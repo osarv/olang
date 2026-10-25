@@ -1,0 +1,9 @@
+# B3e: interpret refuses what a build refuses, section 8's errors included - a block's text kept in a list outside it
+fn main() {
+    keep := List<String&>()
+    for i in range 3 {
+        t := "inner" $i
+        keep.Push(t)
+    }
+    assert keep.Len() == 3
+}

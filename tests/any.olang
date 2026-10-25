@@ -859,3 +859,217 @@ fn spawnScoped(k I64) String {
 test "E25, P1g: a spawn target set by a call given a scope argument" {
     assert spawnScoped(Live - 2) == "12 13"
 }
+
+# P1g, T11b (the fifth any review, 1): a spawn target holding an array by value is stored as the assignment it is
+# judged as - a scoped call's array copied where the target's storage is, on the task's thread; one of several results,
+# a catch default and an array of numbers alike; a target of the same length written in place, as T11b says
+fn spTwo(i I64) String, I64 { return "two" $i "-" $(i * 7), i }
+fn spTry(i I64) String ? ChOops {
+    if i > 100 { error ChOops.BAD }
+    return "try" $i "-" $(i * 7)
+}
+fn spNums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
+fn spawnStores(k I64) String {
+    a := ""
+    n I64 = 0
+    b := ""
+    c := Array<I64>(0)
+    same := "xxxxxxx"
+    before := same[0:3]
+    for i in range k + 1 {
+        u := "inner" $i
+        join {
+            spawn a, n = spTwo&u(i)
+            spawn b = try spTry&u(i) catch default "dflt"
+            spawn c = spNums&u(i)
+        }
+    }
+    {
+        w := "w"
+        join { spawn same = sArg&w(1) }
+    }
+    churn()
+    return $a " " $n " " $b " " $c " " $same " " $before
+}
+BakedSpawnStores String = spawnStores(2)
+
+test "P1g, T11b: a spawn target holding an array by value is stored as its assignment" {
+    want := "two2-14 2 try2-14 I64[2, 14, 22] text1-7 tex"
+    assert BakedSpawnStores == want
+    assert spawnStores(Live - 1) == want
+}
+
+# O26a, T7b (the fifth any review, 2): a callee one of whose other parameters - its receiver too - shares a scope
+# with the returned local's borrow may keep it with no obligation, so the local is copied at its return; a slice of
+# it lent the same way; baked as at run time, and an assert the compiler decides agrees
+type ShHolder struct(l mut List<String&>&) { l }
+fn (h mut ShHolder&) Add(x String&h) I64 {
+    h.l.Push(x)
+    return 1
+}
+fn (x String&) AddTo(h mut ShHolder&x) I64 {
+    h.l.Push(x)
+    return 3
+}
+fn shTie(l mut List<String&>&, x String&l) I64 {
+    l.Push(x)
+    return 2
+}
+fn shAdd(h mut ShHolder&, i I64) String {
+    s := "abc" $i
+    h.Add(s)
+    return s
+}
+fn shTieRet(keep mut List<String&>&, i I64) String {
+    s := "def" $i
+    shTie(keep, s)
+    return s
+}
+fn shSlice(h mut ShHolder&, i I64) String {
+    s := "ghi" $i
+    h.Add(s[0:2])
+    return s
+}
+fn shMethod(h mut ShHolder&, i I64) String {
+    s := "jkl" $i
+    s.AddTo(h)
+    return s
+}
+fn sharedKeep(i I64) String {
+    keep := List<String&>()
+    h := ShHolder(keep)
+    v := shAdd(h, i)
+    v[0] = 'Q'
+    w := shTieRet(keep, i)
+    w[0] = 'R'
+    x := shSlice(h, i)
+    x[0] = 'S'
+    y := shMethod(h, i)
+    y[0] = 'T'
+    churn()
+    return $keep " " $v " " $w " " $x " " $y
+}
+BakedSharedKeep String = sharedKeep(1)
+
+test "O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied" {
+    want := "List<String&>[\"abc1\", \"def1\", \"gh\", \"jkl1\"] Qbc1 Ref1 Shi1 Tkl1"
+    assert sharedKeep(1) == want
+    assert BakedSharedKeep == want
+    assert sharedKeep(Live - 2) == want
+}
+
+# T29a, T7b (the fifth any review, 3): a conversion of a place to a type declared over String names its storage - a
+# value declared or returned from it is a copy, a borrow of it writes the place - for a conditional, a match, a catch
+# default and one of several results too, and boxed into an any; an immutable global is never written through one
+type CvLab extends String
+fn (l CvLab&) Name() String { return "cv " $String(l) }
+type CvPath String
+CvG := "global"
+fn cvLocal(i I64) CvLab {
+    s := "abc" $i
+    return CvLab(s)
+}
+fn cvCond(i I64) CvLab {
+    s := "cond" $i
+    u := "else" $i
+    return CvLab(s) if i % 2 == 0 else CvLab(u)
+}
+fn cvMatch(i I64) CvLab {
+    s := "match" $i
+    return match i { case 0 => CvLab(s) case _ => CvLab(s) }
+}
+fn cvBad(k I64) CvLab ? ChOops {
+    if k < 100 { error ChOops.BAD }
+    return CvLab("never")
+}
+fn cvTry(i I64) CvLab {
+    s := "dflt" $i
+    return try cvBad(i) catch default CvLab(s)
+}
+fn cvTup(i I64) CvLab, I64 {
+    s := "tup" $i
+    return CvLab(s), i
+}
+fn cvGlobal() CvPath { return CvPath(CvG) }
+fn cvWr(l mut CvLab&) { l[0] = 'W' }
+fn conversions(i I64) String {
+    cvKept := List<CvLab&>()
+    xs := List<any Named&>()
+    for k in range 3 {
+        cvKept.Push(cvLocal(k + i))
+        xs.Push(cvLocal(k + i))
+        churn()
+    }
+    a := cvCond(i + 1)
+    b := cvMatch(i + 2)
+    c := cvTry(i + 3)
+    d, n := cvTup(i + 4)
+    g := cvGlobal()
+    g[0] = 'Q'
+    s := "abc"
+    x := CvLab(s)
+    x[1] = 'X'
+    cvWr(CvLab(s))
+    churn()
+    return $cvKept " " $names(xs) " " $a " " $b " " $c " " $d " " $n " " $g " " $CvG " " $s " " $x
+}
+BakedConversions String = conversions(0)
+
+test "T29a: a conversion of a place to a type over String names its storage" {
+    want := ("List<CvLab&>[\"abc0\", \"abc1\", \"abc2\"] cv abc0, cv abc1, cv abc2 else1 match2 dflt3 tup4 4 Qlobal global Wbc "
+             "aXc")
+    assert BakedConversions == want
+    assert conversions(Live - 3) == want
+}
+
+# T7b, K1 (the fifth any review, 4): a returned conditional, match or catch default of a parameter's array is a copy
+# while compiling as at run time
+fn evPick(p String&, q String&, c Bool) String { return p if c else q }
+fn evPickM(p String&, k I64) String { return match k { case 0 => p case _ => p } }
+fn evPickT(p String&, k I64) String { return try chBad(k) catch default p }
+fn evalCopies(i I64) String {
+    s := "cond" $i
+    x := evPick(s, s, i > 0)
+    x[0] = 'Q'
+    t := "match" $i
+    y := evPickM(t, i)
+    y[0] = 'Q'
+    u := "dflt" $i
+    z := evPickT(u, i)
+    z[0] = 'Q'
+    return $s " " $t " " $u " " $x " " $y " " $z
+}
+BakedEvalCopies String = evalCopies(1)
+
+test "T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time" {
+    want := "cond1 match1 dflt1 Qond1 Qatch1 Qflt1"
+    assert evalCopies(1) == want
+    assert BakedEvalCopies == want
+    assert evalCopies(Live - 2) == want
+}
+
+# E25, O25a (the fifth any review, 5): a local a call given a scope argument declares lives where the argument puts it
+fn soMk(i I64) String { return "mk" $i }
+fn soReturn(keep mut List<String&>&, i I64) String {
+    x := soMk&return(i)
+    keep.Push(x)
+    return x
+}
+fn soKeep(keep mut List<String&>&, i I64) String {
+    x := soMk&keep(i)
+    keep.Push(x)
+    return x
+}
+fn scopedLocals(i I64) String {
+    keep := List<String&>()
+    a := soReturn(keep, i)
+    b := soKeep(keep, i + 1)
+    a[0] = 'Q'
+    b[0] = 'R'
+    churn()
+    return $keep " " $a " " $b
+}
+
+test "E25, O25a: a local a scoped call declares lives where the argument puts it" {
+    assert scopedLocals(Live - 2) == "List<String&>[\"mk1\", \"mk2\"] Qk1 Rk2"
+}

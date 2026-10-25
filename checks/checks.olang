@@ -835,6 +835,9 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i printed what the built program did not", dir)
     try r.expect(outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1")
                  "-i prog.olang output", dir)
+    # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
+    try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
+    try r.expect(outOf(dir).Contains("error[O10c]") and not outOf(dir).Contains("assertion"), "-i refused.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret ub.olang > out.txt 2>&1") == 1, "-i ub.olang did not stop", dir)
     try r.expect(outOf(dir).Contains("ub.olang:6: it indexes outside the array"), "-i ub.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret cyclic.olang > out.txt 2>&1") == 1, "-i cyclic.olang did not stop", dir)
