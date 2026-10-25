@@ -204,3 +204,25 @@ test "reflected types chain, and are types" {
     }
     assert Grid.Fields[0].Type.Kind == TypeKind.Reference
 }
+
+# the first case with no fields, built through its descriptor (G34)
+fn plainCase<T>() T {
+    for c in T.Cases {
+        if c.Fields.Len() == 0 { return c() }
+    }
+    unreachable
+}
+
+fn circle<T>(r F64) T {
+    for c in T.Cases {
+        if c.Name == "Circle" { return c(r) }
+    }
+    unreachable
+}
+
+PlainShape := plainCase<Shape>()
+
+test "a case descriptor called builds its case" {
+    assert PlainShape == Shape.Empty and plainCase<Shape>() == Shape.Empty
+    assert circle<Shape>(2.0) == Shape.Circle(2.0)
+}

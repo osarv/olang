@@ -9012,6 +9012,21 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
+            if ref.Kind == names.What.Local {
+                # G34: a case descriptor called builds its case, as the case's name would - a struct's one case its
+                # constructor
+                dt := c.descTypeOf(f)
+                if dt == types.UnknownT {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescCase {
+                    ds := c.P.DescOf(dt)
+                    r := c.P.ReflUnder(ds.Of)
+                    if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
+                    return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
+                }
+            }
             if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
                 return c.callValue(sp, nsp, c.expr(f, types.UnknownT), args)
             }
@@ -9042,6 +9057,21 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             if ref.Kind != names.What.None {
                 c.gap(nsp, "a call of this kind")
                 return c.unknown(sp)
+            }
+            # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)"
+            if generic.ProjectsType(c.text(n)) {
+                rt := c.reflType(f)
+                if rt == types.UnknownT {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                if rt >= types.TypeId(0) and (c.P.T.IsFloat(rt) or c.P.T.IsInt(rt) or rt == types.BoolT) { return c.conversion(sp, rt, args) }
+                if rt >= types.TypeId(0) and c.isNamed(rt) { return c.construct(sp, nsp, rt, args) }
+                if rt >= types.TypeId(0) {
+                    c.err(nsp, msgs.NotCallable(c.ty(rt)))
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
             }
             et := c.typeNamed(x)
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
@@ -11359,7 +11389,9 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
             c.err(sp, msgs.ErrorWordAsValue(w, w))
             return c.unknown(sp)
         }
-        c.gap(nsp, "a member of a type of this kind")
+        # G32: a type's namespace holds its reflected members, its limits and an enum's cases - nothing by this name
+        c.err(nsp, msgs.ReflNoMember(c.ty(t), c.text(n)))
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     tag I64 = -1
@@ -16024,7 +16056,11 @@ fn (c mut Checker&) typeCaseHolds(tc typeCase, st types.TypeId, tr ast.TypeRef&)
         tt := c.P.Subst(tc.Pat, tc.Owner, c.P.T.List(b.Vals)) if tc.N > 0 else tc.Pat
         if not c.P.Satisfies(st, tt) { return false }
     } else if tc.N == 0 {
-        if not c.P.T.Same(tc.Pat, st) { return false }
+        # a read-only reference case takes a writable reference too (T25b: writable converts to read-only at the top),
+        # so "case Node&" holds for a "mut Node&" - "case mut Node&" before it tells them apart
+        ro := st
+        if c.isRef(st) { ro = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & ~types.Writable) }
+        if not c.P.T.Same(tc.Pat, st) and not c.P.T.Same(tc.Pat, ro) { return false }
     } else {
         if not c.P.Unify(tc.Pat, st, b, false, false) { return false }
         for k in range tc.N {
@@ -16048,7 +16084,12 @@ fn (c mut Checker&) typeCaseCovers(e typeCase, l typeCase) Bool {
         return e.N == 0 and l.N == 0 and c.P.Satisfies(l.Pat, e.Pat)
     }
     if l.Trait { return false }
-    if e.N == 0 { return l.N == 0 and c.P.T.Same(e.Pat, l.Pat) }
+    if e.N == 0 {
+        if l.N != 0 { return false }
+        if c.P.T.Same(e.Pat, l.Pat) { return true }
+        # a read-only reference case takes the writable one too (typeCaseHolds)
+        return c.isRef(l.Pat) and c.P.T.Same(e.Pat, c.P.T.Ref(c.P.T.Referent(l.Pat), c.P.T.PermOf(l.Pat) & ~types.Writable))
+    }
     if c.P.T.KindOf(e.Pat) != types.Kind.Named or c.P.T.KindOf(l.Pat) != types.Kind.Named { return false }
     if c.P.T.DeclOf(e.Pat) != c.P.T.DeclOf(l.Pat) { return false }
     # every argument of the earlier one its own variable, each once

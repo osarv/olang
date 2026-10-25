@@ -7583,7 +7583,9 @@ constant there. Each has its members, and asking another is an error listing the
   case descriptor included - as `as` reads it.
 - A case: `c.Name`, `c.Fields` (a list, G33). `v == c` tests the case (E32): with `v` of the case's own type, the case;
   with `v` the struct a struct's one case describes, `true`; with `v` of another type, an error. After such a test `v` is
-  narrowed to that case (S8d) and `f.Of(v)` reads its fields.
+  narrowed to that case (S8d) and `f.Of(v)` reads its fields. `c(args)` builds the case, as the case's name would
+  (`Shape.Circle(2.0)`) - a struct's one case being its constructor - so generic code makes any case it walks to:
+  `return c(decode(f, src) for f in c.Fields)` (G37).
 - A parameter: `p.Name`, `p.Type`, `p.HasDefault` (a `Bool` constant) and `p.Default` - the default's value, built in its
   declaration's context as a call leaving the argument off builds it (D8a). `p.Default` on a parameter with no default is
   an error; under an `if p.HasDefault` it is decided per parameter (G35), so the other branch is not checked. A function
@@ -7593,7 +7595,8 @@ constant there. Each has its members, and asking another is an error listing the
 
 **Visibility.** A list holds only the members the module whose code reads it may see (M6a): a struct's private fields
 (lowercase) are in `T.Fields` only in the module declaring the type, and in a generic only where the generic is
-declared there. So another module's reflection cannot read or build what it could not name.
+declared there. So another module's reflection cannot read or build what it could not name. An enum case's fields are
+read by every module that reads the case (E32, S13), so `c.Fields` holds them all.
 
 **G35 (decided while compiling).** A condition built from reflected constants - `T.Kind == TypeKind.Struct`,
 `p.HasDefault`, `f.Name == "id"`, `T.Fields.Len() > 2`, with `and`, `or`, `not`, comparisons and `+ - *` - is decided
@@ -7610,7 +7613,8 @@ chooses its arm the same way.
   of that type, each name bound to the argument in that place. A name in a case's arguments that is no type is such a
   name, introduced for that case's arm, where it is a type (G14); a type written there must match exactly.
 
-Cases are tried in order and **the first that holds is chosen**. A case that no type can reach - one a case before it
+A case naming a read-only reference (`case Node&`) also holds for a writable one (`mut Node&`), which converts to it
+(T25b); `case mut Node&` before it tells the two apart. Cases are tried in order and **the first that holds is chosen**. A case that no type can reach - one a case before it
 covers (`case _`, the same type, a trait every type of it satisfies, a generic case of distinct names for the same
 type) - is an error. G15's exhaustiveness holds: with no case holding and no `nomatch` (or `case _`) it is an error at
 the instantiation.

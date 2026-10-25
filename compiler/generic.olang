@@ -3870,7 +3870,8 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
     } else {
         return none, "only a struct and an enum's case have fields"
     }
-    own := p.T.DeclModule(p.T.DeclOf(r)) == mi
+    # M6a: a struct's private fields are its module's; an enum case's fields are read by any module that reads the case
+    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r)
     for i in range ns.Len() {
         if own or p.text(ns[i])[0].IsUpper() { out.Push(i) }
     }
