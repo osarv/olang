@@ -1322,6 +1322,10 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 }
             } else if c.P.T.KindOf(b) == types.Kind.Array and c.holdsSelf(d, b) {
                 c.err(nsp, msgs.ArrayTypeHoldsItself(name, name, c.ty(b)))
+            } else if c.P.T.KindOf(b) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(b)) {
+                # T7a: a type over an array of arrays holds its rows by reference, or at a length its declaration gives -
+                # a value of it is made elsewhere, so no row of it can be laid out in place (as a field's cannot)
+                c.err(base.Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(b))))
             }
         }
         nomatch { }

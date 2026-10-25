@@ -1,0 +1,11 @@
+# check: fail error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&
+# T7a (the third any review, finding 7): a type declared over an array of arrays holds its rows by reference - a value of
+# it is made elsewhere, so no row can be laid out in place; converting rows laid out in place to it read each row as a
+# run-time array (a segfault, invalid IR)
+type Grid extends Array<Array<I64>>
+fn (g Grid&) Show() String { return "g " $g[0][0] }
+fn main() {
+    a := Array<Array<I64>>(2, Array<I64>(2, 5))
+    g := Grid(a)
+    s := g.Show()
+}

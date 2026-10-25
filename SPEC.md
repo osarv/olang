@@ -604,7 +604,8 @@ inline field whose declaration gives its length, or the elements of an array mad
 known length. Copying the containing value then copies the array with it. Any other array held by value inside a
 value is a compile-time error naming `Array<T>&`: its storage would live apart from the value naming it, so copying the
 value would share that storage while appearing to copy it. An enum's payload never lays one out (its parameters have
-no declaration to give a length). There is no multi-dimensional array: an array of arrays is `Array<Array<T>&>`, each
+no declaration to give a length), nor does a type declared over an array of arrays (T29: `type Grid extends
+Array<Array<I64>>` is the error, `Array<Array<I64>&>` its rows) - a value of it is made elsewhere. There is no multi-dimensional array: an array of arrays is `Array<Array<T>&>`, each
 element an array of its own length; `Array<Array<F32>>(4, Array<F32>(4))` is four rows of four laid out in place; and
 a rectangular block whose size is known only at run time is one array indexed `r * width + c`.
 
