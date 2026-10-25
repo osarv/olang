@@ -403,3 +403,7 @@ on sight per rules.md, "Code rules".
   fixes (Call adapter error sets T22/E31, olang fix lists every changed-reading site and exits 1, `x.Len()` unknown
   method, touching type arguments, D17e only where nothing catches ArgumentError, Rem(MIN,-1)=0, `!` prints the
   condition, `a.Set(i, v)`). Next: the errors batch (queued above). Bulk review later over several batches.
+- 2026-10-25 ~17:00 CEST: started wt-errs (opus high: `type X error { }`, named sets, clause-only catch bindings,
+  releasetest explain) and wt-mem47 (opus xhigh: memory rounds 4 vacate/Map.Take, 6 early freeing conservative first
+  version + the fixed-array copy leak, 7 Destroy). Next after them: error-set generics <T ? E>, generators,
+  reflection, generic enums, errdefer, embed, lane-wise ops, arbitrary-width ints, prelude moves; then a bulk review.
