@@ -340,3 +340,9 @@ on sight per rules.md, "Code rules".
   a returned local with a kept second name, AnyNoCopy through references, per-instance Eq/Hash, `type X extends
   Array<Array<T>>` refused (T7a). Scope fuzzer writes scope arguments (37 findings -> 0). Fourth (narrow) review running
   -> /home/user/review/any4; merge if clean.
+- 2026-10-25 CEST: any review 4 (/home/user/review/any4): scope-argument references hold everywhere (14 master UAFs
+  closed), but A) scoped calls of plain-data arrays escape (UAF, older) and B) RetCopy's flow misses second names
+  (evaluator/run time disagreement - a regression). Decided: A - an arena-backed scoped value is existing storage
+  whatever it holds; B - INVERT RetCopy: no copy only when the flow proves no second name (whitelist), so the
+  evaluator's always-copy is unobservable. Plus C/D/E smaller. Sent to the fix agent; another narrow review after.
+  LESSON again: a blacklist of "kept" shapes misses some; prove the safe case instead.
