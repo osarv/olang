@@ -157,6 +157,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
     spellItem Bool = false                 # spelling an item of a list: a function type holding a comma is grouped (L18c)
     spellQualified Bool = false            # spelling a type as code in this module writes it: another module's by its alias
+    spellIn I64 = -1                       # explain's module, where Ty spells types qualified from (B11b)
     spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
     s4d List<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
     placeWrite Bool = false                # S8e: the place asked for next is a target written, of its declared type
@@ -2753,7 +2754,20 @@ fn (c mut Checker&) typeContexts(t types.TypeId, td ast.TypeDecl?&) I64 {
 # the note an instance's context gives, and a type as source writes it, for the passes after checking (G16b, B11)
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
-fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
+fn (c mut Checker&) Ty(t types.TypeId) String {
+    if c.spellIn < 0 or c.frames.Len() > 0 { return c.ty(t) }
+    # explain (B11b): as code in that module writes it - another module's type by its alias (os.Error)
+    c.push(-1, c.spellIn, types.VoidT, types.ListId(0))
+    was := c.spellQualified
+    c.spellQualified = true
+    r := c.ty(t)
+    c.spellQualified = was
+    c.pop()
+    return r
+}
+
+# explain (B11b): the module Ty spells types from, -1 for none
+fn (c mut Checker&) SpellFrom(mi I64) { c.spellIn = mi }
 
 # for explain (B11b): a function instance's body (-1 for none); what a body can fail with, its set inferred where its
 # signature's is "?" alone (R1a); a global's type; the type text is

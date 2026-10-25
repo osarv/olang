@@ -18,6 +18,7 @@ type Missing error { NAME }
 
 # the item name names in module mi - "Type.Method" for a method - as text ending in a line break
 fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? Missing {
+    c.SpellFrom(mi)
     nm := c.P.L.Names
     dot := try name.Find(".") catch default -1
     if dot > 0 {
