@@ -182,6 +182,49 @@ entry:
   unreachable
 }
 
+; D17, E35: in a build that keeps no trace, the requirement whose falseness raised the error being returned ("FILE:LINE:
+; f: cond\n") - one thread-local write, on the failure path only - for a "!" or main to name; a clause taking the error
+; clears it
+@__olang_ert_req = thread_local(initialexec) global ptr null
+@__olang_msg_debughint = unnamed_addr constant [47 x i8] c"(build with -debug to see where it came from)\0A\00"
+
+define void @__olang_ert_req_set(ptr %line) {
+entry:
+  store ptr %line, ptr @__olang_ert_req
+  ret void
+}
+
+define void @__olang_ert_req_clear() {
+entry:
+  store ptr null, ptr @__olang_ert_req
+  ret void
+}
+
+; the requirement kept, if one is, then the hint that a -debug build says more
+define void @__olang_ert_req_print(ptr %stream) {
+entry:
+  %r = load ptr, ptr @__olang_ert_req
+  %none = icmp eq ptr %r, null
+  br i1 %none, label %hint, label %say
+say:
+  call i32 @fputs(ptr %r, ptr %stream)
+  store ptr null, ptr @__olang_ert_req
+  br label %hint
+hint:
+  call i32 @fputs(ptr @__olang_msg_debughint, ptr %stream)
+  ret void
+}
+
+; E35 in a build that keeps no trace: the "!"'s message, the requirement that raised the error where one did, the hint
+define void @__olang_bang_failed_plain(ptr %msg) {
+entry:
+  %stream = call ptr @__olang_check_stream()
+  call i32 @fputs(ptr %msg, ptr %stream)
+  call void @__olang_ert_req_print(ptr %stream)
+  call void @__olang_check_end()
+  unreachable
+}
+
 ; S16: an error left a test body - the test fails, its FAIL line naming the error ("Type.WORD") and the trace following
 define void @__olang_test_error(ptr %name) {
 entry:

@@ -4292,7 +4292,9 @@ function and the condition as written, at the condition:
 - when an error escapes `main` (B5), after `unhandled error: TypeName.WORD`;
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
 
-In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
+In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead - after the
+false requirement's `FILE:LINE: f: cond` line where the error is one a requirement raised (D17a), which every build keeps
+for this: one thread-local write where the requirement is false, cleared where a clause takes the error. A program run
 with `interpret` (B3e) prints the trace as a debug build does.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
