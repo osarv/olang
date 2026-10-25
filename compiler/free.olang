@@ -843,6 +843,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     deferStack List<I64>
     deferEnd Map<I64, I64>
     leaveAfter Map<I64, I64>
+    jumpAfter Map<I64, I64>    # by statement: the first break or continue after it in its block, its loop's body block
+    jumpAt Map<I64, I64>       # ...and that jump's statement
     errDefers List<I64>
 }
 
@@ -988,6 +990,8 @@ fn (w mut walker&) reset() {
     w.deferStack.Clear()
     w.deferEnd.Clear()
     w.leaveAfter.Clear()
+    w.jumpAfter.Clear()
+    w.jumpAt.Clear()
     w.errDefers.Clear()
 }
 
@@ -1009,13 +1013,30 @@ fn (w mut walker&) block(bl typed.Block&) {
     # unreachable after them in the block ends the path of
     last := w.no - 1
     leave := -1
+    jump := -1
+    jumpLoop := -1
     for i := bl.Stmts.Len() - 1, i >= 0, i-- {
         match bl.Stmts[i] {
             case typed.Stmt.Defer(_, _) { w.deferEnd.Put(nums[i], last) }
             case _ { }
         }
         if leave >= 0: w.leaveAfter.Put(nums[i], leave)
-        if leavesFunction(bl.Stmts[i]): leave = nums[i]
+        if jump >= 0 {
+            w.jumpAfter.Put(nums[i], jumpLoop)
+            w.jumpAt.Put(nums[i], jump)
+        }
+        if leavesFunction(bl.Stmts[i]) {
+            leave = nums[i]
+            jump = -1
+        }
+        match bl.Stmts[i] {
+            case typed.Stmt.Jump(_, _, lp) {
+                jump = nums[i]
+                jumpLoop = I64(lp)
+                leave = -1
+            }
+            case _ { }
+        }
     }
 }
 
@@ -2554,6 +2575,11 @@ fn (w mut walker&) destroyAfter(l I64, s I64, ds I64, uses List<I64>&) I64 {
     }
     if w.declAt[l] > s { return -1 }
     leave := try w.leaveAfter.Get(s) catch default -1
+    # a break or a continue after it of a loop whose body declares l: l's path ends there - its next turn declares l again
+    jl := try w.jumpAfter.Get(s) catch default -1
+    if leave < 0 and jl >= 0 and w.body().Encloses(typed.BlockId(I32(jl)), w.body().Locals[l].In) {
+        leave = try w.jumpAt.Get(s) catch default -1
+    }
     limit := w.ends[leave] if leave >= 0 else w.no
     for u in uses {
         a := w.useAt[u]
@@ -2995,6 +3021,8 @@ fn (f mut Free&) decide() {
         # can let go of it
         if f.isDestroy(k): continue
         if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
+        # C may call an export fn (X12) from a thread of its own - one of a library's (X13) from any (condition 3)
+        if f.exports.Len() > 0 { f.keep(k, RTask, -1, source.Span(0, 0), "C may call an export fn from a thread of its own: nothing is freed early where a program has one") }
         if f.hidden or has(f.hiddenAt, k) { f.keep(k, RDtor, -1, source.Span(0, 0), "a destructor, Str, Eq or Hash lets go of it where no call is written") }
     }
     # condition 4 judged by what a region would hold, not only by the value's type (F4): a value made for a place whose
