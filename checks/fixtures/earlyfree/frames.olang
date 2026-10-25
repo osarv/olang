@@ -1,0 +1,31 @@
+import "std/io"
+
+# 2.7: an interpreter's frames in a long-lived List, in the one-line-fixed form - every Pop frees its frame
+N I64 = 100000
+
+type Frame struct(d I64) {
+    depth I64 = d
+    vars Map<String&, I64>
+}
+
+type Interp struct() {
+    frames List<mut Frame&>
+}
+
+fn (it mut Interp&) call(d I64) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    f.vars.Put("x" $d, d)
+    depth := f.depth
+    r := d
+    if d > 0 { r += it.call(d - 1) }
+    try it.frames.Pop() catch { unreachable }
+    return r + depth
+}
+
+fn main() {
+    it := Interp()
+    total I64 = 0
+    for i in range N { total += it.call(5) }
+    io.Println($total)!
+}

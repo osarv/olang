@@ -2780,10 +2780,12 @@ fn (f mut Free&) Report() String {
     rows List<String&>
     for k in range f.keyTy.Len() {
         if not f.reported(k): continue
+        # the row is at the place's own let-go - an assignment, a vacate, a value dropped - where there is one, else at
+        # the first call that lets go of it
         first := -1
         for g in range f.goes.Len() {
             if not f.goes[g].Of(k) or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
-            if first < 0 or f.before(f.goes[g], f.goes[first]): first = g
+            if first < 0 or f.rowBefore(f.goes[g], f.goes[first]): first = g
         }
         if first < 0: continue
         places++
@@ -2843,6 +2845,11 @@ fn (f mut Free&) reported(k I64) Bool {
     if t.KindOf(r) != types.Kind.Named { return false }
     m := t.DeclModule(t.DeclOf(r))
     return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
+}
+
+fn (f mut Free&) rowBefore(a letGo, b letGo) Bool {
+    if (a.Kind == LCall) != (b.Kind == LCall) { return b.Kind == LCall }
+    return f.before(a, b)
 }
 
 fn (f mut Free&) before(a letGo, b letGo) Bool {

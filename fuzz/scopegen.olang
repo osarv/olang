@@ -1292,3 +1292,166 @@ fn Program(seed U64, n I64, keep Array<Bool>&) String& {
     b.Push("}\n")
     return b.ToString()
 }
+
+# ---- the early-free mode (docs/memory.md 3.6, O8d) ----
+#
+# FreeProgram's scenarios replace and remove in long-lived places - a holder's text, node chain, List, Map and Vec,
+# a local's and a global's - in loops, so the analysis makes them sole and their old values are freed at once; between
+# the let-goes they keep views (in locals, across a call that lets go, captured by a lambda), store views into other
+# places (which must keep them), take values out of the Map and the List, and read everything back after a churn. No
+# tasks, no destructors and no run-time trait values - each would make the whole program keep - so early freeing is
+# on. Built -d -s (a freed region poisoned and held back) and interpreted in dead-region mode (a read of a freed region
+# stops), the two must print the same.
+
+FreePrelude := (
+    "import \"std/io\"\n"
+    "extern fn getpid() I32\n"
+    "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
+    "Run mut I64 = 1\n"
+    "type Node struct(v I64) {\n"
+    "    v\n"
+    "    next mut Node?& = null\n"
+    "}\n"
+    "fn churn() I64 {\n"
+    "    t I64 = 0\n"
+    "    for i in range 200 {\n"
+    "        a := Array<I64>(64, -7)\n"
+    "        t += a[3]\n"
+    "        s := $i $i $i \"-\" $(i * 7)\n"
+    "        t += s.Len()\n"
+    "    }\n"
+    "    return t + I64(getpid() * 0)\n"
+    "}\n"
+    "fn chain(n Node?&) I64 {\n"
+    "    t I64 = 0\n"
+    "    c := n\n"
+    "    for k in range 40 {\n"
+    "        if c is null { break }\n"
+    "        t = t * 31 + c.v\n"
+    "        c = c.next\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn mkChain(v I64, d I64) Node& {\n"
+    "    n := Node(v)\n"
+    "    if d > 0 { n.next = mkChain(v + 1, d - 1) }\n"
+    "    return n\n"
+    "}\n"
+)
+
+# scenario k's holder type and its helpers - a type of its own, so what keeps in one scenario (a place is a field of a
+# type) keeps in that one alone
+fn freeHolder(k I64) String& {
+    h := "Hold" $k
+    return ("type " $h " struct() {\n"
+            "    t String& = \"\"\n"
+            "    kt String& = \"\"\n"
+            "    n mut Node& = Node(0)\n"
+            "    keep Node?& = null\n"
+            "    l List<mut Node&>\n"
+            "    m Map<String&, mut Node&>\n"
+            "    v Vec<I64>\n"
+            "}\n"
+            "# lets go of h's text and node: a call that lets go, which a view held across it makes the places keep\n"
+            "fn reset" $k "(h mut " $h "&, i I64) {\n"
+            "    h.t = \"r\" $i\n"
+            "    h.n = Node(i * 3)\n"
+            "}\n"
+            "fn grow" $k "(h mut " $h "&, i I64) { h.n.next = mkChain(i, 2) }\n"
+            "fn sum" $k "(h " $h "&) I64 {\n"
+            "    t I64 = chain(h.n) * 7 + h.t.Hash() * 3 + h.kt.Len() + chain(h.keep)\n"
+            "    for x in h.l { t = t * 5 + chain(x) }\n"
+            "    for e in h.m { t = t + e.Key.Hash() * 11 + chain(e.Value) }\n"
+            "    for x in h.v { t = t * 3 + x }\n"
+            "    return t\n"
+            "}\n")
+}
+
+# the statements that keep (views across a let-go, views stored elsewhere): a clean scenario writes none
+FreeKeeps Array<I64> = I64[10, 11, 12, 13, 14, 15, 16]
+
+# one statement on holder h in turn i: a let-go, a view kept across one, a store of a view elsewhere, a move out
+fn (g mut SG&) freeOp(h String&, ind String&, clean Bool) String& {
+    v := g.val()
+    x := g.name("x")
+    kk := g.k
+    k := g.r(22)
+    for clean and k in FreeKeeps { k = g.r(22) }
+    if k == 0 { return $ind $h ".t = \"t\" $i \"-" $v "\"\n" }
+    if k == 1 { return $ind $h ".n = Node(i + " $v ")\n" }
+    if k == 2 { return $ind $h ".n = mkChain(i, " $(1 + g.r(3)) ")\n" }
+    if k == 3 { return $ind $h ".l.Push(Node(i * " $v "))\n" }
+    if k == 4 { return $ind "if " $h ".l.Len() > 2 { try " $h ".l.Pop() catch { } }\n" }
+    if k == 5 { return $ind "if " $h ".l.Len() > 3 { try " $h ".l.RemoveAt(0) catch { } }\n" }
+    if k == 6 { return $ind $h ".m.Put($(i % 4), Node(i + " $v "))\n" }
+    if k == 7 { return $ind $h ".m.Remove($((i + 1) % 4))\n" }
+    if k == 8 {    # taken out of the Map: this function's, used, then let go of
+        return $ind $x " := try " $h ".m.Take($(i % 4)) catch default Node(-1)\n" $ind "acc = acc * 31 + chain(" $x ")\n"
+    }
+    if k == 9 { return $ind $h ".v.Push(i * " $v ")\n" }
+    if k == 10 {    # a view of the node, used after its place lets go: the place keeps
+        return $ind $x " := " $h ".n\n" $ind $h ".n = Node(" $v ")\n" $ind "acc = acc * 31 + chain(" $x ")\n"
+    }
+    if k == 11 {    # a view of the text, used after a call that lets go of it
+        return $ind $x " := " $h ".t\n" $ind "reset" $kk "(" $h ", i)\n" $ind "acc = acc * 31 + " $x ".Hash()\n"
+    }
+    if k == 12 { return $ind $h ".keep = " $h ".n\n" }    # a view stored in another place: the node keeps
+    if k == 13 { return $ind $h ".kt = " $h ".t\n" }      # text stored in another place: the text keeps
+    if k == 14 {    # a lambda capturing a view, called after the place lets go
+        f := g.name("f")
+        return ($ind $x " := " $h ".n\n" $ind $f " := fn() I64 { return chain(" $x ") }\n" $ind $h ".n = Node(" $v
+                ")\n" $ind "acc = acc * 31 + " $f "()\n")
+    }
+    if k == 15 {    # a List element read, then the List removes it
+        return ($ind "if " $h ".l.Len() > 0 {\n" $ind "    " $x " := try " $h ".l.Last() catch default Node(-2)\n" $ind
+                "    try " $h ".l.Pop() catch { }\n" $ind "    acc = acc * 31 + chain(" $x ")\n" $ind "}\n")
+    }
+    if k == 16 {    # a Map value read, then the Map removes it
+        return ($ind $x " := try " $h ".m.Get($(i % 4)) catch default Node(-3)\n" $ind $h ".m.Remove($(i % 4))\n" $ind
+                "acc = acc * 31 + chain(" $x ")\n")
+    }
+    if k == 17 { return $ind "grow" $kk "(" $h ", i)\n" }
+    if k == 18 { return $ind "reset" $kk "(" $h ", i)\n" }
+    if k == 19 {    # a node made where the holder lives, its chain grown, then given to the place
+        return ($ind "{\n" $ind "    " $x " mut Node&h = Node(i)\n" $ind "    " $x ".next = Node(" $v ")\n" $ind "    " $h ".n = " $x
+                "\n" $ind "}\n")
+    }
+    if k == 20 { return $ind $h ".t = $" $h ".t.Len() \"x\"\n" }
+    return $ind "if " $h ".v.Len() > 2 { try " $h ".v.Pop() catch { } }\n"
+}
+
+fn (g mut SG&) freeScenario(k I64) String& {
+    h := "h"
+    head mut String& = freeHolder(k)
+    decl mut String& = $"    h := Hold" $k "()\n"
+    if g.chance(25) {    # the holder a global
+        head = $head "G" $k " mut Hold" $k "& = Hold" $k "()\n"
+        decl = $"    h := G" $k "\n"
+    }
+    clean := g.chance(50)
+    body mut String& = ""
+    for c in range 3 + g.r(5) { body = $body $g.freeOp(h, "        ", clean) }
+    turns := 20 + g.r(40)
+    return ("# scenario " $k "\n" $head "fn s" $k "() I64 {\n" $decl "    acc I64 = 0\n    for i in range " $turns " {\n" $body
+            "        if i % 7 == 0 { acc += churn() }\n    }\n    churn()\n    return acc * 7 + sum" $k "(" $h ")\n}\n")
+}
+
+# the early-free mode's program seed: n scenarios, those with keep[k] false left out (all kept when keep is empty)
+fn FreeProgram(seed U64, n I64, keep Array<Bool>&) String& {
+    b := StringBuilder()
+    b.Push("# early-free fuzz seed " $seed "\n")
+    b.Push(FreePrelude)
+    for k in range n {
+        if keep.Len() == 0 or keep[k] {
+            g := SG(seed * 1000003 + U64(k) + 1)
+            g.k = k
+            b.Push(g.freeScenario(k))
+        }
+    }
+    b.Push("fn main() ? {\n")
+    for k in range n {
+        if keep.Len() == 0 or keep[k] { b.Push("    say(\"" $k ": \" $s" $k "())\n") }
+    }
+    b.Push("}\n")
+    return b.ToString()
+}

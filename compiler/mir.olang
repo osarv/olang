@@ -1193,11 +1193,16 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
                 v.bad("a destructor registered for a " $v.canon(ty) ", which declares none")
             }
         }
-        case Stmt.RegisterOwner(_, _, p), Stmt.Release(_, p) {
+        case Stmt.RegisterOwner(_, _, p) {
             pt := v.placeType(p)
             if pt != types.UnknownT and not (t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0) {
                 v.bad("an owner slot of a " $v.canon(pt) ", not an own reference")
             }
+        }
+        # O8d: what a sole place let go of - a reference, its object in a region (or none: null, constant data)
+        case Stmt.Release(_, p) {
+            pt := v.placeType(p)
+            if pt != types.UnknownT and not t.IsRef(pt) { v.bad("a release of a " $v.canon(pt) ", not a reference") }
         }
         case Stmt.Write(_, b, how, x) {
             v.builder(b)

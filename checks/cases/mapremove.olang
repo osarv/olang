@@ -1,0 +1,21 @@
+# check: build
+# flags: -memory
+type Rec struct(t String&) {
+    text String& = t
+}
+
+fn main() {
+    m := Map<String&, Rec&>()
+    total I64 = 0
+    for i in range 1000 {
+        m.Put($i, Rec("payload " $i))
+        if i >= 100 {
+            x := try m.Get($(i - 100)) catch { unreachable }
+            m.Remove($(i - 100))
+            total += x.text.Len()
+        }
+    }
+    assert m.Len() == 100 and total > 0
+}
+# also: mapremove.olang:14:13: memory: removed elements of 'm' are kept until main's scope closes
+# also: mapremove.olang:15:22: note: 'x' (line 13) is used here, after 'm.Remove($(i - 100))' (line 14), which removes m; read what you need from 'x' before the call

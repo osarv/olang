@@ -1,0 +1,28 @@
+import "std/io"
+
+# T7c: a fixed array's value made a run-time one is made where it is kept - in a loop it grew the program's scope
+N I64 = 2000000
+
+fn sum3(a I64) I64 {
+    x := Array<I64>(3, a)
+    v Array<I64> = Array<I64>(0, 0)
+    v = x
+    t I64 = 0
+    for e in v { t += e }
+    return t
+}
+
+fn mk(a I64) Array<I64> {
+    x := Array<I64>(4, a)
+    return x
+}
+
+fn main() {
+    total I64 = 0
+    for i in range N {
+        total += sum3(i)
+        r := mk(i)
+        total += r[0]
+    }
+    io.Println($total)!
+}

@@ -34,6 +34,7 @@ import "typed"
 import "mir"
 import "std/ffi"
 import "std/os"
+import "std/io"
 import "std/pair"
 
 # ---- requests and what they give ----
@@ -88,6 +89,7 @@ WhyRunEqDepth String& = "the comparison recurses deeper than interpret allows"
 WhyNull String& = "it reads through a null reference"
 WhyNullCall String& = "it calls through a null function value"
 WhyClosed String& = "it uses storage after the scope it was made in closed"
+WhyFreedEarly String& = "it uses storage early freeing reclaimed (O8d) - a place decided sole was not: a compiler bug"
 WhyStale String& = "it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements"
 WhyOutside String& = "it indexes outside the array, which is undefined at run time"
 WhyBeyond String& = "it reaches outside the storage it refers to"
@@ -170,6 +172,7 @@ type scope struct() {
     TasksEnd I64 = -1
     Kept I64 = 0         # a join's earliest kept error, under its own list; 0 for none
     Errors I64 = 0       # a join's error list (a ListId)
+    Early Bool = false   # a region a release closed (O8d): what it held is recorded in dead-region mode
 }
 
 # a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P
@@ -327,6 +330,10 @@ type Machine struct(T mut types.Table&, When Mode) {
     eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
     Steps I64 = 0
     Live I64 = 0                 # bytes allocated and not freed
+    # dead-region mode (OLANG_DEADREGIONS, docs/memory.md 3.6): the allocations a release reclaimed, so a read of one
+    # stops with what it is - the oracle for early freeing - rather than as any storage of a closed scope
+    deadMode Bool = false
+    early Map<I64, Bool>
     Result Ptr = NullPtr         # the last request's result
     ResultTy types.TypeId = types.VoidT
     Stopped Stop = Stop.None
@@ -429,6 +436,7 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
     }
     m.scratch = m.allocate(64, aValue, m.program).Id
     for i in range 3 { m.tmps[i] = m.allocate(64, aValue, m.program).Id }
+    m.deadMode = (try os.Env("OLANG_DEADREGIONS") catch default "") != ""
     return m
 }
 
@@ -807,6 +815,12 @@ fn (m mut Machine&) stop(s Stop) {
 
 fn (m mut Machine&) refuse(why String&) { m.stop(Stop.Refused($why, m.stopFile, m.stopSp)) }
 
+# dead-region mode's stop: a read of storage a release reclaimed - never a refusal to evaluate, at compile time too
+fn (m mut Machine&) freedEarly() {
+    try io.PrintErr($"olang: internal compiler error: file " $m.stopFile " at " $m.stopSp.Start ": " $WhyFreedEarly "\n") catch io.Error { }
+    os.Exit(70)
+}
+
 # ---- types ----
 
 # a type's layout, computed the first time it is asked for, its embedded parts first (generic does the same, with
@@ -1144,6 +1158,7 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
         return -1
     }
     if m.al[slot].Kind == aFree or m.al[slot].Gen != p.Id >> slotBits {
+        if m.deadMode and m.early.Has(p.Id) { m.freedEarly() }
         m.refuse(WhyClosed)
         return -1
     }
@@ -1418,9 +1433,13 @@ fn (m mut Machine&) stepClose() {
         if m.live(c) { m.closing.Push(c) }
         return
     }
+    if m.deadMode and m.scopes[sc].Early {
+        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next { m.early.Put(m.al[a].Gen << slotBits | a, true) }
+    }
     for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
     s := m.scopes[sc]
     s.Live = false
+    s.Early = false
     s.Gen = (s.Gen + 1) & ((1 << 38) - 1)
     m.scopes[sc] = s
     m.freeScopes.Push(sc)
@@ -1437,6 +1456,7 @@ fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId) {
     region := m.regionOfObject(q)
     if region == 0 { return }
     m.disown(region)
+    m.scopes[region & slotMask].Early = true
     m.closing.Push(region)
 }
 
@@ -4368,9 +4388,13 @@ fn (m mut Machine&) dropScope(id I64) {
         m.scopes[sc].Tasks = m.tasks[t].Next
         m.freeTasks.Push(t)
     }
+    if m.deadMode and m.scopes[sc].Early {
+        for a := m.scopes[sc].Allocs, a != 0, a = m.al[a].Next { m.early.Put(m.al[a].Gen << slotBits | a, true) }
+    }
     for m.scopes[sc].Allocs != 0 { m.release(m.scopes[sc].Allocs) }
     s := m.scopes[sc]
     s.Live = false
+    s.Early = false
     s.Gen = (s.Gen + 1) & ((1 << 38) - 1)
     s.TasksEnd = -1
     m.scopes[sc] = s

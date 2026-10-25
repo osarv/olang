@@ -1,0 +1,28 @@
+# check: build
+# flags: -memory
+type Frame struct(d I64) {
+    depth I64 = d
+    vars Map<String&, I64>
+}
+type Interp struct() {
+    frames List<mut Frame&>
+}
+fn (it mut Interp&) call(d I64) I64 {
+    it.frames.Push(Frame(d))
+    f := try it.frames.Last() catch { unreachable }
+    f.vars.Put("x" $d, d)
+    r := d
+    if d > 0 { r += it.call(d - 1) }
+    r = r * 2
+    try it.frames.Pop() catch { unreachable }
+    return f.depth + r
+}
+
+fn main() {
+    it := Interp()
+    total I64 = 0
+    for i in range 1000 { total += it.call(5) }
+    assert total > 0
+}
+# also: frames.olang:15:5: memory: removed elements of 'it.frames' are kept until the Interp's scope closes
+# also: frames.olang:18:12: note: 'f' (line 12) is used here, after 'it.call(d - 1)' (line 15), which removes frames; read what you need from 'f' before the call

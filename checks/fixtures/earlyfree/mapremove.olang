@@ -1,0 +1,17 @@
+import "std/io"
+
+# 2.7: a Map with entries removed - each Remove frees its key and its Rec
+N I64 = 1000000
+
+type Rec struct(t String&) {
+    text String& = t
+}
+
+fn main() {
+    m := Map<String&, Rec&>()
+    for i in range N {
+        m.Put($i, Rec("payload " $i " - about sixty bytes of value text ....."))
+        if i >= 100 { m.Remove($(i - 100)) }
+    }
+    io.Println($m.Len())!
+}

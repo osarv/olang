@@ -1,0 +1,45 @@
+# check: build
+# flags: -memory
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+    Neg(a Expr&)
+}
+
+type Program struct() {
+    root Expr& = Expr.Lit(0)
+}
+
+# the sharing version: a result borrowed from e, its unchanged nodes reused - new nodes are built where the old tree
+# lives, so the place's new value lives in its old value's storage
+#
+#
+fn simplify(e Expr&) Expr&e {
+    match e {
+        case Expr.Lit(_) { return e }
+        case Expr.Neg(Expr.Neg(a)) { return simplify(a) }
+        case Expr.Neg(a) { return Expr.Neg(simplify(a)) }
+        case Expr.Add(Expr.Lit(x), Expr.Lit(y)) { return Expr.Lit(x + y) }
+        case Expr.Add(a, b) { return Expr.Add(simplify(a), simplify(b)) }
+    }
+}
+
+fn build(d I64) Expr& {
+    if d == 0 { return Expr.Neg(Expr.Lit(1)) }
+    return Expr.Add(build(d - 1), build(d - 1))
+}
+
+fn count(e Expr&) I64 {
+    return match e { case Expr.Lit(_) => 1  case Expr.Neg(a) => 1 + count(a)  case Expr.Add(a, b) => 1 + count(a) + count(b) }
+}
+
+fn main() {
+    p := Program()
+    p.root = build(4)
+    for i in range 100 {
+        p.root = simplify(p.root)
+    }
+    assert count(p.root) == 47
+}
+# also: ast.olang:40:9: memory: 'p.root' keeps what it lets go of until main's scope closes
+# also: ast.olang:17:1: note: its new value is built where the old one lives: 'simplify' borrows its result from 'e'; a built result ('Expr&') frees the old tree

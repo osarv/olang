@@ -45,7 +45,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "earlyfree"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -381,6 +381,7 @@ fn scenario(r mut report&, name String&) ? Failed {
     }
     match name {
         case "landing" { try landing(r) }
+        case "earlyfree" { try earlyfree(r) }
         case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
         case "sidebyside" { try sidebyside(r) }
@@ -450,6 +451,32 @@ fn scenario(r mut report&, name String&) ? Failed {
 # O1b/P2: tasks building into the program's scope at once, at -d where nothing hides the allocations (it corrupted the
 # heap); O18a: a value local's references are reclaimed with its loop body's block, under an address-space limit ten
 # million passes would exceed when they went to the function's own scope; E11b: a join left part way, or recursing
+# O8d (docs/memory.md 2.7, round 6): the programs that replace in long-lived places free what they let go of at once -
+# built, each stays under 8 MB; interpreted at a smaller size, the evaluator, which stops on a read of a freed region,
+# prints what the program built at that size prints
+test "what a long-lived place lets go of is freed at once" { assert passed("earlyfree") }
+
+fn earlyfree(r mut report&) ? Failed {
+    dir := fresh("earlyfree")
+    os.Run("cp checks/fixtures/earlyfree/* " $os.Quote(dir))
+    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv"]
+    small := String&["300", "100", "2000", "2000", "5", "300"]
+    full := String&["example.com\n", "3000000\n", "100\n"
+                    "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
+                    "3071\n", "7999996000000\n"]
+    part := String&["example.com\n", "3000\n", "100\n"
+                    "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
+                    "3071\n", "179400\n"]
+    for i in range progs.Len() {
+        p := progs[i]
+        try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)
+        try r.expect(sh(dir, $"(ulimit -v 8192 && ./build/" $p ") > out.txt 2>&1") == 0, $p " under 8 MB", dir)
+        try r.expect(outOf(dir) == full[i], $p " output", dir)
+        try r.expect(sh(dir, $"\"$OLANG\" interpret -define N=" $small[i] " " $p ".olang > out.txt 2>&1") == 0, $p " interpreted", dir)
+        try r.expect(outOf(dir) == part[i], $p " interpreted output", dir)
+    }
+}
+
 test "where a value lands, as whole builds" { assert passed("landing") }
 
 fn landing(r mut report&) ? Failed {
@@ -1003,9 +1030,9 @@ fn static(r mut report&) ? Failed {
     ll String& = "build/lit.main.debug.ll"
     # O8d: constant data has a zero word before it, the "no region" every object's word before it is read as
     try r.expect(irHas(dir, ll, "constant (<\\{ i64, )?.3 x i32. (\\}> <\\{ i64 0, \\[3 x i32\\] )?.i32 3, i32 4, i32 5."), "no constant array", dir)
-    try r.expect(irHas(dir, ll, "lit(_|_2e)total\\(ptr %[a-z0-9.]*, \\{ i64, ptr \\} \\{ i64 3, ptr @\\.(arr|d)")
+    try r.expect(irHas(dir, ll, "lit(_|_2e)total\\(ptr %[a-z0-9.]*, \\{ i64, ptr \\} \\{ i64 3, ptr (getelementptr inbounds \\(.*, ptr )?@\\.(arr|d)")
                  "lit_total was not handed the constant array", dir)
-    try r.expect(irHas(dir, ll, "lit(_|_2e)lenOf\\(ptr %[a-z0-9.]*, \\{ i64, ptr \\} \\{ i64 11, ptr @\\.(str|d)")
+    try r.expect(irHas(dir, ll, "lit(_|_2e)lenOf\\(ptr %[a-z0-9.]*, \\{ i64, ptr \\} \\{ i64 11, ptr (getelementptr inbounds \\(.*, ptr )?@\\.(str|d)")
                  "lit_lenOf was not handed the constant text", dir)
     # E10: its site's address, unmerged
     try r.expect(irHas(dir, ll, "^@\\.(str\\.|d)[0-9]* = private constant (<\\{ i64, )?.11 x i8."), "the text's site was merged", dir)

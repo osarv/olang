@@ -1,0 +1,44 @@
+import "std/io"
+
+# 2.7: a syntax tree rewritten by passes - each p.root = simplify(p.root) frees the old tree
+N I64 = 20000
+
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+    Neg(a Expr&)
+}
+
+type Program struct() {
+    root Expr& = Expr.Lit(0)
+}
+
+fn simplify(e Expr&) Expr& {          # a built result: every node is new
+    match e {
+        case Expr.Lit(v) { return Expr.Lit(v) }
+        case Expr.Neg(Expr.Neg(a)) { return simplify(a) }
+        case Expr.Neg(a) { return Expr.Neg(simplify(a)) }
+        case Expr.Add(Expr.Lit(x), Expr.Lit(y)) { return Expr.Lit(x + y) }
+        case Expr.Add(a, b) { return Expr.Add(simplify(a), simplify(b)) }
+    }
+}
+
+fn build(d I64) Expr& {
+    if d == 0 { return Expr.Neg(Expr.Lit(1)) }
+    return Expr.Add(build(d - 1), build(d - 1))
+}
+
+fn count(e Expr&) I64 {
+    return match e {
+        case Expr.Lit(_) => 1
+        case Expr.Neg(a) => 1 + count(a)
+        case Expr.Add(a, b) => 1 + count(a) + count(b)
+    }
+}
+
+fn main() {
+    p := Program()
+    p.root = build(10)
+    for i in range N { p.root = simplify(p.root) }
+    io.Println($count(p.root))!
+}

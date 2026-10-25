@@ -27,6 +27,13 @@
 #                                                   out the shapes of use-after-frees known when it was written
 #     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY (-1: all)
 #
+# Its early-free mode (docs/memory.md 3.6) runs scopegen's FreeProgram instead - scenarios replacing and removing in
+# long-lived places, views kept across the let-goes and stored elsewhere - built -d -s -memory, and interpreted in the
+# evaluator's dead-region mode (OLANG_DEADREGIONS), which stops at a read of a region a release reclaimed:
+#
+#     fuzz free START COUNT [JOBS [SCENARIOS]]    seeds START.., the places the -memory reports free at once counted
+#     fuzz freeshow SEED [SCENARIOS]              prints an early-free program
+#
 # Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/olang (make bootstrap) - relative to the working directory when it is relative.
 import "std/io"
 import "std/os"
@@ -44,6 +51,8 @@ Total mut I64 = 0
 Scenarios mut I64 = 12
 Refused mut I64 = 0
 Run mut String& = "" # this run's own directory (newRun)
+FreeMode mut Bool = false   # "fuzz free": scopegen's early-free programs (FreeProgram), interpreted in dead-region mode
+Frees mut I64 = 0           # ... the places their builds' -memory reports say free at once, summed
 
 fn main() ? {
     args := os.Args()
@@ -74,6 +83,17 @@ fn main() ? {
     }
     if args[1] == "scope" and args.Len() >= 4 {
         try scopeMain(args)
+        return
+    }
+    if args[1] == "free" and args.Len() >= 4 {
+        FreeMode = true
+        try scopeMain(args)
+        return
+    }
+    if args[1] == "freeshow" {
+        seed := try args[2].ParseInt() catch default 1
+        if args.Len() > 3 { Scenarios = try args[3].ParseInt() catch default 12 }
+        try io.Print(scopegen.FreeProgram(U64(seed), Scenarios, Array<Bool>(0)))
         return
     }
     if args[1] != "run" or args.Len() < 4 { try usage() }
@@ -117,7 +137,8 @@ fn endRun() String& {
 
 fn usage() ? io.Error {
     try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
-                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n"))
+                     " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]"
+                     " | fuzz free START COUNT [JOBS [SCENARIOS]] | fuzz freeshow SEED [SCENARIOS]\n"))
     os.Exit(1)
 }
 
@@ -270,7 +291,8 @@ fn scopeMain(args Array<String&>&) ? io.Error {
     join {
         for w in range jobs { spawn scopeWorker(queue, w) }
     }
-    summary String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
+    summary mut String& = "fuzz scope: " $Ran " programs, " $Total " scenarios run, " $Refused " refused by the compiler"
+    if FreeMode { summary = $"fuzz free: " $Ran " programs, " $Total " scenarios run, " $Refused " refused, " $Frees " places freeing at once" }
     try io.Print($summary ", " $Found " findings" $endRun() "\n")
     if Found > 0 { os.Exit(1) }
 }
@@ -289,12 +311,13 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     keep mut Array<Bool>& = Array<Bool>(Scenarios, true)
     built := false
     for attempt in range 6 {
-        src := scopegen.Program(U64(seed), Scenarios, keep)
+        src := scopegen.FreeProgram(U64(seed), Scenarios, keep) if FreeMode else scopegen.Program(U64(seed), Scenarios, keep)
         try os.WriteFile($dir "/p.olang", src) catch {
             try scopeFinding(dir, seed, -1, "cannot write the program", "")
             return
         }
-        if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build -debug -sanitize p.olang > c.txt 2>&1") == 0 {
+        mem := " -memory" if FreeMode else ""
+        if sh(dir, $"timeout 600 nice -n 19 \"$OLANG\" build -debug -sanitize" $mem " p.olang > c.txt 2>&1") == 0 {
             built = true
             break
         }
@@ -314,6 +337,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     for k in keep { if k { n++ } }
     if n == 0 { return }
     Total.AtomicAdd(n)
+    if FreeMode { Frees.AtomicAdd(freesIn(read(dir, "c.txt"))) }
     st := sh(dir, "timeout 120 ./build/p.debug.san > s.txt 2> serr.txt")
     sOut := read(dir, "s.txt")
     # a scenario that checks itself - a baked global against the same computation at run time, a value a destructor must
@@ -328,7 +352,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     }
     #-i runs no destructors, so a program with them is held to itself: built -b, it must print what -d -s does, and every
     #resource made must have been destructed (the last line, "dtors 0")
-    if scopegen.HasDtors(U64(seed)) {
+    if scopegen.HasDtors(U64(seed)) and not FreeMode {
         if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > cb.txt 2>&1") != 0 {
             try scopeFinding(dir, seed, -1, "builds -d -s but not -b", read(dir, "cb.txt"))
             return
@@ -345,7 +369,9 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
             return
         }
     } else {
-        ist := sh(dir, "timeout 600 nice -n 19 \"$OLANG\" interpret p.olang > i.txt 2> ierr.txt")
+        # dead-region mode: a read of storage a release reclaimed stops -i at once (exit 70, an internal error)
+        dead := "env OLANG_DEADREGIONS=1 " if FreeMode else ""
+        ist := sh(dir, $"timeout 600 nice -n 19 " $dead "\"$OLANG\" interpret p.olang > i.txt 2> ierr.txt")
         if ist != 0 {
             try scopeFinding(dir, seed, -1, "-i failed", read(dir, "ierr.txt"))
             return
@@ -368,6 +394,14 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
         return
     }
     try scopeFinding(dir, seed, -1, "-d -s run failed", read(dir, "serr.txt"))
+}
+
+# the number of places a build's -memory report says free at once: "... - N free(s) it at once, ..."
+fn freesIn(out String&) I64 {
+    at := try out.Find("in code that runs again - ") catch { return 0 }
+    rest := out[at + 26:]
+    end := try rest.FindByte(' ') catch { return 0 }
+    return try rest[:end].ParseInt() catch default 0
 }
 
 # leaves out every scenario an error in diag is reported in, from the "# scenario k" lines of src; how many it left out

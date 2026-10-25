@@ -5136,7 +5136,7 @@ channel that outlives it (built where the channel lives, std/chan), an element a
 loop meant to run indefinitely builds what one turn needs in its own body, reclaimed each turn (O2b), and reuses what it
 keeps: `List.Clear` and `StringBuilder.Clear` empty a container and keep its storage.
 
-**O8d (letting go).** *(Not yet implemented: the C compiler reclaims nothing before its scope closes.)* A **place** is
+**O8d (letting go).** A **place** is
 storage that holds a value and can be given another: a local, a field, an element of an array or a collection, a
 global. A place **lets go** of what it holds when it is assigned (S4), when the entry holding it is removed (M19d's
 `RemoveAt`, `SwapRemove`, `Remove`, `Clear`, `Truncate`), and, for a local given something moved out of a collection
@@ -5153,9 +5153,13 @@ closes - when the place was its **only holder**:
    while the place lives;
 6. no reference read from what the place holds is in use across a call that may make the place let go.
 
-A reference read from it that is still in use when the place lets go, in the function holding the reference, delays
-the reclaiming to that reference's last use. Reclaiming early changes no value a program can read, runs no destructor
-(O15), and is not otherwise observable: a program's memory use is the only way to see it.
+A reference read from what a place holds that is still in use after the place lets go - in the function holding the
+reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
+condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
+(a function value, an `extern`), code in a module compiled on its own (B3i), a cycle of calls not settled - the place
+keeps, as O8c says; nothing is reclaimed on a guess. Which places keep, and why, `-memory` reports (B18). Reclaiming
+early changes no value a program can read, runs no destructor (O15), and is not otherwise observable: a program's
+memory use is the only way to see it.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
 below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
@@ -6073,7 +6077,7 @@ command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
             | "bindgen"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
+            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -6093,6 +6097,7 @@ beginning with `-` that is no option is an error:
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
+| `-memory` | running a file, build, test | B18 |
 
 `build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
@@ -6643,6 +6648,18 @@ without `-check`. The status is 2 when a file cannot be read or a tool cannot be
 are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), and again when the compiler or their source
 is newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
 `precedence_migrate`) - is not run.
+
+**B18.** `-memory` prints, after a build's diagnostics, what early freeing (O8d) decided for the program: a row for
+each place that lets go of storage made for it in code that runs again (a loop, or a function other than `main`) and
+keeps it until its scope closes - `path:line:column: memory: 'PLACE' keeps what it lets go of until SCOPE closes`, at
+the statement letting go, or `removed elements of 'COLLECTION' are kept until SCOPE closes` for what a collection's
+removals let go of - then a `note:` row at the reason: the store of a reference into it elsewhere (condition 2), the
+value that was not made for it (condition 1), the view in use across the let-go (condition 6), the task or the
+destructor (conditions 3 and 4); and last a line counting the places and how many free what they let go of at once. Only
+the program's places are reported - fields of its types, and what its collections hold - not those inside the
+library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
+starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
+scope`). Places that free at once are counted, not listed; rows for one cause are written once.
 
 ## 11. External Functions
 
