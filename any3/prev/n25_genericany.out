@@ -1,0 +1,72 @@
+== build -debug -sanitize
+n25_genericany.olang:24:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:49:56: note: in the standard library's code, here
+   49 |     chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+      |                                                        ^
+n25_genericany.olang:24:1: note: instantiated here, with T = String
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:30:55: note: instantiated here, with T = String
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                                       ^~~~~~
+n25_genericany.olang:24:1: note: instantiated here, with T = String
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:631:47: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                                               ^
+n25_genericany.olang:25:1: note: instantiated here, with T = String
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[G9]: the type arguments of typeWritten cannot be inferred from these arguments
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:631:29: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                             ^~~~~~~~~~~
+== build
+n25_genericany.olang:24:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:49:56: note: in the standard library's code, here
+   49 |     chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+      |                                                        ^
+n25_genericany.olang:24:1: note: instantiated here, with T = String
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+== interpret
+n25_genericany.olang:24:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:49:56: note: in the standard library's code, here
+   49 |     chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+      |                                                        ^
+n25_genericany.olang:24:1: note: instantiated here, with T = String
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:30:55: note: instantiated here, with T = String
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                                       ^~~~~~
+n25_genericany.olang:24:1: note: instantiated here, with T = String
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:631:47: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                                               ^
+n25_genericany.olang:25:1: note: instantiated here, with T = String
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[G9]: the type arguments of typeWritten cannot be inferred from these arguments
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany3/std/prelude/list.olang:631:29: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                             ^~~~~~~~~~~
+status 1

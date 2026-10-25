@@ -1,0 +1,9 @@
+== build -debug -sanitize
+cond match call field slice catch plain trim
+status 0
+== build
+cond match call field slice catch plain trim
+status 0
+== interpret
+cond match call field slice catch plain trim
+status 0

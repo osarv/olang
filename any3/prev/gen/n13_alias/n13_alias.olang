@@ -1,0 +1,56 @@
+import "std/io"
+# which shapes put the source's own storage in the box: each writes through a mut any and shows its own source
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn same(s mut String&) mut String&s { return s }
+type H struct(s mut String&) { s }
+error Oops {
+    BAD
+}
+fn pick(k I64) Lab ? Oops {
+    if k < 0 { error Oops.BAD }
+    return Lab("p" $k)
+}
+fn main() {
+    s1, s2, s3, s4, s5, s6, s7, s8 := "cond", "match", "call", "field", "slice", "catch", "plain", "trim"
+    c := s1.Len() > 2
+    b1 mut any W& = Lab(s1 if c else s1)
+    b1.Bump()
+    b2 mut any W& = Lab(match s2.Len() { case 0 => s2 case _ => s2 })
+    b2.Bump()
+    b3 mut any W& = Lab(same(s3))
+    b3.Bump()
+    h := H(s4)
+    b4 mut any W& = Lab(h.s)
+    b4.Bump()
+    b5 mut any W& = Lab(checked s5[1:9] catch default s5)
+    b5.Bump()
+    b6 mut any W& = try pick(-1) catch default Lab(s6)
+    b6.Bump()
+    b7 mut any W& = Lab(s7)
+    b7.Bump()
+    b8 mut any W& = Lab(s8.Trim())
+    b8.Bump()
+    say($s1 " " $s2 " " $s3 " " $s4 " " $s5 " " $s6 " " $s7 " " $s8)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

@@ -1,0 +1,44 @@
+== build -debug -sanitize
+n21b_iteradapters.olang:24:20: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:25:20: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:26:20: error[T32]: 'Enumerate' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   26 |     for p in mk(n).Enumerate() { b.Push("e" $p) }
+      |                    ^~~~~~~~~
+n21b_iteradapters.olang:27:20: error[T32]: 'Zip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   27 |     for p in mk(n).Zip(mk(n + 1)) { b.Push("z" $p) }
+      |                    ^~~
+n21b_iteradapters.olang:28:20: error[T32]: 'Chain' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   28 |     for x in mk(1).Chain(mk(2)) { b.Push("c" $x) }
+      |                    ^~~~~
+compilation failed with 5 errors
+== build
+n21b_iteradapters.olang:24:20: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:25:20: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:26:20: error[T32]: 'Enumerate' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   26 |     for p in mk(n).Enumerate() { b.Push("e" $p) }
+== interpret
+n21b_iteradapters.olang:24:20: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   24 |     for x in mk(n).Take(2) { b.Push("t" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:25:20: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   25 |     for x in mk(n).Skip(2) { b.Push("s" $x) }
+      |                    ^~~~
+n21b_iteradapters.olang:26:20: error[T32]: 'Enumerate' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   26 |     for p in mk(n).Enumerate() { b.Push("e" $p) }
+      |                    ^~~~~~~~~
+n21b_iteradapters.olang:27:20: error[T32]: 'Zip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   27 |     for p in mk(n).Zip(mk(n + 1)) { b.Push("z" $p) }
+      |                    ^~~
+n21b_iteradapters.olang:28:20: error[T32]: 'Chain' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   28 |     for x in mk(1).Chain(mk(2)) { b.Push("c" $x) }
+      |                    ^~~~~
+compilation failed with 5 errors
+status 1

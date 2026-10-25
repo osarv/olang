@@ -1,0 +1,21 @@
+# a method declared for one instance of a generic type, called on an instance differing only in an argument's
+# permission or reference-shape, directly and through an any
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<String&>&) Describe() String { return "text box " $b.v }
+fn (b Box<I64>&) Describe() String { return "int box " $b.v }
+type D trait {
+    Describe() String
+}
+fn main() {
+    s := "hi"
+    a := Box<String&>(s, 1)
+    m := Box<mut String&>(s, 2)
+    say(a.Describe())
+    say(m.Describe())
+    x any D& = m
+    say(x.Describe())
+    say(Box<I64>(4, 3).Describe())
+}
