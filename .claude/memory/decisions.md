@@ -1048,3 +1048,6 @@ functions; `p.StringFromC(max)` stays. The user then: "It does sound like we sho
   (removed 2026-10-01, T13) would be the real split (two ways to build, validation skippable, zero value and placement
   needing a second rule). Recommended: keep. Open, not asked as a question: a private constructor on a public type (not
   expressible; wait for code needing it).
+- Private constructors on public types: NOT added (the user 2026-10-25: "it's fine to keep ... I don't know how we would
+  do that without breaking the 'capitalized means public' rule"). A constructor is as visible as its type; validation
+  lives in it.
