@@ -36,11 +36,16 @@ type Error error {
 # Encode included, well inside its stack
 MaxDepth I64 = 1000
 
-# a JSON value
+# a JSON value. A number is a Num, its F64 - but a whole number written without a fraction or an exponent that an I64
+# or a U64 holds and an F64 does not hold exactly (beyond 2^53) is kept exactly: an Int, or a Uint above I64's range.
+# Every number reads as an F64 (AsNum, its nearest); AsInt, AsUint and Decode read a whole one exactly, and Encode
+# writes it back as it was
 type Json enum {
     Null
     Bool(v Bool)
     Num(v F64)
+    Int(v I64)
+    Uint(v U64)
     Str(s String&)
     Arr(items Array<Json&>&)
     Obj(o Object&)
@@ -118,22 +123,50 @@ fn (j Json&) Has(key String&) Bool {
 
 fn (j Json&) IsNull() Bool { return j == Json.Null }
 
-# the number j holds - failing with WRONG_KIND when it holds something else
+# the number j holds, as an F64 - an exact whole number's nearest - failing with WRONG_KIND when it holds something else
 fn (j Json&) AsNum() F64 ? Error {
     match j {
         case Json.Num(v) { return v }
+        case Json.Int(v) { return F64(v) }
+        case Json.Uint(v) { return F64(v) }
         nomatch { error Error.WRONG_KIND }
     }
 }
 
-# the number j holds, when it is a whole number an I64 holds - failing with WRONG_KIND otherwise. JSON numbers are read
-# as F64s, so a whole number beyond 2^53 has already been rounded to one
+# the number j holds, when it is a whole number an I64 holds - failing with WRONG_KIND otherwise. A whole number Parse
+# read is exact (an Int beyond 2^53)
 fn (j Json&) AsInt() I64 ? Error {
+    neg, mag := try j.whole()
+    if neg {
+        if mag > U64(9223372036854775808) { error Error.WRONG_KIND }
+        return I64(U64(0) - mag)
+    }
+    if mag > U64(9223372036854775807) { error Error.WRONG_KIND }
+    return I64(mag)
+}
+
+# the number j holds, when it is a whole number a U64 holds - failing with WRONG_KIND otherwise
+fn (j Json&) AsUint() U64 ? Error {
+    neg, mag := try j.whole()
+    if neg and mag != U64(0) { error Error.WRONG_KIND }
+    return mag
+}
+
+# a whole number's sign and magnitude, exactly - a Num's where it is whole and its magnitude below 2^64
+fn (j Json&) whole() Bool, U64 ? Error {
     match j {
         case Json.Num(v) {
-            if v >= -9223372036854775808.0 and v < 9223372036854775808.0 and F64(I64(v)) == v { return I64(v) }
-            error Error.WRONG_KIND
+            if v != v or v - v != 0.0 or v >= 18446744073709551616.0 or v < -9223372036854775808.0 { error Error.WRONG_KIND }
+            if v >= 9223372036854775808.0 { return false, U64(v) }     # every F64 there is whole
+            if F64(I64(v)) != v { error Error.WRONG_KIND }
+            if v < 0.0 { return true, U64(0) - U64(I64(v)) }
+            return false, U64(I64(v))
         }
+        case Json.Int(v) {
+            if v < 0 { return true, U64(0) - U64(v) }
+            return false, U64(v)
+        }
+        case Json.Uint(v) { return false, v }
         nomatch { error Error.WRONG_KIND }
     }
 }
@@ -251,12 +284,7 @@ fn (a Json&) Eq(b Json&) Bool {
                 nomatch { return false }
             }
         }
-        case Json.Num(x) {
-            match b {
-                case Json.Num(y) { return x == y }
-                nomatch { return false }
-            }
-        }
+        case Json.Num(_), Json.Int(_), Json.Uint(_) { return numEq(a, b) }
         case Json.Str(x) {
             match b {
                 case Json.Str(y) { return x == y }
@@ -293,6 +321,26 @@ fn (a Json&) Eq(b Json&) Bool {
     }
 }
 
+# two numbers equal by value, exactly: a Num and an Int when the F64 is that whole number
+fn numEq(a Json&, b Json&) Bool {
+    match a {
+        case Json.Num(x) {
+            match b {
+                case Json.Num(y) { return x == y }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    match b {
+        case Json.Num(_), Json.Int(_), Json.Uint(_) { }
+        nomatch { return false }
+    }
+    an, am := try a.whole() catch { return false }
+    bn, bm := try b.whole() catch { return false }
+    return am == bm and (an == bn or am == U64(0))
+}
+
 # agrees with Eq: equal values hash equally (an object's members combined in no order, a zero of either sign alike)
 fn (j Json&) Hash() I64 {
     match j {
@@ -301,6 +349,13 @@ fn (j Json&) Hash() I64 {
         case Json.Num(v) {
             if v == 0.0 { return 4 }
             return I64(v.Bits()) * 1099511628211
+        }
+        case Json.Int(_), Json.Uint(_) {
+            # a whole number an F64 holds exactly hashes as that Num does
+            neg, mag := try j.whole() catch { return 0 }
+            f := F64(mag)
+            if f < 18446744073709551616.0 and U64(f) == mag { return Json.Num(-f if neg else f).Hash() }
+            return I64(mag) * 1099511628211 + (7 if neg else 9)
         }
         case Json.Str(s) { return s.Hash() }
         case Json.Arr(items) {
@@ -517,7 +572,9 @@ fn (r mut reader&) scalar(c Char) ? Error {
     if c == '"' {
         r.push(Json.Str(try r.string()))
     } else if c == '-' or c.IsDigit() {
-        r.push(Json.Num(try r.number()))
+        start I64 = r.pos
+        v := try r.number()
+        r.push(r.exact(start, v))
     } else if c == 't' {
         try r.word("true")
         r.push(Json.Bool(true))
@@ -769,6 +826,23 @@ fn (r mut reader&) number() F64 ? Error {
 
 fn (r reader&) digitAt(i I64) Bool { return i < r.src.Len() and r.src[i].IsDigit() }
 
+# the number the text from start to pos is, its F64 v: a Num - or, for a whole number written with no fraction and no
+# exponent that an I64 or a U64 holds and v does not hold exactly, an Int or a Uint holding it exactly
+fn (r reader&) exact(start I64, v F64) Json& {
+    t := r.src[start:r.pos]
+    if t.Len() - (1 if t[0] == '-' else 0) <= 15 { return Json.Num(v) }      # 15 digits or fewer: v is exact
+    for ch in t {
+        if ch == '.' or ch == 'e' or ch == 'E' { return Json.Num(v) }
+    }
+    n := try t.ParseInt(10) catch {
+        u := try t.ParseUint(10) catch { return Json.Num(v) }
+        if v < 18446744073709551616.0 and U64(v) == u { return Json.Num(v) }
+        return Json.Uint(u)
+    }
+    if v >= -9223372036854775808.0 and v < 9223372036854775808.0 and I64(v) == n { return Json.Num(v) }
+    return Json.Int(n)
+}
+
 # ---- writing a number: the shortest text that reads back ----
 
 # v, finite, as the shortest text that reads back as it - the closest such, when several are as short - which is what
@@ -835,8 +909,13 @@ fn From<T>(j Json&) T ? {
         }
         case _ {
             if T.Kind == TypeKind.Integer {
-                n := try j.AsInt()
-                return T(try n.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
+                # exactly, an unsigned type's whole range included: a negative number through I64, the rest through U64
+                neg, mag := try j.whole()
+                if neg and mag != U64(0) {
+                    n := try j.AsInt()
+                    return T(try n.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
+                }
+                return T(try mag.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
             } else if T.Kind == TypeKind.Float {
                 return T(T.Base(try j.AsNum()))
             } else if T.Kind == TypeKind.Array {
@@ -930,6 +1009,8 @@ fn (w mut writer&) value(j Json&, depth I64) {
                 writeNumber(w.out, v)
             }
         }
+        case Json.Int(v) { w.out.Push($v) }
+        case Json.Uint(v) { w.out.Push($v) }
         case Json.Str(s) { w.text(s) }
         case Json.Arr(items) {
             if items.Len() == 0 {
@@ -1416,5 +1497,33 @@ if TestBuild {
         assert (try Decode<U8>("300") catch Error.WRONG_KIND default 0) == 0
         assert (try Decode<Member>("{\"Name\": \"x\"}") catch Error.MISSING default Member(-1, "")).Id == -1
         assert (try pct("{\"V\": 300}")) == -1 and (try pct("{\"V\": 30}")) == 30
+    }
+
+    # a whole number an F64 does not hold is kept exactly (the bulk review's F8): baked while compiling, and at run time
+    type bigRec struct(Id I64, Big U64, Small I8) {
+        Id, Big, Small
+    }
+    LiveBig mut I64 = 0
+    bigText String = Encode(bigRec(9007199254740993, 18446744073709551615, -5))
+    bigBack U64 = (try Decode<bigRec>(bigText) catch default bigRec(0, 0, 0)).Big
+    bigId I64 = (try Decode<bigRec>(bigText) catch default bigRec(0, 0, 0)).Id
+
+    test "whole numbers are read and written exactly, through I64's and U64's ranges" {
+        assert bigText == "{\"Id\":9007199254740993,\"Big\":18446744073709551615,\"Small\":-5}"
+        assert bigBack == 18446744073709551615 and bigId == 9007199254740993
+        r := try Decode<bigRec>(Encode(bigRec(LiveBig + 9007199254740993, U64(LiveBig) + 18446744073709551615, -5)))
+        assert r.Id == 9007199254740993 and r.Big == 18446744073709551615 and r.Small == -5
+        assert (try Decode<I64>("-9223372036854775808")) == I64.Min and (try Decode<U64>("9223372036854775808")) == U64(9223372036854775808)
+        assert (try Decode<I64>("9223372036854775808") catch Error.WRONG_KIND default 0) == 0
+        assert (try Decode<U64>("-1") catch Error.WRONG_KIND default 7) == 7
+        n := try Parse("[9007199254740993, -9007199254740993, 18446744073709551615, 9007199254740992, 1e19, 12.0]")
+        assert Encode(n) == "[9007199254740993,-9007199254740993,18446744073709551615,9007199254740992,1e+19,12]"
+        assert (try (try n[0]).AsInt()) == 9007199254740993 and (try (try n[2]).AsUint()) == 18446744073709551615
+        assert (try (try n[0]).AsNum()) == 9007199254740992.0 and (try (try n[4]).AsUint()) == 10000000000000000000
+        assert (try (try n[2]).AsInt() catch Error.WRONG_KIND default 0) == 0 and (try (try n[5]).AsInt()) == 12
+        # equal by value, whichever kind holds the number, and hashing alike
+        assert Json.Int(5) == Json.Num(5.0) and Json.Uint(5) == Json.Int(5) and Json.Int(9007199254740993) != Json.Num(9007199254740992.0)
+        assert Json.Int(5).Hash() == Json.Num(5.0).Hash() and Json.Uint(7).Hash() == Json.Int(7).Hash()
+        assert (try n[1]) == Json.Int(-9007199254740993) and $(try n[0]) == "9007199254740993"
     }
 }
