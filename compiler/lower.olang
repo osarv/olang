@@ -884,7 +884,8 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     t := ln.T
     if not ln.planned {
         # while compiling nothing is placed: a returned array is always copied, so a borrow kept of a returned local
-        # never names the result (the run time copies exactly where one may, Plan.RetCopy - the same values either way)
+        # never names the result - the run time returns one uncopied only where nothing else can name it
+        # (Plan.RetSole), so the values are the same either way
         if ln.valueArray(res) and ln.copiesArray(value, res) {
             cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, mir.ScopeRef.Program)
             ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
@@ -957,9 +958,9 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     match x {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                # a local living in the result scope is the result as it is, unless a borrow kept elsewhere names it
-                # too (O26a: Plan.RetCopy)
-                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or ln.plan.RetCopy[I64(id)] }
+                # a local living in the result scope is the result as it is only where nothing else can name it
+                # (O26a: Plan.RetSole); every other one is copied
+                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or not ln.plan.RetSole[I64(id)] }
                 case _ { }
             }
         }

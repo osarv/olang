@@ -755,9 +755,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     Built mut Array<Scope>& = Array<Scope>(Sites)
     Stored mut Array<Scope>& = Array<Scope>(Locals, Scope.Frame)
     MayBuild mut Array<Bool>& = Array<Bool>(Vars)
-    # by local: a value array the function returns that a borrow kept elsewhere names too - copied at its return, so the
-    # result is the caller's own value (O26a, T7b)
-    RetCopy mut Array<Bool>& = Array<Bool>(Locals)
+    # by local: a value array the function returns, living in the result scope (O26a), that nothing else can name - so it
+    # is returned as it is; every other returned array is copied at its return, so the result is the caller's own (T7b)
+    RetSole mut Array<Bool>& = Array<Bool>(Locals)
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed List<Scope>

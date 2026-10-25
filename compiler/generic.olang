@@ -3022,6 +3022,8 @@ fn (p mut Program&) HoldsVarByValue(t types.TypeId, owner I64, v I64, depth I64)
             if p.T.KindOf(r) == types.Kind.Var { return false }
             return p.HoldsVarByValue(r, owner, v, depth + 1)
         }
+        # a function value may have captured it, by value (D16c): one mentioning it anywhere is taken to hold it
+        case types.Kind.Func { return p.mentionsVar(t, owner, v, depth + 1) }
         case types.Kind.Array { return p.HoldsVarByValue(p.T.Elem(t), owner, v, depth + 1) }
         case types.Kind.Tuple, types.Kind.Record {
             for x in p.T.Items(p.T.Parts(t)) {

@@ -280,6 +280,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     flDirect List<I64>
     flKept Bool = false
     flMode I64 = 0
+    soleOf I64 = -1                        # soleArray's local, and whether a use of it may be a second name
+    soleBad Bool = false
     flBlock typed.BlockId = typed.BlockId(0)
     flGrew Bool = false
     flCaps Bool = true                     # whether carried follows what a function value captured
@@ -1236,14 +1238,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
             s.flCaps = true
             if flHas(s.flDirect, I64(l)) or (flHas(s.fl, I64(l)) and not s.tiedToBlock(x)) {
                 s.moveTo = rt
-                # an array value returned as it is (T7b) that a borrow kept elsewhere names too - stored in a field, a
-                # list, given to a call that keeps it - is copied at its return: the result is the caller's own value
-                if s.arenaValue(loc.Ty) {
-                    s.flowStart(l, 2)
-                    s.flowRun(ss, from)
-                    s.plan.RetCopy[I64(l)] = s.flKept
-                    s.flMode = 0
-                }
+                # an array value returned as it is (T7b) only where nothing else can name it - else copied at its return,
+                # so the result is the caller's own value
+                if s.arenaValue(loc.Ty) { s.plan.RetSole[I64(l)] = s.soleArray(I64(l), ss, from) }
                 return
             }
         }
@@ -1694,6 +1691,264 @@ fn (s mut Scoper&) tiedToBlock(x typed.Expr&) Bool {
     return false
 }
 
+# ---- a returned array's second names (O26a, T7b) ----
+#
+# Whether value array local l, which the function returns, can have no second name - a whitelist read off the rest of
+# its block: it is read (a copy), indexed, measured, rendered, written in place, returned, or lent to a call whose
+# settled facts say it keeps nothing of the argument (canKeep: not in its result, receiver or another argument). Any
+# other borrow of its storage - a reference local, a field, a slice kept, a conversion naming it, a constructor's
+# argument (a destructor-bearing holder among them), a lambda's capture, a task - may be a second name, and the local
+# is copied at its return. Nothing here is a fixed point: a use the walk does not know is a second name
+
+fn (s mut Scoper&) soleArray(l I64, ss Array<typed.Stmt&>&, from I64) Bool {
+    s.soleOf = l
+    s.soleBad = false
+    for i in range from, ss.Len() { s.soleStmt(ss[i]) }
+    return not s.soleBad
+}
+
+fn (s mut Scoper&) soleBlock(b typed.Block?&) {
+    if b is null { return }
+    for st in b.Stmts { s.soleStmt(st) }
+}
+
+fn (s mut Scoper&) soleStmt(st typed.Stmt?&) {
+    if st is null or s.soleBad { return }
+    match st {
+        case typed.Stmt.Let(_, _, x) { s.soleExpr(x, false) }
+        case typed.Stmt.Assign(_, p, x) {
+            s.solePlace(p, false)
+            s.soleExpr(x, false)
+        }
+        case typed.Stmt.Eval(_, x) { s.soleExpr(x, false) }
+        case typed.Stmt.If(_, i) {
+            s.soleExpr(i.Test, false)
+            s.soleBlock(i.Then)
+            s.soleBlock(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            s.soleBlock(body)
+            s.soleBlock(post)
+        }
+        case typed.Stmt.Return(_, x) { s.soleExpr(x, false) }
+        case typed.Stmt.Exit(_, _, m) { s.soleExpr(m, false) }
+        case typed.Stmt.Assert(_, c, m) {
+            s.soleExpr(c, false)
+            s.soleExpr(m, false)
+        }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { s.soleBlock(b) }
+        case typed.Stmt.Join(_, jn) {
+            s.soleBlock(jn.Code)
+            for c in jn.Clauses { s.soleBlock(c.Code) }
+        }
+        # a task may hold whatever it is handed until its join, after the return is computed
+        case typed.Stmt.Spawn(_, sw) { s.soleExpr(sw.Task, true) }
+        case typed.Stmt.Yield(_, x) { s.soleExpr(x, false) }
+        case _ { }
+    }
+}
+
+# whether a place is the local's own storage, or a part of it held in place
+fn (s mut Scoper&) soleRooted(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, id) => I64(id) == s.soleOf
+        case typed.Place.Field(_, _, b, _) => s.soleRooted(b)
+        case typed.Place.Elem(_, _, e) => s.soleRooted(e.Base)
+        case typed.Place.Payload(_, _, pl) => s.soleRooted(pl.Base)
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) solePlace(p typed.Place&, strict Bool) {
+    match p {
+        case typed.Place.Local(_, _, id) {
+            if strict and I64(id) == s.soleOf { s.soleBad = true }
+        }
+        case typed.Place.Deref(_, _, r) { s.soleExpr(r, strict) }
+        case typed.Place.Field(_, _, b, _) { s.solePlace(b, strict) }
+        case typed.Place.Elem(_, _, e) {
+            s.solePlace(e.Base, strict)
+            s.soleExpr(e.Index, strict)
+        }
+        case typed.Place.Payload(_, _, pl) { s.solePlace(pl.Base, strict) }
+        case typed.Place.Temp(_, _, v, _) { s.soleExpr(v, strict) }
+        case _ { }
+    }
+}
+
+# a borrow of the local's storage: its own, or a slice of it - with its index expressions walked
+fn (s mut Scoper&) soleBorrow(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Borrow(_, _, p) {
+            if not s.soleRooted(p) { return false }
+            s.solePlace(p, false)
+            return true
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            if not s.soleRooted(sl.Base) { return false }
+            s.solePlace(sl.Base, false)
+            s.soleExpr(sl.Lo, false)
+            s.soleExpr(sl.Hi, false)
+            return true
+        }
+        case typed.Expr.Away(_, _, y) { return s.soleBorrow(y) }
+        case _ { return false }
+    }
+}
+
+# strict: any mention of the local at all is a second name (a task's call, a lambda's capture)
+fn (s mut Scoper&) soleExpr(x typed.Expr?&, strict Bool) {
+    if x is null or s.soleBad { return }
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+        # a value read out is a copy of it
+        case typed.Expr.Read(_, _, p, _) {
+            if strict and s.soleRooted(p) {
+                s.soleBad = true
+                return
+            }
+            s.solePlace(p, strict)
+        }
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) {
+            if s.soleRooted(p) {
+                s.soleBad = true
+                return
+            }
+            s.solePlace(p, strict)
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            if s.soleRooted(sl.Base) {
+                s.soleBad = true
+                return
+            }
+            s.solePlace(sl.Base, strict)
+            s.soleExpr(sl.Lo, strict)
+            s.soleExpr(sl.Hi, strict)
+        }
+        case typed.Expr.Promote(_, _, pr) { s.soleExpr(pr.X, strict) }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Value(f) { s.soleExpr(f, strict) }
+                case _ { }
+            }
+            for j in range c.Args.Len() {
+                a := c.Args[j]
+                # lent to a call that keeps nothing of it
+                if not strict and s.soleBorrow(a) {
+                    if s.canKeep(c, j) { s.soleBad = true }
+                    continue
+                }
+                s.soleExpr(a, strict)
+            }
+        }
+        case typed.Expr.Make(_, _, m) {
+            s.soleExpr(m.Length, strict)
+            for it in m.Items { s.soleExpr(it, strict) }
+        }
+        case typed.Expr.Collect(_, _, c) {
+            s.soleExpr(c.Reserve, strict)
+            if strict { s.soleStrictBlock(c.Loop) } else { s.soleBlock(c.Loop) }
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            for a in args {
+                # measured, compared, indexed: an operation that keeps nothing - but a conversion names its storage (T29a)
+                if not strict and not typed.PassesRefs(op) and s.soleBorrow(a) { continue }
+                s.soleExpr(a, strict)
+            }
+        }
+        case typed.Expr.Cond(_, _, c) {
+            s.soleExpr(c.C, strict)
+            s.soleExpr(c.A, strict)
+            s.soleExpr(c.B, strict)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { if strict { s.soleStrictStmt(st) } else { s.soleStmt(st) } }
+            s.soleExpr(q.X, strict)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { if strict { s.soleStrictStmt(st) } else { s.soleStmt(st) } }
+            for a in m.Arms { s.soleArm(a, strict) }
+            s.soleArm(m.NoMatch, strict)
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.soleExpr(t.X, strict)
+            for c in t.Clauses {
+                if strict { s.soleStrictBlock(c.Code) } else { s.soleBlock(c.Code) }
+                for df in c.Defaults { s.soleExpr(df, strict) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) { for cp in caps { s.soleExpr(cp.Outer, true) } }
+                case typed.FnVal.Adapter(_, r, _) { s.soleExpr(r, true) }
+                case _ { }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    # a rendering reads what it renders, and keeps nothing of it
+                    case typed.Piece.Render(r) {
+                        if strict or not s.soleBorrow(r) { s.soleExpr(r, strict) }
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { s.soleExpr(y, strict) }
+        case _ { s.soleBad = true }
+    }
+}
+
+fn (s mut Scoper&) soleArm(a typed.Arm?&, strict Bool) {
+    if a is null { return }
+    for alt in a.Alts {
+        s.soleExpr(alt.Test, strict)
+        for bd in alt.Binds { s.soleExpr(bd.From, strict) }
+    }
+    s.soleExpr(a.Guard, strict)
+    if strict { s.soleStrictBlock(a.Code) } else { s.soleBlock(a.Code) }
+    s.soleExpr(a.Value, strict)
+}
+
+# the statements a task or a lambda's capture runs, walked so that any mention of the local is a second name
+fn (s mut Scoper&) soleStrictBlock(b typed.Block?&) {
+    if b is null { return }
+    for st in b.Stmts { s.soleStrictStmt(st) }
+}
+
+fn (s mut Scoper&) soleStrictStmt(st typed.Stmt?&) {
+    if st is null or s.soleBad { return }
+    match st {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { s.soleExpr(x, true) }
+        case typed.Stmt.Assign(_, p, x) {
+            s.solePlace(p, true)
+            s.soleExpr(x, true)
+        }
+        case typed.Stmt.If(_, i) {
+            s.soleExpr(i.Test, true)
+            s.soleStrictBlock(i.Then)
+            s.soleStrictBlock(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            s.soleStrictBlock(body)
+            s.soleStrictBlock(post)
+        }
+        case typed.Stmt.Return(_, x), typed.Stmt.Exit(_, _, x) { s.soleExpr(x, true) }
+        case typed.Stmt.Assert(_, c, m) {
+            s.soleExpr(c, true)
+            s.soleExpr(m, true)
+        }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { s.soleStrictBlock(b) }
+        case typed.Stmt.Join(_, jn) {
+            s.soleStrictBlock(jn.Code)
+            for c in jn.Clauses { s.soleStrictBlock(c.Code) }
+        }
+        case typed.Stmt.Spawn(_, sw) { s.soleExpr(sw.Task, true) }
+        case _ { }
+    }
+}
+
 # ---- the flow analysis (O26a, O18c), read off the rest of a block as written ----
 
 fn flHas(xs List<I64>&, x I64) Bool {
@@ -1710,14 +1965,14 @@ fn (s mut Scoper&) flAdd(x I64) {
 }
 
 # mode 0 asks which locals the function returns, seeded with those living in the result scope already; mode 1 whether
-# local l is kept beyond its block; mode 2 the same of a local the function returns, its returns left out
+# local l is kept beyond its block
 fn (s mut Scoper&) flowStart(l typed.LocalId, mode I64) {
     s.fl.Clear()
     s.flDirect.Clear()
     s.flKept = false
     s.flMode = mode
     s.flBlock = s.B!.Locals[I64(l)].In
-    if mode >= 1 {
+    if mode == 1 {
         s.fl.Push(I64(l))
         return
     }
@@ -1783,8 +2038,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                     s.flAdd(k)
                     if not flHas(s.flDirect, k) { s.flDirect.Push(k) }
                 }
-            } else if s.flMode == 1 and s.carries(x) {
-                # (mode 2 asks of a local the function returns what else keeps it: the return is no second name)
+            } else if s.carries(x) {
                 s.flKept = true
             }
         }
@@ -1801,11 +2055,11 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
         }
         case typed.Stmt.Spawn(_, sw) {
             s.flExpr(sw.Task)
-            if s.flMode >= 1 and s.carries(sw.Task) { s.flKept = true }
+            if s.flMode == 1 and s.carries(sw.Task) { s.flKept = true }
         }
         case typed.Stmt.Yield(_, x) {
             s.flExpr(x)
-            if s.flMode >= 1 and s.carries(x) { s.flKept = true }
+            if s.flMode == 1 and s.carries(x) { s.flKept = true }
         }
         case _ { }
     }
