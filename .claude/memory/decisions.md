@@ -1040,3 +1040,11 @@ functions; `p.StringFromC(max)` stays. The user then: "It does sound like we sho
   overloading costs most (literal adaptation, widening, inference, function values, name-keyed tools); recommended
   module functions + doc grouping, full overloading later (additive) with strict rules if code wants it. ASKED: option 2
   with doc grouping, or a spec of full overloading to look at. In effect: nothing.
+- QAT DECIDED 2026-10-25 (the user: "Do option 2 with the doc grouping"): extra builders are module functions ending
+  in the constructor; doc/explain/lsp list them under their type (wt-builders). The user then asked whether the split is
+  weird (one public constructor, other builders plain functions; plain C structs instead?). Answered: builders always
+  go through the constructor (the only way in - validation in one place); it is Kotlin's primary + delegating
+  secondaries / Swift's designated + convenience; a constructor is already a normal call; C-style structs + literals
+  (removed 2026-10-01, T13) would be the real split (two ways to build, validation skippable, zero value and placement
+  needing a second rule). Recommended: keep. Open, not asked as a question: a private constructor on a public type (not
+  expressible; wait for code needing it).
