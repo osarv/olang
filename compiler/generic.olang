@@ -1877,7 +1877,9 @@ fn (p mut Program&) typesOverlap(a types.TypeId, b types.TypeId, depth I64) Bool
     if depth > 32 { return true }
     ka := p.T.KindOf(a)
     kb := p.T.KindOf(b)
-    if ka == types.Kind.Var or kb == types.Kind.Var or a == types.UnknownT or b == types.UnknownT { return true }
+    # a type not known was said where it is written: a receiver naming one meets nothing, so it adds no second error
+    if a == types.UnknownT or b == types.UnknownT { return false }
+    if ka == types.Kind.Var or kb == types.Kind.Var { return true }
     if ka == types.Kind.Named and kb == types.Kind.Named {
         if p.T.DeclOf(a) != p.T.DeclOf(b) { return false }
         xs := p.T.Items(p.T.Args(a))
@@ -2736,7 +2738,14 @@ fn (p mut Program&) ownMethod(t types.TypeId, name source.NameId) Bool {
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     key := p.typeKey(x)
-    return key >= 0 and p.methods.Has(pair.Pair(key, I64(name)))
+    if key < 0 { return false }
+    # one declared for this instance (M21): a method of another instance of its generic type is not its own
+    m := try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
+    for m >= 0 {
+        if p.recvApplies(m, x) { return true }
+        m = try p.sameKey.Get(m) catch default -1
+    }
+    return false
 }
 
 fn (p mut Program&) declaresEq(t types.TypeId) Bool {

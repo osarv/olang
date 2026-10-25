@@ -1,0 +1,16 @@
+# check: fail unknown type 'Tow'
+# never: declared twice
+# M21 (the third any review, finding 6): a receiver naming an unknown type meets no instance, so a misspelling is
+# one error - not a second "declared twice" at another instance's method
+type Two<A, B> struct(a A, b B) {
+    a
+    b
+}
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+fn main() {
+    s := Box<I64>(1).Describe()
+}

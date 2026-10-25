@@ -687,3 +687,26 @@ test "O26a: a returned local a kept borrow names is copied at its return" {
     assert BakedRetShared == want
     assert retShared(Live - 2) == want
 }
+
+# M21, E10a, E10b (the third any review, finding 5): Eq and Hash declared for one instance of a generic type are that
+# instance's alone - another instance of it has the supplied Hash and part-by-part ==, so it is a Map key too
+type EqBox<T> struct(v T) {
+    v
+}
+fn (b EqBox<I64>&) Eq(o EqBox<I64>&) Bool { return b.v % 10 == o.v % 10 }
+fn (b EqBox<I64>&) Hash() I64 { return b.v % 10 }
+fn instanceEq(k I64) String {
+    m := Map<EqBox<I64>, I64>()
+    m.Put(EqBox<I64>(13), 1)
+    m.Put(EqBox<I64>(23 + k), 2)
+    n := Map<EqBox<Bool>, I64>()
+    n.Put(EqBox<Bool>(true), 1)
+    n.Put(EqBox<Bool>(k > 0), 2)
+    return $m.Len() " " $n.Len() " " $(EqBox<I64>(13) == EqBox<I64>(23)) " " $(EqBox<Bool>(true) == EqBox<Bool>(false))
+}
+BakedInstanceEq String = instanceEq(0)
+
+test "M21: Eq and Hash of one instance are not another's" {
+    assert BakedInstanceEq == "1 2 true false"
+    assert instanceEq(Live - 3) == BakedInstanceEq
+}
