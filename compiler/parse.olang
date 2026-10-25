@@ -77,7 +77,6 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
     inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
-    inContract Bool = false            # in a contract's brackets (D17): "return e" an operand, "x fits T" an operator
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
@@ -699,7 +698,8 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             if p.sees(token.Tok.Lt) { tps = try p.typeParams() }      # G10d: "struct<T>(g Graph<T>&)" (QW)
             try p.want(token.Tok.LParen)
             params := try p.params(false)
-            errs := try p.contractOn(try p.errorSet())
+            k := try p.contractHere()
+            errs := p.withContract(try p.errorSet(), k)
             p.ctorBody = true
             body := try p.block()
             dsp := source.Span(0, 0)
@@ -761,7 +761,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
                 }
                 mn := try p.methodName()
                 # D17f: a trait's method may state the contract every call through an "any" is held to
-                s := try p.contractOn(try p.sig(false, false, true))
+                s := try p.sig(false, false, true)
                 methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
                 try p.entryEnd()
             }
@@ -773,9 +773,10 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
                 cat := p.advance()
                 cp := try p.params(false)
-                ce := try p.contractOn(try p.errorSet())
+                ck := try p.contractHere()
+                ce := p.withContract(try p.errorSet(), ck)
                 cb := try p.block()
-                s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors, false, Array<source.NameId>(0), Array<source.Span>(0), ce.Contract)
+                s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors, false, ce.Contract)
                 return ast.TypeBody.Over(base, ast.Func(p.from(cat), null, source.NameId(0), s, cb))
             }
             return ast.TypeBody.Over(base, null)
@@ -803,7 +804,6 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
     if recv is not null and recv.Ty is not null { p.receiverVars(recv.Ty!, false) }
     p.scopeDecl()
     s := try p.sig(false, false, true)
-    s = try p.contractOn(s)
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
         if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false))) }
@@ -887,29 +887,15 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
     one := value and p.item
     try p.want(token.Tok.LParen)
     params := try p.params(lambda)
+    k ast.ContractBlock?&p = null
+    if named { k = try p.contractHere() }        # D17: a declaration's contract, right after its parameters
     results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
-    rnames List<source.NameId>
-    rsps List<source.Span>
-    unnamed := false
     noReturn := p.accept(token.Tok.Noreturn)      # D8e: where a result would stand
     if not noReturn and p.startsResult() {
         from := p.tys.Len()
         wasItem := p.item
         p.item = true
         for {
-            # D17: a declaration's result may be named, "r F64" - a name, then a type on the same line
-            if named and p.namedResult() {
-                rat := p.here()
-                rn := try p.name()
-                if unnamed or (rnames.Len() == 0 and p.tys.Len() > from) {
-                    p.report(rat, p.prevEnd, msgs.ResultNamesMixed())
-                }
-                rnames.Push(rn)
-                rsps.Push(source.Span(rat, p.prevEnd))
-            } else {
-                if rnames.Len() > 0 { p.report(p.here(), p.here() + 1, msgs.ResultNamesMixed()) }
-                unnamed = true
-            }
             t := try p.typeExpr() catch {
                 p.item = wasItem
                 p.tys.Truncate(from)
@@ -928,46 +914,33 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
         commutes = true
     }
     errs := try p.errorSet(one)
-    if rnames.Len() != results.Len() {
-        rnames.Clear()
-        rsps.Clear()
-    }
-    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, rnames.ToArray(), rsps.ToArray(), null, commutes)
-}
-
-# D17: whether a result here is named - a name followed, on its line, by what starts a type
-fn (p Parser&) namedResult() Bool {
-    if not p.sees(token.Tok.Iden) or p.anyHere() { return false }
-    k := p.look(1)
-    if k != token.Tok.Iden and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.LParen { return false }
-    # a type name followed by "(" is the next method of a trait written on one line, never a result's type
-    if k == token.Tok.Iden and p.look(2) == token.Tok.LParen { return false }
-    # "Vec2 commutes" is a result and the word (E31c)
-    if k == token.Tok.Iden and p.text(p.lookTok(1)) == "commutes" { return false }
-    return not p.lookTok(1).Has(token.LineBreak)
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, k
+                   commutes)
 }
 
 # ---- contracts (D17) ----
 
-# s with the contract that follows it, if one does: "[" items "]" after the signature, right before the body - on the
-# signature's line or the next
-fn (p mut Parser&) contractOn(s ast.Sig&p) ast.Sig&p ? Fail {
-    if p.sees(token.Tok.StmtEnd) and p.look(1) == token.Tok.LBrack { p.advance() }
-    if not p.sees(token.Tok.LBrack) { return s }
-    k := try p.contract()
-    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.ResultNames, s.ResultSps, k, s.Commutes)
+# the contract written here, if one is (D17): "[" items "]" right after a declaration's parameters, on the line of
+# their ")"; null for none
+fn (p mut Parser&) contractHere() ast.ContractBlock?&p ? Fail {
+    if not p.sees(token.Tok.LBrack) { return null }
+    return try p.contract()
+}
+
+# s with a contract k, null for none
+fn (p mut Parser&) withContract(s ast.Sig&p, k ast.ContractBlock?&p) ast.Sig&p {
+    if k is null { return s }
+    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes)
 }
 
 fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
     p.TypeGroups.Push(p.skipFrom(p.pos))
     at := try p.want(token.Tok.LBrack)
-    wasC, wasItem, wasSkip := p.inContract, p.item, p.skip
-    p.inContract = true
+    wasItem, wasSkip := p.item, p.skip
     p.item = false
     p.skip = false
     p.brackets++
     defer {
-        p.inContract = wasC
         p.item = wasItem
         p.skip = wasSkip
         p.brackets--
@@ -979,7 +952,9 @@ fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
         if p.outlivesHere() {
             chains.Push(try p.outlives())
         } else {
-            p.stmts.Push(try p.contractItem())
+            iat := p.here()
+            x := try p.expr()
+            p.stmts.Push(ast.Stmt.Assert(p.from(iat), x, null))
         }
         if not try p.sep(token.Tok.RBrack) { break }
     }
@@ -1013,71 +988,6 @@ fn (p mut Parser&) outlives() ast.Outlives&p ? Fail {
         p.advance()
     }
     return ast.Outlives(p.from(at), ns.ToArray(), sps.ToArray())
-}
-
-# one item of a contract: a condition (an Assert holding it), "for x in a: item" or "for x in a { items }", "if c: item
-# [else ...]" or "if c { items } [else ...]"
-fn (p mut Parser&) contractItem() ast.Stmt&p ? Fail {
-    at := p.here()
-    if p.sees(token.Tok.For) {
-        p.advance()
-        key source.NameId = source.NameId(0)
-        name := try p.name()
-        if p.accept(token.Tok.Comma) {
-            key = name
-            name = try p.name()
-        }
-        try p.want(token.Tok.In)
-        src := try p.forSource()
-        body := try p.contractBody()
-        return ast.Stmt.ForIn(p.from(at), ast.ForIn(key, name, src, false, body, Array<ast.Catch&>(0)))
-    }
-    if p.sees(token.Tok.If) {
-        p.advance()
-        cond := try p.expr()
-        bat := p.here()
-        then := try p.contractBody()
-        tb := ast.Branch(p.from(bat), then, -1)
-        els ast.Stmt?&p = null
-        if p.sees(token.Tok.StmtEnd) and p.look(1) == token.Tok.Else { p.advance() }
-        if p.accept(token.Tok.Else) {
-            if p.sees(token.Tok.If) {
-                els = try p.contractItem()
-            } else {
-                eat := p.here()
-                eb := try p.contractBody()
-                els = ast.Stmt.If(p.from(eat), ast.If(null, ast.Branch(p.from(eat), eb, -1), null))
-            }
-        }
-        return ast.Stmt.If(p.from(at), ast.If(cond, tb, els))
-    }
-    x := try p.expr()
-    return ast.Stmt.Assert(p.from(at), x, null)
-}
-
-# a "for" or "if" item's body: ":" and one item, or "{" items "}" by the listing rule
-fn (p mut Parser&) contractBody() Array<ast.Stmt&>&p ? Fail {
-    if p.sees(token.Tok.Colon) { p.TypeGroups.Push(p.skipFrom(p.pos)) }
-    if p.accept(token.Tok.Colon) {
-        it := try p.contractItem()
-        return ast.Stmt&[it]
-    }
-    try p.want(token.Tok.LBrace)
-    from := p.stmts.Len()
-    p.skipEnds()
-    for not p.sees(token.Tok.RBrace) {
-        if p.outlivesHere() {
-            p.report(p.here(), p.here() + 1, msgs.OutlivesNested())
-            try p.outlives()
-        } else {
-            p.stmts.Push(try p.contractItem())
-        }
-        if not try p.sep(token.Tok.RBrace) { break }
-    }
-    p.skipEnds()
-    items := gather(p.stmts, from)
-    try p.want(token.Tok.RBrace)
-    return items
 }
 
 # whether a signature's result type follows its parameters
@@ -1588,7 +1498,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.Block(sp, body)
         }
-        case token.Tok.Try, token.Tok.Checked { return try p.tryStmt() }
+        case token.Tok.Try { return try p.tryStmt() }
         case token.Tok.Iden { return try p.idenStmt() }
         nomatch { return try p.exprStmt() }
     }
@@ -1840,13 +1750,12 @@ fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
 # than two levels left the limit is said at X first; a store's target and a call with clauses are read at one level, a
 # try with no clause (an expression) at two
 fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
-    isChecked := p.sees(token.Tok.Checked)
     at := p.advance()
     if p.depth + 2 > MaxNesting { p.tooDeepAt(p.pos) }
     was := p.limitAt
     defer { p.limitAt = was }
     p.limitAt = -1
-    if not isChecked and p.sees(token.Tok.Join) {
+    if p.sees(token.Tok.Join) {
         j := try p.joinRest(true)
         return ast.Stmt.Join(p.from(at), j)
     }
@@ -1856,7 +1765,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl, isChecked)
+        return ast.Stmt.TryStore(sp, inner, cl)
     }
     x := try p.postfix()
     k := p.peek()
@@ -1867,7 +1776,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         cl := try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
-        return ast.Stmt.TryStore(sp, inner, cl, isChecked)
+        return ast.Stmt.TryStore(sp, inner, cl)
     }
     match x {
         case ast.Expr.Postfix(_, op, _) {
@@ -1876,7 +1785,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
                 cl := try p.clauses(false)
                 sp := p.from(at)
                 try p.endStmt()
-                return ast.Stmt.TryStore(sp, inner, cl, isChecked)
+                return ast.Stmt.TryStore(sp, inner, cl)
             }
         }
         nomatch { }
@@ -1887,7 +1796,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         p.tooDeepAt(reached)
         error Fail.SYNTAX
     }
-    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl, isChecked)
+    e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
     if cl.Len() == 0 {
         e = try p.postfixFrom(e)
         e = try p.binaryFrom(e, 1)
@@ -2392,16 +2301,6 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
         if p.RecordOperators and links > 0 { p.Operators.Push(left.Span()) }   # the node the last turn made
         k := p.peek()
         pr := p.prec(k)
-        # D17a: in a contract, "x fits T" binds as a comparison
-        if p.inContract and k == token.Tok.Iden and p.text(p.tk()) == "fits" {
-            if 8 < min { return left }
-            p.advance()
-            t := try p.typeExpr()
-            left = ast.Expr.Fits(source.Span(start, p.prevEnd), left, t)
-            try p.enter()
-            links++
-            continue
-        }
         if pr == 0 or pr < min { return left }
         # "not" in infix position can only be "not in"
         if k == token.Tok.Not and p.look(1) != token.Tok.In { return left }
@@ -2495,12 +2394,6 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             defer p.leave()
             x := try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
-        }
-        case token.Tok.Return if p.inContract {
-            # D17b: "return e", e's value when the call returns - binding as a unary operator does
-            p.advance()
-            x := try p.unary()
-            return ast.Expr.Unary(p.from(at), token.Tok.Return, x)
         }
         case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec {
             k := p.peek()
@@ -2770,13 +2663,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             p.skip = wasSkip
             return ast.Expr.Paren(p.from(at), x)
         }
-        case token.Tok.Try, token.Tok.Checked {
+        case token.Tok.Try {
             listOk := at == p.listTry
-            isChecked := p.sees(token.Tok.Checked)
             p.advance()
             x := try p.postfix()
             cl := try p.clauses(listOk)
-            return ast.Expr.Try(p.from(at), x, cl, isChecked)
+            return ast.Expr.Try(p.from(at), x, cl)
         }
         case token.Tok.Fn {
             p.advance()

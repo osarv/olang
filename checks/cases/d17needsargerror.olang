@@ -1,0 +1,14 @@
+# check: fail error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
+# D17b: a written error set lists ArgumentError, which a function with conditions can fail with
+error Odd {
+    ODD
+}
+
+fn half(n I64) [n >= 0] I64 ? Odd {
+    if n % 2 == 1 { error Odd.ODD }
+    return n / 2
+}
+
+fn main() ? {
+    x := try half(4)
+}

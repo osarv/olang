@@ -23969,7 +23969,8 @@ became a build case: with no call there is no instance to check (G16).
 
 **A type variable called (G8b, mine; recorded future work "T(x) through a type variable" since 2026-10-10).** `U(x)` in
 an instance is the call its bound type's name is - a conversion for a number type (E26), the constructor for a declared
-type - and a type that is neither is "not callable". Narrow is written with it.
+type - and a type that is neither is "not callable". Narrow was first written with it (round 1), and is now supplied
+by the compiler (below).
 
 **`commutes` (E31c, the user's decision).** `fn (v Vec2) Mul(s F64) Vec2 commutes { }` makes `2.0 * v` call
 `v.Mul(2.0)` when the left operand's type has no such operator. Decided (mine): the word stands right after the result,
@@ -23981,3 +23982,67 @@ function, `Minus` and the rest are errors naming the five. The left operand is e
 hidden local unless it is a literal, then `y.Mul(held)`; a literal on the left adapts to the method's parameter
 (`0.5 + w` with `Plus(s F32)` is an `F32`). The evaluator needed nothing - the call is an ordinary method call - and
 `E31cBaked` and a decided assert prove it agrees.
+
+**`checked` and `CheckError` removed (E15a, E16c, E16d, E26b, E32, R20, the user's decision: one error system, `try`).**
+Every check `checked` turned on is now a call that fails, written with `try` or `!`, and no keyword is left that adds
+checks to an expression:
+- `a.Get(i)` and `a.SliceOf(lo, hi)` on every array (a `String` included) fail with the prelude's
+  `ArrayError.OUT_OF_RANGE`; `List.Get` and `Vec.Get` with their own `OUT_OF_RANGE`. `a[i]` stays unchecked, `a[lo:hi]`
+  still aborts once per slice (E16b). A constant index known out of range is no compile error under `Get` (it is the
+  checked form), only for a plain `a[i]` (E16).
+- `x.Narrow<T>()` (E26b), on every number type, fails with `NumberError.OVERFLOW` (a value changed) or `INVALID` (a NaN
+  or an infinity made an integer). Decided (mine): supplied by the compiler as a conversion whose check is the try's,
+  exactly the checks `checked T(x)` made, rather than a prelude method over `U(x)` - the prelude's version needed a
+  compare per type pair the compiler already has as one conversion; a target that is no number is E26b's error, and
+  the type argument is required.
+- `x as C` fails as written with `CaseError.WRONG_CASE` (E32): it aborted outside `checked`, so an `as` no try covers
+  is now an error saying to write `try` or `(x as C)!`. `tools/as_migrate.olang` (driven by that diagnostic) gives
+  every such use its old meaning, `(x as C)!` - 35 in the repository. The trace says `raised here` at the `as`.
+- Arithmetic that must not overflow is `std/arith` - not the prelude (the user): `Add Sub Mul Div Rem Neg ShiftLeft
+  ShiftRight Pow` as free generic functions, `try arith.Add(a, b)`, and `Checked<T>` whose `Plus`, `Mul` (both
+  `commutes`), `Minus`, `Div` and `Neg` are those functions, `try arith.Checked(a) * b + c`. `arith.Error` is `OVERFLOW
+  DIVIDE_BY_ZERO INVALID`, IEEE's meaning for floats kept (QO6). Decided (mine): every function's set is inferred (a
+  bare `?`), so it differs per number type - an integer's `Add` fails with `OVERFLOW` alone, and `catch
+  arith.Error.OVERFLOW` is complete for it, where a written `? Error` made every call name three words. Ordinary olang,
+  so the evaluator computes it as the run time does (baked globals beside run-time asserts in its tests).
+- The checked operator forms (`CheckedAt`, `CheckedPlus` ...) and their superset rule went: a method of such a name is
+  ordinary. An operator method may still declare errors (E31a), and `try x[i]`, `try x[i] = v` call a fallible `At` or
+  `SetAt` as written. No form replaces a checked store into a built-in array (decided, mine): a program tests the index,
+  or holds a `List`/`Vec` and writes through its own fallible methods.
+- What `checked` lowered - range prims (`InRange`), the arithmetic checks and the float-result checks - went from MIR,
+  lowering and the evaluator; lowering's `check` dispatches one table of the prelude's words (`failure`).
+`tools/checked_migrate.olang` rewrites what the text says (`checked a[i]`, `checked a[lo:hi]`, `checked T(x)`, `checked
+f(x)`, `(checked e)!`, CheckError's words within the statement) and lists the rest - checked arithmetic and stores - for
+a person: in the repository those were the tests of checked arithmetic, rewritten onto `std/arith`, and of the derived
+checked forms, removed with them (13 checks cases of removed rules deleted, beside 9 of removed contract forms).
+
+**Contracts checked on entry (D17-D17g, the user's design of 2026-10-25, reversing guarantees and run-time
+`checked f(x)`).** The block moved to right after the parameter list - `fn pick(x I32, y I32) [y > x] I32 ? E` - and
+holds conditions (any `Bool` expression: calls, fallible calls and lambdas included) and `outlives` chains. Each
+condition is checked on entry, in every build, in order; a false one fails the call with the prelude's new
+`ArgumentError.INVALID`; an error from a call inside a condition leaves the function as itself. `ArgumentError` is
+therefore in the function's set: inferred by a bare `?`, the whole set of a function with none, and a compile error
+naming it where a written set leaves it out (`ContractNeedsArgumentError`). Every call is handled by its signature.
+Removed: the old position after the signature, guarantees, named results, `return x` entry values, `for`/`if`/`fits`
+items and `checked f(x)` - so the entry-value machinery, `Lowerer.Ensures`, the guarantee lowering and the evaluator's
+guarantee checks went too. Decided (mine):
+- each condition is a requirement body of its own (`BodyOf.Contract`), its error set inferred (`c.inferring`), called
+  on entry with the parameters; a fallible condition's call is wrapped in a `try` whose errors leak into the function;
+- the raise carries its text: `typed.Body.RaiseAt`/`RaiseWhat` (copied into `mir.Fn`) give the trace line `FILE:LINE:
+  pick: y > x`, at the condition, in -debug builds and under `interpret`; the call of the requirement body sits on the
+  condition's last character so the trace says nothing of a "try passed it on" there; `!`'s own line stays
+  `ArgumentError.INVALID`;
+- a trait method's conditions are checked caller-side, before the dispatch through an `any` (a `Holds` prim per
+  condition on the held arguments, `dispatchChecks`), and the method the instance's type supplies checks its own on
+  its entry;
+- the compile-time decision (D17e) at a call whose arguments are all closed reports the first false condition per
+  call, whatever handles the call's failure (`try ... catch default` included) - such a call can never succeed, so it is
+  a defect where it is written; a call the evaluator runs itself (a baked global, a decided assert) fails as at run
+  time, which corpus tests read (`dkTryHalf`);
+- constructors take the block after their parameters (`type Percent struct(v I64) [v >= 0 and v <= 100] { v }`) and
+  check it before their body; `outlives` chains stay compile-time obligations.
+D17g's compile errors stay (`U8(300)`), now naming `x.Narrow<T>()`. `tools/contracts_migrate.olang` moves old blocks
+and lists every dropped item (19 contracts in the repository, 12 files). In the corpus, the D17 tests were rewritten
+for entry checks - every call under `try ... catch ArgumentError.INVALID default`, a baked global beside the run time,
+a constructor's contract, a fallible condition, function values checked through them.
+

@@ -194,6 +194,9 @@ type Diag enum {
     MissingTypeArgs
     TypeArgCount
     TypeArgsOnNonGeneric
+    NarrowNotNumber
+    AsCanFail
+    NarrowNeedsType
     TypeVarAsValue
     ArrayByValueRunTime
     ParamTooLarge
@@ -263,15 +266,12 @@ type Diag enum {
     GenericNotStruct
     DeclaredOverAggregate
     NotTheOperator
-    TryMultiIndexNeedsTryat
     ArrayOneIndex
     OperatorResult
     CommutesNotHere
     CommutesSameType
     CommutesClash
     SetatResult
-    CheckedWithoutPlain
-    CheckedNotSuperset
     MethodCannotFail
     LessNotBool
     LenShape
@@ -450,8 +450,6 @@ type Diag enum {
     IsAsMarker
     AsNothing
     IsAsNotEnum
-    TryIndexNeedsLen
-    TrySliceNeedsLen
     SliceNeedsLen
     AtUndeclared
     SetatUndeclared
@@ -480,7 +478,6 @@ type Diag enum {
     DefaultNeedsCatch
     TryNothingFails
     BangNothingFails
-    TryOnlyChecks
     NestedArrayLiteral
     ArrayOfErrors
     ErrorTypeAsValue
@@ -510,7 +507,6 @@ type Diag enum {
     ContainerScopeUnbuildable
     MutOnLocal
     MutOnInferredLocal
-    TrySetatNeedsLen
     NotAStatement
     JoinNextLine
     ConditionConstant
@@ -657,19 +653,12 @@ type Diag enum {
     NoRawValues
     FromPayload
     FromCaseName
-    ResultNamesMixed
-    OutlivesNested
-    ContractReturnOnValue
-    ContractReturnOnResult
-    ContractFitsNotNumber
-    ContractEntryWritable
     ContractOutlivesNoScope
     ContractOutlivesNotParam
     ContractFalse
-    ContractGuaranteeFalse
+    ContractNeedsArgumentError
     ConversionDoesNotFit
     NoteContractCondition
-    NoteContractCall
 }
 
 # one function each, under the id it is known by
@@ -1106,6 +1095,9 @@ fn MissingTypeArgs(tok String&, text String&) Msg { return Msg(Diag.MissingTypeA
 fn TypeArgCount(text String&, n1 I64, n2 I64) Msg { return Msg(Diag.TypeArgCount, "G7", "type arguments for " $text ": expected " $n1 ", found " $n2) }
 
 # ERR_TYPE_ARGS_ON_NON_GENERIC
+fn AsCanFail() Msg { return Msg(Diag.AsCanFail, "E32", "'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'") }
+fn NarrowNotNumber(ty String&) Msg { return Msg(Diag.NarrowNotNumber, "E26b", "'Narrow' converts to a number type, and " $ty " is none") }
+fn NarrowNeedsType() Msg { return Msg(Diag.NarrowNeedsType, "E26b", "'Narrow' names the type it converts to - write 'x.Narrow<I32>()'") }
 fn TypeArgsOnNonGeneric(text String&) Msg { return Msg(Diag.TypeArgsOnNonGeneric, "G7", $text " is not generic, so it takes no type arguments") }
 
 # ERR_CONST_PARAM_TYPE
@@ -1352,7 +1344,6 @@ fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate
 fn NotTheOperator(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.NotTheOperator, "E31", $ty "'s " $text1 " takes " $text2 " besides its receiver - an ordinary method, not the one " $text3 " calls, which takes " $text4) }
 
 # ERR_TRY_MULTI_INDEX_NEEDS_TRYAT
-fn TryMultiIndexNeedsTryat(ty String&, text String&) Msg { return Msg(Diag.TryMultiIndexNeedsTryat, "E31a", "'checked' on several indices needs " $ty " to declare " $text " - a check derived from Len checks one position") }
 
 # ERR_ARRAY_ONE_INDEX
 fn ArrayOneIndex(ty String&) Msg { return Msg(Diag.ArrayOneIndex, "E31", $ty " takes one index - several are passed to a type's At or SetAt") }
@@ -1373,10 +1364,8 @@ fn CommutesClash(op String&, a String&, b String&, other String&) Msg { return M
 fn SetatResult() Msg { return Msg(Diag.SetatResult, "E31", "SetAt gives no result") }
 
 # ERR_CHECKED_WITHOUT_PLAIN
-fn CheckedWithoutPlain(text1 String&, text2 String&) Msg { return Msg(Diag.CheckedWithoutPlain, "E31a", $text1 " is a checked form, which only adds checks to its plain form - declare " $text2 " beside it") }
 
 # ERR_CHECKED_NOT_SUPERSET
-fn CheckedNotSuperset(text1 String&, text2 String&, text3 String&, ty String&) Msg { return Msg(Diag.CheckedNotSuperset, "E31a", $text1 " is " $text2 "'s checked form, so it fails with every error " $text3 " can - add " $ty " after its '?'") }
 
 # ERR_METHOD_CANNOT_FAIL
 fn MethodCannotFail(text String&) Msg { return Msg(Diag.MethodCannotFail, "E31", $text " cannot fail - the operation calling it has nowhere to handle an error") }
@@ -1668,7 +1657,7 @@ fn MemberIsPrivate(text String&, ty String&) Msg { return Msg(Diag.MemberIsPriva
 fn NotAssignable() Msg { return Msg(Diag.NotAssignable, "S4", "this cannot be written - a variable, an element or a member can") }
 
 # ERR_ASSIGN_INTO_TRIED
-fn AssignIntoTried() Msg { return Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store") }
+fn AssignIntoTried() Msg { return Msg(Diag.AssignIntoTried, "R9a", "a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write into the collection itself, 'x[i].f = v'") }
 
 # ERR_INCDEC_NOT_NUMBER
 fn IncdecNotNumber(tok String&, ty String&) Msg { return Msg(Diag.IncdecNotNumber, "S3a", $tok " takes a number, found " $ty) }
@@ -1862,8 +1851,6 @@ fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", 
 
 fn NullCompared(x String&, form String&) Msg { return Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
 
-
-
 # ERR_AS_NEEDS_CASE
 fn AsNeedsCase(ty String&, text String&) Msg { return Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " $ty ", found " $text) }
 
@@ -1883,10 +1870,8 @@ fn AsNothing(text String&) Msg { return Msg(Diag.AsNothing, "E32", "case " $text
 fn IsAsNotEnum(ty String&) Msg { return Msg(Diag.IsAsNotEnum, "E32", "'as' asks for an enum value's payload, and this is " $ty) }
 
 # ERR_TRY_INDEX_NEEDS_LEN
-fn TryIndexNeedsLen(ty String&) Msg { return Msg(Diag.TryIndexNeedsLen, "E31a", "'checked c[i]' checks against Len, and " $ty " has neither CheckedAt nor Len") }
 
 # ERR_TRY_SLICE_NEEDS_LEN
-fn TrySliceNeedsLen(ty String&) Msg { return Msg(Diag.TrySliceNeedsLen, "E31a", "'checked c[lo:hi]' checks against Len, and " $ty " has neither CheckedSlice nor Len") }
 
 # ERR_SLICE_NEEDS_LEN
 fn SliceNeedsLen(ty String&) Msg { return Msg(Diag.SliceNeedsLen, "E31", "a slice with no end runs to Len(), and " $ty " has none") }
@@ -2009,7 +1994,6 @@ fn TryNothingFails(text String&) Msg { return Msg(Diag.TryNothingFails, "R8", "n
 fn BangNothingFails() Msg { return Msg(Diag.BangNothingFails, "E35", "nothing here can fail - write it without '!'") }
 
 # ERR_TRY_ONLY_CHECKS
-fn TryOnlyChecks() Msg { return Msg(Diag.TryOnlyChecks, "E15a", "nothing here fails as written - write 'checked' to check it") }
 
 # ERR_NESTED_ARRAY_LITERAL
 fn NestedArrayLiteral() Msg { return Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") }
@@ -2099,7 +2083,6 @@ fn MutOnLocal(ty String&) Msg { return Msg(Diag.MutOnLocal, "D11a", "a local is 
 fn MutOnInferredLocal() Msg { return Msg(Diag.MutOnInferredLocal, "D11a", "':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'") }
 
 # ERR_TRY_SETAT_NEEDS_LEN
-fn TrySetatNeedsLen(ty String&) Msg { return Msg(Diag.TrySetatNeedsLen, "E31a", "'checked c[i] = v' checks against Len, and " $ty " has neither CheckedSetAt nor Len") }
 
 # ERR_NOT_A_STATEMENT
 fn NotAStatement() Msg { return Msg(Diag.NotAStatement, "S3", "this computes a value and discards it - only a call, '++' or '--' stands alone") }
@@ -2503,31 +2486,16 @@ fn ModuleIdentityClash(text String&) Msg { return Msg(Diag.ModuleIdentityClash, 
 
 # ---- contracts (D17) ----
 
-fn ResultNamesMixed() Msg { return Msg(Diag.ResultNamesMixed, "D17", "name every result or none, as 'q I64, r I64'") }
-
-fn OutlivesNested() Msg { return Msg(Diag.OutlivesNested, "D17d", "an 'outlives' item stands at the top of a contract, not inside a 'for' or an 'if'") }
-
-fn ContractReturnOnValue(tok String&) Msg { return Msg(Diag.ContractReturnOnValue, "D17b", $"'return' reads a value at return through a reference, and " $tok " reads none the call can change - write it without 'return'") }
-
-fn ContractReturnOnResult(tok String&) Msg { return Msg(Diag.ContractReturnOnResult, "D17b", $"a result has only its value at return - write " $tok " without 'return'") }
-
-fn ContractFitsNotNumber(ty String&) Msg { return Msg(Diag.ContractFitsNotNumber, "D17a", $"'fits' names a number type and takes a number, found " $ty) }
-
-fn ContractEntryWritable(text String&) Msg { return Msg(Diag.ContractEntryWritable, "D17b", $"a guarantee reads '" $text "' at entry through what the call may write - write the value it needs of it (its 'Len()', an element), or 'return " $text "' for its value at return") }
-
 fn ContractOutlivesNoScope(tok String&) Msg { return Msg(Diag.ContractOutlivesNoScope, "D17d", $tok " names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'") }
 
 fn ContractOutlivesNotParam(tok String&) Msg { return Msg(Diag.ContractOutlivesNotParam, "D17d", $tok " is no parameter of this function - an 'outlives' item names its parameters and 'return'") }
 
+fn ContractNeedsArgumentError(name String&) Msg { return Msg(Diag.ContractNeedsArgumentError, "D17", $name " has conditions, so a call fails with ArgumentError where one is false - add it after '?'") }
 fn ContractFalse(cond String&, name String&) Msg { return Msg(Diag.ContractFalse, "D17e", $"this call breaks " $name "'s requirement '" $cond "'") }
 
-fn ContractGuaranteeFalse(name String&, cond String&) Msg { return Msg(Diag.ContractGuaranteeFalse, "D17e", $name "'s guarantee '" $cond "' does not hold for a call evaluated while compiling") }
-
-fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty ", so the conversion's requirement 'x fits " $ty "' is false - write a value that fits, or 'checked " $ty "(x)' to fail with an error") }
+fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
 
 fn NoteContractCondition() Msg { return Msg(Diag.NoteContractCondition, "", "the condition") }
-
-fn NoteContractCall() Msg { return Msg(Diag.NoteContractCall, "", "the call evaluated here") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))

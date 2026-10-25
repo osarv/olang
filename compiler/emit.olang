@@ -1840,6 +1840,7 @@ fn (fe mut fnEm&) trace(sp source.Span) {
     }
     k := try fe.sites.Get(sp.Start) catch default 0
     what := "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
+    if k == 0 and fe.F.RaiseText(sp).Len() > 0 { what = $fe.F.RaiseText(sp) }   # a requirement false on entry (D17)
     rf := "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
     fe.E.declare(rf, $"void @" $rf "(ptr)")
     fe.w($"call void @" $rf "(ptr " $fe.located(sp, $": " $what "\n") ")")

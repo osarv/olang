@@ -24,8 +24,8 @@ fn main() ? {
     a := Array<Bag>(1, Bag())
     kept := List<mut BagState&>()
     for i in range 3 {
-        (checked a[i] catch default Bag()).Sneak(i + 1)
-        (checked a[i] catch default Bag()).Keep(kept)
+        (try a.Get(i) catch default Bag()).Sneak(i + 1)
+        (try a.Get(i) catch default Bag()).Keep(kept)
         try churn()
     }
     try churn()

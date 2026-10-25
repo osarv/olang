@@ -151,23 +151,19 @@ fn (w mut writer&) sig(s ast.Sig&) {
     w.put("(")
     w.params(s.Params)
     w.put(")")
+    w.contract(s)
     if s.NoReturn { w.put(" noreturn") }
     was := w.item
     w.item = true
     for i, t in s.Results {
         w.put(", " if i > 0 else " ")
         if i == s.Results.Len() - 1 and s.HasErrors { w.group = noErrorsOf(t) }
-        if i < s.ResultNames.Len() {
-            w.name(s.ResultNames[i])
-            w.put(" ")
-        }
         w.ty(t)
         w.group = false
     }
     w.item = was
     if s.Commutes { w.put(" commutes") }
     w.errors(s)
-    w.contract(s)
 }
 
 # a contract (D17): " [item, ...]" - its conditions, "for" and "if" items, then its "outlives" chains
@@ -195,47 +191,8 @@ fn (w mut writer&) contract(s ast.Sig&) {
 fn (w mut writer&) contractItem(st ast.Stmt&) {
     match st {
         case ast.Stmt.Assert(_, c, _) { w.expr(c) }
-        case ast.Stmt.ForIn(_, f) {
-            w.put("for ")
-            if f.Key != source.NameId(0) {
-                w.name(f.Key)
-                w.put(", ")
-            }
-            w.name(f.Name)
-            w.put(" in ")
-            w.expr(f.Source)
-            w.contractBody(f.Body)
-        }
-        case ast.Stmt.If(_, i) {
-            w.put("if ")
-            w.expr(i.Cond!)
-            w.contractBody(i.Then!.Body)
-            if i.Else is not null {
-                match i.Else {
-                    case ast.Stmt.If(_, e) {
-                        if e.Cond is null {
-                            w.put(" else")
-                            w.contractBody(e.Then!.Body)
-                        } else {
-                            w.put(" else ")
-                            w.contractItem(i.Else!)
-                        }
-                    }
-                    case _ { }
-                }
-            }
-        }
-        case _ { }
+        nomatch { }
     }
-}
-
-fn (w mut writer&) contractBody(items Array<ast.Stmt&>&) {
-    w.put(" { ")
-    for i, st in items {
-        if i > 0 { w.put(", ") }
-        w.contractItem(st)
-    }
-    w.put(" }")
 }
 
 # whether a type is a function type with no error set of its own
@@ -566,8 +523,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put(" ")
             w.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, cl, isChecked) {
-            w.put("checked " if isChecked else "try ")
+        case ast.Stmt.TryStore(_, inner, cl) {
+            w.put("try ")
             w.stmt(inner)
             w.clauses(cl)
         }
@@ -923,8 +880,8 @@ fn (w mut writer&) expr(x ast.Expr&) {
                 w.expr(y)
             }
         }
-        case ast.Expr.Try(_, y, cl, isChecked) {
-            w.put("checked " if isChecked else "try ")
+        case ast.Expr.Try(_, y, cl) {
+            w.put("try ")
             w.expr(y)
             w.clauses(cl)
         }
@@ -942,11 +899,6 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.exprs(args)
         }
         case ast.Expr.Default(_) { w.put("default") }
-        case ast.Expr.Fits(_, y, t) {
-            w.expr(y)
-            w.put(" fits ")
-            w.ty(t)
-        }
     }
 }
 

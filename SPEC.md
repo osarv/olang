@@ -136,7 +136,7 @@ spelling: see §4.3 (visibility).
 **L9.** The following words are reserved and may not be used as identifiers:
 
 ```
-if        else    try     checked catch   return  assert  noreturn
+if        else    try     catch   return  assert  noreturn
 for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
@@ -163,13 +163,12 @@ ending in one ends its statement there. In its constructor's body such a field i
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of one place).** `fits` and `outlives` are words only inside a contract's brackets (D17): `x fits T`
-and `a outlives b` there, ordinary names everywhere else. In a contract `return` is also a prefix operator (D17b).
+**L9b (words of one place).** `outlives` is a word only inside a contract's brackets (D17): `a outlives b` there,
+an ordinary name everywhere else.
 `commutes` is a word only right after a method's result (E31c), an ordinary name everywhere else.
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
-`s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name. A result named `any`
-(D17) is read as this word wherever a name follows it.
+`s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name.
 
 ### 1.5 Literals
 
@@ -691,7 +690,7 @@ returns, never its instance's - §9.1 C2g): a local of any size is declarable, a
 A value stored into **fixed field or element storage** must have its length known and equal to the storage's: one of
 another known length is a compile-time error naming both lengths, and one whose length is known only at run time is a
 compile-time error saying to copy it explicitly through a slice of that length, `s.m = v[0:16]`, whose bounds are
-checked once where it is evaluated (E16b; under `checked`, `OUT_OF_BOUNDS`, E16c). No store is ever checked for its length
+checked once where it is evaluated (E16b; `v.SliceOf(0, 16)` fails instead, E16c). No store is ever checked for its length
 implicitly. An element length is part of its storage's layout, so a local whose stored values' element lengths
 disagree is a compile-time error, not a length kept at run time.
 
@@ -1106,7 +1105,7 @@ A value **borrowed** into a reference (E12c) gives a writable one only if the va
 local, a parameter's copy (D9), a `mut` global, or a field or element of one of these or of a writable reference - and
 a read-only one otherwise. A slice (E16a) has its base's
 permission; a conditional or a match value (E28, S12b) is writable only when every value it can give is; `as` (E32)
-gives the payload's own permission, and a checked index (`checked c[i]`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
+gives the payload's own permission, and a checked index (`c.Get(i)`, E16d) the element's, as `c[i]` does. A **fresh** value - a literal, a constructor call, `$x` and joins (E11a/b), `Array<T>(n)` - is
 writable, and an array literal's elements take the target's permission when every one of them may be written.
 
 **Read-only copies.** A value whose type **holds writable references** - a `mut` reference among its fields, its enum
@@ -1214,7 +1213,7 @@ spelled in terms of a type not yet declared, and it is a compile-time error at t
 array (`type Nest struct(kids Array<Nest&>&)`) is how a value holds others of its own type.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
-constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] [contract] { ... }` (D17).
+constructor, written after the type on the same line: `type Percent I32(v I32) [contract] [? errors] { ... }` (D17).
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
@@ -1514,12 +1513,9 @@ through an `any`: no field, no method `R` does not declare, no operator but `==`
 calls a function or a function value (P1), never through a table: `spawn s.M()` is a compile-time error naming
 `spawn fn() { s.M() }`.
 
-A call through an `any` is held to the **contract `R` writes on the method** (D17f), as a call of a function is held
-to its own (D17e): its requirements decided while compiling where the arguments are values the evaluator computes, its
-guarantees wherever the evaluator runs the call, and both checked at run time under `checked`. The contract of the
-method the instance's type supplies - its own, or a default's - binds the call too, and is checked only under
-`checked`, after dispatch: a `checked s.M(x)` reaches a second function the table holds for `M`, which calls the
-instance's method as `checked` calls it, failing with `CheckError.CONTRACT` where that contract does not hold.
+A call through an `any` is held to the **contract `R` writes on the method** (D17f): its conditions are checked before
+the dispatch, failing with `ArgumentError.INVALID`, and then the method the instance's type supplies - its own, or a
+default's - checks its own on entry, as every call of it does.
 
 **T32c (an `any` satisfies its trait).** The type `any R&` satisfies `R`, and every trait `R` extends (T30a), and
 nothing else, whatever its instance's type does: a type variable constrained by such a trait may be bound to it (G19),
@@ -1551,8 +1547,8 @@ body; `_` binds nothing. A type case binding a name is its clause's only alterna
 one (`case Button _, Slider _`). The type cases must cover every member of the trait, or the match carries a `nomatch` or a
 `case _` (S13a's rule, S13f); a type that is not a member, or one named in two unguarded clauses, is a compile-time
 error. A null `any` matches no type case (S13: it aborts where nothing else takes it). `w as Button` gives the instance
-as a binding would, and **aborts** when the instance is of another type (E32's rule), under `checked` failing with
-`CheckError.WRONG_CASE` instead.
+as a binding would, and fails with `CaseError.WRONG_CASE` when the instance is of another type (E32's rule), covered by
+a `try` or a `!` as an enum's `as` is.
 
 An `any` of an **open** trait is used through its methods alone: a type case or an `as` on one is a compile-time error -
 its set of types is not written down, and a method the trait lacks is what to add.
@@ -1626,8 +1622,8 @@ through a reference marker at some point in the chain (T16, T17d). An error type
 
 ### 3.4 Function declarations
 
-**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig [ contract ] block`, with
-`receiver ::= "(" param ")"`. `contract` is specified in §3.4.1 (D17).
+**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig block`, with
+`receiver ::= "(" param ")"`.
 The declared name enters the module's `vars` set (D2). `block` is specified in §6.1. `fn-type-params` lists the
 function's own type variables (§12.2 G3).
 
@@ -1636,13 +1632,14 @@ ahead of those in the parameter list, and is in every other respect an ordinary 
 reference marker and a scope tag read exactly as they do there. A declaration without a receiver is never
 a method, whatever its first parameter's type.
 
-**D8.** `func-sig ::= "(" param-list ")" ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where:
+**D8.** `func-sig ::= "(" param-list ")" [ contract ] ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where
+`contract` is specified in §3.4.1 (D17) and:
 
 ```
 param-list      ::= list(param)                         (L18a)
 param           ::= IDEN type-expr [ "=" expr ]
 ret-type        ::= result { "," result }                (on one line; several results, D8c)
-result          ::= [ IDEN ] type-expr                  (a declaration's results all named or none, D17)
+result          ::= type-expr
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
 error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
@@ -1746,94 +1743,71 @@ constructor's own `param-list` (§9.1 C1).
 
 ### 3.4.1 Contracts
 
-**D17 (contracts).** A function, a method or a constructor may state what it **requires** of its callers and what it
-**guarantees** them in one bracketed block, its **contract**, written after its signature - after the error set, or the
-results, or the parameters - and right before its body, on the signature's line or the next:
+**D17 (contracts).** A function, a method or a constructor may state what it **requires** of its callers in one
+bracketed block, its **contract**, written right after its parameter list - before its results, its error set, or the
+body:
 
 ```
 contract       ::= "[" list(contract-item) "]"                    (L18a)
-contract-item  ::= expr | outlives | contract-for | contract-if
-contract-for   ::= "for" IDEN [ "," IDEN ] "in" expr item-body
-contract-if    ::= "if" expr item-body [ "else" ( contract-if | item-body ) ]
-item-body      ::= ":" contract-item | "{" list(contract-item) "}"
+contract-item  ::= expr | outlives
 outlives       ::= scope-name "outlives" scope-name { "outlives" scope-name }
 scope-name     ::= IDEN | "return"
 ```
 
 ```
-fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= part <= whole, 0 <= p <= 100] { return part * 100 / whole }
-fn divmod(a I64, b I64) q I64, r I64 [b > 0, 0 <= r < b] { return a / b, a % b }
-fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1] { ... }
-fn link(a mut Node&, b Node&) [b outlives a] { a.next = b }
-type Ring struct(cap I64) [cap > 0] { cap }
+fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { return y - x }
+fn between(lo I64, hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool { return x - lo < hi - x }
+fn link(a mut List<Node&>&, b Node&) [b outlives a] { a.Push(b) }
+type Percent struct(v I64) [v >= 0 and v <= 100] { v }
 ```
 
-A declaration's results may be **named** for its contract - every one or none, each name before its type (`q I64, r
-I64`). A result's name means nothing outside the contract: the body returns its results with `return` as any body
-does. Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. A `for` or an
-`if` item takes one item after `:`, or several in braces. `fits` and `outlives` are words of a contract only (L9b).
+Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. `outlives` is a word
+of a contract only (L9b).
 
-**D17a (conditions).** Every item but an `outlives` one is a **condition**, a `Bool`: an expression of type `Bool` - a
-call in one must give one - `x fits T`, a `for` item, or an `if` item. It reads the receiver, the parameters, a
-guarantee's named results, and anything a function body reads at its top level (globals, constants, functions); it
-writes nothing - the parameters are read-only in it, and a call in it is checked as any call is.
-- `x fits T`, for a number `x` and a number type `T`, holds when `T(x)` keeps `x`'s value - exactly when `checked
-  T(x)` would not fail (E15a). It binds as a comparison does.
-- `for x in a: c` holds when its item holds for every element, walked as a `for` walks it (S9a); `for i, x in a`
-  names the position too. "Some element" is `not for x in a: x != v`.
-- `if a: b` holds when `a` is false or `b` holds - `a` implies `b`; `else: c` holds `c` when `a` is false. Items nest
-  freely.
+**D17a (conditions).** Every item but an `outlives` one is a **condition**: an expression of type `Bool` over the
+receiver, the parameters and anything a function body reads at its top level (globals, constants, functions) - a call
+in it, a fallible one, a lambda among its arguments included. It writes nothing: the parameters are read-only in it.
+Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
+the call fail with the prelude's `ArgumentError.INVALID` (§7.6), its trace (S18d) and a `!`'s message naming the
+function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
+own error, as a call in the body would (R6), and the conditions after it are not evaluated.
 
-**D17b (entry and return values).** In a contract a name means its value **when the call begins**. `return e` - a
-prefix binding as tightly as unary `-` - means `e`'s value **when the call returns**: `[return l.Len() == l.Len() + 1]`
-compares the length after the call with the length before it plus one. `return` is written only before what is read
-through a reference parameter (or a parameter holding references), which is all a call can change: `return x` of a
-by-value parameter is a compile-time error naming the fix, and so is `return r` of a named result, which has no other
-value. A part of a guarantee read through a reference, mentioning no result, no `return` and no name a `for` item
-binds, is kept as it was when the call began; a part whose value holds references is read when the call returns
-instead, and is a compile-time error where what it reaches is what the call may write.
+**D17b (the error set).** A function with conditions can fail with `ArgumentError`: a bare `?` (R1a) infers it with
+the rest, a function with no `?` has the set `? ArgumentError` and anything its conditions' calls can fail with, and a
+written set must list `ArgumentError` - a compile-time error naming it otherwise. Every call is then handled as any
+fallible call is (R8): `try`, a `catch`, or `!`. A function whose only items are `outlives` ones has no conditions and
+fails with nothing more.
 
-**D17c (requirements and guarantees).** A condition mentioning a named result or `return` is a **guarantee**, which the
-function promises its callers; every other condition is a **requirement**, which its callers promise it. A guarantee
-holds when the function returns normally - an error or a function that never returns promises nothing.
+**D17c (constructors).** A constructor's contract follows its parameter list (`type Percent struct(v I64) [v >= 0] {
+v }`, a declared primitive's too, T29d) and is checked before its body, so an instance a constructor makes always met
+it. A literal running a constructor (T29d) and a zero value made by one (D13c) are decided while compiling: a false
+condition there is a compile-time error.
 
 **D17d (scope relations).** `a outlives b` says the scope argument `a`'s storage lives in outlives `b`'s, `return`
 standing for the result scope; a chain `a outlives b outlives c` is each pair in turn, and so `a outlives c` too. Each
 name is a parameter that is a reference or holds references, the receiver included, or `return`; another is a
 compile-time error. It is an **obligation** (§8 O10b) as an inferred one is: every call is held to it where the call is
-checked (O10c), and a function writing one is no function value (T22a). An `outlives` item stands at the top of the
-contract, never in a `for` or an `if`.
+checked (O10c), and a function writing one is no function value (T22a). It is decided while compiling only - nothing
+of it runs.
 
-**D17e (deciding a contract).** A condition is decided **while compiling** wherever the compile-time evaluator can
-decide it (K1), and is otherwise not checked unless the caller asks for it:
-- A **requirement** is decided at every call whose arguments are all values the evaluator computes - literals,
-  constants, immutable globals, calls of such - and no local: false is a compile-time error at the call naming the
-  condition, with a note at it; true, or not decidable (K1 refuses it), says nothing.
-- A **guarantee** is checked wherever the evaluator runs a call - in a global it bakes (K2), an assert it decides
-  (S18c), a value it computes: false is a compile-time error at the guarantee, blaming the function, with a note at
-  the call.
-- Everywhere else a condition is **unchecked**: the call runs as written, whatever its arguments, and nothing is
-  checked at run time. `checked f(x)` asks for the checks there - `f(x)` anywhere in what a `checked` covers (E15a):
-  its arguments are evaluated and held, each requirement is checked, the entry values its guarantees read are kept,
-  the call is made, then each guarantee is checked. A false one fails with `CheckError.CONTRACT` (R20). This is the
-  one run-time cost of a contract, and it is written where it is paid.
-A contract is a statement of fact about every call: a call breaking a requirement no check finds is a call the program
-should not have made, as an out-of-range index is (E16e), and a guarantee that does not hold is a defect in the
-function. Deciding more conditions while compiling only ever turns an unchecked condition into a decided one, so what a
-program means never depends on how many are decided.
+**D17e (deciding a contract while compiling).** At a call whose arguments are all values the evaluator computes -
+literals, constants, immutable globals, calls of such - and no local, each condition is decided while compiling (K1):
+a false one is a compile-time error at the call naming the condition, with a note at it, whatever handles the call's
+failure. Where the evaluator runs a call itself - a global it bakes (K2), an assert it decides (S18c) - the conditions
+are checked as at run time, failing the same way. A condition the evaluator cannot decide is checked at run time.
 
-**D17f (contracts and function values).** A function with conditions may be made a function value (T21): a call through
-the value checks nothing of its contract, even under `checked`. One writing a scope relation may not (D17d, T22a).
-Lambdas, `extern fn`s and destructors take no contract. A trait's method may take one, written after its signature as
-a function's is (`mut Withdraw(n I64) left I64 [n > 0, left >= 0]`), its results named for it and its receiver
-unnamed - it reads the parameters and results alone, and states no `outlives` (D17d): it is the contract of every call
-through an `any` of the trait (T32b). A call through generic code (G19) is held to the contract of the method the type
-argument supplies, as a direct call is.
+**D17f (contracts and function values).** A function with conditions may be made a function value (T21); its type's
+error set holds `ArgumentError`, and a call through the value checks the conditions on entry as a direct call does.
+One writing a scope relation may not (D17d, T22a). Lambdas, `extern fn`s and destructors take no contract. A trait's
+method may take one, written after its parameter list as a function's is (`mut Withdraw(n I64) [n > 0] I64`), reading
+the parameters alone and stating no `outlives`: a call through an `any` of the trait (T32b) checks it before the
+dispatch, and then the method the instance's type supplies checks its own on entry. A call through generic code (G19)
+is a direct call of the method the type argument supplies, held to that method's contract.
 
-**D17g (conversions).** A conversion to a number type `T(x)` (E26) behaves as a function with the requirement `[x fits
-T]`: where the evaluator computes `x` - a constant, an immutable global, a call of such - a value that does not fit is a
-compile-time error at the conversion; elsewhere it is unchecked, wrapping or undefined as E26 and E26a say. `checked
-T(x)` checks it at run time, failing with `OVERFLOW` or `INVALID` as E15a's table says (not `CONTRACT`).
+**D17g (conversions).** A conversion to a number type `T(x)` (E26) whose argument the evaluator computes - a constant,
+an immutable global, a call of such - and whose value does not fit `T` is a compile-time error at the conversion
+naming `x.Narrow<T>()`; elsewhere it is unchecked, wrapping or undefined as E26 and E26a say. `try x.Narrow<T>()`
+(E26b) checks it at run time.
 
 **D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
 array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the
@@ -2056,8 +2030,7 @@ program's own scope, which is never closed (§8 O1b).
 
 **D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
 count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
-out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`; under `checked` (R20) it
-fails with `CheckError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
+out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
@@ -2211,7 +2184,7 @@ being told which ones exist.
 
 **M6b (the methods the compiler calls).** The methods the compiler calls by itself for an operation written in the
 program - the operators' (E31: `Plus` ... `MatMul`, `Neg`, `Less`, `At`, `SetAt`, `Slice`, the bitwise ones, `Inc`,
-`Dec`, `Call`, `Len`, and the checked forms `CheckedAt` ...), `Eq` (`==`, E10a), `Hash` (E10b), `Str` (`$`, E11c), `Next`,
+`Dec`, `Call`, `Len`), `Eq` (`==`, E10a), `Hash` (E10b), `Str` (`$`, E11c), `Next`,
 `Iter` and `RunFrom` (`for ... in`, S9a), `Has` and `Contains` (`in`, E29) - follow M6 as every name does. A type
 declares each under its capitalized name, public, or with its first letter lowercase (`plus`, `eq`, `hash`, `str`,
 `next`), private to its module; never both, which is a compile-time error. A method has one of these roles only when it
@@ -2297,8 +2270,8 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 `0.0`, so `a.Min(b)` and `b.Min(a)` are one value; on an integer `Abs` negates a negative value (the most negative one
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
-U32)`, `x` to the `n`th power, wrapping as `*` does (E6c), whose checked form `CheckedPow` (E31a) fails with
-`CheckError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
+U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.OVERFLOW` where
+the true power does not fit (E15a); and `Sqrt()`, the integer
 square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
@@ -2313,7 +2286,7 @@ The prelude declares `type List<T>`, a growable sequence whose storage **never m
 array in the caller's scope, and `Has(x)` asks by `==` (E29); an array's `ToList()` is the other way, a new `List` of
 its elements (`Array<I32>(n, v).ToList()` for `n` copies of one value). It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
-`checked l[i]` and `checked l[i] = x` checking `i` against `Len()` (E31a, derived). Every one of these costs the same whatever
+`try l.Get(i)` checking `i` against `Len()`, failing with `ListError.OUT_OF_RANGE`. Every one of these costs the same whatever
 the length: storage is a run of chunks, each twice the size of the last, so a position's chunk is found by arithmetic
 rather than by a search, and nothing stored is moved by a later `Push`. `RunFrom(at)` gives the elements stored next
 to each other from position `at` - a read-only slice of the chunk holding it, to that chunk's end or the list's - and
@@ -2373,7 +2346,7 @@ room for `cap` elements before its buffer is replaced, made by its first `Push`;
 buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
 room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the same names and on
 the same terms, failing with `VecError`'s words where a `List` fails with `ListError`'s - `v[i]` and `v[i] = x` (E31,
-unchecked, `checked` checking), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
+unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
 and `Clone`; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
@@ -2731,8 +2704,7 @@ any other that does not fit, as is a negative amount (E8a). So `b U8 = 1 + 2`, `
 has none - a float computation whose finite operands give an infinity (`1e308 * 10.0`) - and an integer `/` or `%` by
 a literal-only divisor whose value is zero is an error wherever it is written (E6a). A float divided by zero is an
 infinity or a NaN (E6a), which are values of every float type. Only literals take part: a name - an immutable global
-or a build constant included - does not, nor does a conversion, a call, or an expression under `checked` (E15a), which
-is a checked computation in its literals' own types. With nothing adapting it, a literal-only expression is an
+or a build constant included - does not, nor does a conversion or a call. With nothing adapting it, a literal-only expression is an
 ordinary expression of its literals' own types (T6a).
 
 A **conditional of literals** - `a if c else b` (E28), or a `match` used as a value (S12b), every value of which is a
@@ -2794,7 +2766,7 @@ signed type (`I32`, `I64`) is two's complement, so `I32` 2147483647 + 1 is -2147
 negative value is itself; `U8` is unsigned, so 255 + 1 is 0 and 0 - 1 is 255. `<<` discards the bits shifted
 out; `>>` shifts in the sign bit for a signed type and zeros for `U8`. Overflow is never undefined, never
 checked and never trapped, and compile-time evaluation (§13 K1) wraps identically - so hashing and checksums may
-rely on it. A program wanting overflow detected checks for it itself, or writes `checked` (E15a), which checks it there.
+rely on it. A program wanting overflow detected checks for it itself, or calls `std/arith` (E15a), which checks it there.
 Wrapping is deliberate, not a gap: it is the one defined result that costs nothing, where a check on every operation
 would be a cost the code does not show. Division is the exception, by E6a.
 
@@ -3158,46 +3130,26 @@ a call (its other use, introducing a `try`'s fallback value, is §7 R9a), and on
 may not be assigned, nested, or used as a value anywhere. Parameter *names* are deliberately not part of
 this: they remain internal to the declaration, so renaming one is never a change to the caller's contract.
 
-**E15.** A call to a function that can fail (§7 R1, R1a) must be covered by a `try` or a `checked` (R8, E15a) -
+**E15.** A call to a function that can fail (§7 R1, R1a) must be covered by a `try` or a `!` (R8, E35) -
 written before it, or before an expression or chain it is part of; a bare, unhandled call to a fallible function is a
 compile-time error.
 
-**E15a (checked operations).** `checked` is `try` (R8) **plus every check** the language can make on what it
-covers: `checked (a * b / c)`, `checked a[i]`, `checked a[lo:hi]`, `checked Array<T>(n)`, `checked (x as Shape.Circle)`
-- a call, a chain and a parenthesized expression as `try` covers them, with every operation in them checked too - a
-call's arguments included - other than in the called function's body (which has its own signature), a nested `try`, a
-lambda, or a `match` used as a value
-(S12b), whose clauses are statements' bodies. An operation a type declares (E31) is checked by calling its checked
-form (E31a), whose own errors the expression then can produce too; with no checked form it calls the plain method, as
-`try` would. Each check fails with a word of `CheckError` (§7.6) instead of doing what the unchecked operation
-does:
+**E15a (checking an operation).** No operation is checked by the language at run time beyond what it states as
+guaranteed (a slice's bounds, an array's length, an `as`): each behaves as its rule says - wrapping (E6c), IEEE's
+results, or undefined (E6a, E16, E26a). A check is asked for by calling something that fails, covered by a `try` or a
+`!` as any fallible call is:
 
-| operation | fails with |
-|---|---|
-| integer `+ - *`, unary `-` | `OVERFLOW` when the true result does not fit (instead of wrapping, E6c) |
-| integer `/ %` | `DIVIDE_BY_ZERO` for a zero divisor; `OVERFLOW` for the most negative value by `-1` (E6a) |
-| float `+ - * /` | `DIVIDE_BY_ZERO` for a finite nonzero dividend divided by zero (whose result is an infinity); `INVALID` for a NaN result from operands that are not NaN (`0.0 / 0.0`, an infinity divided by one, an infinity minus itself); `OVERFLOW` for any other infinite result from finite operands |
-| `<<` | `OVERFLOW` when the true value `x * 2^n` does not fit the type; `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
-| `>>` | `OUT_OF_BOUNDS` for an amount outside `[0, w)` (E8a) |
-| integer conversion `T(x)` | `OVERFLOW` when the value changes - it does not fit `T`, a sign change between types of one width included (instead of wrapping, T6) |
-| float to integer `T(f)` | `INVALID` for a NaN or an infinity; `OVERFLOW` for a finite value out of `T`'s range (E26a) |
-| integer to float `T(x)` | `OVERFLOW` when the value becomes infinite (an integer above 65504 to `F16`) |
-| float narrowing `F32(f)`, `F16(f)`, `BF16(f)` | `OVERFLOW` when a finite value becomes infinite |
-| `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
-| `x as E.Case` | `WRONG_CASE` when `x` is another case (E32) |
-| `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
-| a call `f(x)` of a function with a contract | `CONTRACT` when a requirement is false before the call, or a guarantee after it (D17e) |
+| to check | write | fails with |
+|---|---|---|
+| an index | `try a.Get(i)` (E16d) | `ArrayError.OUT_OF_RANGE` (a `List`'s and a `Vec`'s `Get`: their own `OUT_OF_RANGE`) |
+| a slice | `try a.SliceOf(lo, hi)` (E16c) | `ArrayError.OUT_OF_RANGE` |
+| a narrowing conversion | `try x.Narrow<I32>()` (E26b) | `NumberError.OVERFLOW`, `NumberError.INVALID` |
+| arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.OVERFLOW`, `DIVIDE_BY_ZERO`, `INVALID` |
 
-`INVALID` means what IEEE 754 means by an invalid operation: a NaN made from operands that are not NaN, or a NaN or an
-infinity converted to an integer. `DIVIDE_BY_ZERO` is IEEE's division by zero for a float and an integer `/` or `%` by
-zero; a finite value that becomes infinite or does not fit an integer type is `OVERFLOW`. `checked` binds as
-tightly as a unary operator, as `try` does, so a checked computation is parenthesized: `checked a + b` is
-`(checked a) + b`. A `checked` covering nothing that can fail or be checked is a compile-time error, and so is a `try`
-whose operand only `checked` would make fallible - it names `checked`. The words a checked expression can produce are
-exactly those of the operations in it, and catching those is complete (R13). A `checked` with no clauses, written in
-what a `try` or a `!` covers, hands its errors to that one (E35): `(checked a[i])!` ends the program on an index out of
-range, and `try (checked e) + 1` propagates what `e`'s checks find with the rest. Written without `checked`, every
-operation behaves as the rules above state - wrapping, IEEE results, or undefined.
+`std/arith` gives each operation as a generic function over the number types (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`,
+`ShiftLeft`, `ShiftRight`) and a struct `Checked<T>` whose operators are those functions, failing where the true result
+does not fit (`OVERFLOW`), on a zero divisor (`DIVIDE_BY_ZERO`) and on IEEE's invalid operation or a shift amount out
+of range (`INVALID`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
 
 ### 5.5 Indexing and member access
 
@@ -3208,24 +3160,26 @@ the same reading C gives it, and one of exactly two places in this language wher
 storage it does not own (the other is `extern fn`, §11 X1a).
 
 Where the index and the length are **both known at compile time** — a constant index into an array whose length is
-known (T7c) — an out-of-range index written without `checked` is a **compile-time error**. That check costs nothing at
-run time and is not affected by the above. Under `checked` (E16d) the index is the checked form, whose failure is
-defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a function over a by-value array (`fn third(a
-Array<I32>) I32 { return checked a[2] catch default -1 }`) one instance (G29) may have the element and another not.
+known (T7c) — an out-of-range index is a **compile-time error**. That check costs nothing at run time and is not
+affected by the above. `base.Get(index)` (E16d) is the checked form, whose failure is defined: it compiles, and fails
+with `OUT_OF_RANGE` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
+a.Get(2) catch default -1 }`) one instance (G29) may have the element and another not.
 
-**E16d.** `checked base [ index ]` (E15a) **opts in to a bounds check**: the index is checked against
-`[0, base.Len())` and an out-of-range one produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than reading or
-writing storage the array does not own, propagating like any other `try` so the enclosing signature must
-cover it. This is the mirror of E16c, which opts a *slice* out of its abort — in both, `checked` means "give me
-the failure as an error I handle". An index written without `checked` is unchecked and costs nothing.
+**E16d.** `base.Get(index)`, a method the compiler supplies on every array (as it supplies `Len`, E23), **checks the
+index**: against `[0, base.Len())`, an out-of-range one failing with `ArrayError.OUT_OF_RANGE` (the prelude's) rather
+than reading storage the array does not own - covered by `try` or `!` as any fallible call is, so `try a.Get(i) catch
+default 0` is a checked index with a fallback and `a.Get(i)!` one that ends the program. The index is of any integer
+type, as `base[index]`'s is; the result is the element, as `base[index]` gives it. This is the mirror of E16c, which
+makes a *slice* fail instead of aborting. An index written `base[index]` is unchecked and costs nothing. A declared
+array type has `Get` as it has `Len`, and may not declare a method of that name (T29e).
 
-**E16e (memory safety).** An out-of-range index written without `checked` is, with `extern fn` (§11 X1a) and
+**E16e (memory safety).** An out-of-range index written `base[index]` is, with `extern fn` (§11 X1a) and
 a data race (§6.8 P8b), one of the places where memory safety rests on something the compiler does not
 check (a null dereference is not: it traps, T2b). This is deliberate: the check E16 used to make cost about 50% on indexing whose bounds the optimizer
 cannot establish, and nothing at all where it can. Every other guarantee in this specification — §8's scope
 containment above all — is stated as holding for programs that do not index out of range. What remains
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
-checked (E16b), and `checked a[i]` (E16d) checks where the program asks it to.
+checked (E16b), and `a.Get(i)` (E16d) checks where the program asks it to.
 
 **E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array, value or reference, of any
 length; `lo` and `hi` must be integer types, and either may be omitted, defaulting to `0` and
@@ -3263,21 +3217,17 @@ read any number of times — so the failure surfaces arbitrarily far from the mi
 cheap exactly where a per-index check is not, since a slice is taken once and read many times: its cost is
 paid per slice expression, never per element access.
 
-**E16c.** Writing the slice as `checked base [ lo : hi ]` (E15a) makes it **fallible** instead: an
-out-of-range bound produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than aborting, and the expression
-propagates it like any other `try`, so the enclosing signature must cover it.
+**E16c.** `base.SliceOf(lo, hi)`, a method the compiler supplies on every array (beside `Get`, E16d), is the slice
+`base[lo:hi]` made **fallible** instead: an out-of-range bound fails with `ArrayError.OUT_OF_RANGE` rather than
+aborting, covered by `try` or `!` as any fallible call is. It is the slice in every other respect - a borrow of
+`base`'s storage, its type, scope and permission `base[lo:hi]`'s (E16a) - and both bounds are written.
 
 The two forms divide the two cases cleanly. Bounds that come from the program itself (`a[:]`, `a[0:a.Len()]`,
 a loop index already checked) cannot fail, cost nothing, and force no error onto the signature. Bounds that
 come from somewhere that can legitimately be wrong — a parsed length, a protocol field — are written with
-`checked`, and the caller handles them. Making *every* slice fallible was rejected for that reason: it would
-put `checked` on slices that provably cannot fail and make "this function can fail" depend on whether it
+`SliceOf`, and the caller handles them. Making *every* slice fallible was rejected for that reason: it would
+put `try` on slices that provably cannot fail and make "this function can fail" depend on whether it
 slices, cascading through every caller.
-
-`checked` on a slice is valid only in the **expression** form. The `checked ... catch { }` *statement* discards the
-value it guarded — for a call that is the whole point (C7: control flow only, the error is never bound to a
-value), but for a slice it would leave nothing behind but the bounds check, so the slice would have to be
-written a second time to be used. Bind and propagate instead.
 
 **E17.** `base . IDEN` requires `base` to be a struct type with a field named `IDEN`; its result
 type is that field's declared type.
@@ -3329,9 +3279,9 @@ integer type only by an explicit conversion (`I32(a.Len())`, T6).
 
 ### 5.10 `try` as an expression
 
-**E24.** `try-expr ::= ( "try" | "checked" ) postfix { catch-clause }`, where the `postfix` is any postfix
+**E24.** `try-expr ::= "try" postfix { catch-clause }`, where the `postfix` is any postfix
 expression - a call, a chain of calls and members (`try f().g()`), an index or a slice, a parenthesized expression -
-and holds something that can fail as written (`try`, R8) or be checked (`checked`, E15a); usable as an ordinary
+and holds something that can fail as written (R8); usable as an ordinary
 expression anywhere a value of its success type is expected. Every fallible call and operator in it is covered,
 arguments and every link of a chain included. Its full semantics (error propagation, signature requirements, and
 catch clauses in value position) are specified in §7.
@@ -3390,8 +3340,8 @@ An integer converted to a float type is **rounded once**, from its exact value, 
 (ties to even) - an infinity where it is beyond the type's range - never through a wider float first, which would
 round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
-conversion cannot itself produce an error. Its requirement is that `x` fits (D17g): a value the evaluator computes that
-does not - `U8(300)`, `I32(G)` with `G` an immutable global beyond `I32` - is a compile-time error; one computed at run
+conversion cannot itself produce an error (`try x.Narrow<T>()`, E26b, is the form that can). A value the evaluator
+computes that does not fit (D17g) - `U8(300)`, `I32(G)` with `G` an immutable global beyond `I32` - is a compile-time error; one computed at run
 time that does not is unchecked, an integer narrowing wrapping (T6), the same well-defined, unchecked behavior this
 language accepts at every other point a value can silently lose information, such as E16's own unchecked array
 indexing.
@@ -3403,6 +3353,13 @@ Note that this differs from an integer narrowing conversion, which **wraps** and
 float-to-integer conversion out of range has no defined result at all: not a wrap, not a saturation,
 nothing. In practice x86 yields the target's most negative value and sets a masked floating-point flag,
 but that is the hardware's behaviour rather than the language's.
+
+**E26b (`Narrow`).** `x.Narrow<T>()`, a method of every number in the prelude (`fn (x S) Narrow<S Number, T Number>()
+T ? NumberError`), is the conversion `T(x)` **checked**: it fails with `NumberError.OVERFLOW` where `x`'s value does
+not fit `T` - an integer out of `T`'s range (a sign change between types of one width included), a finite float whose
+value truncated toward zero is out of an integer type's range, a finite value made infinite by a narrower float type -
+and with `NumberError.INVALID` for a NaN or an infinity made an integer; otherwise it gives `T(x)`. It is ordinary
+olang (written over `T(x)` and E36's limits), so the compile-time evaluator computes it as the program does.
 
 ### 5.11 Comprehensions
 
@@ -3551,24 +3508,22 @@ compound assignment's operand, held); only then is the element read through `At`
 would read it, the store made into that local, and the local written back through `SetAt` (`x[i] = t`). A collection
 read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back the same way one level out, after the
 inner write-back. A write through a reference read out of `x[i]` is not a write into the element and is unchanged (it
-goes where the reference points). Under `checked` (R21) the read is checked as `checked x[i]` is and the write-back
-as `checked x[i] = v`; under `try` they are the plain `At` and `SetAt`, covered where those can fail (E31). A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
+goes where the reference points). Under `try` (R21) they are the plain `At` and `SetAt`, covered where those can fail
+(E31). A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
 compile-time error naming `SetAt`. The element is read and written after the value is computed (S4), so a value that
 shrinks the collection leaves the held index out of range when the access runs - the program's out-of-range index
-(E16e), unchecked unless the store is written under `checked`.
+(E16e), unchecked.
 
 **A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
-an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - or `checked x[i]`,
-the checked read, `g(checked x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
+an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
 so one of the two writes would be lost. The error names the written-out form, `t := x[i]`, the call on `t`, then
 `x[i] = t`, which says which write wins, or holding the elements by reference (`List<mut T&>`). A method with a
 read-only receiver, and a read-only parameter, take the copy as any value. The same holds for a spawned call. A call
 through a function value - a local's, a parameter's, a field's (`h.fv(x[i])`), an element's (`fs[0](x[i])`), a call's
 result (`mk()(x[i])`), a lambda called where it is written - has a body no check can read, so it takes no copy of an
-element for a writable reference parameter at all, a view's or a handle's included: each is the error. So is `checked a[i]
+element for a writable reference parameter at all, a view's or a handle's included: each is the error. So is `try a.Get(i)
 catch default v` (or a field of it) for a writable reference parameter on any collection, a built-in array's included:
-it is the element or `v`, a value either way, which the write would be lost in (R9a); `checked a[i]` alone on a built-in
-array is the element itself. A conditional or a match choosing an element, or any other place, is a value too, and the same error (E28).
+it is the element or `v`, a value either way, which the write would be lost in (R9a). A conditional or a match choosing an element, or any other place, is a value too, and the same error (E28).
 
 **A view element** - a struct element, no handle, lent to a callee that writes **nothing of the instance's own
 storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `ws.Gemm(c[g, h], ...)`
@@ -3591,8 +3546,7 @@ not qualify, sliced or walked, a value field that is neither a number, a `Bool`,
 at all (an enum matched or compared, an inline array's element, a struct rendered), the parameter read into a local,
 captured, compared or handed to a function value, an extern or a lambda; a callee whose body is not checked says no
 too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
-into what the copy holds is judged as for any copy (O17, below). `checked x[i]` is never lent this way, with or without a
-default: its copy is not held apart from its `checked`.
+into what the copy holds is judged as for any copy (O17, below).
 
 **A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
 by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
@@ -3611,32 +3565,9 @@ the element holds (an element type's `SetAt` pushing onto a `List` field of the 
 and is an error saying to hold the elements by reference or to make the copy where the collection lives (`t mut T&l =
 l[i]`). Written by name (`x.At(i).f = v`) the element is still a copy no one holds, and writing it an error.
 
-**E31a (checked forms).** An operation may have a **checked form**, a method of its own named with `Checked`:
-`CheckedAt`, `CheckedSetAt`, `CheckedSlice`, `CheckedPlus`, `CheckedMinus`, `CheckedMul`, `CheckedDiv`, `CheckedRem`,
-`CheckedMatMul`, `CheckedNeg`, `CheckedShiftLeft`, `CheckedShiftRight`, `CheckedInc` and `CheckedDec` - each with its
-operation's shape, declaring the errors it fails with. A method called by name has one the same way: `x.M(args)` where
-`checked` checks it calls `x.CheckedM(args)` when `x`'s type has a method of that name and as many parameters (an
-integer's `Pow`, M19d), and `x.M(args)` otherwise. The lowercase spelling (`checkedAt`) is private, as above. The
-plain form is what the operator calls, under `try` too; the checked form is what it calls **where `checked` checks
-it** (E15a, R21, S9e). A checked form only adds checks, so it fails with **every error its plain form can** and
-possibly more: one whose errors do not include each of the plain form's is a compile-time error at its declaration,
-naming the error to add. Where a type declares no checked form:
-
-- `CheckedAt` is **derived** from a one-index `At` and `Len`: the position is checked against `[0, x.Len())`, failing
-  with `CheckError.OUT_OF_BOUNDS` (R20), and `At` is called - so `checked x[i]` on such a type checks exactly as it
-  does on an array. `CheckedSlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and
-  `CheckedSetAt` from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or
-  stored into under `checked` - a compile-time error - and neither can one indexed by several indices (`checked m[i,
-  j]`) that does not declare `CheckedAt` (or `CheckedSetAt`) itself, since `Len` checks one position.
-- every other operation is its plain form, which `checked` then calls as `try` would.
-
-A checked form **requires its plain form**: a type declaring `CheckedX` and no `X` - `CheckedAt` with no `At` - is a
-compile-time error at the checked form, naming `X` (`CheckedInc` and `CheckedDec` are satisfied by the `Plus` and
-`Minus` an increment is derived from, E31). `checked` only adds checks, and `try` never turns one on (R8), so no
-operation is reachable under one keyword and not under the other. The superset rule above is judged for a generic type
-per instantiation, since a plain form written `?` alone may fail with what its type argument's operation fails with -
-an instantiation whose checked form leaves out one of those errors is the error, with a note at the use that
-instantiated it (G16b). A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read.
+A type declaring `SetAt` and no `At` is stored into (`x[i] = v`) and not read. A method named `CheckedAt`,
+`CheckedPlus` or the like is an ordinary method: no operation calls one by itself. A type whose index can be checked
+declares a `Get` that fails, as arrays, `List` and `Vec` have one.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
@@ -3668,8 +3599,7 @@ an absent `lo` is `0` and an absent `hi` is `x.Len()`, which the type must then 
 `Plus` takes the literal one needs nothing more - and `x--` likewise with `Dec` or `Minus`, the place evaluated once as
 a compound assignment's is (S5): `a[next()]++` calls `next` once. A type with neither is an
 error, as for any other non-numeric type. An element of a type indexed through `At` and `SetAt` is incremented as it
-is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once), and `checked x[i]++` checks
-the store and the element's addition as `checked x[i] += 1` does (R21).
+is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` evaluated once).
 
 `==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
 `.`, `try` and `match` are never declared.
@@ -3694,9 +3624,11 @@ gives (T7c, E16a) - `as` is a compile-time error. What follows `as` is a `type-r
 after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `as` to the type `Box.Val&mask`, and a
 compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
 
-An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `checked` (E15a) it fails with
-`CheckError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
-`as` does not hold. The safe forms are a test that narrows (S8d), and a `match` (S13).
+An `as` **can fail as written**: one whose answer is no fails with `CaseError.WRONG_CASE` (the prelude's), so it is
+covered by a `try` or a `!` (R8, E35) as a fallible call is - `try e as Shape.Circle catch default c0`, `(e as
+Shape.Circle)!` - and one covered by neither is a compile-time error naming both. A case test never fails. A null
+reference to an enum is no case: a test is false and `as` does not hold. The safe forms are a test that narrows (S8d),
+and a `match` (S13).
 
 A part of an array of a known length is a **slice** with known bounds (T7c, E16a), checked once where it is taken:
 
@@ -3799,8 +3731,8 @@ fallible call and operator in it, arguments and every link of a chain included),
 reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
 of its path (`io.Error.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
-success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; `checked`
-asks for checks, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
+success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
+that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c), `x!` is that
 reference as a `T&`, ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is null - after
 handling a failure first, where the expression can also fail. `!` on an expression that neither can fail as written nor
@@ -3810,11 +3742,7 @@ covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfi
 While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
 and elsewhere evaluation stops there.
 
-A `checked` with no clauses written in what `!` or a `try` covers (E15a) hands what it checks to them: `(checked a[i])!`
-is the bounds-checked index that ends the program when `i` is out of range, and `try (checked a[i]) + 1` propagates
-its `OUT_OF_BOUNDS` with whatever else the `try` covers - the inner `checked` neither propagates on its own nor needs
-the enclosing function to name `CheckError` for it. A `checked` with clauses handles its errors itself, as a nested
-`try` does. On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
+On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
 call fails, as a failed `assert` there does (P6); no error reaches the join.
 
 ## 6. Statements
@@ -3887,7 +3815,7 @@ the index is the first call and the value the second, and a value whose evaluati
 refers to stores into the place computed before it. The compile-time evaluator follows the same order (K1). Where the
 place is an element reached through `At`/`SetAt` (E31, E31b) the element itself is read and written only after the
 value is computed: an index held while it was in range is the program's index when the access runs, so a value that
-shrinks the collection makes it an out-of-range index (E16e) - checked only under `checked`.
+shrinks the collection makes it an out-of-range index (E16e), unchecked.
 
 **S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
 (S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
@@ -4057,7 +3985,7 @@ scoped to the body. `e` is evaluated once, before the first iteration, and must 
   `Iter()` nor a `RunFrom` of its own - each of which says how the type wants to be walked (a `List` has them all,
   and is walked run by run). The `Iter()` that `Indexable<T>` supplies as a default (T35b) is not the type's own. It is walked as an array is: a
   counted loop over positions `0` to `Len() - 1`, `x` each `At(i)`, `Len()` read every iteration, the collection
-  borrowed (E12c), never copied. The loop calls `At` - never a checked form, `for x in try c` included (S9e).
+  borrowed (E12c), never copied. The loop calls `At`, `for x in try c` included (S9e).
 - an **iterable** (S9c): a value with no `Next()` of its own and a method `Iter()`, taking no arguments, whose
   result is an iterator. The loop walks `e.Iter()`. An iterable keeps no position — every loop, nested or
   repeated, gets a fresh iterator — which is why a collection is an iterable rather than an iterator itself.
@@ -4079,8 +4007,7 @@ ended, so a `break` or `continue` directly in one is a compile-time error.
 
 A **comprehension** (E27) makes the same calls and has no clauses of its own: one whose own calls can fail is
 written under `try` - `try I32[f(x) for x in lines] catch default I32[]` - which covers those calls and every
-fallible call in it (R8), `Exhausted` aside, which ends the walk; `checked` before it checks it as E15a checks any
-expression. An error from them abandons the array being built.
+fallible call in it (R8), `Exhausted` aside, which ends the walk. An error from them abandons the array being built.
 
 **S9b (`range`).** After a `for`'s `in` (and nowhere else), `range-expr ::= "range" expr [ "," expr [ "," expr ] ]`
 (no parentheses) names a sequence of integers. One argument is its **end**, with start `0`; two are its
@@ -4343,12 +4270,13 @@ not, so a branch that must never run says so with `unreachable` (S16d) rather th
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
 **S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
-where the error being returned went - its last 32 places: an `error` statement (R3) or a check failing under `checked`
-(E15a) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
+where the error being returned went - its last 32 places: an `error` statement (R3), an `as` that does not hold (E32) or a
+requirement that is false (D17) **raises** an error and starts the trace again; a `try` that passes an error on to its caller, or a `join` passing
 on a task's error (P4b), adds its place; a clause that takes an error clears it. Nothing is recorded where nothing fails,
 and a build of any other kind records nothing at all. The trace is printed, oldest first, one `FILE:LINE: what` line per
 place - `raised here`, `try passed it on`, `a task failed, and its join passed it on`, `left the test` - preceded by
-`(N earlier places not kept)` when more than 32 were recorded:
+`(N earlier places not kept)` when more than 32 were recorded; a false requirement's place reads `FILE:LINE: f: cond`, the
+function and the condition as written, at the condition:
 - when an error leaves a test body (S16), after the test's `FAIL - NAME: TypeName.WORD` line;
 - when an error escapes `main` (B5), after `unhandled error: TypeName.WORD`;
 - when a `!` takes an error (E35), after its `FILE:LINE: TypeName.WORD` line.
@@ -4896,8 +4824,8 @@ function of its own. A `try` covering nothing that can fail is a compile-time er
 (G16), where what a call can fail with may differ between instantiations (R1a): there a `try`, and a clause naming
 an error, may cover nothing in one instantiation and something in another, and covers nothing where it covers
 nothing. `try` never turns a check on:
-an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; `checked` (E15a) is
-`try` plus every check the language can make. A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
+an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; a check is a call that
+can fail (E15a). A spawned call (§6.8 P4) and a `join` block (P4c) are tried on the same
 terms: whatever can fail is written with `try`, and nothing else is. Where nothing names what a `try` lets
 through - a function with no `?`, a lambda whose expected type (D16a) writes no errors - its clauses must take all of it, except in a `test`
 body, where what is let through fails the test (S16).
@@ -4927,9 +4855,9 @@ is written in; one written directly after the tried operand, outside any clause,
 always what the clause to its left names.
 
 A `try-expr` carrying clauses is a **value** - the element, say, or what a clause gives - and so is a field or an
-inline element of one reached through no reference, `(checked a[i] catch default v).f`: never a place. Assigned into,
+inline element of one reached through no reference, `(try a.Get(i) catch default v).f`: never a place. Assigned into,
 incremented, or given for a writable reference parameter or receiver (E31b), it is a compile-time error - what was
-written would be kept by neither; `checked x[i].f = v` (R21) is a checked store.
+written would be kept by neither.
 
 - Each default is a `unary` (E1), binding as tightly as the `try` itself: `try f() catch default 0 == 3`
   compares the result with `3`. A compound default is parenthesized.
@@ -4953,11 +4881,11 @@ written would be kept by neither; `checked x[i].f = v` (R21) is a checked store.
   references are where the result's are, and what is later put into it lands there too. A default naming existing
   storage, or built from it, is a compile-time error: its references would have to agree with every scope the
   result's live in.
-- A checked index `checked a[i]` and a slice `checked a[lo:hi]` can fail only with `CheckError.OUT_OF_BOUNDS`
-  (§7.6), which a clause names or takes with an item-less `catch`: `checked a[i] catch default -1`. The
+- A checked index `a.Get(i)` and a slice `a.SliceOf(lo, hi)` can fail only with `ArrayError.OUT_OF_RANGE`
+  (§7.6), which a clause names or takes with an item-less `catch`: `try a.Get(i) catch default -1`. The
   expression is then a value, never an lvalue.
 
-**R10.** As a **statement** (`try-catch-stmnt ::= ( "try" | "checked" ) postfix catch-clause { catch-clause }`):
+**R10.** As a **statement** (`try-catch-stmnt ::= "try" postfix catch-clause { catch-clause }`):
 evaluates the operand; if it produced its success value, that value is discarded (the statement form never
 binds one — see §7.5) and control continues after the statement; if it produced an error, the first
 clause that handles it runs (§7.5) and, if its block does not leave, control continues after the
@@ -5008,41 +4936,25 @@ callee happens to only ever produce a subset of them internally. A callee writte
 `catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
 type it does not name is (R13).
 
-### 7.6 Check errors
+### 7.6 The prelude's errors
 
-**R21 (tried and checked statements).** `try-store-stmnt ::= ( "try" | "checked" ) ( lvalue assign-op expr |
-increment ) { catch-clause } STMNT_END`, where `increment` is one of `x++`, `x--`, `++x`, `--x`. With `try` the
-statement handles what fails in it as written (R8): a fallible call in the target or the value, and a declared type's
-`SetAt`, `At`, `Plus`, `Inc` ... when its method declares errors (E31) - there must be one. With `checked` it is
-checked as E15a checks an expression: the store (an array's bounds; a declared type's `CheckedSetAt`, or its derived
-form, E31a), the value, and the operator an assignment or increment implies (`x[i] += v` reads through `CheckedAt` and
-adds through `CheckedPlus` when declared, or the built-in checked addition; `x++` on a number checks for overflow, on
-a declared type calls `CheckedInc`, else `CheckedPlus`, else the plain forms). Its clauses are a statement's (R10): one
-that takes an error runs its block and control continues after the statement; an error no clause names propagates.
+**R21 (tried statements).** `try-store-stmnt ::= "try" ( lvalue assign-op expr | increment ) { catch-clause }
+STMNT_END`, where `increment` is one of `x++`, `x--`, `++x`, `--x`. The statement handles what fails in it as written
+(R8): a fallible call in the target or the value, and a declared type's `SetAt`, `At`, `Plus`, `Inc` ... when its
+method declares errors (E31) - there must be one. Its clauses are a statement's (R10): one that takes an error runs its
+block and control continues after the statement; an error no clause names propagates.
 
-**R20.** The checks the language itself makes report **`CheckError`**, an error type declared in the prelude:
-
-```
-error CheckError {
-    OVERFLOW
-    DIVIDE_BY_ZERO
-    OUT_OF_BOUNDS
-    INVALID
-    WRONG_CASE
-    CONTRACT
-}
-```
-
-A check runs only where it is asked for, with `checked` (E15a); an operation written without it behaves as §5 says,
-and `try` asks for none. Only these checks raise `CheckError`; no function raises it with `error`, only lets through
-one a `checked` in it produced. It is an ordinary error type in every other respect: a function letting one through
-names it in its `?` (or infers it, R1a), and a `catch` names it, or one of its words. A check names exactly the words
-it can produce, and catching those is complete (R13): a checked index or slice produces only `OUT_OF_BOUNDS`, a
-checked `as` only `WRONG_CASE`, a checked call of a function with a contract only `CONTRACT` (D17e).
+**R20.** The language checks nothing at run time that a program does not ask for by a call that can fail (E15a), so it
+raises no error of its own but these, each declared in the prelude as an ordinary error type: `CaseError.WRONG_CASE`
+from an `as` that does not hold (E32), `CaseError.NO_CASE` from an enum's `From` (T17e), `Exhausted.END` from an
+iterator that has run out (S9a), and `ArgumentError.INVALID` from a call whose requirement is false (D17). The methods
+it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OUT_OF_RANGE` (E16d, E16c), and
+`Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
+`catch` names it, or one of its words.
 
 **R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
 without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, a
-slice or a length out of range outside `checked`, running out of memory, a task that cannot start - ends the test or
+slice or a length out of range, running out of memory, a task that cannot start - ends the test or
 the process (§6.6) and is never an error. The standard library holds itself to this: a function that can fail on its
 arguments (an index out of range, an empty collection, a closed channel, a bad base) fails with an error declared
 beside it, and none ends the process on a caller's mistake.
@@ -5770,8 +5682,8 @@ decided from their checked bodies; a call checked while a body its answer rests 
 takes it on trust, and is an error once every body is checked if the answer is no) - the call binds
 the parameter's scope variable where the reference leads, as passing the reference itself would, and the handle's own
 storage is no part of the call but to be alive through it. A handle with no storage of its own - a call's result
-(`ll[0]` for `ll[0][0]`), `checked a[i] catch default v` on a built-in array (`v` then built where the element's references
-are, as the same `checked` through a `List`'s `At` builds it where its result lands) - is lent the same way, its copy a
+(`ll[0]` for `ll[0][0]`), `try a.Get(i) catch default v` on a built-in array (`v` then built where the element's references
+are, as the same through a `List`'s `Get` builds it where its result lands) - is lent the same way, its copy a
 temporary of the block. So the grouping idiom builds where the map's lists live:
 
 ```
@@ -5811,7 +5723,7 @@ as a temporary is built where it lands (E12c):
 A temporary argument for a reference parameter is placed by the same table, as the result of a call would be - except
 where O18b places it. What is built from the result lands with it: an array literal or fill holding temporaries
 (T7), a constructor call or enum case passed as an argument, a value a conditional or match gives, and a checked
-index (`checked c[i]`) of the result - and each is checked where it lands for the existing storage it holds (C2d, T17c,
+index (`c.Get(i)`) of the result - and each is checked where it lands for the existing storage it holds (C2d, T17c,
 O25c). The callee's obligations that involve the result scope (O10b) are discharged once the statement
 holding the call has been checked, against the scope the result landed in. Where several destructured targets disagree,
 the fallback to the caller's block makes any target outliving that block fail the ordinary check, so the
@@ -5911,7 +5823,7 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] [ contract ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ contract ] [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
 ```
 
 `param-list`, `error-list` and `contract` are as in a function declaration
@@ -6632,7 +6544,7 @@ error.
 root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
 error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
 their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
-conditions (D17), each a line `[cond]` as written, after a comment naming its results where they are named, and its scope
+conditions (D17), each a line `[cond]` as written, and its scope
 obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
 constructor's signature, its fields, its methods and the traits with no type parameters it meets; an enum with its
@@ -7353,7 +7265,7 @@ fn total(a Array<I64>) I64 {
 `assert` (§6.7) in its body: one reading those lengths and otherwise only what K1 can evaluate is decided in each
 instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule a function's callers
 are held to, about any argument, is a requirement of its contract (D17), decided at each call whose arguments the
-evaluator computes (D17e).
+evaluator computes (D17e) and checked on entry everywhere else (D17a).
 
 ## 13. Compile-time evaluation
 
@@ -7362,7 +7274,7 @@ without a running program. No declaration marks a function as evaluable: any fun
 call, when what that call actually does is evaluable. Evaluation follows this specification's own
 meaning for every operation - integer widths wrap exactly as generated code does, a reference names the very
 value it was taken from, a function value names the function, a slice shares its base's elements, text renders exactly as the generated code
-writes it, a checked operation (E15a) fails with the same `CheckError` word, and a `try`'s clauses handle an
+writes it, an `as` and a supplied `Get` or `SliceOf` fail with the same word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
 - read a mutable global, whose value is the running program's, or write any global or what one holds (its
@@ -7380,7 +7292,7 @@ error as they would at run time. It is **not** possible when evaluation would:
 - do anything this specification leaves undefined - divide by zero, divide the most negative value by
   `-1`, shift by a count outside the type's width, convert a float the target cannot represent, or index
   outside an array - which evaluation refuses rather than giving a value the program never had (each is
-  evaluated when written under `checked`, E15a, where it is defined);
+  evaluated when written through `std/arith` or `Get`, E15a, where it is defined);
 - read the bits (E33) of a NaN an operation made, or of a signalling NaN, which E33a leaves unspecified - a NaN made
   from bits that is quiet is read exactly;
 - run longer, recurse deeper or take more memory than an implementation-defined budget - which is never a crash or
@@ -7417,7 +7329,7 @@ under `interpret` the program stops there.
 
 A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value
 parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. A contract's conditions
-are evaluated as a function's body is (D17e): a requirement at a call whose arguments are computed, a guarantee at
+are evaluated as a function's body is (D17e): decided at a call whose arguments are computed, and checked on entry at
 every call the evaluator runs.
 
 Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than

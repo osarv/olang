@@ -230,7 +230,6 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     d := c.P.L.Diags
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
-    x.Lw.Ensures = c.Contracts
     n I64 = decideContracts(c, x)
     for a in c.AssertAsks {
         key := pair.Pair(a.Body, I64(a.Sp.Start))
@@ -253,7 +252,6 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 n++
-                if guaranteeFailed(c, x, s) { continue }
                 rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
                 d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
             }
@@ -282,7 +280,9 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
     n I64 = 0
     for a in c.ContractAsks {
         key := pair.Pair(a.File, (I64(a.At.Start) << 32) | I64(a.CondSp.Start))
-        if said.Has(key) { continue }
+        # one false requirement is said at a call: the first, as the call checks them in order on entry
+        call := pair.Pair(a.File, I64(a.At.Start) << 32)
+        if said.Has(key) or (a.Name != "" and said.Has(call)) { continue }
         k := mir.FnKey.Body(typed.BodyId(I32(a.Body)))
         x.Need(k)
         s := x.M.Eval(k, Array<I64>(0))
@@ -296,37 +296,15 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
                     d.Error(at, msgs.ConversionDoesNotFit(a.Text, a.Ty))
                     continue
                 }
+                said.Put(call, true)
                 rec := d.Error(at, msgs.ContractFalse(a.Text, a.Name))
                 d.Note(rec, diag.Where.Span(a.CondFile, I64(a.CondSp.Start), I64(a.CondSp.End)), msgs.NoteContractCondition())
                 if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
             }
-            case _ { if guaranteeFailed(c, x, s) { n++ } }
+            case _ { }
         }
     }
     return n
-}
-
-# D17e: whether an evaluation stopped at a call whose guarantee did not hold - said as the callee's error, at the
-# guarantee, with a note at the call, once for each guarantee and call
-fn guaranteeFailed(c mut typecheck.Checker&, x mut Exec&, s eval.Stop) Bool {
-    match s {
-        case eval.Stop.Exited(kind, file, sp, msg) {
-            if kind != mir.ExitKind.Guarantee { return false }
-            i := try msg.ParseInt() catch { return true }
-            if i < 0 or i >= x.Lw.Guarantees.Len() { return true }
-            g := x.Lw.Guarantees[i]
-            info := try c.Contracts.Get(g.Callee) catch { return true }
-            key := pair.Pair(file, (I64(sp.Start) << 20) | g.Index)
-            if c.GuaranteesSaid.Has(key) { return true }
-            c.GuaranteesSaid.Put(key, true)
-            d := c.P.L.Diags
-            gsp := info.EnsSps[g.Index]
-            rec := d.Error(diag.Where.Span(info.File, I64(gsp.Start), I64(gsp.End)), msgs.ContractGuaranteeFalse(info.Name, info.EnsTexts[g.Index]))
-            d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteContractCall())
-            return true
-        }
-        case _ { return false }
-    }
 }
 
 # ---- values decided while compiling (T29d, D13c) ----
@@ -340,7 +318,6 @@ fn DecideValues(c mut typecheck.Checker&) I64 {
     d := c.P.L.Diags
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
-    x.Lw.Ensures = c.Contracts
     said Map<pair.Pair<I64, I64>, Bool>
     n I64 = 0
     for a in c.ValueAsks {
@@ -349,10 +326,6 @@ fn DecideValues(c mut typecheck.Checker&) I64 {
         k := mir.FnKey.Body(typed.BodyId(I32(a.Body)))
         x.Need(k)
         s := x.M.Eval(k, Array<I64>(0))
-        if guaranteeFailed(c, x, s) {
-            said.Put(key, true)
-            continue
-        }
         at := diag.Where.Span(a.File, I64(a.Sp.Start), I64(a.Sp.End))
         why, file, sp := valueWhy(s, a.Sp)
         if why == "" {
@@ -450,7 +423,6 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     out Map<I64, eval.Image>
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
-    x.Lw.Ensures = c.Contracts
     x.start()
     d := c.P.L.Diags
     abortsAt Map<pair.Pair<I64, I64>, Bool>
@@ -472,7 +444,6 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
                         }
                         case eval.Stop.Exited(kind, file, sp, _) {
                             if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { continue }
-                            if guaranteeFailed(c, x, x.M.Stopped) { continue }
                             key := pair.Pair(file, I64(sp.Start))
                             if abortsAt.Has(key) { continue }
                             abortsAt.Put(key, true)
@@ -590,7 +561,6 @@ fn AbortWhy(k mir.ExitKind) String& {
         case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
         case mir.ExitKind.Error => "an error reaches '!', which ends the program"
         case mir.ExitKind.Escaped => "an error leaves the test, which ends it"
-        case mir.ExitKind.Guarantee => "a call's guarantee does not hold"
         nomatch => "it ends the test or the process"
     }
 }
@@ -1009,6 +979,7 @@ fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
     for i in range x.M.TraceLen() {
         file, at, kind := x.M.TraceAt(i)
         what := "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
+        if x.M.TraceWhat(i).Len() > 0 { what = $x.M.TraceWhat(i) }
         b.Push($line(d, file, source.Span(I32(at), I32(at))) ": " $what "\n")
     }
     return b.ToString()

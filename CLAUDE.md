@@ -177,7 +177,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
-  (fails with `WRONG_CASE` under `checked`, else aborts). `is` tests for null and nothing else: `x is null`, `x is not
+  (fails as written with `CaseError.WRONG_CASE`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
   null` (E10c, the user's decision 2026-10-24); `x == null`, `a is b` and `x is E.Case` are errors naming the form.
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload too, `_`
@@ -221,7 +221,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
   returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
   compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
-  length is inferred where an array is made, a view is a slice).
+  length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
+  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25).
 
 ### Types
 
@@ -234,10 +235,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   literal another operand cannot hold meets it at its own type (E6d).
 - **Numbers widen implicitly toward their base, never narrow (T6b, the user's design).** Lattice: wider within a
   signedness, unsigned into strictly wider signed, F16/BF16 -> F32 -> F64; a declared type into its base. Narrowing is
-  written (`I32(x)`), unchecked, `checked` checks it (R20) - never a per-operation check (the user: "It's not even a
+  written (`I32(x)`), unchecked; `try x.Narrow<I32>()` checks it (E26b) - never a per-operation check (the user: "It's not even a
   question").
 - **Integer arithmetic wraps (E6c, the user's call, re-confirmed 2026-10-09 knowing its `nsw` cost).** Division by
-  zero and MIN / -1 are undefined (E6a); `checked (expr)` checks every operation inside (E15a).
+  zero and MIN / -1 are undefined (E6a); `std/arith` checks: `try arith.Add(a, b)`, `try arith.Checked(a) * b` (E15a).
 - **Value or reference is decided by the `&` marker alone (T11, T25a).** `&` is scope-tagged heap indirection, not an
   address-of: no pointer type, no unary `&`, no reference to a reference. Reference-shape is part of type identity;
   value<->reference conversion is assignability at the outermost level only (E12): an lvalue into a reference borrows
@@ -280,7 +281,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
-  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `checked a[i]` checks; an out-of-range index, a
+  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a.Get(i)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
   reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
@@ -325,8 +326,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `-(2.0.Sqrt())`. L12's lexing is unchanged.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
-  method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are
-  `Checked...` (E31a); any operator but `Len`/`Eq`/`Str` may fail. `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the
+  method is the operator only in the operator's shape - another shape is an ordinary method. Any operator's
+  method but `Len`/`Eq`/`Str` may declare errors, making the operator fallible as written (E31a); there are no checked
+  forms. `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the
   user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
   left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
   clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
@@ -364,7 +366,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (M19e). The 2026-10-08 interfaces were removed (bugs clustered in tables and boxing).
 - **`any Trait&` (T32-T34, D17f, 2026-10-24, the user's design; HISTORY.md "Run-time trait values").** Two words, the
   instance and a static table per (type, trait) - its type's identity, `$`'s renderings, a function per slot (the
-  trait's and extended traits' methods, defaults the receiver binds alone), the slots again for `checked`. A struct or
+  trait's and extended traits' methods, defaults the receiver binds alone), and nothing else. A struct or
   enum variable is borrowed, a temporary built where the any lands, a number/Bool/Char/array copied (the user); placement
   is the scope pass's (`AnyMake` read as a conversion), never emit's. A method saying more than the trait's signature
   (scopes, obligations) cannot be in a table (an error at the conversion). Calls dispatch through the table, `mut` only
@@ -372,9 +374,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reaches it (so `any Iterator<String>&` exists), an argument left off taking the trait's default; `for x in it` walks an
   `any Iterator<T>&`; the any satisfies its
   trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
-  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `nomatch`) and `w as Button` (WRONG_CASE under
-  `checked`); an open trait's never (the user). A trait's methods take contracts (D17f), held to every call through an
-  any; the implementation's own are checked only under `checked`, after dispatch. Tables are `linkonce_odr`, named by
+  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `nomatch`) and `w as Button` (failing with
+  `CaseError.WRONG_CASE` as written); an open trait's never (the user). A trait's methods take contracts (D17f), checked before every call through an
+  any; the implementation's own on its entry, after dispatch. Tables are `linkonce_odr`, named by
   type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
   has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
   anys is written `any W&[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
@@ -503,29 +505,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/
   `Last` EMPTY, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OUT_OF_RANGE, `IndexOf`/`Find*` NOT_FOUND, `ShortestDecimal`
   NOT_FINITE). A lambda infers with nothing written, in the canonical order (D16b).
-- **`try` handles what fails as written; `checked` is try plus every check (R8, E15a, E24, QQ1, the user's design).**
-  One `try` covers every fallible call and operator in its operand - arguments, a chain (`try f().g()`, reversing
-  E24's one-call reading), a parenthesized expression - and never turns a check on; a `try` covering nothing is an
-  error (not in a generic's body, where instantiations differ). `checked (e)`, `checked a[i]`, `checked a[lo:hi]`,
-  `checked x[i] = v`, `checked T[e for ...]`: overflow, `<<` whose true value `x * 2^n` does not fit, shift amounts
-  (`OUT_OF_BOUNDS`), any integer conversion changing the value (signs too), a finite value made infinite (`OVERFLOW`),
-  IEEE's exceptions - `DIVIDE_BY_ZERO` for an integer or a finite nonzero float divided by zero, `INVALID` for a NaN
-  from non-NaN operands (`0.0/0.0`, `inf - inf`) and a NaN or infinity made an integer - `as` of another case
-  (`WRONG_CASE`), indexes, slices, lengths. A clause-less `checked` inside a `try` or `!` hands its errors to it
-  (`(checked a[i])!`). `for x in try c` and `try join` stay `try`. No `try { block }` (declined: hides exits).
+- **`try` handles what fails as written, and nothing else is checked (R8, E15a, E24, the user's design; `checked`
+  removed 2026-10-25, the user: "one error system: try").** One `try` covers every fallible call and operator in its
+  operand - arguments, a chain (`try f().g()`), a parenthesized expression - and never turns a check on; a `try`
+  covering nothing is an error (not in a generic's body, where instantiations differ). What `checked` checked is now a
+  call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OUT_OF_RANGE`, a List's and a Vec's `Get`
+  their own errors), `try x.Narrow<I32>()` (`NumberError.OVERFLOW`/`INVALID`, supplied by the compiler for every number
+  type), `as` failing as written (`CaseError.WRONG_CASE`), and arithmetic in `std/arith` (not the prelude): `try
+  arith.Add(a, b)`, `Sub Mul Div Rem Neg ShiftLeft ShiftRight Pow`, and `Checked<T>` whose operators are those
+  (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DIVIDE_BY_ZERO INVALID`, each function's set inferred per
+  number type (an integer's Add fails with OVERFLOW alone). Plain `/ %`, indexing and conversions stay unchecked; a
+  plain slice still aborts once per slice (E16b). `for x in try c` and `try join` stay. No `try { block }`.
+  `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
+  uncovered `as` `(x as C)!`.
 - **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
   `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.IoError.W`
   and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
   ends the program from the task's thread (P4, P6).
-- **Operators may fail; checked forms add checks (E31, E31a, QQ1, the user's calls).** A plain operator method (all
-  but `Len`, `Eq`, `Str`) may declare errors, making the operator fallible as written (`try (a - b)`). Its checked form
-  is `CheckedAt`, `CheckedPlus` ... (the Try forms renamed - the user, reversing their own TryAt), what `checked`
-  calls, and must fail with every error the plain one can (a compile error at the declaration otherwise; for a generic
-  type, per instantiation). A checked form requires its plain one (`CheckedAt` alone is an error); loops never call one.
-  `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared. A method called
-  by name has its checked form the same way (`checked x.Pow(n)` calls `CheckedPow`, E31a, 2026-10-18, mine).
-- **`CheckError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE CONTRACT`, std/prelude/check.olang; named
-  `BuiltinError` until 2026-10-24, QAI - `tools/checkerror_rename.olang` migrates) is raised only by `checked` (R20);**
+- **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
+  declare errors, making the operator fallible as written (`try (a - b)`, `try x[i]`, `try x[i] = v`). The checked forms
+  (`CheckedAt`, `CheckedPlus` ...) went with `checked` (2026-10-25): a method of that name is an ordinary method.
+- **The prelude's errors of the language's own operations (R20, 2026-10-25; `CheckError` removed with `checked`):**
+  `ArrayError.OUT_OF_RANGE` (`Get`, `SliceOf`), `NumberError.OVERFLOW`/`INVALID` (`Narrow`), `CaseError.WRONG_CASE`
+  (`as`), `ArgumentError.INVALID` (a false contract condition, D17);
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
@@ -543,7 +545,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (and its trace, S18d) and exits 1. `os.Args()`/`os.Env()` give the command line (B4a).
 - **Where errors may be raised (R3, R10, R14).** `error` is valid in an ordinary function and a constructor, never in
   a `test` or `destruct` (a test's `try` may let an error out, which fails it, S16); the `try ... catch { }`
-  statement discards the value. A constructor field that fails produces no instance. A run-time array length out of range aborts outside `checked` (D14b), out of memory aborts
+  statement discards the value. A constructor field that fails produces no instance. A run-time array length out of range aborts (D14b), out of memory aborts
   (D14c). `tools/errors_migrate.olang` migrates code (Try forms renamed, `try` to `checked`, `try` for what now fails);
   `tools/donefail_migrate.olang` moves code off `done`/`fail`/`abort`.
 
@@ -714,7 +716,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a default over `Float` (`fn (x T) Sqrt<T Float>() T`, `match T` inside, X8's libm calls, so the evaluator computes
   them while compiling), the first C argument the receiver: `x.Sqrt()`, `y.Atan2(x)`, `a.Hypot(b)`, `x.Fma(a, b)`,
   `x.Pow(y)`, `IsNan`... `Abs`, `Min`, `Max`, `Clamp` over `Number` (IEEE on floats). Integers: `x.Pow(n U32)`
-  (wrapping as `*`; `CheckedPow` is what `checked x.Pow(n)` calls - E31a now covers a method called by name, mine) and
+  (wrapping as `*`; `try arith.Pow(x, n)` fails where it does not fit) and
   `Sqrt()` (the user's name, not ISqrt: the floor of the root in the receiver's type, hardware sqrt plus a one-step
   correction, exact for every U64; signed fails with the prelude's `NumberError.NEGATIVE` - mine - unsigned cannot
   fail). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's, read by bare name everywhere and reserved (D3a);
@@ -789,7 +791,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `interpret` loads the linked libraries and refuses structs and extern types (B3e). Still no extern variables, and
   the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
 - **std API details.** `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt SwapRemove IndexOf Remove
-  Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `checked l[i]` checked, first chunk held on its own. `Map`: `Put Get
+  Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `try l.Get(i)` checked, first chunk held on its own. `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
   reads olang literal syntax; every base is a `Radix` (`TextError.BAD_BASE`, a literal one decided while compiling);
@@ -797,7 +799,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
   captures through memory files; `chan.Send` on a closed channel fails with `ChanError.CLOSED`; `std/csv` is RFC 4180 strict;
   `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
-- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`, `checked`.
+- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`.
 
 ### Codegen and runtime
 
@@ -806,7 +808,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Representation choices**: a function value is a code/environment pair crossing calls as two words; aggregates over
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
-  opt-in with `checked`.
+  opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`).
 - **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C;
   remaining gaps are in abstractions above them (bench/README.md).
 - **Fuzzers:** `fuzz/` (differential: baked, decided, run - `make fuzz`) and the scope fuzzer (`make scopefuzz`).
@@ -848,7 +850,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lowered to MIR with the scope pass's placement - the stand-in, everything in the program's scope, where a body has no
   plan - helpers, adapters and initializations made as MIR functions; `make
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
-  leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try and a clause-less checked, which pass them to the try around them, a T29d literal's error edge is never taken, no releases or
+  leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try, which passes them to the try around it, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, fixed locals included (S8c), `olang
   interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), array lengths computed by calls (QP1), the
@@ -927,33 +929,34 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `nomatch` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
   an intersection is held as a tuple of traits, each checked; a method a binding lacks from an extended trait is
   named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
-- **Contracts (D17-D17g, 2026-10-24, the user's design; the details mine).** One bracketed block after the signature,
-  right before the body (constructors too): `fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= p <= 100] { }`,
-  `fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1]`, `[b outlives a outlives c]`, `[for x in a: x >= 0]`,
-  `[if neg: x < 0 else: x >= 0]`, `[x fits I32]`. Results may be named (all or none) for the contract only. A condition
-  mentioning a result or `return` is a guarantee, else a requirement. Plain names are entry values; `return e` is e's
-  value at return - **a prefix as tight as unary `-`** (mine: "binds like not" would make the user's own Push example
-  read `return (l.Len() == ...)`), only on what is read through a reference parameter. **Decided while compiling where
-  the evaluator can**: a requirement at a call whose arguments are literals, constants, immutable globals or calls of
-  such (no local, not inside a body only the evaluator runs) - false is an error at the call; a guarantee wherever the
-  evaluator runs a call (a baked global, a decided assert, a value) - false is an error at the guarantee with a note at
-  the call. Elsewhere unchecked unless `checked f(x)` (anywhere a `checked` covers): arguments held, requirements, entry
-  values kept, the call, guarantees - `CheckError.CONTRACT`. `outlives` chains are obligations handed to the scope pass
-  (seeded into its summaries), so a function writing one is no function value (T22a); one with value conditions is a
-  value, unchecked through it. **Conversions are contracts (D17g)**: `U8(300)` and `I32(G)` (G an immutable global
-  beyond I32) are compile errors; a run-time value still wraps; `checked T(x)` keeps OVERFLOW/INVALID. S18e (leading
-  asserts at calls) is gone, superseded. Decided (mine): an entry value is kept only for a part read through a reference
-  (a by-value parameter is its entry value already); a part holding references is read at return, an error where it
-  reaches a writable parameter; contract bodies see parameters read-only; one body per item (typed.BodyOf.Contract);
-  the evaluator's guarantee checks are a compile-only lowering (`Lowerer.Ensures`), never in a build. Found on the way:
-  the port's resolver accepted two functions of one name in a module (D2) - an error now.
+- **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25; details mine).** One bracketed
+  block right after the parameter list: `fn pick(x I32, y I32) [y > x] I32 ? ArgumentError { }`, `fn between(lo I64,
+  hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`, `fn link(a mut List<Node&>&, b Node&) [b outlives a]`,
+  `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
+  what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
+  order: a false one fails the call with the prelude's `ArgumentError.INVALID`, its trace line and `!`'s message naming
+  the function and the condition (`pick: y > x`); an error from a call inside a condition leaves as itself. So
+  `ArgumentError` is in the function's set: a bare `?` infers it, a function with no `?` has it, a written set must list
+  it (an error naming it otherwise); every call needs `try`/`catch`/`!`. Decided while compiling where the evaluator can:
+  at a call whose arguments are all values it computes a false condition is an error at the call, whatever handles the
+  failure; where the evaluator runs a call (a baked global, a decided assert) the conditions are checked as at run time.
+  `outlives` chains are compile-time obligations only (O10b), so such a function is no value (T22a); one with value
+  conditions is a value, checked on entry through it. A trait method's contract is checked before a call through an
+  `any` dispatches, then the implementation checks its own. **Removed 2026-10-25**: the position after the signature,
+  guarantees, named results, `return x` entry values, `for`/`if`/`fits` items, `checked f(x)`. D17g stays: a
+  conversion of a value the evaluator computes that does not fit (`U8(300)`) is a compile error naming
+  `x.Narrow<T>()`. Decided (mine): a requirement body per condition, its error set inferred; a trait's conditions held
+  caller-side before dispatch; the compile-time decision reports the first false condition per call; a false
+  requirement's trace line is the condition's (`FILE:LINE: f: cond`), `!`'s own line `ArgumentError.INVALID`.
+  `tools/contracts_migrate.olang` moves old blocks and lists the dropped items. Found on the way (2026-10-24): the
+  port's resolver accepted two functions of one name in a module (D2) - an error now.
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that
   modules have namespaces"; refined: "chan.Chan can stay no?").** `io.IoError` is `io.Error`, and likewise `os.Error`,
   `json.Error`, `csv.Error`, `stats.Error`, `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` and
   `filepath.Error` (was `PathError`); `net`, `base64`, `hex`, `deque`, `heap`, `flags`, `time`, `utf8` already were. A module named for its main
   type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `rand.Rand`, as Go's `list.List`); a module with
   several error types names the others by subject (`linalg.ShapeError`, `http.HeaderError`, `regex.SyntaxError`). The
-  prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `CheckError`,
+  prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `ArgumentError`,
   `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
   its type qualified as source writes it outside the module (`unhandled error: io.Error.FAILED`, B5; see the next entry). `tools/stutter_rename.olang`
   renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and

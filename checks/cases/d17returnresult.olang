@@ -1,8 +1,0 @@
-# check: fail a result has only its value at return - write 'r' without 'return'
-# D17b: a named result has no entry value
-fn f(x I64) r I64 [return r > 0] { return x }
-
-fn main() {
-    n := f(3)
-    n++
-}

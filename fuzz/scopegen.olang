@@ -18,7 +18,7 @@
 #
 # A Str scenario (one scenario in four) declares a type whose Str's body does what the reviews of decision 49 attacked,
 # over the parts of its receiver - a node, a List, a Map and an array of nodes: stores through conditionals, matches and
-# catch defaults (a borrowed result, a Map's Get, a checked index), callbacks building or reading, lambdas, tasks and
+# catch defaults (a borrowed result, a Map's Get, an array's Get), callbacks building or reading, lambdas, tasks and
 # spawned lambdas, generics, call cycles, writes through a List's element (E31b), a local moved into a borrowed result's
 # home (O26a), as well as what Str may do - read and walk its receiver, write numbers through it, build in its own blocks.
 # The value is rendered in a loop, alone and in joins, with a churn after each rendering, and the text's hash and what the
@@ -213,10 +213,10 @@ Prelude := (
     "}\n"
     "fn sumE(e E&) I64 {\n"
     "    if e == E.A {\n"
-    "        b := e as E.A\n"
+    "        b := (e as E.A)!\n"
     "        return chain(b.head)\n"
     "    }\n"
-    "    if e == E.N { return chain(e as E.N) }\n"
+    "    if e == E.N { return chain((e as E.N)!) }\n"
     "    return 0\n"
     "}\n"
     "fn mkNode(v I64) mut Node& { return Node(v) }\n"
@@ -256,12 +256,12 @@ Prelude := (
     "    f := fn(x I64) mut Node& { return Node(x) }\n"
     "    return f(v)\n"
     "}\n"
-    "fn nodeOf(e E) mut Node&e { return e as E.N }\n"
+    "fn nodeOf(e E) mut Node&e { return (e as E.N)! }\n"
     "fn pickNode(x mut Node&) mut Node&x { return x }\n"
     "fn pickBox(x mut Box&) mut Box&x { return x }\n"
     "fn build(b Box) { b.head.next = Node(42) }\n"
     "fn byAs(e E) {\n"
-    "    b := e as E.A\n"
+    "    b := (e as E.A)!\n"
     "    b.head.next = Node(43)\n"
     "}\n"
     "fn link(a mut Node&, b mut Node?&a) { a.next = b }\n"
@@ -597,7 +597,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
     if k == 7 { return $ind "byAs(E.A(" $b "))\n" }
     if k == 8 {    # a payload taken out by "as"
         x := g.name("x")
-        return $ind $x " := E.A(" $b ") as E.A\n" $ind $x ".head.next = " $g.newNode() "\n"
+        return $ind $x " := (E.A(" $b ") as E.A)!\n" $ind $x ".head.next = " $g.newNode() "\n"
     }
     if k == 9 { return g.nodeOp($b ".head", ind, d) }
     if k == 12 {    # a copy with no storage of its own - a call's result, a conditional of the box - lent to a reference
@@ -1012,7 +1012,7 @@ fn (g mut SG&) strOp(ind String&) String& {
         if k == 11 {    # a catch default that is existing storage, read
             return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
         }
-        if k == 12 { return $ind $q " := checked r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
+        if k == 12 { return $ind $q " := try r.a.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n" }
         if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n\n" $ind "acc += " $q ".v\n" }
         if k == 14 {    # walks
             y := g.name("y")
@@ -1027,7 +1027,7 @@ fn (g mut SG&) strOp(ind String&) String& {
     if k == 1 { return $ind "r.n.next = match Run { case 1 => mkNode(" $v ") case _ => r.n.next }\n" }
     if k == 2 { return $ind "r.n.next = try borrowF(r.n) catch default mkNode(" $v ")\n" }
     if k == 3 { return $ind "r.n.next = try r.m.Get(3) catch default mkNode(" $v ")\n" }
-    if k == 4 { return $ind "r.n.next = checked r.a[Run * 9] catch default mkNode(" $v ")\n" }
+    if k == 4 { return $ind "r.n.next = try r.a.Get(Run * 9) catch default mkNode(" $v ")\n" }
     if k == 5 { return $ind "applyN(r.n, fn(x mut Node&) { x.next = Node(" $v ") })\n" }
     if k == 6 { return $ind "acc += applyR(r.n, fn(x Node&) I64 { return x.v })\n" }
     if k == 7 {

@@ -88,24 +88,17 @@ type BodyOf enum {
 }
 
 type ContractKind enum {
-    Req        # fn(the function's parameters) Bool
-    Ensures    # fn(its parameters, its results, the entry values it reads) Bool
-    Entry      # fn(its parameters) the value
+    Req        # fn(the function's parameters) Bool ?, its errors those of the calls in it
 }
 
-# a body's contract (D17), its items made bodies of their own: each requirement's body and where it is written; each
-# guarantee's, and where it is written; each condition as written; each entry value's, called before the call; what
-# diagnostics name the function and the file its contract is written in
+# a body's contract (D17), its conditions made bodies of their own: each requirement's body, where it is written and
+# its text; what diagnostics name the function and the file its contract is written in
 type ContractInfo struct(Name String&, File I64) {
     Name
     File
     Reqs List<I64>
     ReqSps List<source.Span>
     ReqTexts List<String&>
-    Ens List<I64>
-    EnsSps List<source.Span>
-    EnsTexts List<String&>
-    Entries List<I64>
 }
 
 # a scope relation a contract writes (D17d): Hi outlives Lo, each one of the body's scope variables, by its index in
@@ -210,20 +203,22 @@ type Place enum {
 type Elem struct(Base Place&, Index Expr&, Checked Check) {
     Base
     Index
-    Checked     # None (E16), Try (E16d); a constant index known in range is None
+    Checked     # None for x[i] (E16), Try for x.Get(i) (E16d)
 }
 
 type Payload struct(Base Place&, Tag I64, Checked Check) {
     Base
     Tag
-    Checked     # None after a test chose the case (S13b), Abort for "as" (E32), Try under try
+    Checked     # None after a test chose the case (S13b), Try for "as" (E32)
 }
 
 # what a failing operation does
 type Check enum {
     None       # nothing is checked (E16, E6c)
-    Abort      # a guaranteed check (S18a): a slice's bounds, an array's length, an "as", a copy into fixed storage
-    Try        # it fails with CheckError's word, to the innermost enclosing Try (E15a, R20)
+    Abort      # a guaranteed check (S18a): a slice's bounds, an array's length, a copy into fixed storage
+    Try        # it fails as written, to the innermost enclosing Try (E15a, R20): a.Get(i), a.SliceOf(lo, hi),
+               # x.Narrow<T>(), e as C - each with its prelude word
+
 }
 
 # ---- expressions ----
@@ -296,7 +291,7 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false, Checked Bool = false) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false) {
     Target
     Args
     Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
@@ -304,7 +299,6 @@ type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Z
     # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
     # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
     Zero
-    Checked    # its callee's contract checked here by the program, under "checked" (D17e): the evaluator checks nothing more
 }
 
 type MakeKind enum {
@@ -321,7 +315,7 @@ type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Sit
     Items
     Length     # null but for Fill
     Site       # -1 where nothing is allocated: a tuple, a case by value, a fixed array held in place (T7c)
-    Checked    # Fill's length (D14b): Abort, Try under try (E15a); None for every other kind and a length known in range
+    Checked    # Fill's length (D14b): Abort; None for every other kind and a length known in range
 }
 
 type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check) {
@@ -434,8 +428,6 @@ type PrimOp enum {
     Bitcast    # a value's bits as ty, of its width (E33)
     Len        # an array's length (E23)
     IsCase     # args [x, tag]: whether an enum value holds the case (E32, S13)
-    InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived CheckedAt's check (E31)
-    InRangeIncl     # the same, hi itself allowed - a derived CheckedSlice's
     AtomicLoad      # args[0] a Borrow of the integer place (P9)
     AtomicStore
     AtomicAdd
@@ -453,8 +445,7 @@ type PrimOp enum {
     RotateLeft
     RotateRight
     ByteSwap
-    # args [b]: b, once it holds - a contract's condition checked under "checked" (D17e), failing with CheckError's
-    # CONTRACT
+    # args [b]: b, once it holds - a contract's condition checked (D17e), failing with ArgumentError.INVALID
     Holds
     # T32: args [r, t], r a reference to an instance - a borrow, a temporary's, a copy's box (T32a) - made an "any", ty:
     # the pair of r and table t (a Lit, its index in generic.Program's AnyTables). Where the "any" lives is where r's
@@ -472,7 +463,7 @@ type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
     Base
     Lo
     Hi         # both always present: an absent end is the base's length
-    Checked    # Abort (E16b) or Try (E16c)
+    Checked    # Abort for x[lo:hi] (E16b), Try for x.SliceOf(lo, hi) (E16c)
 }
 
 # a choice of two values; only the one chosen is evaluated
@@ -663,6 +654,10 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     Fields List<LocalId>
     Root Block?& = null     # null until checked; a payload's (Case) stays null
     Written List<ScopeRel>   # the scope relations its contract writes (D17d), which section 8 holds every call to
+    # S18d: what its error return trace says where a Raise starts - "pick: y > x" for a requirement false on entry
+    # (D17) - by the Raise's span's start; "raised here" where none is given
+    RaiseAt List<I32>
+    RaiseWhat List<String&>
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {

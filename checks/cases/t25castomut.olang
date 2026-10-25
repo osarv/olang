@@ -9,7 +9,7 @@ type Box enum {
 }
 fn bump(n mut Node&) { n.v = 55 }
 fn viaAs(q Node&) {
-    bump(Box.R(q) as Box.R)
+    bump((Box.R(q) as Box.R)!)
 }
 fn main() ? {
     a Node& = Node(1)

@@ -1,6 +1,7 @@
 # X8: the C math library's functions, computed while compiling (the baked globals), by the built program at -O3 and at
 # -O0, and under -i - every line printed by each of the three, and all three the same; the integers' methods too
 import "std/io"
+import "std/arith"
 
 x mut F64 = 0.7
 y mut F64 = -2.25
@@ -38,6 +39,6 @@ fn main() ? io.Error {
     try line($y.Clamp(-1.0, 1.0) " " $NaN.Min(x) " " $(-0.0).Max(0.0) " " $(-0.0).Min(0.0))
     n I64 = I64(x * 1000.0)
     m U64 = U64(n) * 123456789
-    try line($n.Pow(5) " " $(checked n.Pow(9) catch default -1) " " $m.Sqrt() " " $(try (-n).Sqrt() catch default -7) " " $(-n).Abs() " " $n.Clamp(0, 9))
+    try line($n.Pow(5) " " $(try arith.Pow(n, 9) catch default -1) " " $m.Sqrt() " " $(try (-n).Sqrt() catch default -7) " " $(-n).Abs() " " $n.Clamp(0, 9))
     try line($IntPowBaked " " $IntSqrtBaked " " $Pi.Sin() " " $Euler.Log())
 }

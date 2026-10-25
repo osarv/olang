@@ -12,7 +12,7 @@ type World struct() {
 }
 fn viaAs(q Node&) {
     b := Box.R(q)
-    (b as Box.R).v = 81
+    (b as Box.R)!.v = 81
 }
 fn viaTry(w World&) ? {
     (try w.items[0]).v = 82

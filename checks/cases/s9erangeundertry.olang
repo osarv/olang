@@ -1,9 +1,10 @@
 # check: run
-# R8/S9e: a range comprehension inside what a try or checked covers - the try is not the loop's, so it is no error (it
+# R8/S9e: a range comprehension inside what a try covers - the try is not the loop's, so it is no error (it
 # crashed the compiler)
 import "std/io"
+import "std/arith"
 fn main() ? {
     try io.Println($I32[x for x in range I32(10) if x % 2 == 0])
-    n := checked (I64[x * 2 for x in range 4].Len() + 1)
+    n := try arith.Add(I64[x * 2 for x in range 4].Len(), 1)
     assert n == 5
 }

@@ -533,7 +533,16 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     }
     if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.contractErrors(s, p.errorList(c, s.HasErrors, s.Errors)), scopes)
+}
+
+# D17: a declaration with value conditions and no "?" fails with ArgumentError - its set where it writes none; a
+# written or inferred set is its own, which the checker holds to name it
+fn (p mut Program&) contractErrors(s ast.Sig&, el types.ListId) types.ListId {
+    if s.Contract is null or s.Contract!.Items.Len() == 0 or s.HasErrors { return el }
+    t := p.preludeType("std/prelude/argument", "ArgumentError")
+    if t == types.UnknownT { return el }
+    return p.T.List1(t)
 }
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
@@ -1389,7 +1398,7 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.ArrayLit(_, elem, items) => p.T.Array(p.itemsElem(c, known, p.Resolve(c, elem), items), p.T.Const(p.T.Prim("I64"), items.Len()))
         case ast.Expr.Index(_, y, items) => p.literalOf(c, y, items)
         case ast.Expr.Call(_, f, cargs) => p.madeType(c, known, f, cargs)
-        case ast.Expr.Try(_, y, _, _) => p.Infer(c, known, y)
+        case ast.Expr.Try(_, y, _) => p.Infer(c, known, y)
         case ast.Expr.As(_, _, t) => p.Resolve(c, t)
         case ast.Expr.Binary(_, op, a, b) => p.binaryType(c, known, op, a, b)
         case _ => types.UnknownT
@@ -2342,7 +2351,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
         }
     }
     scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
-    el := p.errorList(c, errs.HasErrors, errs.Errors) if errs is not null else types.ListId(0)
+    el := p.contractErrors(errs, p.errorList(c, errs.HasErrors, errs.Errors)) if errs is not null else types.ListId(0)
     return p.T.Func(p.T.List(ps.ToArray()), result, el, scopes)
 }
 

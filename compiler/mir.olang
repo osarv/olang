@@ -299,9 +299,6 @@ type ExitKind enum {
     FixedLength    # T7d: "array length does not match its fixed storage"
     Error          # E35: an error a "!" took - its message, the error's name ("io.Error.FULL"), is the exit's text
     Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
-    # D17e: while compiling, a call's guarantee did not hold - its message the guarantee's position among the
-    # lowering's Guarantees; never in a build
-    Guarantee
 }
 
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
@@ -316,7 +313,6 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.ArrayLength => "array length out of range"
         case ExitKind.As => "'as' named what the value is not"
         case ExitKind.FixedLength => "array length does not match its fixed storage"
-        case ExitKind.Guarantee => "a guarantee does not hold"
     }
 }
 
@@ -424,6 +420,16 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     ConstItems List<I32>
     Bytes List<U8>
     Taken List<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
+    RaiseAt List<I32>       # S18d: a Raise's span's start whose trace line says RaiseWhat's text (typed.Body's)
+    RaiseWhat List<String&>
+}
+
+# S18d: what a Raise at sp says in a kept error return trace: its text where one was given, "" for "raised here"
+fn (f Fn&) RaiseText(sp source.Span) String&f {
+    for i in range f.RaiseAt.Len() {
+        if f.RaiseAt[i] == sp.Start { return f.RaiseWhat[i] }
+    }
+    return ""
 }
 
 fn (f mut Fn&) AddLocal(l Local) LocalId {
@@ -1302,7 +1308,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance => 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap => 1
-        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl, typed.PrimOp.Holds => -1
+        case typed.PrimOp.Holds => -1
         case typed.PrimOp.AtomicCompareSwap => 3
         case _ => 2
     }
@@ -2472,10 +2478,9 @@ test "a malformed function: every malformation is caught" {
     expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
     # a check written as an operation; a switch with a value twice
     f18 := addFn(t)
-    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.InRange, i32
-                                         f18.Args(Operand[Operand.Copy(L(LocalId(0))), Operand.Const(i32, 0)
-                                                          Operand.Const(i32, 4)])))
-    expect(t, f18, "InRange is a check: a test and a branch in MIR")
+    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.Holds, i32
+                                         f18.Args(Operand[Operand.Copy(L(LocalId(0)))])))
+    expect(t, f18, "Holds is a check: a test and a branch in MIR")
     f19 := addFn(t)
     f19.End(b0, Term.Switch(Operand.Copy(L(LocalId(0))), f19.AddCases(Case[Case(1, b0), Case(1, b0)]), b0))
     expect(t, f19, "a switch with the value 1 twice")

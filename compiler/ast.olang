@@ -34,24 +34,20 @@ type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&)
 
 # a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
 # set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
-# a declaration's results may be named, every one or none (D17): ResultNames one per result, empty for unnamed; a
-# declaration's contract, null for none (D17)
+# a declaration's contract, null for none (D17)
 type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
-                ResultNames Array<source.NameId>& = Array<source.NameId>(0), ResultSps Array<source.Span>& = Array<source.Span>(0)
                 Contract ContractBlock?& = null, Commutes Bool = false) {
     Params
     Results
     HasErrors
     Errors
     NoReturn
-    ResultNames
-    ResultSps
     Contract
     Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
 }
 
-# a contract (D17): its bracketed block's span, its conditions as statements - a condition an Assert with no message,
-# a "for" item a ForIn, an "if" item an If, each branch's and loop's body the items in it - and its "outlives" chains
+# a contract (D17): its bracketed block's span, its conditions as statements - each an Assert with no message - and its
+# "outlives" chains
 type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&, Chains Array<Outlives&>&) {
     Sp
     Items
@@ -98,12 +94,11 @@ type Expr enum {
     Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
     Compr(sp source.Span, c Compr&)                    # T[e for x in s if c] (E27)
     Join(sp source.Span, parts Array<Expr&>&)          # "a" $b "c" (E11b)
-    Try(sp source.Span, x Expr&, clauses Array<Catch&>&, isChecked Bool)    # try, or checked (E15a)
+    Try(sp source.Span, x Expr&, clauses Array<Catch&>&)    # try (E24)
     Lambda(sp source.Span, f Func&)
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
     Default(sp source.Span)                            # "default" as an argument (E14a)
-    Fits(sp source.Span, x Expr&, t TypeRef&)          # x fits T, only in a contract (D17a)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -223,7 +218,7 @@ type Stmt enum {
     Var(sp source.Span, v VarDecl&)
     Multi(sp source.Span, m Multi&)
     Assign(sp source.Span, op token.Tok, target Expr&, value Expr&)
-    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&, isChecked Bool)    # try/checked x[i] = v, x++ (R21)
+    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&)    # try x[i] = v, x++ (R21)
     If(sp source.Span, i If&)
     Forever(sp source.Span, body Array<Stmt&>&)
     While(sp source.Span, cond Expr&, body Array<Stmt&>&)
@@ -341,8 +336,8 @@ fn (e Expr&) Span() source.Span {
         case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _) => sp
         case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _) => sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
-        case Expr.Join(sp, _), Expr.Try(sp, _, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
-        case Expr.Default(sp), Expr.Fits(sp, _, _) => sp
+        case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
+        case Expr.Default(sp) => sp
     }
 }
 
@@ -356,7 +351,7 @@ fn (t TypeRef&) Span() source.Span {
 fn (s Stmt&) Span() source.Span {
     return match s {
         case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _) => sp
-        case Stmt.TryStore(sp, _, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
+        case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
         case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _) => sp
         case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _) => sp
         case Stmt.Block(sp, _) => sp

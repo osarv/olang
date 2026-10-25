@@ -482,12 +482,14 @@ fn (x T) Clamp<T Number>(lo T, hi T) T {
 
 # ---- the integers' methods ----
 
-# what an integer's square root fails with
+# what an integer's square root fails with, and a narrowing x.Narrow<T>(), which the compiler supplies (E26b)
 error NumberError {
     NEGATIVE       # a negative value, which has no square root among the integers
+    OVERFLOW       # a narrowing that changes the value: an integer out of T's range, a finite float made infinite
+    INVALID        # a NaN or an infinity narrowed to an integer
 }
 
-# x to the power n, wrapping as "*" does (E6c): x.Pow(0) is 1, 0 included. "checked x.Pow(n)" calls CheckedPow (E31a)
+# x to the power n, wrapping as "*" does (E6c): x.Pow(0) is 1, 0 included - std/arith's Pow fails where it overflows
 fn (x T) Pow<T Integer>(n U32) T {
     r T = 1
     b T = x
@@ -496,20 +498,6 @@ fn (x T) Pow<T Integer>(n U32) T {
         if (e & 1) == 1 { r = r * b }
         e = e >> 1
         if e > 0 { b = b * b }
-    }
-    return r
-}
-
-# x.Pow(n), failing with CheckError.OVERFLOW where the true power does not fit - the checked form "checked x.Pow(n)"
-# calls (E31a). A square no later step needs is never taken, so it fails exactly where the result does not fit
-fn (x T) CheckedPow<T Integer>(n U32) T ? CheckError {
-    r T = 1
-    b T = x
-    e U32 = n
-    for e > 0 {
-        if (e & 1) == 1 { r = checked (r * b) }
-        e = e >> 1
-        if e > 0 { b = checked (b * b) }
     }
     return r
 }

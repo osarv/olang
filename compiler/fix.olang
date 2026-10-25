@@ -27,8 +27,9 @@ DrivenArg I64 = 3      # tools_NAME COMPILER FILE...
 # the tools in the order the changes were made (their dates in tools/README.md): the text tools first, then the driven
 ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
     "donefail_migrate", "syntax_migrate", "math_methods", "arrays_migrate", "results_migrate", "equality_migrate"
-    "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0]
+    "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
+    "as_migrate"]
+ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -205,7 +206,7 @@ test "the text tools run before the driven ones, each group in the order the cha
         assert t > last
         last = t
     }
-    assert ToolNames[o[0]] == "bare_typevars" and ToolNames[o[o.Len() - 1]] == "null_migrate"
+    assert ToolNames[o[0]] == "bare_typevars" and ToolNames[o[o.Len() - 1]] == "as_migrate"
 }
 
 test "a tool's command line has its compiler or std before the files" {

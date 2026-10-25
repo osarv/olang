@@ -1,0 +1,7 @@
+# check: fail error[E15]: this call can fail - write 'try', and catch or pass on its errors
+# E16d: a checked index is a call that fails with ArrayError.OUT_OF_RANGE, handled as any fallible call is
+fn main() {
+    a := I64[1, 2, 3]
+    x := a.Get(1)
+    x++
+}

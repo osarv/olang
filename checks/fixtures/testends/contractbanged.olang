@@ -1,0 +1,7 @@
+# D17a, E35, S18d: a false requirement under "!" ends the program, its trace naming the function and the condition
+At mut I32 = 0
+fn pick(x I32, y I32) [y > x] I32 { return y - x }
+fn main() {
+    v := pick(1, At)!
+    unreachable
+}

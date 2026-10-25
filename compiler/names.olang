@@ -563,12 +563,11 @@ fn (r mut Resolver&) func(f ast.Func&) {
     r.popTo(m)
 }
 
-# a contract's names (D17), its parameters already declared: the named results, read only here, and each item's -
-# a "for" item's names new, as a for-in's are (D3a); an "outlives" chain names parameters or "return"
+# a contract's names (D17), its parameters already declared: each condition's, and an "outlives" chain's - parameters
+# or "return"
 fn (r mut Resolver&) contract(s ast.Sig&) {
     if s.Contract is null { return }
     m := r.mark()
-    for i in range s.ResultNames.Len() { r.declare(s.ResultNames[i], s.ResultSps[i]) }
     r.block(s.Contract!.Items)
     for ch in s.Contract!.Chains {
         for i in range ch.Names.Len() {
@@ -770,7 +769,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             r.expr(target)
             r.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, clauses, _) {
+        case ast.Stmt.TryStore(_, inner, clauses) {
             r.stmt(inner)
             r.clauses(clauses)
         }
@@ -1012,7 +1011,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.expr(c)
             r.expr(b)
         }
-        case ast.Expr.IsType(_, a, t, _), ast.Expr.As(_, a, t), ast.Expr.Fits(_, a, t) {
+        case ast.Expr.IsType(_, a, t, _), ast.Expr.As(_, a, t) {
             r.expr(a)
             r.typeRef(t)
         }
@@ -1054,7 +1053,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.expr(c.Filter)
             r.popTo(m)
         }
-        case ast.Expr.Try(_, a, clauses, _) {
+        case ast.Expr.Try(_, a, clauses) {
             r.expr(a)
             r.clauses(clauses)
         }

@@ -27,10 +27,10 @@ fn rd(n Node&) I64 {
 fn main() ? {
     c := churn() < 0
     e1 := E.A(Box())
-    k1 := (e1 as E.A).head
+    k1 := (e1 as E.A)!.head
     {
         e2 := E.A(Box())
-        y := (e1 if c else e2) as E.A
+        y := ((e1 if c else e2) as E.A)!
         grow(y)
     }
     churn()

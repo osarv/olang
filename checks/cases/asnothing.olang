@@ -5,7 +5,7 @@ type T enum {
     B
 }
 fn f(t T) I32 {
-    x := t as T.B
+    x := (t as T.B)!
     return 0
 }
 fn main() ? { }

@@ -6,5 +6,5 @@ type Shape enum {
 }
 fn main() ? {
   s Shape& = Shape.Circle(1)
-  r := s as Shape.Circle&
+  r := (s as Shape.Circle&)!
 }

@@ -1,0 +1,8 @@
+# check: fail error[R9]: ParseError
+# D17a: a condition's own fallible call leaves the function with its error, which the caller then handles
+fn positive(t String&) [try t.ParseInt() > 0] I64 ? ArgumentError { return 1 }
+
+fn main() ? {
+    t := "5"
+    v := try positive(t) catch ArgumentError default 0
+}

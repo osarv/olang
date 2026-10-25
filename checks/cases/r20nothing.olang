@@ -1,7 +1,0 @@
-# check: fail error[R8]: nothing here can fail - write it without 'checked'
-# R8/R20: 'checked' needs something that can fail - a fallible call, or an operation it can check
-fn f(a I32) I32 {
-    r I32 = checked (a == 1) catch default 0
-    return r
-}
-fn main() ? { }

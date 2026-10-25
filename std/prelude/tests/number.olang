@@ -147,18 +147,11 @@ bakedPow I64 = I64(3).Pow(4)
 bakedPowWraps I32 = I32(3).Pow(21)                               # 10460353203 wraps to 1870418611, as "*" does
 bakedSqrt I64 = try I64(17).Sqrt() catch default -1
 bakedSqrtMax U64 = U64(18446744073709551615).Sqrt()
-bakedChecked I32 = checked I32(3).Pow(21) catch default -1       # does not fit: CheckedPow fails
 
-test "Pow wraps as * does, and checked checks it" {
+test "Pow wraps as * does (std/arith's Pow checks it)" {
     assert bakedPow == 81 and seventeen.Pow(2) == 289
     assert bakedPowWraps == 1870418611 and three.Pow(21) == bakedPowWraps
     assert I32(0).Pow(0) == 1 and I32(5).Pow(0) == 1 and I32(-2).Pow(3) == -8 and U8(2).Pow(8) == 0
-    assert bakedChecked == -1 and (checked three.Pow(21) catch default -1) == -1
-    assert (checked three.Pow(19) catch default -1) == 1162261467           # fits: the same value as Pow
-    assert (checked I64(-2).Pow(63) catch default 0) == -9223372036854775807 - 1
-    assert (checked I64(2).Pow(63) catch default 0) == 0
-    assert (checked U8(2).Pow(7) catch default 0) == 128 and (checked U8(2).Pow(8) catch default 0) == 0
-    assert (checked U8(16).Pow(2) catch CheckError.OVERFLOW default 7) == 7
 }
 
 test "an integer's Sqrt is the floor of its root, exact at every edge" {

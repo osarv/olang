@@ -1,0 +1,6 @@
+# check: fail error[E26b]: 'Narrow' converts to a number type, and Bool is none
+# E26b: Narrow names a number type
+fn main() ? {
+    n := I64(7)
+    m := try n.Narrow<Bool>()
+}

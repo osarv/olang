@@ -19,7 +19,7 @@ fn mkE(n I64) E {
     return E.C(q)
 }
 fn set(h mut H&, n I64) {
-    h.r = (mkE(n) as E.C).a[0:2]
+    h.r = (mkE(n) as E.C)!.a[0:2]
 }
 fn main() ? {
     h mut H& = H(1)

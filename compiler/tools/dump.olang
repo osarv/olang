@@ -515,7 +515,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.ExprS(sp, x) {
             kind String& = "EXPR"
             match x {
-                case ast.Expr.Try(_, _, cl, _) {
+                case ast.Expr.Try(_, _, cl) {
                     if cl.Len() > 0 { kind = "TRY" }
                 }
                 nomatch { }
@@ -534,7 +534,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.expr(t)
             w.expr(v)
         }
-        case ast.Stmt.TryStore(sp, inner, cl, _) {
+        case ast.Stmt.TryStore(sp, inner, cl) {
             w.line("TRYSTORE", sp)
             match inner {
                 case ast.Stmt.Assign(_, _, _, _) { w.stmt(inner) }
@@ -693,7 +693,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
             w.expr(c.Source)
             w.expr(c.Filter)
         }
-        case ast.Expr.Try(_, a, cl, _) {
+        case ast.Expr.Try(_, a, cl) {
             w.expr(a)
             w.clauses(cl)
         }

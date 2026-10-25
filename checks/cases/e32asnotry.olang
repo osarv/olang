@@ -1,0 +1,12 @@
+# check: fail error[E32]: 'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'
+# E32: 'as' fails as written where the value holds another case, so one no try covers is an error
+type Shape enum {
+    Circle(r F64)
+    Square(s F64)
+}
+
+fn main() {
+    sh := Shape.Circle(1.0)
+    r := sh as Shape.Circle
+    r += 1.0
+}

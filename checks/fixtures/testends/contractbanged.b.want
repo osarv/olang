@@ -1,0 +1,2 @@
+contractbanged.olang:5: ArgumentError.INVALID
+(build with -debug to see where it came from)

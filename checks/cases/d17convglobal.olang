@@ -1,4 +1,4 @@
-# check: fail Big does not fit I32, so the conversion's requirement 'x fits I32' is false
+# check: fail error[D17g]: Big does not fit I32 - write a value that fits
 # D17g: an immutable global the evaluator computes is a constant argument too
 Big I64 = 5000000000
 

@@ -1,5 +1,5 @@
 # check: fail x[i] gives a copy of the element, which this call would write
-# E31b (the review of the view lend, T1): "checked a[1] catch default v" on a built-in array is a value - the element or
+# E31b (the review of the view lend, T1): "try a.Get(1) catch default v" on a built-in array is a value - the element or
 # v - so lent for a writable reference parameter the write would be lost, as for the List spelling (e31btryat)
 type Acc struct() {
     N I64 = 0
@@ -7,5 +7,5 @@ type Acc struct() {
 fn bump(a mut Acc&) { a.N++ }
 fn main() ? {
     a := Acc[Acc(), Acc(), Acc()]
-    bump(checked a[1] catch default Acc())
+    bump(try a.Get(1) catch default Acc())
 }

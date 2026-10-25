@@ -71,9 +71,9 @@ test "Vec: an empty one fails First, Last, Pop and IndexOf with the default erro
     v := Vec<I64>()
     assert v.Len() == 0 and (try v.First() catch default -1) == -1 and (try v.Last() catch default -1) == -1
     assert (try v.Pop() catch default -1) == -1 and (try v.IndexOf(3) catch default -1) == -1
-    assert (checked v[0] catch default -1) == -1           # E31a: the derived checked form
+    assert (try v.Get(0) catch default -1) == -1           # E31a: the derived checked form
     v.Push(4)
-    assert (checked v[1] catch default -1) == -1 and (checked v[0] catch default -1) == 4
+    assert (try v.Get(1) catch default -1) == -1 and (try v.Get(0) catch default -1) == 4
 }
 
 test "Vec: growth keeps every element, the buffer doubling from 8" {

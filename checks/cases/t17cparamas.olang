@@ -8,7 +8,7 @@ type Box enum {
     No
 }
 fn stash(b Box, l mut List<Node&>&) {
-    if b == Box.Has { l.Push(b as Box.Has) }
+    if b == Box.Has { l.Push((b as Box.Has)!) }
 }
 fn main() ? {
     l mut List<Node&>& = List<Node&>()
