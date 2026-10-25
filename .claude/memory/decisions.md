@@ -1189,3 +1189,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   locals/params, x!, T flows into T?, nothing read through it unnarrowed; a flag beside the value); `T?` with T a
   reference IS `T?&`. ASKED: (1) T? on values (rec yes); (2) no `T?` function results - errors are errors, and it avoids
   the bare-`?` clash (rec yes); (3) also forbid `T?&` results for consistency, a change to what is built (rec yes).
+- QAZ DECIDED 2026-10-25 (the user: "I don't want the option type for values, the ref one earns its keep especially
+  through narrowing ... Values are just not worth it"): no `T?` on values (a flag per value, niches only for some
+  types); `?&` unchanged; `T?&` results stay allowed (my question 3 withdrawn). Open: the tuples talk, which Result waits on.
