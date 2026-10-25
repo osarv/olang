@@ -11052,6 +11052,8 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
         }
         if c.isNumber(t) or isLimitName(name) { return null }
         if c.isEnum(t) { return null }
+        # T20: an error type's word is said as one (enumCase)
+        if c.isNamed(t) and c.declKind(t) == types.DeclKind.Error { return null }
         c.err(nsp, msgs.ReflNoMember(c.ty(t), name))
         return c.unknown(sp)
     }
