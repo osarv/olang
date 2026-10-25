@@ -1,0 +1,47 @@
+import "std/io"
+
+Ends mut I64 = 0
+
+type Res struct(n I64) {
+    n
+    t String& = $"resource " $n " - its text, padded out to a fair length ................."
+} destruct {
+    Ends += 1
+}
+
+type Server struct() {
+    rs Map<I64, Res&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+# a resource of the map read and held across a yield
+fn watch(s Server&, k I64) Iterator<I64> {
+    r := try s.rs.Get(k) catch { return }
+    yield 1
+    yield r.t.Len() * 1000 + I64(r.t[9]) + r.n
+}
+
+fn main() {
+    s := Server()
+    for i in range 4 {
+        s.rs.Put(i, Res(i))
+        for x in watch(s, i) {
+            if x == 1 {
+                r := try s.rs.Take(i) catch { unreachable }     # taken out and ended while the walk holds it
+                r.Destroy()
+                churn()
+            }
+            io.Println($x " " $Ends)!
+        }
+    }
+}

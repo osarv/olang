@@ -1,0 +1,145 @@
+import "std/io"
+
+type Holder struct() {
+    t String& = ""
+}
+
+fn (h mut Holder&) set(i I64) { h.t = $"text number " $i " padded out to many bytes ........................................" }
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+# the text's view handed down a chain of locals written last to first, one step a turn of the loop - no let-go in it
+fn step(h mut Holder&, i I64) {
+    a1 String&h = ""
+    a2 String&h = ""
+    a3 String&h = ""
+    a4 String&h = ""
+    a5 String&h = ""
+    a6 String&h = ""
+    a7 String&h = ""
+    a8 String&h = ""
+    a9 String&h = ""
+    a10 String&h = ""
+    a11 String&h = ""
+    a12 String&h = ""
+    a13 String&h = ""
+    a14 String&h = ""
+    a15 String&h = ""
+    a16 String&h = ""
+    a17 String&h = ""
+    a18 String&h = ""
+    a19 String&h = ""
+    a20 String&h = ""
+    a21 String&h = ""
+    a22 String&h = ""
+    a23 String&h = ""
+    a24 String&h = ""
+    a25 String&h = ""
+    a26 String&h = ""
+    a27 String&h = ""
+    a28 String&h = ""
+    a29 String&h = ""
+    a30 String&h = ""
+    a31 String&h = ""
+    a32 String&h = ""
+    a33 String&h = ""
+    a34 String&h = ""
+    a35 String&h = ""
+    a36 String&h = ""
+    a37 String&h = ""
+    a38 String&h = ""
+    a39 String&h = ""
+    a40 String&h = ""
+    a41 String&h = ""
+    a42 String&h = ""
+    a43 String&h = ""
+    a44 String&h = ""
+    a45 String&h = ""
+    a46 String&h = ""
+    a47 String&h = ""
+    a48 String&h = ""
+    a49 String&h = ""
+    a50 String&h = ""
+    a51 String&h = ""
+    a52 String&h = ""
+    a53 String&h = ""
+    a54 String&h = ""
+    a55 String&h = ""
+    a56 String&h = ""
+    for k in range 61 {
+        a56 = a55
+        a55 = a54
+        a54 = a53
+        a53 = a52
+        a52 = a51
+        a51 = a50
+        a50 = a49
+        a49 = a48
+        a48 = a47
+        a47 = a46
+        a46 = a45
+        a45 = a44
+        a44 = a43
+        a43 = a42
+        a42 = a41
+        a41 = a40
+        a40 = a39
+        a39 = a38
+        a38 = a37
+        a37 = a36
+        a36 = a35
+        a35 = a34
+        a34 = a33
+        a33 = a32
+        a32 = a31
+        a31 = a30
+        a30 = a29
+        a29 = a28
+        a28 = a27
+        a27 = a26
+        a26 = a25
+        a25 = a24
+        a24 = a23
+        a23 = a22
+        a22 = a21
+        a21 = a20
+        a20 = a19
+        a19 = a18
+        a18 = a17
+        a17 = a16
+        a16 = a15
+        a15 = a14
+        a14 = a13
+        a13 = a12
+        a12 = a11
+        a11 = a10
+        a10 = a9
+        a9 = a8
+        a8 = a7
+        a7 = a6
+        a6 = a5
+        a5 = a4
+        a4 = a3
+        a3 = a2
+        a2 = a1
+        a1 = h.t
+    }
+    h.set(i)            # lets go of the text the chain's last local holds
+    churn()
+    io.Println(a56)!
+}
+
+fn main() {
+    h := Holder()
+    h.set(-1)
+    for i in range 5 { step(h, i) }
+}

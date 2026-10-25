@@ -1,0 +1,22 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    next mut Node?& = null
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+}
+
+fn main() {
+    a := Holder()
+    b := Holder()
+    for i in range 6 {
+        b.n = Node(i + 1)
+        if a.n.next is not null { io.Println($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
+        a.n.next = b.n          # the node of one holder linked from another holder's node
+        b.n = Node(100 + i)     # which lets go of it: freed at once
+    }
+}

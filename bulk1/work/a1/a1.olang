@@ -1,0 +1,30 @@
+import "std/io"
+
+type Holder struct() {
+    buf Array<I64>& = Array<I64>(0)
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+# a by-value array parameter is the caller's array (D9b); a lambda capturing it borrows it (T7b)
+fn reader(a Array<I64>) fn() I64 { return fn() I64 { return a[3] } }
+
+fn main() {
+    h := Holder()
+    for r in range 4 {
+        h.buf = Array<I64>(64, r + 10)
+        f := reader(h.buf)
+        h.buf = Array<I64>(64, 99)      # lets go of the buffer the closure reads
+        churn()
+        io.Println($f())!
+    }
+}

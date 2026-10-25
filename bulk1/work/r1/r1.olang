@@ -1,0 +1,41 @@
+import "std/io"
+
+type Item struct(v I64) {
+    v
+    t String& = $"item " $v " with text padded out to a fair length ..........................."
+}
+
+type Node struct(v I64) {
+    v
+    l List<mut Item&>
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+    l2 List<mut Item&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 5 {
+        h.n = Node(i)
+        h.n.l.Push(Item(i + 1))                                 # built where the node's list is
+        h.l2.Push(try h.n.l.Pop() catch { unreachable })        # moved into the holder's own list
+        h.n = Node(100 + i)                                     # the node let go of, with what was built in it
+        churn()
+        t I64 = 0
+        for x in h.l2 { t += x.v * 1000 + x.t.Len() }
+        io.Println($t)!
+    }
+}
