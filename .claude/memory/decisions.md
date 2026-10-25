@@ -1136,3 +1136,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   declared = error at the second); operands evaluated as written; keyword after the result like noreturn. ASKED to
   confirm. NEXT (the user): change try's binding ("probably change the binding of try a bit") and checked with try -
   asked whether they mean Swift's loose try (covers everything to its right) and what they want of checked.
+- commutes, the user 2026-10-25: "make the normally commutative types commute automatically if no alternative
+  implementation ... exists too. Or we just leave it completely." Answered: automatic is out (silent wrong answers:
+  Matrix*Vec, quaternion*vector - only the author knows the method commutes). ASKED: explicit `commutes` (rec) or leave
+  it out (`2.0 * v` an error naming `v * 2.0`, additive later).
