@@ -1,0 +1,36 @@
+import "std/io"
+
+type Holder struct() {
+    m Map<String&, String&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for r in range 3 {
+        for k in range 40 { h.m.Put($"key " $k, $"value " $k " of round " $r " padded out ...................................") }
+        first := true
+        n I64 = 0
+        for e in h.m {
+            if first {
+                first = false
+                for k in range 40 { if $"key " $k != e.Key { h.m.Remove($"key " $k) } }   # every other entry removed mid-walk
+                churn()
+                continue
+            }
+            n += e.Key.Len() + e.Value.Len()
+        }
+        io.Println($n " " $h.m.Len())!
+        h.m.Clear()
+    }
+}

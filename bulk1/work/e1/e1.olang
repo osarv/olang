@@ -1,0 +1,47 @@
+import "std/io"
+
+type P error { A, B }
+type Q error { A, C }
+type PQ error P, Q { D }
+
+Live mut I64 = 0
+
+fn f(n I64) I64 ? PQ {
+    if n == 0 { error P.A }
+    if n == 1 { error Q.A }
+    if n == 2 { error PQ.D }
+    if n == 3 { error Q.C }
+    if n == 4 { error P.B }
+    return n
+}
+
+# raised again under a set in another order
+fn g(n I64) I64 ? Q, PQ, P {
+    return try f(n) catch e {
+        if e == Q.A { error Q.C }
+        error e
+    }
+}
+
+fn h(n I64) String {
+    return try $g(n) catch e default ($e " " $(1 if e == P.A else 2 if e == Q.A else 3 if e == P else 4 if e == Q else 5))
+}
+
+fn com(n I64) I64 {
+    return try f(n) catch e default I64[k for k in range 4 if e == P or k == 0].Len()
+}
+
+fn nested(n I64) String {
+    return try $f(n) catch e {
+        r := try $f(n + 1) catch d default ($e "/" $d)
+        return r
+    }
+}
+
+Baked := $h(0) "|" $h(1) "|" $h(2) "|" $h(3) "|" $h(4) "|" $h(5) "|" $com(0) $com(1) "|" $nested(0) "|" $nested(3)
+
+fn main() {
+    l := Live
+    io.Println(Baked)!
+    io.Println($h(l) "|" $h(l + 1) "|" $h(l + 2) "|" $h(l + 3) "|" $h(l + 4) "|" $h(l + 5) "|" $com(l) $com(l + 1) "|" $nested(l) "|" $nested(l + 3))!
+}

@@ -1,0 +1,20 @@
+import "std/io"
+
+type Cell struct() {
+    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.END })
+}
+
+# a generator that resumes itself: its Next called while its body runs
+fn gen(c mut Cell&) Iterator<I64> {
+    yield 1
+    x := try c.g.Next() catch Exhausted default -1
+    yield x + 100
+    yield 3
+}
+
+fn main() {
+    c := Cell()
+    c.g = gen(c)
+    for x in c.g { io.Println($x)! }
+    io.Println("done")!
+}

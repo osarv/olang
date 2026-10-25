@@ -1,0 +1,5 @@
+import "std/io"
+type P error { A, B }
+fn f() ? P { error P.A }
+fn k(x I64 = 0) { }
+fn main() { try f() catch e { defer io.Println($e)!; io.Println("x")! } }

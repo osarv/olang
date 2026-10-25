@@ -1,0 +1,18 @@
+import "std/io"
+type P error { A, B }
+fn f() ? P { error P.A }
+fn gen() Iterator<String> {
+    for i in range 2 {
+        try f() catch e {
+            yield $e
+            yield $e "!"
+        }
+    }
+}
+fn main() {
+    for s in gen() { io.Println(s)! }
+    try f() catch e {
+        defer io.Println($e)!
+        io.Println("x")!
+    }
+}

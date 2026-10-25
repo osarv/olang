@@ -1,0 +1,42 @@
+import "std/io"
+
+type P error { A, B }
+type Q error { C, D }
+
+fn pq(x I64) I64 ? Q, P {
+    if x == 1 { error P.B }
+    if x == 2 { error Q.D }
+    if x == 3 { error P.A }
+    if x == 4 { error Q.C }
+    return x
+}
+
+fn onlyP(x I64) I64 ? P {
+    if x == 5 { error P.B }
+    return x
+}
+
+fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E { return try f(x) }
+
+fn apply2<T, U ? E>(x T, f fn(x T) U ? E, g fn(x T) U ? E) U ? E { return try f(x) + try g(x) }
+
+fn word(n I64) String {
+    return try $apply(n, pq) catch e default $e
+}
+
+fn word2(n I64) String {
+    return try $apply2(n, onlyP, pq) catch e default $e
+}
+
+fn word3(n I64) String {
+    return try $apply2(n, pq, onlyP) catch P.A default "pa" catch P.B default "pb" catch Q.C default "qc" catch Q.D default "qd"
+}
+
+Live mut I64 = 0
+Baked := $word(1) $word(2) $word(3) $word(4) $word(0) "|" $word2(1) $word2(2) $word2(5) $word2(4) "|" $word3(1) $word3(2) $word3(3) $word3(4) $word3(5)
+
+fn main() {
+    l := Live
+    io.Println(Baked)!
+    io.Println($word(l + 1) $word(l + 2) $word(l + 3) $word(l + 4) $word(l) "|" $word2(l + 1) $word2(l + 2) $word2(l + 5) $word2(l + 4) "|" $word3(l + 1) $word3(l + 2) $word3(l + 3) $word3(l + 4) $word3(l + 5))!
+}

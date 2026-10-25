@@ -1,0 +1,45 @@
+import "std/io"
+import "std/json"
+
+type Rec struct(Id I64, Big U64, Name String&, Tags Array<String&>&, Ratio F32, Ch Char, Ok Bool) {
+    Id, Big, Name, Tags, Ratio, Ch, Ok
+}
+
+type Shape enum {
+    Circle(r F64)
+    Rect(w F64, h F64)
+    Empty
+}
+
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+
+type Box struct(S Shape, O Opt<I64>, Inner Rec&) {
+    S, O, Inner
+}
+
+fn rt<T>(v T) String {
+    t := json.Encode(v)
+    back := try json.Decode<T>(t) catch e { return $t " -> failed " $e }
+    return $t " -> " $json.Encode(back) " " $(back == v)
+}
+
+Live mut I64 = 0
+Live2 mut F64 = -0.0
+
+fn all(z I64) String {
+    r := Rec(z + 9007199254740993, U64(z) + 18446744073709551615, "a \"q\" \\ \n\t é", String&["x", "y"], F32(z) + 0.1, 'q', true)
+    b := Box(Shape.Rect(1.5, F64(z) - 2.0), Opt<I64>.Some(z + 7), r)
+    return ($rt(z + 9007199254740993) "\n" $rt(I64.Min + z) "\n" $rt(U64(z) + 18446744073709551615) "\n" $rt(r) "\n" $rt(b) "\n" $rt(Opt<I64>.None) "\n"
+            $rt(Shape.Empty) "\n" $rt(F64(z) + 1e300) "\n" $rt(-0.0 - F64(z)) "\n" $rt(Live2))
+}
+
+Baked := all(0)
+
+fn main() {
+    io.Println(Baked)!
+    io.Println("----")!
+    io.Println(all(Live))!
+}
