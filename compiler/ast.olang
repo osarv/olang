@@ -70,7 +70,7 @@ type Path struct(Sp source.Span, Parts Array<source.NameId>&) {
 type Expr enum {
     Name(sp source.Span, name source.NameId)
     Lit(sp source.Span, kind token.Tok)                # IntLit, FloatLit, CharLit, StrLit, BoolLit, NullLit: its text
-    Paren(sp source.Span, x Expr&)                     # kept: "try (x)" checks x (E15a), "(x.f)(a)" calls a field (E13b)
+    Paren(sp source.Span, x Expr&)                     # kept: "(x.f)(a)" calls a field (E13b), and "try (x)" is an error (E24)
     Unary(sp source.Span, op token.Tok, x Expr&)       # - ~ $ not ++ --
     Postfix(sp source.Span, op token.Tok, x Expr&)     # x++ x-- x! (E35)
     Binary(sp source.Span, op token.Tok, a Expr&, b Expr&)

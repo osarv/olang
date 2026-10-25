@@ -2654,7 +2654,7 @@ if TestBuild {
     fn smallSum() F64 {
         a := counting(3, 4, 1.0)
         b := try a.ColRange(1, 3) catch { unreachable }
-        c := try (b + b) catch { unreachable }
+        c := try b + b catch { unreachable }
         try c.AddRow(Full(1, 2, 0.5)) catch { unreachable }
         return c.Sum()
     }
@@ -2728,9 +2728,9 @@ if TestBuild {
     test "element operators, in-place forms and Map" {
         a := counting(2, 3, 1.0)
         b := Full(2, 3, 2.0)
-        assert (try (a + b)).Get(1, 2) == 8.0 and (try (a - b)).Get(0, 0) == -1.0
-        assert (try (a * b)).Get(1, 0) == 8.0
-        assert (try (a / b)).Get(0, 1) == 1.0 and (-a).Get(1, 1) == -5.0 and (a * 3.0).Get(1, 2) == 18.0 and (a + 0.5).Get(0, 0) == 1.5
+        assert (try a + b).Get(1, 2) == 8.0 and (try a - b).Get(0, 0) == -1.0
+        assert (try a * b).Get(1, 0) == 8.0
+        assert (try a / b).Get(0, 1) == 1.0 and (-a).Get(1, 1) == -5.0 and (a * 3.0).Get(1, 2) == 18.0 and (a + 0.5).Get(0, 0) == 1.5
         c := a.Clone()
         try c.Add(b)
         try c.Sub(a)
@@ -2774,10 +2774,10 @@ if TestBuild {
 
     # whether try (a op b) failed with ShapeError.MISMATCH - op 0 is +, 1 is -, 2 is @, 3 is a.T() @ b.T()
     fn shapeFails(a Matrix<F32>&, b Matrix<F32>&, op I64) Bool {
-        if op == 0 { try (a + b) catch ShapeError.MISMATCH { return true } }
-        if op == 1 { try (a - b) catch ShapeError.MISMATCH { return true } }
-        if op == 2 { try (a @ b) catch ShapeError.MISMATCH { return true } }
-        if op == 3 { try (a.T() @ b.T()) catch ShapeError.MISMATCH { return true } }
+        if op == 0 { try a + b catch ShapeError.MISMATCH { return true } }
+        if op == 1 { try a - b catch ShapeError.MISMATCH { return true } }
+        if op == 2 { try a @ b catch ShapeError.MISMATCH { return true } }
+        if op == 3 { try a.T() @ b.T() catch ShapeError.MISMATCH { return true } }
         return false
     }
 
@@ -2786,7 +2786,7 @@ if TestBuild {
         b := Matrix<F32>(3, 2)
         assert shapeFails(a, b, 0) and shapeFails(a, b, 1) and shapeFails(a, a, 2) and shapeFails(a, a, 3)
         assert not shapeFails(a, a, 0) and not shapeFails(b, b, 1) and not shapeFails(a, b, 2) and not shapeFails(a, b, 3)
-        s := try (a + a) catch ShapeError { unreachable }
+        s := try a + a catch ShapeError { unreachable }
         assert s.Rows == 2 and s.Cols == 3
     }
 
@@ -2928,20 +2928,20 @@ if TestBuild {
     test "the product operators, and products of views" {
         a := counting(2, 3, 0.0)
         b := counting(3, 2, 1.0)
-        c := try (a @ b)
+        c := try a @ b
         assert c.Get(0, 0) == 13.0 and c.Get(1, 1) == 52.0
         assert (try (a @ a.T()).Get(0, 1)) == 14.0 and (try (a.T() @ a).Get(2, 2)) == 29.0
-        assert (try (b.T() @ a.T())) == c.T().Clone()
+        assert (try b.T() @ a.T()) == c.T().Clone()
         big := counting(4, 5, 0.0)
         left := (try big.ColRange(1, 4))
         right := (try big.Block(0, 1, 3, 2))
-        assert (try (left @ right)) == (try (left.Clone() @ right.Clone()))
+        assert (try left @ right) == (try left.Clone() @ right.Clone())
         # a vector times a matrix, and a matrix times a vector, both ways round
         x := counting(1, 3, 1.0)
         w := counting(2, 3, 0.0)
-        y := try (x @ w.T())
+        y := try x @ w.T()
         assert y.Get(0, 0) == 8.0 and y.Get(0, 1) == 26.0
-        col := try (w @ x.Reshape(3, 1))
+        col := try w @ x.Reshape(3, 1)
         assert col.Get(1, 0) == 26.0
         z := Matrix<F64>(1, 3)
         try Gemm(z, x.RowRange(0, 1).Reshape(1, 3), false, counting(3, 3, 0.0), false)
@@ -2953,7 +2953,7 @@ if TestBuild {
     test "products in every element type: F16, BF16 and F8 computed in F32, integers wrapping" {
         a := counting(3, 4, 1.0)
         b := counting(4, 2, -3.0)
-        want := try (a @ b)
+        want := try a @ b
         assert (try (a.ToF32() @ b.ToF32()).ToF64()) == want
         assert (try (a.ToF16() @ b.ToF16()).ToF64()) == want
         assert (try (a.ToBF16() @ b.ToBF16()).ToF64()) == want
@@ -2961,7 +2961,7 @@ if TestBuild {
         try ai.Convert(a)
         bi := Matrix<I32>(4, 2)
         try bi.Convert(b)
-        ci := try (ai @ bi)
+        ci := try ai @ bi
         assert ci.Get(2, 1) == I32(want.Get(2, 1))
         a8 := Matrix<F8E4M3>(3, 4)
         try a8.Convert(a)
@@ -3066,7 +3066,7 @@ if TestBuild {
         a := counting(3, 3, 1.0)
         a.Set(2, 2, 10.0)
         x := counting(3, 2, 0.0)
-        b := try (a @ x)
+        b := try a @ x
         got := try Solve(a, b)
         assert (try got.MaxAbsDifference(x)) < 1e-12
         inv := try a.Inverse()
@@ -3303,7 +3303,7 @@ if TestBuild {
                 try GemmBatch(c, a, transA, b, transB, 2.0, 0.5)
                 for g in range 3 {
                     for h in range 2 {
-                        want := try (referenceProduct(a[g, h], transA, b[g, h], transB) * 2.0 + c0[g, h].ToF64() * 0.5)
+                        want := try referenceProduct(a[g, h], transA, b[g, h], transB) * 2.0 + c0[g, h].ToF64() * 0.5
                         assert (try c[g, h].Distance(want)) < 1e-9 * F64(k)
                     }
                 }
@@ -3413,7 +3413,7 @@ if TestBuild {
                     y.Fill(1.0)
                     try GemmBatch(y.Stacked(T), p.Stacked(T), transA == 1, v.Stacked(T), false, 1, 2, Triangular.Left, diag)
                     for g in range 3 {
-                        want := try (referenceProduct(clean.Stacked(T)[g, 0], transA == 1, v.Stacked(T)[g, 0], false) + 2.0)
+                        want := try referenceProduct(clean.Stacked(T)[g, 0], transA == 1, v.Stacked(T)[g, 0], false) + 2.0
                         assert (try y.Stacked(T)[g, 0].Distance(want)) < 1e-12 * F64(T)
                     }
                 }
@@ -3634,7 +3634,7 @@ if TestBuild {
         try bi.Convert(counting(6, 70, -200.0))
         ci := Matrix<I32>(5, 70)
         try GemmAct(ci, ai, false, bi, false, null, Activation.Relu)
-        wi := try (ai @ bi)
+        wi := try ai @ bi
         for i in range 5 {
             for j in range 70 { assert ci.Get(i, j) == (wi.Get(i, j) if wi.Get(i, j) > 0 else 0) }
         }

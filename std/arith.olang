@@ -218,16 +218,16 @@ test "floats: IEEE's exceptions as errors" {
     assert Add(Inf, 1.0)! == Inf        # an infinity in is no overflow
 }
 
-Baked I64 = (try (Checked(I64(6)) * 7 + 1) catch default Checked(I64(0))).Value
+Baked I64 = (try Checked(I64(6)) * 7 + 1 catch default Checked(I64(0))).Value
 G mut I64 = 3000000000
 
 test "Checked: each step checked, left to right, the same while compiling as at run time" {
-    c := try (Checked(I64(6)) * 7 + 1)
+    c := try Checked(I64(6)) * 7 + 1
     assert c.Value == 43
     assert Baked == 43
-    assert (try (2 * Checked(I32(5))) catch default Checked(I32(0))).Value == 10    # Mul commutes (E31c)
-    assert (try (Checked(I32(G / 3000)) * 2) catch default Checked(I32(-1))).Value == 2000000
-    assert (try (Checked(I32(G / 2)) * 2) catch Error.OVERFLOW default Checked(I32(-1))).Value == -1
-    assert (try (Checked(U8(250)) + 5)).Value == 255
-    assert (try (Checked(U8(250)) + 6) catch default Checked(U8(1))).Value == 1
+    assert (try 2 * Checked(I32(5)) catch default Checked(I32(0))).Value == 10    # Mul commutes (E31c)
+    assert (try Checked(I32(G / 3000)) * 2 catch default Checked(I32(-1))).Value == 2000000
+    assert (try Checked(I32(G / 2)) * 2 catch Error.OVERFLOW default Checked(I32(-1))).Value == -1
+    assert (try Checked(U8(250)) + 5).Value == 255
+    assert (try Checked(U8(250)) + 6 catch default Checked(U8(1))).Value == 1
 }

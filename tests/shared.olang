@@ -8477,8 +8477,8 @@ fn txReads() I32 {
     sp TxSparse& = TxSparse(1)
     x := try sp[3] catch default 0
     y := try sp[1] catch TxErr default 7
-    z := try (TxQ(10) / TxQ(0) + TxQ(1)) catch TxErr default TxQ(99)
-    w := try (TxQ(10) / TxQ(2) + TxQ(1)) catch TxErr default TxQ(99)
+    z := try TxQ(10) / TxQ(0) + TxQ(1) catch TxErr default TxQ(99)
+    w := try TxQ(10) / TxQ(2) + TxQ(1) catch TxErr default TxQ(99)
     return a + b + I32(s.Len()) + I32(t.Len()) + x + y + z.v + w.v
 }
 
@@ -8552,8 +8552,8 @@ fn (r TxRemote&) Has(x I32) Bool ? TxErr {
 fn txMember(down Bool) I32 {
     r TxRemote& = TxRemote(down)
     t I32 = 0
-    if try (5 in r) catch default false { t += 1 }
-    if try (2 not in r) catch default false { t += 10 }
+    if try 5 in r catch default false { t += 1 }
+    if try 2 not in r catch default false { t += 10 }
     return t
 }
 
@@ -8620,7 +8620,7 @@ fn icToks() I64 {
     if e == IcTok.End { t += 1000 }
     v := (x as IcTok.Num)!
     a, b := (y as IcTok.Pair)!
-    w := try (y as IcTok.Num) catch default -1
+    w := try y as IcTok.Num catch default -1
     return t + v + a + w + b
 }
 
@@ -17519,7 +17519,7 @@ fn ebMake(v I64) ebBox ? {
 }
 fn ebCovered(v I64) I64 {
     chain := try ebMake(v).Twice() catch ebA default -1 catch ebB default -2
-    sum := try (ebLeaf(v) + ebMake(v + 1).Twice()) catch default -3
+    sum := try ebLeaf(v) + ebMake(v + 1).Twice() catch default -3
     return chain * 100 + sum
 }
 EbCoveredBaked := ebCovered(3) * 1000000 + ebCovered(-1) * 1000 + ebCovered(60)
@@ -17546,8 +17546,8 @@ fn ebChecked(k I64) I64 {
     conv := try big.Narrow<I32>() catch NumberError.OVERFLOW default -3
     sign := try neg.Narrow<U64>() catch NumberError.OVERFLOW default 0
     narrow := try huge.Narrow<F32>() catch NumberError.OVERFLOW default -4.0
-    wrong := try (s as ebShape.Circle) catch CaseError.WRONG_CASE default -5
-    right := try (s as ebShape.Square) catch CaseError.WRONG_CASE default -5
+    wrong := try s as ebShape.Circle catch CaseError.WRONG_CASE default -5
+    right := try s as ebShape.Square catch CaseError.WRONG_CASE default -5
     return I64(shl) * 1000000 + I64(conv) * 10000 + I64(sign) * 1000 + I64(narrow) * 100 + wrong * 10 + right
 }
 EbCheckedBaked := ebChecked(31) * 10 + ebChecked(40)
@@ -17570,7 +17570,7 @@ fn (a ebMoney&) Minus(b ebMoney&) ebMoney ? ebMoneyError {
     return ebMoney(a.c - b.c)
 }
 fn ebOps(a I64, b I64) I64 {
-    x := try (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-1)
+    x := try ebMoney(a) - ebMoney(b) catch ebMoneyError default ebMoney(-1)
     return x.c
 }
 EbOpsBaked := ebOps(10, 3) + ebOps(3, 10) * 10
@@ -18090,4 +18090,35 @@ test "D17g: a conversion checked at run time keeps its own words" {
     b := try x.Narrow<U8>() catch NumberError.OVERFLOW default U8(7)
     assert b == 7
     assert U8(x) == 44
+}
+
+# ---- E24: a try covers the whole expression after it, to its end or its first catch; after the clauses the
+# expression around it goes on; the try itself parenthesized covers less ----
+
+error TrReach {
+    NEG
+}
+
+fn trPos(n I64) I64 ? TrReach {
+    if n < 0 { error TrReach.NEG }
+    return n
+}
+
+fn trAll(n I64) I64 { return try trPos(n) + trPos(n + 1) catch default -1 }
+fn trLess(n I64) I64 { return 2 * (try trPos(n) catch default 0) + 1 }
+fn trMore(n I64) I64 { return try 2 * trPos(n) + 1 catch default -1 }
+fn trAfter(n I64) I64 { return try trPos(n) catch default 7 + 1 }
+fn trCond(n I64) I64 { return try trPos(n) if n > 3 else trPos(-n) catch default 9 }
+
+TrReachBaked := trAll(2) * 1000 + trLess(-1) * 100 + trMore(3) * 10 + trAfter(-5)
+
+test "E24: a try covers the whole expression after it, and the evaluator agrees" {
+    assert trAll(2) == 5 and trAll(-1) == -1 and trAll(-2) == -1
+    assert trLess(3) == 7 and trLess(-1) == 1
+    assert trMore(3) == 7 and trMore(-3) == -1
+    assert trAfter(4) == 5 and trAfter(-5) == 8
+    assert trCond(5) == 5 and trCond(2) == 9 and trCond(-2) == 2
+    n := 2
+    assert TrReachBaked == trAll(n) * 1000 + trLess(-1) * 100 + trMore(3) * 10 + trAfter(-5)
+    assert TrReachBaked == 5000 + 100 + 70 + 8
 }

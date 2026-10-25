@@ -196,6 +196,7 @@ type Diag enum {
     TypeArgsOnNonGeneric
     NarrowNotNumber
     AsCanFail
+    TryParens
     NarrowNeedsType
     TypeVarAsValue
     ArrayByValueRunTime
@@ -1095,6 +1096,7 @@ fn MissingTypeArgs(tok String&, text String&) Msg { return Msg(Diag.MissingTypeA
 fn TypeArgCount(text String&, n1 I64, n2 I64) Msg { return Msg(Diag.TypeArgCount, "G7", "type arguments for " $text ": expected " $n1 ", found " $n2) }
 
 # ERR_TYPE_ARGS_ON_NON_GENERIC
+fn TryParens() Msg { return Msg(Diag.TryParens, "E24", "these parentheses group nothing - a 'try' covers the whole expression after it, so write it without them") }
 fn AsCanFail() Msg { return Msg(Diag.AsCanFail, "E32", "'as' fails where the value holds another case - write 'try' before it and catch CaseError, or '(x as C)!'") }
 fn NarrowNotNumber(ty String&) Msg { return Msg(Diag.NarrowNotNumber, "E26b", "'Narrow' converts to a number type, and " $ty " is none") }
 fn NarrowNeedsType() Msg { return Msg(Diag.NarrowNeedsType, "E26b", "'Narrow' names the type it converts to - write 'x.Narrow<I32>()'") }
@@ -1810,7 +1812,7 @@ fn MembershipNoMethod(text String&, ty String&) Msg { return Msg(Diag.Membership
 fn MembershipNotBool(text String&) Msg { return Msg(Diag.MembershipNotBool, "E29", $text ", which 'in' calls, gives a Bool") }
 
 # ERR_MEMBERSHIP_NEEDS_TRY
-fn MembershipNeedsTry(text String&) Msg { return Msg(Diag.MembershipNeedsTry, "E29", $text " can fail here - write 'try (x in c)'") }
+fn MembershipNeedsTry(text String&) Msg { return Msg(Diag.MembershipNeedsTry, "E29", $text " can fail here - write 'try x in c'") }
 
 # ERR_INCDEC_IN_EXPRESSION
 fn IncdecInExpression(tok String&) Msg { return Msg(Diag.IncdecInExpression, "S3a", $tok " is a statement of its own, never part of an expression") }

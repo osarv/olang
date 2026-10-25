@@ -506,9 +506,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Last` EMPTY, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OUT_OF_RANGE, `IndexOf`/`Find*` NOT_FOUND, `ShortestDecimal`
   NOT_FINITE). A lambda infers with nothing written, in the canonical order (D16b).
 - **`try` handles what fails as written, and nothing else is checked (R8, E15a, E24, the user's design; `checked`
-  removed 2026-10-25, the user: "one error system: try").** One `try` covers every fallible call and operator in its
-  operand - arguments, a chain (`try f().g()`), a parenthesized expression - and never turns a check on; a `try`
-  covering nothing is an error (not in a generic's body, where instantiations differ). What `checked` checked is now a
+  removed 2026-10-25, the user: "one error system: try").** A `try` takes the whole expression after it, up to its
+  end or the first `catch` (E24, the user's call 2026-10-25; it took a postfix expression): `try a.Get(i) + b.Get(j)`,
+  `x := 2 * try f() + 1` multiplying by `f() + 1`; in a list the item's `,` ends it; after its clauses the expression
+  goes on (a default is one term); parentheses directly around what it covers are an error; to cover less the `try` is
+  parenthesized, `2 * (try f()) + 1`. It covers every fallible call and operator in that - arguments, a chain - and never
+  turns a check on; every `try` must cover something no `try` or `!` inside it covers, and one covering nothing is an
+  error (not in a generic's body, where instantiations differ). `tools/try_migrate.olang` takes the parentheses off
+  (always) and, with `--old`, parenthesizes a `try` that read only its postfix and now reads on (listed without it). What `checked` checked is now a
   call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OUT_OF_RANGE`, a List's and a Vec's `Get`
   their own errors), `try x.Narrow<I32>()` (`NumberError.OVERFLOW`/`INVALID`, supplied by the compiler for every number
   type), `as` failing as written (`CaseError.WRONG_CASE`), and arithmetic in `std/arith` (not the prelude): `try
@@ -523,7 +528,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
   ends the program from the task's thread (P4, P6).
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
-  declare errors, making the operator fallible as written (`try (a - b)`, `try x[i]`, `try x[i] = v`). The checked forms
+  declare errors, making the operator fallible as written (`try a - b`, `try x[i]`, `try x[i] = v`). The checked forms
   (`CheckedAt`, `CheckedPlus` ...) went with `checked` (2026-10-25): a method of that name is an ordinary method.
 - **The prelude's errors of the language's own operations (R20, 2026-10-25; `CheckError` removed with `checked`):**
   `ArrayError.OUT_OF_RANGE` (`Get`, `SliceOf`), `NumberError.OVERFLOW`/`INVALID` (`Narrow`), `CaseError.WRONG_CASE`

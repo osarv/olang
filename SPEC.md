@@ -3279,12 +3279,16 @@ integer type only by an explicit conversion (`I32(a.Len())`, T6).
 
 ### 5.10 `try` as an expression
 
-**E24.** `try-expr ::= "try" postfix { catch-clause }`, where the `postfix` is any postfix
-expression - a call, a chain of calls and members (`try f().g()`), an index or a slice, a parenthesized expression -
-and holds something that can fail as written (R8); usable as an ordinary
-expression anywhere a value of its success type is expected. Every fallible call and operator in it is covered,
-arguments and every link of a chain included. Its full semantics (error propagation, signature requirements, and
-catch clauses in value position) are specified in §7.
+**E24.** `try-expr ::= "try" expr { catch-clause }`: a `try` covers the **whole expression after it** - up to that
+expression's end, or the first `catch` - and that expression holds something that can fail as written (R8). Every
+fallible call and operator in it is covered, arguments and every link of a chain included: `try a.Get(i) + b.Get(j)`
+covers both calls, and `x := 2 * try f() + 1` multiplies by what `try f() + 1` gives. Inside a list the expression ends at the list's
+`,` (`g(try f(x), y)`), as any item does. After the clauses the expression around the `try` goes on, a `default`
+being one `unary` (R9a): `try f() catch default 0 + 1` adds one to what the `try` gives. To cover less, the `try` is
+what is parenthesized: `2 * (try f()) + 1`. Parentheses directly around the whole expression a `try` covers - `try (a
++ b)` - group nothing, and are a compile-time error saying to leave them out. Usable anywhere a value of its success
+type is expected; its full semantics (error propagation, signature requirements, and catch clauses in value position)
+are specified in §7.
 
 ### 5.11 The scope argument
 
@@ -3432,7 +3436,7 @@ written in place and `c` is text), it is `c.Contains(x)`: whether `x` occurs in 
 substring for text. Otherwise it is `c.Has(x)`, whether `x` is one of its elements (a key, for a `Map`). The method
 must exist and give a `Bool`. `not in` is `not (x in c)`. `x` is evaluated before `c`. `Has` and `Contains` may
 declare errors - a question whose answer can fail, like a set kept elsewhere - and are then reached under `try`, which
-covers them as it covers an operator (R8): `if try (x in c) catch default false { }`.
+covers them as it covers an operator (R8): `if try x in c catch default false { }`.
 
 The prelude gives every array `Has` and `Contains`, both comparing elements with `==` (E10) - so by `Eq` where the
 element type declares it, and text is found by what it says; `List` and `Map` have `Has`.
@@ -3486,7 +3490,7 @@ operator's parameters is held to the rest of its shape: the result the table nam
 The same name with a **lowercase first letter** (`plus`, `at`, ...) is the operator too, private to the declaring
 module (M6b): there the operator calls it, and anywhere else the operator is an error naming it. A type declaring an
 operator by both names is an error. Any of them but `Len`, `Eq` and `Str` may **declare errors**: the operator then
-fails as written, as a call to the method would, and is covered by a `try` (R8) - `try (a + b)`, `try x[i]`, `try x[i]
+fails as written, as a call to the method would, and is covered by a `try` (R8) - `try a + b`, `try x[i]`, `try x[i]
 = v` (R21), `try f(x)` for a fallible `Call`; written without one it is a compile-time error naming the method.
 
 **E31c (`commutes`).** An operator method for `+`, `*`, `&`, `|` or `^` - `Plus`, `Mul`, `BitAnd`, `BitOr`,
@@ -4819,8 +4823,10 @@ empty - has no `code`; its result is simply its success value, or nothing.
 **R8.** `try` handles what **fails as written**: a call whose function or constructor can fail (R1, R1a), and an
 operator whose method can (E31). A fallible call or operator not under a `try` is a compile-time error. One `try`
 covers **every** such call and operator in its operand (E24) - the arguments, a chain (`try f().g()` covers both
-calls), a parenthesized expression (`try (a.Get(k) + b.Get(k))`) - but not inside a lambda written there, which is a
-function of its own. A `try` covering nothing that can fail is a compile-time error - except in a generic's body
+calls), an operator's operands (`try a.Get(k) + b.Get(k)`) - but not inside a lambda written there, which is a
+function of its own, and not what a `try` or a `!` inside it covers: **every `try` covers something no `try` within it
+covers**, so `try (try f()) + 1` is an error at the outer one. A `try` covering nothing that can fail is a compile-time
+error - except in a generic's body
 (G16), where what a call can fail with may differ between instantiations (R1a): there a `try`, and a clause naming
 an error, may cover nothing in one instantiation and something in another, and covers nothing where it covers
 nothing. `try` never turns a check on:
@@ -4885,7 +4891,7 @@ written would be kept by neither.
   (§7.6), which a clause names or takes with an item-less `catch`: `try a.Get(i) catch default -1`. The
   expression is then a value, never an lvalue.
 
-**R10.** As a **statement** (`try-catch-stmnt ::= "try" postfix catch-clause { catch-clause }`):
+**R10.** As a **statement** (`try-catch-stmnt ::= "try" expr catch-clause { catch-clause }`):
 evaluates the operand; if it produced its success value, that value is discarded (the statement form never
 binds one — see §7.5) and control continues after the statement; if it produced an error, the first
 clause that handles it runs (§7.5) and, if its block does not leave, control continues after the

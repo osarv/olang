@@ -931,9 +931,9 @@ if TestBuild {
         doc := try Parse("{\"s\": \"text\", \"n\": -12.5e1, \"t\": true, \"f\": false, \"z\": null, \"a\": [1, [2, 3], {}]}")
 
         try kinds(doc)
-        assert (try (doc["s"] as Json.Str) catch default "") == "text"
-        assert (try (doc["a"][1][1] as Json.Num) catch default 0.0) == 3.0
-        assert (try (doc["a"][9] as Json.Num) catch default -1.0) == -1.0
+        assert (try doc["s"] as Json.Str catch default "") == "text"
+        assert (try doc["a"][1][1] as Json.Num catch default 0.0) == 3.0
+        assert (try doc["a"][9] as Json.Num catch default -1.0) == -1.0
         assert "s" in doc and "a" in doc and "missing" not in doc
         assert asking(doc, "missing") == "MISSING" and asking(doc, 0) == "WRONG_KIND"
         a := try doc["a"]
@@ -1051,7 +1051,7 @@ if TestBuild {
 
     test "objects keep their order, answer with the last of a repeated name, and index big ones" {
         doc := try Parse("{\"b\": 1, \"a\": 2, \"b\": 3}")
-        assert (try (doc["b"] as Json.Num) catch default 0.0) == 3.0
+        assert (try doc["b"] as Json.Num catch default 0.0) == 3.0
         assert Encode(doc) == "{\"b\":1,\"a\":2,\"b\":3}"
         big := StringBuilder()
         big.PushChar('{')
@@ -1063,7 +1063,7 @@ if TestBuild {
         o := try Parse(big.ToString())
         for i in range 500 {
             want F64 = F64(i * i) if i != 7 else -1.0
-            assert (try (o["key" $i] as Json.Num) catch default -2.0) == want
+            assert (try o["key" $i] as Json.Num catch default -2.0) == want
         }
         assert "key499" in o and "key500" not in o and "" not in o
         assert (try o.AsObj()).Len() == 501
@@ -1114,8 +1114,8 @@ if TestBuild {
         assert churn() > 0
         assert Encode(doc) == "{\"n\":7,\"s\":\"value 7\",\"a\":[7,{\"deep\":\"x\\ty\"}]}"
         for i, k in kept {
-            assert (try (k["s"] as Json.Str) catch default "") == "value " $i
-            assert (try (k["a"][1]["deep"] as Json.Str) catch default "") == "x\ty"
+            assert (try k["s"] as Json.Str catch default "") == "value " $i
+            assert (try k["a"][1]["deep"] as Json.Str catch default "") == "x\ty"
         }
     }
 

@@ -10616,10 +10616,18 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     fr := c.fr()
     mark := fr.leaks.Len()
     before := fr.Fallible
+    # E24: parentheses directly around the whole operand group nothing - a try covers all of what follows it
+    match y {
+        case ast.Expr.Paren(psp, _) { c.err(psp, msgs.TryParens()) }
+        nomatch { }
+    }
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
-    if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
+    # R8: what this try covers is its own - an enclosing try covers something only where this one does not
+    covered := fr.Fallible != before
+    fr.Fallible = before
+    if not covered and typeOf(x) != types.UnknownT and not c.inGeneric() {
         c.nothingFails(sp)
         # the operand stands as written, so what follows from it is still judged (E31b's copy, section 8)
         return x if clauses.Len() == 0 else c.unknown(sp)
@@ -10666,9 +10674,11 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     fr.Tries++
     x := c.expr(y, c.P.T.OrNull(want) if c.isRef(want) else want)
     fr.Tries--
+    covered := fr.Fallible != before
+    fr.Fallible = before
     # T2c: on a reference that may be null, "x!" is it known not to be - after what can fail, where something can
     nullable := c.P.T.IsNullable(typeOf(x))
-    if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
+    if not covered and typeOf(x) != types.UnknownT and not c.inGeneric() {
         if nullable { return c.unwrapNull(sp, x) }
         c.err(source.Span(sp.End - 1, sp.End), msgs.BangNothingFails())
         return c.unknown(sp)
@@ -10749,7 +10759,9 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     fr.Tries++
     c.stmt(st)
     fr.Tries--
-    if fr.Fallible == before and not c.inGeneric() { c.nothingFails(sp) }
+    covered := fr.Fallible != before
+    fr.Fallible = before
+    if not covered and not c.inGeneric() { c.nothingFails(sp) }
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     end := fr.leaks.Len()
     c.produced(clauses, mark, end)
@@ -15594,7 +15606,7 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
                        "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
                        "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
-                       "fn n() I32 { return try (1 + 2) catch default 0 }\nfn q() I32 { return 3! }\n"
+                       "fn n() I32 { return try 1 + 2 catch default 0 }\nfn q() I32 { return 3! }\n"
                        "fn s() noreturn { }\nfn main() { }\n"))
     r := names.Resolver(l)
     r.Resolve()

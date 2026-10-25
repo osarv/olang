@@ -271,7 +271,7 @@ if TestBuild {
         assert moved.Status == 200 and moved.Body == "hello"
         data := try Get($base "/json")
         doc := try json.Parse(data.Body) catch json.Error { error Error.FAILED }
-        assert (try (doc["a"][1] as json.Json.Num) catch default 0.0) == 2.5
+        assert (try doc["a"][1] as json.Json.Num catch default 0.0) == 2.5
         assert failure("GET", $base "/slow", Array<Header>(0), 300) == "TIMEOUT"
         assert failure("GET", "ftp://127.0.0.1:" $port "/", Array<Header>(0), 0) == "BAD_URL"
         assert failure("GET", "http://127.0.0.1:1/", Array<Header>(0), 0) == "CONNECT"

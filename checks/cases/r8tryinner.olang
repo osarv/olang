@@ -1,0 +1,7 @@
+# check: fail error[R8]: nothing here can fail - write it without 'try'
+# R8: every try covers something no try within it covers - here the inner one covers f, and the outer nothing
+error E { A }
+fn f(n I64) I64 ? E { return n }
+fn main() ? {
+    x := try (try f(1)) + 2
+}

@@ -36,6 +36,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `checked_migrate.olang` | E15a/E16d/E26b: `checked` and `CheckError` removed - `checked a[i]` -> `try a.Get(i)`, `checked a[lo:hi]` -> `try a.SliceOf(lo, hi)`, `checked T(x)` -> `try x.Narrow<T>()`, `checked f(x)` -> `try f(x)`, `(checked e)!` -> `e!`, the words renamed; checked arithmetic and stores listed (std/arith) | `build/tools_checked_migrate [--check] [-v] FILE\|DIR...` |
 | `contracts_migrate.olang` | D17: a contract moved to right after the parameter list, results unnamed, guarantees and `for`/`if`/`fits` items dropped (listed) | `build/tools_contracts_migrate [--check] [-v] FILE\|DIR...` |
 | `as_migrate.olang` | E32: `x as C` fails as written - a use no `try` covers made `(x as C)!`, from the compiler's diagnostics | `build/tools_as_migrate [--olang PATH] [-j N] FILE\|DIR...` |
+| `try_migrate.olang` | E24: `try` takes the whole expression after it - `try (a + b)` loses its parentheses; with `--old` a `try` after an operator and before one is parenthesized (`2 * (try f()) + 1`), which it read before (listed without `--old`) | `build/tools_try_migrate [--old] [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.

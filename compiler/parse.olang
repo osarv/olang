@@ -1790,6 +1790,9 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         }
         nomatch { }
     }
+    # E24: the whole expression the postfix begins, then the clauses
+    x = try p.binaryFrom(x, 1)
+    x = try p.condFrom(x)
     reached := p.limitAt
     cl := try p.clauses(false)
     if cl.Len() == 0 and reached >= 0 {
@@ -1797,11 +1800,6 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
         error Fail.SYNTAX
     }
     e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
-    if cl.Len() == 0 {
-        e = try p.postfixFrom(e)
-        e = try p.binaryFrom(e, 1)
-        e = try p.condFrom(e)
-    }
     sp := p.from(at)
     try p.endStmt()
     return ast.Stmt.ExprS(sp, e)
@@ -2664,9 +2662,11 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             return ast.Expr.Paren(p.from(at), x)
         }
         case token.Tok.Try {
+            # E24: what it covers is the whole expression after it, ending at the expression's end or a "catch" - its
+            # clauses then end the try, and the expression around it goes on (a default is one unary)
             listOk := at == p.listTry
             p.advance()
-            x := try p.postfix()
+            x := try p.expr()
             cl := try p.clauses(listOk)
             return ast.Expr.Try(p.from(at), x, cl)
         }

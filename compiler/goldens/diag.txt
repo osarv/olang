@@ -1090,7 +1090,7 @@ e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or p
 compilation failed with 1 error
 === e15atryonlychecks.olang
 e15atryonlychecks.olang:3:37: error[R8]: nothing here can fail - write it without 'try'
-    3 | fn add(a I32, b I32) I32 ? { return try (a + b) }
+    3 | fn add(a I32, b I32) I32 ? { return try a + b }
       |                                     ^~~
 compilation failed with 1 error
 === e16atrydefaultslice.olang
@@ -1118,6 +1118,11 @@ compilation failed with 1 error
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }
       |              ^~~
+compilation failed with 1 error
+=== e24tryparens.olang
+e24tryparens.olang:6:14: error[E24]: these parentheses group nothing - a 'try' covers the whole expression after it, so write it without them
+    6 |     x := try (f(1) + 2)
+      |              ^~~~~~~~~~
 compilation failed with 1 error
 === e25defaultunknown.olang
 e25defaultunknown.olang:6:25: error[E25]: 'q' is no local or parameter here - a scope argument names where the result is built
@@ -2552,7 +2557,7 @@ m6bprivatelen.olang:9:14: note: 'len' is Len's private spelling with Len's param
       |              ^~~
 compilation failed with 1 error
 === membershipneedstry.olang
-membershipneedstry.olang:12:10: error[E29]: Has can fail here - write 'try (x in c)'
+membershipneedstry.olang:12:10: error[E29]: Has can fail here - write 'try x in c'
    12 |     if 3 in r { }
       |          ^~
 compilation failed with 1 error
@@ -3596,6 +3601,11 @@ compilation failed with 1 error
 r3bareerror.olang:4:22: error: expected a name, found '}'
     4 |     if n < 0 { error }
       |                      ^
+compilation failed with 1 error
+=== r8tryinner.olang
+r8tryinner.olang:6:10: error[R8]: nothing here can fail - write it without 'try'
+    6 |     x := try (try f(1)) + 2
+      |          ^~~
 compilation failed with 1 error
 === r8trynothing.olang
 r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'try'

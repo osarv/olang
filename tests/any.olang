@@ -192,7 +192,7 @@ fn slide(w mut any Widget&) {
 }
 
 fn labelLen(w any Widget&) I64 {
-    b := try (w as Button) catch CaseError.WRONG_CASE default Button("none")
+    b := try w as Button catch CaseError.WRONG_CASE default Button("none")
     return b.label.Len()
 }
 

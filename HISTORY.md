@@ -24046,3 +24046,18 @@ and lists every dropped item (19 contracts in the repository, 12 files). In the 
 for entry checks - every call under `try ... catch ArgumentError.INVALID default`, a baked global beside the run time,
 a constructor's contract, a fallible condition, function values checked through them.
 
+**`try` takes the whole expression after it (E24, R8, R10, the user's decision of 2026-10-25).** It took a postfix
+expression, so covering an operator needed parentheses (`try (a + b)`) and `try f() + g()` covered only `f`. Now it
+covers everything up to its expression's end or its first `catch`; in a list the item's `,` ends it; after the clauses
+the enclosing expression goes on, a default being one term (R9a, unchanged). In the parser this is `expr()` where
+`postfix()` was, in the statement form too. Parentheses directly around the whole operand are an error
+(`TryParens`, E24) - they group nothing, and leaving them legal would give one expression two spellings. Decided
+(mine): "every try must cover something no inner try covers" is counted by the checker's frame: a `try` or `!` hands
+nothing it covered to an enclosing one (`Fallible` restored after its operand), since what an inner try lets through
+leaves the body (R13) rather than reaching the outer try's clauses. `tools/try_migrate.olang` takes the parentheses off
+always, and with `--old` parenthesizes a `try` standing after an operator and followed by one (`2 * try f() + 1` read
+`2 * (try f()) + 1` before, `2 * (f() + 1)` now); a `try` at the start of its expression followed by an operator gives
+the same value either way and is left alone. Without `--old` such sites are listed, not changed - code of today may
+mean the longer reading, so only the parenthesis removal is idempotent and in `olang fix`'s table as it runs. In the
+repository: 54 rewrites in 10 files (`try (` in std/linalg and std/json mostly), none of the wrapped kind outside the
+tool's tests.

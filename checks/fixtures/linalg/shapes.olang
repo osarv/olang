@@ -8,15 +8,15 @@ fn main() ? {
     a := linalg.Matrix<F32>(2, 3)
     b := linalg.Matrix<F32>(3, 2)
     if which == "add" {
-        c := try (a + b)
+        c := try a + b
         try io.Print($c.Rows)
     } else if which == "matmul" {
-        c := try (a @ a)
+        c := try a @ a
         try io.Print($c.Rows)
     } else if which == "gemm" {
         try linalg.Gemm(a, a, false, b, false)
     } else if which == "caught" {
-        c := try (a @ a) catch linalg.ShapeError.MISMATCH {
+        c := try a @ a catch linalg.ShapeError.MISMATCH {
             try io.Print("caught\n")
             return
         }
