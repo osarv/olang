@@ -387,8 +387,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   argument (E25) is existing storage where that says, judged wherever it is put (it was taken for a temporary where it
   stood - use-after-frees through fields, lists, returns, anys); the box's "new storage" answer is one pure function,
   `typed.AnyItemNew`, which the scope pass, lowering and the compile-time evaluator all ask; a returned local that a kept
-  borrow also names is copied at its return (`Plan.RetCopy`, O26a's flow in a third mode), so the caller's value is its own;
+  borrow also names is copied at its return, so the caller's value is its own;
   M21's per-instance methods reach Eq/Hash; a type over an array of arrays is T7a's error.
+  **The fourth review's round (2026-10-25, HISTORY.md "`any Trait&`: the fourth review, fixed"):** a scoped call's array
+  is existing storage where the argument says whatever it holds (text and numbers too: copied where it is returned or
+  boxed, a local declared from one not moved); a returned array local is uncopied only where a whitelist proves nothing
+  else names it (`Plan.RetSole` - read, indexed, measured, sliced into what dies first, lent to calls keeping nothing),
+  else copied - so the evaluator, which always copies, agrees; AnyNoCopy looks inside function types; `spawn x = f&t()`
+  is a call; E25's "builds no result a scope argument could place" and "no local or parameter here" are given. Bench and
+  the compiler itself: identical IR, so no copy was added there.
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk

@@ -23586,6 +23586,66 @@ callee's `&return` storing into a parameter from a loop, and text built `&t` box
 `anyOp` k 20-22, helpers `mkText`, `putRet`, `stashLab`). Seeds 1-120: 37 findings on 5d0529f, none after; seeds
 1000-1299, none.
 
+## `any Trait&`: the fourth review, fixed (E25, T7b, O26a, T32a, T32, P1, P1g, 2026-10-25)
+
+A fourth read-only review (/home/user/review/any4) of the third round found one older use-after-free class the round's
+rule left open, a value-semantics hole in the round's own copy decision (with an evaluator disagreement), an internal
+error, and two diagnostics. All are fixed, each with a test; the decisions are the coordinator's, the details mine.
+
+**A. A scoped call whose result holds no reference was never judged (use-after-free, older).** The third round made a
+call given a scope argument existing storage where the argument says - but `Scoper.call` answered `plain()` for any
+result holding no reference before reaching that, so text and arrays of numbers (and a type declared over one, `Lab`)
+built `&t` were judged as nothing at all: `return mk&p(i)` handed the caller text in its argument's block, a local
+declared from one was moved by O26a's `madeHere` (taken for new storage) and returned as it was, and `AnyItemNew` took
+an unscoped outer call (`Lab(g(t, i))`, `g` returning `mk&p(i)`) for new storage and boxed it in place. Decided: such a
+call's array value - any arena-backed value - is existing storage at its scope whatever it holds. `s.call` returns
+`existing(beta[rv])` for it; lowering copies it where a value must be the caller's own (`copiesArray` covers a scoped call,
+a conversion of one, `Away` and `Seq`); `madeHere` is false for it, so O26a does not move a local declared from one. The
+box's second half - an unscoped call returning such storage - needs no fixed point over bodies: with B's rule below every
+function's array result is new storage (a returned scoped call or a returned local not proven sole is copied into the
+result scope), so `AnyItemNew` may take an unscoped call's array as new, and does. Found on the way: a struct holding
+references built by a scoped constructor took the early return too and lost its construction bindings (a regression the
+corpus caught - `ScopedBox&return(...)`); the early return is only for results holding nothing. And an any's copy of an
+array of plain data no longer judges where the array was (`b35`, accepted again); a non-any promotion's copy is reported
+as O25h, not T32a.
+
+**B. The round's copy decision missed second names (value semantics; the evaluator disagreed).** The third round copied
+a returned local only where O26a's flow found a kept borrow - so a borrow kept through a reference local (`l := lst;
+l.Push(s)`), a handle's copy, a method on a list's element (`ks[0].Set(s)`), a chain of borrows longer than the flow's
+six passes, or a destructor of the block writing it after the return left the caller's value and the other name one
+storage, and the compile-time evaluator (which copies every returned array) baked a different value than the program
+computed. Decided: invert it. The local is returned uncopied only where a whitelist proves nothing else names it
+(`soleArray`, recorded in `Plan.RetSole`): it is only read, indexed, measured, sliced or viewed into values that die
+before the return, rendered, and lent to calls whose settled bodies keep nothing of it (O17's `canKeep`). Anything else
+- a reference or handle local, a call receiver, a capture, a task, a destructor-bearing holder, an expression kind the
+walk does not know - means copy. The third mode of the flow analysis is gone. Measured: every bench program and the
+compiler itself compile to identical IR before and after, so the inversion added no copy there.
+
+**C.** `HoldsVarByValue` did not look inside function types, so a default returning `fn() G` through an any reached the
+code generator without the any's marker (an internal error at build). It walks a function type's parameters and result,
+and the call is AnyNoCopy's error like the rest.
+
+**D.** `spawn x = mkp&t(i)` was "'spawn' takes a call": a call given a scope argument is a call, its target judged as
+the same call declared first (O25 for an inner `t`, accepted for one outliving the join). A parameter default naming
+another parameter in a scope argument now gets E25's "no local or parameter here" (a default has no locals) rather than
+O1b's program-scope message.
+
+**E.** E25's error for a scope argument on a target with no result scope - a number, a struct of numbers by value or as
+a constructor's instance (copied where it lands), a borrowed result - was never given; it is.
+
+**Limits, recorded (o1-o4, refused, never unsound).** A borrow of a moved local read back out of a value holding it - a
+`match` binding, an `as` payload, a `for ... in` element of an array literal or of a local `List` of it - and pushed into
+a parameter's list stays O10c's error. Relaxing them would need the second-name whitelist to follow those paths too.
+
+**Fuzzer.** The scope fuzzer writes two scenario kinds more: text scenarios (A's shapes - text and arrays of numbers
+built `&t` in a loop body, returned on by helpers, chained, as one of several results, from a conditional and a catch
+default, captured, boxed into anys outside the loop) and second-name scenarios (B's - a helper returning a text local
+also named through a reference local, a handle's copy, an element's method, a chain of 2-10 borrows, a lambda kept in a
+list, a field, or a destructor of its block). A second-name scenario checks itself: its probe is computed into a global
+while compiling and again at run time, and a line "BAD" (or a destructor having reached the caller's value) is a finding.
+Seeds 1-60: 54 findings on 0c37adb (7 disagreements between -d -s and -i, 31 uses after a scope closed that -i itself
+stopped on, 16 failed self-checks), none after; seeds 61-300 on the fixed compiler (1,519 scenarios run), none.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name
