@@ -1,0 +1,35 @@
+import "std/io"
+# a value local declared from a call given a scope argument naming the function's own local, then returned: O26a
+# moves the local to the result scope (madeHere counts any call), T7b returns it uncopied - but the call built it where
+# the scope argument said, the function's own block
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn g(i I64) String {
+    t := "local" $i
+    x := mk&t(i)
+    return x
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say(a)
+    say(b)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

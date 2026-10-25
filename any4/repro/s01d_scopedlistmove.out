@@ -1,0 +1,13 @@
+== build -debug -sanitize
+s01d_scopedlistmove.olang:11:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   11 |     x := mkl&t(i)
+      |              ^
+compilation failed with 1 error
+== build
+s01d_scopedlistmove.olang:11:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   11 |     x := mkl&t(i)
+      |              ^
+compilation failed with 1 error
+== interpret
+List<I64>[10, 11, 12, 13, 14] List<I64>[20, 21, 22, 23, 24]
+status 0

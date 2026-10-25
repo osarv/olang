@@ -1,0 +1,13 @@
+# the reference form of s01 (expected: refused, O10d - the call is existing storage at t)
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn g(i I64) P& {
+    t := "local" $i
+    x := mkp&t(i * 11 + 1)
+    return x
+}
+fn main() {
+    a := g(1)
+    assert churn() > 0
+    say("a " $a.n)
+}

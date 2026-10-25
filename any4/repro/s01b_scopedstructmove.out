@@ -1,0 +1,13 @@
+== build -debug -sanitize
+s01b_scopedstructmove.olang:9:14: error[O10]: this reference lives in a scope that may not outlive where it is put
+    9 |     x := mkh&t(i * 11 + 1)
+      |              ^
+compilation failed with 1 error
+== build
+s01b_scopedstructmove.olang:9:14: error[O10]: this reference lives in a scope that may not outlive where it is put
+    9 |     x := mkh&t(i * 11 + 1)
+      |              ^
+compilation failed with 1 error
+== interpret
+a 12 b 23
+status 0
