@@ -1101,3 +1101,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (CaseError.WRONG_CASE) or `(e as C)!`. Clarified to the user: a parameter condition is part of the parameter's
   declaration, the same as `if not cond { error ArgumentError.INVALID }` at the body's top, checked in parameter order
   (each may read earlier parameters and itself); the function's error set gains ArgumentError automatically.
+- Condition form taken as settled (the user asked how `if` works rather than objecting): `y I32 > x` short form,
+  `n I64 if expr` for any expression. Told the user; they may object.
+- **QAW ASKED 2026-10-25 (operators, the user's next topic: "the only place the language allows overloading"):**
+  (1) keep operator methods (rec yes - narrow overloading by the left operand, one method per type); (2) checked
+  arithmetic without `checked`: (a) prelude `Checked<T>` wrapper with failing operators, (b) methods
+  `try a.AddChecked(b)`, (c) both (rec c); (3) fallible operator methods stay (rec yes); (4) `Saturating<T>`/wrapping
+  wrappers later, additive (rec yes). In effect: E31 as built.
