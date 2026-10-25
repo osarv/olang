@@ -664,8 +664,8 @@ compilation failed with 1 error
 d13czeroref.olang:18:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    18 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:177:12: note: in the standard library's code, here
-  177 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:180:12: note: in the standard library's code, here
+  180 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:11:5: note: here
    11 |     Counter++
@@ -999,10 +999,10 @@ compilation failed with 2 errors
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:455:21: note: in the standard library's code, here
-  455 |             if keep(x) { c++ }
-      |                     ^
-derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&
+$ROOT/std/prelude/list.olang:455:25: note: in the standard library's code, here
+  455 |             if try keep(x) { c++ }
+      |                         ^
+derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&, E = nothing
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
 compilation failed with 1 error
@@ -1953,6 +1953,40 @@ compilation failed with 1 error
 g19unknowntrait.olang:5:8: error: unknown type 'Nope'
     5 | fn f<V Nope>(m V&) I64 { return 1 }
       |        ^~~~
+compilation failed with 1 error
+=== g1aerrvartype.olang
+g1aerrvartype.olang:4:7: error[G1a]: 'E' is an error-set parameter, not a type - it stands where an error set is written, '? E'
+    4 |     y E = x
+      |       ^
+g1aerrvartype.olang:9:5: note: instantiated here, with T = I64, E = nothing
+    9 |     keep(1, fn(x I64) I64 { return x })
+      |     ^~~~
+compilation failed with 1 error
+=== g1aiternotmet.olang
+g1aiternotmet.olang:21:5: error[G19]: R does not satisfy the constraint Iterator on I: it has no method Next that fits
+   21 |     total(r)
+      |     ^~~~~
+g1aiternotmet.olang:7:15: note: 'Next' is declared here, with another signature
+    7 | fn (r mut R&) Next() I64 ? Bad, Exhausted {
+      |               ^~~~
+compilation failed with 1 error
+=== g1atypevarerrs.olang
+g1atypevarerrs.olang:3:21: error[G1a]: 'T' is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'
+    3 | fn keep<T>(x T) T ? T { return x }
+      |                     ^
+g1atypevarerrs.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    6 |     keep(1)
+      |     ^~~~
+compilation failed with 2 errors
+=== g1auntried.olang
+g1auntried.olang:12:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+   12 |     n := a.Fold(0, fn(acc I64, x I64) I64 { return acc + try pos(x) })
+      |            ^~~~
+compilation failed with 1 error
+=== g1aunwanted.olang
+g1aunwanted.olang:8:15: error[G1a]: Box has no error-set parameter, so its arguments end in no '?'
+    8 |     b Box<I64 ? Bad> = Box<I64>(1)
+      |               ^~~~~
 compilation failed with 1 error
 === g1primname.olang
 g1primname.olang:5:10: error[G1]: type variable 'P' is named after a type - choose a name no type has, as '<T>'
@@ -3890,8 +3924,8 @@ compilation failed with 1 error
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
-$ROOT/std/prelude/array.olang:98:5: note: 'a' is declared here
-   98 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
+$ROOT/std/prelude/array.olang:101:5: note: 'a' is declared here
+  101 | fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
       |     ^~~~~~~~~~~
 compilation failed with 1 error
 === rv3roforin.olang
@@ -4588,9 +4622,9 @@ compilation failed with 1 error
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
     9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
       |                     ^~~~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 compilation failed with 1 error
 === strayfnbody.olang
 strayfnbody.olang:4:12: error[L16]: unexpected character '`'
@@ -4604,15 +4638,15 @@ compilation failed with 2 errors
 strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    10 |     n := b.words.Count(fn(s String&) Bool {
       |                  ^~~~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {
       |          ^~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 compilation failed with 2 errors
 === strcalleeadapter.olang
 strcalleeadapter.olang:30:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
