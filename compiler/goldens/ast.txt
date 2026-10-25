@@ -207,9 +207,13 @@ ea651cff2a9ea1f3 6e54631a0265982e checks/cases/d16espawn.olang
 12f76dec065e8784 0c5a7e251f50c32e checks/cases/d16return.olang
 db220d91fc0c300f 091071610b44df69 checks/cases/d16sig.olang
 2f8e569167fba74f 2e6cd42c38996879 checks/cases/d16untyped.olang
+487958e43046da4e aa1ae2dcd0ae3ad7 checks/cases/d17callnotry.olang
+c658e6b1f732a068 ec9126f38e600fde checks/cases/d17condfails.olang
 af977be97486676c 38c1ed837e44d68e checks/cases/d17convfit.olang
 0066939cf536ca98 0293fb76797cb237 checks/cases/d17convglobal.olang
+a38d82fc7798fc25 b0595ddd6f010a9b checks/cases/d17entrycheck.olang
 e0ff2e40ac475430 1ba5802ae0650fa8 checks/cases/d17fnvalue.olang
+b2ec047393f33e4f 540ed4c2a7d7ff57 checks/cases/d17needsargerror.olang
 f9d82a78b27773bd 0d74549d3bf29139 checks/cases/d17notbool.olang
 e82c0fbfe4318842 9e978daa7d8a8c44 checks/cases/d17outlivescall.olang
 eef71395dda03602 187618f412516052 checks/cases/d17outlivesnoscope.olang
@@ -270,6 +274,7 @@ e21a15b5c2f85bb3 e482a10112eaa6fc checks/cases/e13btry.olang
 57a67d76ad2f635c d6838b842bd3b3e2 checks/cases/e16atrydefaultslice.olang
 93d9d2aa057b47e6 a920d6fadd38c332 checks/cases/e16constnotry.olang
 998ceb8ad096a62d daf04bdd09323172 checks/cases/e16dgetbang.olang
+643d4997a442a593 36ef65254cc36a0b checks/cases/e16getnotry.olang
 597364386727892a 9880452e1c403a34 checks/cases/e23lenclash.olang
 696b379d8dd16419 5ce1f8c148a3f728 checks/cases/e24chaininner.olang
 41693db582df0a01 9c9b2019dc9093fe checks/cases/e25defaultunknown.olang
@@ -281,6 +286,8 @@ b9f5b8bee4ffecd3 1a56e5784eef17e5 checks/cases/e25noresultscope.olang
 471868953d201cd9 7f0e3fc64c83c292 checks/cases/e25scopeargreturn.olang
 300f134f9282d272 fad38ee7c506bc63 checks/cases/e25scopeargreturnstore.olang
 6ab96386f860ae9c 93fe8cb49cafee51 checks/cases/e25spawninner.olang
+8a062f42731c2447 db35bf0297f40e40 checks/cases/e26bnarrownotnumber.olang
+774c4a262abe58c4 285d138508dfd372 checks/cases/e26bnarrownotry.olang
 36e12b018eb1d17e ac39de956423e64a checks/cases/e28condarraylent.olang
 adecedc3e4fa0e75 790c194d14e47002 checks/cases/e28condelementlent.olang
 7954431d314f351e 830c01c5faafbdb5 checks/cases/e28condlocallent.olang
@@ -332,6 +339,7 @@ df7ade79bf854b28 95fe669a23d6369e checks/cases/e31ccommutesnothere.olang
 5cffcc1a954220ec c3f0f33e11b2e25c checks/cases/e31ccommutessame.olang
 997d5bfa41f20158 229156fc3c762a1c checks/cases/e31operatorfails.olang
 1bfdab30c24852a2 ac62d7ce510cd17c checks/cases/e31opshapeuse.olang
+c895bf3b75dc3013 41b21c46b10511be checks/cases/e32asnotry.olang
 c505f3a5b7db7c69 fddc639c565c0224 checks/cases/e32asref.olang
 9027fa33d4233c82 821856d26ed57859 checks/cases/e32marker.olang
 fcd6766b7b232a7e 0886fde830950306 checks/cases/e33args.olang
@@ -748,6 +756,7 @@ c1a3b5dd64006c8d 08b218cb486af82b checks/cases/r1apromise.olang
 c7dd300e43bbb455 b1516aa2b465ba1d checks/cases/r8trynothing.olang
 24be9b60e3938c00 b0450cae1428840c checks/cases/r9adefaultinner.olang
 91713025a55af8ba 28e0475b30e07c46 checks/cases/r9adefaultlocal.olang
+4481efed24d5d69e 9d4126a7e3fdc241 checks/cases/r9arithpartial.olang
 b24e1db264ecd0c2 69932cff998beabd checks/cases/r9atrydefaultassign.olang
 bd9fbc2db8a78b65 d687b52ee4cf582a checks/cases/r9bafterall.olang
 74319b64ad798235 80fb04ece4b0498d checks/cases/r9bdeaddefault.olang
@@ -1422,6 +1431,7 @@ d888814393d74e16 8738a8de54c55da5 checks/fixtures/target/loop.olang
 8577fae5116fee70 fb5f436cc36ed763 checks/fixtures/tbaa/narrow.olang
 a915242493e91897 c9ed4be234c0412f checks/fixtures/testends/banged.olang
 596819aa42248238 96e4d361d954e42d checks/fixtures/testends/checkbanged.olang
+10db9f4d7250cb30 6f52b47db4918fb1 checks/fixtures/testends/contractbanged.olang
 07f6983f8a8276cf a1faf6ba3a8b54a1 checks/fixtures/testends/ends.olang
 5499d9fa8dd4c266 ffc6555048bba064 checks/fixtures/testends/spawnbanged.olang
 a192c8769543ffdb 6323344309450966 checks/fixtures/testends/traced.olang
@@ -1540,6 +1550,7 @@ e1c6eb38d80b3f31 d7b5e96228532069 fuzz/repro/nullarrayrender.olang
 1108f0db76d54b21 225829a0ca4718da fuzz/repro/trygenericindex.olang
 bcaca9898b51c76c c5e5e13bc2e016f7 fuzz/repro/trystmtarg.olang
 20b8935e9c6bc8f0 47ada8082f021594 fuzz/scopegen.olang
+141c0a5edaf99be5 ec7ef5760ff1d05a std/arith.olang
 245159ddf78be1ee a1841656dcb52195 std/base64.olang
 54644dc4fc6a9bd3 3ccbb05352a35eed std/cancel.olang
 e1413381aab0f17b e51dd37d8a6be56e std/chan.olang
@@ -1558,6 +1569,7 @@ b1103a3cc3079092 12c7c3c0a96dc8d3 std/linalg.olang
 7b72ab8addb60c1d f9e4dec357a4940b std/net.olang
 e90221e4696600ca 11bfa04516fc4a02 std/os.olang
 7a7267224a9ffb34 874c9eef15229c84 std/pair.olang
+6f4274f78404d3b1 d474bb8d5bf5d35e std/prelude/argument.olang
 6ba03d0503b419f4 37d8d68725836ae5 std/prelude/array.olang
 7dd2a3dddcacf115 6cec84ba285311b5 std/prelude/complex.olang
 62d526e60637bb5d 9b0b6fa203ae72aa std/prelude/enums.olang
@@ -1595,9 +1607,12 @@ c3154015ef1cc50e e1777a72e9172179 tests/geom/measure.olang
 dfae9db85c5fbffe d34732ad6ec1b932 tests/shared.olang
 aec07da7d56774f9 5a3244bf73052f30 tests/worker.olang
 a2164371847187c4 693299f8713316ba tools/arrays_migrate.olang
+88837a6a60c77ebc 7cd4b6c9fc25698e tools/as_migrate.olang
 c077f2c1ffadef31 185f79158c676661 tools/bare_typevars.olang
+994324f5d1335970 0aa36582ae5d3741 tools/checked_migrate.olang
 f1b606c14a2e344e 7afcae1101f271c4 tools/checkerror_rename.olang
 2d599f34597d9870 529481b423ba69dc tools/cli_words.olang
+f589fe7a27e0d313 20b88069f8ef6aaf tools/contracts_migrate.olang
 64244689fceaf640 9e169df53253960d tools/diagedit.olang
 183e8ca7630e06f3 178242776f373c3a tools/donefail_migrate.olang
 476d22551b563cc1 d4043e31845a3b30 tools/equality_migrate.olang
