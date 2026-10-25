@@ -867,11 +867,6 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     }
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
-    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
-    # (under the stand-in placement here, into the program's scope; under the plan by retArrays, into the result scope)
-    if not ln.dead and not ln.planned and ln.defers.Len() > 0 and ln.copiesArray(value, res) {
-        v = ln.arrayCopy(v, res, sp, mir.ScopeRef.Program)
-    }
     if ln.dead { return }
     l := ln.local(v, res, sp)
     ln.retArrays(l, res, value, sp)
@@ -881,33 +876,12 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
 
 # T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
 # closes into its result scope (types.ScopeVarsOf gives such a result one) - where it is existing storage that is not
-# there already: a temporary the scope pass built there, and a local it moved there (O26a), are returned as they are;
-# under the stand-in placement it is in the program's scope already, and copied only where it is storage another name
-# reaches - what a reference names, a global, a field - which the caller could write after the call (the evaluator's
-# placement: it aliased the caller's array, so a global baked from a copy-out read the caller's later writes)
+# there already: a temporary the scope pass built there, and a local it moved there (O26a) that nothing else names
+# (Plan.RetSole), are returned as they are. One decision with a plan and without: while compiling nothing is placed,
+# and every existing array is copied (into the program's scope) - the run time leaves uncopied only what nothing else
+# can name, so the values are the same either way (S19's deferred code and a join's tasks included)
 fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Expr&, sp source.Span) {
     t := ln.T
-    if not ln.planned {
-        # while compiling nothing is placed: a returned array is always copied, so a borrow kept of a returned local
-        # never names the result - the run time returns one uncopied only where nothing else can name it
-        # (Plan.RetSole), so the values are the same either way
-        if ln.valueArray(res) and ln.copiesArray(value, res) {
-            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, mir.ScopeRef.Program)
-            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
-        }
-        sr := t.Repr(res)
-        if ln.valueArray(res) or t.KindOf(sr) != types.Kind.Tuple { return }
-        sparts := t.Items(t.Parts(sr))
-        sitems := tupleItems(value)
-        if sitems.Len() == 0 { return }
-        for i in range sparts.Len() {
-            if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) { continue }
-            at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
-            cp := ln.arrayCopy(mir.Operand.Copy(at), sparts[i], sp, mir.ScopeRef.Program)
-            ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
-        }
-        return
-    }
     if ln.valueArray(res) {
         if ln.retCopies(value, res) {
             cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
@@ -955,6 +929,8 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
         }
     }
     if not ln.copiesArray(x, ty) { return false }
+    # nothing placed (while compiling): every existing array is copied
+    if not ln.planned { return true }
     # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
     if ln.defers.Len() > 0 { return true }
     for lv in ln.levels {
