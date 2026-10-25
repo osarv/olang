@@ -4033,7 +4033,13 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         return
     }
     if not s.holds(t) {
-        s.val(x, Term.None)
+        v := s.val(x, Term.None)
+        # a local a call given a scope argument declares is that call's array, where the argument puts it (E25, T7b):
+        # its storage lives there, not in its block
+        if x is not null and v.K == ValKind.Existing and s.arenaValue(t) and typed.ScopedArray(x) and v.T.Runs() {
+            s.stors[I64(l)] = v.T
+            s.plan.Stored[I64(l)] = s.scopeOf(v.T)
+        }
         return
     }
     # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held) - a call's several results
@@ -7105,12 +7111,9 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
         if s.noteThroughResult(rec, ic, w, wname, depth) { return }
         if s.isMethodCall(ic) or s.indexCall(ic) { return }
         # a result the callee builds: made where its scope argument says (E25)
+        # (one given a scope argument already is made where that says: the argument is what to change)
         fname := s.calleeName(ic)
-        unscoped := match ic.Scoped {
-            case typed.Mark.None => true
-            case _ => false
-        }
-        if fname.Len() > 0 and unscoped and s.resultVarOf(s.calleeType(ic)) >= 0 {
+        if fname.Len() > 0 and s.resultVarOf(s.calleeType(ic)) >= 0 {
             s.note(rec, s.B!.File, at, msgs.NoteMakeWhere(name, wname, fname, wname))
             return
         }
