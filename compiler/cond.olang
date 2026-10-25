@@ -416,7 +416,7 @@ fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
         case ast.Expr.Chain(_, ch) => e.anyLocal(ch.Xs)
         case ast.Expr.Cond(_, a, k, b) => e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
         case ast.Expr.Postfix(_, _, x), ast.Expr.IsType(_, x, _, _), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
-             ast.Expr.Try(_, x, _, _) => e.mentionsLocal(x)
+             ast.Expr.Try(_, x, _) => e.mentionsLocal(x)
         case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => e.mentionsLocal(a) or e.mentionsLocal(b)
         case ast.Expr.ScopeCall(_, f, _, args) => e.mentionsLocal(f) or e.anyLocal(args)
         case ast.Expr.Slice(_, x, lo, hi) => e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)

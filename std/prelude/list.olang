@@ -155,8 +155,7 @@ fn highBit(x I64) I64 {
     return k
 }
 
-# the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l[i]" checks i against
-# Len() first and fails with CheckError.OUT_OF_BOUNDS (E31a, derived from this and Len)
+# the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l.Get(i)" checks it
 fn (l List<T>&) At(i I64) T {
     if i < firstChunk { return l.s.first[i] }
     p I64 = i + firstChunk
@@ -164,7 +163,14 @@ fn (l List<T>&) At(i I64) T {
     return l.s.chunks[k][p - (firstChunk << k)]
 }
 
-# replaces the element at position i - "l[i] = x" (E31), unchecked as At is; "try l[i] = x" checks it
+# the element at position i, failing with OUT_OF_RANGE where i is no position - "l[i]" checked, as an array's Get is
+# (E16d)
+fn (l List<T>&) Get(i I64) T ? ListError.OUT_OF_RANGE {
+    if i < 0 or i >= l.s.count { error ListError.OUT_OF_RANGE }
+    return l.At(i)
+}
+
+# replaces the element at position i - "l[i] = x" (E31), unchecked as At is
 fn (l mut List<T>&) SetAt(i I64, x T) {
     if i < firstChunk {
         l.s.first[i] = x
@@ -842,21 +848,15 @@ if TestBuild {
         assert one[0] == 6 and one.Len() == 1
     }
 
-    # E31a: a List has no CheckedAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
-    # with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
+    # E16d: "try l.Get(i)" checks i against the length and fails with OUT_OF_RANGE, as an array's Get does
     test "a checked index into a List" {
         l mut List<I32>& = List<I32>()
         for i in range 20 { l.Push(I32(i)) }
-        assert (checked l[19] catch default -1) == 19
-        assert (checked l[20] catch default -1) == -1
-        assert (checked l[-1] catch default -1) == -1
-        missed := false
-        checked l[20] = 5 catch CheckError.OUT_OF_BOUNDS { missed = true }
-        assert missed and l.Len() == 20
-        checked l[3] = 30 catch CheckError.OUT_OF_BOUNDS { unreachable }
-        assert l[3] == 30
+        assert (try l.Get(19) catch default -1) == 19
+        assert (try l.Get(20) catch default -1) == -1
+        assert (try l.Get(-1) catch ListError.OUT_OF_RANGE default -1) == -1
         e List<I32>& = List<I32>()
-        assert (checked e[0] catch default 7) == 7
+        assert (try e.Get(0) catch default 7) == 7
     }
 
     # a List of structs and of references indexes like any other
@@ -950,7 +950,7 @@ if TestBuild {
         s I64 = 0
         for i in range l.Len() { s += l[i] }
         for x in l { s += x }
-        return s + (checked l[42] catch default 7)
+        return s + (try l.Get(42) catch default 7)
     }
 
     listIndexedBaked := listIndexed()

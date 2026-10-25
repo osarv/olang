@@ -1,0 +1,5 @@
+# check: fail error[E31c]: 'Plus' takes A, its own receiver's type, so the operator reads both ways already - remove 'commutes'
+# E31c: a + b with both of one type already reads both ways
+type A struct(n I64) { n }
+fn (a A) Plus(b A) A commutes { return a }
+fn main() { }

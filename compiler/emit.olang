@@ -1827,7 +1827,14 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
 # at the same place - "try passed it on", a join's failure restarting the trace with its own line - else it raised it
 fn (fe mut fnEm&) trace(sp source.Span) {
-    if not fe.E.traced() { return }
+    if not fe.E.traced() {
+        # D17, E35: where no trace is kept, a requirement false on entry is kept alone, for a "!" to name
+        if fe.F.RaiseText(sp).Len() > 0 {
+            fe.E.declare("__olang_ert_req_set", "void @__olang_ert_req_set(ptr)")
+            fe.w($"call void @__olang_ert_req_set(ptr " $fe.located(sp, $": " $fe.F.RaiseText(sp) "\n") ")")
+        }
+        return
+    }
     if not fe.sited {
         fe.sited = true
         for b in fe.F.Blocks {
@@ -1840,6 +1847,7 @@ fn (fe mut fnEm&) trace(sp source.Span) {
     }
     k := try fe.sites.Get(sp.Start) catch default 0
     what := "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
+    if k == 0 and fe.F.RaiseText(sp).Len() > 0 { what = $fe.F.RaiseText(sp) }   # a requirement false on entry (D17)
     rf := "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
     fe.E.declare(rf, $"void @" $rf "(ptr)")
     fe.w($"call void @" $rf "(ptr " $fe.located(sp, $": " $what "\n") ")")
@@ -2358,16 +2366,17 @@ fn (fe mut fnEm&) run() {
         }
     }
     taken Map<I64, Bool>
-    if fe.E.traced() {
-        for b in f.Taken { taken.Put(I64(b), true) }
-    }
+    for b in f.Taken { taken.Put(I64(b), true) }
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
         bb := f.Blocks[b]
         # S18d: a clause takes the error - the trace it left is no one's now
-        if taken.Has(b) {
+        if taken.Has(b) and fe.E.traced() {
             fe.E.runtime("__olang_ert_clear")
             fe.w("call void @__olang_ert_clear()")
+        } else if taken.Has(b) {
+            fe.E.declare("__olang_ert_req_clear", "void @__olang_ert_req_clear()")
+            fe.w("call void @__olang_ert_req_clear()")
         }
         for s in bb.Stmts { fe.stmt(s) }
         fe.term(bb.T)
@@ -4421,9 +4430,10 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
             case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
             case _ { }
         }
-        hint := "" if fe.E.traced() else "(build with -debug to see where it came from)\n"
-        fe.E.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
-        fe.w("call void @__olang_bang_failed(ptr " $fe.located(sp, $": " $text "\n" $hint) ")")
+        # where no trace is kept, the requirement that raised it is named, then the hint (D17)
+        f := "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
+        fe.E.declare(f, $"void @" $f "(ptr)")
+        fe.w($"call void @" $f "(ptr " $fe.located(sp, $": " $text "\n") ")")
         fe.w("unreachable")
         return
     }
@@ -5493,7 +5503,8 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
         e.declare("__olang_ert_print", "void @__olang_ert_print(ptr)")
         b.Push("  call void @__olang_ert_print(ptr %s)\n  ret i32 1\n}\n\n")
     } else {
-        b.Push("  call i32 @fputs(ptr " $e.cstr("(build with -debug to see where it came from)\n") ", ptr %s)\n  ret i32 1\n}\n\n")
+        e.declare("__olang_ert_req_print", "void @__olang_ert_req_print(ptr)")
+        b.Push("  call void @__olang_ert_req_print(ptr %s)\n  ret i32 1\n}\n\n")
     }
     e.item("main", e.P.L.Root, b.ToString())
 }
@@ -6042,8 +6053,8 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
 # as a "!" names it, where the "!" is
 fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
     e := fe.E
-    hint := "" if e.traced() else "(build with -debug to see where it came from)\n"
-    e.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
+    bf := "__olang_bang_failed" if e.traced() else "__olang_bang_failed_plain"
+    e.declare(bf, $"void @" $bf "(ptr)")
     for i in range 0, I64(k.Ends.N), 2 {
         v I64 = 0
         match fe.F.Ops[I64(k.Ends.At) + i] {
@@ -6056,9 +6067,9 @@ fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
             case _ { }
         }
         b.Push("  %bq" $i " = icmp eq i32 " $code ", " $v "\n  br i1 %bq" $i ", label %bang" $i ", label %bnext" $i "\nbang" $i ":\n")
-        b.Push("  call void @__olang_bang_failed(ptr " $fe.located(k.EndsSp, $": " $text "\n" $hint) ")\n  unreachable\nbnext" $i ":\n")
+        b.Push("  call void @" $bf "(ptr " $fe.located(k.EndsSp, $": " $text "\n") ")\n  unreachable\nbnext" $i ":\n")
     }
-    b.Push("  call void @__olang_bang_failed(ptr " $fe.located(k.EndsSp, $": unhandled error\n" $hint) ")\n  unreachable\n")
+    b.Push("  call void @" $bf "(ptr " $fe.located(k.EndsSp, ": unhandled error\n") ")\n  unreachable\n")
 }
 
 # a code under list from as the same error under list to, written into b: the name of its value

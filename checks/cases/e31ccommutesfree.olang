@@ -1,0 +1,4 @@
+# check: fail error[E31c]: 'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and 'twice' is none - remove it
+# E31c: only an operator method commutes
+fn twice(x I64) I64 commutes { return x * 2 }
+fn main() { }

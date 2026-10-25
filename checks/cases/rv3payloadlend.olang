@@ -23,7 +23,7 @@ fn churn() I64 {
 fn build(b Box) { b.head.next = Node(42) }
 fn grow(b mut Box&) { b.head.next = Node(43) }
 fn second(e E) I64 {
-    b := e as E.A
+    b := (e as E.A)!
     if b.head.next is null { return 0 }
     return b.head.next!.v
 }
@@ -39,7 +39,7 @@ fn main() ? {
     }
     e2 := E.A(Box())
     {
-        y := e2 as E.A
+        y := (e2 as E.A)!
         grow(y)
     }
     e3 := E.A(Box())

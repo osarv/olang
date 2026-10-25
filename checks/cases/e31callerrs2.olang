@@ -1,0 +1,10 @@
+# check: fail error[T22, E31]: Gate's Call fails with nothing where the function type says E
+# T22, E31 (the lang25 review, finding 1, the other direction): an infallible Call where a fallible function type is
+# wanted - the run time read the result as an error code, the evaluator as a value
+error E { BAD }
+type Gate struct(lim I64) { lim }
+fn (g Gate&) Call(x I64) I64 { return x + 100 }
+fn run2(f fn(x I64) I64 ? E, v I64) I64 { return try f(v) catch default -1 }
+fn main() ? {
+    assert run2(Gate(5), 1) == 101
+}

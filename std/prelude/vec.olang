@@ -96,11 +96,17 @@ fn (v mut Vec<T>&) Reserve(n I64) {
     s.room(r, s.data[0])
 }
 
-# the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "checked v[i]" checks i against Len()
-# first and fails with CheckError.OUT_OF_BOUNDS (E31a, derived from this and Len)
+# the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "try v.Get(i)" checks it
 fn (v Vec<T>&) At(i I64) T { return v.s.data[i] }
 
-# replaces the element at position i - "v[i] = x" (E31), unchecked as At is; "checked v[i] = x" checks it
+# the element at position i, failing with OUT_OF_RANGE where i is no position - "v[i]" checked, as an array's Get is
+# (E16d)
+fn (v Vec<T>&) Get(i I64) T ? VecError.OUT_OF_RANGE {
+    if i < 0 or i >= v.s.n { error VecError.OUT_OF_RANGE }
+    return v.s.data[i]
+}
+
+# replaces the element at position i - "v[i] = x" (E31), unchecked as At is
 fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
 
 # the first element - failing with EMPTY when there is none, as List's First does

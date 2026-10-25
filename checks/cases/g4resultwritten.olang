@@ -1,0 +1,7 @@
+# check: run
+# G4, G12: a variable only the result names, given by the type arguments written at the call
+fn mk<T>(n I64) Array<T> { return Array<T>(n) }
+fn main() {
+    a := mk<I32>(3)
+    assert a.Len() == 3 and a[0] == 0
+}

@@ -1,8 +1,10 @@
-# what enums need of the prelude: the error an enum's From fails with, and the search it is made of (T17e)
+# what enums need of the prelude: the error From and "as" fail with, and the search From is made of (T17e)
 
-# no case of the enum has the raw value asked for
+# what a case fails with: no case of the enum has the raw value asked for (NO_CASE, T17e); "e as C" on a value holding
+# another case (WRONG_CASE, E32)
 error CaseError {
     NO_CASE
+    WRONG_CASE
 }
 
 # E.From(v): the position of v among an enum's raw values, which the compiler passes in its cases' order

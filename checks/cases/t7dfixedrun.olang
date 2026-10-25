@@ -4,8 +4,8 @@ fn main() ? {
     r := Array<I32>(3, 4)
     f Array<I32> = r
     assert f == r and f[2] == 4
-    v := checked r[0:3] catch default I32[0, 0, 0]
+    v := try r.SliceOf(0, 3) catch default I32[0, 0, 0]
     assert v[0] == 4
-    w := checked r[0:4] catch default I32[5, 5]
+    w := try r.SliceOf(0, 4) catch default I32[5, 5]
     assert w[1] == 5
 }

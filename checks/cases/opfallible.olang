@@ -12,8 +12,8 @@ fn (a V) Mul(b V) V ? VErr {
     return V(a.x * b.x)
 }
 fn main() ? {
-    p := try (V(3) * V(4))
+    p := try V(3) * V(4)
     assert p.x == 12
-    q := try (V(3) * V(0)) catch VErr default V(-1)
+    q := try V(3) * V(0) catch VErr default V(-1)
     assert q.x == -1
 }

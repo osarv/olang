@@ -177,19 +177,11 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
     return c.P.T.Items(c.P.T.Args(recv)).Len()
 }
 
-# a contract's conditions (D17), each as written in its brackets, and its results' names - its "outlives" chains are
-# among the obligations
+# a contract's conditions (D17), each as written in its brackets - its "outlives" chains are among the obligations
 fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
+    if s.Commutes { b.Push($indent "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
     if s.Contract is null { return }
     src := c.P.L.Mods[mi].Src!.Text
-    if s.ResultNames.Len() > 0 {
-        b.Push($indent "# its results: ")
-        for i in range s.ResultNames.Len() {
-            if i > 0 { b.Push(", ") }
-            b.Push(c.P.L.Names.Text(s.ResultNames[i]))
-        }
-        b.Push("\n")
-    }
     for it in s.Contract!.Items { b.Push($indent "[" $src[I64(it.Span().Start):I64(it.Span().End)] "]\n") }
 }
 

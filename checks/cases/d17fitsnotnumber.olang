@@ -1,7 +1,0 @@
-# check: fail 'fits' names a number type and takes a number, found Bool
-# D17a: x fits T is about numbers
-fn f(x I64) [x fits Bool] { }
-
-fn main() {
-    f(3)
-}

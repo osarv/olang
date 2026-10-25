@@ -5,7 +5,7 @@ type Box enum {
     No
 }
 fn apply(f fn() I64) I64 { return f() }
-fn first(b Box) I64 { return (b as Box.Has)[0] }
+fn first(b Box) I64 { return (b as Box.Has)![0] }
 fn main() ? {
     out := Array<I64>(4)
     out2 := Array<I64>(4)

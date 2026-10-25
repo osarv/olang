@@ -320,7 +320,7 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     # not reach - says "BAD k: ..." when the check fails (scopegen's second-name scenarios)
     for line in sOut.Split("\n") {
         if not line.StartsWith("BAD ") { continue }
-        rest := try line[(try line[4:].FindByte(' ') catch default 0) + 5:] catch default ""
+        rest := line[(try line[4:].FindByte(' ') catch default 0) + 5:]
         at := try rest.Find(":") catch default 0
         k := try rest[:at].ParseInt() catch default -1
         try scopeFinding(dir, seed, k, "a scenario's own check failed (a baked global or the caller's value differs)", line)

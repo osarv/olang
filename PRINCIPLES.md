@@ -14,7 +14,8 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    a lock) have destructors, run once when their scope closes.
 2. **C-like performance.** You get what the machine can do unless you ask for less: `-O3` and whole-program LTO by
    default, generics compiled per type, data laid out as C lays it out. **No cost is paid per operation that the code
-   does not show**: indexing, arithmetic and conversions are unchecked, and `checked` opts into a check where you want one.
+   does not show**: indexing, arithmetic and conversions are unchecked, and a call that can fail - `try a.Get(i)`,
+   `try x.Narrow<I32>()`, `std/arith` - checks where you want one.
    A check paid once per construction (a slice's bounds, an array's length) is fine. A cost the reader should see is
    written at the use site: atomics are named operations, an operator is a named method, a copy of an array is an
    assignment someone wrote.
@@ -63,7 +64,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
 ## Judging a new feature
 
 1. Does the programmer have to manage memory for it? Then it is wrong.
-2. Does it add a cost on every use that the use does not show? Then it needs `checked`, a name, or a redesign.
+2. Does it add a cost on every use that the use does not show? Then it needs a named call, or a redesign.
 3. Can it be said in words? Is there an existing construct it could reuse instead?
 4. Does it compose: with generics, scopes, error sets, the compile-time evaluator, `interpret`?
 5. Does it serve more than one of the domains above?

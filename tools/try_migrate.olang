@@ -1,0 +1,473 @@
+# try_migrate - "try" takes the whole expression after it (E24, 2026-10-25, the user's call): it bound to the postfix
+# expression after it, and now covers everything up to the end of its expression or its first "catch" - "try a + b"
+# covers the "+". What changes in code written before:
+#
+#     x := try (a + b) catch default 0    ->  x := try a + b catch default 0     (parentheses around what a try covers
+#                                                                                 are an error now)
+#     y := 2 * try f() + 1                ->  y := 2 * (try f()) + 1             (with --old: the try read on)
+#     z := try f(sh as Circle)            ->  z := try f((sh as Circle)!)       (an "as" a try covers aborted)
+#
+# The first is always rewritten: the parentheses directly around a try's whole operand are an error now, so code of
+# today has none and running this again changes nothing. The second - a try standing after an operator and followed by
+# one, which read only its postfix expression and now reads on - is a different expression in the two readings where
+# an operator after it binds no tighter than the one before it (2 * (f() + 1) against 2 * f() + 1), and the text does
+# not say which time it was written for: such a try is rewritten with --old, for a tree written wholly before (oann),
+# and listed otherwise, the listing making "olang fix" end with status 1. Where every operator after it binds tighter
+# than the one before (a + try f() * 2) the two readings are one expression and nothing is done; so too for a try at the
+# start of its expression (after "=", ":=", "return", "(", "[", ",", "{", "if", "assert", a line's start), where the
+# operator applies to what the try gives or the try to what the operator gives - the same value. An operator at the
+# start of a later line inside brackets (L18a) continues the expression as one on the try's own line does.
+#
+# The third: before, "as" aborted where the value held another case (only checked made it fail), and now it fails
+# into the try covering it. An "as" inside a try's old reach is given "!" - the program ends there, as it did - where
+# what it reads is a plain chain of names and members, which "!" covers nothing else of; one reading a call or an index,
+# whose failure the try handled, and a try followed by "as" (which read "(try x) as T"), are listed. Files are rewritten
+# in place; --check writes nothing and the exit status says whether anything would change.
+#
+#     $OLANG build tools/try_migrate.olang && build/tools_try_migrate [--old] [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Result struct() {
+    changes I64 = 0
+    left List<String&>
+}
+
+# the end of a name starting at i, i itself where none starts there
+fn nameEnd(src String&, i I64) I64 {
+    if i >= src.Len() or not srcmask.IsIdStart(src[i]) { return i }
+    j := i + 1
+    for j < src.Len() and srcmask.IsWord(src[j]) { j++ }
+    return j
+}
+
+# the index past type arguments "<...>" at i that a "(" follows on the line (C#'s rule), -1 for none
+fn typeArgsEnd(src String&, i I64) I64 {
+    depth I64 = 0
+    for k in range i, src.Len() {
+        c := src[k]
+        if c == '<' {
+            depth++
+        } else if c == '>' {
+            depth--
+            if depth == 0 { return k + 1 if k + 1 < src.Len() and src[k + 1] == '(' else -1 }
+        } else if not (srcmask.IsWord(c) or c == ' ' or c == ',' or c == '.' or c == '&' or c == '?') {
+            return -1
+        }
+    }
+    return -1
+}
+
+# the postfix expression starting at i, as old "try" read it: a name, a number, text or a parenthesized expression, then
+# members, calls, indexes, type arguments and "!" - its end, i where none starts there
+fn postfixEnd(src String&, mask String&, i I64) I64 {
+    j := nameEnd(src, i)
+    if j == i {
+        if i < src.Len() and (src[i] == '(' or src[i] == '[') and mask[i] == 'c' {
+            k := srcmask.CloseOf(src, mask, i)
+            if k < 0 { return i }
+            j = k
+        } else if i < src.Len() and src[i] == '"' {
+            j = i + 1
+            for j < src.Len() and mask[j] != 'c' { j++ }
+        } else {
+            for j < src.Len() and (src[j].IsDigit() or src[j] == '_' or (src[j] == '.' and j + 1 < src.Len() and src[j + 1].IsDigit())) { j++ }
+            if j == i { return i }
+        }
+    }
+    for j < src.Len() {
+        c := src[j]
+        if c == '.' and nameEnd(src, j + 1) > j + 1 {
+            j = nameEnd(src, j + 1)
+        } else if (c == '(' or c == '[') and mask[j] == 'c' {
+            k := srcmask.CloseOf(src, mask, j)
+            if k < 0 { break }
+            j = k
+        } else if c == '<' {
+            k := typeArgsEnd(src, j)
+            if k < 0 { break }
+            j = k
+        } else if c == '!' and not (j + 1 < src.Len() and src[j + 1] == '=') {
+            j++
+        } else {
+            break
+        }
+    }
+    return j
+}
+
+fn lineOf(src String&, i I64) I64 {
+    n I64 = 1
+    for k in range i {
+        if src[k] == '\n' { n++ }
+    }
+    return n
+}
+
+fn lineText(src String&, i I64) String&src {
+    a := i
+    for a > 0 and src[a - 1] != '\n' { a-- }
+    b := try src[i:].FindByte('\n') catch default (src.Len() - i)
+    return src[a:i + b]
+}
+
+# where the type after "as " starting at a ends: names, dots, "<...>", "?" and "&"
+fn typeEnd(text String&, a I64) I64 {
+    j := a
+    for j < text.Len() {
+        ch := text[j]
+        if srcmask.IsWord(ch) or ch == '.' or ch == '&' or ch == '?' {
+            j++
+        } else if ch == '<' {
+            depth I64 = 0
+            for j < text.Len() {
+                if text[j] == '<' { depth++ }
+                if text[j] == '>' {
+                    depth--
+                    if depth == 0 { break }
+                }
+                j++
+            }
+            j++
+        } else {
+            break
+        }
+    }
+    return j
+}
+
+# whether a word w stands at i in code, on its own
+fn wordAt(src String&, mask String&, i I64, w String&) Bool {
+    return i < src.Len() and mask[i] == 'c' and src[i:].StartsWith(w) and (i == 0 or not srcmask.IsWord(src[i - 1])) and
+        (i + w.Len() >= src.Len() or not srcmask.IsWord(src[i + w.Len()]))
+}
+
+# how tightly each operator the expression goes on with after position e binds, at its own level and in order, as far
+# as the text says (the conditional's "if" ending it); false where an operand could not be read
+fn trailing(src String&, mask String&, br String&, e I64) List<I64>, Bool {
+    precs List<I64>
+    j := e
+    for {
+        j = srcmask.SkipGap(src, mask, br, j)
+        op := srcmask.OpAt(src[j:])
+        if op.Len() == 0 { return precs, true }
+        if op == "if" {
+            precs.Push(0)
+            return precs, true
+        }
+        j += op.Len()
+        if op == "as" {
+            j = typeEnd(src, srcmask.SkipGap(src, mask, br, j))
+            continue
+        }
+        if op == "not" {
+            j = srcmask.SkipGap(src, mask, br, j)
+            if not wordAt(src, mask, j, "in") { return precs, false }
+            j += 2
+            op = "in"
+        }
+        precs.Push(srcmask.Prec(op))
+        for {
+            j = srcmask.SkipGap(src, mask, br, j)
+            if j < src.Len() and (src[j] == '-' or src[j] == '~' or src[j] == '$') {
+                j++
+            } else if wordAt(src, mask, j, "not") or wordAt(src, mask, j, "try") {
+                j += 3
+            } else {
+                break
+            }
+        }
+        k := postfixEnd(src, mask, j)
+        if k == j { return precs, false }
+        j = k
+    }
+}
+
+# where the postfix chain ending just before b starts, b itself where none ends there
+fn chainStart(text String&, mask String&, b I64) I64 {
+    i := b
+    for i > 0 {
+        ch := text[i - 1]
+        if mask[i - 1] != 'c' { break }
+        if ch == ')' or ch == ']' {
+            k := i - 1
+            depth I64 = 0
+            open := '(' if ch == ')' else '['
+            for k >= 0 {
+                if mask[k] == 'c' and text[k] == ch { depth++ }
+                if mask[k] == 'c' and text[k] == open {
+                    depth--
+                    if depth == 0 { break }
+                }
+                k--
+            }
+            if k < 0 { return b }
+            i = k
+            continue
+        }
+        if srcmask.IsWord(ch) {
+            for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
+            if i == 0 or text[i - 1] != '.' { break }
+            i--
+            continue
+        }
+        break
+    }
+    return i
+}
+
+# the "as"es a try's old reach [o, e) holds, each given "!" (an insertion: where, and what) or listed
+fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut List<I64>&, texts mut List<String&>&, seen mut List<I64>&, c mut Result&) {
+    p := o
+    for p < e {
+        if not wordAt(src, mask, p, "as") or src[p - 1] != ' ' or p in seen {
+            p++
+            continue
+        }
+        b := p
+        for b > 0 and src[b - 1] == ' ' { b-- }
+        seen.Push(p)
+        a := chainStart(src, mask, b)
+        t := typeEnd(src, p + 3)
+        if a == b or t == p + 3 {
+            p++
+            continue
+        }
+        # one given "!" already, by as_migrate or a person
+        if t < src.Len() and src[t:].StartsWith(")!") {
+            p = t
+            continue
+        }
+        if src[a:b].Contains("(") or src[a:b].Contains("[") {
+            c.left.Push($path ":" $lineOf(src, p) ": an 'as' a try covers ended the program where the value held another case, and fails into the try now: " $srcmask.Strip(lineText(src, p)))
+        } else if a > 0 and src[a - 1] == '(' and t < src.Len() and src[t] == ')' and (a < 2 or not (srcmask.IsWord(src[a - 2]) or src[a - 2] == ']' or src[a - 2] == ')')) {
+            edits.Push(t + 1)
+            texts.Push("!")
+        } else {
+            edits.Push(a)
+            texts.Push("(")
+            edits.Push(t)
+            texts.Push(")!")
+        }
+        p = t
+    }
+}
+
+# src with every "as" a try's old reach holds given "!" where the header says (insertions applied in order)
+fn migrateAs(path String&, src String&, c mut Result&) String {
+    mask := srcmask.Mask(src, true)
+    edits List<I64>
+    texts List<String&>
+    seen List<I64>
+    i I64 = 0
+    for i < src.Len() {
+        if not wordAt(src, mask, i, "try") or not src[i:].StartsWith("try ") {
+            i++
+            continue
+        }
+        o := i + 4
+        for o < src.Len() and src[o] == ' ' { o++ }
+        e := postfixEnd(src, mask, o)
+        if e > o { asUnderTry(path, src, mask, o, e, edits, texts, seen, c) }
+        i = o
+    }
+    if edits.Len() == 0 { return $src }
+    # the insertions in the order of where they go, those at one place as they were asked for
+    order := Array<I64>(edits.Len())
+    for k in range edits.Len() {
+        q := k
+        for q > 0 and edits[order[q - 1]] > edits[k] {
+            order[q] = order[q - 1]
+            q--
+        }
+        order[q] = k
+    }
+    out := StringBuilder()
+    at I64 = 0
+    for k in order {
+        out.Push(src[at:edits[k]])
+        out.Push(texts[k])
+        at = edits[k]
+    }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# src migrated as the header says
+fn migrate(path String&, text String&, old Bool, c mut Result&) String {
+    src := migrateAs(path, text, c)
+    if src != text { c.changes++ }
+    mask := srcmask.Mask(src, true)
+    br := srcmask.Brackets(src, mask)
+    out := StringBuilder()
+    at I64 = 0
+    i I64 = 0
+    for i < src.Len() {
+        if mask[i] != 'c' or not src[i:].StartsWith("try ") or (i > 0 and srcmask.IsWord(src[i - 1])) {
+            i++
+            continue
+        }
+        o := i + 4
+        for o < src.Len() and src[o] == ' ' { o++ }
+        e := postfixEnd(src, mask, o)
+        if src[o:].StartsWith("join") or e == o {
+            i = o
+            continue
+        }
+        n := srcmask.SkipGap(src, mask, br, e)
+        op := srcmask.OpAt(src[n:])
+        # parentheses directly around the whole operand: taken off
+        if src[o] == '(' and srcmask.CloseOf(src, mask, o) == e and op.Len() == 0 and not src[n:].StartsWith("=") {
+            out.Push(src[at:o])
+            out.Push(srcmask.Strip(src[o + 1:e - 1]))
+            at = e
+            c.changes++
+            i = e
+            continue
+        }
+        if op == "as" {
+            # "try x as T": it read "(try x) as T" - unless clauses follow, which it could not have had
+            t := typeEnd(src, srcmask.SkipGap(src, mask, br, n + 2))
+            if not wordAt(src, mask, srcmask.SkipGap(src, mask, br, t), "catch") {
+                c.left.Push($path ":" $lineOf(src, i) ": 'try x as T' read '(try x) as T', ending the program where the value held another case, and the 'as' fails into the try now: " $srcmask.Strip(lineText(src, i)))
+            }
+            i = o
+            continue
+        }
+        if op.Len() == 0 or srcmask.StartsExpr(src, i) {
+            i = o
+            continue
+        }
+        lop, lp := srcmask.OpBefore(src, i)
+        precs, read := trailing(src, mask, br, e)
+        same := read and lp >= 0
+        for q in precs {
+            if q <= lp { same = false }
+        }
+        if same {
+            i = o
+            continue
+        }
+        if old {
+            out.Push(src[at:i])
+            out.Push("(")
+            out.Push(src[i:e])
+            out.Push(")")
+            at = e
+            c.changes++
+        } else {
+            after := " after '" $lop "'" if lop.Len() > 0 else ""
+            c.left.Push($path ":" $lineOf(src, i) ": a try" $after " read only up to '" $op "' when written before 2026-10-25, and reads on past it now - write '(try ...)' for the first, nothing for the second: " $srcmask.Strip(lineText(src, i)))
+        }
+        i = e
+    }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+fn main() ? {
+    old := false
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for k in range 1, args.Len() {
+        a := args[k]
+        if a == "--old" {
+            old = true
+        } else if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_try_migrate [--old] [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Result()
+    changed I64 = 0
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("try_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrate(path, src, old, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("try_migrate: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.changes " rewrites")
+    for l in total.left { srcmask.Say("by hand: " $l) }
+    if check and changed > 0 { os.Exit(1) }
+}
+
+test "parentheses around a try's operand taken off, a try read on wrapped with --old" {
+    r := Result()
+    assert migrate("f", "    x := try (a + b) catch default 0\n", false, r) == "    x := try a + b catch default 0\n"
+    assert migrate("f", "    y := 2 * try f() + 1\n", true, r) == "    y := 2 * (try f()) + 1\n"
+    assert migrate("f", "    y := 2 * try f() + 1\n", false, r) == "    y := 2 * try f() + 1\n" and r.left.Len() == 1
+    assert migrate("f", "    z := try f() + 1\n", true, r) == "    z := try f() + 1\n"
+    assert migrate("f", "    if 0 < try g(x) < 9 {\n", true, r) == "    if 0 < (try g(x)) < 9 {\n"
+    assert migrate("f", "    if try g(x) < 9 {\n", true, r) == "    if try g(x) < 9 {\n"
+    assert migrate("f", "    v := try x.Narrow<I32>() catch default 0\n", true, r) == "    v := try x.Narrow<I32>() catch default 0\n"
+    assert migrate("f", "    try a[i] = v\n", true, r) == "    try a[i] = v\n"
+    assert migrate("f", "    for x in try c.Lines() {\n", true, r) == "    for x in try c.Lines() {\n"
+    assert migrate("f", "    t := try (p.Get(0)) + 1\n", true, r) == "    t := try (p.Get(0)) + 1\n"
+}
+
+test "a second run changes nothing" {
+    r := Result()
+    for t in String&["    x := try a + b catch default 0\n", "    y := 2 * (try f()) + 1\n", "    try join {\n"] {
+        assert migrate("f", t, true, r) == t
+    }
+    assert r.changes == 0
+}
+
+test "a try reading on is wrapped or listed only where the two readings differ" {
+    r := Result()
+    assert migrate("f", "    y := -try f(n) + 1\n", true, r) == "    y := -(try f(n)) + 1\n"
+    assert migrate("f", "    y := -try f(n) + 1\n", false, r) == "    y := -try f(n) + 1\n" and r.left.Len() == 1
+    assert migrate("f", "    b := not try g() or h\n", false, r) == "    b := not try g() or h\n" and r.left.Len() == 2
+    # every operator after it binds tighter than the one before: one expression either way, nothing to do
+    assert migrate("f", "    a := x + try f() * 2\n", false, r) == "    a := x + try f() * 2\n" and r.left.Len() == 2
+    assert migrate("f", "    a := x or try f() == 2 and y\n", false, r) == "    a := x or try f() == 2 and y\n" and r.left.Len() == 2
+    # an operator at the start of a later line inside brackets goes on with the expression (L18a)
+    assert migrate("f", "    y := (not try g(n > 5)\n        or true)\n", true, r) == "    y := (not (try g(n > 5))\n        or true)\n"
+    assert migrate("f", "    y := (2 * try g(n)\n        + 1)\n", false, r) == "    y := (2 * try g(n)\n        + 1)\n" and r.left.Len() == 3
+    # a conditional after it is looser than anything before it
+    assert migrate("f", "    k := 2 * try f() if c else 3\n", false, r) == "    k := 2 * try f() if c else 3\n" and r.left.Len() == 4
+}
+
+test "an 'as' a try covers is given '!' where only a chain of names is read, listed otherwise" {
+    r := Result()
+    assert migrate("f", "    z := try f(sh as Circle)\n", false, r) == "    z := try f((sh as Circle)!)\n" and r.left.Len() == 0
+    assert migrate("f", "    z := try f((a.b as Circle).r)\n", false, r) == "    z := try f((a.b as Circle)!.r)\n"
+    r2 := Result()
+    assert migrate("f", "    r := try (find(n) as Shape.Circle) catch default -1.0\n", false, r2) == "    r := try find(n) as Shape.Circle catch default -1.0\n"
+    assert r2.left.Len() == 1
+    r3 := Result()
+    assert migrate("f", "    v := try find(n) as Shape.Circle\n", false, r3) == "    v := try find(n) as Shape.Circle\n" and r3.left.Len() == 1
+    # clauses after the "as": written today, its failure caught on purpose
+    r4 := Result()
+    t := "    w := try y as IcTok.Num catch default -1\n"
+    assert migrate("f", t, false, r4) == t and r4.left.Len() == 0
+    # given "!" already: left alone, so a second run changes nothing
+    done := "    z := try f((sh as Circle)!)\n"
+    assert migrate("f", done, false, r4) == done and r4.changes == 0
+}

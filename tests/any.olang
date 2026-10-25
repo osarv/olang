@@ -192,7 +192,7 @@ fn slide(w mut any Widget&) {
 }
 
 fn labelLen(w any Widget&) I64 {
-    b := checked (w as Button) catch CheckError.WRONG_CASE default Button("none")
+    b := try w as Button catch CaseError.WRONG_CASE default Button("none")
     return b.label.Len()
 }
 
@@ -208,35 +208,35 @@ test "T34: type cases bind the instance itself; as gives it, or fails under chec
     assert kind(ws[2]) == "level 9" and kind(ws[3]) == "slider far"
     slide(ws[1])
     assert sl.at == 4
-    assert (ws[1] as Slider).at == 4
-    assert (ws[2] as Level) == Level(9)
+    assert (ws[1] as Slider)!.at == 4
+    assert (ws[2] as Level)! == Level(9)
     assert labelLen(ws[0]) == 2 and labelLen(ws[1]) == 4
     t := 0
     for w in ws { t += w.Draw().Len() }
     assert t == 4 + 3 + 2 + 4
 }
 
-# D17f: a trait's contract held to every call through an any; the instance's own checked after dispatch under checked
+# D17f: a trait's requirements held to every call through an any, before dispatch; the instance's own on its entry
 type Account trait {
-    mut Withdraw(n I64) left I64 [n > 0, left >= 0]
+    mut Withdraw(n I64) [n > 0] I64
 }
 type Wallet struct(cash I64) {
     cash
 }
-fn (w mut Wallet&) Withdraw(n I64) I64 [n <= 100] {
+fn (w mut Wallet&) Withdraw(n I64) [n <= 100] I64 {
     w.cash -= n
     return w.cash
 }
-fn draw(a mut any Account&, n I64) I64 { return checked a.Withdraw(n) catch CheckError.CONTRACT default -1 }
+fn draw(a mut any Account&, n I64) I64 { return try a.Withdraw(n) catch ArgumentError.INVALID default -1 }
 
 test "D17f: a trait's contract and the instance's own, checked through an any" {
     w := Wallet(500)
     assert draw(w, 10) == 490
     assert draw(w, 0) == -1          # the trait's requirement
-    assert draw(w, 200) == -1        # the wallet's own, after dispatch
+    assert draw(w, 200) == -1        # the wallet's own, on its entry
     assert w.cash == 490
     v := Wallet(50)
-    assert draw(v, 60) == -1         # the trait's guarantee, the call made
+    assert draw(v, 60) == -10        # both hold: the call is made
     assert v.cash == -10
 }
 
@@ -273,7 +273,7 @@ fn widgets(n I64) I64 {
     ws.Push(Slider(n))
     ws.Push(Level(n))
     for w in ws { slide(w) }
-    return (ws[0] as Slider).at + I64(ws[1] as Level)
+    return (ws[0] as Slider)!.at + I64((ws[1] as Level)!)
 }
 BakedMix String = mix(3)
 BakedWidgets I64 = widgets(5)

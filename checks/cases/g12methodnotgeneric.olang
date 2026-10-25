@@ -1,0 +1,8 @@
+# check: fail error[G7]: Get is not generic, so it takes no type arguments
+# G12: a method's written type arguments name its own variables - Box's T is its receiver's
+type Box<T> struct(v T) { v }
+fn (b Box<T>) Get() T { return b.v }
+fn main() {
+    b := Box<I64>(1)
+    c := b.Get<I64>()
+}

@@ -1,2 +1,2 @@
-checkbanged.olang:5: CheckError.OUT_OF_BOUNDS
+checkbanged.olang:5: ArrayError.OUT_OF_RANGE
 (build with -debug to see where it came from)

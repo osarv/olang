@@ -403,8 +403,10 @@ type Machine struct(T mut types.Table&, When Mode) {
     StaleAt I64 = -1
     Library Map<I64, Bool>
     Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
-    # S18d: the error being returned's last places, oldest first - its file, span and what it did, three words a place
+    # S18d: the error being returned's last places, oldest first - its file, span, what it did and its own text (a
+    # requirement's "pick: y > x", D17), four words a place
     trace List<I64>
+    whats List<String&>        # the texts trace places name, a place's fourth word its index here, -1 for none
     TraceDropped I64 = 0
     traceStack List<I64>        # the traces of the threads a running task stands beside: each's words, then its count
                                 # of words and its dropped places
@@ -2284,7 +2286,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
              typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
-        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl, typed.PrimOp.Holds {
+        case typed.PrimOp.Holds {
             m.refuse(WhyNotModelled)
             return 0
         }
@@ -2654,10 +2656,7 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
         return r < m.minOf(w) or r > -(m.minOf(w) + 1)
     }
     if op == typed.PrimOp.Div { return x0 == m.minOf(8) and b == -1 }
-    r := checked (x0 + b if op == typed.PrimOp.Add else (x0 - b if op == typed.PrimOp.Sub else x0 * b)) catch {
-        return true
-    }
-    return false
+    return overflows64(op, x0, b, true)
 }
 
 # whether a float's value, truncated toward zero, fits an integer of w bytes and a signedness (E26) - a NaN never
@@ -3735,18 +3734,30 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
         m.TraceDropped = 0
     }
     m.fs[fi].ErrKind = -1
-    if m.trace.Len() >= 3 * traceKept {
-        for i in range 3 { try m.trace.RemoveAt(0) catch { } }
+    if m.trace.Len() >= 4 * traceKept {
+        for i in range 4 { try m.trace.RemoveAt(0) catch { } }
         m.TraceDropped++
     }
     m.trace.Push(m.cf[k].File)
     m.trace.Push(I64(sp.Start))
     m.trace.Push(kind)
+    what := m.fns[m.fs[fi].Fn].RaiseText(sp) if kind == tRaised else ""
+    if what.Len() > 0 {
+        m.trace.Push(m.whats.Len())
+        m.whats.Push(what)
+    } else {
+        m.trace.Push(-1)
+    }
 }
 
 # the trace's places, oldest first: each one's file, offset and what it did (tRaised, tCall, tJoin)
-fn (m Machine&) TraceLen() I64 { return m.trace.Len() / 3 }
-fn (m Machine&) TraceAt(i I64) I64, I64, I64 { return m.trace[3 * i], m.trace[3 * i + 1], m.trace[3 * i + 2] }
+fn (m Machine&) TraceLen() I64 { return m.trace.Len() / 4 }
+fn (m Machine&) TraceAt(i I64) I64, I64, I64 { return m.trace[4 * i], m.trace[4 * i + 1], m.trace[4 * i + 2] }
+# a place's own text: a requirement's (D17), "" for its kind's
+fn (m Machine&) TraceWhat(i I64) String&m {
+    w := m.trace[4 * i + 3]
+    return m.whats[w] if w >= 0 else ""
+}
 
 # ---- tasks (P1, P4, run in sequence at their join as K1 says) ----
 
@@ -4714,7 +4725,7 @@ fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, si
 }
 
 # whether op's true result on a and b (their values as the host holds them) is outside a w-byte type: worked out with
-# I64 for narrow types, by the host's own checked arithmetic for 8-byte ones
+# I64 for narrow types, by overflows64 for 8-byte ones
 fn trueOverflows(op typed.PrimOp, a I64, b I64, w I64, signed Bool) Bool {
     if w < 8 {
         r := a + b if op == typed.PrimOp.Add else (a - b if op == typed.PrimOp.Sub else a * b)
@@ -4722,15 +4733,31 @@ fn trueOverflows(op typed.PrimOp, a I64, b I64, w I64, signed Bool) Bool {
         hi := (I64(1) << (8 * w - 1)) - 1 if signed else (I64(1) << (8 * w)) - 1
         return r < lo or r > hi
     }
+    return overflows64(op, a, b, signed)
+}
+
+# whether op's true result on two 8-byte integers (their bits in a and b; signed or not) is outside the type: worked
+# out from the wrapped result, as the hardware's flags would say
+fn overflows64(op typed.PrimOp, a I64, b I64, signed Bool) Bool {
     if signed {
-        r := checked (a + b if op == typed.PrimOp.Add else (a - b if op == typed.PrimOp.Sub else a * b)) catch { return true }
-        return false
+        if op == typed.PrimOp.Add {
+            r := a + b
+            return ((a ^ r) & (b ^ r)) < 0
+        }
+        if op == typed.PrimOp.Sub {
+            r := a - b
+            return ((a ^ b) & (a ^ r)) < 0
+        }
+        if a == 0 or b == 0 { return false }
+        least := I64(1) << 63
+        if (a == -1 and b == least) or (b == -1 and a == least) { return true }
+        return (a * b) / b != a
     }
     ua, ub := U64(a), U64(b)
-    r := checked (ua + ub if op == typed.PrimOp.Add else (ua - ub if op == typed.PrimOp.Sub else ua * ub)) catch {
-        return true
-    }
-    return false
+    if op == typed.PrimOp.Add { return ua + ub < ua }
+    if op == typed.PrimOp.Sub { return ub > ua }
+    if ua == 0 { return false }
+    return (ua * ub) / ua != ub
 }
 
 test "integers at every width agree with the run time: wrapping, comparisons, shifts, the undefined refused" {

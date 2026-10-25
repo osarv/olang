@@ -1,8 +1,0 @@
-# check: fail name every result or none, as 'q I64, r I64'
-# D17: a declaration's results are all named or none
-fn divmod(a I64, b I64) q I64, I64 [b > 0] { return a / b, a % b }
-
-fn main() {
-    q, r := divmod(7, 2)
-    q += r
-}

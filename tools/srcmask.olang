@@ -247,6 +247,118 @@ fn SayErr(t String&) {
     io.Write(io.Stderr, $t "\n")!
 }
 
+# ---- expressions, as the try and checked migrations read them ----
+
+# the operators an expression continues with, longest first so "<<" is not read as "<"
+Ops Array<String&> = String&["<<=", ">>=", "<<", ">>", "<=", ">=", "==", "!=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^="
+                             "+", "-", "*", "/", "%", "&", "|", "^", "<", ">", "@"]
+Words Array<String&> = String&["and", "or", "xor", "in", "not", "is", "as", "if"]
+
+# the operator the text t starts with ("" for none) - an assignment is none, for a store is no expression
+fn OpAt(t String&) String {
+    for o in Ops {
+        if t.StartsWith(o) {
+            return "" if o.EndsWith("=") and o != "==" and o != "!=" and o != "<=" and o != ">=" else $o
+        }
+    }
+    for w in Words {
+        if t.StartsWith(w) and (t.Len() == w.Len() or not IsWord(t[w.Len()])) { return $w }
+    }
+    return ""
+}
+
+# how tightly a binary operator binds (E5), two steps a level so prefix "not" (3 1/2) has its place: "or" 2, ... "*" 22;
+# the conditional's "if" 0, looser than all
+fn Prec(op String&) I64 {
+    return match op {
+        case "if" => 0
+        case "or" => 2
+        case "xor" => 4
+        case "and" => 6
+        case "not" => 7
+        case "==", "!=" => 8
+        case "<", "<=", ">", ">=", "in", "is" => 10
+        case "|" => 12
+        case "^" => 14
+        case "&" => 16
+        case "<<", ">>" => 18
+        case "+", "-" => 20
+        case _ => 22
+    }
+}
+
+# for each position of text, the innermost bracket open there in code: '(', '[', '{', or ' ' outside every one
+fn Brackets(text String&, mask String&) String {
+    out := Array<Char>(text.Len(), ' ')
+    stack List<Char>
+    for i in range text.Len() {
+        c := text[i]
+        if mask[i] == 'c' and (c == ')' or c == ']' or c == '}') and stack.Len() > 0 { try stack.Pop() catch { } }
+        out[i] = try stack.Last() catch default ' '
+        if mask[i] == 'c' and (c == '(' or c == '[' or c == '{') { stack.Push(c) }
+    }
+    return String(out)
+}
+
+# from i past the spaces - and, inside "(" or "[", where a line's end ends nothing (L18a), past line ends and comments
+fn SkipGap(text String&, mask String&, br String&, i I64) I64 {
+    j := i
+    for j < text.Len() {
+        c := text[j]
+        inside := br[j] == '(' or br[j] == '['
+        if c == ' ' or c == '\t' {
+            j++
+        } else if inside and (c == '\n' or mask[j] == 'm') {
+            j++
+        } else {
+            break
+        }
+    }
+    return j
+}
+
+# whether the expression position i begins an expression: what stands before it on its line ends with one of the
+# tokens that start an expression, or nothing does
+fn StartsExpr(src String&, i I64) Bool {
+    a := i
+    for a > 0 and src[a - 1] == ' ' { a-- }
+    if a == 0 or src[a - 1] == '\n' { return true }
+    c := src[a - 1]
+    if c == '(' or c == '[' or c == ',' or c == '{' or c == ':' { return true }
+    if c == '=' { return not (a >= 2 and (src[a - 2] == '=' or src[a - 2] == '!' or src[a - 2] == '<' or src[a - 2] == '>')) }
+    b := a
+    for b > 0 and IsWord(src[b - 1]) { b-- }
+    word := src[b:a]
+    return word == "return" or word == "if" or word == "assert" or word == "for" or word == "in" or word == "else" or word == "spawn"
+}
+
+# the operator ending just before position i (spaces skipped), and how tightly it binds where it stands: a prefix one
+# ("-", "~", "$", "not") binds its operand alone; -1 where none ends there
+fn OpBefore(src String&, i I64) String, I64 {
+    a := i
+    for a > 0 and src[a - 1] == ' ' { a-- }
+    b := a
+    for b > 0 and IsWord(src[b - 1]) { b-- }
+    word := src[b:a]
+    if word.Len() > 0 {
+        for w in Words {
+            if w == word { return $word, 7 if word == "not" else Prec(word) }
+        }
+        return "", -1
+    }
+    for o in Ops {
+        if a >= o.Len() and src[a - o.Len():a] == o {
+            k := a - o.Len()
+            for k > 0 and src[k - 1] == ' ' { k-- }
+            prefix := k == 0 or not (IsWord(src[k - 1]) or src[k - 1] == ')' or src[k - 1] == ']' or src[k - 1] == '"' or src[k - 1] == '\'' or src[k - 1] == '!')
+            if prefix and (o == "-" or o == "~") { return $o, 100 }
+            return $o, Prec(o)
+        }
+    }
+    if a > 0 and src[a - 1] == '$' { return "$", 100 }
+    return "", -1
+}
+
 # ---- the module std/io is imported as ----
 
 # the index of the first line start after position at: just past the next line break, or the end of the text
@@ -325,6 +437,23 @@ test "ValidUtf8 refuses what Python's decoder refuses" {
     assert not ValidUtf8(String(U8[0xED, 0xA0, 0x80]))
     assert not ValidUtf8(String(U8[0x61, 0x62, 0xE2, 0x82]))
     assert ValidUtf8(String(U8[0xE2, 0x82, 0xAC]))
+}
+
+test "operators read where they stand" {
+    assert OpAt("+ 1") == "+" and OpAt("<<= 2") == "" and OpAt("or x") == "or" and OpAt("order") == ""
+    op, p := OpBefore("x := 2 * ", 9)
+    assert op == "*" and p == 22
+    op2, p2 := OpBefore("y := -", 6)
+    assert op2 == "-" and p2 == 100
+    op3, p3 := OpBefore("z := a - ", 9)
+    assert op3 == "-" and p3 == 20
+    op4, p4 := OpBefore("w := not ", 9)
+    assert op4 == "not" and p4 == 7
+    t := "f(a\n    or b)\nc"
+    m := Mask(t, true)
+    br := Brackets(t, m)
+    assert SkipGap(t, m, br, 3) == 8 and SkipGap(t, m, br, 14) == 14
+    assert StartsExpr("x := try", 5) and not StartsExpr("x := 2 * try", 9)
 }
 
 test "CloseOf counts only brackets in code" {

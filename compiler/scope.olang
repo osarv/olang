@@ -3213,7 +3213,7 @@ fn regionLocal(r typed.Expr&) I64 {
 # ---- writes through x[i] (E31b) ----
 
 # a call's argument i, for a writable reference parameter: a copy of an element no one holds - x[i] read through At, a
-# field or an element of it, a "checked ... catch default" value, a conditional or a match choosing places - is written
+# field or an element of it, a "try ... catch default" value, a conditional or a match choosing places - is written
 # where the write is lost, an error; but a handle element lent as its reference to a callee using it only through it
 # (O17b), and a view element lent to one writing nothing of its own storage, are lent as copies (not spawned)
 fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source.Span) {
@@ -3314,7 +3314,7 @@ fn tempOf(p typed.Place&) typed.Expr?&p {
     }
 }
 
-# whether x reads an element through At (E31): a call of a method At, at, CheckedAt or checkedAt - under checked too
+# whether x reads an element through At (E31): a call of a method At or at
 fn (s mut Scoper&) atCall(x typed.Expr?&) Bool {
     if x is null { return false }
     match x {
@@ -3329,7 +3329,7 @@ fn (s mut Scoper&) atCall(x typed.Expr?&) Bool {
                             fd := s.P.FnDecl(s.P.InstanceFn(inst))
                             if fd.Recv is null { return false }
                             n := s.P.L.Names.Text(fd.Name)
-                            return n == "At" or n == "at" or n == "CheckedAt" or n == "checkedAt"
+                            return n == "At" or n == "at"
                         }
                         case _ { }
                     }
@@ -6925,7 +6925,7 @@ fn (s mut Scoper&) setAtCall(c typed.Call&) Bool {
             match s.Bodies[I64(id)].Of {
                 case typed.BodyOf.Fn(inst) {
                     n := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
-                    return n == "SetAt" or n == "setAt" or n == "CheckedSetAt"
+                    return n == "SetAt" or n == "setAt"
                 }
                 case _ { }
             }
@@ -6990,7 +6990,7 @@ fn (s mut Scoper&) indexCall(c typed.Call&) Bool {
             match s.Bodies[I64(id)].Of {
                 case typed.BodyOf.Fn(inst) {
                     n := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
-                    return n == "At" or n == "at" or n == "SetAt" or n == "setAt" or n == "CheckedAt" or n == "CheckedSetAt"
+                    return n == "At" or n == "at" or n == "SetAt" or n == "setAt"
                 }
                 case _ { }
             }

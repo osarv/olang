@@ -1,7 +1,7 @@
-# E15a, E35: "(checked a[i])!" - the bounds-checked index that ends the program, in a -d build and under -i too
+# E16d, E35: "a.Get(i)!" - the bounds-checked index that ends the program, in a -d build and under -i too
 At mut I64 = 3
 fn main() {
     a := I64[1, 2, 3]
-    x := (checked a[At])!
+    x := a.Get(At)!
     unreachable
 }

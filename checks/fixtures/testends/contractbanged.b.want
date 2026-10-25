@@ -1,0 +1,3 @@
+contractbanged.olang:5: ArgumentError.INVALID
+contractbanged.olang:3: pick: y > x
+(build with -debug to see where it came from)

@@ -1,0 +1,7 @@
+# check: fail error[E24]: these parentheses group nothing - a 'try' covers the whole expression after it
+# E24: a try takes the whole expression after it, so parentheses directly around that expression are an error
+error E { A }
+fn f(n I64) I64 ? E { return n }
+fn main() ? {
+    x := try (f(1) + 2)
+}

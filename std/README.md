@@ -15,6 +15,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | sum, mean, variance, percentiles, histograms |
+| `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error` |
 | `linalg.olang` | `Matrix<T>`, GEMM, activations, convolutions by patches |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
@@ -50,7 +51,7 @@ A name never repeats its module's: `io.Error`, not `io.Error`; `os.Error`, `json
   `http.HeaderError`), and the one for the module as a whole is still `Error`.
 
 The prelude is the exception to the rule, since its names are bare everywhere (`ListError`, `MapError`, `TextError`,
-`CheckError`, `CaseError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with
+`ArrayError`, `NumberError`, `CaseError`, `ArgumentError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with
 every module's own. `tools/stutter_rename.olang` renames the old names in other code (`olang fix` runs it).
 
 ## Subfolders
@@ -59,8 +60,8 @@ every module's own. `tools/stutter_rename.olang` renames the old names in other 
   without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator` (the helpers and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
-  `check` (CheckError, the errors of the language's own checks), `enums` (`CaseError`, what an enum's `From` fails
-  with, T17e). Only the prelude may give methods to built-in types (M19d).
+  `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`
+  (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
   `san.ll` (scope sanitizer, linked only under `-s`), `dyncall.ll` (calls by name over libffi). The compiler

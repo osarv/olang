@@ -1,0 +1,233 @@
+# as_migrate - "x as C" fails as written (E32, 2026-10-25, the user's call: "one error system: try"). It aborted where
+# the value held another case, and failed with WRONG_CASE only under checked; now it fails with CaseError.WRONG_CASE
+# wherever it is written, so a use that no try covers is an error. Each such use is given the meaning it had - the
+# program ends where the value holds another case - from the compiler's own diagnostic (E32, at the "as"):
+#
+#     p := sh as Shape.Tri          ->  p := (sh as Shape.Tri)!
+#     (ws[1] as Slider).at          ->  (ws[1] as Slider)!.at
+#     I64(ws[1] as Level)           ->  I64((ws[1] as Level)!)
+#
+# The operand before "as" is the postfix chain ending there (names, members, indexes, calls, a parenthesized
+# expression); a use whose operand is anything else is listed for a person. Each file is compiled (test when it has
+# tests, compile otherwise), the edits applied, and that repeats until nothing more changes. A checks/cases program that
+# must fail keeps the failure it is about. Running it again changes nothing.
+#
+#     $OLANG build tools/as_migrate.olang && build/tools_as_migrate [--olang PATH] [-j N] FILE|DIR...
+#
+# For oann: build/tools_as_migrate --olang /home/user/olang/build/olang /home/user/oann
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+AsMessage String& = "'as' fails where the value holds another case"
+
+# where the postfix chain ending just before b starts, b itself where none ends there
+fn chainStart(text String&, mask String&, b I64) I64 {
+    i := b
+    for i > 0 {
+        c := text[i - 1]
+        if mask[i - 1] != 'c' { break }
+        if c == ')' or c == ']' {
+            open := '(' if c == ')' else '['
+            depth I64 = 0
+            k := i - 1
+            for k >= 0 {
+                if mask[k] == 'c' and text[k] == c { depth++ }
+                if mask[k] == 'c' and text[k] == open {
+                    depth--
+                    if depth == 0 { break }
+                }
+                k--
+            }
+            if k < 0 { return b }
+            i = k
+            continue
+        }
+        if srcmask.IsWord(c) {
+            for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
+            if i == 0 or text[i - 1] != '.' { break }
+            i--
+            continue
+        }
+        break
+    }
+    return i
+}
+
+# where the type after "as " starting at a ends: names, dots, "<...>", "?" and "&"
+fn typeEnd(text String&, a I64) I64 {
+    j := a
+    for j < text.Len() {
+        c := text[j]
+        if srcmask.IsWord(c) or c == '.' or c == '&' or c == '?' {
+            j++
+        } else if c == '<' {
+            depth I64 = 0
+            for j < text.Len() {
+                if text[j] == '<' { depth++ }
+                if text[j] == '>' {
+                    depth--
+                    if depth == 0 { break }
+                }
+                j++
+            }
+            j++
+        } else {
+            break
+        }
+    }
+    return j
+}
+
+# the line with the "as" at column index at rewritten to end the program where it fails; "" where it cannot be
+fn rewriteAt(text String&, at I64) String {
+    mask := srcmask.Mask(text, true)
+    if not text[at:].StartsWith("as ") { return "" }
+    b := at
+    for b > 0 and text[b - 1] == ' ' { b-- }
+    a := chainStart(text, mask, b)
+    if a == b { return "" }
+    e := typeEnd(text, at + 3)
+    if e == at + 3 { return "" }
+    # already in parentheses of its own - not a call's - the "!" goes after them
+    if a > 0 and text[a - 1] == '(' and e < text.Len() and text[e] == ')' and (a < 2 or not (srcmask.IsWord(text[a - 2]) or text[a - 2] == ']' or text[a - 2] == ')')) {
+        if e + 1 < text.Len() and text[e + 1] == '!' { return "" }
+        return $text[:e + 1] "!" $text[e + 1:]
+    }
+    return $text[:a] "(" $text[a:e] ")!" $text[e:]
+}
+
+fn main() ? {
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths List<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else {
+                jobs = try args[i + 1].ParseInt() catch default 3
+            }
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_as_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1 { jobs = 1 }
+    olang = $diagedit.RealPathOf(olang)
+    files List<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed List<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    tmp := try os.MkTemp("", "as_migrate") catch {
+        srcmask.SayErr("as_migrate: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("as_migrate: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    total I64 = 0
+    left List<String&>
+    fileArray := files.ToArray()
+    for round in range 1, 10 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        requests List<diagedit.Request>
+        for o in outputs {
+            for row in o.Split("\n") {
+                path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
+                full := diagedit.RealPathOf(path)
+                if isError and msg.StartsWith(AsMessage) and diagedit.Allowed(full, allowed) {
+                    requests.Push(diagedit.Request($full, line, col, "as", "", $row))
+                }
+            }
+        }
+        made := apply(requests, left)
+        srcmask.Say("round " $round ": " $made " uses of 'as' given '!'")
+        total += made
+        if made == 0 { break }
+    }
+    srcmask.Say("total: " $total " uses of 'as' given '!'")
+    for l in left { srcmask.Say("by hand: " $l) }
+}
+
+# the edits applied to their files; how many were made, what could not be in left
+fn apply(requests List<diagedit.Request>&, left mut List<String&>&) I64 {
+    paths List<String&>
+    for r in requests {
+        if not (r.Path in paths) { paths.Push($r.Path) }
+    }
+    made I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch { continue }
+        expect List<String&>
+        diagedit.ExpectedTexts(src, expect)
+        lines := src.Split("\n")
+        mine List<diagedit.Request>
+        for r in requests {
+            if r.Path == path { mine.Push(r) }
+        }
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line { return a.Line < b.Line }
+            return a.Col > b.Col
+        })
+        shLine List<I64>
+        shAt List<I64>
+        shDelta List<I64>
+        changed := false
+        seen List<String&>
+        for r in mine {
+            # a module imported by several files compiled is reported once by each
+            key := $r.Line ":" $r.Col
+            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
+            seen.Push($key)
+            idx := r.Line - 1
+            text := $lines[idx]
+            out := rewriteAt(text, r.Col - 1)
+            if out.Len() == 0 {
+                if not (r.Why in left) { left.Push($r.Why) }
+                continue
+            }
+            lines[idx] = $out
+            delta := out.Len() - text.Len()
+            diagedit.Realign(lines, idx, delta, r.Col - 1)
+            shLine.Push(r.Line)
+            shAt.Push(r.Col - 1)
+            shDelta.Push(delta)
+            made++
+            changed = true
+        }
+        if not changed { continue }
+        diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
+        b := StringBuilder()
+        for k in range lines.Len() {
+            if k > 0 { b.PushChar('\n') }
+            b.Push(lines[k])
+        }
+        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("as_migrate: cannot write " $path) }
+    }
+    return made
+}
+
+test "an 'as' wrapped where it stands, parenthesized ones given '!' after them" {
+    assert rewriteAt("    p := sh as KShape.Tri", 12) == "    p := (sh as KShape.Tri)!"
+    assert rewriteAt("    assert (ws[1] as Slider).at == 4", 18) == "    assert (ws[1] as Slider)!.at == 4"
+    assert rewriteAt("    return I64(ws[1] as Level)", 21) == "    return I64((ws[1] as Level)!)"
+    assert rewriteAt("    y := (e1 if c else Z) as rv5E.A", 26) == "    y := ((e1 if c else Z) as rv5E.A)!"
+    assert rewriteAt("    k := (a.e as M.Lit) + 1", 14) == "    k := (a.e as M.Lit)! + 1"
+    assert rewriteAt("    k := 1 + 2", 6) == ""
+}

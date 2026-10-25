@@ -35,6 +35,7 @@ TBool I32 = 12
 TStr I32 = 13
 
 Arith := String&["+", "-", "*"]
+ArithFn := String&["Add", "Sub", "Mul"]
 # text a String is compared with or searched for: pieces renderings are made of
 Texts := String&["", "0", "1", "-", "-1", "0.5", "e+", "nan", "inf", "true", "I32[", ", ", " ", "S0_0(", "C1"]
 Bits := String&["&", "|", "^"]
@@ -453,7 +454,7 @@ fn (g mut Gen&) leaf(t I32) String& {
         f := g.pick(t, 14)
         if f >= 0 { return $g.use(f) "(" $g.fit(g.lp[g.vt[f] - 400], 1) ")" }
         l := g.pick(t, 15)
-        if l >= 0 { return "(checked " $g.use(l) "[" $g.ex(I32(g.r(7)), 1) "] catch default " $g.lit(t) ")" }   # flows into I64
+        if l >= 0 { return "(try " $g.use(l) ".Get(" $g.ex(I32(g.r(7)), 1) ") catch default " $g.lit(t) ")" }   # flows into I64
     }
     if p < 75 {
         k := g.pick(t, 8)
@@ -515,7 +516,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         s := g.intT()
         return g.conv(t, s, g.ex(s, d - 1))
     }
-    if k == 10 { return "(checked " $Prims[t] "(" $g.ex(g.floatT(), d - 1) ") catch default " $g.lit(t) ")" }
+    if k == 10 { return "(try (" $g.ex(g.floatT(), d - 1) ").Narrow<" $Prims[t] ">() catch default " $g.lit(t) ")" }
     if k == 11 or k == 12 { return g.checkedInt(t, d) }
     if k == 13 { return g.helper(t, d) }
     if k == 14 { return g.cond(t, d) }
@@ -538,7 +539,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
             i := g.solid(it, d - 1) if isFixed(g.vt[a]) else g.ex(it, d - 1)
             # a literal written as an index is an I64 (E16): a U64 one past I64's maximum is written converted
             if it == 7 { i = $"U64(" $i ")" }
-            return "(checked " $g.use(a) "[" $i "] catch default " $g.lit(t) ")"
+            return "(try " $g.use(a) ".Get(" $i ") catch default " $g.lit(t) ")"
         }
         if t == 3 {
             a2 := g.pick(0, 5)
@@ -555,7 +556,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
             et I32 = g.vt[e] - 200
             for c in range g.en[et] {
                 if g.epn[et * 4 + c] == 1 and g.ept[(et * 4 + c) * 2] == t {
-                    return "(checked (" $g.use(e) " as E" $g.ci "_" $et ".C" $c ") catch default " $g.lit(t) ")"
+                    return "(try " $g.use(e) " as E" $g.ci "_" $et ".C" $c " catch default " $g.lit(t) ")"
                 }
             }
         }
@@ -585,20 +586,20 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
         } else {
             a = g.fit(t, d - 1)
         }
-        return "(checked (" $a " " $Arith[p] " " $b ") catch default " $dflt ")"
+        return "(try arith." $ArithFn[p] "(" $a ", " $b ") catch default " $dflt ")"
     }
     if p == 3 {
-        op String& = "/" if g.chance(50) else "%"
-        return "(checked (" $g.fit(t, d - 1) " " $op " " $g.solid(t, d - 1) ") catch default " $dflt ")"
+        op String& = "Div" if g.chance(50) else "Rem"
+        return "(try arith." $op "(" $g.fit(t, d - 1) ", " $g.solid(t, d - 1) ") catch default " $dflt ")"
     }
     if p == 4 {
-        op String& = "<<" if g.chance(50) else ">>"
-        return "(checked (" $g.solid(t, d - 1) " " $op " " $g.solid(g.intT(), d - 1) ") catch default " $dflt ")"
+        op String& = "ShiftLeft" if g.chance(50) else "ShiftRight"
+        return "(try arith." $op "(" $g.solid(t, d - 1) ", I64(" $g.solid(g.intT(), d - 1) ")) catch default " $dflt ")"
     }
-    if p == 5 { return "(checked (-" $g.solid(t, d - 1) ") catch default " $dflt ")" }
+    if p == 5 { return "(try arith.Neg(" $g.solid(t, d - 1) ") catch default " $dflt ")" }
     s := g.intT()
-    if s == t or flows(s, t) { return "(checked (" $g.fit(t, d - 1) " * " $g.solid(t, d - 1) ") catch default " $dflt ")" }
-    return "(checked " $Prims[t] "(" $g.solid(s, d - 1) ") catch default " $dflt ")"
+    if s == t or flows(s, t) { return "(try arith.Mul(" $g.fit(t, d - 1) ", " $g.solid(t, d - 1) ") catch default " $dflt ")" }
+    return "(try (" $g.solid(s, d - 1) ").Narrow<" $Prims[t] ">() catch default " $dflt ")"
 }
 
 fn (g mut Gen&) exFloat(t I32, d I64) String& {
@@ -617,7 +618,7 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         return g.conv(t, s, g.ex(s, d - 1))
     }
     if k == 7 or k == 8 {
-        ops := String&["+", "-", "*", "/"]
+        ops := String&["Add", "Sub", "Mul", "Div"]
         b := g.ex(t, d - 1)
         a String& = ""
         if isLit(b) {
@@ -625,12 +626,12 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         } else {
             a = g.fit(t, d - 1)
         }
-        return "(checked (" $a " " $ops[g.r(4)] " " $b ") catch default " $g.lit(t) ")"
+        return "(try arith." $ops[g.r(4)] "(" $a ", " $b ") catch default " $g.lit(t) ")"
     }
     if k == 9 {
         s := g.floatT()
         if s != t and not flows(s, t) {
-            return "(checked " $Prims[t] "(" $g.solid(s, d - 1) ") catch default " $g.lit(t) ")"
+            return "(try (" $g.solid(s, d - 1) ").Narrow<" $Prims[t] ">() catch default " $g.lit(t) ")"
         }
     }
     if k == 10 { return g.fromBits(t, d) }
@@ -789,7 +790,7 @@ fn (g mut Gen&) piece(d I64) String& {
         l := g.pick(0, 16)
         if l >= 0 { return "$(" $g.use(l) ".ToArray())" }
         sv := g.pick(TStr, 0)
-        if sv >= 0 { return "$((checked " $g.use(sv) "[" $g.r(4) ":" $g.r(8) "] catch default \"?\"))" }
+        if sv >= 0 { return "$((try " $g.use(sv) ".SliceOf(" $g.r(4) ", " $g.r(8) ") catch default \"?\"))" }
     }
     if p == 9 {                                     # a comprehension
         t := g.primT()
@@ -1528,7 +1529,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if p == 7 { return $ind $x ".Reverse()\n" }
     if p == 8 and g.chance(30) { return $ind $x ".Clear()\n" }
     if p == 9 and et != TBool { return $ind $x ".Sort(" $g.comparator(et) ")\n" }
-    if p == 10 { return $ind "checked " $x "[" $g.ex(g.idxT(), 2) "] = " $g.fit(et, 2) " catch { }\n" }
+    if p == 10 { return $ind "try " $x ".Insert(" $g.plainIdx() ", " $g.fit(et, 2) ") catch ListError { }\n" }
     if p == 11 { return $ind "if " $x ".Len() > 0 { " $x "[" $g.plainIdx() " % " $x ".Len()] = " $g.fit(et, 2) " }\n" }
     if p == 12 and d > 0 { return g.runWalk(l, d, ind) }
     if p == 13 {
@@ -1958,8 +1959,8 @@ fn (g mut Gen&) fixedDecl(ind String&) String& {
     return $ind "x" $k " " $g.tn(t) $init "\n"
 }
 
-# an element of a run-time array viewed through a slice of a known length (E16a): checked under checked, the default
-# where the slice or the index is out of range
+# an element of a run-time array viewed through a slice of a known length (E16a): read by Get (E16d), the default where
+# the slice or the index is out of range
 fn (g mut Gen&) viewElement(t I32, d I64) String& {
     a := g.pick(t, 24)
     if a < 0 or g.chance(40) {
@@ -1972,7 +1973,8 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
     if g.vlen[a] > 0 and g.chance(50) { n = g.vlen[a] }
     v String& = "(" $g.use(a) "[0:" $n "])"
     if n == g.vlen[a] and g.chance(60) { return $v "[" $g.r(n) "]" }
-    return "(checked (" $v "[" $g.solid(g.idxT(), d - 1) "]) catch default " $g.lit(t) ")"
+    # the slice checked as the index is: n may pass the array's length
+    return "(try " $g.use(a) ".SliceOf(0, " $n ").Get(" $g.solid(g.idxT(), d - 1) ") catch default " $g.lit(t) ")"
 }
 
 # a conversion to t of x - of a literal, which a conversion requires fits (D17g), a literal of t in its place
@@ -1981,12 +1983,12 @@ fn (g mut Gen&) conv(t I32, s I32, x String&) String& {
     if lossless(s, t) { return $Prims[t] "(" $x ")" }
     # a conversion that may not hold its value is a contract (D17g): decided while compiling where the value is - an
     # error where it does not fit - so only a value read from a variable (x0, x1 ...), not a fixed array's length, is
-    # converted plainly, wrapping at run time; anything else is checked
+    # converted plainly, wrapping at run time; anything else is narrowed with a check (E26b)
     if readsVar(x) and not x.Contains(".Len()") { return $Prims[t] "(" $x ")" }
-    return "(checked " $Prims[t] "(" $x ") catch default " $g.lit(t) ")"
+    return "(try (" $x ").Narrow<" $Prims[t] ">() catch default " $g.lit(t) ")"
 }
 
-# whether every value of number type s is one of t's: no conversion from s to t can fail under checked (R20)
+# whether every value of number type s is one of t's: no narrowing from s to t can fail (E26b)
 fn lossless(s I32, t I32) Bool {
     if s == t { return true }
     if isInt(s) and isInt(t) {
@@ -2185,13 +2187,13 @@ fn (g mut Gen&) mathFloat(t I32, d I64) String& {
     return "(" $g.solid(t, d - 1) ")." $f "(" $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")"
 }
 
-# one of an integer's methods (M19d) on a value of type t: Abs, Min, Max, Clamp, Pow (wrapping, or checked), Sqrt
+# one of an integer's methods (M19d) on a value of type t: Abs, Min, Max, Clamp, Pow (wrapping, or std/arith's), Sqrt
 fn (g mut Gen&) mathInt(t I32, d I64) String& {
     p := g.r(7)
     if p == 0 { return "(" $g.solid(t, d - 1) ").Abs()" }
     if p == 3 { return "(" $g.solid(t, d - 1) ").Clamp(" $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")" }
     if p == 4 { return "(" $g.solid(t, d - 1) ").Pow(" $g.r(70) ")" }
-    if p == 5 { return "(checked (" $g.solid(t, d - 1) ").Pow(" $g.r(9) ") catch default " $g.lit(t) ")" }
+    if p == 5 { return "(try arith.Pow(" $g.solid(t, d - 1) ", " $g.r(9) ") catch default " $g.lit(t) ")" }
     if p == 6 {
         if t >= 4 { return "(" $g.solid(t, d - 1) ").Sqrt()" }                    # an unsigned one cannot fail
         return "(try (" $g.solid(t, d - 1) ").Sqrt() catch default " $g.lit(t) ")"
@@ -2610,7 +2612,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     g := Gen(seed)
     g.atomics = atomics
     b := StringBuilder()
-    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\n")
+    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\nimport \"std/arith\"\n")
     prints := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {

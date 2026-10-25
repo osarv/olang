@@ -1,4 +1,4 @@
-# check: fail 300 does not fit U8, so the conversion's requirement 'x fits U8' is false
+# check: fail error[D17g]: 300 does not fit U8 - write a value that fits
 # D17g: a conversion to a number type requires its value fits - a constant that does not is an error at the conversion
 fn main() {
     b := U8(300)
