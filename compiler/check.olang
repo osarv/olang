@@ -3377,9 +3377,18 @@ fn (c mut Checker&) entryChecks() {
     b := c.fr().Body
     if b < 0 { return }
     match c.cur().Of {
-        case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _) { }
+        case typed.BodyOf.Fn(i) { if c.P.IsGenerator(c.P.InstanceFn(i)) { return } }    # its first Next's (D18)
+        case typed.BodyOf.Ctor(_, _) { }
         nomatch { return }
     }
+    params List<I64>
+    for l in c.cur().Params { params.Push(I64(l)) }
+    c.contractChecks(b, params, false)
+}
+
+# function b's conditions checked here, each called on locals args - b's own parameters, or (gen) a generator's Next
+# beginning: its parameters' locals, its first Next failing where one is false (D18)
+fn (c mut Checker&) contractChecks(b I64, args List<I64>&, gen Bool) {
     if not c.hasContract(b) { return }
     info := try c.Contracts.Get(b) catch { return }
     if info.Reqs.Len() == 0 { return }
@@ -3395,12 +3404,12 @@ fn (c mut Checker&) entryChecks() {
     src := c.ctSourceOf(b)
     # a written set names ArgumentError, which every call of a function with value conditions may fail with
     if not fr.InferErrors and not fr.InTest and c.uncovered(fr.Errors, raised) != types.UnknownT and src is not null {
-        c.ctErr(src.Mi, src.K.Sp, msgs.ContractNeedsArgumentError(info.Name))
+        c.ctErr(src.Mi, src.K.Sp, msgs.GenContractNeedsArgumentError(info.Name) if gen else msgs.ContractNeedsArgumentError(info.Name))
     }
     for i in range info.Reqs.Len() {
         sp := info.ReqSps[i]
         from := c.exprs.Len()
-        for l in c.cur().Params { c.exprs.Push(c.readLocal(sp, I64(l))) }
+        for l in args { c.exprs.Push(c.readLocal(sp, l)) }
         req := info.Reqs[i]
         # the call at the condition's end, the raise at its start: a trace tells passing an error of a call in the
         # condition on from the requirement failing (S18d)
@@ -3588,6 +3597,11 @@ fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, 
     info := try c.Contracts.Get(cb) catch { return call }
     # a body only the evaluator runs (an assert's condition, S18c) asks nothing: its call is asked where it is written
     if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return call }
+    # a generator's are its first Next's (D18), which this call does not run
+    match c.Bodies[cb].Of {
+        case typed.BodyOf.Fn(i) { if c.P.IsGenerator(c.P.InstanceFn(i)) { return call } }
+        nomatch { }
+    }
     out := call
     match target {
         case typed.Callee.Dispatch(_, _, _) { out = c.dispatchChecks(sp, r, target, args, site, info) }
@@ -15631,7 +15645,6 @@ fn (c mut Checker&) genResultMet(r ast.TypeRef&) {
 fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId) typed.Block&c {
     sp := fd.Sp
     from := c.stmts.Len()
-    c.entryChecks()
     gt := c.P.T.Result(sig)
     csig := c.P.CtorSig(gt)
     if csig == types.UnknownT or c.P.T.Items(c.P.T.Params(csig)).Len() != 1 {
@@ -15667,9 +15680,14 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
     c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
     from := c.stmts.Len()
     pb := c.Bodies[parent.Body]
+    args List<I64>
+    whole := true
     for p in pb.Params {
         pl := pb.Locals[I64(p)]
-        if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" { continue }
+        if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" {
+            whole = false
+            continue
+        }
         cap := c.captureIn(c.frames.Len() - 1, pl.Name, pl.Sp)
         if cap < 0 { continue }
         ct := c.localType(cap)
@@ -15679,6 +15697,11 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
         mark := typed.Mark.Infer if c.isRef(pl.Ty) or c.P.T.HoldsRefs(pl.Ty) else typed.Mark.None
         l := c.local(pl.Name, pl.Sp, pl.Ty, typed.LocalKind.Var, mark)
         c.emit(typed.Stmt.Let(pl.Sp, typed.LocalId(I32(l)), x))
+        args.Push(l)
+    }
+    # its contract (D17): checked as its first Next begins, a false condition that Next's ArgumentError (D18)
+    if c.hasContract(parent.Body) {
+        if whole { c.contractChecks(parent.Body, args, true) } else { c.gap(sp, "a generator with a contract and an unnamed parameter") }
     }
     storedIn(fd.Body, c.fr().stored)
     if fd.Body.Len() > 0 { c.stmtsOf(fd.Body) }

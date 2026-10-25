@@ -687,6 +687,7 @@ type Diag enum {
     ContractOutlivesNotParam
     ContractFalse
     ContractNeedsArgumentError
+    GenContractNeedsArgumentError
     ConversionDoesNotFit
     NoteContractCondition
     NotAnErrorType
@@ -2707,6 +2708,7 @@ fn ContractOutlivesNoScope(tok String&) Msg { return Msg(Diag.ContractOutlivesNo
 fn ContractOutlivesNotParam(tok String&) Msg { return Msg(Diag.ContractOutlivesNotParam, "D17d", $tok " is no parameter of this function - an 'outlives' item names its parameters and 'return'") }
 
 fn ContractNeedsArgumentError(name String&) Msg { return Msg(Diag.ContractNeedsArgumentError, "D17", $name " has conditions, so a call fails with ArgumentError where one is false - add it after '?'") }
+fn GenContractNeedsArgumentError(name String&) Msg { return Msg(Diag.GenContractNeedsArgumentError, "D18, D17", $name " has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'") }
 fn ContractFalse(cond String&, name String&) Msg { return Msg(Diag.ContractFalse, "D17e", $"this call breaks " $name "'s requirement '" $cond "'") }
 
 fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
