@@ -1051,3 +1051,9 @@ functions; `p.StringFromC(max)` stays. The user then: "It does sound like we sho
 - Private constructors on public types: NOT added (the user 2026-10-25: "it's fine to keep ... I don't know how we would
   do that without breaking the 'capitalized means public' rule"). A constructor is as visible as its type; validation
   lives in it.
+
+**Prover questions (docs/prover.md section 10), the user 2026-10-25:** 4 DECIDED - our own solver in olang (Z3 etc.
+only as test oracles); 6 DECIDED - the prover is built after everything else already decided (build list first).
+1, 2, 3, 5: the user asked for explanations - given with examples (Clamp's broken requirement: run as written vs UB;
+three answers always-fails / broken-guarantee / might-fail and Dafny's alternative; loop invariants as asserts vs a
+loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED again; in effect: nothing built.
