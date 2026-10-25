@@ -2254,13 +2254,30 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
         case _ { }
     }
-    if s.P.T.Role(fty) == types.RoleCtor { return true }
-    e := s.P.T.ResultFrom(fty, 0)
-    if e == j or e == types.FromTypeVar { return true }
-    # an argument sharing the scope the result is borrowed from may be what is handed back (O13)
-    if e >= 0 and s.P.T.ShareOf(fty, j) == e { return true }
+    t := s.P.T
+    if t.Role(fty) == types.RoleCtor { return true }
+    sj := t.ShareOf(fty, j)
+    if sj == types.FromTypeVar { return true }
+    # a result, in any position (D8c), borrowed from it - or from the scope it shares, which it may be what is handed
+    # back (O13)
+    nr := t.Results(fty).Len()
+    for k in range nr if nr > 0 else 1 {
+        e := t.ResultFrom(fty, k)
+        if e == j or e == types.FromTypeVar { return true }
+        if e >= 0 and (sj == e or t.ShareOf(fty, e) == j) { return true }
+    }
+    # another parameter - the receiver too - sharing a scope variable with it: the body may store one into the other
+    # with no obligation, the signature saying they are one scope ("fn tie(l mut List<String&>&, x String&l)")
+    for k in range c.Args.Len() {
+        if k == j { continue }
+        sk := t.ShareOf(fty, k)
+        if sk == j or sj == k or (sj >= 0 and sk == sj) or sk == types.FromTypeVar { return true }
+    }
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return true }
+    if callee < 0 or not s.sums[callee].Done or s.sums[callee].Judging { return true }
+    # what the settled body stores into what the argument names, or hands a writable reference into out (O17)
+    sm := s.sums[callee]
+    if j >= sm.Keeps.Len() or sm.Keeps[j] or sm.Stores[j] or sm.Puts[j] { return true }
     vars := s.P.T.ScopeVarsOf(fty)
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
