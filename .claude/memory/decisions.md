@@ -1114,3 +1114,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - Conditions naming later parameters, asked by the user 2026-10-25: recommended NO - itself and earlier parameters only
   (all arguments are evaluated before the call anyway, so a relation goes on the later parameter; one place per
   condition; checked in order). In effect: earlier only (as proposed).
+- Condition form, the user 2026-10-25: "Maybe we bring the bracket form back? conditions on the variables that are
+  checked during entry. fn myFunc(x I32, y I32) [x > y] I64 ? ArgError {...}". Recommended YES: one block after the
+  parameter list, before the result; any Bool expressions over parameters and constants, listing rule; checked in order
+  on entry (ArgumentError.INVALID naming the condition) or decided at compile time; `outlives` relations in the same
+  block (compile time only); constructors take it; result conditions, entry values, for/if/fits and the prover gone.
+  ASKED to confirm; in effect: undecided.
