@@ -2345,6 +2345,10 @@ fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut List<I64>&) {
         }
         case typed.Expr.Seq(_, _, q) { s.returnedArrays(q.X, out) }
         case typed.Expr.Away(_, _, y) { s.returnedArrays(y, out) }
+        # a conversion of an array names its storage (T29a)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 { s.returnedArrays(args[0], out) }
+        }
         case _ { }
     }
 }

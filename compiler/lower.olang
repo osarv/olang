@@ -725,14 +725,19 @@ fn (ln mut lowering&) valueArray(ty types.TypeId) Bool {
 # not a temporary whose storage the target takes
 fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.valueArray(ty) { return false }
+    return copiesValue(x)
+}
+
+# whether x, an array value, is existing storage rather than a temporary whose storage its target takes
+fn copiesValue(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Read(_, _, _, _) => true
-        # a fixed array a reference names, converted (it names that storage)
-        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or typed.ScopedArray(args[0]))
+        # a conversion names its argument's storage (T29a): a fixed array a reference names, a place, a scoped call
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or copiesValue(args[0]))
         # a call given a scope argument builds its array where that says, which may close first (E25)
         case typed.Expr.Call(_, _, c) => typed.ScopedCall(c)
-        case typed.Expr.Away(_, _, y) => ln.copiesArray(y, ty)
-        case typed.Expr.Seq(_, _, q) => q.X is not null and ln.copiesArray(q.X!, ty)
+        case typed.Expr.Away(_, _, y) => copiesValue(y)
+        case typed.Expr.Seq(_, _, q) => q.X is not null and copiesValue(q.X!)
         case _ => false
     }
 }

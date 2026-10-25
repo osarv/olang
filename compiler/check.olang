@@ -9370,7 +9370,7 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
             # T29a: an array named by a place converted names its storage - a place of the declared type, whose read is
             # a copy where one is made and whose borrow is that storage, written where it may be
             xp := readPlace(x)
-            if xp is not null and c.P.T.KindOf(c.under(xt)) == types.Kind.Array and c.P.T.KindOf(base) == types.Kind.Array {
+            if xp is not null and c.P.T.KindOf(c.under(xt)) == types.Kind.Array and c.P.T.KindOf(c.under(base)) == types.Kind.Array {
                 perm := types.Writable if c.placeWritable(xp) else types.ReadOnly
                 r := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(xt, perm), xp), c.P.T.Ref(t, perm))
                 # fixed storage (T7d) is named as one of a run-time length, as a slice of it is (E16a): its read a copy
