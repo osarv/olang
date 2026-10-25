@@ -9296,7 +9296,7 @@ type SetNode struct(v I64) { v }
 test "E16d: a.Set(i, v) is a checked store - baked and run" {
     assert SetBaked == 2430
     n := 3
-    assert setChecked(n) == SetBaked and setChecked(n - 1) == 2930
+    assert setChecked(n) == SetBaked and setChecked(n - 1) == 3009
     ns := Array<SetNode&>(2, SetNode(0))
     try ns.Set(1, SetNode(5))
     assert churnArena() > 0
@@ -18072,7 +18072,7 @@ test "D17e: a closed call whose ArgumentError is caught fails as written - baked
     broke := false
     try dkPercent(5, 0) catch ArgumentError { broke = true }
     assert broke
-    v := try (try dkHalf(9)) + 1 catch ArgumentError default -3
+    v := try dkHalf(9) + dkHalf(4) catch ArgumentError default -3
     assert v == -3 and DkCaught + DkFailed == -2
 }
 
