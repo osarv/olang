@@ -72,6 +72,10 @@ type Kind enum {
     # a run-time trait value's referent (T32): A the trait (a Named trait, its arguments bound) - always under a Ref, the
     # pair (instance, table)
     Any
+    # an error set given for an error-set parameter (G1a, QAH): A its entries (a ListId) - error types, words entries
+    # (ErrWords) and error-set variables (Var) - in the canonical order (R1a), so one set is one type. Only ever an
+    # instance's argument or a variable's binding; never a value's type
+    ErrSet
 }
 
 # a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
@@ -419,6 +423,12 @@ fn (t mut Table&) ConstExpr(key String&) TypeId {
 # what "any R&" refers to (T32): R a trait instance
 fn (t mut Table&) Any(tr TypeId) TypeId { return t.intern(data(Kind.Any, I64(tr), 0, 0), t.depthOf(tr) + 1) }
 
+# an error set as an argument (G1a): its entries, already merged and in the canonical order (generic's ErrSetOf)
+fn (t mut Table&) ErrSet(entries ListId) TypeId { return t.intern(data(Kind.ErrSet, I64(entries), 0, 0), 1) }
+
+# an error-set argument's entries
+fn (t Table&) ErrSetItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrSet else ListId(0) }
+
 # ---- reading types ----
 
 fn (t Table&) KindOf(id TypeId) Kind { return t.at(id).K }
@@ -503,6 +513,7 @@ fn (t Table&) Closed(id TypeId) Bool {
         case Kind.AnonEnum => t.closedList(t.ShapeCases(id))
         case Kind.Const => t.Closed(t.ConstType(id))
         case Kind.Any => t.Closed(t.AnyTrait(id))
+        case Kind.ErrSet => t.closedList(t.ErrSetItems(id))
         case _ => true
     }
 }
@@ -1116,10 +1127,13 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             b.PushChar(':')
             b.Push(t.Names.Text(t.DeclName(dl)))
             args := t.Items(t.Args(id))
-            if args.Len() > 0 {
+            # G1a: an error-set argument after the types, " ? A + B" - the empty set left out, as "Iterator<I64>" writes it
+            n := args.Len()
+            if n > 0 and t.KindOf(args[n - 1]) == Kind.ErrSet and t.ErrSetItems(args[n - 1]) == ListId(0) { n-- }
+            if n > 0 {
                 b.PushChar('<')
-                for i in range args.Len() {
-                    if i > 0 { b.Push(", ") }
+                for i in range n {
+                    if i > 0 { b.Push(" " if t.KindOf(args[i]) == Kind.ErrSet else ", ") }
                     t.canon(b, args[i])
                 }
                 b.PushChar('>')
@@ -1221,6 +1235,14 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         case Kind.Any {
             b.Push("any ")
             t.canon(b, t.AnyTrait(id))
+        }
+        case Kind.ErrSet {
+            b.PushChar('?')
+            es := t.Items(t.ErrSetItems(id))
+            for i in range es.Len() {
+                b.Push(" + " if i > 0 else " ")
+                t.canon(b, es[i])
+            }
         }
     }
 }

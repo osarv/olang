@@ -22,6 +22,8 @@ type TypeRef enum {
     Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
     # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
     Any(sp source.Span, of TypeRef&)
+    # "? A, B" closing a type-argument list (G8, QAH): the error set given for the type's error-set parameter
+    Errs(sp source.Span, items Array<Path&>&)
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
@@ -292,12 +294,14 @@ type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, Dt
 }
 
 # a type parameter: its name and its constraint (null for none) - several traits side by side its intersection (G19),
-# the first in Ty and the rest in Also
-type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)) {
+# the first in Ty and the rest in Also; ErrSet for the error-set parameter "? E" closing a list (G1a, QAH)
+type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)
+                      ErrSet Bool = false) {
     Sp
     Name
     Ty
     Also
+    ErrSet
 }
 
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&) {
@@ -351,6 +355,7 @@ fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
         case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _) => sp
+        case TypeRef.Errs(sp, _) => sp
     }
 }
 

@@ -4299,7 +4299,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.Named {
             if c.spellQualified { b.Push(c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(t)))) }
             b.Push(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))))
-            c.spellList(b, c.P.T.Args(t), "<", ">")
+            c.spellArgs(b, c.P.T.Args(t))
         }
         case types.Kind.Any {
             b.Push("any ")
@@ -4417,6 +4417,15 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         }
         case types.Kind.Const { b.Push($c.P.T.ConstValue(t)) }
         case types.Kind.Var { b.Push(c.text(c.P.VarAt(c.P.T.A(t), c.P.T.B(t)).Name)) }
+        # QAH: an error set given for an error-set parameter, "Bad, io.Error" - "nothing" for the empty set
+        case types.Kind.ErrSet {
+            es := c.P.T.Items(c.P.T.ErrSetItems(t))
+            if es.Len() == 0 { b.Push("nothing") }
+            for i in range es.Len() {
+                if i > 0 { b.Push(", ") }
+                c.spell(b, es[i], false)
+            }
+        }
         nomatch { b.Push(c.P.T.Canon(t)) }
     }
 }
@@ -4441,6 +4450,28 @@ fn (c mut Checker&) spellList(b mut StringBuilder&, l types.ListId, open String&
     }
     c.spellItem = was
     b.Push(end)
+}
+
+# a declared type's arguments as source writes them: "<T, U>", the error-set argument closing it after "?" - "<I64 ?
+# Bad>" - and left out where it is the empty set, as "Iterator<I64>" writes it (QAH)
+fn (c mut Checker&) spellArgs(b mut StringBuilder&, l types.ListId) {
+    xs := c.P.T.Items(l)
+    n := xs.Len()
+    if n > 0 and c.P.T.KindOf(xs[n - 1]) == types.Kind.ErrSet and c.P.T.ErrSetItems(xs[n - 1]) == types.ListId(0) { n-- }
+    if n == 0 { return }
+    b.Push("<")
+    was := c.spellItem
+    c.spellItem = true
+    for i in range n {
+        if c.P.T.KindOf(xs[i]) == types.Kind.ErrSet {
+            b.Push(" ? " if i > 0 else "? ")
+        } else if i > 0 {
+            b.Push(", ")
+        }
+        c.spell(b, xs[i], false)
+    }
+    c.spellItem = was
+    b.Push(">")
 }
 
 fn primName(t types.TypeId) String& {
@@ -8518,12 +8549,13 @@ fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
                 c.err(tr.Span(), msgs.AnyNotTrait(c.src(tr.Span())))
                 return false
             }
-            np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
-            if np != args.Len() {
-                c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), np, args.Len()))
+            ad := c.P.DeclFor(ref.Module, ref.Index)
+            if not c.P.ArgsFit(ad, args) {
+                c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(ad), generic.WrittenTypes(args)))
                 return false
             }
             for a in args {
+                if generic.IsErrsArgOf(a) { continue }
                 if not c.writtenMet(a) { return false }
             }
             return true
@@ -8621,6 +8653,14 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 c.unknownType(nsp, path[0])
                 return false
             }
+            # G1a: an error-set parameter is no type - it stands where an error set is written
+            if path.Len() == 1 and c.fr().Ctx.Vars.Has(path[0]) {
+                v := try c.fr().Ctx.Vars.Get(path[0]) catch default types.UnknownT
+                if c.P.IsErrVar(v) or c.P.T.KindOf(v) == types.Kind.ErrSet {
+                    c.err(nsp, msgs.ErrVarNotType(c.tok(path[0]), c.text(path[0])))
+                    return false
+                }
+            }
             if c.errorTypeHeld(tr) or c.traitWritten(tr, tr) { return false }
             if c.foreignNamed(tr) {
                 # X10: an extern type is held by reference alone
@@ -8630,14 +8670,25 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             ref := c.P.R.Use(c.fr().File, nsp.Start)
             if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) {
                 # G7: a generic type's arguments, as many as its parameters; a type with none takes none
-                np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
+                dd := c.P.DeclFor(ref.Module, ref.Index)
+                np := c.P.T.DeclParams(dd)
                 tn := c.text(path[path.Len() - 1])
-                if np == 0 and args.Len() > 0 {
+                # G1a: an error-set argument closes the list, given where the type's list ends in an error-set parameter
+                na := args.Len()
+                if na > 0 and generic.IsErrsArgOf(args[na - 1]) {
+                    if not c.P.HasErrParam(dd) {
+                        c.err(args[na - 1].Span(), msgs.ErrSetArgUnwanted(tn))
+                        return false
+                    }
+                    na--
+                }
+                if c.P.HasErrParam(dd) { np-- }
+                if np == 0 and na > 0 {
                     c.err(args[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
                     return false
                 }
-                if np > 0 and args.Len() > 0 and np != args.Len() {
-                    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                if np > 0 and na > 0 and np != na {
+                    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, na))
                     # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
                     if np < args.Len() {
                         for i in range args.Len() - 1 {
@@ -8657,6 +8708,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 return false
             }
             for a in args {
+                if generic.IsErrsArgOf(a) { continue }   # its items are read where it is resolved (ErrorItemKnown)
                 # T25b: "mut" before a type argument is a reference's permission
                 match a {
                     case ast.TypeRef.Perm(psp, of, w, _) {
@@ -9075,6 +9127,11 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
     c.P.InferThroughBounds(b)
     for i in range nv {
         v := b.Vals[i]
+        # QAH: an error-set parameter nothing fallible bound is the empty set
+        if v == types.UnknownT and c.P.ErrVarAt(owner, i) {
+            b.Vals[i] = c.P.ErrSetOf(types.ListId(0))
+            continue
+        }
         if v == types.UnknownT {
             tn := c.text(c.P.T.DeclName(d))
             c.err(nsp, msgs.CtorTypeArgsNotInferable(tn, tn))
@@ -9278,16 +9335,28 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         c.P.InferThroughBounds(b)
     }
     # D16a: a lambda checked against its parameter as far as the other arguments bound it; a variable reached only
-    # through its result is then inferred from it
+    # through its result is then inferred from it. An error-set variable is left open for it (QAH): the lambda's body
+    # says what it fails with, which the variable takes on beside what else binds it
     for i in lambdas {
         part := Array<types.TypeId>(nv)
-        for j in range nv { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(owner, j, types.ReadOnly) }
+        for j in range nv {
+            part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT and not c.P.ErrVarAt(owner, j) else c.P.T.Var(owner, j, types.ReadOnly)
+        }
         pk := i + k0w
         if pk >= ps.Len() { continue }
         e := c.lambda(args[i].Span(), lambdaOf(args[i])!, c.P.Subst(ps[pk], owner, c.P.T.List(part)))
-        if typeOf(e) != types.UnknownT { c.unifySoft(ps[pk], typeOf(e), b) }
+        if typeOf(e) != types.UnknownT {
+            c.unifySoft(ps[pk], typeOf(e), b)
+            if c.P.T.KindOf(ps[pk]) == types.Kind.Func and c.P.T.KindOf(typeOf(e)) == types.Kind.Func {
+                c.P.UnifyErrors(c.P.T.Errors(ps[pk]), c.P.T.Errors(typeOf(e)), b)
+            }
+        }
         vals[i] = e
         c.P.InferThroughBounds(b)
+    }
+    # QAH: an error-set variable nothing fallible bound is the empty set - its instance cannot fail by it
+    for i in range nv {
+        if b.Vals[i] == types.UnknownT and c.P.ErrVarAt(owner, i) { b.Vals[i] = c.P.ErrSetOf(types.ListId(0)) }
     }
     for i in range nv {
         if b.Vals[i] == types.UnknownT {
@@ -9340,6 +9409,14 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     if not c.instancesMet(c.P.InstanceSig(inst), nsp) { return c.unknown(sp) }
     if not c.fnBodies.Has(inst) { c.instsOf.Put(f, made + 1) }
     id := c.fnBody(inst)
+    # QAH: a lambda whose set bound an error-set variable fails, as a value, with the set its parameter is given
+    ips := c.P.T.Items(c.P.T.Params(c.P.InstanceSig(inst)))
+    for i in lambdas {
+        pk := i + k0w
+        if pk < ips.Len() and pk < ps.Len() and c.P.T.KindOf(ps[pk]) == types.Kind.Func and c.listMentions(c.P.T.Errors(ps[pk]), owner) {
+            vals[i] = c.lambdaErrs(vals[i], c.P.T.Errors(ips[pk]))
+        }
+    }
     # the arguments typed for inference, a hole where an argument is checked against its bound parameter instead
     pv := Array<typed.Expr&>(vals.Len(), c.hole)
     for i in range vals.Len() {
@@ -11363,6 +11440,24 @@ fn (c mut Checker&) caught(mark I64, end I64, cls List<typed.Clause&>&) I64 {
 
 # a catch clause's item: an error type, or one of its words (R10); a named set every entry it stands for (T19a)
 fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
+    # QAH: an error-set parameter takes every entry of the set the instance binds it to - none, for the empty set
+    if p.Parts.Len() == 1 and c.fr().Ctx.Vars.Has(p.Parts[0]) {
+        v := c.P.ErrorSetItem(c.fr().Ctx, p)
+        if c.P.T.KindOf(v) == types.Kind.ErrSet {
+            for e in c.P.T.Items(c.P.T.ErrSetItems(v)) {
+                if c.P.T.KindOf(e) == types.Kind.ErrWords {
+                    m := c.P.T.ErrMask(e)
+                    for w in range 64 {
+                        if (m & (U64(1) << w)) != 0 { items.Push(typed.Item(c.P.T.ErrOf(e), w)) }
+                    }
+                } else if c.P.T.KindOf(e) == types.Kind.Named {
+                    items.Push(typed.Item(e, -1))
+                }
+            }
+            return
+        }
+        if c.P.IsErrVar(v) { return }
+    }
     et := c.P.ErrorType(c.fr().Ctx, p)
     if et != types.UnknownT {
         if not c.P.IsErrorSet(et) {
@@ -13556,7 +13651,8 @@ fn (c mut Checker&) iterShaped(m I64) Bool {
     r := c.P.T.Result(sig)
     if r == types.VoidT or r == types.NoreturnT or c.P.T.KindOf(r) == types.Kind.Tuple { return false }
     for e in c.P.T.Items(c.P.T.Errors(sig)) {
-        if e != types.DefaultErrT and c.text(c.P.T.DeclName(c.P.T.DeclOf(c.P.T.ErrOf(e)))) == "Exhausted" { return true }
+        if c.P.T.KindOf(c.P.T.ErrOf(e)) != types.Kind.Named { continue }   # the inferred mark, an error-set variable (QAH)
+        if c.text(c.P.T.DeclName(c.P.T.DeclOf(c.P.T.ErrOf(e)))) == "Exhausted" { return true }
     }
     return c.infersErrs(sig)
 }
@@ -13682,9 +13778,10 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
         inferErrs = true
     } else if f.S.HasErrors {
         errs = c.P.ErrorList(c.fr().Ctx, true, f.S.Errors)
-    } else if w != types.UnknownT {
+    } else if w != types.UnknownT and not c.listMentions(c.P.T.Errors(w), -1) {
         errs = c.P.T.Errors(w)
     } else {
+        # QAH: an expected set naming a generic call's error-set variable supplies nothing - the body says, and binds it
         inferErrs = true
     }
     # with nothing expected every parameter has a scope of its own and a result is built: the plain scopes (O4b, O13)
@@ -13726,6 +13823,27 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     # with nothing expected the value renders with its own parameters' names (E11a); else it is the type expected
     vt := c.P.T.WithNames(ty, c.P.SigNames(f.S)) if w == types.UnknownT else c.P.T.WithNames(ty, c.P.T.NamesIdOf(w))
     return typed.Expr.Fn(sp, vt, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
+}
+
+# a lambda's value given a wider error set (QAH): what its parameter's error-set variable was bound to, its own among
+# them - its body's codes are counted by it, as by an inferred set (R6)
+fn (c mut Checker&) lambdaErrs(e typed.Expr?&c, errs types.ListId) typed.Expr?&c {
+    if e is null { return e }
+    match e {
+        case typed.Expr.Fn(sp, vt, fv) {
+            match fv {
+                case typed.FnVal.Lambda(id, _, _) {
+                    if c.P.T.Errors(vt) == errs { return e }
+                    b := c.Bodies[I64(id)]
+                    b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), c.P.T.Result(b.Ty), errs, c.P.T.ScopesOf(b.Ty))
+                    nt := c.P.T.Func(c.P.T.Params(vt), c.P.T.Result(vt), errs, c.P.T.ScopesOf(vt), c.P.T.NamesIdOf(vt))
+                    return typed.Expr.Fn(sp, nt, fv)
+                }
+                nomatch { return e }
+            }
+        }
+        nomatch { return e }
+    }
 }
 
 # T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
@@ -14838,9 +14956,9 @@ fn (c mut Checker&) caseTypeWritten(tr ast.TypeRef&, say Bool = true) Bool {
                 return false
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
-                np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
-                if np != args.Len() {
-                    if say { c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), np, args.Len())) }
+                ad := c.P.DeclFor(ref.Module, ref.Index)
+                if not c.P.ArgsFit(ad, args) {
+                    if say { c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(ad), generic.WrittenTypes(args))) }
                     return false
                 }
             }

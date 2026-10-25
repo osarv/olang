@@ -41,18 +41,21 @@ fn (a Array<T>&) Contains(sub Array<T>&) Bool {
     return false
 }
 
+# The helpers taking a callback fail with what it fails with (E, QAH): with nothing, for one that cannot, and then they
+# are called with no try. One that fails stops at that element and passes the error on.
+
 # true when keep holds for at least one element
-fn (a Array<T>&) Some(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for x in a {
-        if keep(x) { return true }
+        if try keep(x) { return true }
     }
     return false
 }
 
 # true when keep holds for every element - so for none, of an empty array
-fn (a Array<T>&) Every(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for x in a {
-        if not keep(x) { return false }
+        if not try keep(x) { return false }
     }
     return true
 }
@@ -67,39 +70,39 @@ type ArrayError error {
 
 # the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
 # read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Some(f)" only asks
-fn (a Array<T>&) FindIndex(keep fn(x T) Bool) I64 ? ArrayError {
+fn (a Array<T>&) FindIndex<? E>(keep fn(x T) Bool ? E) I64 ? ArrayError, E {
     for i, x in a {
-        if keep(x) { return i }
+        if try keep(x) { return i }
     }
     error ArrayError.NOT_FOUND
 }
 
 # how many elements keep holds for
-fn (a Array<T>&) Count(keep fn(x T) Bool) I64 {
+fn (a Array<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
     n I64 = 0
     for x in a {
-        if keep(x) { n++ }
+        if try keep(x) { n++ }
     }
     return n
 }
 
 # a new array of f applied to every element, in order. Made filled with the first result rather than with U's zero value,
 # so a U without one (D13c) maps as any other
-fn (a Array<T>&) Map<U>(f fn(x T) U) Array<U> {
+fn (a Array<T>&) Map<U ? E>(f fn(x T) U ? E) Array<U> ? E {
     if a.Len() == 0 { return Array<U>(0) }           # no element, so no zero value of U is needed (D13c)
-    out := Array<U>(a.Len(), f(a[0]))
+    out := Array<U>(a.Len(), try f(a[0]))
     for i in range 1, a.Len() {
-        out[i] = f(a[i])
+        out[i] = try f(a[i])
     }
     return out
 }
 
 # a new array of the elements keep holds for, in order. keep runs once per element
-fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
+fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
     marks := Array<Bool>(a.Len())
     n I64 = 0
     for i, x in a {
-        marks[i] = keep(x)
+        marks[i] = try keep(x)
         if marks[i] { n++ }
     }
     if n == 0 { return Array<T>(0) }                 # no element, so no zero value of T is needed (D13c)
@@ -115,10 +118,10 @@ fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
 }
 
 # the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
-fn (a Array<T>&) Fold<U>(init U, f fn(acc U, x T) U) U {
+fn (a Array<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
     acc U = init
     for x in a {
-        acc = f(acc, x)
+        acc = try f(acc, x)
     }
     return acc
 }
@@ -213,19 +216,19 @@ fn (a Array<T>&) ToList() List<T>& {
 # then moved where it puts them, one cycle of the permutation at a time, while the block is in the cache - and the
 # blocks are merged in place by rotation (SymMerge, Go's sort.Stable), so it allocates only a block's positions and
 # costs O(n log n log(n / 12288)): a few times the plain merge on a million elements
-fn (a mut Array<T>&) Sort(less fn(x T, y T) Bool) {
+fn (a mut Array<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
     if a.Len() < 2 { return }
     match T {
-        case I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64, Bool, Char { sortMergeBuffered(a, less) }
-        nomatch { sortByPositions(a, less) }
+        case I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64, Bool, Char { try sortMergeBuffered(a, less) }
+        nomatch { try sortByPositions(a, less) }
     }
 }
 
 # Sort for elements a scratch array cannot hold
-fn sortByPositions<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
+fn sortByPositions<T ? E>(a mut Array<T>&, less fn(x T, y T) Bool ? E) ? E {
     n I64 = a.Len()
     if n <= sortRun {                        # one run: insertion-sorted where it is, nothing allocated
-        sortInsertion(a, 0, n, less)
+        try sortInsertion(a, 0, n, less)
         return
     }
     pos := Array<I64>(sortBlock if n > sortBlock else n)
@@ -235,7 +238,7 @@ fn sortByPositions<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
         if hi > n { hi = n }
         p := pos[:hi - lo]
         for k in range hi - lo { p[k] = lo + k }
-        sortMergeBuffered(p, fn(i I64, j I64) Bool { return less(a[i], a[j]) })
+        try sortMergeBuffered(p, fn(i I64, j I64) Bool { return try less(a[i], a[j]) })
         sortPermute(a, lo, p)
         lo = hi
     }
@@ -245,7 +248,7 @@ fn sortByPositions<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
         for lo + block < n {
             hi I64 = lo + 2 * block
             if hi > n { hi = n }
-            sortMerge(a, lo, lo + block, hi, less)
+            try sortMerge(a, lo, lo + block, hi, less)
             lo = hi
         }
         block = block * 2
@@ -253,14 +256,14 @@ fn sortByPositions<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
 }
 
 # the merge sort itself, over elements a scratch array of the call's own may hold (Sort)
-fn sortMergeBuffered<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
+fn sortMergeBuffered<T ? E>(a mut Array<T>&, less fn(x T, y T) Bool ? E) ? E {
     n I64 = a.Len()
     run I64 = sortRun
     lo I64 = 0
     for lo < n {
         hi I64 = lo + run
         if hi > n { hi = n }
-        sortInsertion(a, lo, hi, less)
+        try sortInsertion(a, lo, hi, less)
         lo = hi
     }
     if n <= run { return }
@@ -269,25 +272,25 @@ fn sortMergeBuffered<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
     for lo < n {
         hi I64 = lo + sortBlock
         if hi > n { hi = n }
-        sortMergeRuns(a, scratch, lo, hi, run, less)
+        try sortMergeRuns(a, scratch, lo, hi, run, less)
         lo = hi
     }
-    sortMergeRuns(a, scratch, 0, n, sortBlock, less)
+    try sortMergeRuns(a, scratch, 0, n, sortBlock, less)
 }
 
 # merges the sorted runs of a[from:to], each "run" long but the last, pairwise into runs twice as long until one is left
-fn sortMergeRuns<T>(a mut Array<T>&, scratch mut Array<T>&, from I64, to I64, run I64, less fn(x T, y T) Bool) {
+fn sortMergeRuns<T ? E>(a mut Array<T>&, scratch mut Array<T>&, from I64, to I64, run I64, less fn(x T, y T) Bool ? E) ? E {
     for run < to - from {
         lo I64 = from
         for lo + run < to {
             m I64 = lo + run
             hi I64 = m + run
             if hi > to { hi = to }
-            if less(a[m], a[m - 1]) {        # already in order when the right run's first is not less than the left's last
+            if try less(a[m], a[m - 1]) {        # already in order when the right run's first is not less than the left's last
                 if m - lo <= hi - m {
-                    sortMergeForward(a, scratch, lo, m, hi, less)
+                    try sortMergeForward(a, scratch, lo, m, hi, less)
                 } else {
-                    sortMergeBackward(a, scratch, lo, m, hi, less)
+                    try sortMergeBackward(a, scratch, lo, m, hi, less)
                 }
             }
             lo = hi
@@ -298,14 +301,14 @@ fn sortMergeRuns<T>(a mut Array<T>&, scratch mut Array<T>&, from I64, to I64, ru
 
 # merges the sorted runs a[lo:m] and a[m:hi], the left one the shorter: it is copied into scratch and merged back from
 # the front, the right run's element taken only when strictly less - so equal ones keep their order
-fn sortMergeForward<T>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMergeForward<T ? E>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool ? E) ? E {
     nl I64 = m - lo
     for k in range nl { scratch[k] = a[lo + k] }
     i I64 = 0
     j I64 = m
     k I64 = lo
     for i < nl and j < hi {
-        if less(a[j], scratch[i]) {
+        if try less(a[j], scratch[i]) {
             a[k] = a[j]
             j++
         } else {
@@ -323,14 +326,14 @@ fn sortMergeForward<T>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi
 
 # the same with the right run the shorter: it is copied into scratch and merged back from the end, the left run's
 # element taken only when the right one is strictly less than it
-fn sortMergeBackward<T>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMergeBackward<T ? E>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool ? E) ? E {
     nr I64 = hi - m
     for k in range nr { scratch[k] = a[m + k] }
     i I64 = m - 1
     j I64 = nr - 1
     k I64 = hi - 1
     for i >= lo and j >= 0 {
-        if less(scratch[j], a[i]) {
+        if try less(scratch[j], a[i]) {
             a[k] = a[i]
             i--
         } else {
@@ -352,11 +355,11 @@ sortRun I64 = 24
 sortBlock I64 = sortRun << 9
 
 # sorts a[lo:hi] by insertion: each element shifted down past those it is less than
-fn sortInsertion<T>(a mut Array<T>&, lo I64, hi I64, less fn(x T, y T) Bool) {
+fn sortInsertion<T ? E>(a mut Array<T>&, lo I64, hi I64, less fn(x T, y T) Bool ? E) ? E {
     for i in range lo + 1, hi {
         x := a[i]
         j I64 = i
-        for j > lo and less(x, a[j - 1]) {
+        for j > lo and try less(x, a[j - 1]) {
             a[j] = a[j - 1]
             j--
         }
@@ -392,13 +395,13 @@ fn sortSwap<T>(a mut Array<T>&, i I64, j I64) {
 }
 
 # merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
-fn sortMerge<T>(a mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMerge<T ? E>(a mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool ? E) ? E {
     if m - lo == 1 {
         i I64 = m
         j I64 = hi
         for i < j {
             h I64 = (i + j) / 2
-            if less(a[h], a[lo]) { i = h + 1 } else { j = h }
+            if try less(a[h], a[lo]) { i = h + 1 } else { j = h }
         }
         for k in range lo, i - 1 { sortSwap(a, k, k + 1) }
         return
@@ -408,7 +411,7 @@ fn sortMerge<T>(a mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) 
         j I64 = m
         for i < j {
             h I64 = (i + j) / 2
-            if not less(a[m], a[h]) { i = h + 1 } else { j = h }
+            if not try less(a[m], a[h]) { i = h + 1 } else { j = h }
         }
         k I64 = m
         for k > i {
@@ -428,12 +431,12 @@ fn sortMerge<T>(a mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) 
     p I64 = n - 1
     for start < r {
         c I64 = (start + r) / 2
-        if not less(a[p - c], a[c]) { start = c + 1 } else { r = c }
+        if not try less(a[p - c], a[c]) { start = c + 1 } else { r = c }
     }
     end I64 = n - start
     if start < m and m < end { sortRotate(a, start, m, end) }
-    if lo < start and start < mid { sortMerge(a, lo, start, mid, less) }
-    if mid < end and end < hi { sortMerge(a, mid, end, hi, less) }
+    if lo < start and start < mid { try sortMerge(a, lo, start, mid, less) }
+    if mid < end and end < hi { try sortMerge(a, mid, end, hi, less) }
 }
 
 # swaps the runs a[lo:m] and a[m:hi]

@@ -625,6 +625,16 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
             for i in range args.Len() {
                 a := args[i]
                 match a {
+                    # QAH: "? E" in a receiver's arguments introduces its error-set variable, as a bare name does
+                    case ast.TypeRef.Errs(_, items) {
+                        for e in items {
+                            if e.Parts.Len() != 1 { continue }
+                            n := e.Parts[0]
+                            j := try r.scope.Get(n) catch default -1
+                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
+                            if not known and r.typeIn(r.mi, n).Kind == What.None { r.introduce(e.Sp, n, null) }
+                        }
+                    }
                     case ast.TypeRef.Named(asp, ap, aargs) {
                         if ap.Len() == 1 and aargs.Len() == 0 {
                             n := ap[0]
@@ -1280,6 +1290,9 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
         }
         case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
         case ast.TypeRef.Any(_, of) { r.typeRef(of) }
+        case ast.TypeRef.Errs(_, items) {
+            for e in items { r.path(e) }
+        }
     }
 }
 

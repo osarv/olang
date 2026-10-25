@@ -1,116 +1,174 @@
-# T19, T19a, R11b, R3a: error types declared as types, named error sets, and the name a catch clause gives the error it
-# took. Each computation is done twice - as a global the evaluator bakes and an assert it decides while compiling (K2,
-# S18c), and on an input the evaluator cannot see (Live, a mutable global), at run time - so the two must agree.
+# error-set parameters (G1a, QAH): a generic's list ending in "? E", E standing wherever an error set is written and
+# bound, like a type variable, to what the function values and iterators given to it fail with - their union - or to
+# the empty set, where nothing given can fail, so that the call needs no try
 
-import "std/os"
-
-type ParseErr error { EMPTY, BAD }
-type NetErr error {
-    DOWN
-    SLOW
-}
-# a set: its members, flattened, then its own words
-type LoadErr error os.Error, ParseErr { TIMEOUT }
-# a set of a set and a single word
-type AnyErr error LoadErr, NetErr.DOWN
-
-Live mut I64 = 0
-
-fn load(n I64) I64 ? LoadErr {
-    if n == 0 { error ParseErr.EMPTY }
-    if n == 1 { error ParseErr.BAD }
-    if n == 2 { error LoadErr.TIMEOUT }
-    if n == 3 { error os.Error.DENIED }
-    return n * 10
+type Bad error {
+    NEG
+    BIG
 }
 
-fn fetch(n I64) I64 ? AnyErr {
-    if n == 9 { error NetErr.DOWN }
-    return try load(n)
+type Other error { ODD }
+
+# a named set (T19a) as an error-set argument
+type Both error Bad, Other
+
+fn parsePos(x I64) I64 ? Bad {
+    if x < 0 { error Bad.NEG }
+    return x
 }
 
-# the same set written out
-fn loadAgain(n I64) I64 ? os.Error, ParseErr, LoadErr { return try load(n) }
-
-fn label(n I64) String {
-    return try $load(n) catch e default ("failed: " $e)
+fn even(x I64) I64 ? Other {
+    if x % 2 != 0 { error Other.ODD }
+    return x
 }
 
-fn kind(n I64) I64 {
-    return try fetch(n) catch e {
-        match e {
-            case ParseErr.EMPTY { return 100 }
-            case ParseErr { return 200 }
-            case LoadErr.TIMEOUT { return 300 }
-            case NetErr { return 400 }
-            nomatch { return 500 }
-        }
+fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E { return try f(x) }
+
+test "G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail" {
+    assert apply(3, fn(x I64) I64 { return x * 2 }) == 6
+    assert (try apply(3, parsePos) catch Bad default -1) == 3
+    assert (try apply(-3, parsePos) catch Bad default -1) == -1
+    assert (try apply(-3, fn(x I64) I64 { return try parsePos(x) }) catch Bad default -9) == -9
+    assert (try apply(3, even) catch Other default -1) == -1
+}
+
+# the empty set and a set are two instances (G16a): the one apply at the empty set cannot fail
+fn twice(x I64) I64 { return apply(x, fn(v I64) I64 { return v + v }) }
+
+test "G1a: an instance at the empty set is called without try" {
+    assert twice(21) == 42
+}
+
+test "QAH: the helpers take callbacks that fail" {
+    a := I64[1, 2, 3, 4]
+    assert a.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) == 10
+    assert (try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == 10
+    b := I64[1, -2, 3]
+    assert (try b.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
+    assert (try b.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
+    assert (try a.Some(fn(x I64) Bool { return try even(x) == 2 }) catch Other default false) == false
+    assert (try I64[2, 4].Every(fn(x I64) Bool { return try even(x) > 0 }) catch Other default false)
+    assert (try a.Count(fn(x I64) Bool { return try parsePos(x) > 1 }) catch Bad default -1) == 3
+    assert (try a.Map(fn(x I64) I64 { return try parsePos(x) * 10 }) catch Bad default I64[]) == I64[10, 20, 30, 40]
+    assert (try b.Filter(fn(x I64) Bool { return try parsePos(x) > 0 }) catch Bad default I64[7]) == I64[7]
+    assert (try a.Iter().Map(fn(x I64) I64 { return try parsePos(x) }) catch Bad default List<I64>()).Len() == 4
+    assert (try a.FindIndex(fn(x I64) Bool { return try parsePos(x) == 3 }) catch Bad default -1 catch ArrayError default -2) == 2
+}
+
+test "QAH: a comparator that fails stops the sort" {
+    a := I64[3, 1, 2]
+    try a.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { unreachable }
+    assert a == I64[1, 2, 3]
+    b := I64[3, -1, 2]
+    failed := false
+    try b.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { failed = true }
+    assert failed
+    l := List<I64>()
+    l.Push(5)
+    l.Push(4)
+    try l.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < y }) catch Bad { unreachable }
+    assert l[0] == 4
+}
+
+# an iterator that can fail on its way (QAH): its Next fails with Bad beside Exhausted
+type Reader struct(of Array<I64>&) {
+    xs Array<I64>&of = of
+    at I64 = 0
+}
+
+fn (r mut Reader&) Next() I64 ? Bad, Exhausted {
+    if r.at == r.xs.Len() { error Exhausted.END }
+    r.at++
+    if r.xs[r.at - 1] < 0 { error Bad.NEG }
+    return r.xs[r.at - 1]
+}
+
+fn readAll(xs Array<I64>&) I64 ? Bad {
+    r := Reader(xs)
+    s I64 = 0
+    for x in try r { s += x }
+    return s
+}
+
+# a function over any iterator failing with Bad, its set written in the constraint
+fn total<I Iterator<I64 ? Bad>>(it mut I&) I64 ? Bad {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
+}
+
+test "QAH: an iterator's own errors reach what walks it" {
+    assert (try readAll(I64[1, 2, 3]) catch Bad default -1) == 6
+    assert (try readAll(I64[1, -2, 3]) catch Bad default -1) == -1
+    r := Reader(I64[4, 5])
+    assert (try r.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 9
+    # the iterator's errors and the callback's, together
+    q := Reader(I64[4, 5])
+    assert (try q.Fold(0, fn(acc I64, x I64) I64 { return acc + try even(x) }) catch Bad default -1 catch Other default -2) == -2
+    p := Reader(I64[1, 2, 3, 4])
+    assert (try p.Take(2).Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 3
+    s := Reader(I64[10, 20])
+    assert (try total(s) catch Bad default -1) == 30
+    # an iterator that cannot fail meets "Iterator<I64 ? Bad>" too: its set is held by Bad, Exhausted (T31)
+    assert (try total(I64[7, 8].Iter()) catch Bad default -1) == 15
+    w := Reader(I64[1, -1])
+    assert (try w.ToList() catch Bad default List<I64>()).Len() == 0
+    v := Reader(I64[1, 2])
+    assert (try v.ToList() catch Bad default List<I64>()).Len() == 2
+}
+
+# a struct type over an error set: what it runs fails with what it holds fails with
+type Retry<T ? E> struct(f fn() T ? E, times I64) {
+    run fn() T ? E = f
+    n I64 = times
+}
+
+fn (r Retry<T ? E>&) Run() T ? E {
+    for i in range r.n - 1 {
+        v := try r.run() catch E { continue }
+        return v
     }
+    return try r.run()
 }
 
-fn kindValue(n I64) I64 {
-    return try fetch(n) catch e default (match e {
-        case ParseErr => 1
-        case LoadErr.TIMEOUT, NetErr.DOWN => 2
-        case os.Error => 3
-    })
+counter mut I64 = 0
+
+fn flaky() I64 ? Bad {
+    counter++
+    if counter < 3 { error Bad.BIG }
+    return counter
 }
 
-# what a test narrows: after "e != ParseErr" leaves, e can only be ParseErr, which the set promises
-fn onlyParse(n I64) I64 ? ParseErr {
-    return try load(n) catch e {
-        if e != ParseErr { return -1 }
-        error e
-    }
+test "G1a: a type's error-set parameter, and catch E in its methods" {
+    counter = 0
+    r := Retry<I64 ? Bad>(flaky, 5)
+    assert (try r.Run() catch Bad default -1) == 3
+    counter = 0
+    q := Retry<I64 ? Bad>(flaky, 2)
+    assert (try q.Run() catch Bad default -1) == -1
+    sure := Retry<I64>(fn() I64 { return 7 }, 1)
+    assert sure.Run() == 7
 }
 
-fn twice(n I64) I64 ? ParseErr {
-    return try onlyParse(n) catch ParseErr.BAD default 7 catch e { error e }
+fn either<I Iterator<I64 ? Both>>(it mut I&) I64 ? Both {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
 }
 
-BakedLabel := label(0)
-BakedTimeout := label(2)
-BakedKinds := I64[kind(0), kind(1), kind(2), kind(3), kind(9), kind(5)]
-BakedValues := I64[kindValue(1), kindValue(2), kindValue(3), kindValue(9)]
-BakedTwice := I64[try twice(0) catch ParseErr e default (10 if e == ParseErr.EMPTY else 20), try twice(1) catch default -9, try twice(3) catch default -9]
-
-test "an error type and a set are declared as types, and a set stands for its members" {
-    f fn(n I64) I64 ? os.Error, ParseErr, LoadErr = load
-    assert (try f(4) catch default 0) == 40
-    g fn(n I64) I64 ? LoadErr = loadAgain
-    assert (try g(1 + Live) catch ParseErr.BAD default -1 catch default 0) == -1
-    assert (try fetch(9 + Live) catch AnyErr default 1) == 1
-    assert (try fetch(Live) catch LoadErr default 2 catch NetErr default 3) == 2
+test "T19a: a named set as an error-set argument" {
+    r := Reader(I64[1, 2])
+    assert (try either(r) catch Bad default -1 catch Other default -2) == 3
 }
 
-test "a caught error renders as its name prints, decided while compiling and at run time alike" {
-    assert BakedLabel == "failed: ParseErr.EMPTY"
-    assert BakedTimeout == "failed: LoadErr.TIMEOUT"
-    assert label(0) == "failed: ParseErr.EMPTY"
-    assert label(Live + 3) == "failed: os.Error.DENIED"
-    assert label(Live + 1) == "failed: ParseErr.BAD"
-    assert label(Live + 5) == "50"
-}
+# K1: the evaluator gives what the run time gives
+Baked I64 = try I64[1, 2, 3].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+BakedBad I64 = try I64[1, -2].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+BakedNone I64 = apply(5, fn(x I64) I64 { return x + 1 })
 
-test "a caught error is compared, narrowed and matched" {
-    assert BakedKinds == I64[100, 200, 300, 500, 400, 50]
-    for i, n in I64[0, 1, 2, 3, 9, 5] { assert kind(n + Live) == BakedKinds[i] }
-    assert BakedValues == I64[1, 2, 3, 2]
-    assert kindValue(Live + 9) == 2 and kindValue(Live + 3) == 3
-}
-
-test "a caught error is raised again, held to the set the narrowing leaves" {
-    assert BakedTwice == I64[10, 7, -1]
-    assert (try onlyParse(Live) catch ParseErr e default (1 if e == ParseErr.EMPTY else 2)) == 1
-    assert (try twice(Live + 1) catch default -1) == 7
-    assert (try onlyParse(Live + 3) catch default -9) == -1
-}
-
-test "a clause's name reaches its block and its default; each clause its own" {
-    r := try load(Live + 2) catch ParseErr p default ($p).Len() catch LoadErr.TIMEOUT t {
-        assert $t == "LoadErr.TIMEOUT"
-    } default 99
-    assert r == 99
-    s := try $load(Live) catch e default $e
-    assert s == "ParseErr.EMPTY"
+test "K1: error-set instances are evaluated while compiling" {
+    assert Baked == 6 and BakedBad == -1 and BakedNone == 6
+    assert (try apply(-1, parsePos) catch Bad default 99) == 99
+    rt := I64[1, -2]
+    assert (try rt.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == BakedBad
 }

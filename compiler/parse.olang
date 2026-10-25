@@ -881,13 +881,22 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
     p.skip = false
     l mut List<ast.TypeParam&>&p = List<ast.TypeParam&>()
     for {
+        # G1a: "? E" closes the list - its error-set parameter, a name alone
+        if p.accept(token.Tok.Question) {
+            eat := p.here()
+            en := try p.name()
+            p.vars.Push(en)
+            l.Push(ast.TypeParam(p.from(eat), en, null, Array<ast.TypeRef&>(0), true))
+            break
+        }
         pat := p.here()
         pn := try p.name()
         p.vars.Push(pn)
         ty ast.TypeRef?&p = null
         also mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
         # its constraint: a trait, or several side by side - their intersection (G19)
-        for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
+        for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() and
+            not p.sees(token.Tok.Question) {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
@@ -897,6 +906,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
             if ty is null { ty = t } else { also.Push(t) }
         }
         l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray()))
+        if p.sees(token.Tok.Question) { continue }
         if not try p.sep(token.Tok.Gt) { break }
     }
     p.skip = wasSkip
@@ -1315,13 +1325,31 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
     defer { p.item = wasItem }
     from := p.tys.Len()
     for {
+        # G8, QAH: "? A, B" closes the list - the error set given for the type's error-set parameter
+        if p.sees(token.Tok.Question) {
+            p.tys.Push(try p.errsArg())
+            break
+        }
         p.tys.Push(try p.typeArg())
+        if p.sees(token.Tok.Question) { continue }
         if not try p.sep(token.Tok.Gt) { break }
     }
     p.skip = wasSkip
     p.noGt = wasNoGt
     try p.closeAngle()
     return gather(p.tys, from)
+}
+
+# an error-set argument (G8, QAH): "?" and the error set's items, on its line, up to the list's ">"
+fn (p mut Parser&) errsArg() ast.TypeRef&p ? Fail {
+    at := p.here()
+    try p.want(token.Tok.Question)
+    l mut List<ast.Path&>&p = List<ast.Path&>()
+    for {
+        l.Push(try p.path())
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    return ast.TypeRef.Errs(p.from(at), l.ToArray())
 }
 
 # a type argument: a type (G8) - a length is never one (T7)

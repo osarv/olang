@@ -272,6 +272,12 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
     was := w.item
     w.item = true
     for i, x in tps {
+        if x.ErrSet {
+            # G1a: "? E" closes the list
+            w.put(" ? " if i > 0 else "? ")
+            w.name(x.Name)
+            continue
+        }
         if i > 0 { w.put(", ") }
         w.name(x.Name)
         if x.Ty is not null {
@@ -384,6 +390,18 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
     was := w.item
     w.item = true
     for i, t in ts {
+        match t {
+            # QAH: an error-set argument closes a type-argument list, "<T ? A, B>"
+            case ast.TypeRef.Errs(_, items) {
+                w.put(" ? " if i > 0 else "? ")
+                for k, e in items {
+                    if k > 0 { w.put(", ") }
+                    w.path(e)
+                }
+                continue
+            }
+            nomatch { }
+        }
         if i > 0 { w.put(", ") }
         w.ty(t)
     }
@@ -423,6 +441,13 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         case ast.TypeRef.Any(_, of) {
             w.put("any ")
             w.ty(of)
+        }
+        case ast.TypeRef.Errs(_, items) {
+            w.put("? ")
+            for k, e in items {
+                if k > 0 { w.put(", ") }
+                w.path(e)
+            }
         }
         case ast.TypeRef.Perm(_, of, writable, owned) {
             if owned { w.put("own") }

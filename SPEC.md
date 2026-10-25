@@ -905,7 +905,9 @@ and name** (T29), matching the identity rule the type itself has, so two modules
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type and whether it is reference-shaped — every part of what makes an array type distinct (T25a) - and, bound by
 inference to an array value of known length (D9b), by that length, which lays it out. An instance (G29) is
-distinguished the same way by the lengths it was compiled for. A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
+distinguished the same way by the lengths it was compiled for. An error-set argument (G1a) is distinguished by the set it
+stands for - the error types and words it holds, in no order - so `Iterator<I64>` and `Iterator<I64 ? io.Error>` are two
+instantiations, and a function's instances at two error sets are two. A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
 and where its references live (T22); a reference argument by its permission (T25b), so `List<Node&>` and
 `List<mut Node&>` are two; and a declared array type from the array it is declared over (T29a). No argument is too long to tell
 apart: there is no limit on how deeply type arguments nest short of G17's.
@@ -1420,9 +1422,11 @@ arguments as type variables, bound through the constrained type's methods (`<I I
 method of a generic type (`fn (b mut Box<T>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
-**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { END }` and `type Iterator<T> trait {
-mut Next() T ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
-`Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
+**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { END }` and `type Iterator<T ? E> trait {
+mut Next() T ? E, Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
+`Exhausted` once there are none - running out is an error like any other, never a flag beside a value - and with what
+`E` holds where it can fail on its way (G1a): a file's lines are an `Iterator<String ? io.Error>`. `Iterator<T>` is an
+iterator failing with nothing but `Exhausted`, and one failing with more does not meet it. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
 `v := try it.Next() catch Exhausted { break }`.
 The prelude declares `type Indexable<T> trait { At(i I64) T  Len() I64 }` and, as its default (M19e), `Iter()`
@@ -1434,7 +1438,9 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
-left - `m.Keys().ToList()`.
+left - `m.Keys().ToList()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
+(G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
+`Chain`) fail as the iterators they wrap do.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }`; and
@@ -2270,7 +2276,11 @@ with no import, and no module may declare a type, a global, a function, a local 
 (D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
-(T29) and gives that its methods.
+(T29) and gives that its methods. The prelude's methods taking a callback - an array's `Some`, `Every`, `FindIndex`,
+`Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `List`'s and a `Vec`'s `Sort`, the iterator helpers
+(T35b) - fail with what the callback fails with, an error-set parameter (G1a) bound to it, and stop where it fails
+(a `Sort` leaving its elements permuted): `try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parse(x) })`; with
+a callback that cannot fail they cannot either, and are called without `try`.
 
 **The numbers.** The prelude's constants are `Pi`, `Euler` (e), `Inf` (the positive infinity) and `NaN` (the quiet NaN
 with no sign and no payload), each an `F64`: `F32(Pi)` is the `F32` nearest pi, and other constants are computed where
@@ -4943,7 +4953,9 @@ terms too, run on the task's thread.
 least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of
-that error type; an item naming a named set (T19a) matches everything the set stands for (`catch LoadError`). Several
+that error type; an item naming a named set (T19a) matches everything the set stands for (`catch LoadError`), and one
+naming an error-set parameter (G1a) everything the set it is bound to holds - nothing, for the empty set, a clause
+covering nothing in one instance of a generic and something in another (R8). Several
 `catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on the clause's line (`catch
 A, B.X`). A clause may begin on a line after the one before it. An `IDEN` after the items, with no `,` before it,
 names the error the clause took (R11b); `catch e { }` with no items is one bare name that names no error type, read as
@@ -7002,8 +7014,9 @@ constructor's (G10d) - or by a method's receiver (G3b), and written as its bare 
 its declaration (G8b):
 
 ```
-fn-type-params ::= "<" list(type-param) ">"
+fn-type-params ::= "<" ( list(type-param) [ errset-param ] | errset-param ) ">"
 type-param     ::= IDEN [ type-expr ]
+errset-param   ::= "?" IDEN
 ```
 
 An `IDEN` alone, or followed by a trait, introduces a type variable (the trait its constraint, G19); followed by any
@@ -7013,6 +7026,28 @@ by value, §12.7). The names of one list are distinct. `IDEN` must not
 name a type the referencing module can name - one it declares or imports by bare name (D2), a prelude type, `Array` or
 a primitive; listing such a name (or declaring it as a generic type's parameter) is a compile-time error, reported once
 where it is written, since `<Point>` would otherwise read as parameterizing over something already concrete.
+
+**G1a (error-set parameters).** A type parameter list - a struct type's, a trait's or a function's or method's, not a
+constructor's - may end in one **error-set parameter**, `? E` after the last type parameter, or alone: `type Iterator<T
+? E> trait`, `fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ?
+E`. A method's receiver introduces one written as its type's error-set argument (G8), as it introduces a type variable
+(G3b): `fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`. `E` stands for a set of errors, bound per instantiation,
+and is written only where an error set is - an item of a signature's, a function type's or a trait method's `? ...`
+(R1, R1b), beside other items (`? E, Exhausted`); a type's error-set argument (G8); a catch clause's item (R11), which
+takes every error the set holds; and a constraint's (`<I Iterator<T ? E>, T ? E>`). Written as a type, or a type
+variable written where an error set is, it is a compile-time error. Where it is written, `E` holds what it is bound to,
+the other items beside it: with `E` bound to `io.Error`, `? E, Exhausted` is `? io.Error, Exhausted`, and with `E` the
+empty set, `? Exhausted`; a set every item of which is `E` bound to the empty set is no set at all, so the function
+cannot fail (R7) and is called with no `try` (R8). An error-set parameter is no stored error: no value holds an error
+(T20), and an instance at one set is compiled as if its sets were written out (G16).
+
+A call binds `E` (G9) to the **union** of what every function value and iterator matched against it fails with -
+beyond the other items of the set it stands in, so `fn(x T) U ? E` matched with a function failing with `ParseError`
+binds `ParseError`, and `Next() T ? E, Exhausted` matched with one failing with `io.Error, Exhausted` binds `io.Error`.
+Two arguments never conflict over it: each adds what it fails with. A lambda given for a parameter whose function type
+names `E` infers its set from its body (D16b) and then fails, as a value, with the set the parameter is given. An `E`
+nothing fallible binds is the **empty set**. A type's error-set argument left out is the empty set too:
+`Iterator<I64>` is `Iterator<I64 ? >`, an iterator that fails with nothing but `Exhausted`.
 
 **G2.** A type variable may carry a reference marker exactly as any type does (T24), and is written as an array's
 element as any type is — `T&`, `Array<T>&`, `Array<T&>&` — and the marker rules of §2.9 apply to it unchanged once the
@@ -7055,8 +7090,8 @@ parameters), and `less` is called inside the body as an ordinary function value.
 `x.Narrow<I32>()`. A call that writes none, so that nothing determines the variable, is a compile-time error at the
 call naming the variable and the form to write (`Narrow<...>(...)`); the declaration itself is no error.
 
-**G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
-is the same for every instantiation.
+**G5.** A generic function's error set (D8) may not mention a type variable - an error-set parameter (G1a) is what
+lets it differ between instantiations, as an inferred set (R1a) does too.
 
 ### 12.3 Generic struct types
 
@@ -7081,9 +7116,12 @@ what a type argument list (G8) supplies positionally; a function's list fixes no
 arguments are inferred (G9) and never written.
 
 **G8.** `type-ref` (T24) is extended to accept a **type argument list**:
-`type-args ::= "<" list(type-expr) ">"`, written immediately after the name and before any reference marker. The
-count must equal the named type's own `type-params` count exactly - `Array`'s being one (T7), so `Array<I32, 3>` is
-that error. A generic
+`type-args ::= "<" ( list(type-expr) [ errset-arg ] | errset-arg ) ">"`, `errset-arg ::= "?" error-list-item { ","
+error-list-item }` (R1), written immediately after the name and before any reference marker. The
+count of types must equal the named type's own type parameters' exactly - `Array`'s being one (T7), so `Array<I32, 3>` is
+that error. A type whose list ends in an error-set parameter (G1a) takes its set after `?`, the last argument -
+`Iterator<String ? io.Error>`, `Retry<I64 ? A, B>`, a named set (T19a) as any item - or, left out, the empty set;
+`?` among the arguments of a type with no error-set parameter is a compile-time error. A generic
 type is never valid without one — a bare reference to a generic type name is a compile-time error.
 Within a `type-args` list a type variable is written as anywhere else (G8b) - bare, so a
 generic declaration may instantiate another generic with its own parameter (`Vec<T>` inside a declaration that

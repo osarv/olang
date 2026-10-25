@@ -243,6 +243,9 @@ type Diag enum {
     ScopeDecl
     TypeVarNamesType
     TypeVarNotInferable
+    TypeVarNotErrorSet
+    ErrVarNotType
+    ErrSetArgUnwanted
     ExternType
     ExportMethod
     ExportGeneric
@@ -1352,6 +1355,15 @@ fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "
 
 # ERR_TYPE_VAR_NOT_INFERABLE
 fn TypeVarNotInferable(text String&, name String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " of " $name " appears in no parameter's type, so the call writes it - " $name "<...>(...)") }
+
+# ERR_TYPE_VAR_NOT_ERROR_SET
+fn TypeVarNotErrorSet(tok String&) Msg { return Msg(Diag.TypeVarNotErrorSet, "G1a", $tok " is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'") }
+
+# ERR_ERR_VAR_NOT_TYPE
+fn ErrVarNotType(tok String&, name String&) Msg { return Msg(Diag.ErrVarNotType, "G1a", $tok " is an error-set parameter, not a type - it stands where an error set is written, '? " $name "'") }
+
+# ERR_ERR_SET_ARG_UNWANTED
+fn ErrSetArgUnwanted(name String&) Msg { return Msg(Diag.ErrSetArgUnwanted, "G1a", $name " has no error-set parameter, so its arguments end in no '?'") }
 
 # ERR_EXTERN_TYPE
 fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }

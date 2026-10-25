@@ -2629,8 +2629,19 @@ fn (s mut Scoper&) aliasBlock(bl typed.Block?&) {
             }
             case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { s.aliasBlock(b) }
             case typed.Stmt.Join(_, jn) { s.aliasBlock(jn.Code) }
+            # "for x in try p" (S9e): the loop a try statement's operand - its hidden cursor declared inside
+            case typed.Stmt.Eval(_, x) { s.aliasExpr(x) }
             case _ { }
         }
+    }
+}
+
+fn (s mut Scoper&) aliasExpr(x typed.Expr?&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Try(_, _, t) { s.aliasExpr(t.X) }
+        case typed.Expr.Seq(_, _, q) { s.aliasBlock(typed.Block(typed.BlockId(-1), q.Stmts)) }
+        case _ { }
     }
 }
 
