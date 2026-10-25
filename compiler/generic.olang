@@ -1240,6 +1240,8 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args), p.T.ShapeFields(t)) }
+        # T32: an any's trait written with the owner's variables ("any Iterator<T>&")
+        case types.Kind.Any { return p.T.Any(p.Subst(p.T.AnyTrait(t), owner, args)) }
         nomatch { return t }
     }
 }
@@ -1270,6 +1272,7 @@ fn (p mut Program&) unsubst(t types.TypeId, owner I64, xs Array<types.TypeId>&) 
         }
         case types.Kind.Array { return p.T.Array(p.unsubst(p.T.Elem(t), owner, xs), p.unsubst(p.T.Length(t), owner, xs)) }
         case types.Kind.Ref { return p.T.Ref(p.unsubst(p.T.Referent(t), owner, xs), p.T.PermOf(t)) }
+        case types.Kind.Any { return p.T.Any(p.unsubst(p.T.AnyTrait(t), owner, xs)) }
         nomatch { return t }
     }
 }
@@ -2399,6 +2402,8 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
         case types.Kind.AnonEnum {
             return p.T.ShapeNames(pat) == p.T.ShapeNames(actual) and p.unifyLists(p.T.ShapeCases(pat), p.T.ShapeCases(actual), b)
         }
+        # T32: an any's trait's arguments ("any Iterator<T>&" meeting "any Iterator<I64>&")
+        case types.Kind.Any { return p.Unify(p.T.AnyTrait(pat), p.T.AnyTrait(actual), b, false, receiver) }
         nomatch { return false }
     }
 }
@@ -2994,6 +2999,40 @@ fn (p mut Program&) mentionsList(l types.ListId, owner I64, v I64, depth I64) Bo
         if p.mentionsVar(x, owner, v, depth + 1) { return true }
     }
     return false
+}
+
+# whether a value of t holds variable v of owner by value - not behind a reference - itself, as a part, or as a field
+# of a generic type's instance that holds its own variable there (T32: an "any" bound to v has no copy to hold)
+fn (p mut Program&) HoldsVarByValue(t types.TypeId, owner I64, v I64, depth I64) Bool {
+    if depth > 16 { return false }
+    match p.T.KindOf(t) {
+        case types.Kind.Var { return p.T.A(t) == owner and p.T.B(t) == v }
+        case types.Kind.Array { return p.HoldsVarByValue(p.T.Elem(t), owner, v, depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for x in p.T.Items(p.T.Parts(t)) {
+                if p.HoldsVarByValue(x, owner, v, depth + 1) { return true }
+            }
+            return false
+        }
+        case types.Kind.Named {
+            xs := p.T.Items(p.T.Args(t))
+            if xs.Len() == 0 { return false }
+            d := p.T.DeclOf(t)
+            self := p.SelfType(d)
+            for i in range xs.Len() {
+                if not p.HoldsVarByValue(xs[i], owner, v, depth + 1) { continue }
+                if not p.Body(self) { return true }
+                for f in p.T.Items(p.T.Fields(self)) {
+                    if p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1) { return true }
+                }
+                for f in p.T.Items(p.T.Cases(self)) {
+                    if f != types.TypeId(0) and p.HoldsVarByValue(f, DeclOwner(d), i, depth + 1) { return true }
+                }
+            }
+            return false
+        }
+        nomatch { return false }
+    }
 }
 
 # the type an instance of t is stored as in an "any" (T32): itself, or for an array of a run-time length - its value a

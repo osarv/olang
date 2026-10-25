@@ -920,6 +920,7 @@ fn (c mut Checker&) varsIn(t types.TypeId, owner I64, seen mut Array<Bool>&, dep
             c.varsIn(c.P.T.Result(t), owner, seen, depth + 1)
         }
         case types.Kind.Tuple, types.Kind.Record { for x in c.P.T.Items(c.P.T.Parts(t)) { c.varsIn(x, owner, seen, depth + 1) } }
+        case types.Kind.Any { c.varsIn(c.P.T.AnyTrait(t), owner, seen, depth + 1) }   # T32: "any Iterator<T>&" infers T
         nomatch { }
     }
 }
@@ -6373,18 +6374,24 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     }
     x typed.Expr?&c = null
     y typed.Expr?&c = null
-    if la.Ok and not lb.Ok {
+    if la.Ok and not lb.Ok and shift {
         y = c.value(c.expr(b, types.UnknownT), b.Span())
-        tb := c.literalBeside(typeOf(y))
-        if shift { tb = want if c.isInt(want) else c.i64() }
+        tb := want if c.isInt(want) else c.i64()
         x = c.litOf(a, la, tb) if c.litFits(la, tb) else c.litOf(a, la, types.UnknownT)
-        if not shift and not c.litFits(la, tb) and c.noMeet(opSp, typeOf(y), typeOf(x)) { return c.unknown(sp) }
+    } else if la.Ok and not lb.Ok {
+        y = c.value(c.expr(b, types.UnknownT), b.Span())
+        x = c.litBeside(a, la, y, op, opSp, false)
+        if x is null { return c.unknown(sp) }
     } else if lb.Ok and not la.Ok {
         x = c.value(c.expr(a, want if shift else types.UnknownT), a.Span())
-        ta := c.literalBeside(typeOf(x))
-        if not c.isNumber(ta) { ta = c.opParam(typeOf(x), op) }
-        y = c.litOf(b, lb, ta) if c.litFits(lb, ta) else c.litOf(b, lb, types.UnknownT)
-        if not shift and not c.litFits(lb, ta) and c.noMeet(opSp, typeOf(x), typeOf(y)) { return c.unknown(sp) }
+        if shift {
+            ta := c.literalBeside(typeOf(x))
+            if not c.isNumber(ta) { ta = c.opParam(typeOf(x), op) }
+            y = c.litOf(b, lb, ta) if c.litFits(lb, ta) else c.litOf(b, lb, types.UnknownT)
+        } else {
+            y = c.litBeside(b, lb, x, op, opSp, true)
+            if y is null { return c.unknown(sp) }
+        }
     } else if c.shiftLit(b) and not c.shiftLit(a) {
         x = c.value(c.expr(a, types.UnknownT), a.Span())
         y = c.value(c.expr(b, c.literalBeside(typeOf(x)) if c.isInt(typeOf(x)) else types.UnknownT), b.Span())
@@ -6401,6 +6408,18 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         y = c.value(c.expr(b, types.UnknownT), b.Span())
     }
     return c.opValues(sp, opSp, op, x!, y!, a.Span(), b.Span())
+}
+
+# a literal operand (folded as v) beside the other operand of a binary operator: adapted to its type (T6), or where it
+# does not fit, at its own (E6d) - null where the two then do not meet, said at the operator. On the right of a
+# declared type's operator method it adapts to the method's operand (E31)
+fn (c mut Checker&) litBeside(x ast.Expr&, v litv, other typed.Expr&c, op token.Tok, opSp source.Span, right Bool) typed.Expr?&c {
+    ot := typeOf(other)
+    t := c.literalBeside(ot)
+    if right and not c.isNumber(t) { t = c.opParam(ot, op) }
+    e := c.litOf(x, v, t) if c.litFits(v, t) else c.litOf(x, v, types.UnknownT)
+    if not c.litFits(v, t) and c.noMeet(opSp, ot, typeOf(e)) { return null }
+    return e
 }
 
 # E6d: a literal that does not fit the other operand's number type, which does not flow into the literal's own -
@@ -7458,12 +7477,16 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     return typed.Expr.Seq(sp, typeOf(r), typed.Seq(gather(c.stmts, from), r))
 }
 
-# a < b <= c (E30): each operand evaluated once, the next comparison only where the last held
+# a < b <= c (E30): each operand evaluated once, the next comparison only where the last held - "a < b and b < c" with
+# b evaluated once. A literal (a literal-only expression, E4a) has no evaluation to share: it is typed in each comparison
+# it takes part in, beside that comparison's other operand, as it would be written out (T6, E6d)
 fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr&c {
     base := c.exprs.Len()
     n := ch.Xs.Len()
-    # a literal operand adapts to the nearest operand that is none, as beside one comparison's (T6, E6d) - its left
-    # neighbour's type first
+    pure := Array<Bool>(n, false)
+    for i in range n { pure[i] = c.fold(ch.Xs[i]).Ok }
+    # what is literal-like but runs (a conditional of literals) is evaluated once, adapting to the nearest operand that
+    # is no literal - its left neighbour's first
     lit := Array<Bool>(n, false)
     for i in range n {
         lit[i] = c.litLike(ch.Xs[i])
@@ -7474,7 +7497,7 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr&c {
         }
     }
     for i in range n {
-        if not lit[i] { continue }
+        if not lit[i] or pure[i] { continue }
         j := -1
         for d in range 1, n {
             if i - d >= 0 and not lit[i - d] {
@@ -7499,24 +7522,44 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr&c {
         if not fits { c.noMeet(c.between(ch.Xs[k].Span(), ch.Xs[k + 1].Span(), ch.Ops[k].Text().Len()), other, typeOf(e)) }
         c.exprs[base + i] = e
     }
-    r := c.chainFrom(sp, ch, base, 0, c.exprs[base])
+    r := c.chainFrom(sp, ch, base, pure, 0, null if pure[0] else c.exprs[base])
     c.exprs.Truncate(base)
     return r
 }
 
-fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, i I64, left typed.Expr&c) typed.Expr&c {
+# comparison i of a chain and the rest: left its left operand, null where that is a literal, typed here
+fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, pure Array<Bool>&, i I64, left typed.Expr?&c) typed.Expr&c {
     n := ch.Xs.Len()
-    op := ch.Ops[i]
-    opSp := c.between(ch.Xs[i].Span(), ch.Xs[i + 1].Span(), op.Text().Len())
-    if i + 2 >= n { return c.opValues(sp, opSp, op, left, c.exprs[base + i + 1], ch.Xs[i].Span(), ch.Xs[i + 1].Span()) }
+    if i + 2 >= n { return c.chainCmp(sp, ch, i, left, null if pure[i + 1] else c.exprs[base + i + 1]) }
+    if pure[i + 1] { return typed.Expr.Cond(sp, types.BoolT, typed.Cond(c.chainCmp(sp, ch, i, left, null), c.chainFrom(sp, ch, base, pure, i + 1, null), c.lit(sp, types.BoolT, 0))) }
     rt := typeOf(c.exprs[base + i + 1])
     h := c.hidden(sp, rt)
     from := c.stmts.Len()
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.exprs[base + i + 1]))
-    first := c.opValues(sp, opSp, op, left, c.readLocal(sp, h), ch.Xs[i].Span(), ch.Xs[i + 1].Span())
+    first := c.chainCmp(sp, ch, i, left, c.readLocal(sp, h))
     held := typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, from), first))
-    rest := c.chainFrom(sp, ch, base, i + 1, c.readLocal(sp, h))
+    rest := c.chainFrom(sp, ch, base, pure, i + 1, c.readLocal(sp, h))
     return typed.Expr.Cond(sp, types.BoolT, typed.Cond(held, rest, c.lit(sp, types.BoolT, 0)))
+}
+
+# comparison i of a chain, x and y its operands - null for a literal, made here as the comparison written alone makes it
+fn (c mut Checker&) chainCmp(sp source.Span, ch ast.Chain&, i I64, x typed.Expr?&c, y typed.Expr?&c) typed.Expr&c {
+    a := ch.Xs[i]
+    b := ch.Xs[i + 1]
+    op := ch.Ops[i]
+    if x is null and y is null { return c.binary(sp, op, a, b, types.UnknownT) }
+    opSp := c.between(a.Span(), b.Span(), op.Text().Len())
+    if x is null {
+        lx := c.litBeside(a, c.fold(a), y!, op, opSp, false)
+        if lx is null { return c.unknown(sp) }
+        return c.opValues(sp, opSp, op, lx, y!, a.Span(), b.Span())
+    }
+    if y is null {
+        ly := c.litBeside(b, c.fold(b), x, op, opSp, true)
+        if ly is null { return c.unknown(sp) }
+        return c.opValues(sp, opSp, op, x, ly, a.Span(), b.Span())
+    }
+    return c.opValues(sp, opSp, op, x, y, a.Span(), b.Span())
 }
 
 # ---- text (E11a, E11b) ----
@@ -13128,6 +13171,7 @@ fn (c mut Checker&) mentionsVar(t types.TypeId, owner I64) Bool {
                    c.listMentions(c.P.T.Errors(t), owner)
         }
         case types.Kind.Tuple, types.Kind.Record { return c.listMentions(c.P.T.Parts(t), owner) }
+        case types.Kind.Any { return c.mentionsVar(c.P.T.AnyTrait(t), owner) }
         nomatch { return false }
     }
 }
@@ -15686,10 +15730,26 @@ fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n sour
         return c.callBody(sp, nsp, slots[k].Sig, typed.Callee.Dispatch(r, k, slots[k].Sig), -1, rx, args, Array<typed.Expr&>(0))
     }
     f := c.P.AnyDefault(r, n)
+    if f >= 0 and c.defaultCopiesRecv(f) {
+        # T32: a default keeping a copy of its receiver - an adapter (Take, Zip ...) - has none to keep of an any
+        c.err(nsp, msgs.AnyNoCopy(c.tok(n), c.ty(rt)))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
     if f >= 0 { return c.invoke(sp, nsp, f, rx, args, Array<typed.Expr&>(0)) }
     c.err(nsp, msgs.AnyNoMethod(c.ty(rt), c.tok(n)))
     c.dropArgs(args)
     return c.unknown(sp)
+}
+
+# whether a trait's default f's result holds its receiver by value: the variable its receiver "it mut I&" binds
+fn (c mut Checker&) defaultCopiesRecv(f I64) Bool {
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 { return false }
+    rv := c.deref(ps[0])
+    if c.P.T.KindOf(rv) != types.Kind.Var { return false }
+    return c.P.HoldsVarByValue(c.P.T.Result(sig), c.P.T.A(rv), c.P.T.B(rv), 0)
 }
 
 # ---- tests ----

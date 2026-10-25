@@ -52,7 +52,7 @@ fn (it mut I&) Fold<I Iterator<T>, T, U>(init U, f fn(acc U, x T) U) U {
 
 # a new List - in the caller's scope - of f applied to every element
 fn (it mut I&) Map<I Iterator<T>, T, U>(f fn(x T) U) List<U>& {
-    out List<U>&return = List<U>()
+    out mut List<U>&return = List<U>()
     for x in it {
         out.Push(f(x))
     }

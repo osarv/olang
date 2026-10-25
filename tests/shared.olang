@@ -7782,6 +7782,33 @@ test "E30: literals in chains adapt; indexes of any integer type; arrays of two 
     assert not fzChain(U64(FzLive - 3), 9)
 }
 
+# E30 (the second any review, finding 4): a literal in a chain is typed in each comparison beside that comparison's
+# other operand, as the chain written out with "and" is - an F32 and an F64 neighbour each take it at their own type,
+# and an I8 and a U64 neighbour need not meet; an operand that runs is still evaluated once - baked and run alike
+fn chEach(f F32, g F64) String { return $(f < 0.1 < g) " " $(f < 0.1 and 0.1 < g) }
+fn chMeet(a I8, b U64) Bool { return a < 5 < b and 300 < 400 < b }
+ChCalls mut I64 = 0
+fn chCount(x I64) I64 {
+    ChCalls += 1
+    return x
+}
+fn chOnce() String {
+    before := ChCalls
+    r := 1 < 2 < chCount(5) < 300 < chCount(400)
+    return $r " " $(ChCalls - before)
+}
+ChEachBaked String = chEach(F32(0.05), 0.1000000001)
+ChMeetBaked Bool = chMeet(1, 700)
+ChLive mut F32 = 0.05
+
+test "E30: a chain's literal is typed beside each comparison's other operand, as the chain written out" {
+    assert ChEachBaked == "true true"
+    assert chEach(ChLive, 0.1000000001) == ChEachBaked
+    assert ChMeetBaked and chMeet(I8(ChLive * 20.0), 700)
+    assert not chMeet(1, 3)
+    assert chOnce() == "true 2"
+}
+
 # E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
 # M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
 type CondColor enum {

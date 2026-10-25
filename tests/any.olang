@@ -592,3 +592,35 @@ test "M21: two instances' methods each found for their own instance, an exact re
     churn()
     assert twoInstances(Live - 1) == want
 }
+
+# T32, G4, G8a (the second any review, finding 5): a type variable inside "any Iterator<T>&" is substituted in a generic
+# type's instance and inferred at a generic function's call; and Map to a reference result works through an any
+type AUps struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut AUps&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at * 10
+}
+fn anyCount<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
+type ASrc<T> struct(it mut any Iterator<T>&) { it }
+fn (s mut ASrc<T>&) First() T ? Exhausted { return try s.it.Next() }
+fn (s mut ASrc<T>&) Rest() List<T>& { return s.it.ToList() }
+fn anyGeneric(n I64) String {
+    a mut any Iterator<I64>& = AUps(n)
+    s := ASrc<I64>(AUps(n + 1))
+    f := try s.First() catch default -1
+    m mut any Iterator<I64>& = AUps(n)
+    mapped := m.Map(fn(x I64) String& { return "m" $x })
+    return $anyCount(a) " " $f " " $s.Rest() " " $mapped
+}
+BakedAnyGeneric String = anyGeneric(2)
+
+test "T32: a type variable in an any's trait, substituted and inferred; Map to a reference through an any" {
+    want := "2 10 List<I64>[20, 30] List<String&>[\"m10\", \"m20\"]"
+    assert BakedAnyGeneric == want
+    churn()
+    assert anyGeneric(Live - 1) == want
+}

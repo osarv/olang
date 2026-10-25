@@ -218,6 +218,7 @@ type Diag enum {
     AnyMethodScopes
     AnyMethodObligations
     AnyNoMethod
+    AnyNoCopy
     AnyOpenInspected
     AnyNotMemberCase
     AnyCaseTwice
@@ -1212,6 +1213,7 @@ fn AnyMethodScopes(ty String&, tok String&, tr String&) Msg { return Msg(Diag.An
 fn AnyMethodObligations(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodObligations, "T32a, T22a", $ty "'s " $tok " relates its arguments' scopes, which a call through an 'any " $tr "&' cannot check - call it directly, or through generic code") }
 
 # ERR_ANY_NO_METHOD
+fn AnyNoCopy(tok String&, ty String&) Msg { return Msg(Diag.AnyNoCopy, "T32", $tok " keeps a copy of the value it is called on, and an " $ty " has none - call it on the instance's own type") }
 fn AnyNoMethod(ty String&, tok String&) Msg { return Msg(Diag.AnyNoMethod, "T32b", $ty " has no method " $tok " - an 'any' is used through its trait's methods alone") }
 
 # ERR_ANY_OPEN_INSPECTED
