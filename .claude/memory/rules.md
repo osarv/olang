@@ -85,6 +85,11 @@ overkill no?").** Routine soundness reviews of fix rounds and batch relaxations:
 the mechanical check). xhigh only for NEW design in section 8 / ownership. (This replaced the 2026-10-11 line "xhigh or
 max for all soundness reviews".)
 
+**Full reviews in bulk (the user, 2026-10-25: "We don't need a full review every change. Do the full reviews in
+bulks").** A batch merges on its own verify (and the fuzzers); full read-only reviews run over several merged batches at
+once - for instance after a few language batches, or before announcing - not one per batch or per fix round. Soundness
+relaxations in section 8 still get looked at, but in the bulk review that follows, unless the change is large.
+
 **No more C-compiler soundness reviews (the user, 2026-10-17: "Do we need to review the C compiler much more in the
 future? It takes a lot of resources").** Stage 0's remaining job is building the port, whose test suite and the bootstrap
 fixed point (stage 2 == stage 3) catch a stage-0 miscompile. So: the e31view round-4 review is the last C review; C
