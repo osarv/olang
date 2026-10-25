@@ -1,0 +1,11 @@
+# check: fail error[G33]: a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'
+# also: compilation failed with 1 error
+# G33: walking a reflected list makes no call that can fail
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() {
+    for f in try Point.Fields { }
+}

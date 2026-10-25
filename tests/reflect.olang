@@ -159,3 +159,48 @@ test "agrees with the run time: the same walks over values only the run time kno
     assert q.x == k + 3
     assert fields(Point(k, 2.5, "a")) == "Point(x=" $k ", Y=2.5, label=a)"
 }
+
+# the first field whose type is T's kind, skipping text; the walk stops at it
+fn firstNumber<T>() String {
+    s := ""
+    for f in T.Fields {
+        if f.Type.Kind == TypeKind.Reference or f.Type.Kind == TypeKind.Array { continue }
+        s = f.Name
+        break
+    }
+    return s
+}
+
+fn kindWord<T>() String {
+    return match T.Kind {
+        case TypeKind.Struct => "struct"
+        case TypeKind.Enum => "enum"
+        case _ => "other"
+    }
+}
+
+fn bump<T>(v mut T&) {
+    for f in T.Fields {
+        if f.Type.Kind == TypeKind.Integer { f.Of(v)++ }
+    }
+}
+
+type Grid struct(cells Array<Meters>&) { cells }
+
+test "an unrolled walk breaks and continues; a match on a reflected constant is decided per instance" {
+    assert firstNumber<Point>() == "x"
+    assert kindWord<Point>() == "struct" and kindWord<Shape>() == "enum" and kindWord<I64>() == "other"
+    p := Point(1, 0.5, "w")
+    bump(p)
+    assert p.x == 2
+}
+
+test "reflected types chain, and are types" {
+    for f in Grid.Fields {
+        x f.Type.Target.Element.Base = 2.5
+        y Meters.Base = 1.0
+        assert y + x == 3.5
+        assert f.Type.Kind == TypeKind.Reference and f.Type.Target.Element.Name == "Meters"
+    }
+    assert Grid.Fields[0].Type.Kind == TypeKind.Reference
+}

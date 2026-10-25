@@ -281,6 +281,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     reflTouched Bool = false    # G35: the condition being folded read a reflected member
+    spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
     typeCaseBinds List<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
     slotsCalled Map<I64, diag.Where>  # T32b: the slots (SlotKey) some call through an "any" reaches, by its first call
     lazyThunks List<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
@@ -8983,6 +8984,10 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
 fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr&c {
     # G37: a comprehension written as arguments gives one argument per item of its list
     args = c.spreadArgs(args)
+    if c.spreadBad {
+        c.spreadBad = false
+        return c.unknown(sp)
+    }
     match f {
         case ast.Expr.Name(nsp, n) {
             ref := c.P.R.Use(c.fr().File, nsp.Start)
@@ -10497,7 +10502,8 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
         return null
     }
     if not c.isStruct(t) {
-        c.gap(nsp, "a member of a type of this kind")
+        # only a struct has fields: a number's, an array's, a function value's member is a misspelling
+        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n)))
         return null
     }
     i := c.fieldIndex(t, n)
@@ -11224,6 +11230,7 @@ fn (c mut Checker&) spreadArgs(args Array<ast.Expr&>&) Array<ast.Expr&>&args {
                 l := c.listOf(cm.Source)
                 if not l.Ok {
                     c.err(cm.Source.Span(), msgs.ReflArgCompr())
+                    c.spreadBad = true
                     continue
                 }
                 items := c.listItems(cm.Source.Span(), l)
@@ -11235,7 +11242,10 @@ fn (c mut Checker&) spreadArgs(args Array<ast.Expr&>&) Array<ast.Expr&>&args {
                         d := c.reflDecide(cm.Filter)
                         c.reflUnbind(cm.Key, wasKey)
                         c.reflUnbind(cm.Name, wasName)
-                        if d < 0 { c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided()) }
+                        if d < 0 {
+                            c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided())
+                            c.spreadBad = true
+                        }
                         keep = d == 1
                     }
                     if keep {

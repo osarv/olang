@@ -1,0 +1,9 @@
+# check: fail error[G32]: Point has no Length - only an array whose length is known while compiling has one
+# also: compilation failed with 1 error
+# G32: only an array whose length is known while compiling has a Length
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { n := Point.Length }

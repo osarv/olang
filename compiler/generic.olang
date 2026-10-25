@@ -555,6 +555,19 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
     if path.Len() >= 2 {
         h := p.reflHead(c, path[0])
         if h >= types.TypeId(0) { return p.projectPath(c, sp, h, path, args) }
+        # a declared or built-in type's ("Meters.Base", "String.Element"), its head recorded where its name ends
+        hr := p.R.Member(p.file(c.Mi), sp.Start + I32(p.text(path[0]).Len()))
+        if hr.Kind == names.What.Type and hr.Index >= 0 {
+            d := p.DeclFor(hr.Module, hr.Index)
+            if p.T.DeclParams(d) > 0 { return types.UnknownT }
+            return p.projectPath(c, sp, p.Apply(c, d, Array<ast.TypeRef&>(0)), path, args)
+        }
+        if hr.Kind == names.What.Builtin {
+            hn := p.text(path[0])
+            ht := types.BoolT if hn == "Bool" else p.T.Prim(hn)
+            if ht == types.UnknownT { return ht }
+            return p.projectPath(c, sp, ht, path, args)
+        }
     }
     if path.Len() == 1 {
         v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)

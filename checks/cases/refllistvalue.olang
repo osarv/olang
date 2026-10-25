@@ -1,0 +1,9 @@
+# check: fail error[G33]: Point.Fields is a list known while compiling, no value - walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension
+# also: compilation failed with 1 error
+# G33: a list known while compiling is no value - walked, counted, indexed or made into an array
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { fs := Point.Fields }

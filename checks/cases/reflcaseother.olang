@@ -1,0 +1,16 @@
+# check: fail error[G34]: this case is Other's, and the value is Shape
+# also: compilation failed with 1 error
+# G34: a case descriptor of another type is no case of this value
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+type Other enum {
+    A
+    B
+}
+fn main() {
+    s := Shape.Empty
+    if s == Other.Cases[0] { }
+}

@@ -1,0 +1,9 @@
+# check: fail error[G33]: index 2 is outside the list, which holds 2
+# also: compilation failed with 1 error
+# G33: a constant index outside the list
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { s := Point.Fields[2].Name }

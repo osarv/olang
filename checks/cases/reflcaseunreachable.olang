@@ -1,0 +1,15 @@
+# check: fail error[G36]: no type can reach this case - a case before it takes every type it does
+# also: compilation failed with 1 error
+# G36: a case a case before it covers is unreachable
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn f<T>() I64 {
+    return match T {
+        case _ => 1
+        case I64 => 2
+    }
+}
+fn main() { n := f<I64>() }

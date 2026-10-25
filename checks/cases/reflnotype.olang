@@ -1,0 +1,9 @@
+# check: fail error[G38]: 'Element' of I64: only an array has an Element
+# also: compilation failed with 1 error
+# G38: a reflected type that does not exist is said where it is written
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { x I64.Element = 3 }

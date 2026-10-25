@@ -1336,8 +1336,20 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         return
     }
     head := path[0]
-    if (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 and r.lookup(head).Kind == What.None {
-        r.unknownHead(r.nameSpan(r.mi, sp.Start, head), head)
+    if (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 {
+        hr := r.lookup(head)
+        hsp := r.nameSpan(r.mi, sp.Start, head)
+        if hr.Kind == What.None {
+            # a path whose head names nothing: std's module of that name, else no import (M10)
+            said := r.unknownSaid.Len()
+            r.unknownHead(hsp, head)
+            if r.unknownSaid.Len() == said and not os.Exists($r.L.Std "/" $r.text(head) ".olang") and not (head in r.Tables[r.mi].waiting) {
+                r.L.Diags.Error(r.at(r.mi, hsp), msgs.UnknownImport(r.tok(head)))
+            }
+            return
+        }
+        # G38: a type's reflected member ("Point.Base", "I64.Element") - the head recorded where its name ends
+        if hr.Kind == What.Type or hr.Kind == What.Builtin { r.members.Put(key(r.L.Mods[r.mi].File, hsp.End), hr) }
         return
     }
     t := r.aliasModule(path)

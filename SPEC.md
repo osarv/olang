@@ -2333,7 +2333,9 @@ their exported immutable globals - the **constants of the prelude** - are visibl
 with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
 (D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
-(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
+(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `TypeKind` enum is what
+reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
+reflection's descriptors (G34), made only by the compiler. A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods. The prelude's methods taking a callback - an array's `Some`, `Every`, `FindIndex`,
 `Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `List`'s and a `Vec`'s `Sort`, the iterator helpers
 (T35b) - fail with what the callback fails with, an error-set parameter (G1a) bound to it, and stop where it fails
@@ -2752,7 +2754,8 @@ chain; if it resolves as one, ordinary member resolution does not apply to that 
 
 **E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" list(arg) ")"`,
 where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
-`arg ::= expr | "default"` (E14a) (§4.4 M8),
+`arg ::= expr | "default" | expr "for" IDEN [ "," IDEN ] "in" binary [ "if" binary ]` (E14a; the last, an argument
+comprehension, G37) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
 type, where it names the instantiation whose constructor is being called (G10a), or a generic function, where it names
 the instance being called (G12). A method call takes them too, after the method's name: `x.Narrow<I32>()`,
@@ -3775,7 +3778,7 @@ values are some NaN's.
 **E36.** A numeric type's limits are read through its name: `I64.Max`, `U8.Min`, `F32.Inf`. Each is a **constant** of
 that type, known while compiling (it is baked and decides asserts there, §13), and a type variable bound to a numeric
 type reaches them as the type does: in an instance where `T` is `I32`, `T.Max` is `I32.Max`. This is the type's own
-namespace, the one compile-time reflection reads through. Every integer type has `Max` and `Min`, its largest and
+namespace, the one compile-time reflection reads through (§12.8). Every integer type has `Max` and `Min`, its largest and
 smallest values. Every float type has `Max`, its largest finite value; `Min`, which is `-Max`; `Inf`, positive infinity;
 `NaN`, the quiet NaN with a clear sign and a payload of zero; `Epsilon`, the difference between 1 and the next larger
 value (2^-52 for `F64`, 2^-23 for `F32`, 2^-10 for `F16`, 2^-7 for `BF16`); and `SmallestNormal`, its smallest
@@ -7421,8 +7424,9 @@ takes none (G7).
 ### 12.5 Dispatching on a type parameter
 
 **G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, its function's list, its receiver or its
-type's parameter list having introduced it (G3) - with each `case` naming one or more
-`type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
+type's parameter list having introduced it (G3) - or a type a reflected member names (G38: `match P.Type`, `match
+f.Type`), with each `case` naming one or more `type-expr`s (S13c: `case I32, U32 { }`), traits or generic patterns (G36)
+instead of value expressions, and no guard (S13e). Any other operand where a type match is written is an error. This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 
 ```
@@ -7525,6 +7529,127 @@ fn total(a Array<I64>) I64 {
 instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule a function's callers
 are held to, about any argument, is a requirement of its contract (D17), decided at each call whose arguments the
 evaluator computes (D17e) and checked on entry everywhere else (D17a).
+
+### 12.8 Compile-time reflection
+
+A type's structure is read through its name, while compiling: nothing about types exists at run time. In a generic the
+name is a type variable, so the code that walks a type is compiled once per instantiation, as G16 says, and everything
+these rules give is a constant of that instance. Reflection on a value is a generic call that binds its type
+(`describe(x)` with `fn describe<T>(v T)`); a value has no reflected members.
+
+**G32 (a type's members).** After any type - written by name, `Point`, `lib.Point`, `Tree<I64>`, `Array<F32>`, a type
+variable, or a type G38 names - these members are read with a `.`, alongside a number type's limits (E36):
+
+- `T.Name` - the type as source writes it, its module's alias left out (`Point`, `Tree<I64>`, `Array<String&>`), a
+  `String`.
+- `T.Kind` - a `TypeKind` (the prelude's enum: `Struct Enum Integer Float Bool Array Reference Function`); a declared
+  type has its base's kind, `String` an `Array`, `Char` an `Integer`. Coarse on purpose: the exact type is `match T`'s
+  (G13). An error type, a trait and an extern type have none, an error.
+- `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
+- `T.Element` - an array's element type (an error for another type); `T.Target` - a reference's referent (`Node&`'s
+  `Node`).
+- `T.Length` - an array's length where it is known while compiling (T7c), an `I64`; for another type an error.
+- `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
+  layout, §10), `I64`s; a type that is not laid out (a trait, an error type, an extern type) has none.
+- `T.Fields`, `T.Cases`, `T.Params`, `T.Results` - lists (G33) of descriptors (G34): a struct's fields; an enum's cases
+  (a struct's being its one case, named as the struct, so one walk covers both); a constructor's parameters, or a
+  function type's; a function type's results. A struct, an enum and a function type have the lists that apply to
+  them; asking another is an error naming what it has (`T.Fields` on an enum names `T.Cases`).
+- `T.Errors` - a function type's error set, written only where an error set is (R1b): `fn call<F>(f F) I64 ? F.Errors`.
+
+Any other name is an error listing these. Members of a generic type are read of an instance: `Tree<I64>.Cases`.
+
+**G33 (lists known while compiling).** A list G32 gives is known while compiling and is no value: it is not assigned,
+passed or returned. It is used four ways:
+
+- `for x in T.Fields { }` (and `for i, x in ...`) is **unrolled**: the body is checked and compiled once per element,
+  in order, `x` a descriptor (G34) and `i` an `I64` constant in each copy; `break` leaves the whole walk and `continue`
+  goes on with the next copy. It makes no call that can fail, so `for x in try T.Fields` is an error.
+- `T.Fields.Len()` is the count, an `I64` constant.
+- `T.Fields[k]` with `k` a constant (K1) is that element; an index known only at run time, or one outside the list, is
+  an error.
+- A comprehension `String&[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference]` makes a run-time array of one
+  element per list element its filter keeps; the filter is decided while compiling (G35), one that is not an error.
+
+**G34 (descriptors).** An element of a list is a **descriptor**: a value of no storage whose type says which member it
+describes, so a generic taking one (`fn arg<P>(p P) P.Type`) is compiled once per member and everything it asks is a
+constant there. Each has its members, and asking another is an error listing them:
+
+- A field: `f.Name` (a `String`), `f.Type` (a type, G38), `f.Offset` (an `I64`: its offset in bytes where the type is
+  laid out - a case's field counted from the start of the enum, past its tag), and `f.Of(v)`. `f.Of(v)` is that field
+  of `v`, a **place** (S4): read, assigned and incremented where `v` is writable (T25b), lent as the field would be. `v`
+  is a value of the field's type's owner (or a reference to one), else an error; one value, else an error. A case's
+  field is read only where `v` is known to hold that case - narrowed by a test (S8d), the walk's `if v == c` with `c` a
+  case descriptor included - as `as` reads it.
+- A case: `c.Name`, `c.Fields` (a list, G33). `v == c` tests the case (E32): with `v` of the case's own type, the case;
+  with `v` the struct a struct's one case describes, `true`; with `v` of another type, an error. After such a test `v` is
+  narrowed to that case (S8d) and `f.Of(v)` reads its fields.
+- A parameter: `p.Name`, `p.Type`, `p.HasDefault` (a `Bool` constant) and `p.Default` - the default's value, built in its
+  declaration's context as a call leaving the argument off builds it (D8a). `p.Default` on a parameter with no default is
+  an error; under an `if p.HasDefault` it is decided per parameter (G35), so the other branch is not checked. A function
+  type's parameter has no name of its own (T22, G16a: two function types differing only in their parameters' names are
+  one type), so its `p.Name` is `""`.
+- A result: `r.Type`.
+
+**Visibility.** A list holds only the members the module whose code reads it may see (M6a): a struct's private fields
+(lowercase) are in `T.Fields` only in the module declaring the type, and in a generic only where the generic is
+declared there. So another module's reflection cannot read or build what it could not name.
+
+**G35 (decided while compiling).** A condition built from reflected constants - `T.Kind == TypeKind.Struct`,
+`p.HasDefault`, `f.Name == "id"`, `T.Fields.Len() > 2`, with `and`, `or`, `not`, comparisons and `+ - *` - is decided
+per instance: in an `if`, a conditional (E28) and an `assert` (S18c) only the branch or value chosen is checked and
+compiled, as G30 says of a length, and an assert decided false is a compile-time error. Such a condition is
+configuration, never S8a's dead code. A `match` on a reflected constant (`match T.Kind { case TypeKind.Struct => ... }`)
+chooses its arm the same way.
+
+**G36 (type cases).** A `match T` (G13) case may name, besides a type:
+
+- a **trait** (`case Hashable`, `case Iterator<E>`): it holds where `T` satisfies the trait (G19), the trait's unbound
+  arguments bound by satisfaction;
+- a **generic type with names for its arguments** (`case List<E>`, `case Map<K, V>`): it holds where `T` is an instance
+  of that type, each name bound to the argument in that place. A name in a case's arguments that is no type is such a
+  name, introduced for that case's arm, where it is a type (G14); a type written there must match exactly.
+
+Cases are tried in order and **the first that holds is chosen**. A case that no type can reach - one a case before it
+covers (`case _`, the same type, a trait every type of it satisfies, a generic case of distinct names for the same
+type) - is an error. G15's exhaustiveness holds: with no case holding and no `nomatch` (or `case _`) it is an error at
+the instantiation.
+
+```
+fn what<T>() String {
+    return match T {
+        case List<E> => "a list of " $E.Name
+        case Map<K, V> => "a map from " $K.Name " to " $V.Name
+        case Hashable => "hashable " $T.Name
+        case _ => "something else"
+    }
+}
+```
+
+**G37 (building through the constructor).** A comprehension written as a call's arguments, with no brackets -
+`T(decode(p, src) for p in T.Params)` - walks a list G33 knows while compiling and gives the call one argument per
+element its filter keeps, in order: the value written, checked once per element with the names bound to that element.
+It may stand beside other arguments. Building a value this way runs its constructor, and with it the constructor's
+checks (§9): reflection never builds what the constructor would refuse. Over anything else it is an error naming the
+bracketed form, `T[e for x in c]` (E27).
+
+```
+fn arg<P>(p P, k I64) P.Type {
+    if p.HasDefault { return p.Default } else {
+        match P.Type {
+            case I64 { return k }
+            nomatch { unreachable }
+        }
+    }
+}
+fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
+```
+
+**G38 (reflected types are types).** A type G32 or G34 names - `T.Base`, `T.Element`, `T.Target`, `f.Type`, `p.Type`,
+`r.Type`, and chains of them, `T.Element.Base` - is usable wherever a type is written (a declaration, a parameter, a
+result, a type argument, a `match`'s subject) and is a type of the instance it is read in (a result written `P.Type` is
+each instance's own). It is no value: written where a value goes it is an error naming the declaration form. One that
+does not exist (`I64.Element`) is an error where it is written, saying why.
 
 ## 13. Compile-time evaluation
 

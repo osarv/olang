@@ -1,0 +1,10 @@
+# check: fail error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+# also: compilation failed with 1 error
+# G33: a comprehension over a reflected list keeps elements by a filter decided while compiling
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn g(k I64) Array<String&> { return String&[f.Name for f in Point.Fields if k > 0] }
+fn main() { a := g(1) }

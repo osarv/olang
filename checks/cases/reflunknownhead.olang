@@ -1,0 +1,6 @@
+# check: fail error[M10]: 'zz' is no import here
+# also: compilation failed with 1 error
+# M10: a type path whose head names nothing is no import
+fn main() {
+    x zz.T = 3
+}

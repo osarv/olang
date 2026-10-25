@@ -1,0 +1,12 @@
+# check: fail error[G34]: this field is Point's, and the value is Shape
+# also: compilation failed with 1 error
+# G34: f.Of takes a value of the field's type
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() {
+    s := Shape.Empty
+    n := Point.Fields[0].Of(s)
+}
