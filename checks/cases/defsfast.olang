@@ -1,6 +1,6 @@
 # check: run
 # flags: -define Flag=true -define Ratio=0.75 -define Huge=5000000000 -define Level=3 -define Mode=fast -define Expect=30
-error E { X }
+type E error { X }
 if Level > 2 and Mode == "fast" {
     fn pick() I64 { return Level * 10 }
 } else {

@@ -1,0 +1,213 @@
+# error-set parameters (G1a, QAH): a generic's list ending in "? E", E standing wherever an error set is written and
+# bound, like a type variable, to what the function values and iterators given to it fail with - their union - or to
+# the empty set, where nothing given can fail, so that the call needs no try
+
+type Bad error {
+    NEG
+    BIG
+}
+
+type Other error { ODD }
+
+# a named set (T19a) as an error-set argument
+type Both error Bad, Other
+
+fn parsePos(x I64) I64 ? Bad {
+    if x < 0 { error Bad.NEG }
+    return x
+}
+
+fn even(x I64) I64 ? Other {
+    if x % 2 != 0 { error Other.ODD }
+    return x
+}
+
+fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E { return try f(x) }
+
+test "G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail" {
+    assert apply(3, fn(x I64) I64 { return x * 2 }) == 6
+    assert (try apply(3, parsePos) catch Bad default -1) == 3
+    assert (try apply(-3, parsePos) catch Bad default -1) == -1
+    assert (try apply(-3, fn(x I64) I64 { return try parsePos(x) }) catch Bad default -9) == -9
+    assert (try apply(3, even) catch Other default -1) == -1
+}
+
+# the empty set and a set are two instances (G16a): the one apply at the empty set cannot fail
+fn twice(x I64) I64 { return apply(x, fn(v I64) I64 { return v + v }) }
+
+test "G1a: an instance at the empty set is called without try" {
+    assert twice(21) == 42
+}
+
+test "QAH: the helpers take callbacks that fail" {
+    a := I64[1, 2, 3, 4]
+    assert a.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) == 10
+    assert (try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == 10
+    b := I64[1, -2, 3]
+    assert (try b.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
+    assert (try b.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == -1
+    assert (try a.Some(fn(x I64) Bool { return try even(x) == 2 }) catch Other default false) == false
+    assert (try I64[2, 4].Every(fn(x I64) Bool { return try even(x) > 0 }) catch Other default false)
+    assert (try a.Count(fn(x I64) Bool { return try parsePos(x) > 1 }) catch Bad default -1) == 3
+    assert (try a.Map(fn(x I64) I64 { return try parsePos(x) * 10 }) catch Bad default I64[]) == I64[10, 20, 30, 40]
+    assert (try b.Filter(fn(x I64) Bool { return try parsePos(x) > 0 }) catch Bad default I64[7]) == I64[7]
+    assert (try a.Iter().Map(fn(x I64) I64 { return try parsePos(x) }) catch Bad default List<I64>()).Len() == 4
+    assert (try a.FindIndex(fn(x I64) Bool { return try parsePos(x) == 3 }) catch Bad default -1 catch ArrayError default -2) == 2
+}
+
+test "QAH: a comparator that fails stops the sort" {
+    a := I64[3, 1, 2]
+    try a.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { unreachable }
+    assert a == I64[1, 2, 3]
+    b := I64[3, -1, 2]
+    failed := false
+    try b.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { failed = true }
+    assert failed
+    l := List<I64>()
+    l.Push(5)
+    l.Push(4)
+    try l.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < y }) catch Bad { unreachable }
+    assert l[0] == 4
+}
+
+# an iterator that can fail on its way (QAH): its Next fails with Bad beside Exhausted
+type Reader struct(of Array<I64>&) {
+    xs Array<I64>&of = of
+    at I64 = 0
+}
+
+fn (r mut Reader&) Next() I64 ? Bad, Exhausted {
+    if r.at == r.xs.Len() { error Exhausted.END }
+    r.at++
+    if r.xs[r.at - 1] < 0 { error Bad.NEG }
+    return r.xs[r.at - 1]
+}
+
+fn readAll(xs Array<I64>&) I64 ? Bad {
+    r := Reader(xs)
+    s I64 = 0
+    for x in try r { s += x }
+    return s
+}
+
+# a function over any iterator failing with Bad, its set written in the constraint
+fn total<I Iterator<I64 ? Bad>>(it mut I&) I64 ? Bad {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
+}
+
+test "QAH: an iterator's own errors reach what walks it" {
+    assert (try readAll(I64[1, 2, 3]) catch Bad default -1) == 6
+    assert (try readAll(I64[1, -2, 3]) catch Bad default -1) == -1
+    r := Reader(I64[4, 5])
+    assert (try r.Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 9
+    # the iterator's errors and the callback's, together
+    q := Reader(I64[4, 5])
+    assert (try q.Fold(0, fn(acc I64, x I64) I64 { return acc + try even(x) }) catch Bad default -1 catch Other default -2) == -2
+    p := Reader(I64[1, 2, 3, 4])
+    assert (try p.Take(2).Fold(0, fn(acc I64, x I64) I64 { return acc + x }) catch Bad default -1) == 3
+    s := Reader(I64[10, 20])
+    assert (try total(s) catch Bad default -1) == 30
+    # an iterator that cannot fail meets "Iterator<I64 ? Bad>" too: its set is held by Bad, Exhausted (T31)
+    assert (try total(I64[7, 8].Iter()) catch Bad default -1) == 15
+    w := Reader(I64[1, -1])
+    assert (try w.ToList() catch Bad default List<I64>()).Len() == 0
+    v := Reader(I64[1, 2])
+    assert (try v.ToList() catch Bad default List<I64>()).Len() == 2
+}
+
+# a struct type over an error set: what it runs fails with what it holds fails with
+type Retry<T ? E> struct(f fn() T ? E, times I64) {
+    run fn() T ? E = f
+    n I64 = times
+}
+
+fn (r Retry<T ? E>&) Run() T ? E {
+    for i in range r.n - 1 {
+        v := try r.run() catch E { continue }
+        return v
+    }
+    return try r.run()
+}
+
+counter mut I64 = 0
+
+fn flaky() I64 ? Bad {
+    counter++
+    if counter < 3 { error Bad.BIG }
+    return counter
+}
+
+test "G1a: a type's error-set parameter, and catch E in its methods" {
+    counter = 0
+    r := Retry<I64 ? Bad>(flaky, 5)
+    assert (try r.Run() catch Bad default -1) == 3
+    counter = 0
+    q := Retry<I64 ? Bad>(flaky, 2)
+    assert (try q.Run() catch Bad default -1) == -1
+    sure := Retry<I64>(fn() I64 { return 7 }, 1)
+    assert sure.Run() == 7
+}
+
+fn either<I Iterator<I64 ? Both>>(it mut I&) I64 ? Both {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
+}
+
+test "T19a: a named set as an error-set argument" {
+    r := Reader(I64[1, 2])
+    assert (try either(r) catch Bad default -1 catch Other default -2) == 3
+}
+
+# K1: the evaluator gives what the run time gives
+Baked I64 = try I64[1, 2, 3].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+BakedBad I64 = try I64[1, -2].Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1
+BakedNone I64 = apply(5, fn(x I64) I64 { return x + 1 })
+
+test "K1: error-set instances are evaluated while compiling" {
+    assert Baked == 6 and BakedBad == -1 and BakedNone == 6
+    assert (try apply(-1, parsePos) catch Bad default 99) == 99
+    rt := I64[1, -2]
+    assert (try rt.Fold(0, fn(acc I64, x I64) I64 { return acc + try parsePos(x) }) catch Bad default -1) == BakedBad
+}
+
+test "G12: an instance named with its error set, and one whose set is left to inference" {
+    assert apply<I64, I64>(4, fn(x I64) I64 { return x + 1 }) == 5
+    assert (try apply<I64, I64 ? Bad>(4, parsePos) catch Bad default -1) == 4
+    f := apply<I64, I64 ? Bad>
+    assert (try f(-4, parsePos) catch Bad default -1) == -1
+    ys := I64[1, 2].Map<F64>(fn(x I64) F64 { return F64(x) / 2.0 })
+    assert ys == F64[0.5, 1.0]
+}
+
+# a fallible iterator as a run-time trait value (T32), and one whose Next writes its set in another order (T31: held by)
+type Countdown struct(n I64) { n }
+
+fn (r mut Countdown&) Next() I64 ? Exhausted, Bad {
+    if r.n == 0 { error Exhausted.END }
+    r.n--
+    if r.n == 5 { error Bad.NEG }
+    return r.n
+}
+
+fn sumAny(it mut any Iterator<I64 ? Bad>&) I64 ? Bad {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
+}
+
+test "T32, T31: an any of a fallible iterator, and a set written in another order" {
+    a := Countdown(3)
+    it mut any Iterator<I64 ? Bad>& = a
+    assert (try sumAny(it) catch Bad default -1) == 3
+    b := Countdown(7)
+    jt mut any Iterator<I64 ? Bad>& = b
+    assert (try sumAny(jt) catch Bad default -1) == -1
+    c := Countdown(7)
+    assert (try total(c) catch Bad default -1) == -1
+    d := Countdown(3)
+    kt mut any Iterator<I64 ? Bad>& = d
+    assert (try kt.Count(fn(x I64) Bool { return x > 0 }) catch Bad default -1) == 2
+}

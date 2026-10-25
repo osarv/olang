@@ -72,18 +72,25 @@ fn (w mut writer&) decl(d ast.Decl&) {
             }
             w.span(path)
         }
-        case ast.Decl.Errors(_, name, words) {
-            w.put("error ")
+        case ast.Decl.Errors(_, name, words, members) {
+            w.put("type ")
             w.name(name)
-            w.put(" {")
-            w.ind++
-            for x in words {
-                w.nl()
-                w.name(x)
+            w.put(" error")
+            for i, m in members {
+                w.put(", " if i > 0 else " ")
+                w.path(m)
             }
-            w.ind--
-            w.nl()
-            w.put("}")
+            if words.Len() > 0 {
+                w.put(" {")
+                w.ind++
+                for x in words {
+                    w.nl()
+                    w.name(x)
+                }
+                w.ind--
+                w.nl()
+                w.put("}")
+            }
         }
         case ast.Decl.Test(_, name, body) {
             w.put("test ")
@@ -265,6 +272,12 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
     was := w.item
     w.item = true
     for i, x in tps {
+        if x.ErrSet {
+            # G1a: "? E" closes the list
+            w.put(" ? " if i > 0 else "? ")
+            w.name(x.Name)
+            continue
+        }
         if i > 0 { w.put(", ") }
         w.name(x.Name)
         if x.Ty is not null {
@@ -377,6 +390,18 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
     was := w.item
     w.item = true
     for i, t in ts {
+        match t {
+            # QAH: an error-set argument closes a type-argument list, "<T ? A, B>"
+            case ast.TypeRef.Errs(_, items) {
+                w.put(" ? " if i > 0 else "? ")
+                for k, e in items {
+                    if k > 0 { w.put(", ") }
+                    w.path(e)
+                }
+                continue
+            }
+            nomatch { }
+        }
         if i > 0 { w.put(", ") }
         w.ty(t)
     }
@@ -416,6 +441,13 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         case ast.TypeRef.Any(_, of) {
             w.put("any ")
             w.ty(of)
+        }
+        case ast.TypeRef.Errs(_, items) {
+            w.put("? ")
+            for k, e in items {
+                if k > 0 { w.put(", ") }
+                w.path(e)
+            }
         }
         case ast.TypeRef.Perm(_, of, writable, owned) {
             if owned { w.put("own") }
@@ -495,7 +527,10 @@ fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
             w.put(", " if i > 0 else " ")
             w.path(it)
         }
-
+        if c.Bind != source.NameId(0) {
+            w.put(" ")
+            w.name(c.Bind)
+        }
         if c.Braced {
             w.put(" ")
             w.block(c.Body)
@@ -574,6 +609,10 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
                 w.exprs(values)
             }
         }
+        case ast.Stmt.Yield(_, x) {
+            w.put("yield ")
+            w.expr(x)
+        }
         case ast.Stmt.Jump(_, kind, msg) {
             w.put(kind.Text())
             if msg is not null {
@@ -610,8 +649,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.block(j.Body)
             w.clauses(j.Clauses)
         }
-        case ast.Stmt.Defer(_, inner) {
-            w.put("defer ")
+        case ast.Stmt.Defer(_, inner, onError) {
+            w.put("errdefer " if onError else "defer ")
             w.stmt(inner)
         }
         case ast.Stmt.Block(_, body) { w.block(body) }
@@ -751,7 +790,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Unary(_, op, y) {
             w.put(op.Text())
-            if op == token.Tok.Not or op == token.Tok.Return {
+            if op == token.Tok.Not or op == token.Tok.Return or op == token.Tok.Embed {
                 w.put(" ")
             } else if (op == token.Tok.Minus or op == token.Tok.Dec) and startsWithMinus(y) {
                 w.put(" ")          # "- -x" is no "--x"

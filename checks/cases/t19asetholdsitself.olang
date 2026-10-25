@@ -1,0 +1,5 @@
+# check: fail error[T19a]: 'A' reaches itself through its member 'B' - a set holds its members' errors, never itself
+# T19a: a named set stands for its members, flattened - one reaching itself again stands for nothing
+type A error B { X }
+type B error A
+fn main() { }

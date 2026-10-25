@@ -3,7 +3,7 @@
 # while a test runs (a builder that malloc'd past 256 bytes and freed only at its end lost it on every such exit: 1.5GB at
 # 2M passes)
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 fn g(i I64) I64 ? {

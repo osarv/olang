@@ -74,7 +74,7 @@ fn (c mut Consts&) text(t String&) I64 {
 }
 
 # a name that is not there: a build constant (Consts.find) or a global (Scope.find)
-error missing {
+type missing error {
     NAME
 }
 
@@ -112,7 +112,7 @@ fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I6
 }
 
 # what is wrong with a -D flag (B10, B10a)
-error DefineError {
+type DefineError error {
     SHAPE
     NOT_NAME
     TWICE
@@ -124,7 +124,7 @@ error DefineError {
 }
 
 # a -D flag that could not be defined - its diagnostic said
-error Bad { FLAG }
+type Bad error { FLAG }
 
 # -D NAME=VALUE (B10): defines a build constant, its value read as its literal would be. What is wrong with the flag is
 # reported to d, as the compiler reports a command line's mistakes

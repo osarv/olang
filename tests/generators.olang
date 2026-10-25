@@ -1,0 +1,245 @@
+# generators (D18, S20, QAG): a function whose result is written Iterator<T ? E> and whose body yields gives a
+# Generator<T ? E>, whose Next runs the body on from where it stopped to its next yield
+
+type Bad error {
+    NEG
+}
+
+type Res struct(id I64) {
+    id
+} destruct {
+    Dropped++
+}
+
+Dropped mut I64 = 0
+Ten mut I64 = 10 # read at run time: what the evaluator bakes below is computed again from it
+
+fn evens(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i += 2
+    }
+}
+
+fn countdown(n I64) Iterator<I64 ? Bad> {
+    for n > 0 {
+        if n == 3 { error Bad.NEG }
+        yield n
+        n--
+    }
+}
+
+fn repeat<T>(x T, n I64) Iterator<T> {
+    for i in range n { yield x }
+}
+
+fn (l List<T>&) Twice() Iterator<T> {
+    for x in l {
+        yield x
+        yield x
+    }
+}
+
+fn words(t String&) Iterator<String> {
+    for w in t.Split(" ") {
+        if w.Len() == 0 { continue }
+        yield $w "!"
+    }
+}
+
+fn guarded(n I64) Iterator<I64> {
+    for i in range n {
+        r := Res(i)
+        yield r.id
+    }
+}
+
+fn nested(n I64) Iterator<I64> {
+    for x in evens(n) {
+        for y in repeat(x, 2) { yield 10 * x + y }
+    }
+}
+
+fn firstTwo(n I64) Iterator<I64> {
+    yield n
+    if n > 5 { return }
+    yield n + 1
+}
+
+fn pairs<I Iterator<I64>>(it mut I&) Iterator<I64> {
+    for {
+        a := try it.Next()
+        b := try it.Next() catch Exhausted default 0
+        yield a + b
+    }
+}
+
+# K2: globals baked from generators, beside the same walks at run time
+Total I64 = evens(10).Sum()
+Walked I64 = nested(4).Sum()
+Said I64 = words("a bb  ccc").Count(fn(s) { return s.Len() > 2 })
+
+type Holder struct(g Generator<I64>) {
+    g
+}
+
+test "D18: a generator walked by for-in and by the iterator helpers, while compiling and at run time" {
+    assert Total == 20
+    assert evens(Ten).Sum() == Total
+    assert evens(4).Sum() == 2 # decided while compiling (S18c)
+    n I64 = 0
+    for x in evens(Ten) { n += x }
+    assert n == 20
+    assert Walked == 44
+    assert nested(Ten - 6).Sum() == Walked
+    assert Said == 2
+}
+
+test "D18: a generic generator, a generator method, text built for each value" {
+    assert repeat("ab", 3).Count(fn(s) { return s == "ab" }) == 3
+    l := List<I64>()
+    l.Push(1)
+    l.Push(Ten)
+    out := List<I64>()
+    for x in l.Twice() { out.Push(x) }
+    assert out.Len() == 4 and out[2] == 10 and out[3] == 10
+    n I64 = 0
+    for w in words("the  quick brown") {
+        n++
+        if n == 2 { assert w == "quick!" }
+    }
+    assert n == 3
+}
+
+test "D18: errors - the error leaves, Exhausted after it" {
+    got := List<I64>()
+    failed := false
+    for x in try countdown(5) { got.Push(x) } catch Bad { failed = true }
+    assert failed and got.Len() == 2 and got[1] == 4
+    g := countdown(Ten)
+    total I64 = 0
+    for { total += try g.Next() catch Bad { break } catch Exhausted { break } }
+    over := false
+    try g.Next() catch Exhausted { over = true } catch Bad { }
+    assert over
+    assert total == 10 + 9 + 8 + 7 + 6 + 5 + 4
+}
+
+test "D18a: return ends a walk, and Next after the end fails with Exhausted again" {
+    g := firstTwo(Ten)
+    a := try g.Next() catch default -1
+    b := try g.Next() catch default -1
+    c := try g.Next() catch default -1
+    assert a == 10 and b == -1 and c == -1
+    assert firstTwo(1).Sum() == 3
+}
+
+test "D18: a generator over another iterator ends where that one does" {
+    it := evens(Ten)
+    assert pairs(it).Sum() == 20
+    assert pairs(evens(6)).Sum() == 6
+}
+
+test "D18: a copy of a Generator is the same walk; a field holds one" {
+    h := Holder(repeat(7, 2))
+    c := h.g
+    x1 := try h.g.Next() catch default -1
+    x2 := try c.Next() catch default -1
+    x3 := try c.Next() catch default -1
+    assert x1 == 7 and x2 == 7 and x3 == -1
+    a mut any Iterator<I64>& = repeat(5, 3)
+    n I64 = 0
+    for v in a { n += v }
+    assert n == 15
+}
+
+test "D18b: a walk stopped part way closes its scopes with the scope the generator lives in" {
+    d := Dropped
+    {
+        g := guarded(Ten)
+        a := try g.Next() catch default -1
+        b := try g.Next() catch default -1
+        assert a == 0 and b == 1
+        assert Dropped == d + 1 # the first turn's scope closed as the walk went on
+    }
+    assert Dropped == d + 2 # the second's, as the walk was dropped
+    for x in guarded(3) {
+        if x == 1 { break }
+    }
+    assert Dropped == d + 4
+    for x in guarded(2) { }
+    assert Dropped == d + 6
+}
+
+test "D18: a walk churned between values reads what it made, not reused storage" {
+    for w in words("one two three") {
+        junk := List<I64>()
+        for i in range 50 { junk.Push(($i "-" $i).Len()) }
+        assert w.EndsWith("!") and junk.Len() == 50
+    }
+}
+
+fn logged(n I64, log mut List<String&>&) Iterator<I64> {
+    for i in range n {
+        log.Push($i "!")
+        yield i
+    }
+}
+
+test "D18b: a generator builds into what it was given, where that lives" {
+    log := List<String&>()
+    s I64 = 0
+    for x in logged(Ten - 6, log) { s += x }
+    assert s == 6 and log.Len() == 4 and log[3] == "3!"
+}
+
+fn copies(t String&) Iterator<String> {
+    at I64 = 0
+    for k in range t.Len() {
+        if t[k] == ',' {
+            yield $t[at:k]
+            at = k + 1
+        }
+    }
+    yield $t[at:]
+}
+
+test "D18c: a generator yields copies of what it was given" {
+    n I64 = 0
+    for p in copies("a,bb,,ccc") {
+        n++
+        if n == 2 { assert p == "bb" }
+        if n == 3 { assert p.Len() == 0 }
+    }
+    assert n == 4
+}
+
+# S19e: an errdefer in a block of a generator's body that closes before its yield runs when the walk's error leaves it
+EdLog mut I64 = 0
+
+fn edCheck(n I64) ? Bad {
+    if n < 0 { error Bad.NEG }
+}
+
+fn edWalk(n I64) Iterator<I64 ? Bad> {
+    for i in range 3 {
+        {
+            errdefer EdLog = EdLog * 10 + 1
+            try edCheck(n - i)
+        }
+        yield i
+    }
+}
+
+fn edTotal(n I64) I64 {
+    t I64 = 0
+    for x in try edWalk(n) { t += x } catch Bad { t += 100 }
+    return t
+}
+
+test "S19e: an errdefer in a generator's body runs when the walk fails, not when it ends" {
+    EdLog = 0
+    assert edTotal(5) == 3 and EdLog == 0
+    assert edTotal(1) == 101 and EdLog == 1
+}

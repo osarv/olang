@@ -174,7 +174,7 @@ fn callExtent(l String&, col I64) I64, I64 ? {
     return start, k + 1
 }
 
-error Unparsed {
+type Unparsed error {
     CALL
     SIGNATURE
 }
@@ -219,7 +219,7 @@ fn declareError(text String&, line I64, errType String&) String ? {
             for w in code[q + 3:code.Len() - 2].Split(" + ") {
                 if w.Trim() == errType { error Unparsed.SIGNATURE }         # already listed
             }
-            if not text.Contains("error " $errType " {") { error Unparsed.SIGNATURE }   # another module's: written by hand
+            if not text.Contains("error " $errType " {") and not text.Contains("type " $errType " error") { error Unparsed.SIGNATURE }   # another module's: written by hand
             return splice(text, at, 0, " + " $errType)
         }
         n--

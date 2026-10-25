@@ -1,6 +1,6 @@
 # check: fail error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
 # D17b: a written error set lists ArgumentError, which a function with conditions can fail with
-error Odd {
+type Odd error {
     ODD
 }
 

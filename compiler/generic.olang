@@ -88,6 +88,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
     varsN Map<I64, I64>
     vars List<varRow>
+    errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
+    genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
     typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
@@ -118,6 +120,9 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # and the ones a check met undecided (ConstAsks)
     Lengths Map<String&, I64>
     ConstAsks List<ConstAsk>
+    # E38: the paths of embeds written as no literal, evaluated while compiling - by file and offset (set before
+    # checking; interp's Analyze): the path, or "\0" where its evaluation gave none
+    Embeds Map<pair.Pair<I64, I64>, String&>
     # B5a: every module's global initializers' bodies in the order they run - a module's after its imports', each
     # after the globals its initializer reads (check's orderGlobals, once every body is checked)
     InitOrder List<I64>
@@ -238,7 +243,7 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
 }
 
 # FindDecl's miss: no module of that identity, or no type of that name in it
-error Undeclared {
+type Undeclared error {
     TYPE
 }
 
@@ -280,6 +285,9 @@ fn (p mut Program&) declVars(d types.DeclId) {
     }
     p.addVars(owner, ns.ToArray())
     if td is null or td.Params.Len() == 0 { return }
+    for i in range td.Params.Len() {
+        if td.Params[i].ErrSet { p.errVars.Put(pair.Pair(owner, i), true) }
+    }
     c := p.declContext(d)
     base := try p.varsAt.Get(owner) catch default 0
     for i in range td.Params.Len() {
@@ -315,8 +323,169 @@ fn (p mut Program&) SelfType(d types.DeclId) types.TypeId {
     owner := DeclOwner(d)
     n := p.T.DeclParams(d)
     vs := Array<types.TypeId>(n)
-    for i in range n { vs[i] = p.T.Var(owner, i, types.ReadOnly) }
+    for i in range n { vs[i] = p.VarArg(owner, i) }
     return p.T.Named(d, p.T.List(vs))
+}
+
+# ---- error-set parameters (G1a, QAH) ----
+
+# whether a type is an error-set variable: a variable its list writes after "?"
+fn (p mut Program&) IsErrVar(t types.TypeId) Bool {
+    return p.T.KindOf(t) == types.Kind.Var and (try p.errVars.Get(pair.Pair(p.T.A(t), p.T.B(t))) catch default false)
+}
+
+# whether function f is a generator (D18): its result written Iterator<T ? E>, its body yielding - known once its
+# signature is
+fn (p mut Program&) IsGenerator(f I64) Bool {
+    p.Sig(f)
+    return try p.genFns.Get(f) catch default false
+}
+
+# D18: the Generator<T ? E> a generator's result written t, an Iterator<T ? E>, stands for; Unknown where t is no
+# Iterator
+fn (p mut Program&) generatorOf(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named { return types.UnknownT }
+    it := try p.FindDecl("std/prelude/iterator", "Iterator") catch { return types.UnknownT }
+    if p.T.DeclOf(t) != it { return types.UnknownT }
+    g := try p.FindDecl("std/prelude/iterator", "Generator") catch { return types.UnknownT }
+    return p.Instance(g, p.T.Args(t))
+}
+
+fn (p mut Program&) ErrVarAt(owner I64, i I64) Bool { return try p.errVars.Get(pair.Pair(owner, i)) catch default false }
+
+# owner's i-th variable as an argument: itself, or for the error-set parameter the set holding it
+fn (p mut Program&) VarArg(owner I64, i I64) types.TypeId {
+    v := p.T.Var(owner, i, types.ReadOnly)
+    return p.ErrSetOf(p.T.List1(v)) if p.ErrVarAt(owner, i) else v
+}
+
+# whether a declared type's list ends in an error-set parameter
+fn (p mut Program&) HasErrParam(d types.DeclId) Bool {
+    p.declVars(d)
+    n := p.T.DeclParams(d)
+    return n > 0 and p.ErrVarAt(DeclOwner(d), n - 1)
+}
+
+# an error set as an argument: its entries merged (R1c) and in the canonical order - error types by the module
+# declaring them, then by name (R1a), variables after them - so one set is one type
+fn (p mut Program&) ErrSetOf(entries types.ListId) types.TypeId {
+    flat List<types.TypeId>
+    for e in p.T.Items(entries) {
+        if e != types.UnknownT and e != types.DefaultErrT { flat.Push(e) }
+    }
+    es List<types.TypeId>
+    p.mergeEntries(flat, es)
+    xs := es.ToArray()
+    xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return p.errBefore(a, b) })
+    return p.T.ErrSet(p.T.List(xs))
+}
+
+fn (p mut Program&) errBefore(a types.TypeId, b types.TypeId) Bool {
+    av := p.T.KindOf(a) == types.Kind.Var
+    bv := p.T.KindOf(b) == types.Kind.Var
+    if av or bv {
+        if av != bv { return bv }
+        return p.T.A(a) < p.T.A(b) or (p.T.A(a) == p.T.A(b) and p.T.B(a) < p.T.B(b))
+    }
+    da := p.T.DeclOf(p.T.ErrOf(a))
+    db := p.T.DeclOf(p.T.ErrOf(b))
+    ma := p.L.Mods[p.T.DeclModule(da)].Identity
+    mb := p.L.Mods[p.T.DeclModule(db)].Identity
+    if ma != mb { return ma < mb }
+    return p.text(p.T.DeclName(da)) < p.text(p.T.DeclName(db))
+}
+
+# the union of two error-set arguments (G9: what binds an error-set variable)
+fn (p mut Program&) ErrSetUnion(a types.TypeId, b types.TypeId) types.TypeId {
+    xs := List<types.TypeId>()
+    for e in p.T.Items(p.T.ErrSetItems(a)) { xs.Push(e) }
+    for e in p.T.Items(p.T.ErrSetItems(b)) { xs.Push(e) }
+    return p.ErrSetOf(p.T.List(xs.ToArray()))
+}
+
+# an error list with an owner's error-set variables replaced by the sets args binds them to, spliced in where the
+# variable stands and merged (R1c): "? E, Exhausted" with E bound to {io.Error} is "? io.Error, Exhausted"
+fn (p mut Program&) substErrs(l types.ListId, owner I64, args types.ListId) types.ListId {
+    if l == types.ListId(0) { return l }
+    xs := p.T.Items(args)
+    flat List<types.TypeId>
+    changed := false
+    for e in p.T.Items(l) {
+        if p.T.KindOf(e) == types.Kind.Var and p.T.A(e) == owner and p.T.B(e) < xs.Len() {
+            v := xs[p.T.B(e)]
+            changed = true
+            if p.T.KindOf(v) == types.Kind.ErrSet {
+                for x in p.T.Items(p.T.ErrSetItems(v)) { flat.Push(x) }
+            } else if p.T.KindOf(v) == types.Kind.Var {
+                flat.Push(v)
+            }
+        } else {
+            flat.Push(e)
+        }
+    }
+    if not changed { return l }
+    es List<types.TypeId>
+    p.mergeEntries(flat, es)
+    return p.T.List(es.ToArray())
+}
+
+# whether an error list names one of the binding's error-set variables
+fn (p mut Program&) errsHaveVar(l types.ListId, b Binding&) Bool {
+    for e in p.T.Items(l) {
+        if p.isVar(e, b) { return true }
+    }
+    return false
+}
+
+# an error list matched against one a value has (G9, QAH): the pattern's error-set variable takes what the value can
+# fail with beyond the pattern's other entries - unioned with what it holds, since every function value and iterator
+# passed adds to it. A pattern with no variable of the binding's matches as before, entry by entry
+fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Binding&) Bool {
+    if not p.errsHaveVar(pat, b) { return p.unifyLists(pat, actual, b) }
+    fixed List<types.TypeId>
+    vi I64 = -1
+    for e in p.T.Items(pat) {
+        if p.isVar(e, b) { vi = p.T.B(e) } else { fixed.Push(e) }
+    }
+    rest List<types.TypeId>
+    for e in p.T.Items(actual) {
+        if e == types.DefaultErrT or e == types.UnknownT { continue }
+        if not p.entryHeld(e, fixed) { rest.Push(e) }
+    }
+    return p.bind(b, vi, p.ErrSetOf(p.T.List(rest.ToArray())), false, false)
+}
+
+# the index of a function's error-set variable among its signature's (G1a), -1 for none
+fn (p mut Program&) ErrVarIndex(f I64) I64 {
+    owner := FnOwner(f)
+    p.Sig(f)
+    for i in range p.VarCount(owner) {
+        if p.ErrVarAt(owner, i) { return i }
+    }
+    return -1
+}
+
+fn (p mut Program&) ErrsArgOf(c Context&, t ast.TypeRef&) types.TypeId { return p.errsArg(c, t) }
+
+fn (p mut Program&) UnifyErrors(pat types.ListId, actual types.ListId, b mut Binding&) Bool { return p.unifyErrs(pat, actual, b) }
+
+# whether an error set's entry is held by one of a list's (R1c: the same error type, its words among theirs)
+fn (p mut Program&) entryHeld(e types.TypeId, l List<types.TypeId>&) Bool {
+    for x in l {
+        if p.T.ErrOf(x) == p.T.ErrOf(e) and (p.T.ErrMask(e) & ~p.T.ErrMask(x)) == U64(0) { return true }
+    }
+    return false
+}
+
+# whether every error of one set is held by another (T31: a method's set held by its trait's signature's)
+fn (p mut Program&) ErrsHeld(have types.ListId, want types.ListId) Bool {
+    if have == want { return true }
+    ws List<types.TypeId>
+    for x in p.T.Items(want) { ws.Push(x) }
+    for e in p.T.Items(have) {
+        if e == types.DefaultErrT or not p.entryHeld(e, ws) { return false }
+    }
+    return true
 }
 
 # ---- written types ----
@@ -334,6 +503,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Perm(_, of, writable, owned) => p.perm(p.Resolve(c, of), writable, owned)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of) => p.T.Any(p.Resolve(c, of))
+        case ast.TypeRef.Errs(_, _) => types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
     }
 }
 
@@ -368,6 +538,8 @@ fn (p mut Program&) perm(t types.TypeId, writable Bool, owned Bool) types.TypeId
 fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&, args Array<ast.TypeRef&>&) types.TypeId {
     if path.Len() == 1 {
         v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)
+        # G1a: an error-set parameter stands only where an error set is written - said by the checker (writtenMet)
+        if v >= types.TypeId(0) and (p.IsErrVar(v) or p.T.KindOf(v) == types.Kind.ErrSet) { return types.UnknownT }
         if v >= types.TypeId(0) { return v }
     }
     ref := p.R.Use(p.file(c.Mi), sp.Start)
@@ -395,11 +567,65 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
 fn (p mut Program&) Apply(c Context&, d types.DeclId, args Array<ast.TypeRef&>&) types.TypeId {
     p.declVars(d)
     n := p.T.DeclParams(d)
-    if n != args.Len() { return types.UnknownT }
+    # G1a: a list ending in an error-set parameter takes its set after "?", the empty set where none is written
+    written := args.Len()
+    given := written > 0 and isErrsArg(args[written - 1])
+    if p.HasErrParam(d) {
+        if (written if given else written + 1) != n { return types.UnknownT }
+    } else if given or n != written {
+        return types.UnknownT
+    }
     vs := Array<types.TypeId>(n)
-    owner := DeclOwner(d)
-    for i in range n { vs[i] = p.Resolve(c, args[i]) }
+    for i in range n {
+        if i == n - 1 and p.HasErrParam(d) {
+            vs[i] = p.errsArg(c, args[i]) if given else p.ErrSetOf(types.ListId(0))
+        } else {
+            vs[i] = p.Resolve(c, args[i])
+        }
+    }
     return p.Instance(d, p.T.List(vs))
+}
+
+# how many types a declared type's argument list writes (G7): its parameters, less an error-set one (G1a)
+fn (p mut Program&) WrittenArity(d types.DeclId) I64 { return p.T.DeclParams(d) - (1 if p.HasErrParam(d) else 0) }
+
+# how many types a written argument list holds, its error-set argument left out
+fn WrittenTypes(args Array<ast.TypeRef&>&) I64 {
+    n := args.Len()
+    return n - 1 if n > 0 and isErrsArg(args[n - 1]) else n
+}
+
+# whether a written argument list fits a declared type's parameters (G7, G1a): as many types, and an error-set
+# argument only where the type has an error-set parameter
+fn (p mut Program&) ArgsFit(d types.DeclId, args Array<ast.TypeRef&>&) Bool {
+    n := args.Len()
+    if n > 0 and isErrsArg(args[n - 1]) and not p.HasErrParam(d) { return false }
+    return WrittenTypes(args) == p.WrittenArity(d)
+}
+
+# whether a written type argument is an error set's, "? A, B" (G1a)
+fn IsErrsArgOf(t ast.TypeRef&) Bool { return isErrsArg(t) }
+
+fn isErrsArg(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Errs(_, _) => true
+        case _ => false
+    }
+}
+
+# an error-set argument as written (G1a): its items' entries, merged, the set they make
+fn (p mut Program&) errsArg(c Context&, t ast.TypeRef&) types.TypeId {
+    match t {
+        case ast.TypeRef.Errs(_, items) {
+            flat List<types.TypeId>
+            for e in items {
+                p.ErrorItemKnown(c, e)
+                p.errorSetEntries(c, e, flat)
+            }
+            return p.ErrSetOf(p.T.List(flat.ToArray()))
+        }
+        nomatch { return p.ErrSetOf(types.ListId(0)) }
+    }
 }
 
 # a type's instance with these arguments (or the type itself, a non-generic one with none): G17 bounds how deep the
@@ -582,8 +808,16 @@ fn (p mut Program&) markOf(t ast.TypeRef?&) source.NameId {
     }
 }
 
-# an error set's item: an error type, its own module's or one an alias chain reaches (names records the head)
+# an error set's item: an error type, its own module's or one an alias chain reaches (names records the head); Unknown
+# for a type of another kind
 fn (p mut Program&) errorType(c Context&, e ast.Path&) types.TypeId {
+    t := p.namedType(c, e)
+    if t == types.UnknownT or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Error { return types.UnknownT }
+    return t
+}
+
+# a declared type a dotted path names, of any kind
+fn (p mut Program&) namedType(c Context&, e ast.Path&) types.TypeId {
     ref := p.R.Use(p.file(c.Mi), e.Sp.Start)
     n := e.Parts.Len()
     if n == 1 {
@@ -604,6 +838,12 @@ fn (p mut Program&) errorType(c Context&, e ast.Path&) types.TypeId {
 # an error set's item (R1, R1c): an error type, or one of its words - an entry holding that word alone, past the 64th
 # none; Unknown for neither
 fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
+    # G1a: an error-set parameter - its variable, or the set an instance binds it to
+    if e.Parts.Len() == 1 {
+        v := try c.Vars.Get(e.Parts[0]) catch default types.TypeId(-1)
+        if v >= types.TypeId(0) and (p.IsErrVar(v) or p.T.KindOf(v) == types.Kind.ErrSet) { return v }
+        if v >= types.TypeId(0) { return types.UnknownT }
+    }
     t := p.errorType(c, e)
     n := e.Parts.Len()
     if t != types.UnknownT or n < 2 { return t }
@@ -617,64 +857,179 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
 }
 
 # an error set as written (R1, R1c): its items in order, the words of one type one entry, a type named whole holding
-# every word of it; "?" alone the inferred set's mark (R1a)
+# every word of it, a named set its members (T19a); "?" alone the inferred set's mark (R1a)
 fn (p mut Program&) errorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId {
     es List<types.TypeId>
     if has and items.Len() == 0 { es.Push(types.DefaultErrT) }
     if has {
+        flat List<types.TypeId>
         for e in items {
-            t := p.errorSetItem(c, e)
-            k I64 = -1
-            for j in range es.Len() {
-                if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
-            }
-            if k < 0 {
-                es.Push(t)
-            } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
-                es[k] = p.T.ErrOf(t)
-            } else {
-                es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
-            }
+            p.ErrorItemKnown(c, e)
+            p.errorSetEntries(c, e, flat)
         }
+        p.mergeEntries(flat, es)
     }
     return p.T.List(es.ToArray())
 }
 
-# the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
-fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
-    ds := p.L.Mods[p.T.DeclModule(d)].Decls
-    w := wordsIn(ds, p.T.DeclName(d))
-    return w if w.Len() > 0 else Array<source.NameId>(0)
+fn (p mut Program&) ErrorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId { return p.errorList(c, has, items) }
+
+# entries merged as one set holds them (R1c): the words of one type one entry, a type named whole holding every word
+fn (p mut Program&) mergeEntries(flat List<types.TypeId>&, es mut List<types.TypeId>&) {
+    for t in flat {
+        k I64 = -1
+        for j in range es.Len() {
+            if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
+        }
+        if k < 0 {
+            es.Push(t)
+        } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
+            es[k] = p.T.ErrOf(t)
+        } else {
+            es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
+        }
+    }
 }
 
-fn wordsIn(ds Array<ast.Decl&>&, name source.NameId) Array<source.NameId>&ds {
-    if ds.Len() == 0 { return Array<source.NameId>(0) }
+# an error set's item as the entries it stands for (T19a): an error type, or one of its words, itself; a named set its
+# members in order, each flattened, then its own words where it declares any - a set reached again on its way (a cycle,
+# said at its declaration) and an unknown item stand for nothing (Unknown, an unknown one)
+fn (p mut Program&) errorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) {
+    seen List<types.DeclId>
+    p.entriesOf(p.errorSetItem(c, e), out, seen)
+}
+
+fn (p mut Program&) ErrorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) { p.errorSetEntries(c, e, out) }
+
+fn (p mut Program&) ErrorSetItem(c Context&, e ast.Path&) types.TypeId { return p.errorSetItem(c, e) }
+
+# the entries an error type or a set stands for (T19a)
+fn (p mut Program&) EntriesOf(t types.TypeId, out mut List<types.TypeId>&) {
+    seen List<types.DeclId>
+    p.entriesOf(t, out, seen)
+}
+
+fn (p mut Program&) entriesOf(t types.TypeId, out mut List<types.TypeId>&, seen mut List<types.DeclId>&) {
+    if p.T.KindOf(t) == types.Kind.ErrSet {
+        for x in p.T.Items(p.T.ErrSetItems(t)) { out.Push(x) }
+        return
+    }
+    if t == types.UnknownT or p.T.KindOf(t) != types.Kind.Named {
+        out.Push(t)
+        return
+    }
+    d := p.T.DeclOf(t)
+    ms := p.ErrorMembers(d)
+    if ms.Len() == 0 {
+        out.Push(t)
+        return
+    }
+    for s in seen {
+        if s == d { return }
+    }
+    seen.Push(d)
+    mc := Context(p.T.DeclModule(d), -1)
+    for m in ms { p.entriesOf(p.errorSetItem(mc, m), out, seen) }
+    seen.Pop()!
+    if p.ErrorWords(d).Len() > 0 { out.Push(t) }
+}
+
+# R1, T19a: an error set's item names an error type, one of its words or a named set - said once where it does not,
+# false then
+fn (p mut Program&) ErrorItemKnown(c Context&, e ast.Path&) Bool {
+    if e.Parts.Len() == 0 or p.errorSetItem(c, e) != types.UnknownT { return true }
+    at := p.at(c.Mi, e.Sp)
+    if e.Parts.Len() == 1 and c.Vars.Has(e.Parts[0]) {
+        p.L.Diags.ErrorOncePerLine(at, msgs.TypeVarNotErrorSet(msgs.Tok(p.text(e.Parts[0]))))
+        return false
+    }
+    t := p.namedType(c, e)
+    if t != types.UnknownT {
+        p.L.Diags.ErrorOncePerLine(at, msgs.NotAnErrorType(msgs.Tok(p.text(p.T.DeclName(p.T.DeclOf(t))))))
+        return false
+    }
+    n := e.Parts.Len()
+    if n >= 2 {
+        et := p.errorType(c, ast.Path(e.Sp, e.Parts[:n - 1]))
+        if et != types.UnknownT {
+            w := e.Parts[n - 1]
+            ws := p.ErrorWords(p.T.DeclOf(et))
+            far := false
+            for i in range ws.Len() {
+                if ws[i] == w { far = true }
+            }
+            nm := p.text(p.T.DeclName(p.T.DeclOf(et)))
+            if far {
+                p.L.Diags.ErrorOncePerLine(at, msgs.ErrorWordTooFar(nm))
+            } else {
+                p.L.Diags.ErrorOncePerLine(at, msgs.NoSuchErrorWord(nm, msgs.Tok(p.text(w))))
+            }
+            return false
+        }
+    }
+    text := p.L.Mods[c.Mi].Src!.Text[I64(e.Sp.Start):I64(e.Sp.End)]
+    p.L.Diags.ErrorOncePerLine(at, msgs.UnknownErrorType(msgs.Tok(text)))
+    return false
+}
+
+# whether an error type is a named set (T19a): it declares members
+fn (p mut Program&) IsErrorSet(t types.TypeId) Bool {
+    return t != types.UnknownT and p.T.KindOf(t) == types.Kind.Named and p.ErrorMembers(p.T.DeclOf(t)).Len() > 0
+}
+
+# the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
+fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
+    e := p.errorDecl(d)
+    if e is null { return Array<source.NameId>(0) }
+    return match e {
+        case ast.Decl.Errors(_, _, words, _) => words
+        case _ => Array<source.NameId>(0)
+    }
+}
+
+# the members a named error set declares (T19a), in order, as written in its module
+fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>&p {
+    e := p.errorDecl(d)
+    if e is null { return Array<ast.Path&>(0) }
+    return match e {
+        case ast.Decl.Errors(_, _, _, members) => members
+        case _ => Array<ast.Path&>(0)
+    }
+}
+
+# an error type's declaration (T19), among its module's and a top-level if's; null for none
+fn (p mut Program&) errorDecl(d types.DeclId) ast.Decl?&p {
+    return errorDeclIn(p.L.Mods[p.T.DeclModule(d)].Decls, p.T.DeclName(d))
+}
+
+fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?&ds {
+    if ds.Len() == 0 { return null }
     for d in ds {
         match d {
-            case ast.Decl.Errors(_, n, words) {
-                if n == name { return words }
+            case ast.Decl.Errors(_, n, _, _) {
+                if n == name { return d }
             }
             case ast.Decl.If(_, ti) {
-                w := wordsInIf(ti, name)
-                if w.Len() > 0 { return w }
+                e := errorDeclInIf(ti, name)
+                if e is not null { return e }
             }
             nomatch { }
         }
     }
-    return Array<source.NameId>(0)
+    return null
 }
 
-fn wordsInIf(ti ast.TopIf&, name source.NameId) Array<source.NameId>&ti {
+fn errorDeclInIf(ti ast.TopIf&, name source.NameId) ast.Decl?&ti {
     if ti.Then is not null {
-        w := wordsIn(ti.Then!.Decls, name)
-        if w.Len() > 0 { return w }
+        e := errorDeclIn(ti.Then!.Decls, name)
+        if e is not null { return e }
     }
     if ti.ElseIf is not null {
-        w := wordsInIf(ti.ElseIf!, name)
-        if w.Len() > 0 { return w }
+        e := errorDeclInIf(ti.ElseIf!, name)
+        if e is not null { return e }
     }
-    if ti.Else is not null { return wordsIn(ti.Else!.Decls, name) }
-    return Array<source.NameId>(0)
+    if ti.Else is not null { return errorDeclIn(ti.Else!.Decls, name) }
+    return null
 }
 
 # the module an alias of a module reaches, -1 for none
@@ -1219,6 +1574,11 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Var {
             if p.T.A(t) != owner or p.T.B(t) >= xs.Len() { return t }
             v := xs[p.T.B(t)]
+            # G1a: an error-set variable bound to another one is that one (an argument holds it in a set)
+            if p.T.KindOf(v) == types.Kind.ErrSet and p.IsErrVar(t) {
+                vs := p.T.Items(p.T.ErrSetItems(v))
+                if vs.Len() == 1 and p.T.KindOf(vs[0]) == types.Kind.Var { return vs[0] }
+            }
             bits := p.T.C(t)
             if bits != types.ReadOnly and p.T.KindOf(v) == types.Kind.Ref {
                 return p.T.Ref(p.T.Referent(v), p.T.PermOf(v) | bits)
@@ -1244,8 +1604,9 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
             return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
-                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
+                            p.substErrs(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
         }
+        case types.Kind.ErrSet { return p.ErrSetOf(p.substErrs(p.T.ErrSetItems(t), owner, args)) }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args), p.T.ShapeFields(t)) }
@@ -1953,6 +2314,17 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     }
     written := ns.Len()
     for i in range written { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
+    # G1a: the error-set variables - its list's "? E", and one its receiver's error-set argument introduces
+    errNames List<source.NameId>
+    if row.F.Recv is not null { errIntroductions(row.F.Recv!.Ty, errNames) }
+    if row.F.TypeParams.Len() > 0 {
+        for tp in row.F.TypeParams {
+            if tp.ErrSet { errNames.Push(tp.Name) }
+        }
+    }
+    for i in range written {
+        if errNames.Has(ns[i]) { p.errVars.Put(pair.Pair(owner, i), true) }
+    }
     # G29, D9a: each array level a parameter holds by value takes its length from the argument - a variable of the
     # function's own, no name the program can write ("a.Len()" in a note), one instance per set of lengths
     levels List<I64>
@@ -1978,6 +2350,15 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
+    # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
+    if ast.FirstYield(row.F.Body).Start >= I32(0) {
+        g := p.generatorOf(p.T.Result(sig))
+        if g != types.UnknownT {
+            p.genFns.Put(f, true)
+            sig = p.T.Func(p.T.Params(sig), g, types.ListId(0), p.T.ScopesOf(sig))
+        }
+    }
     if ns.Len() > written {
         ps := p.T.Items(p.T.Params(sig))
         out := Array<types.TypeId>(ps.Len())
@@ -2006,6 +2387,7 @@ fn (p mut Program&) OwnVarIndexes(f I64) List<I64> {
         }
         for tp in row.F.TypeParams {
             if row.F.Recv is not null and mentionsName(row.F.Recv!.Ty, tp.Name) { continue }
+            if tp.ErrSet { continue }   # G1a: an error-set parameter is given after "?", or inferred
             for i, n in ns {
                 if n == tp.Name { out.Push(i) }
             }
@@ -2028,6 +2410,12 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
         case ast.TypeRef.Ref(_, of, _, _) { return mentionsName(of, n) }
         case ast.TypeRef.Perm(_, of, _, _) { return mentionsName(of, n) }
         case ast.TypeRef.Any(_, of) { return mentionsName(of, n) }
+        case ast.TypeRef.Errs(_, items) {
+            for e in items {
+                if e.Parts.Len() == 1 and e.Parts[0] == n { return true }
+            }
+            return false
+        }
         nomatch { return false }
     }
 }
@@ -2090,6 +2478,32 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut List<source.Na
         case ast.TypeRef.Ref(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Any(_, of) { p.introductions(mi, of, ns, inArgs) }
+        # QAH: "? E" among a receiver's arguments introduces its error-set variable
+        case ast.TypeRef.Errs(_, items) {
+            for e in items {
+                if e.Parts.Len() == 1 and p.R.Use(p.file(mi), e.Sp.Start).Kind == names.What.TypeVar and not ns.Has(e.Parts[0]) {
+                    ns.Push(e.Parts[0])
+                }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# the names an error-set argument introduces among a receiver's arguments (QAH), at any depth
+fn errIntroductions(t ast.TypeRef?&, out mut List<source.NameId>&) {
+    if t is null { return }
+    match t {
+        case ast.TypeRef.Named(_, _, args) {
+            for a in args { errIntroductions(a, out) }
+        }
+        case ast.TypeRef.Ref(_, of, _, _) { errIntroductions(of, out) }
+        case ast.TypeRef.Perm(_, of, _, _) { errIntroductions(of, out) }
+        case ast.TypeRef.Errs(_, items) {
+            for e in items {
+                if e.Parts.Len() == 1 { out.Push(e.Parts[0]) }
+            }
+        }
         nomatch { }
     }
 }
@@ -2447,8 +2861,9 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
         case types.Kind.Func {
             if not p.unifyLists(p.T.Params(pat), p.T.Params(actual), b) { return false }
             if not p.Unify(p.T.Result(pat), p.T.Result(actual), b, false, false) { return false }
-            return p.unifyLists(p.T.Errors(pat), p.T.Errors(actual), b)
+            return p.unifyErrs(p.T.Errors(pat), p.T.Errors(actual), b)
         }
+        case types.Kind.ErrSet { return p.unifyErrs(p.T.ErrSetItems(pat), p.T.ErrSetItems(actual), b) }
         case types.Kind.Tuple, types.Kind.Record { return p.unifyLists(p.T.Parts(pat), p.T.Parts(actual), b) }
         case types.Kind.AnonEnum {
             return p.T.ShapeNames(pat) == p.T.ShapeNames(actual) and p.unifyLists(p.T.ShapeCases(pat), p.T.ShapeCases(actual), b)
@@ -2474,6 +2889,12 @@ fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&, r
 # number widens to a wider one of its family unless a receiver bound it (G9b), two references differing only in
 # permission meet at read-only (G9d)
 fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) Bool {
+    # G1a: an error-set variable takes the union of what binds it - a set never conflicts with another
+    if p.T.KindOf(actual) == types.Kind.ErrSet {
+        cur := b.Vals[i]
+        b.Vals[i] = actual if cur == types.UnknownT or p.T.KindOf(cur) != types.Kind.ErrSet else p.ErrSetUnion(cur, actual)
+        return true
+    }
     # a function type argument keeps where its references live (G16a, T22): fn(a mut N&, b N&a) is another argument
     # than fn(mut N&, N&); what holds one by its parts' identity (a declared type's arguments) is held plain
     v := actual if p.T.KindOf(actual) == types.Kind.Func else p.T.Plain(actual)
@@ -2581,6 +3002,8 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
                 if hs.Len() != ws.Len() + 1 { continue }
                 for k in range ws.Len() { p.UnifyArg(ws[k], hs[k + 1], b, false, false) }
                 p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false)
+                # QAH: "Next() T ? E, Exhausted" binds E to what the type's Next fails with beyond Exhausted
+                if p.errsHaveVar(p.T.Errors(want), b) { p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) }
             }
         }
         nomatch { }
@@ -2749,7 +3172,7 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     # D8e: a noreturn method meets one with no result
     hr := p.T.Result(have)
     wr := p.T.Result(want)
-    return (p.T.Same(hr, wr) or (hr == types.NoreturnT and wr == types.VoidT)) and p.T.Errors(have) == p.T.Errors(want)
+    return (p.T.Same(hr, wr) or (hr == types.NoreturnT and wr == types.VoidT)) and p.ErrsHeld(p.T.Errors(have), p.T.Errors(want))
 }
 
 # a method the compiler supplies meeting a trait's (G19): Hash where E10b supplies one, an array's Len (E23)
@@ -3146,7 +3569,7 @@ fn (p mut Program&) AnyDefault(r types.TypeId, name source.NameId) I64 {
 # ---- canonical texts ----
 
 # what a canonical text that names no type fails with
-error BadCanon {
+type BadCanon error {
     TEXT
 }
 
@@ -3337,7 +3760,7 @@ test "declared types and instances: laid out as C lays them out, their canonical
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
-                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\nerror E { BAD }\n"
+                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\ntype E error { BAD }\n"
                        "type Meters extends I32\ntype Buf struct() { a := Array<U8>(5) }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()

@@ -1,5 +1,5 @@
 # check: fail B10a
 # flags: -define TestBuild=true
-error E { X }
+type E error { X }
 Level I32 = 1
 fn main() ? E { }

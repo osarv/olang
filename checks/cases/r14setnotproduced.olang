@@ -1,0 +1,9 @@
+# check: fail error[R14]: the call does not fail with Q
+# R14, T19a: a named set as a catch item names something the call can fail with
+type P error { A }
+type R error { B }
+type Q error R
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch Q { } catch P { }
+}

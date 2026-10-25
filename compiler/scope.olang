@@ -419,11 +419,19 @@ fn (s mut Scoper&) fnValues() {
                             case typed.ScopeVar.Param(l) {
                                 if kept == "" { kept = s.P.L.Names.Text(body.Locals[I64(l)].Name) }
                             }
+                            # a generator's Next: what it was given, its parameter (D18c)
+                            case typed.ScopeVar.Capture(l) {
+                                if kept == "" and body.Gen { kept = s.P.L.Names.Text(body.Locals[I64(l)].Name) }
+                            }
                             case _ { }
                         }
                     }
                     case _ { }
                 }
+            }
+            if body.Gen {
+                s.P.L.Diags.Error(at, msgs.GenYieldsBorrow(kept))
+                continue
             }
             s.P.L.Diags.Error(at, msgs.LambdaValueObligations(kept) if kept != "" else msgs.LambdaValueRelates())
         }
@@ -870,7 +878,7 @@ fn collectStmt(st typed.Stmt?&, out mut walked&) {
             collectBlock(body, out)
             collectBlock(post, out)
         }
-        case typed.Stmt.Return(_, x) { collectExpr(x, out) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { collectExpr(x, out) }
         case typed.Stmt.Assert(_, c, m) {
             collectExpr(c, out)
             collectExpr(m, out)
@@ -1730,7 +1738,7 @@ fn (s mut Scoper&) soleStmt(st typed.Stmt?&) {
             s.soleBlock(body)
             s.soleBlock(post)
         }
-        case typed.Stmt.Return(_, x) { s.soleExpr(x, false) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { s.soleExpr(x, false) }
         case typed.Stmt.Exit(_, _, m) { s.soleExpr(m, false) }
         case typed.Stmt.Assert(_, c, m) {
             s.soleExpr(c, false)
@@ -1934,7 +1942,7 @@ fn (s mut Scoper&) soleStrictStmt(st typed.Stmt?&) {
             s.soleStrictBlock(body)
             s.soleStrictBlock(post)
         }
-        case typed.Stmt.Return(_, x), typed.Stmt.Exit(_, _, x) { s.soleExpr(x, true) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Exit(_, _, x), typed.Stmt.Suspend(_, x) { s.soleExpr(x, true) }
         case typed.Stmt.Assert(_, c, m) {
             s.soleExpr(c, true)
             s.soleExpr(m, true)
@@ -2057,9 +2065,15 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
             s.flExpr(sw.Task)
             if s.flMode == 1 and s.carries(sw.Task) { s.flKept = true }
         }
+        # a generator's value (S20) is built in the Next call's result scope, which a local outlives: nothing is moved
+        # there for it (O26a, D18b), and a local it carries is kept
         case typed.Stmt.Yield(_, x) {
             s.flExpr(x)
             if s.flMode == 1 and s.carries(x) { s.flKept = true }
+        }
+        case typed.Stmt.Suspend(_, x) {
+            s.flExpr(x)
+            if s.flMode == 1 and s.carries(x!) { s.flKept = true }
         }
         case _ { }
     }
@@ -2629,8 +2643,19 @@ fn (s mut Scoper&) aliasBlock(bl typed.Block?&) {
             }
             case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { s.aliasBlock(b) }
             case typed.Stmt.Join(_, jn) { s.aliasBlock(jn.Code) }
+            # "for x in try p" (S9e): the loop a try statement's operand - its hidden cursor declared inside
+            case typed.Stmt.Eval(_, x) { s.aliasExpr(x) }
             case _ { }
         }
+    }
+}
+
+fn (s mut Scoper&) aliasExpr(x typed.Expr?&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Try(_, _, t) { s.aliasExpr(t.X) }
+        case typed.Expr.Seq(_, _, q) { s.aliasBlock(typed.Block(typed.BlockId(-1), q.Stmts)) }
+        case _ { }
     }
 }
 
@@ -2714,7 +2739,7 @@ fn (s mut Scoper&) rlStmt(st typed.Stmt?&, pass I64) {
             }
             s.rlExpr(x, pass)
         }
-        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { s.rlExpr(x, pass) }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Suspend(_, x) { s.rlExpr(x, pass) }
         case typed.Stmt.If(_, i) {
             s.rlExpr(i.Test, pass)
             s.rlBlock(i.Then, pass)
@@ -2864,7 +2889,7 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt?&) {
             s.kwBlock(body)
             s.kwBlock(post)
         }
-        case typed.Stmt.Return(_, x) {
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
             s.kwExpr(x, false)
             # a reference into a parameter's region through which something can be stored, handed out: the caller can
             # build through it (O17) - a read-only one's writable references included ("return b.arr[0:1]" of an
@@ -3425,7 +3450,7 @@ fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt?&, l I64, mode I64) Bool 
             return s.ueExpr(b, i.Test, l, mode) and s.ueBlock(b, i.Then, l, mode) and s.ueBlock(b, i.Else, l, mode)
         }
         case typed.Stmt.Loop(_, body, post) { return s.ueBlock(b, body, l, mode) and s.ueBlock(b, post, l, mode) }
-        case typed.Stmt.Return(_, x) { return s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { return s.ueExpr(b, x, l, mode) }
         case typed.Stmt.Assert(_, c, m) { return s.ueExpr(b, c, l, mode) and s.ueExpr(b, m, l, mode) }
         case typed.Stmt.Exit(_, _, m) { return s.ueExpr(b, m, l, mode) }
         case typed.Stmt.Block(_, bl) { return s.ueBlock(b, bl, l, mode) }
@@ -3802,7 +3827,7 @@ fn (s mut Scoper&) ocStmt(st typed.Stmt?&, l I64, passOn Bool) Bool {
             return s.ocExpr(i.Test, l, passOn) and s.ocBlock(i.Then, l, passOn) and s.ocBlock(i.Else, l, passOn)
         }
         case typed.Stmt.Loop(_, body, post) { return s.ocBlock(body, l, passOn) and s.ocBlock(post, l, passOn) }
-        case typed.Stmt.Return(_, x) { return s.ocExpr(x, l, passOn) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { return s.ocExpr(x, l, passOn) }
         case typed.Stmt.Assert(_, c, m) { return s.ocExpr(c, l, passOn) and s.ocExpr(m, l, passOn) }
         case typed.Stmt.Exit(_, _, m) { return s.ocExpr(m, l, passOn) }
         case typed.Stmt.Block(_, b) { return s.ocBlock(b, l, passOn) }
@@ -3972,8 +3997,9 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
             s.block(post)
         }
         case typed.Stmt.Jump(_, _, _) { }
-        case typed.Stmt.Return(sp, x) { s.ret(sp, x) }
+        case typed.Stmt.Return(sp, x), typed.Stmt.Suspend(sp, x) { s.ret(sp, x) }
         case typed.Stmt.Raise(_, _, _) { }
+        case typed.Stmt.Reraise(_, x, _) { s.val(x, Term.None) }
         case typed.Stmt.Exit(_, _, m) { s.val(m, Term.None) }
         case typed.Stmt.Assert(_, c, m) {
             s.val(c, Term.None)
@@ -6702,7 +6728,7 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         }
         if s.inRet and r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
             # a result returned holding this function's own storage, through the call that put it there (O26)
-            s.err(s.nameSpan(sp), msgs.ReturnOwnStorage())
+            s.err(s.nameSpan(sp), msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage())
             continue
         }
         if r.Why != 0 {
@@ -7656,7 +7682,7 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
     } else if kind == FitGlobal {
         m = msgs.GlobalHoldsShorter()
     } else if kind == FitReturn {
-        m = msgs.ReturnOwnStorage()
+        m = msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage()
     } else if kind == FitValue {
         m = msgs.ValueRefsOutlived()
     }

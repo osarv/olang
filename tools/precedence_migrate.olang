@@ -19,7 +19,7 @@ import "../compiler/parse"
 import "../compiler/diag"
 import layout "../compiler/fmt"
 
-error Unparsable { SYNTAX }
+type Unparsable error { SYNTAX }
 
 # the comparisons the old reading of a file has as operands of a bitwise operator
 fn mixed(path String&, text String&, std String&, prelude String&) List<source.Span> ? Unparsable {

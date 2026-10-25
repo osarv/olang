@@ -39,7 +39,7 @@ extern fn pipe(fds Array<I32>) I32
 
 # why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
 # every other
-error Error {
+type Error error {
     NOT_FOUND
     EXISTS
     DENIED

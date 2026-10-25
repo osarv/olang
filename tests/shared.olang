@@ -30,12 +30,12 @@ type Direction enum {
     WEST
 }
 
-error MathError {
+type MathError error {
     DIV_BY_ZERO
     OVERFLOW
 }
 
-error RangeError {
+type RangeError error {
     TOO_SMALL
     TOO_LARGE
 }
@@ -249,7 +249,7 @@ fn ComputeChecked(a I32, b I32, lo I32, hi I32) I32 ? MathError, RangeError {
 
 # an inferred set (R1a): "?" alone declares a function failing with what its body can - RangeError here - and an
 # untyped "catch" catches it. A function naming its errors fails with those and nothing else.
-error Oops {
+type Oops error {
     BAD
 }
 fn mightFailWithBareError(n I32) I32 ? {
@@ -281,7 +281,7 @@ type Rectangle struct(n I32) {
     doubled I32 = n * 2
 }
 
-error ValidationError {
+type ValidationError error {
     NEGATIVE
 }
 
@@ -305,7 +305,7 @@ fn measurementValue(n I32) I32 ? ValidationError {
     return m.v
 }
 
-error MeasureError {
+type MeasureError error {
     NEGATIVE
     TOO_BIG
 }
@@ -360,7 +360,7 @@ zeroGlobal mut Array<I32> = Array<I32>(5)
 # error union of its own - same rule as a test{} block - so a fallible call inside must be fully caught
 # right there; a destructor can never propagate a failure to anyone (there's no caller to hand it to,
 # especially once many queued destructors can fire in one scope-close batch - see the report).
-error CloseError {
+type CloseError error {
     FAIL
 }
 
@@ -3709,7 +3709,7 @@ test "an inferred set: an untyped catch catches what it holds" {
 
 # R1a: and so does a try statement whose clauses take only part of what its call can fail with - the rest leaves a bare
 # "?" function as itself, as an uncaught "try" expression's does
-error R17Err {
+type R17Err error {
     Loud
     Quiet
 }
@@ -4575,7 +4575,7 @@ test "a test after one that ended early still runs" {
     assert true
 }
 
-error S16Err {
+type S16Err error {
     MISSING
 }
 
@@ -5045,7 +5045,7 @@ test "a mut trait method writes through to the very instance" {
 
 # a fallible method is an ordinary one: the trait declares the error list, and T31 requires the concrete method's to
 # match it exactly and in order
-error SinkError { Full }
+type SinkError error { Full }
 
 type Sink trait {
     mut Put(n I32) ? SinkError
@@ -6419,7 +6419,7 @@ test "D15: := from a call" {
 fn divmodD(a I32, b I32) I32, I32 { return a / b, a % b }
 fn passD(a I32, b I32) I32, I32 { return divmodD(a, b) }        # several results passed on whole
 
-error DivError { ZERO }
+type DivError error { ZERO }
 fn safeDivD(a I32, b I32) I32, I32 ? DivError {
     if b == 0 { error DivError.ZERO }
     return a / b, a % b
@@ -6482,10 +6482,10 @@ test "D8c: with try, scopes, generics, methods and interfaces" {
 
 # L18c: a function type of several results or error items, as an item of a list, is parenthesized whole; a result that
 # is one, likewise, and one with no error set of its own before its signature's "?"
-error L18cErr {
+type L18cErr error {
     BAD
 }
-error L18cOther {
+type L18cOther error {
     WORSE
 }
 fn l18cPairer() (fn(x I64) I64, I64) { return fn(x I64) I64, I64 { return x, x + 1 } }
@@ -6813,12 +6813,12 @@ test "R9a: a reference default lives in exactly the result's scope, or is built 
 
 # R9b: several catch clauses, tried in order; in value position each leaves or gives its own default
 
-error R9E {
+type R9E error {
     A
     B
 }
 
-error R9F {
+type R9F error {
     C
 }
 
@@ -8140,7 +8140,7 @@ fn (s OpScale) Call(x I32) I32 { return x * s.k }
 
 fn opApply(f fn(x I32) I32, v I32) I32 { return f(v) }
 
-error OpGridError {
+type OpGridError error {
     OUT
 }
 
@@ -8433,7 +8433,7 @@ fn (g mut TxGrid&) Set(i I64, v I32) ? ArrayError.OUT_OF_RANGE {
     g.cells[i] = v
 }
 
-error TxErr {
+type TxErr error {
     MISSING
     ZERO
 }
@@ -9175,7 +9175,7 @@ test "O26/O25a: &return as a scope argument, := adopting it, and a typed local n
 # check (failing through its own error union) or change; "Pct(x)" runs it instead of the plain conversion. A
 # literal entering such a type runs it too, while compiling, and arithmetic produces it without running the constructor - Pct extends
 # I32 (T29f), so it has I32's operators.
-error PctError { NEGATIVE }
+type PctError error { NEGATIVE }
 type Pct extends I32(v I32) {
     if v > 100 { v = 100 }
 }
@@ -9640,7 +9640,7 @@ fn lamCount<T>(a Array<T>&, keep fn(x T) Bool) I32 {
 }
 fn lamTry(f fn(a I32) I32 ? LamErr, a I32) I32 ? LamErr { return try f(a) }
 fn lamDoubler() fn(x I32) I32 { return fn(x) { return x * 2 } }
-error LamErr { NEG }
+type LamErr error { NEG }
 
 LamBaked I32 = lamApply(fn(x) { return x * 7 }, 6)
 LamMapped := lamMap(I32[1, 2, 3], fn(x) { return I64(x) * 10 })
@@ -10719,7 +10719,7 @@ type DfLog struct() {
     n I64 = 0
 }
 fn (l mut DfLog&) Note(d I64) { l.n = l.n * 10 + d }
-error DfErr {
+type DfErr error {
     BAD
 }
 fn dfOrder(l mut DfLog&) I64 {
@@ -10839,6 +10839,96 @@ test "S19: deferred code runs on every way out of its block, while compiling and
     assert dfAll(WdMutable / 1000000000 + 1)
     assert dfAll(3)                     # S18c: decided while compiling
     assert DeferBaked
+}
+
+# S19e: an errdefer's code runs only when its block is left by an error moving outward - out of the function, to a
+# clause outside the block (a "for x in try c" ended by its own error), a join's tasks failing - in one list with the
+# defers, last registered first; never on the block's ordinary ways out or for an error a clause inside it takes.
+# Run while compiling (ErrDeferBaked, K2) exactly as at run time.
+fn edFails(l mut DfLog&, n I64) I64 ? DfErr {
+    defer l.Note(1)
+    errdefer l.Note(2)
+    defer l.Note(3)
+    if n < 0 { error DfErr.BAD }
+    return n
+}
+fn edLoop(l mut DfLog&, bad I64) ? DfErr {
+    for i in range 4 {
+        errdefer l.Note(5)              # only the iteration the error leaves runs it
+        defer l.Note(4)
+        if i == 2 { continue }
+        if i == bad { error DfErr.BAD }
+    }
+}
+fn edCaught(l mut DfLog&) {
+    errdefer l.Note(9)                  # the error below is taken inside this block: it never leaves it
+    try edFails(l, -1) catch DfErr { l.Note(6) }
+}
+fn edPassed(l mut DfLog&, n I64) I64 ? DfErr {
+    errdefer { l.Note(7) }
+    return try edFails(l, n)            # a try's error no clause takes leaves the function
+}
+fn edWalk(l mut DfLog&, failAt I32) I32 ? TxErr {
+    t I32 = 0
+    if failAt > 0 {
+        errdefer l.Note(8)
+        w mut TxLines& = TxLines(4, failAt)
+        for x in try w { t += x }       # the walk's own error leaves the block, then the function
+    }
+    return t
+}
+fn edJoin(l mut DfLog&, a I64) I64 {
+    out := Array<I64>(2)
+    try join {
+        defer l.Note(1)
+        errdefer l.Note(2)              # S19e: a join's failure is known after its wait, after its defers
+        spawn out[0] = try peSq(a)
+        spawn out[1] = try peSq(2)
+    } catch peErr { return -1 }
+    return out[0] + out[1]
+}
+fn edAll(k I64) Bool {
+    l := DfLog()
+    ok Bool = (try edFails(l, k) catch default -1) == k and l.n == 31
+    l.n = 0
+    r := try edFails(l, -k) catch default -9
+    failed Bool = r == -9 and l.n == 321
+    l.n = 0
+    try edLoop(l, k + 10) catch { }
+    loops Bool = l.n == 4444
+    l.n = 0
+    try edLoop(l, 1) catch { }
+    loopFails Bool = l.n == 445
+    l.n = 0
+    edCaught(l)
+    caught Bool = l.n == 3216
+    l.n = 0
+    p := try edPassed(l, -1) catch default -5
+    passed Bool = p == -5 and l.n == 3217
+    l.n = 0
+    w1 := try edWalk(l, 9) catch default -1
+    w2 := try edWalk(l, 2) catch TxErr default -2
+    walked Bool = w1 == 10 and w2 == -2 and l.n == 8
+    l.n = 0
+    joined Bool = edJoin(l, k) == k * k + 4 and l.n == 1 and edJoin(l, -1) == -1 and l.n == 112
+    return ok and failed and loops and loopFails and caught and passed and walked and joined
+}
+ErrDeferBaked := edAll(3)
+
+test "S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time" {
+    assert edAll(WdMutable / 1000000000 + 1)
+    assert edAll(3)                     # S18c: decided while compiling
+    assert ErrDeferBaked
+}
+
+# S19e: an errdefer in a test body runs when an error ends the test - shown by the test after it
+edTestLog mut I64 = 0
+test "errdefer pending in a test body is not run when the test passes" {
+    errdefer edTestLog = 5
+    edTestLog = 1
+}
+test "...and was not run" {
+    assert edTestLog == 1
 }
 
 # S19a: a block's deferred code runs before its scope closes - so it reads the block's locals and what was allocated
@@ -11418,7 +11508,7 @@ test "P2/P1g: what a task builds lives where its call bound it, not in the join 
     assert r!.v == 5 and h.item!.v == 6
 }
 
-error WlErr {
+type WlErr error {
     BAD
 }
 fn wlMaybe(x I64) WlNode& ? WlErr {
@@ -11483,7 +11573,7 @@ type SfPk enum {
 }
 sfRun mut I64 = 5
 
-error SfErr {
+type SfErr error {
     BAD
 }
 fn sfMk(k I64) mut SfNode& ? SfErr {
@@ -12176,7 +12266,7 @@ test "T4: a BF16 below F16's range, widened and computed on, narrows to F16 as c
 # K1/K1a: "unreachable" and "abort" stop an evaluation only where reached - a function holding one ("catch {
 # unreachable }", a guard for what cannot happen) is evaluated like any other, so its global is baked and its assert
 # decided; it used to be refused outright for holding one
-error fzErr {
+type fzErr error {
     BIG
 }
 fn fzChecked(x I32) I32 ? fzErr {
@@ -12280,7 +12370,7 @@ test "K1/P1: a join's tasks are evaluated while compiling, in sequence, and agre
 # R10/R9: an error raised by a try statement's call's own arguments ("try h(try g(n)) catch E.A") leaves the function,
 # as an argument's try says - the evaluator ran the statement's clause for it, so a baked global, an assert decided while
 # compiling and -i gave 7 where the program gave 1 (fuzz/repro/trystmtarg.olang)
-error fzTryErr {
+type fzTryErr error {
     A
     B
 }
@@ -12472,7 +12562,7 @@ test "S1a: a bare block closes its scope at its end, and leaves as its statement
 
 # S1b: a one-line body - ":" and one simple statement on its line - is the block holding it; an "else" may begin the
 # next line, and a statement before an "else" on its line ends there
-error S1bError { NEG }
+type S1bError error { NEG }
 fn s1bSign(x I64) I64 {
     if x < 0: return -1
     else if x == 0: return 0
@@ -13804,7 +13894,7 @@ fn c3PickField(i I64) String {
     }
     return "none"
 }
-error c3Err { BAD }
+type c3Err error { BAD }
 fn c3Fails(i I64) String ? c3Err {
     if i > 0 { error c3Err.BAD }
     return c3Mk(i)
@@ -14451,7 +14541,7 @@ test "G9a, T22: Fold's literal start and a read-only lambda parameter" {
 
 # R11: a by-value default holding references, when it builds all it holds - here an empty List, or a struct made of
 # written text - is built where the call's result is, and what is pushed into it later lives where the result's does
-error sc3Bad { NO }
+type sc3Bad error { NO }
 type sc3Bag struct(label String&) {
     label
     items List<String&>
@@ -16908,11 +16998,11 @@ test "C2d/E25: a constructor with a scope argument, declared with ':='" {
 # do not take reaches the join, which waits for every task and then fails with the earliest-spawned failure (P4b), as
 # "try join { ... } catch ..." - tried as a call is (P4c). A target its failed task leaves unwritten is never read
 # after the join: every clause of such a join leaves (P4d)
-error peErr {
+type peErr error {
     NEG
     BIG
 }
-error peOther {
+type peOther error {
     SEVEN
 }
 fn peSq(n I64) I64 ? peErr {
@@ -17377,7 +17467,7 @@ test "S4c: several parallel assignments in one function" {
 }
 
 # E31/E31a: a type's Call that can fail is called with "try", as the function it stands for would be - spawned too
-error b6CallErr {
+type b6CallErr error {
     HIT
 }
 type b6Ctr struct(k I64) {
@@ -17428,7 +17518,7 @@ test "O1b/S4c: a parallel assignment builds a whole global value's references wh
 
 # P4a/D16d: a task's default holding a lambda that captures only a number - the lambda is built where it lands, as any
 # temporary holding nothing that lives elsewhere
-error b6TaskErr {
+type b6TaskErr error {
     NEG
 }
 type b6FBox struct(f fn(x I64) I64) {
@@ -17509,10 +17599,10 @@ test "O15: a tree's nodes destruct in reverse construction order - each node aft
 # ---- the errors batch: inferred sets (R1a), what try covers (R8), checked (E15a), checked forms (E31a), "!" (E35) ----
 # each computation baked into a global while compiling (K2) and asserted beside the same computation at run time
 
-error ebA {
+type ebA error {
     X
 }
-error ebB {
+type ebB error {
     Y
 }
 fn ebLeaf(n I64) I64 ? {
@@ -17605,7 +17695,7 @@ test "std/arith reports a shifted-out bit; Narrow a changed conversion and an in
 }
 
 # E31: a plain operator method may fail - "try (a - b)" handles it as a call
-error ebMoneyError {
+type ebMoneyError error {
     NEGATIVE
 }
 type ebMoney struct(c I64) {
@@ -18156,7 +18246,7 @@ test "D17g: a conversion checked at run time keeps its own words" {
 # ---- E24: a try covers the whole expression after it, to its end or its first catch; after the clauses the
 # expression around it goes on; the try itself parenthesized covers less ----
 
-error TrReach {
+type TrReach error {
     NEG
 }
 
@@ -18215,7 +18305,7 @@ fn destroyLooped() I64 {
     return t
 }
 
-error DestroyFail {
+type DestroyFail error {
     NEG
 }
 
@@ -18261,4 +18351,88 @@ test "C9b: a Destroy() before an error, a deferred one, and one after a call tha
     n := destroyLen(k)
     k.Destroy()
     assert n == 37 and DestroyLog == 5
+}
+
+# C9b, S19e: an errdefer's Destroy() runs only where an error leaves its block - there at once, before the caller goes
+# on - so the instance may be returned on the other ways out
+fn destroyOnError(i I64) DestroyRes& ? DestroyFail {
+    r := DestroyRes(i)
+    errdefer r.Destroy()
+    churnArena()
+    if i < 0 { error DestroyFail.NEG }
+    return r
+}
+
+# C9b, D18: a generator's frame holds its destroy target across a yield - destroyed before the instance built after it,
+# which its block's close destructs - and a walk stopped part way reclaims what the frame holds, in reverse
+fn destroyGen(n I64) Iterator<I64> {
+    for i in range n {
+        r := DestroyRes(i + 1)
+        q := DestroyRes(i + 4)
+        yield r.text.Len() + r.id + q.id
+        r.Destroy()
+    }
+}
+
+# O8d, D18, S19e: a place let go of between a generator's yields, and in an errdefer as an error leaves - each value
+# read back after the arena is churned
+type LetGoHolder struct() {
+    cur String& = "none yet"
+}
+
+fn letGoGen(h mut LetGoHolder&, n I64) Iterator<I64> {
+    for i in range n {
+        h.cur = $"turn " $i " of the walk, built for the place"
+        churnArena()
+        yield h.cur.Len()
+    }
+}
+
+fn letGoOnError(h mut LetGoHolder&, i I64) I64 ? DestroyFail {
+    errdefer h.cur = $"reset after " $i
+    h.cur = $"value " $i " held for a while"
+    churnArena()
+    if i < 0 { error DestroyFail.NEG }
+    return h.cur.Len()
+}
+
+fn letGoLoop(n I64) I64 {
+    h := LetGoHolder()
+    t I64 = 0
+    for k in letGoGen(h, n) { t += k + h.cur.Len() }
+    for i in range n {
+        v := try letGoOnError(h, i - 2) catch DestroyFail default -1
+        if v < 0 { v = 1000 * h.cur.Len() }
+        t += v
+        churnArena()
+    }
+    return t * 100 + h.cur.Len()
+}
+
+LetGoBaked := letGoLoop(4)
+
+test "C9b: an errdefer's Destroy() runs where an error leaves, and a Destroy() between a generator's yields" {
+    DestroyLog = 0
+    try destroyOnError(-3 + ctRuntimeZero) catch DestroyFail { }
+    assert DestroyLog == -3
+    DestroyLog = 0
+    r := destroyOnError(4 + ctRuntimeZero)!
+    churnArena()
+    assert r.text == "res 4 - its text built where it lives" and DestroyLog == 0
+    t I64 = 0
+    for v in destroyGen(3 + ctRuntimeZero) {
+        t += v
+        churnArena()
+    }
+    assert t == 3 * 37 + 5 + 7 + 9 and DestroyLog == 142536
+    DestroyLog = 0
+    {
+        for v in destroyGen(5 + ctRuntimeZero) { if v == 44 { break } }
+    }
+    assert DestroyLog == 1452
+}
+
+test "O8d: a place let go of between a generator's yields and in an errdefer - baked, decided and run alike" {
+    assert LetGoBaked == (4 * 78 + 2 * 14000 + 2 * 24) * 100 + 24
+    assert letGoLoop(4 + ctRuntimeZero) == LetGoBaked
 }

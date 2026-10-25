@@ -1,7 +1,7 @@
 # check: run
 # S17: an assert's message may hold code that does not leave it - a catch block giving a default, a lambda returning from
 # itself, a loop broken inside it, unreachable
-error E {
+type E error {
     BAD
 }
 fn h(k I64) I64 ? E {

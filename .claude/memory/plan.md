@@ -403,3 +403,19 @@ on sight per rules.md, "Code rules".
   fixes (Call adapter error sets T22/E31, olang fix lists every changed-reading site and exits 1, `x.Len()` unknown
   method, touching type arguments, D17e only where nothing catches ArgumentError, Rem(MIN,-1)=0, `!` prints the
   condition, `a.Set(i, v)`). Next: the errors batch (queued above). Bulk review later over several batches.
+- 2026-10-25 ~17:00 CEST: started wt-errs (opus high: `type X error { }`, named sets, clause-only catch bindings,
+  releasetest explain) and wt-mem47 (opus xhigh: memory rounds 4 vacate/Map.Take, 6 early freeing conservative first
+  version + the fixed-array copy leak, 7 Destroy). Next after them: error-set generics <T ? E>, generators,
+  reflection, generic enums, errdefer, embed, lane-wise ops, arbitrary-width ints, prelude moves; then a bulk review.
+- 2026-10-25 CEST: wt-errs MERGED (ea15be7, full verify passed; merge = tip + 3 CLAUDE.md example words): T19
+  `type X error { }` (tools/errortype_migrate.olang, ~263 files), T19a named sets, R11b/R3a clause-only catch names ($e,
+  ==, narrowing, match, error e; storing refused), releasetest runs explain, seed regenerated. Agent decision worth
+  telling the user: an unused catch name is an error.
+- 2026-10-25 CEST: wt-esgen MERGED (10e9e1f, verified per round; fast-forward): QAH `<T ? E>` error-set parameters
+  (union inference, Iterator<T ? E>, std helpers take fallible callbacks), QAG generators (`fn f() Iterator<T ? E>` +
+  `yield`, LLVM coroutine, frame where the generator lands, yielded values reclaimed per turn), D10a fix (for-in's
+  break inside Next's catch). FOLLOW-UP recorded: generator speed (~6 ns per value vs 0.25 for a hand iterator -
+  coroutine elision where a for-in makes and finishes the walk), defer across yield.
+- 2026-10-25 CEST: wt-small2 MERGED (db11954, verified; fast-forward): errdefer (S19e), embed (E38), generic enums
+  (G6b; `Tree<I64>.Leaf(3)`, bare `Tree.Leaf(3)` inferred). Not fixed (found): a global whose initializer failed is
+  still read by the evaluator - `X := String(1)` then `assert X.Len() > 0` adds a second S18c error. Queue it.

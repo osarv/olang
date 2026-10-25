@@ -73,7 +73,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   line break. A line break separates where L18 would end a statement (so a line ending in an operator continues the
   item), or after an item ending in `}`, `>` or a bare `&` when the next token starts a later line. A comma before a
   line break is an error (reversing L18a's trailing comma and T17/T19/C2's comma-is-an-error), and so is one before the
-  closing bracket on its line. `+` is gone from error sets and catch items (`? IoError, ParseError`, `catch A, B.X`). A
+  closing bracket on its line. `+` is gone from error sets and catch items (`? io.Error, ParseError`, `catch A, B.X`). A
   function type's or a lambda's error set is one item or parenthesized (`fn(I64) ? (A, B)`) - always, so a `,` after
   it separates the list it stands in (mine). A parenthesized expression and a comprehension are one item, not lists:
   line breaks inside separate nothing (mine). `x, y I64` (D12b) is unchanged. `tools/syntax_migrate.olang` migrates.
@@ -172,6 +172,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
+- **`errdefer` (S19e, the user's decision 2026-10-18; built 2026-10-25).** `errdefer STATEMENT` / `errdefer { }`: deferred
+  code of its block run only when an error leaves the block outward - out of the function, to a clause outside it, a
+  join's tasks failing; never on its end, `return`, `break`, `continue`, an error a clause inside takes, or what S19c
+  lists. One list with `defer`, last registered first. **Decided (mine)**: a join block's errdefer code runs after its
+  wait when its tasks fail - after its defers, the one place the order bends, since the failure is known only then (a
+  failure of its own statements runs both before the wait, in order); one may not be pending around a `yield` (S20's
+  rule over the one list - relaxable with defer's); no interpret cleanup (a stop is no error). Built in lowering: the
+  block's kind (`typed.BlockKind.ErrDefer`), `lowering.runDefers` taking it only where `erroring` (raise, a clause) or
+  after a failed wait - nothing new in the evaluator or emit.
 - **`match` (S12-S13f).** Several values per case, guards (`case P if c`), nested patterns, literals in payload
   positions, `case _` (alone, last); `match` as a value with `case P => v` (S12b); exhaustiveness over the patterns
   (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).
@@ -188,7 +197,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
-  breaks between lines.
+  breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
   keywords may name fields (typed, never punned). `_` discards and is never a name.
 - **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, beyond 64
@@ -222,7 +231,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
   compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
   length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
-  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25).
+  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
+  IoError error { ... }`, T19).
 
 ### Types
 
@@ -448,6 +458,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
+- **Generic enums (G6b, the user's decision 2026-10-18: "generic enums go in for sure"; built 2026-10-25).** `type
+  Tree<T> enum { Leaf(v T)  Node(l Tree<T>&, r Tree<T>&) }` is instantiated as a generic struct is - payloads, layout,
+  `==`, Hash, `$` and section 8 (T17c) per instance, which the type machinery already did once G6 stopped refusing it.
+  A case is written with its arguments (`Tree<I64>.Leaf(3)`, `lib.Opt<I64>.None`) or bare (`Tree.Leaf(3)`): then the
+  instance is the type it lands in, else inferred from its arguments as G10c does (`check.genericCase`); `x :=
+  Opt.None` is an error naming the fix. Patterns, case tests and `as` name a case bare against the subject's instance
+  (`namesEnumOf`), a case of another instance is S13's error. **Decided (mine)**: `$` writes the case without the
+  arguments (`Opt.Some(4)`), as it is written; a raw-value enum may be generic (nothing forbids it, nothing needs a
+  rule); std gets no `Option`/`Result` (the decision). Reflection's `T.Cases` is not built yet. **Found on the way
+  (pre-existing)**: `if t == Shape.Rect(_, _)` - a `_` in a local if's case test - was B10's "unknown name '_'"
+  (names.name).
 - **Explicit type arguments (G12, E3, the user's calls 2026-10-24 and 2026-10-25).** `big<I64>` names a generic
   function's instance, as a value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written
   ones are (count, bounds, T7c lengths); a method takes them at a call too (`x.Narrow<I32>()`, `xs.Map<U>(f)`), naming
@@ -487,6 +508,51 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
   exhaustiveness-checked and compiles only the chosen arm; inside it the variable is the concrete type.
 - **A literal default for a type-variable parameter is fitted per call (G18).**
+- **Error-set parameters (G1a, QAH, the user's decision 2026-10-18; built 2026-10-25).** A type's, trait's, function's
+  or method's list may end in `? E` (`type Iterator<T ? E> trait { mut Next() T ? E, Exhausted }`, `fn apply<T, U ?
+  E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(...)`); a receiver introduces one written as its type's
+  error-set argument (`fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`). `E` stands only where an error set is
+  written - signatures, function types, trait methods, a type's error-set argument (`Iterator<I64 ? io.Error>`, a
+  named set too), catch items - and is spliced in where it stands; written as a type it is an error, and so is a type
+  variable written as a set. A call binds `E` to the **union** of what the function values and iterators matched against
+  it fail with (beyond the other items of its set; mine: a union never conflicts), to the empty set where nothing
+  fallible binds it - then the instance cannot fail and is called without `try`; a type's argument left out is the
+  empty set (`Iterator<I64>`). A lambda given for a parameter naming `E` infers its set from its body and is then
+  given the parameter's set (mine). Satisfaction is "held by" (T31 as written, which the code had as equality): a Next
+  failing with only `Exhausted` meets `Iterator<T ? Bad>`. `catch E` takes what the instance binds `E` to. Explicit type
+  arguments may give the set after `?` (`apply<I64, I64 ? Bad>`); left out, a call infers it and a value takes the empty
+  set (mine). std: `Iterator<T ? E>`; its helpers, adapters (`TakeIter<I, T ? E>` ...), an array's
+  `Some/Every/FindIndex/Count/Map/Filter/Fold/Sort`, List/Vec `Sort`, ListIter's overrides and linalg's
+  `Map/Map2/Map3/Mapped` fail with what their callbacks and iterators fail with. Not a stored error: no value holds one
+  (T20). Representation: `types.Kind.ErrSet` (a canonical, merged entry list) for an argument or binding, the variable
+  itself an entry of an error list until substituted. Not for a G10d constructor's own list (mine: no use yet). Found
+  on the way: section 8's alias analysis did not look inside `for x in try p` (a try statement), so a helper walking its
+  receiver under `try` was refused by O17 (`scope.aliasExpr`).
+- **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18; built 2026-10-25).** A `fn` whose result
+  is written `Iterator<T ? E>` and whose body holds a `yield` of its own is a generator - no keyword, `yield` the one
+  new word. A call runs none of the body and gives the prelude's `Generator<T ? E>` (a struct holding `next (fn() T ? E,
+  Exhausted)`; its `Next` calls `next`), so `for`, the iterator helpers, constraints and `any Iterator<T>&` take it as
+  any iterator; it is nameable (a field holds a `Generator<I64>`) and a copy is the same walk, as a List's. Its errors
+  are `E` and `Exhausted`, written in its result (a `?` on the signature is an error naming that); its end, a bare
+  `return` (`return v` an error) and an error leaving it end the walk, every later `Next` failing with `Exhausted`.
+  **How it is built (mine): its body is a lambda's** - check makes the generator's own body `return Generator(next)`,
+  `next` a lambda of the body capturing the parameters, which become its own writable locals set once at its start
+  (a value array given is copied where the generator lives) - so captures (D16c), placement and every scope rule apply
+  with nothing new; a `yield` is checked and judged by section 8 as that lambda's `return` (a typed `Suspend`). The
+  lambda's MIR is a coroutine (`mir.Fn.Gen`, `Term.Suspend` holding the open scopes): emit writes an LLVM coroutine
+  (`llvm.coro.*`, its frame from the arena where the generator lands, its promise the result slot plus the scopes the
+  Next call passed, a `.drop` registered there destroying a walk stopped part way - closing the scopes it holds - and a
+  wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
+  **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
+  each value per turn - which no local outlives: `&return` is an error in a generator, O26a moves nothing there, a
+  yielded local holding the generator's own storage is O26 worded for yield (write `$x`/`x.Clone()`), and a yielded
+  borrow of a parameter's referent is T22a's (the walk's Next is a function value; worded "yield a copy"). Not allowed:
+  `yield` in a lambda, deferred code, a join block, or with deferred code pending around it (a dropped walk would never
+  run it - relaxable). Cost: about 6 ns a value (an indirect resume per Next, the frame never elided), against 0.25 for a
+  hand-written iterator struct - eliding the frame where the walk is made and finished in one place is future work.
+  **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
+  `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
+  aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).
 
 ### Errors
 
@@ -529,7 +595,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
   uncovered `as` `(x as C)!`.
 - **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
-  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.IoError.W`
+  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W`
   and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
   ends the program from the task's thread (P4, P6).
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
@@ -549,6 +615,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
+- **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL  DENIED }` (the
+  listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { TIMEOUT }`
+  is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
+  type then the last member of its own set; one grammar `type Name error [Member, ...] [{ WORDS }]`. A set is written
+  wherever an error set is (`? LoadError`, `fn(I64) ? LoadError` - so no parentheses in a list -, trait methods,
+  `catch LoadError`) and is the same set as its members written out (the same function type); never a code space of its
+  own (R6 codes per member type, expanded in `generic.errorList`). A set reaching itself, a word repeating a member's,
+  a word declared twice and a member naming nothing are errors (the last two, and `? Pt` with `Pt` a struct, and an
+  unknown error type in a function type or a lambda's set, were never reported - fixed). **`catch os.Error e { }`,
+  `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
+  caught by the rule that a clause's name must be used) name the error **for the clause alone** (its block and
+  defaults): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
+  something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
+  combine), `match e` (read as the if-chain it is; exhaustive or `nomatch`/`case _`; a value form with `=>`), `error e`
+  (R3a, held to the function's set by what narrowing leaves). Nothing else - assigning, `:=`, passing, storing,
+  capturing, returning, `try e` - each an error naming `$e`/`error e`. **Not built (the user's open question):** errors
+  as storable values, a zero value for errors, Result. Representation (mine): the name is a hidden `I32` local holding
+  the code recoded to the clause's own set (canonical order), assigned where the clause is entered (lowering's
+  `toClause`), so the evaluator and `interpret` need nothing new; `error e` is `typed.Stmt.Reraise`, recoded to the
+  body's set. Decided (mine): a spawned call's clause names no error (it is a lambda on the task's thread - an error
+  naming it); a value `match e` gives every value with `=>`; a case after the cases cover everything is an error.
+  `tools/errortype_migrate.olang` (text, idempotent, last of `olang fix`'s text tools) rewrites old declarations.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
@@ -739,6 +828,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
 - **`interpret` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
   C.
+- **`embed PATH` (E38, the user's decision 2026-10-18; built 2026-10-25).** A file's bytes read while compiling: a
+  read-only `Array<U8>&` of constant data, as a text literal is (T25d, one instance per site); text is `String(embed
+  "f")`, a view. A prefix operator over a `unary` (mine). PATH is a literal or an expression reading no local, the
+  latter evaluated after a check (`interp.decide`, alone in its round, then read in the next check); resolved as a
+  relative import against the source file's directory, kept inside std or a remote repository (`load.Embed`, each file
+  read once a compilation). B3i's module key holds each embedded file's hash, so a changed file rebuilds its module.
+  **Decided (mine)**: every file is an LLVM constant, whatever its size - `.incbin` above 64KB was dropped, measured: a
+  10MB constant compiles in 0.18s at -O3 and 0.32s under -flto (lower+emit 0.8s), and module asm would collide symbols
+  across modules under full LTO; explain and doc cut a value over 400 characters, saying its length.
 
 ### std
 
@@ -781,7 +879,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   meets no other (mine). Hidden routes stay the evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
-  `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on
+  `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
   its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
@@ -1028,7 +1126,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`ListError.EMPTY`), and so do the root program's own (`Bad.WORD` for a `Bad` in the file being run - from outside it
   would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
   names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
-  bang inside std/io said `Error.X`). Error values are not renderable (T20), so `$e` has nothing to print.
+  bang inside std/io said `Error.X`). The error a catch clause names renders the same way (`$e`, R11b); the rule is
+  `load.ErrQualifier` (moved from lower, 2026-10-25).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

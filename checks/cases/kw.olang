@@ -1,5 +1,5 @@
 # check: run
-error E { X }
+type E error { X }
 fn main() ? E {
     compif I32 = 1
     compelse I32 = compif

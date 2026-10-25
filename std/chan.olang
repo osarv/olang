@@ -100,7 +100,7 @@ fn oldest<T>(c mut Chan<T>&) T {
 }
 
 # the failure of a Recv on a closed channel with nothing left in it
-error Error {
+type Error error {
     CLOSED
 }
 

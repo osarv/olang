@@ -54,17 +54,17 @@ import "std/rand"
 extern fn sysconf(name I32) I64
 
 # a shape that does not fit the operation - two operands of different shapes, a product whose inner dimensions differ
-error ShapeError {
+type ShapeError error {
     MISMATCH
 }
 
 # an activation an element type has not: an integer has only the identity and ReLU
-error ActivationError {
+type ActivationError error {
     NOT_FOR_INTEGERS
 }
 
 # a linear system with no unique solution
-error SolveError {
+type SolveError error {
     SINGULAR
 }
 
@@ -196,55 +196,56 @@ fn (t Transposed<T>&) Clone() Matrix<T> {
 # Each writes its destination and allocates nothing. The function is a lambda written at the call, which is inlined
 # into the loop (a function value's code is a value the optimizer follows, T21), so dst.Map2(a, b, fn(x, y) { return
 # x * y }) runs as the loop written out would. A destination may be one of the operands itself - each element is read
-# before it is written - but not another view overlapping one.
+# before it is written - but not another view overlapping one. A function that can fail makes the operation fail with
+# what it fails with (E, QAH), the destination then written up to the element it failed at.
 
 # dst = f(a), element by element
-fn (dst mut Matrix<T>&) Map(a Matrix<T>&, f fn(x T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map<? E>(a Matrix<T>&, f fn(x T) T ? E) ? ShapeError, E {
     if not (sameShape(dst, a)) { error ShapeError.MISMATCH }
-    dst.mapInto(a, f)
+    try dst.mapInto(a, f)
 }
 
 # Map with the shapes known to agree - what the operations building their own destination call
-fn (dst mut Matrix<T>&) mapInto(a Matrix<T>&, f fn(x T) T) {
+fn (dst mut Matrix<T>&) mapInto<? E>(a Matrix<T>&, f fn(x T) T ? E) ? E {
     if dst.Contiguous() and a.Contiguous() {
-        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i]) }
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = try f(a.Data[i]) }
         return
     }
     for r in range dst.Rows {
         d I64 = r * dst.Stride
         x I64 = r * a.Stride
-        for c in range dst.Cols { dst.Data[d + c] = f(a.Data[x + c]) }
+        for c in range dst.Cols { dst.Data[d + c] = try f(a.Data[x + c]) }
     }
 }
 
 # dst = f(a, b), element by element
-fn (dst mut Matrix<T>&) Map2(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map2<? E>(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T ? E) ? ShapeError, E {
     if not (sameShape(dst, a) and sameShape(dst, b)) { error ShapeError.MISMATCH }
-    dst.map2Into(a, b, f)
+    try dst.map2Into(a, b, f)
 }
 
-fn (dst mut Matrix<T>&) map2Into(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T) {
+fn (dst mut Matrix<T>&) map2Into<? E>(a Matrix<T>&, b Matrix<T>&, f fn(x T, y T) T ? E) ? E {
     if dst.Contiguous() and a.Contiguous() and b.Contiguous() {
-        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i]) }
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = try f(a.Data[i], b.Data[i]) }
         return
     }
     for r in range dst.Rows {
         d I64 = r * dst.Stride
         x I64 = r * a.Stride
         y I64 = r * b.Stride
-        for c in range dst.Cols { dst.Data[d + c] = f(a.Data[x + c], b.Data[y + c]) }
+        for c in range dst.Cols { dst.Data[d + c] = try f(a.Data[x + c], b.Data[y + c]) }
     }
 }
 
 # dst = f(a, b, c), element by element - a fused update of three operands, an optimizer's step say
-fn (dst mut Matrix<T>&) Map3(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) ? ShapeError {
+fn (dst mut Matrix<T>&) Map3<? E>(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T ? E) ? ShapeError, E {
     if not (sameShape(dst, a) and sameShape(dst, b) and sameShape(dst, c)) { error ShapeError.MISMATCH }
-    dst.map3Into(a, b, c, f)
+    try dst.map3Into(a, b, c, f)
 }
 
-fn (dst mut Matrix<T>&) map3Into(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T) {
+fn (dst mut Matrix<T>&) map3Into<? E>(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(x T, y T, z T) T ? E) ? E {
     if dst.Contiguous() and a.Contiguous() and b.Contiguous() and c.Contiguous() {
-        for i in range dst.Rows * dst.Cols { dst.Data[i] = f(a.Data[i], b.Data[i], c.Data[i]) }
+        for i in range dst.Rows * dst.Cols { dst.Data[i] = try f(a.Data[i], b.Data[i], c.Data[i]) }
         return
     }
     for r in range dst.Rows {
@@ -252,7 +253,7 @@ fn (dst mut Matrix<T>&) map3Into(a Matrix<T>&, b Matrix<T>&, c Matrix<T>&, f fn(
         x I64 = r * a.Stride
         y I64 = r * b.Stride
         z I64 = r * c.Stride
-        for k in range dst.Cols { dst.Data[d + k] = f(a.Data[x + k], b.Data[y + k], c.Data[z + k]) }
+        for k in range dst.Cols { dst.Data[d + k] = try f(a.Data[x + k], b.Data[y + k], c.Data[z + k]) }
     }
 }
 
@@ -391,9 +392,9 @@ fn (m Matrix<T>&) Clone() Matrix<T> {
 }
 
 # f applied to every element, into a new matrix
-fn (m Matrix<T>&) Mapped(f fn(x T) T) Matrix<T> {
+fn (m Matrix<T>&) Mapped<? E>(f fn(x T) T ? E) Matrix<T> ? E {
     out mut Matrix<T>&return = Matrix<T>(m.Rows, m.Cols)
-    out.mapInto(m, f)
+    try out.mapInto(m, f)
     return out
 }
 

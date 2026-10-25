@@ -243,6 +243,9 @@ type Diag enum {
     ScopeDecl
     TypeVarNamesType
     TypeVarNotInferable
+    TypeVarNotErrorSet
+    ErrVarNotType
+    ErrSetArgUnwanted
     ExternType
     ExportMethod
     ExportGeneric
@@ -469,8 +472,13 @@ type Diag enum {
     WriteThroughAtCall
     DefaultArgNotAllowed
     DeferErrorEscapes
+    EmbedPathUnknown
+    CaseTypeArgsNotInferable
+    EmbedPathUndecided
+    EmbedNotRead
     TryNowhereToGo
     TryErrorNotDeclared
+    GenErrorNotDeclared
     UnknownMethod
     MethodNotInherited
     AtomicNotInteger
@@ -553,6 +561,16 @@ type Diag enum {
     ReturnBorrowAsBuilt
     ReturnOwnStorage
     DeferReturns
+    YieldOutside
+    YieldInLambda
+    YieldInDefer
+    YieldInJoin
+    YieldPastDefer
+    GenReturnValue
+    GenErrors
+    YieldOwnStorage
+    GenYieldsBorrow
+    GenReturnScope
     ReturnCount
     ReturnInCtor
     ReturnInTest
@@ -671,6 +689,25 @@ type Diag enum {
     ContractNeedsArgumentError
     ConversionDoesNotFit
     NoteContractCondition
+    NotAnErrorType
+    ErrorSetHoldsItself
+    ErrorWordOfMember
+    CatchNameUnused
+    CatchLoneUnused
+    CatchNameInTask
+    CaughtNotAValue
+    CaughtCaptured
+    CaughtComparedToCaught
+    CaughtCompareWhat
+    CaughtNeverIs
+    TryOnCaught
+    ReraiseUndeclared
+    ReraiseWordNotInSet
+    RaiseNotCaught
+    CaughtMatchBlock
+    CaughtCaseNever
+    CaughtCaseForm
+    CaughtMatchMissing
 }
 
 # one function each, under the id it is known by
@@ -1019,6 +1056,65 @@ fn UnknownFunctionMeant(tok String&, text String&) Msg { return Msg(Diag.Unknown
 # ERR_UNKNOWN_ERROR_TYPE
 fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok) }
 
+# ---- the error a clause took (R11b, R3a) ----
+
+# ERR_CATCH_NAME_UNUSED
+fn CatchNameUnused(tok String&) Msg { return Msg(Diag.CatchNameUnused, "R11b", $tok " names the error this clause took, and nothing uses it - leave the name off") }
+
+# ERR_CATCH_LONE_UNUSED
+fn CatchLoneUnused(tok String&) Msg { return Msg(Diag.CatchLoneUnused, "R11b", $tok " names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone") }
+
+# ERR_CATCH_NAME_IN_TASK
+fn CatchNameInTask(tok String&) Msg { return Msg(Diag.CatchNameInTask, "R11b", "a spawned call's clause runs on the task's thread and names no error - leave " $tok " off, or catch it where the join fails") }
+
+# ERR_CAUGHT_NOT_A_VALUE
+fn CaughtNotAValue(tok String&, text String&) Msg { return Msg(Diag.CaughtNotAValue, "R11b", $tok " is the error this clause took: it is only rendered, compared, matched or raised again here - write '$" $text "' where text is wanted") }
+
+# ERR_CAUGHT_CAPTURED
+fn CaughtCaptured(tok String&, text String&) Msg { return Msg(Diag.CaughtCaptured, "R11b", $tok " is the error a clause took, which a lambda cannot capture - pass '$" $text "' for its text") }
+
+# ERR_CAUGHT_COMPARED_TO_CAUGHT
+fn CaughtComparedToCaught() Msg { return Msg(Diag.CaughtComparedToCaught, "R11b", "two caught errors are never compared - compare each with an error word or an error type") }
+
+# ERR_CAUGHT_COMPARE_WHAT
+fn CaughtCompareWhat(tok String&) Msg { return Msg(Diag.CaughtCompareWhat, "R11b", $tok " is compared with an error word, an error type or a named set - 'e == T.WORD', 'e == T'") }
+
+# ERR_CAUGHT_NEVER_IS
+fn CaughtNeverIs(tok String&, text1 String&, text2 String&) Msg { return Msg(Diag.CaughtNeverIs, "R11b", $tok " is never " $text1 " here - it is " $text2) }
+
+# ERR_TRY_ON_CAUGHT
+fn TryOnCaught(text String&) Msg { return Msg(Diag.TryOnCaught, "R11b", "'" $text "' is an error already caught, not a call - raise it again with 'error " $text "'") }
+
+# ERR_RERAISE_UNDECLARED
+fn ReraiseUndeclared(ty String&) Msg { return Msg(Diag.ReraiseUndeclared, "R3a", "the error raised again can be " $ty ", which this function does not declare - add it after '?', or test the error first") }
+
+# ERR_RERAISE_WORD_NOT_IN_SET
+fn ReraiseWordNotInSet(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReraiseWordNotInSet, "R3a", "the error raised again can be " $ty1 ", and this function's '?' names " $ty2 " - add it after '?', or test the error first") }
+
+# ERR_RAISE_NOT_CAUGHT
+fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or the error a clause took - " $tok " is neither") }
+
+# ERR_CAUGHT_MATCH_BLOCK
+fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on a caught error giving a value gives it with '=> v' in every case") }
+
+# ERR_CAUGHT_CASE_NEVER
+fn CaughtCaseNever(tok String&) Msg { return Msg(Diag.CaughtCaseNever, "R11b", "this case is never reached: the cases before it take every error " $tok " can be") }
+
+# ERR_CAUGHT_CASE_FORM
+fn CaughtCaseForm() Msg { return Msg(Diag.CaughtCaseForm, "R11b", "a case of a caught error names an error word, an error type or a named set") }
+
+# ERR_CAUGHT_MATCH_MISSING
+fn CaughtMatchMissing(text String&) Msg { return Msg(Diag.CaughtMatchMissing, "R11b", "this match does not cover " $text " - add a case for it, or 'nomatch'") }
+
+# ERR_ERROR_SET_HOLDS_ITSELF
+fn ErrorSetHoldsItself(tok String&, text String&) Msg { return Msg(Diag.ErrorSetHoldsItself, "T19a", $tok " reaches itself through its member '" $text "' - a set holds its members' errors, never itself") }
+
+# ERR_ERROR_WORD_OF_MEMBER
+fn ErrorWordOfMember(tok String&, ty String&) Msg { return Msg(Diag.ErrorWordOfMember, "T19a", "word " $tok " is " $ty "'s too, a member of this set - name it another way") }
+
+# ERR_NOT_AN_ERROR_TYPE
+fn NotAnErrorType(tok String&) Msg { return Msg(Diag.NotAnErrorType, "R1", $tok " is no error type - an error set names error types, their words and named sets") }
+
 # ERR_FUNC_TYPE_ERRS_UNWRITTEN
 fn FuncTypeErrsUnwritten() Msg { return Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? io.Error' - since no body says what it is") }
 
@@ -1284,6 +1380,15 @@ fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "
 # ERR_TYPE_VAR_NOT_INFERABLE
 fn TypeVarNotInferable(text String&, name String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " of " $name " appears in no parameter's type, so the call writes it - " $name "<...>(...)") }
 
+# ERR_TYPE_VAR_NOT_ERROR_SET
+fn TypeVarNotErrorSet(tok String&) Msg { return Msg(Diag.TypeVarNotErrorSet, "G1a", $tok " is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'") }
+
+# ERR_ERR_VAR_NOT_TYPE
+fn ErrVarNotType(tok String&, name String&) Msg { return Msg(Diag.ErrVarNotType, "G1a", $tok " is an error-set parameter, not a type - it stands where an error set is written, '? " $name "'") }
+
+# ERR_ERR_SET_ARG_UNWANTED
+fn ErrSetArgUnwanted(name String&) Msg { return Msg(Diag.ErrSetArgUnwanted, "G1a", $name " has no error-set parameter, so its arguments end in no '?'") }
+
 # ERR_EXTERN_TYPE
 fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
 
@@ -1348,7 +1453,7 @@ fn ErrorWordInUse(tok String&) Msg { return Msg(Diag.ErrorWordInUse, "T19", "err
 fn ExtendsNotBase() Msg { return Msg(Diag.ExtendsNotBase, "T29f", "only a type over a number or an array extends its base") }
 
 # ERR_GENERIC_NOT_STRUCT
-fn GenericNotStruct() Msg { return Msg(Diag.GenericNotStruct, "G6", "only a struct or a trait takes type parameters") }
+fn GenericNotStruct() Msg { return Msg(Diag.GenericNotStruct, "G6", "only a struct, an enum or a trait takes type parameters") }
 
 # ERR_DECLARED_OVER_AGGREGATE
 fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate, "T29", "a type is declared over a number or an array, not over " $ty " - hold it in a struct's field instead") }
@@ -1940,10 +2045,23 @@ fn DefaultArgNotAllowed() Msg { return Msg(Diag.DefaultArgNotAllowed, "E14a", "'
 # ERR_DEFER_ERROR_ESCAPES
 fn DeferErrorEscapes() Msg { return Msg(Diag.DeferErrorEscapes, "S19b", "an error may not leave deferred code - catch it here") }
 
+# ERR_CASE_TYPE_ARGS_NOT_INFERABLE
+fn CaseTypeArgsNotInferable(text1 String&, text2 String&) Msg { return Msg(Diag.CaseTypeArgsNotInferable, "G10c", "the type arguments of " $text1 " cannot be inferred from this case - write them, '" $text1 "<...>." $text2[text1.Len() + 1:] "', or give it a type to land in") }
+
+# ERR_EMBED_PATH_UNKNOWN
+fn EmbedPathUnknown() Msg { return Msg(Diag.EmbedPathUnknown, "E38", "an embed's path is text known while compiling - a literal, or what reads no local") }
+
+# ERR_EMBED_PATH_UNDECIDED
+fn EmbedPathUndecided() Msg { return Msg(Diag.EmbedPathUndecided, "E38", "this embed's path cannot be computed while compiling - write it so it can, or as a literal") }
+
+# ERR_EMBED_NOT_READ
+fn EmbedNotRead(path String&, why String&) Msg { return Msg(Diag.EmbedNotRead, "E38", $"embed " $path " reads no file: " $why) }
+
 # ERR_TRY_NOWHERE_TO_GO
 fn TryNowhereToGo() Msg { return Msg(Diag.TryNowhereToGo, "R13", "an error tried here has nowhere to go - catch every one it can be") }
 
 # ERR_TRY_ERROR_NOT_DECLARED
+fn GenErrorNotDeclared(ty String&) Msg { return Msg(Diag.GenErrorNotDeclared, "R9, D18", $ty " can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? " $ty ">', or catch it") }
 fn TryErrorNotDeclared(ty String&) Msg { return Msg(Diag.TryErrorNotDeclared, "R9", $ty " can escape here, and this function does not declare it - add it after '?', or catch it") }
 
 # ERR_UNKNOWN_METHOD
@@ -2042,7 +2160,7 @@ fn NestedArrayLiteral() Msg { return Msg(Diag.NestedArrayLiteral, "E21", "there 
 fn ArrayOfErrors(ty String&) Msg { return Msg(Diag.ArrayOfErrors, "T20", $ty " has no values to put in an array") }
 
 # ERR_ERROR_TYPE_AS_VALUE
-fn ErrorTypeAsValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.ErrorTypeAsValue, "T20", $ty1 " is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch " $ty2 ".WORD { }')") }
+fn ErrorTypeAsValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.ErrorTypeAsValue, "T20", $ty1 " is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch " $ty2 ".WORD { }'), or by the name a clause gives one ('catch " $ty2 " e { if e == " $ty2 ".WORD { } }')") }
 
 # ERR_COMPREHENSION_REFERENCES
 fn ComprehensionReferences() Msg { return Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
@@ -2051,7 +2169,7 @@ fn ComprehensionReferences() Msg { return Msg(Diag.ComprehensionReferences, "E27
 fn NotAnEnum(tok String&) Msg { return Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }
 
 # ERR_ERROR_WORD_AS_VALUE
-fn ErrorWordAsValue(text1 String&, text2 String&) Msg { return Msg(Diag.ErrorWordAsValue, "T20", "'" $text1 "' is an error word, not a value - raise it with 'error " $text2 "', tell it apart with a catch clause") }
+fn ErrorWordAsValue(text1 String&, text2 String&) Msg { return Msg(Diag.ErrorWordAsValue, "T20", "'" $text1 "' is an error word, not a value - raise it with 'error " $text2 "', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == " $text2 " { } }')") }
 
 # ERR_TAKES_NO_ARGS
 fn TakesNoArgs(tok String&) Msg { return Msg(Diag.TakesNoArgs, "E14", $tok " takes no arguments") }
@@ -2229,6 +2347,16 @@ fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value
 
 # ERR_DEFER_RETURNS
 fn DeferReturns() Msg { return Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
+fn YieldOutside() Msg { return Msg(Diag.YieldOutside, "D18, S20", "'yield' is a generator's - a function whose result is written 'Iterator<T>'") }
+fn YieldInLambda() Msg { return Msg(Diag.YieldInLambda, "S20", "a lambda is no generator - 'yield' in the function it is written in") }
+fn YieldInDefer() Msg { return Msg(Diag.YieldInDefer, "S19b, S20", "deferred code may not yield - it runs while its block is left") }
+fn YieldInJoin() Msg { return Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
+fn YieldPastDefer() Msg { return Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
+fn GenReturnValue() Msg { return Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
+fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')") }
+fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')") }
+fn GenReturnScope() Msg { return Msg(Diag.GenReturnScope, "D18b", "a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator") }
+fn GenErrors(elem String&) Msg { return Msg(Diag.GenErrors, "D18", "a generator fails as its Next does - write its errors in its result: 'Iterator<" $elem " ? E>'") }
 
 # ERR_RETURN_COUNT
 fn ReturnCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.ReturnCount, "D8c", "this function returns " $n1 " value" $text ", found " $n2) }

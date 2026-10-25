@@ -1,6 +1,6 @@
 # check: fail error[S9e]: this loop's own calls can fail
 # S9e: a loop whose Next can fail is written with try
-error E {
+type E error {
     X
 }
 type It struct() {

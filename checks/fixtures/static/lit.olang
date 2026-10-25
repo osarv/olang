@@ -6,7 +6,7 @@ fn total(a Array<I32>&) I32 {
     return t
 }
 fn lenOf(s String&) I64 { return s.Len() }
-error E { X }
+type E error { X }
 fn main() ? E {
     assert total(I32[3, 4, 5]) + Live == 13
     assert lenOf("static text") + I64(Live) == 12

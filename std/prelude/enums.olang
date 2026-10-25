@@ -2,7 +2,7 @@
 
 # what a case fails with: no case of the enum has the raw value asked for (NO_CASE, T17e); "e as C" on a value holding
 # another case (WRONG_CASE, E32)
-error CaseError {
+type CaseError error {
     NO_CASE
     WRONG_CASE
 }

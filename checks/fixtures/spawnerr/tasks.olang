@@ -1,11 +1,11 @@
 # P4-P4d: tasks that fail, the same built, built -d -s (a use of storage after its scope closed would stop it), and under
 # -i, which runs a join's tasks one after another: each line printed by each, and the three the same
 import "std/io"
-error E {
+type E error {
     NEG
     BIG
 }
-error F {
+type F error {
     SEVEN
 }
 type Node struct(v I64) {

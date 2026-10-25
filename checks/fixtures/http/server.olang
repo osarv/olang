@@ -107,7 +107,7 @@ fn receive(fd I32) String {
 }
 
 # what parse fails with: the text is no request
-error badRequest {
+type badRequest error {
     LINE
 }
 

@@ -60,7 +60,7 @@ fn build(olang String&, path String&, src String&) String {
 }
 
 # what parseDiag fails with: the row is no compiler error
-error notDiag {
+type notDiag error {
     ROW
 }
 

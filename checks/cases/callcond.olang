@@ -1,5 +1,5 @@
 # check: run
-error E { X }
+type E error { X }
 fn f() I32 { return 1 }
 if f() == 1 {
     fn g() I32 { return 7 }

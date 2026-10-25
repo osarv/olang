@@ -1,0 +1,13 @@
+# check: fail error[E15]: this call can fail
+# QAH: a helper given a callback that can fail fails with it, so the call is written with try (R8)
+type Bad error { NEG }
+
+fn pos(x I64) I64 ? Bad {
+    if x < 0 { error Bad.NEG }
+    return x
+}
+
+fn main() {
+    a := I64[1, 2]
+    n := a.Fold(0, fn(acc I64, x I64) I64 { return acc + try pos(x) })
+}

@@ -1,0 +1,4 @@
+# check: fail error[T19]: error word 'Y' is already declared
+# T19: an error type's words differ
+type C error { Y, Z, Y }
+fn main() { }

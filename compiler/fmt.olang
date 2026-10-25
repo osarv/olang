@@ -610,7 +610,7 @@ fn (f formatter&) write() String {
 # ---- files ----
 
 # a file that does not scan or parse, so it has no layout: its diagnostics are said
-error Unparsable { SYNTAX }
+type Unparsable error { SYNTAX }
 
 # the file src in the layout - or, where it does not scan or parse, nothing, its diagnostics rendered into said (in
 # colour where color says)

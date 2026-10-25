@@ -14,10 +14,11 @@ import "interp"
 import typecheck "check"
 
 # a name the root module does not declare
-error Missing { NAME }
+type Missing error { NAME }
 
 # the item name names in module mi - "Type.Method" for a method - as text ending in a line break
 fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? Missing {
+    c.SpellFrom(mi)
     nm := c.P.L.Names
     dot := try name.Find(".") catch default -1
     if dot > 0 {
@@ -82,6 +83,13 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
     decl := c.P.FnDecl(f)
     name := $c.P.L.Names.Text(decl.Name) $typeVars(c, generic.FnOwner(f), receiverVars(c, f))
     text := sigOf(c, named(c, sig, decl.Recv, decl.S.Params), body)
+    if c.P.IsGenerator(f) {
+        # D18: its result as written, the Generator a call gives said beside it
+        g := c.Ty(c.P.T.Result(sig))
+        if text.EndsWith(g) and g.StartsWith("Generator") {
+            text = $text[:text.Len() - g.Len()] "Iterator" $g[9:] "   # a generator: a call gives a " $g
+        }
+    }
     lead := "extern fn " if c.P.FnIsExtern(f) else "fn "
     inside := text[3:]     # past "fn("
     if decl.Recv is null { return $lead $name "(" $inside }
@@ -108,6 +116,11 @@ fn typeArgs(c mut typecheck.Checker&, args types.ListId) String {
     b.PushChar('<')
     k I64 = 0
     for a in c.P.T.Items(args) {
+        # QAH: an error-set argument after "?", left out where it is the empty set
+        if c.P.T.KindOf(a) == types.Kind.ErrSet {
+            if c.P.T.ErrSetItems(a) != types.ListId(0) { b.Push($(" ? " if k > 0 else "? ") $c.Ty(a)) }
+            continue
+        }
         if k > 0 { b.Push(", ") }
         b.Push(c.Ty(a))
         k++
@@ -157,6 +170,11 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
     b.PushChar('<')
     for i in range skip, n {
         v := c.P.VarAt(owner, i)
+        # G1a: an error-set parameter closes the list after "?"
+        if c.P.ErrVarAt(owner, i) {
+            b.Push($(" ? " if i > skip else "? ") $c.P.L.Names.Text(v.Name))
+            continue
+        }
         if i > skip { b.Push(", ") }
         b.Push(c.P.L.Names.Text(v.Name))
         if v.Const != types.UnknownT { b.Push($" " $c.Ty(v.Const)) }
@@ -201,7 +219,12 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     match c.P.T.DeclKindOf(d) {
         case types.DeclKind.Foreign { return $"extern type " $name "\n" }
         case types.DeclKind.Error {
-            b.Push($"error " $name "\n")
+            # T19, T19a: its members as written, then its own words
+            src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
+            b.Push($"type " $name " error")
+            ms := c.P.ErrorMembers(d)
+            for i in range ms.Len() { b.Push($(", " if i > 0 else " ") $src[I64(ms[i].Sp.Start):I64(ms[i].Sp.End)]) }
+            b.Push("\n")
             for w in c.P.ErrorWords(d) { b.Push($"    " $nm.Text(w) "\n") }
             return b.ToString()
         }
@@ -318,8 +341,15 @@ fn firstItemEndAll(s String&) I64 {
 
 # " ? E" of what follows a constructor's parameters, nothing where it cannot fail
 fn errorsAfter(rest String&) String {
-    at := try rest.Find(" ?") catch default -1
-    return "" if at < 0 else rest[at:]
+    # outside every bracket: a result's type arguments may hold an error set of their own (QAH)
+    depth I64 = 0
+    for i in range rest.Len() {
+        ch := rest[i]
+        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if depth == 0 and ch == '?' and i > 0 and rest[i - 1] == ' ' { return rest[i - 1:] }
+    }
+    return ""
 }
 
 # a struct's fields, as its constructor assembles them (C2a)
@@ -443,9 +473,14 @@ fn globalItem(c mut typecheck.Checker&, x mut interp.Exec&, mi I64, e names.Entr
     text, has := x.Text(body)
     if not has { return $head "   # set at startup\n" }
     v := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
-    if v == c.TextType() { return $head " = " $quoted(text) "\n" }
-    return $head " = " $text "\n"
+    shown := $quoted(text) if v == c.TextType() else $text
+    # a long value - an embedded file's bytes (E38), a large table - is cut, its length said
+    if shown.Len() > LongValue { return $head " = " $shown[:LongValue] "...   # " $shown.Len() " characters\n" }
+    return $head " = " $shown "\n"
 }
+
+# the most of a global's value explain writes out
+LongValue I64 = 400
 
 # text written as a literal writes it
 fn quoted(s String&) String {

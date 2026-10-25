@@ -6,5 +6,5 @@ fn stash(b mut Box&) {
     p Point& = Point(5)
     b.f = fn(n) { return n + p.x }
 }
-error E { X }
+type E error { X }
 fn main() ? E { }

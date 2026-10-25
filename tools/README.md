@@ -37,6 +37,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `contracts_migrate.olang` | D17: a contract moved to right after the parameter list, results unnamed, guarantees and `for`/`if`/`fits` items dropped (listed) | `build/tools_contracts_migrate [--check] [-v] FILE\|DIR...` |
 | `as_migrate.olang` | E32: `x as C` fails as written - a use no `try` covers made `(x as C)!`, from the compiler's diagnostics | `build/tools_as_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 | `try_migrate.olang` | E24: `try` takes the whole expression after it - `try (a + b)` loses its parentheses; a `try` after an operator and before a looser one is parenthesized with `--old` (`2 * (try f()) + 1`, its old reading) and listed without it; an `as` an old `try` covered is given `!` (a plain chain) or listed. A listing makes `olang fix` end with status 1 | `build/tools_try_migrate [--old] [--check] [-v] FILE\|DIR...` |
+| `errortype_migrate.olang` | T19: error types declared as types - `error IoError { FULL }` becomes `type IoError error { FULL }`; idempotent; code and Markdown olang blocks only (programs inside strings by hand) | `build/tools_errortype_migrate [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.

@@ -153,6 +153,7 @@ type BlockKind enum {
     Clause     # a catch clause in value position
     Join       # a join block: on every way out it waits for its tasks (P1b) and fails with theirs (P4b)
     Defer      # deferred code, run on every way out of the block it is registered in (S19)
+    ErrDefer   # an errdefer's: run only on the ways out of that block an error takes (S19e)
     Collect    # a comprehension's loop (E27)
 }
 
@@ -525,12 +526,15 @@ type Try struct(X Expr?&, Clauses Array<Clause&>&, Ends Bool = false, Passes Boo
                # and a clause-less checked inside a try or a "!" (E15a, E35)
 }
 
-type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block?&, Defaults Array<Expr&>&) {
+type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block?&, Defaults Array<Expr&>&, Caught I64 = -1
+                   CaughtSet types.ListId = types.ListId(0)) {
     Sp
     Items
     All        # an item-less clause: every error left
     Code       # null for none
     Defaults   # one per result, or none
+    Caught     # R11b: the local holding the error the clause took, its code under CaughtSet (set where the clause is
+    CaughtSet  # entered), -1 for none
 }
 
 # what a clause takes: one word of an error type, or every word (-1)
@@ -584,6 +588,7 @@ type Stmt enum {
     # null for none; several results a Make of a tuple; an owner local returned is a Take of it (O36, O42)
     Return(sp source.Span, value Expr?&)
     Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD" (R3)
+    Reraise(sp source.Span, code Expr&, from types.ListId)   # "error e" (R3a): a caught error's code under from, raised
     Exit(sp source.Span, kind ExitKind, msg Expr?&)  # msg: an unreachable's message (S16d), null for none
     Assert(sp source.Span, cond Expr&, msg Expr?&)   # msg null for none; read only when it fails (S17)
     Block(sp source.Span, b Block&)
@@ -591,6 +596,9 @@ type Stmt enum {
     Join(sp source.Span, j Join&)
     Spawn(sp source.Span, s Spawn&)
     Yield(sp source.Span, x Expr&)                  # appended to the innermost Collect
+    # a generator's value (S20): x the result of the Next that asked (never null - typed as Return's, so the two are
+    # walked as one), its body going on after this at the next
+    Suspend(sp source.Span, x Expr?&)
 }
 
 type If struct(Test Expr&, Then Block&, Else Block?&) {
@@ -661,6 +669,7 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # (D17) - by the Raise's span's start; "raised here" where none is given
     RaiseAt List<I32>
     RaiseWhat List<String&>
+    Gen Bool = false    # a generator's Next (D18): a lambda its Suspends give values from, its end an Exhausted
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
@@ -830,7 +839,9 @@ fn (s Stmt&) Span() source.Span {
     return match s {
         case Stmt.Let(sp, _, _), Stmt.Assign(sp, _, _), Stmt.Eval(sp, _), Stmt.If(sp, _), Stmt.Loop(sp, _, _) => sp
         case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _, _), Stmt.Assert(sp, _, _) => sp
+        case Stmt.Reraise(sp, _, _) => sp
         case Stmt.Block(sp, _), Stmt.Defer(sp, _), Stmt.Join(sp, _), Stmt.Spawn(sp, _), Stmt.Yield(sp, _) => sp
+        case Stmt.Suspend(sp, _) => sp
     }
 }
 
@@ -884,6 +895,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         case Stmt.Jump(_, k, l) { w.line(d, $("break" if k == JumpKind.Break else "continue") " {" $l) }
         case Stmt.Return(_, x) { w.line(d, "return" $(" " $w.expr(x) if x is not null else "")) }
         case Stmt.Raise(_, e, word) { w.line(d, "raise " $w.T.Canon(e) "." $word) }
+        case Stmt.Reraise(_, x, _) { w.line(d, "reraise " $w.expr(x)) }
         case Stmt.Exit(_, k, _) { w.line(d, "exit " $short($k)) }
         case Stmt.Assert(_, c, _) { w.line(d, "assert " $w.expr(c)) }
         case Stmt.Block(_, bl) { w.block(bl, d + 1) }
@@ -897,6 +909,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         }
         case Stmt.Spawn(_, sp) { w.line(d, "spawn " $w.expr(sp.Task) " site " $sp.Site) }
         case Stmt.Yield(_, x) { w.line(d, "yield " $w.expr(x)) }
+        case Stmt.Suspend(_, x) { w.line(d, "suspend " $w.expr(x!)) }
     }
 }
 

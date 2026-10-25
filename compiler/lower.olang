@@ -137,6 +137,12 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
         f.RaiseAt.Push(b.RaiseAt[i])
         f.RaiseWhat.Push(b.RaiseWhat[i])
     }
+    if b.Gen {
+        # D18: a generator's Next, a coroutine - its end the code Exhausted.END has under its own list
+        f.Gen = true
+        ex := lw.P.PreludeType("std/prelude/iterator", "Exhausted")
+        if ex != types.UnknownT { f.GenEnd = mir.ErrorCode(lw.P.T, lw.P.T.Errors(b.Ty), ex, 0) }
+    }
     ln := lowering(lw, b, lw.P.T, f)
     ln.file = b.File
     if id < lw.Plans.Len() {
@@ -678,31 +684,16 @@ fn (ln mut lowering&) leave(to I64) {
     for i := ln.levels.Len() - 1, i >= to, i-- { ln.exitLevel(i) }
 }
 
+# whether deferred code k is an errdefer's (S19e): run only on a way out an error takes
+fn (ln lowering&) onError(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.ErrDefer }
+
 # level i left - every level above it already left on this path: its deferred code (lowered as if the levels above
-# were closed, which they are here), its wait if it is a join, its close
+# were closed, which they are here) - an errdefer's only where an error is leaving (S19e) -, its wait if it is a join,
+# its close
 fn (ln mut lowering&) exitLevel(i I64) {
     if ln.dead { return }
     lv := ln.levels[i]
-    # the levels above i, set aside while i's deferred code is lowered
-    saved List<level>
-    for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
-    mine List<I64>
-    for k in range ln.defers.Len() {
-        if ln.deferAt[k] == lv.S { mine.Push(k) }
-    }
-    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
-    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
-    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
-    for k := mine.Len() - 1, k >= 0, k-- {
-        # no longer pending once it runs here (B3e): a stop inside it does not run it again
-        if ln.L.Cleanups {
-            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
-        }
-        # deferred code runs as a block of its own, inside the block it is registered in
-        ln.block(ln.defers[mine[k]])
-    }
-    for k in mine { ln.deferAt[k] = lv.S }
-    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+    ln.runDefers(i, false)
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
     if lv.Kind == mir.ScopeKind.Join {
@@ -718,12 +709,43 @@ fn (ln mut lowering&) exitLevel(i I64) {
             failed := ln.F.NewBlock()
             ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
             ln.start(failed)
+            # S19e: the join failed, which is known only once it has waited - its errdefers run now, after its defers
+            ln.runDefers(i, true)
             ln.emit(mir.Stmt.Close(sp, lv.S))
             ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
         }
         ln.start(ok)
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
+}
+
+# level i's deferred code, last registered first, lowered as the block's last statements with the levels above it set
+# aside: what runs on this way out - every defer's, and an errdefer's where an error is leaving (S19e) - or, failed,
+# only the errdefers' (a join failing after its wait)
+fn (ln mut lowering&) runDefers(i I64, failed Bool) {
+    lv := ln.levels[i]
+    # the levels above i, set aside while i's deferred code is lowered
+    saved List<level>
+    for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
+    mine List<I64>
+    for k in range ln.defers.Len() {
+        if ln.deferAt[k] != lv.S { continue }
+        e := ln.onError(k)
+        if (e and (ln.erroring or failed)) or (not e and not failed) { mine.Push(k) }
+    }
+    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
+    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
+    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
+    for k := mine.Len() - 1, k >= 0, k-- {
+        # no longer pending once it runs here (B3e): a stop inside it does not run it again - an errdefer has no cleanup
+        if ln.L.Cleanups and not ln.onError(mine[k]) {
+            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
+        }
+        # deferred code runs as a block of its own, inside the block it is registered in
+        ln.block(ln.defers[mine[k]])
+    }
+    for k in mine { ln.deferAt[k] = lv.S }
+    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
 }
 
 # B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
@@ -799,6 +821,7 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             }
         }
         case typed.Stmt.Eval(sp, x) { ln.evalStmt(sp, x) }
+        case typed.Stmt.Suspend(sp, x) { ln.suspend(sp, x!) }
         case typed.Stmt.If(sp, i) { ln.ifStmt(sp, i) }
         case typed.Stmt.Loop(sp, body, post) { ln.loop(sp, body, post) }
         case typed.Stmt.Jump(sp, kind, loop) { ln.jump(sp, kind, loop) }
@@ -806,6 +829,15 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Raise(sp, err, word) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
+        }
+        case typed.Stmt.Reraise(sp, x, from) {
+            # R3a: a caught error raised again - its code recoded from the clause's set to the body's
+            v := ln.val(x)
+            if not ln.dead and ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() > 0 {
+                ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(v, from, ln.T.Errors(ln.B.Ty)), sp))
+            } else if not ln.dead {
+                ln.raise(sp, v)
+            }
         }
         case typed.Stmt.Exit(sp, kind, msg) {
             # S16d: the message is computed only here, where the unreachable is reached
@@ -819,7 +851,8 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Defer(sp, bl) {
             ln.defers.Push(bl)
             ln.deferAt.Push(ln.top().S)
-            if ln.L.Cleanups { ln.cleanup(sp, ln.defers.Len() - 1) }
+            # B3e: a stop interpret meets is no error leaving, so an errdefer has no cleanup (S19c, S19e)
+            if ln.L.Cleanups and not ln.onError(ln.defers.Len() - 1) { ln.cleanup(sp, ln.defers.Len() - 1) }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
@@ -1001,6 +1034,21 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     if not ln.fits(value, res) and not ln.widens(value, res) { ln.retArrays(l, res, value, sp) }
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# a generator's value (S20): computed as a return's is, an array value among it copied into the result scope (T7b), then
+# the function suspended with every scope it has open held, to go on at the block made here when it is next called
+fn (ln mut lowering&) suspend(sp source.Span, value typed.Expr&) {
+    res := ln.T.Result(ln.B.Ty)
+    v := ln.fit(ln.val(value), value, res, sp)
+    if ln.dead { return }
+    l := ln.local(v, res, sp)
+    ln.retArrays(l, res, value, sp)
+    held := Array<mir.ScopeRef>(ln.levels.Len(), mir.ScopeRef.Frame)
+    for i in range ln.levels.Len() { held[i] = mir.ScopeRef.Scope(ln.levels[ln.levels.Len() - 1 - i].S) }
+    resume := ln.F.NewBlock()
+    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.L(l)), resume, ln.F.ScopeRefs(held)))
+    ln.start(resume)
 }
 
 # T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
@@ -1430,7 +1478,7 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         if t.KindOf(et) != types.Kind.Named { continue }
         d := t.DeclOf(et)
         dm := t.DeclModule(d)
-        q := ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
+        q := load.ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
@@ -1438,14 +1486,6 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         }
     }
     return out.ToArray()
-}
-
-# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
-# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
-fn ErrQualifier(identity String&, inRoot Bool) String {
-    if inRoot or identity.StartsWith("std/prelude") { return "" }
-    k := try identity.FindLast("/") catch default -1
-    return $identity[k + 1:] "."
 }
 
 # text as constant data (T25d), a String&
@@ -1495,13 +1535,13 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             }
             if not always and test1 == mir.Operand.None { continue }
             if always {
-                ln.toClause(tc, ci)
+                ln.toClause(tc, ci, code, from)
                 return
             }
             yes, no := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(test1, yes, no))
             ln.start(yes)
-            ln.toClause(tc, ci)
+            ln.toClause(tc, ci, code, from)
             ln.start(no)
         }
         # what this try's clauses do not take leaves the body - past a "!", it ends the program
@@ -1532,8 +1572,14 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(code, from, mineErrs), sp))
 }
 
-# from here to clause ci of try tc: the scopes opened since the try closed, then a jump to the clause's entry
-fn (ln mut lowering&) toClause(tc tryCtx, ci I64) {
+# from here to clause ci of try tc: the error, where the clause names it, recoded from its list to the clause's own set
+# (R11b), then the scopes opened since the try closed, then a jump to the clause's entry
+fn (ln mut lowering&) toClause(tc tryCtx, ci I64, code mir.Operand, from types.ListId) {
+    cl := tc.Clauses[ci]
+    if cl.Caught >= 0 {
+        bind := mir.L(mir.LocalId(I32(cl.Caught)))
+        ln.emit(mir.Stmt.Assign(cl.Sp, bind, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+    }
     was := ln.erroring
     ln.erroring = true
     ln.leave(tc.Depth)
@@ -2474,10 +2520,18 @@ fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mi
 
 fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, site typed.SiteId, ty types.TypeId
                             sp source.Span) mir.Operand {
-    ops := Array<mir.Operand>(caps.Len())
-    for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
-    if ln.dead { return mir.Operand.None }
+    gen := ln.L.Bodies[I64(body)].Gen
     s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
+    # D18: a generator's Next is its walk - its storage (its coroutine's frame, its locals, the scopes it holds open)
+    # where the generator lands, which its captures outlive (O14a); a value array it is given copied there (D18b)
+    if gen { s = ln.resultScope() }
+    ops := Array<mir.Operand>(caps.Len())
+    for i in range caps.Len() {
+        ops[i] = ln.val(caps[i].Outer)
+        ct := caps[i].Outer.Type()
+        if gen and not ln.dead and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+    }
+    if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
 }
 
@@ -3544,7 +3598,7 @@ test "a function lowers to straight-line MIR: its operands in temporaries, its f
 
 test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
     text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
-             "error E {\n    BAD\n    WORSE\n}\n"
+             "type E error {\n    BAD\n    WORSE\n}\n"
              "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
              "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
              "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"

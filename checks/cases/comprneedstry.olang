@@ -1,6 +1,6 @@
 # check: fail error[E27, S9e]: this comprehension's own calls can fail
 # S9e: a comprehension over an iterator whose Next can fail
-error E {
+type E error {
     X
 }
 type It struct() {

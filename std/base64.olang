@@ -4,7 +4,7 @@
 # missing or misplaced '=', or bits left over that encoding would not have written, fail with Error.INVALID. Imported
 # with `import "std/base64"`; text goes in as its bytes.
 
-error Error {
+type Error error {
     INVALID
 }
 

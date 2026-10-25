@@ -23,7 +23,7 @@
 
 
 # why a statistic has no value
-error Error {
+type Error error {
     TOO_FEW             # an empty array, or one value for a sample variance or deviation
     OUT_OF_RANGE        # a percentile p outside 0 to 100
     BAD_EDGES           # a histogram's edges not two or more and increasing, or Edges given no bin or an empty range

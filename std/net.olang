@@ -48,7 +48,7 @@ shutWr I32 = 1
 # UNKNOWN_HOST: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
 # CLOSED: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
 # did; DENIED: not permitted (a port below 1024, say); FAILED: any other reason
-error Error {
+type Error error {
     REFUSED
     IN_USE
     TIMEOUT

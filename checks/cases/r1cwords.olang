@@ -1,7 +1,7 @@
 # check: run
 # R1c/R14/R1a: words in written and inferred sets - catching the words a callee names is complete, an inferred set
 # holds the words it lets through, a function value fits a set holding more words, and a signature renders them
-error LE {
+type LE error {
     EMPTY
     GONE
 }

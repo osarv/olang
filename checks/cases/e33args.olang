@@ -1,5 +1,5 @@
 # check: fail error[E14]: 'Bits' takes no arguments
-error E { X }
+type E error { X }
 fn main() ? E {
     b := F64(1).Bits(2)
 }

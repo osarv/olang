@@ -22,6 +22,8 @@ type TypeRef enum {
     Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
     # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
     Any(sp source.Span, of TypeRef&)
+    # "? A, B" closing a type-argument list (G8, QAH): the error set given for the type's error-set parameter
+    Errs(sp source.Span, items Array<Path&>&)
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
@@ -116,13 +118,18 @@ type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.Na
     Filter
 }
 
-# catch A + B.word { block } default v, w - a clause with no items takes every error left (R9b)
-type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true) {
+# catch A, B.word e { block } default v, w - a clause with no items takes every error left (R9b); e names the error it
+# took, in the clause alone (R11b) - "catch e" with no items is written as one item, which the resolver finds is no
+# error type (Bind 0 then)
+type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true
+                  Bind source.NameId = source.NameId(0), BindSp source.Span = source.Span(0, 0)) {
     Sp
     Items
     Body
     Defaults
     Braced     # whether a block is written - "catch E { }" has one, empty, "catch E default v" none
+    Bind
+    BindSp
 }
 
 # a match, a statement's or a value's; OnType for "match T" on an introduced type variable, whose cases are types
@@ -232,8 +239,9 @@ type Stmt enum {
     Raise(sp source.Span, word Path?&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
-    Defer(sp source.Span, s Stmt&)
+    Defer(sp source.Span, s Stmt&, onError Bool)    # onError: errdefer (S19e)
     Block(sp source.Span, body Array<Stmt&>&)
+    Yield(sp source.Span, x Expr&)                      # a generator's next value (QAG)
 }
 
 # a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
@@ -287,12 +295,14 @@ type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, Dt
 }
 
 # a type parameter: its name and its constraint (null for none) - several traits side by side its intersection (G19),
-# the first in Ty and the rest in Also
-type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)) {
+# the first in Ty and the rest in Also; ErrSet for the error-set parameter "? E" closing a list (G1a, QAH)
+type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)
+                      ErrSet Bool = false) {
     Sp
     Name
     Ty
     Also
+    ErrSet
 }
 
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&) {
@@ -322,7 +332,8 @@ type Decl enum {
     Type(sp source.Span, t TypeDecl&)
     Global(sp source.Span, v VarDecl&)
     Import(sp source.Span, alias source.NameId, path source.Span)   # the path's span holds its quotes
-    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&)
+    # type Name error [Member, ...] [{ WORDS }] (T19, T19a): an error type's own words, and the members of a named set
+    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&)
     Test(sp source.Span, name source.Span, body Array<Stmt&>&)
     If(sp source.Span, i TopIf&)
     Link(sp source.Span, path source.Span)     # link "name" (X9): the path's span holds its quotes
@@ -345,6 +356,7 @@ fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
         case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _) => sp
+        case TypeRef.Errs(sp, _) => sp
     }
 }
 
@@ -353,8 +365,103 @@ fn (s Stmt&) Span() source.Span {
         case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _) => sp
         case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
         case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _) => sp
-        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _) => sp
-        case Stmt.Block(sp, _) => sp
+        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _) => sp
+        case Stmt.Block(sp, _), Stmt.Yield(sp, _) => sp
+    }
+}
+
+# ---- generators (QAG) ----
+
+# where the first yield a function's body holds is, its own - nested blocks, loops, matches and the statements of catch
+# clauses included, a lambda's aside (a yield there is the lambda's, and an error): NoYield for none. A function whose
+# result is written Iterator<T ? E> and whose body yields is a generator
+NoYield source.Span = source.Span(-1, -1)
+
+fn FirstYield(body Array<Stmt&>&) source.Span {
+    if body.Len() == 0 { return NoYield }
+    for st in body {
+        y := yieldIn(st)
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+fn yieldIn(st Stmt?&) source.Span {
+    if st is null { return NoYield }
+    return match st {
+        case Stmt.Yield(sp, _) => sp
+        case Stmt.ExprS(_, x) => yieldInExpr(x)
+        case Stmt.Var(_, v) => yieldInExprs(v.Values)
+        case Stmt.Multi(_, m) => yieldInExprs(m.Values)
+        case Stmt.Assign(_, _, t, v) => yieldOr(yieldInExpr(t), yieldInExpr(v))
+        case Stmt.TryStore(_, inner, cs) => yieldOr(yieldIn(inner), yieldInCatches(cs))
+        case Stmt.If(_, i) => yieldInIf(i)
+        case Stmt.Forever(_, b), Stmt.Block(_, b) => FirstYield(b)
+        case Stmt.While(_, k, b), Stmt.DoFor(_, b, k) => yieldOr(yieldInExpr(k), FirstYield(b))
+        case Stmt.For3(_, f) => yieldOr(yieldOr(yieldIn(f.Init), yieldInExpr(f.Cond)), yieldOr(yieldIn(f.Post), FirstYield(f.Body)))
+        case Stmt.ForIn(_, f) => yieldOr(yieldOr(yieldInExpr(f.Source), FirstYield(f.Body)), yieldInCatches(f.Clauses))
+        case Stmt.MatchS(_, m) => yieldInMatch(m)
+        case Stmt.Return(_, xs) => yieldInExprs(xs)
+        case Stmt.Assert(_, k, msg) => yieldOr(yieldInExpr(k), yieldInExpr(msg))
+        case Stmt.Jump(_, _, msg) => yieldInExpr(msg)
+        case Stmt.Spawn(_, _, call) => yieldInExpr(call)
+        case Stmt.Join(_, j) => yieldOr(FirstYield(j.Body), yieldInCatches(j.Clauses))
+        case Stmt.Defer(_, d, _) => yieldIn(d)
+        case Stmt.Raise(_, _) => NoYield
+    }
+}
+
+fn yieldOr(a source.Span, b source.Span) source.Span { return a if a.Start >= I32(0) else b }
+
+fn yieldInIf(i If&) source.Span {
+    y := yieldInExpr(i.Cond)
+    if y.Start < I32(0) and i.Then is not null { y = FirstYield(i.Then!.Body) }
+    return yieldOr(y, yieldIn(i.Else))
+}
+
+fn yieldInMatch(m Match&) source.Span {
+    y := yieldInExpr(m.Subject)
+    for cs in m.Cases { y = yieldOr(y, yieldInCase(cs)) }
+    if m.NoMatch is not null { y = yieldOr(y, yieldInCase(m.NoMatch!)) }
+    return y
+}
+
+fn yieldInCase(cs Case&) source.Span { return yieldOr(yieldOr(yieldInExpr(cs.Guard), FirstYield(cs.Body)), yieldInExpr(cs.Value)) }
+
+fn yieldInCatches(cs Array<Catch&>&) source.Span {
+    if cs.Len() == 0 { return NoYield }
+    for k in cs {
+        y := yieldOr(FirstYield(k.Body), yieldInExprs(k.Defaults))
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+fn yieldInExprs(xs Array<Expr&>&) source.Span {
+    if xs.Len() == 0 { return NoYield }
+    for x in xs {
+        y := yieldInExpr(x)
+        if y.Start >= I32(0) { return y }
+    }
+    return NoYield
+}
+
+# an expression's statements: a try's clauses, a match value's cases
+fn yieldInExpr(x Expr?&) source.Span {
+    if x is null { return NoYield }
+    return match x {
+        case Expr.Paren(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _) => yieldInExpr(y)
+        case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _) => yieldInExpr(y)
+        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _) => yieldOr(yieldInExpr(a), yieldInExpr(b))
+        case Expr.Cond(_, a, k, b) => yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
+        case Expr.Chain(_, ch) => yieldInExprs(ch.Xs)
+        case Expr.Call(_, f, args), Expr.ScopeCall(_, f, _, args), Expr.Index(_, f, args) => yieldOr(yieldInExpr(f), yieldInExprs(args))
+        case Expr.Slice(_, y, lo, hi) => yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
+        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Join(_, items), Expr.Range(_, items) => yieldInExprs(items)
+        case Expr.Try(_, y, cs) => yieldOr(yieldInExpr(y), yieldInCatches(cs))
+        case Expr.MatchE(_, m) => yieldInMatch(m)
+        case Expr.Compr(_, k) => yieldOr(yieldOr(yieldInExpr(k.Value), yieldInExpr(k.Source)), yieldInExpr(k.Filter))
+        nomatch => NoYield
     }
 }
 

@@ -20,7 +20,7 @@ fn (c Char) ToLower() Char { return c + 32 if c.IsUpper() else c }
 
 type String extends Array<Char>
 
-error ParseError {
+type ParseError error {
     EMPTY
     INVALID
     OVERFLOW
@@ -29,7 +29,7 @@ error ParseError {
 # what text's other operations fail with: a Find, FindLast or FindByte finding nothing (NOT_FOUND), a Radix - the base
 # Format, ParseInt and ParseUint take - made from a number outside 2 to 36 and not 0 (BAD_BASE), and ShortestDecimal given
 # a NaN or an infinity, which no digits write (NOT_FINITE). Each function names the one word it can fail with (R1c)
-error TextError {
+type TextError error {
     NOT_FOUND
     BAD_BASE
     NOT_FINITE
@@ -37,7 +37,7 @@ error TextError {
 
 # where Eisel and Lemire's algorithm cannot settle a rounding, or the value is outside what it decides - the slower way
 # decides it (toF64)
-error undecided {
+type undecided error {
     NO
 }
 

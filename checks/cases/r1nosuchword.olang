@@ -1,0 +1,5 @@
+# check: fail error[T19]: C has no word 'W'
+# R1c: a word in a set is one its type declares
+type C error { Y }
+fn f() ? C.W { }
+fn main() { }

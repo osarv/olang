@@ -50,7 +50,7 @@ fn (r Rand&) State() Array<U64> {
 }
 
 # what SetState fails with: four zeros, which no generator's state is, or other than four words
-error Error {
+type Error error {
     ZERO_STATE
     WRONG_LENGTH
 }

@@ -1,0 +1,5 @@
+# check: fail error[T19a]: word 'Z' is C's too, a member of this set - name it another way
+# T19a: a set's own words share no name with a member's (words are qualified; this is only against confusion)
+type C error { Y, Z }
+type D error C { Z }
+fn main() { }

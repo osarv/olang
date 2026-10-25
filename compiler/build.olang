@@ -70,7 +70,7 @@ type Program struct() {
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
 # (said by Unbuildable)
-error Failed {
+type Failed error {
     REPORTED
     UNBUILT
 }

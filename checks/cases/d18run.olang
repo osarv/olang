@@ -1,0 +1,16 @@
+# check: run
+# flags: -debug -sanitize
+# D18: a generator runs as built, at -debug, sanitized
+import "std/io"
+
+fn evens(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i += 2
+    }
+}
+
+fn main() ? {
+    for x in evens(6) { try io.Println($x) }
+}

@@ -1,6 +1,6 @@
 # check: fail error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
 # P4a: an error statement in a clause would leave it - what the task lets through is what its clauses do not take
-error E {
+type E error {
     BAD
     WORSE
 }

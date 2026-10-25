@@ -1,0 +1,5 @@
+# check: fail error[R1]: 'Pt' is no error type - an error set names error types, their words and named sets
+# R1: an error set names error types - a struct named after "?" is none (it was accepted silently)
+type Pt struct(x I64) { x }
+fn f() ? Pt { }
+fn main() { }

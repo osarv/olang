@@ -151,6 +151,11 @@ hand-off notes, then one agent at a time with gaps - the error-set generics/chec
 Check the week at every completion; nothing new starts above ~0.85. (This week's rule overrides "speed over evenness"
 for this week only.)
 
+**Week of 2026-10-24 to 2026-10-31 (the user, 2026-10-25: "Make sure to stop at 90 percent usage this week too").**
+Same rule as last week: code work (agents, merges, reviews) stops at ~0.90 weekly; the rest is the user's. Nothing new
+starts above ~0.85; running agents finish and merge. The reset is Sat 2026-10-31 ~06:00 CEST. Check the week at every
+completion and check-in.
+
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
 out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the

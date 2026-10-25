@@ -1,0 +1,20 @@
+# check: run
+# R3a, R11b: what a test narrows is what "error e" can raise - after "e != P" leaves, e is P, which g promises
+type P error { A, B }
+type Q error { C }
+fn f(n I64) ? P, Q {
+    if n == 0 { error P.B }
+    error Q.C
+}
+fn g(n I64) I64 ? P {
+    try f(n) catch e {
+        if e != P { return 1 }
+        error e
+    }
+    return 0
+}
+fn main() {
+    r := try g(0) catch P.B default 2 catch P default 3
+    assert r == 2
+    assert (try g(1) catch default 9) == 1
+}

@@ -2,5 +2,5 @@
 # E33/T29e: a type extending a float has the supplied Bits(), which is never overridden
 type Temp extends F64
 fn (t Temp) Bits() U64 { return 7 }
-error E { X }
+type E error { X }
 fn main() ? E { }

@@ -909,7 +909,21 @@ fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
             }
             st.Dead = true
         }
-        case typed.Stmt.Raise(_, _, _) { st.Dead = true }
+        case typed.Stmt.Suspend(sp, x) {
+            # a generator's value (S20): handed out as a return's is, the walk going on after it
+            refs := List<view>()
+            v.expr(x, st, refs)
+            if not v.check {
+                for r in refs {
+                    match r.P.R {
+                        case Root.Param(i) { v.factPut(v.sums[v.Id].Views, i, -1, source.NameId(0), r.P, sp) }
+                        case Root.Mark(_) { v.passes(r) }
+                        case _ { }
+                    }
+                }
+            }
+        }
+        case typed.Stmt.Raise(_, _, _), typed.Stmt.Reraise(_, _, _) { st.Dead = true }
         case typed.Stmt.Exit(_, _, m) {
             if m is not null { v.expr(m, st, scratch) }
             st.Dead = true
@@ -1477,7 +1491,7 @@ fn calls(bl typed.Block?&, out mut List<I64>&) {
 fn callsStmt(s typed.Stmt?&, out mut List<I64>&) {
     if s is null { return }
     match s {
-        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { callsExpr(x, out) }
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Suspend(_, x) { callsExpr(x, out) }
         case typed.Stmt.Assign(_, p, x) {
             callsPlace(p, out)
             callsExpr(x, out)

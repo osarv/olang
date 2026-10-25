@@ -24339,3 +24339,335 @@ success path alone, before the join. **A relaxation of round
 now it keeps exactly the places it may let go of (its may-summary, all of them only where it may let go of any) - a
 StringBuilder in `IP.Str` or `Duration.Str` had stopped all early freeing in every program importing std/net or
 std/time.
+
+## Error types as types, named error sets, the error a clause took (T19, T19a, R11b, R3a, R1, R14, 2026-10-25)
+
+The user's decisions: QAM of 2026-10-18 (error types declared `type IoError error { ... }`, named sets `type LoadError
+error os.Error, ParseError { TIMEOUT }`, members and words last) and the talk of 2026-10-25, which settled the catch
+binding as **a name for the clause alone** and left open whether errors become storable values (not built: no
+assignment, passing, fields or type arguments of an error, no zero value, no Result).
+
+**Declarations.** `type Name error [Member, ...] [{ WORDS }]` is the one form; `error X { }` is gone (a removed spelling,
+simply unknown). The parser makes the same `ast.Decl.Errors` it made, with the members beside the words, so names, the
+type table (`DeclKind.Error`), sessions and doc needed nothing but the extra field. `tools/errortype_migrate.olang`
+rewrites `error X {` - the keyword first in its statement (first on its line, or after a statement end or a brace), a
+name, a brace - and nothing else, so it is idempotent: `type L error A {` has a name before its `error`, and an error
+statement never has a `{` after its name. It is the last of `olang fix`'s text tools; `errors_migrate` (a driven tool,
+run after it) learned to see the new form. The tree's 330 declarations, the fixtures' `.want`s and the programs written
+inside strings (the checker's, lowering's and generic's tests, drvdiff, the fuzz generator, the scope generator, the
+explain test) were migrated; the tests of the old tools (errors_migrate, stutter_rename) keep the old text they test.
+
+**Sets (T19a).** A set stands for its members, flattened in order, then its own words where it declares any (its own
+type is then a member of its own set). It is expanded in one place, `generic.errorList` (`errorSetEntries` /
+`EntriesOf`), so a signature's `?`, a function type, a trait method and a lambda's written set all expand alike, and in
+`check.catchItem` for a catch item. A set adds no code space: the expanded list is an ordinary error list, so R6's codes,
+re-encoding, R14 and T22's in-order comparison of function types are unchanged - `? LoadError` and `? os.Error,
+ParseError, LoadError` are one function type. Decided (mine): a member naming an unknown type, a non-error type or an
+unknown word is an error at the member; a set reaching itself (through any depth) is an error at its name and stands for
+nothing; a set's own word sharing a name with a member's word is an error (QAM's "only against confusion"); R14 accepts
+a set as a catch item where anything it stands for can come from the operand.
+
+**Found on the way, all pre-existing and fixed:** `fn f() ? Pt` with `Pt` a struct was accepted silently (errorType took
+any declared type); an unknown error type in a function type's or a lambda's written set was never reported; a lambda's
+written set ignored words (`ErrorType` per item instead of `errorList`); `error T.NOPE`, `catch T.NOPE` and `? T.NOPE`
+were a checker "gap" with no diagnostic of their own (`NoSuchErrorWord` existed and was never used), and so was an error
+word declared twice (`ErrorWordInUse`, also unused). All now go through `ErrorItemKnown`, reported once per line where
+the set is resolved; check's `errorSetKnown` went (it duplicated the report and missed the other places). `errsText`
+joined a set with ` + `, a spelling QY removed.
+
+**Catch bindings (R11b).** `catch os.Error e { }`, `catch A, B e`, `catch e` (one bare item resolving to no type, read
+so by the resolver - `names.LoneCatchName` - and the checker alike). The name is declared for the clause's block and its
+defaults (D3, D3a apply). Uses, each an AST form recognised before the general expression path: `$e` (a conditional of
+text constants, one per word the error can be, qualified as `!` and `main` print errors - `ErrQualifier` moved to
+`load` so the checker shares it); `e == X` / `e != X` (a word, a type or a set; a test on the code's type ordinal where
+X covers every word the clause's entry holds, word by word otherwise); narrowing, by a stack of (name, set left, block)
+popped as blocks close - after `==`/`!=` in a branch, in an else, after a leaving `if`, through `and`/`or`/`not`; `match
+e`, which is rewritten into the `if` chain it means (so narrowing, D10a and the checker's if handling all apply), with
+its exhaustiveness decided first (the last case, unguarded, becomes the plain else); `error e`, a new
+`typed.Stmt.Reraise` lowered as a recode to the body's set and a raise. Anything else naming it - assignment, `:=`, an
+argument, a capture by a lambda, `try e` - is an error naming what to write. Decided (mine): **a name a clause gives and
+never uses is an error** - with the bare `catch e` form, a misspelled error type would otherwise silently become a
+catch-all; **a spawned call's clause names no error** (it is a lambda run on the task's thread, and the name would have
+to be its parameter); a value `match e` gives every value with `=>` (a leaving block arm is not supported there); a case
+after the cases cover every error, or naming nothing the error can be, is an error.
+
+**Representation.** The name is a hidden `I32` local; lowering assigns it in `toClause`, where each error site enters the
+clause, by `Rvalue.Recode` from the site's list to the clause's own set (its canonical order). So the evaluator and
+`interpret`, which run MIR, needed nothing new: tests/errsets.olang bakes globals and decides asserts through every form
+(rendering, compare, match, re-raise) beside the same computations at run time on a mutable input. Measured: nothing is
+emitted unless a clause names its error (one recode at clause entry).
+
+**Not done / limits.** explain spells another module's types bare in signatures (`Error` for `os.Error`) - pre-existing,
+seen with sets because explain prints the expanded set.
+
+**`make releasetest`** also runs `olang explain T6a` in the unpacked release, so a release whose SPEC.md is not beside
+`bin/` fails it.
+
+## Error-set parameters (G1a, QAH, G5, G8, G12, G16a, T31, T35b, M19d, R11, 2026-10-25)
+
+The user decided on 2026-10-18 ("If this make sense in general we do it in general yes") that generics range over
+error sets too: a list may end in `? E`, inferred from the function values and iterators passed, the empty set where
+nothing fallible binds it, monomorphized per set, never a stored error. What it is for: a helper taking a callback
+(`Fold`, `Sort`'s comparator, linalg's `Map`) could not take one that fails - a function type writes its set (R1b), so
+`fn(acc U, x T) U` was an infallible one and a lambda whose body tried something was an error - and an iterator that
+fails on its way (a file's lines) could not be an `Iterator<T>`, whose `Next` failed with `Exhausted` alone. An inferred
+set (`?` alone, R1a) did not answer either: it lets a body's own errors differ per instance, not a parameter's type.
+
+**Syntax.** A type parameter list's last item is `? E` (or the list is `<? E>`); a type argument list's last is `? A, B`
+- everything after the `?` up to `>` is the set, since nothing follows it (mine; a function type's set in a list is one
+item, L18c, but here no comma is ambiguous). A receiver's `? E` among its type's arguments introduces `E` as a bare name
+does (G3b). The parser stops a type parameter's constraint at `?`; the formatter needed nothing (it works on tokens).
+
+**What E is.** A variable of its list like a type variable (a `generic.varRow`), marked an error-set one
+(`Program.errVars`, by owner and index - kept apart from `varRow` so no construction of one changed). Where an error set
+is resolved, `E` is an entry of the list (`types.Kind.Var`); where a type argument is given, the argument is a set,
+`types.Kind.ErrSet` - its entries merged (R1c) and sorted canonically (by module and name, R1a's order; variables
+after), so one set is one type and G16a's identity is the set's. A type with an error-set parameter given none gets the
+empty set as its last argument, so `Iterator<I64>` is one type however it is written; the canonical text and the
+diagnostics leave the empty set out, and spell a set after `?`.
+
+**Substitution** splices: an error list naming `E` gets `E`'s set's entries where `E` stands, merged with the rest -
+`? E, Exhausted` with `E = {io.Error}` is `? io.Error, Exhausted`, with the empty set `? Exhausted`, and a list of `E`
+alone with the empty set is no list, so the function cannot fail (R7) and its call takes no `try`.
+
+**Binding (mine: the union).** Matching an error list naming the binding's `E` against a value's binds `E` to what the
+value fails with beyond the pattern's other entries, and a second match adds to it - two arguments never conflict over
+`E`, since each says what else the instance can fail with. This runs where function types unify (a callback), where
+named types' arguments unify (`Iterator<T ? E>` against `Iterator<I64 ? Bad>`), and - the part that makes iterators
+work - where G9c binds a constraint's variables through the bound type's methods: `Next() T ? E, Exhausted` against
+`Reader.Next() I64 ? Bad, Exhausted` binds `E = {Bad}`. An `E` left unbound is the empty set (a function's call, a
+generic constructor's G10c inference, a function value named with explicit arguments).
+
+**Lambdas.** A lambda's expected type naming an unbound `E` supplies no errors (D16a's rule for an unbound variable),
+so it infers its set from its body (D16b); the call then unions that into `E`. The expected type is built with `E`
+always open, even where an earlier argument bound it - else a lambda after a fallible iterator would be held to the
+iterator's set and refused its own errors. Once the instance is made, each such lambda is given, as a value and as its
+body's type, the set its parameter got (`lambdaErrs`): its codes are counted by that list (R6), as an inferred body's
+are by its settled one.
+
+**Satisfaction is "held by".** T31 always said a method's set is held by the trait's; `generic.meets` compared the
+lists for identity, which was the same thing only while every iterator wrote exactly `? Exhausted`. It is
+`ErrsHeld` now (an entry held by one of the same type whose words include its own), so an iterator that cannot fail
+meets `Iterator<I64 ? Bad>` too, and one failing with more than `Exhausted` does not meet `Iterator<I64>` (a check
+case). The constrained call is a direct one, so no code is recoded.
+
+**catch E.** A catch item naming the error-set parameter takes every entry of the set the instance binds it to - none
+for the empty set, a clause covering nothing in that instance, which R8 already allows in a generic's body.
+
+**std.** `Iterator<T ? E>`; Some/Every/Count/Fold/Map/Filter/ToList/Sum/Min/Max/MinBy/MaxBy take
+`<I Iterator<T ? E>, ... ? E>` and their callbacks `? E`, walking with `for x in try it` (a try covering nothing where `E`
+is empty); the adapters carry the set as a parameter of their types (`TakeIter<I, T ? E>`), their `Next` failing with
+`E, Exhausted` - an inferred `?` would have needed satisfaction to read a body's inferred set, which the generic layer
+cannot; the array helpers (`Some<? E>` ...) and `Sort`'s whole merge sort (its helpers `<T ? E>`, every comparison a
+`try`); List's and Vec's `Sort`, ListIter's overrides (which must keep their defaults' signatures, M19e); linalg's
+`Map/Map2/Map3/Mapped` and the `mapInto` family. A sort whose comparator fails stops there, the elements permuted.
+
+**Found on the way.** Section 8's alias analysis (`scope.aliasBlock`), which finds the hidden locals that are second
+names for a reference parameter, did not descend into a `for x in try p` - a try statement whose operand is the loop -
+so walking a receiver under `try` made the hidden cursor look like storage kept in the parameter's region, and the call
+`I64[].Iter().Min()` was refused by O17 once `Min` walked with `try`. And `check.iterShaped` read every error entry as a
+declared type (it crashed on the variable).
+
+**Explain** prints the list as written (`fn apply<T, U ? E>`) and an instance's set after `?` (`apply<I64, I64 ?
+Bad>`, the empty set left out); its constructor line looked for the first " ?" in the whole signature, which a result's
+type arguments now hold - it looks outside brackets.
+
+**Tests.** tests/errsetparams.olang (an own generic, the helpers with failing callbacks, a failing comparator, a
+fallible iterator walked, folded, adapted and passed to a constrained function, a struct type over an error set with
+`catch E`, a named set as the argument, explicit arguments; globals baked through fallible folds and an assert the
+evaluator decides, beside the run time); checks cases g1aerrvartype, g1atypevarerrs, g1aunwanted, g1auntried,
+g1aiternotmet.
+
+## Generators (D18, D18a-D18d, S20, QAG revised, T35b, D10a, 2026-10-25)
+
+**The decision.** QAG, revised by the user on 2026-10-18: "settle on fn evens (n I64) Iterator<T> ... the compiler knows
+this is a generator because of the return type and the yields and the user doesn't need to know". No `generator`
+keyword and no `yields` marker: a `fn` whose result is written `Iterator<T ? E>` and whose body yields is a generator,
+`Iterator<T ? E>` naming the type it hides. It waited for QAH (round 1 of this batch), since its Next fails with `E`.
+
+**What the caller is given.** A struct in the prelude, `Generator<T ? E>`, holding `next (fn() T ? E, Exhausted)` - the
+parentheses L18c's, the field's type a function type of several error items inside a list - whose `Next()` is
+`return try g.next()`. Choosing a struct over a type of its own kind means everything that takes an iterator takes a
+generator with nothing new: `for ... in` finds `Next`, the defaults meet `Iterator<T ? E>` by satisfaction, `any
+Iterator<I64>&` converts it, `Generator<I64>` can be a field's type, and a copy is a second name for the same walk, as
+a List's. A `Generator` made by hand of any function value of that type is an iterator too (the body of `next` the
+walk). `generic.Sig` turns the written `Iterator<...>` result into the `Generator<...>` instance where `ast.FirstYield`
+finds a yield of the body's own (a lambda's aside), and records the function as a generator (`IsGenerator`).
+
+**The body is a lambda's.** The design question was where a generator's locals live between values and how section 8
+judges them. Rather than teach every pass a new kind of body, check makes the generator's own body `return
+Generator(next)` - the generator's contract checked there - and `next` a lambda (`genLambda`) whose body is the
+written one: its captures are the parameters (copied in where the generator is made, a value array as a copy built
+where the generator lives - a lambda's borrow of one would point into the frame of the call that returns it), each
+then declared as a local of the lambda set once at its start, so the parameters stay writable as a function's are. A
+`yield` is checked as the lambda's `return` of its value (`yieldStmt`), emitted as a typed `Suspend`, which section 8
+walks as it walks a `Return` - so what may be yielded is exactly what a lambda may return, with no rule of its own. A
+`return` there is a raise of `Exhausted.END`, as is falling off the end (appended where the body does not leave); `?`
+after the result is an error naming `Iterator<T ? E>`, and a `try` letting out what the result's set does not hold says
+to write it there.
+
+**Where the yielded value lives.** Each `Next` call passes its result scope, so a yielded value is built where that
+call's result goes and `for w in words(t)` reclaims each one per turn. The cost of that choice is that no local of the
+generator may live there: the scope belongs to one call while the locals live across many. So `&return` (a local's
+mark or a scope argument) is an error in a generator, and O26a moves nothing into the result scope for a yield (`flStmt`
+treats `Suspend` as `Yield`, never as a `Return`); a yielded local holding the generator's own storage is O26's error,
+worded for a generator ("yield a copy, built where the value goes"). A yielded borrow of what a parameter refers to
+(`yield t[a:b]`) is the lambda's obligation that its capture outlive its result scope, which T22a refuses for a
+function value - it is worded "yield a copy" (D18c). The alternative recorded: elements living where the generator
+does (G11's container scope), with `Next() T&g`, which would admit the borrow and the per-generator reuse of a result
+scope at the price of every fresh reference element accumulating there for the walk's life.
+
+**The coroutine.** Lowering marks the lambda's MIR function `Gen`, with `GenEnd` - Exhausted.END's code under its own
+list - and lowers a `Suspend` to `Term.Suspend(x, resume, held)`: the value written as a return's would be (an array
+value copied into the result scope, T7b), the scopes open there listed innermost first, and the body going on at
+`resume`. The verifier reads it as a `Goto` to `resume` for initialization and scope nesting. The generator's closure
+is always built in the creator's result scope: the coroutine's frame - its locals, the scope headers it holds open, a
+big arena - lives where the generator lands.
+
+- emit writes the lambda as an LLVM coroutine `SYM.coro(env, home)` (`presplitcoroutine`, switched-resume lowering):
+  `llvm.coro.id` with a promise `{ result, running, out, the passed scopes }` whose first field is the function's own
+  result slot (`%rv`), the frame from `__olang_scope_alloc_a` in `home`, an initial suspend so a call runs nothing, a
+  `coro.suspend` per Suspend whose destroy edge closes the held scopes, and the final suspend at the old `ret`. A
+  passed scope variable is read from the promise at each use, and a capture's scope asked again of the runtime at each
+  use (decision 48: the thread resuming the walk may not be the one that made it). `SYM` itself, the function value's
+  code, stores this call's scopes in the promise, sets "running", resumes, and returns the promise's result; once
+  `coro.done` it returns `Exhausted` without resuming. Creating the closure calls `SYM.coro` and registers `SYM.drop` in
+  the home scope with the runtime's destructor ABI: it destroys the coroutine, closing the scopes a walk stopped part
+  way holds - unless "running" is set, which happens when a failed check inside the walk ended a test: the test's
+  unwinding (P1d) closed those scopes already. In a test build a suspend takes its held scopes off the chain of open
+  scopes and a resume puts them back. LLVM's coroutine passes run in every pipeline olang builds with (checked by hand
+  at -O0, -O3 and -O3 -flto before building, then in every mode).
+- eval keeps a record per generator (`gens`), its index at the end of the closure's environment: a `Suspend` delivers
+  the value as a return would, then copies the frame and its words (locals, scopes, scope variables) into the record and
+  pops the frame without closing anything; a call resumes by pushing the frame back with this call's scope variables,
+  refuses a walk resumed from inside itself, and answers a finished walk with `GenEnd`. A `gGen` registration in the
+  home scope closes a stopped walk's held scopes and its frame's storage, innermost first.
+
+**Measured.** 200M values summed: a generator 1.25 s (6.2 ns a value), a hand-written iterator struct 0.05 s, the plain
+loop 0.02 s (vectorized). The generator's resume is an indirect call through its frame that LLVM never inlines: the
+drop registration lets the handle escape, and the frame is allocated by the runtime, so CoroElide has nothing to take.
+Eliding it where a walk is made and finished in one place (a for-in over a temporary generator, which could destroy it
+at the loop's end) is the recorded next step.
+
+**Found on the way, pre-existing: D10a and for-in.** `leaves` counted any loop with no `break` of its own as one that
+never ends, and `breaks` looked only at statements - but a `for x in it` over an iterator ends by the `break` in its
+Next call's `catch Exhausted`, inside an expression. So `fn f(l List<I64>&) I64 { for x in l { } }` compiled and
+aborted with "unreachable reached" when called; `breaks` now looks into a try's clauses, a match's arms, a
+conditional's values and a call's arguments (`exprBreaks`). Nothing in the corpus relied on it. The genLambda's appended
+end raise depended on the same answer, which is how it was found.
+
+## `errdefer` (S19e, 2026-10-25)
+
+**The decision** (docs/ideas.md #7, the user 2026-10-18: "1) errdefer 2) that's good 3) good"): Zig's word; deferred
+code of its block run only when an error leaves the block outward; one list with `defer` in reverse registration order,
+so `x := alloc(); errdefer free(x); y := build(x); defer log(y)` unwinds in the order it was built; the error is no value
+inside (T20); nothing on what ends the test or the process (S19c).
+
+**How it is built.** The parser takes `errdefer` where it takes `defer` (`ast.Stmt.Defer` gained `onError`); check
+treats it as a defer in every respect - S19a's checking, S19b's "may not leave", S20's pending-around-a-yield - but opens
+its block as `typed.BlockKind.ErrDefer`, so the typed tree, section 8 and every walker over it need nothing. Lowering
+already knew when an error was leaving: `erroring` is set by `raise` (an error leaving the body, after every scope is
+closed) and by `toClause` (an error going to a try's clause, leaving the blocks inside the try). `exitLevel` now lowers
+its deferred code through `runDefers`, which takes an errdefer's only while `erroring`. So an errdefer inside a block a
+clause outside it takes the error for runs, and one in the block holding that try does not - the clause is inside it.
+The evaluator runs the MIR, so it agrees by construction: a baked global and S18c-decided asserts (`edAll`) show it
+beside the run time.
+
+**Decided (mine).**
+1. A `join` block's tasks failing is an error leaving the join block - the case the decision lists - but the failure is
+   known only once the block has waited, and S19a runs a join block's deferred code *before* the wait (so a deferred
+   `Cancel()` lets its tasks finish). So on a failed wait the block's errdefer code runs then, after its defers: the
+   one place the reverse order bends. Running every piece after the wait would break S19a's reason; running none would
+   drop the decision's case. A failure of the join block's own statements leaves before the wait and runs both kinds in
+   order.
+2. An errdefer may not be pending around a `yield` (S20's rule). A dropped walk is not an error leaving, so an errdefer
+   there would be sound where a defer is not; but the coordinator asked for errdefer consistent with the generator rule,
+   and the rule is over the one list. Relaxable with defer's.
+3. No interpret cleanup (B3e): a stop interpret meets is no error leaving, and the built program would not run it.
+
+**Tests.** shared.olang's S19e section (out of a function, a try passing it on, a loop's iteration, a caught error, a
+`for x in try c` ended by its error, a join failing, a test body passing) baked and decided while compiling and run;
+checks cases for a return, an error escaping, a one-line body and a yield.
+
+## `embed PATH` (E38, B3i, 2026-10-25)
+
+**The decision** (docs/ideas.md #6, the user 2026-10-18: "It's good for spelling ... Do as you want"): a builtin word
+rather than a std function the evaluator understands, files only, the bytes constant data, the path relative to the
+source file as imports are and kept inside a remote package, the content in the object's hash.
+
+**How it is built.** `embed` is a keyword and a prefix operator (`ast.Expr.Unary(_, Tok.Embed, path)`), its operand a
+`unary` - so `String(embed "f")`, `embed $Dir "/f"` (a join is one unary) and `embed f()` all read naturally, and an
+index read through an embed is parenthesized. Check (`embed`) types it `Array<U8>&` read-only and gives a
+`typed.Expr.Data` holding the bytes - exactly what a text literal gives (T25d) - so lowering, the evaluator, section 8
+and emit needed nothing: the bytes are constant data everywhere, a global built from them bakes (a table parsed while
+compiling, K2), an assert reading them is decided (S18c). A literal path is read at once; any other is checked in its
+module's context as the body of a function giving text (`ExprBody`, which refuses a local), recorded (`EmbedAsk`),
+evaluated after the check by `interp.decide` and read in the next check (`generic.Program.Embeds`, by file and offset).
+Embeds are decided first and alone in their round: until the next check the embed holds no bytes, and a length or a
+condition evaluated in the same round could have read the placeholder. The loader resolves the path as a relative
+import - against the module's own directory, an absolute one as itself, inside std or a remote repository refused when
+it leaves it - reads each file once a compilation (every check sees the same bytes), and records it with the module.
+B3i's module key (olang's `moduleKeys`) holds each embedded file's hash, so a module's object is made again when its
+file changes, which the `embed` scenario shows with `OLANG_CHECKREUSE` (a stale reuse would be a difference).
+
+**Decided (mine).**
+1. Every embedded file is an LLVM constant, whatever its size. The decision placed files over 64KB with `.incbin`
+   because "LLVM would only be slow on it" - measured, it is not: a 10MB random constant compiles in 0.18s at -O3 and
+   0.32s under -flto, and the full build of a program embedding it spends 0.8s in lowering and emission (writing the
+   escaped text and hashing it, after the escape loop stopped formatting each byte through Format/PadStart). And
+   module asm is the wrong home under olang's full LTO: the modules' asm is joined into one assembly, where two objects
+   defining one blob collide. Revisit for files of hundreds of MB.
+2. Each `embed` written is an instance of its own, as each literal is (T25d): a file embedded at two places is in the
+   binary twice; a global shares it.
+3. A wrong embed gives no bytes of its own type (not the unknown stand-in), so its body is faulty (K1a) and nothing
+   evaluates it - with the stand-in, an assert reading the global was decided false from nothing.
+4. `explain` and `doc` cut a global's value over 400 characters, saying how long it is - an embedded file's bytes
+   would otherwise be one line of megabytes.
+
+**Found on the way, not fixed (pre-existing):** `X := String(1)` (an initializer that does not check) then
+`assert X.Len() > 0` adds a second error, S18c's "this assertion is false" - the global's value is read while
+compiling though its initializer failed. Not traced to its cause here.
+
+**Tests.** tests/embed.olang (a table parsed and baked, a computed path, a view as text, decided and run, in a loop
+and a generic); checks cases for a missing file, a directory, a path reading a local, one the evaluator cannot compute,
+and the binding; the `embed` scenario (a changed file rebuilds, interpret agrees, std may not be left).
+
+## Generic enums (G6b, G10c, S13, E32, 2026-10-25)
+
+**The decision** (docs/ideas.md #12, the user 2026-10-18: "generic enums go in for sure"): monomorphized exactly as a
+generic struct is, case constructors inferring their arguments as a generic constructor does (G10c), exhaustiveness,
+layout and patterns per instance; no `Option<T>`/`Result<T, E>` in std (those are `null` and `? E`).
+
+**What it took.** Less than expected: the type table already instantiated enums - `Program.Body` substitutes an
+instance's cases, and layout, `==`, the supplied Hash, `$` and the evaluator work from an instance's cases as from a
+plain enum's. G6's check refused the declaration, and nothing else had ever been reached. What was missing was naming
+cases:
+- **With arguments**, `Tree<I64>.Leaf(3)`: the parser already made `Member(Generic(Tree, [I64]), Leaf)`; `typeNamed`
+  now reads a `Generic` naming an enum as its instance (`lib.Opt<I64>` through an import by `Program.Apply`, since the
+  resolver records no type for a span the parser built), so every path naming a case through a type - a call, a member,
+  a pattern, a case test - takes it.
+- **Bare**, `Tree.Leaf(3)`: `genericNamed` finds the generic declaration a name names; a call or member of a case then
+  goes to `genericCase`, which takes the instance the value lands in (`want`, read through a reference) when it is one of
+  this enum's, and otherwise infers - each argument checked once and unified with the case's payload parameters, a
+  literal by its kind (G9a), a reference bound read-only and an array value as a reference (G10c's rules), the checked
+  values handed to `enumCase` (`pre`) so nothing is checked twice. A variable neither gives is an error with the form
+  to write.
+- **In patterns**: `caseTag` and `caseWritten` accept the generic declaration named bare against the subject's instance
+  (`namesEnumOf`); a case written with another instance's arguments is none of the subject's, and a pattern naming a
+  case of another enum or instance now says so (S13's "a case value here is ...") instead of checking its payload as
+  values (`_` and binding names reported as unknown).
+
+**Decided (mine).** `$` writes a case as `Opt.Some(4)`, its enum's arguments left out - how a case is written, and what
+the existing rendering of an instance's name already gave. A raw-value enum may be generic: nothing forbids it and
+nothing in it needs a rule. Reflection (`T.Cases`, ideas #2) is not built in this compiler yet; when it is, it reads an
+instance's cases as everything else does.
+
+**Found on the way, pre-existing.** A `_` in a case test inside a local `if` condition (`if t == Shape.Rect(_, _)`)
+was B10's "unknown name '_' - if it is a build constant ...": the resolver reports names nothing declares in a
+condition, and `_` is a wildcard there. Fixed in `names.name`.
+
+**Tests.** tests/genenums.olang: trees, options, eithers, a constrained parameter, a payload written whole; methods,
+generic functions, nested patterns, case tests, `as`, `$`, `==`, a Map key, baked and decided while compiling and run;
+payloads holding references read back after an arena churn (and clean under `-debug -sanitize`). checks cases: a case
+whose arguments cannot be inferred, exhaustiveness per instance, another instance's case in a pattern; genericenum.olang,
+which said an enum is never generic, now runs.

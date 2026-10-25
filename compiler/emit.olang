@@ -25,6 +25,7 @@ import "std/os"
 import "source"
 import "ast"
 import "diag"
+import "load"
 import "types"
 import "generic"
 import "typed"
@@ -1822,6 +1823,10 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     idle Map<I64, Bool>
     pieceKinds List<mir.WriteKind>
     pieceOps List<mir.Operand>
+    # D18: a generator's Next, written as an LLVM coroutine (genFunction) - its promise's type: the result as the
+    # function returns it, a "running" word, the result pointer, then the scopes the call passed
+    gen Bool = false
+    promTy String& = ""
 }
 
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
@@ -2069,6 +2074,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     fe mut fnEm&e = fnEm(e, f, k)
     fe.passed = passed
     fe.env = env
+    fe.gen = f.Gen
     e.badType = false
     if e.Debug { fe.subprogram() }
     fe.run()
@@ -2079,6 +2085,10 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         return
     }
     b := StringBuilder()
+    if fe.gen {
+        # D18: the coroutine, its Next (the function value's code) beside it
+        hdr = $"define internal ptr @" $symbol ".coro(ptr %env, ptr %home) presplitcoroutine #0 {\n"
+    }
     if fe.dbgSp >= 0 {
         # B2e: the define line names its subprogram
         b.Push(hdr[:hdr.Len() - 2])
@@ -2095,7 +2105,77 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     b.Push("}\n")
     b.Push(fe.dbgMeta.ToString())
     b.PushChar('\n')
+    if fe.gen {
+        nx := e.genNext(k, f, symbol, passed, fe.promTy)
+        dr := e.genDrop(symbol, fe.promTy)
+        e.fnItem(k, f.Ty, symbol, passed, env, $nx $foldSlots(b.ToString(), f.Locals.Len()) $dr)
+        return
+    }
     e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
+}
+
+# ---- generators (D18) ----
+
+# a generator's Next as its function value's code calls it: the walk, a coroutine (the value's environment its handle),
+# resumed with the scopes this call passes (its result scope among them) in the promise, its result read back from
+# there - or, its walk over, Exhausted at once
+fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, promTy String&) String {
+    t := e.T
+    e.coroDecls()
+    rt := t.RetLlvm(f.Ty)
+    via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
+    b := StringBuilder()
+    b.Push(e.header(k, f.Ty, symbol, passed, true, "internal"))
+    b.Push("entry:\n  %done = call i1 @llvm.coro.done(ptr %env)\n  br i1 %done, label %over, label %go\ngo:\n")
+    b.Push("  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
+    if via { b.Push("  %po = getelementptr " $promTy ", ptr %p, i32 0, i32 2\n  store ptr %out, ptr %po\n") }
+    for i in range passed {
+        b.Push("  %pv" $i " = getelementptr " $promTy ", ptr %p, i32 0, i32 " $(3 + i) "\n  store ptr %v" $i ", ptr %pv" $i "\n")
+    }
+    b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  store i32 1, ptr %pr\n")
+    b.Push("  call void @llvm.coro.resume(ptr %env)\n  store i32 0, ptr %pr\n")
+    b.Push("  %r = load " $rt ", ptr %p\n  ret " $rt " %r\nover:\n")
+    if rt == "i32" {
+        b.Push("  ret i32 " $f.GenEnd "\n}\n\n")
+    } else {
+        b.Push("  %x = insertvalue " $rt " zeroinitializer, i32 " $f.GenEnd ", 0\n  ret " $rt " %x\n}\n\n")
+    }
+    return b.ToString()
+}
+
+# a generator's walk dropped with the scope it lives in (the runtime's destructor ABI, fn(ptr instance, ptr scope)):
+# the coroutine destroyed - from where it suspended, the scopes it holds open closed - unless a failed check left it
+# running, whose scopes the test's unwinding closed (P1d)
+fn (e mut Emitter&) genDrop(symbol String&, promTy String&) String {
+    b := StringBuilder()
+    b.Push("define internal void @" $symbol ".drop(ptr %h, ptr %scope) #0 {\nentry:\n")
+    b.Push("  %p = call ptr @llvm.coro.promise(ptr %h, i32 8, i1 false)\n")
+    b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %r = load i32, ptr %pr\n")
+    b.Push("  %idle = icmp eq i32 %r, 0\n  br i1 %idle, label %d, label %x\nd:\n  call void @llvm.coro.destroy(ptr %h)\n")
+    b.Push("  br label %x\nx:\n  ret void\n}\n\n")
+    return b.ToString()
+}
+
+fn (e mut Emitter&) coroDecls() {
+    e.declare("llvm.coro.id", "token @llvm.coro.id(i32, ptr, ptr, ptr)")
+    e.declare("llvm.coro.size.i64", "i64 @llvm.coro.size.i64()")
+    e.declare("llvm.coro.align.i64", "i64 @llvm.coro.align.i64()")
+    e.declare("llvm.coro.begin", "ptr @llvm.coro.begin(token, ptr)")
+    e.declare("llvm.coro.suspend", "i8 @llvm.coro.suspend(token, i1)")
+    e.declare("llvm.coro.end", "i1 @llvm.coro.end(ptr, i1, token)")
+    e.declare("llvm.coro.free", "ptr @llvm.coro.free(token, ptr)")
+    e.declare("llvm.coro.resume", "void @llvm.coro.resume(ptr)")
+    e.declare("llvm.coro.destroy", "void @llvm.coro.destroy(ptr)")
+    e.declare("llvm.coro.done", "i1 @llvm.coro.done(ptr)")
+    e.declare("llvm.coro.promise", "ptr @llvm.coro.promise(ptr, i32, i1)")
+}
+
+# whether a function is a generator's Next (D18)
+fn (e mut Emitter&) isGen(k mir.FnKey) Bool {
+    return match k {
+        case mir.FnKey.Body(id) => e.Lw.Bodies[I64(id)].Gen
+        case _ => false
+    }
 }
 
 # ---- single-use slots ----
@@ -2275,6 +2355,23 @@ fn (fe mut fnEm&) run() {
     for i in range f.Scopes.Len() {
         if f.Scopes[i].Kind == mir.ScopeKind.Frame and fe.frameScope < 0 { fe.frameScope = i }
     }
+    if fe.gen {
+        # D18: the coroutine's frame made where the generator lives, its promise the result's slot
+        fe.E.coroDecls()
+        fe.E.runtime("__olang_scope_alloc_a")
+        pb := StringBuilder()
+        pb.Push("{ " $t.RetLlvm(f.Ty) ", i32, ptr")
+        for i in range fe.passed { pb.Push(", ptr") }
+        pb.Push(" }")
+        fe.promTy = pb.ToString()
+        fe.head.Push("  %prom = alloca " $fe.promTy ", align 8\n")
+        fe.head.Push("  store " $fe.promTy " zeroinitializer, ptr %prom\n")
+        fe.head.Push("  %rv = getelementptr " $fe.promTy ", ptr %prom, i32 0, i32 0\n")
+        fe.pro.Push("  %cid = call token @llvm.coro.id(i32 8, ptr %prom, ptr null, ptr null)\n")
+        fe.pro.Push("  %csz = call i64 @llvm.coro.size.i64()\n  %cal = call i64 @llvm.coro.align.i64()\n")
+        fe.pro.Push("  %cmem = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)\n")
+        fe.pro.Push("  %hdl = call ptr @llvm.coro.begin(token %cid, ptr %cmem)\n")
+    }
     # the locals, the scope headers and the result's slot
     # T7c: storage over 64KB never on the stack - a local that large comes from an arena of the frame's own, opened
     # here and closed at the one return
@@ -2307,7 +2404,7 @@ fn (fe mut fnEm&) run() {
         }
     }
     rt := t.RetLlvm(f.Ty)
-    if rt != "void" { fe.head.Push("  %rv = alloca " $rt "\n") }
+    if rt != "void" and not fe.gen { fe.head.Push("  %rv = alloca " $rt "\n") }
     # the parameters into their locals, the captures out of the environment
     pass := t.Passing(f.Ty)
     for i in range f.Params.Len() {
@@ -2331,6 +2428,12 @@ fn (fe mut fnEm&) run() {
     # D9b: a by-value array parameter the body writes is the callee's own copy, else the caller's array - the copy in
     # the frame's own arena, reclaimed at the one return as the parameter's storage is
     fe.label("start")
+    if fe.gen {
+        # the first Next runs the body from its start
+        fe.w("%is = call i8 @llvm.coro.suspend(token none, i1 false)")
+        fe.w("switch i8 %is, label %gen.end [ i8 0, label %gen.go i8 1, label %gen.free ]")
+        fe.label("gen.go")
+    }
     for i in range f.Params.Len() {
         l := f.Params[i]
         lt := f.Locals[I64(l)].Ty
@@ -2382,6 +2485,22 @@ fn (fe mut fnEm&) run() {
         fe.term(bb.T)
     }
     fe.label("ret")
+    if fe.gen {
+        # the walk over: its last result (an error, Exhausted at its end) in the promise, the coroutine at its final
+        # suspend until it is dropped - its frame's storage over 64KB with it
+        fe.w("%fs = call i8 @llvm.coro.suspend(token none, i1 true)")
+        fe.w("switch i8 %fs, label %gen.end [ i8 0, label %gen.dead i8 1, label %gen.free ]")
+        fe.label("gen.dead")
+        fe.w("unreachable")
+        fe.label("gen.free")
+        if fe.big { fe.w("call void @__olang_scope_close(ptr %big)") }
+        fe.w("%fm = call ptr @llvm.coro.free(token %cid, ptr %hdl)")
+        fe.w("br label %gen.end")
+        fe.label("gen.end")
+        fe.w("%ce = call i1 @llvm.coro.end(ptr %hdl, i1 false, token none)")
+        fe.w("ret ptr %hdl")
+        return
+    }
     if fe.big { fe.w("call void @__olang_scope_close(ptr %big)") }
     if rt != "void" {
         fe.w("%rr = load " $rt ", ptr %rv")
@@ -2922,8 +3041,10 @@ fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
             for i in range r.N {
                 v := fe.F.Bytes[I64(r.At) + i]
                 if v == U8('"') or v == U8('\\') or v < U8(32) or v > U8(126) {
+                    # a byte at a time, an embedded file's (E38) millions of them among the bytes
                     b.PushChar('\\')
-                    b.Push(v.Format(16).PadStart(2, '0').ToUpper())
+                    b.PushChar(hexDigits[I64(v >> 4)])
+                    b.PushChar(hexDigits[I64(v & U8(15))])
                 } else {
                     b.PushChar(Char(v))
                 }
@@ -2945,6 +3066,8 @@ fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
         case mir.ConstNode.Bits(v) { return $fe.ty(el), fe.E.constText(el, v), 1 }
     }
 }
+
+hexDigits := "0123456789ABCDEF"
 
 # one element of an array constant, of type el
 fn (fe mut fnEm&) constItem(el types.TypeId, c I32) String {
@@ -2977,8 +3100,18 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
     match r {
         case mir.ScopeRef.Scope(s) { return "%s" $s }
         case mir.ScopeRef.Var(i) {
+            # D18: a generator's are its current Next call's, in the promise
+            if i < fe.passed and fe.gen { return fe.load("ptr", fe.let("getelementptr " $fe.promTy ", ptr %prom, i32 0, i32 " $(3 + i))) }
             if i < fe.passed { return "%v" $i }
-            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) { return "%vc" $(i - fe.passed) }
+            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) {
+                if fe.gen {
+                    # D18: asked again at each use, a resumed walk's thread perhaps not the one that made it (P2)
+                    j := i - fe.passed
+                    q := fe.let("getelementptr " $fe.envType() ", ptr %env, i32 0, i32 " $(fe.F.Captures.Len() + j))
+                    return fe.let("call ptr @__olang_capture_scope(ptr " $fe.load("ptr", q, ", !tbaa !28") ")")
+                }
+                return "%vc" $(i - fe.passed)
+            }
             return fe.program()
         }
         case mir.ScopeRef.Program { return fe.program() }
@@ -4142,6 +4275,14 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)), ", !tbaa !28")
         }
     }
+    if fe.E.isGen(code) {
+        # D18: a generator - its walk begun where it lives, dropped with that scope
+        home := fe.scope(s)
+        gs := fe.E.sym(code)
+        env = fe.let("call ptr @" $gs ".coro(ptr " $env ", ptr " $home ")")
+        fe.E.runtime("__olang_scope_register_dtor")
+        fe.w("call void @__olang_scope_register_dtor(ptr " $home ", ptr " $env ", ptr @" $gs ".drop)")
+    }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
     return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $env ", 1")
 }
@@ -4407,6 +4548,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             }
             fe.w("br label %ret")
         }
+        case mir.Term.Suspend(_, x, resume, held) { fe.suspend(x, resume, held) }
         case mir.Term.Raise(sp, code) {
             fe.trace(sp)
             rt := t.RetLlvm(fe.F.Ty)
@@ -4433,6 +4575,50 @@ fn (fe mut fnEm&) term(tm mir.Term) {
         case mir.Term.Exit(sp, kind, msg) { fe.exit(sp, kind, msg) }
         case mir.Term.Resume(_) { fe.gap("a cleanup (interpret's)") }
     }
+}
+
+# S20: a generator's value written where its Next's result goes - the promise, or the caller's storage for one returned
+# through memory - and the coroutine suspended: resumed, it goes on at resume; dropped, it closes the scopes it holds,
+# innermost first. In a test build the scopes it holds are off the chain of open scopes while it is suspended (P1d)
+fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range) {
+    t := fe.E.T
+    rt := t.RetLlvm(fe.F.Ty)
+    if fe.via {
+        out := fe.load("ptr", fe.let("getelementptr " $fe.promTy ", ptr %prom, i32 0, i32 2"))
+        fe.put(out, fe.res, x)
+        fe.store("i32", "0", "%rv")
+    } else {
+        a := fe.let("insertvalue " $rt " zeroinitializer, " $fe.ty(fe.res) " " $fe.val(x, fe.res) ", 1")
+        fe.store(rt, a, "%rv")
+    }
+    hs List<I64>
+    for i in range held.N {
+        match fe.F.Refs[I64(held.At) + i] {
+            case mir.ScopeRef.Scope(sc) {
+                si := I64(sc)
+                if not fe.idle.Has(si) and not fe.direct.Has(si) and fe.F.Scopes[si].Kind != mir.ScopeKind.Builder { hs.Push(si) }
+            }
+            case _ { }
+        }
+    }
+    if fe.E.Tests {
+        for sc in hs { fe.unwindPop(mir.ScopeId(I32(sc))) }
+    }
+    s := fe.let("call i8 @llvm.coro.suspend(token none, i1 false)")
+    go, drop := fe.fresh("gen.res"), fe.fresh("gen.drop")
+    fe.w("switch i8 " $s ", label %gen.end [ i8 0, label %" $go " i8 1, label %" $drop " ]")
+    fe.label(go)
+    if fe.E.Tests {
+        for k in range hs.Len() {
+            sc := hs[hs.Len() - 1 - k]
+            fe.unwindPush(mir.ScopeId(I32(sc)), fe.F.Scopes[sc].Kind == mir.ScopeKind.Join)
+        }
+    }
+    fe.w("br label %" $blockName(resume))
+    fe.label(drop)
+    fe.E.runtime("__olang_scope_close")
+    for sc in hs { fe.w("call void @__olang_scope_close(ptr %s" $sc ")") }
+    fe.w("br label %gen.free")
 }
 
 # the test or the process ends (S16-S18a): a failed check prints "FILE:LINE: " and what failed, an assert's message
@@ -5546,7 +5732,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
 # an error type's name as B5 says it escaping main: as source writes it outside its module ("io.Error")
 fn (e mut Emitter&) errName(et types.TypeId) String {
     d := e.T.DeclOf(et)
-    return $lower.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root) $e.text(e.T.DeclName(d))
+    return $load.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root) $e.text(e.T.DeclName(d))
 }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending

@@ -687,7 +687,7 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
             f.findCands(body)
             if post is not null { f.findCands(post) }
         }
-        case typed.Stmt.Return(_, x) { if x is not null: f.findExpr(x) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x is not null: f.findExpr(x) }
         case typed.Stmt.Block(_, b) { f.findCands(b) }
         case typed.Stmt.Defer(_, b) { f.findCands(b) }
         case typed.Stmt.Join(_, j) { f.findCands(j.Code) }
@@ -821,7 +821,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     # C9b, in a body with a destroy target: each Destroy() - its target, its statement, the Defer statement it is in
     # (-1 none); each return of a view of a target; by use, the Defer statement it is in; the Defer statements being
     # walked; by Defer statement, the last statement of the block it is in; by statement, the first after it in its
-    # block that leaves the function (a return, an error, an unreachable)
+    # block that leaves the function (a return, an error, an unreachable); the Defer statements that are errdefers (S19e)
     dGoD List<I64>
     dGoAt List<I64>
     dGoDefer List<I64>
@@ -831,6 +831,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     deferStack List<I64>
     deferEnd Map<I64, I64>
     leaveAfter Map<I64, I64>
+    errDefers List<I64>
 }
 
 fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
@@ -965,6 +966,7 @@ fn (w mut walker&) reset() {
     w.deferStack.Clear()
     w.deferEnd.Clear()
     w.leaveAfter.Clear()
+    w.errDefers.Clear()
 }
 
 fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
@@ -1064,7 +1066,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.loopAt.Push(n)
             w.loopEnd.Push(w.no - 1)
         }
-        case typed.Stmt.Return(_, x) {
+        # D18: a generator's yield (Suspend) gives its value as a return does - to the call of its Next - and the body goes
+        # on after it, so it ends no path
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
             if x is not null {
                 o := w.expr(x)
                 if not w.Final { w.result(o) }
@@ -1085,6 +1089,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Exit(_, _, m) { if m is not null: w.expr(m) }
         case typed.Stmt.Block(_, b) { w.block(b) }
         case typed.Stmt.Defer(_, b) {
+            if w.body().Blocks[I64(b.Id)].Kind == typed.BlockKind.ErrDefer: w.errDefers.Push(n)
             w.inDefer++
             w.deferStack.Push(n)
             w.block(b)
@@ -2268,8 +2273,9 @@ fn (w mut walker&) destroys() {
             line := f.P.L.Diags.LineAt(body.File, I64(body.Locals[l].Sp.Start))
             f.keep(d, RView, body.File, w.useSp[v], $"'" $w.localName(l) "' (line " $line ") reaches it too, and is used here, after '" $name ".Destroy()'")
         }
-        # a return of it, which a deferred Destroy() follows as the function leaves
-        if ds >= 0 {
+        # a return of it, which a deferred Destroy() follows as the function leaves - not an errdefer's (S19e), which runs
+        # only where an error leaves, and then nothing is returned
+        if ds >= 0 and not w.errDefers.Has(ds) {
             end := try w.deferEnd.Get(ds) catch default w.no
             for i in range w.dRetD.Len() {
                 if w.dRetD[i] == d and w.dRetAt[i] > ds and w.dRetAt[i] <= end {
@@ -2492,7 +2498,7 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
             m.block(body)
             if post is not null { m.block(post) }
         }
-        case typed.Stmt.Return(_, x) {
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
             if x is not null {
                 m.returns.Push(x)
                 m.expr(x)
@@ -3075,7 +3081,7 @@ fn findCallStmt(st typed.Stmt&, site I64) typed.Call?&st {
         case typed.Stmt.Eval(_, x) => findCall(x, site)
         case typed.Stmt.If(_, i) => findIf(i, site)
         case typed.Stmt.Loop(_, body, post) => findCallBlock(body, site) if findCallBlock(body, site) is not null else (findCallBlock(post, site) if post is not null else null)
-        case typed.Stmt.Return(_, x) => findCall(x, site) if x is not null else null
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) => findCall(x, site) if x is not null else null
         case typed.Stmt.Block(_, b) => findCallBlock(b, site)
         case typed.Stmt.Defer(_, b) => findCallBlock(b, site)
         case _ => null

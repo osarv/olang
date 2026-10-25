@@ -90,7 +90,7 @@ AvoidKnown mut Bool = false
 # the types and helpers every program has
 Prelude := (
     "import \"std/time\"\nimport \"std/io\"\n"
-    "error SgErr {\n    E\n}\n"
+    "type SgErr error {\n    E\n}\n"
     "extern fn getpid() I32\n"
     "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"

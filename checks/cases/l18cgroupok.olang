@@ -1,6 +1,6 @@
 # check: run
 # L18c: an infallible function type as a result before its signature's "?" is parenthesized, so the "?" is not its own
-error E {
+type E error {
     BAD
 }
 Gate mut I64 = 1

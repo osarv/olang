@@ -16,7 +16,7 @@ import "diag"
 import "msgs"
 import "std/os"
 
-error Fail { SYNTAX }
+type Fail error { SYNTAX }
 
 # L21: how deep blocks, operands and operator chains may nest
 MaxNesting I64 = 20000
@@ -568,20 +568,6 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             try p.endStmt()
             return ast.Decl.Extern(ast.Func(sp, null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
         }
-        case token.Tok.Error {
-            p.advance()
-            name := try p.name()
-            try p.want(token.Tok.LBrace)
-            from := p.ids.Len()
-            p.skipEnds()
-            for not p.sees(token.Tok.RBrace) {
-                w := try p.name()
-                p.ids.Push(w)
-                try p.entryEnd()
-            }
-            p.advance()
-            return ast.Decl.Errors(p.from(at), name, gather(p.ids, from))
-        }
         case token.Tok.Test {
             p.advance()
             if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
@@ -669,10 +655,48 @@ fn (p mut Parser&) topBranch() ast.TopBranch&p ? Fail {
 fn (p mut Parser&) typeDecl() ast.Decl&p ? Fail {
     at := try p.want(token.Tok.Type)
     name := try p.name()
+    if p.sees(token.Tok.Error) { return try p.errorDecl(at, name) }
     return try p.typeDeclRest(at, name) catch {
         p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, p.typeParamsRead, false, null)))
         error Fail.SYNTAX
     }
+}
+
+# "type Name error [Member, ...] [{ WORDS }]" (T19, T19a): an error type's words, a named set's members on the line
+# after "error", or both - at least one of the two, the braces last
+fn (p mut Parser&) errorDecl(at I32, name source.NameId) ast.Decl&p ? Fail {
+    p.advance()
+    ms mut List<ast.Path&>&p = List<ast.Path&>()
+    if p.sees(token.Tok.Iden) {
+        for {
+            ms.Push(try p.path())
+            if not p.accept(token.Tok.Comma) { break }
+        }
+    }
+    words Array<source.NameId>&p = Array<source.NameId>(0)
+    if p.sees(token.Tok.LBrace) {
+        words = try p.errorWords()
+    } else if ms.Len() == 0 {
+        try p.fail("an error type's words or a set's members")
+    }
+    sp := p.from(at)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.Decl.Errors(sp, name, words, ms.ToArray())
+}
+
+# an error type's words: "{" then one per line, or several on one line separated by "," (T19, QY), at least one
+fn (p mut Parser&) errorWords() Array<source.NameId>&p ? Fail {
+    try p.want(token.Tok.LBrace)
+    from := p.ids.Len()
+    p.skipEnds()
+    if p.sees(token.Tok.RBrace) { try p.fail("an error word") }
+    for not p.sees(token.Tok.RBrace) {
+        w := try p.name()
+        p.ids.Push(w)
+        try p.entryEnd()
+    }
+    p.advance()
+    return gather(p.ids, from)
 }
 
 fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl&p ? Fail {
@@ -857,13 +881,22 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
     p.skip = false
     l mut List<ast.TypeParam&>&p = List<ast.TypeParam&>()
     for {
+        # G1a: "? E" closes the list - its error-set parameter, a name alone
+        if p.accept(token.Tok.Question) {
+            eat := p.here()
+            en := try p.name()
+            p.vars.Push(en)
+            l.Push(ast.TypeParam(p.from(eat), en, null, Array<ast.TypeRef&>(0), true))
+            break
+        }
         pat := p.here()
         pn := try p.name()
         p.vars.Push(pn)
         ty ast.TypeRef?&p = null
         also mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
         # its constraint: a trait, or several side by side - their intersection (G19)
-        for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
+        for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() and
+            not p.sees(token.Tok.Question) {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
@@ -873,6 +906,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
             if ty is null { ty = t } else { also.Push(t) }
         }
         l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray()))
+        if p.sees(token.Tok.Question) { continue }
         if not try p.sep(token.Tok.Gt) { break }
     }
     p.skip = wasSkip
@@ -1291,13 +1325,31 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
     defer { p.item = wasItem }
     from := p.tys.Len()
     for {
+        # G8, QAH: "? A, B" closes the list - the error set given for the type's error-set parameter
+        if p.sees(token.Tok.Question) {
+            p.tys.Push(try p.errsArg())
+            break
+        }
         p.tys.Push(try p.typeArg())
+        if p.sees(token.Tok.Question) { continue }
         if not try p.sep(token.Tok.Gt) { break }
     }
     p.skip = wasSkip
     p.noGt = wasNoGt
     try p.closeAngle()
     return gather(p.tys, from)
+}
+
+# an error-set argument (G8, QAH): "?" and the error set's items, on its line, up to the list's ">"
+fn (p mut Parser&) errsArg() ast.TypeRef&p ? Fail {
+    at := p.here()
+    try p.want(token.Tok.Question)
+    l mut List<ast.Path&>&p = List<ast.Path&>()
+    for {
+        l.Push(try p.path())
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    return ast.TypeRef.Errs(p.from(at), l.ToArray())
 }
 
 # a type argument: a type (G8) - a length is never one (T7)
@@ -1438,6 +1490,14 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             try p.endStmt()
             return ast.Stmt.Return(sp, values)
         }
+        case token.Tok.Yield {
+            # QAG: a generator's value, handed to the Next that asked for it
+            p.advance()
+            x := try p.expr()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Yield(sp, x)
+        }
         case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable {
             k := p.peek()
             p.advance()
@@ -1495,16 +1555,17 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             j := try p.joinRest(false)
             return ast.Stmt.Join(p.from(at), j)
         }
-        case token.Tok.Defer {
+        case token.Tok.Defer, token.Tok.ErrDefer {
+            onError := p.sees(token.Tok.ErrDefer)
             p.advance()
             if p.sees(token.Tok.LBrace) {
                 body := try p.block()
                 sp := p.from(at)
                 if p.sees(token.Tok.StmtEnd) { p.advance() }
-                return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body))
+                return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body), onError)
             }
             s := try p.stmt()
-            return ast.Stmt.Defer(p.from(at), s)
+            return ast.Stmt.Defer(p.from(at), s, onError)
         }
         case token.Tok.LBrace {
             body := try p.block()
@@ -1944,6 +2005,7 @@ fn lineBodyRefused(k token.Tok) String {
         case token.Tok.LBrace => "a block (a block takes no ':')"
         case token.Tok.Join => "a join"
         case token.Tok.Defer => "a defer"
+        case token.Tok.ErrDefer => "an errdefer"
         case _ => ""
     }
 }
@@ -2214,6 +2276,14 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
                 if not p.accept(token.Tok.Comma) { break }
             }
         }
+        # R11b: a name after the items, the error the clause took ("catch os.Error e")
+        bind := source.NameId(0)
+        bsp := source.Span(0, 0)
+        if items.Len() > 0 and p.sees(token.Tok.Iden) {
+            bt := p.tk()
+            bind = try p.name()
+            bsp = source.Span(bt.Start, bt.End)
+        }
         body Array<ast.Stmt&>&p = Array<ast.Stmt&>(0)
         braced := p.sees(token.Tok.LBrace)
         if braced { body = try p.block() }
@@ -2226,7 +2296,7 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
             try p.fail(token.Tok.LBrace.Describe())
         }
         defaults := gather(p.exprs, from)
-        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced))
+        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced, bind, bsp))
     }
     return l.ToArray()
 }
@@ -2406,6 +2476,12 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             defer p.leave()
             x := try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
+        }
+        case token.Tok.Embed {
+            # E38: "embed PATH", the path a unary as a prefix operator's operand is
+            p.advance()
+            x := try p.unary()
+            return ast.Expr.Unary(p.from(at), token.Tok.Embed, x)
         }
         case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec {
             k := p.peek()

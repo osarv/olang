@@ -367,7 +367,7 @@ fn lineAfter(text String&, at I64) I64 {
 }
 
 # what IoAlias fails with: the text does not import std/io
-error NoIoImport {
+type NoIoImport error {
     NONE
 }
 

@@ -111,7 +111,7 @@ fn (a Analysis&) RealOfFile(file I64) String {
 # ---- what is written at an offset ----
 
 # nothing to say: no name there, or nothing known of it
-error Nothing { HERE }
+type Nothing error { HERE }
 
 # the identifier at or just before offset at of t: its span, empty where none is there
 fn WordAt(t String&, at I64) source.Span {
@@ -358,7 +358,7 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
             f.block(body)
             f.block(post)
         }
-        case typed.Stmt.Return(_, v) { f.expr(v) }
+        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { f.expr(v) }
         case typed.Stmt.Exit(_, _, m) { f.expr(m) }
         case typed.Stmt.Assert(_, cond, m) {
             f.expr(cond)
@@ -677,7 +677,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
             }
         }
-        case ast.Decl.Errors(sp, n, words) {
+        case ast.Decl.Errors(sp, n, words, _) {
             name := nm.Text(n)
             s := nameIn(t, I64(sp.Start), name)
             w.open(b, name, KindEnum, I64(sp.Start), I64(sp.End), s, s + name.Len(), "error")
@@ -931,7 +931,7 @@ fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
             f.place(p)
             f.expr(v)
         }
-        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { f.expr(x) }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Suspend(_, x) { f.expr(x) }
         case typed.Stmt.If(_, i) {
             f.expr(i.Test)
             f.block(i.Then)
@@ -1032,7 +1032,7 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
 
 Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
     "else", "for", "in", "range", "match", "case", "nomatch", "return", "break", "continue", "error", "try", "catch"
-    "default", "join", "spawn", "defer", "assert", "unreachable", "noreturn", "mut", "and", "or", "not"
+    "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "assert", "unreachable", "noreturn", "mut", "and", "or", "not"
     "xor", "is", "as", "null", "true", "false", "destruct"]
 
 # ---- formatting ----
@@ -1222,7 +1222,7 @@ fn (r mut Reader&) Fill() Bool {
 }
 
 # no whole message is buffered yet
-error Incomplete { MORE }
+type Incomplete error { MORE }
 
 # the next whole framed message's body, taken out of the buffer
 fn (r mut Reader&) Next() String ? Incomplete {

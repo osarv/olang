@@ -141,8 +141,8 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join    defer
-import    test    destruct
+trait     spawn   join    defer   errdefer yield
+import    test    destruct embed
 unreachable
 extern    default
 ```
@@ -755,6 +755,8 @@ constants beside the cases may be declared (T17e), which changes none of this.
 Cases follow the listing rule (L18a), as every list does: on one line they are separated by `,` (`enum { North, South
 }`), on different lines by the line break, and two on one line with nothing between them are a compile-time error.
 
+An enum may declare type parameters, its payloads then written over them (§12.3 G6b).
+
 **T17a.** A case may carry a **payload**, written as a parameter list after its name, or as one type written whole:
 
 ```
@@ -905,7 +907,9 @@ and name** (T29), matching the identity rule the type itself has, so two modules
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type and whether it is reference-shaped — every part of what makes an array type distinct (T25a) - and, bound by
 inference to an array value of known length (D9b), by that length, which lays it out. An instance (G29) is
-distinguished the same way by the lengths it was compiled for. A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
+distinguished the same way by the lengths it was compiled for. An error-set argument (G1a) is distinguished by the set it
+stands for - the error types and words it holds, in no order - so `Iterator<I64>` and `Iterator<I64 ? io.Error>` are two
+instantiations, and a function's instances at two error sets are two. A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
 and where its references live (T22); a reference argument by its permission (T25b), so `List<Node&>` and
 `List<mut Node&>` are two; and a declared array type from the array it is declared over (T29a). No argument is too long to tell
 apart: there is no limit on how deeply type arguments nest short of G17's.
@@ -956,19 +960,37 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 
 ### 2.6 Error types
 
-**T19.** `error-decl ::= "error" IDEN "{" list(IDEN) "}"` is a **top-level**
-declaration in its own right — not a `type Name error { ... }` form, and not reachable from a
-general `type-expr` position (T2). An error type declares a closed, ordered set of named words,
-similar in shape to an enum body but declared with its own keyword and usable only
-in the specific positions described in §7. Its words follow the listing rule (L18a), as an enum's cases do (T17):
-`error E { A, B }` on one line, one per line otherwise.
+**T19.** `error-decl ::= "type" IDEN "error" [ error-list ] [ "{" list(IDEN) "}" ]` (the `error-list` on the
+declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
+the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
+`trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
+**error type**: a closed, ordered set of named words, `type IoError error { FULL  DENIED }` - shaped like an enum
+body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
+B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
+qualified by its own type (`IoError.FULL`) and is public by its own first letter (M6a). An error type takes no type
+parameters and extends nothing.
+
+**T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type
+LoadError error os.Error, ParseError`. Its members are what an `error-list` names (D8) - error types, single words
+(`ParseError.EMPTY`) and other named sets - and the set **stands for** its members, flattened: a set among the
+members stands for its own, and the words of one type are one entry (R1c). A set with braces as well, `type LoadError
+error os.Error, ParseError { TIMEOUT }`, is also an error type of its own words (`LoadError.TIMEOUT`), a member of its
+own set after the others. A named set is written wherever an error set is - after a signature's `?` (`fn load() Config
+? LoadError`), in a function type and a trait's method (`fn(I64) ? LoadError`), as a member of another set, and as a
+catch item (R11: `catch LoadError` takes every member) - and is **the same set as its members written out**: `?
+LoadError` and `? os.Error, ParseError` promise the same errors, and two function types differing only in that
+spelling are one type (T27). It is never a code space of its own: codes stay per member type (R6), so a set adds
+nothing to the error-union ABI. A set may not reach itself through its members, and none of its own words may share a
+name with a word of a member (both compile-time errors): words are qualified, so the second rule is only against
+confusion. A member naming no error type, word or set is a compile-time error (R1).
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
 §7. An error is raised (`error E.WORD`) and caught (`catch E.WORD`), never held: an error type is not a value's type,
 so naming one as the type of a parameter, a local, a field, a result, an element or a type argument is a compile-time
-error, and so is a word written as a value (`e != E.A`). Which word failed is told apart by catch clauses
-(`try f() catch E.A { ... } catch E.B { ... }`).
+error, and so is a word written as a value (`e != E.A`) - except where it is compared with the error a catch clause
+took (R11b), the one place an error has a name. Which word failed is told apart by catch clauses
+(`try f() catch E.A { ... } catch E.B { ... }`), or inside one by its name (R11b).
 
 ### 2.7 Function types
 
@@ -1402,9 +1424,11 @@ arguments as type variables, bound through the constrained type's methods (`<I I
 method of a generic type (`fn (b mut Box<T>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
-**T35b (built-in traits).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T> trait {
-mut Next() T ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
-`Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
+**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { END }` and `type Iterator<T ? E> trait {
+mut Next() T ? E, Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
+`Exhausted` once there are none - running out is an error like any other, never a flag beside a value - and with what
+`E` holds where it can fail on its way (G1a): a file's lines are an `Iterator<String ? io.Error>`. `Iterator<T>` is an
+iterator failing with nothing but `Exhausted`, and one failing with more does not meet it. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
 `v := try it.Next() catch Exhausted { break }`.
 The prelude declares `type Indexable<T> trait { At(i I64) T  Len() I64 }` and, as its default (M19e), `Iter()`
@@ -1416,7 +1440,12 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
-left - `m.Keys().ToList()`.
+left - `m.Keys().ToList()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
+(G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
+`Chain`) fail as the iterators they wrap do.
+The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
+`next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
+second name for the same walk, as a `List`'s copy is the same list.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }`; and
@@ -1608,17 +1637,17 @@ T29f), with
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in
 §2.1; the struct shape (T13) is specified fully in
-§9. The declared name enters
+§9. A name followed by `error` begins an `error-decl` instead (D5, T19). The declared name enters
 the module's `types` set (D2) and is visible throughout the module, and, per §4.3, outside it if
 capitalized.
 
-**D5.** `error-decl` is specified in §2 T19. Its declared name also enters
+**D5.** `error-decl` (`type Name error ...`) is specified in §2 T19 and T19a. Its declared name also enters
 the module's `types` set (D2) — an error type and a struct/enum type may not share a name within
 one module.
 
 **D6.** A named struct or enum type may embed itself (directly or through a chain of other named types) only
-through a reference marker at some point in the chain (T16, T17d). An error type may never reference any other type
-(T19).
+through a reference marker at some point in the chain (T16, T17d). An error type references nothing but, as a named
+set, error types, their words and other sets (T19a).
 
 ### 3.4 Function declarations
 
@@ -1652,7 +1681,8 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-`error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
+`error-list-item` must name a declared error type (§2.6), one of its words (`ListError.EMPTY`, R1c), or a named set
+(`LoadError`, T19a), which stands for its members. `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
 list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
@@ -1946,6 +1976,59 @@ lasts until the join.
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
 `ret-type`.
+
+### 3.4.2 Generators
+
+**D18 (generators).** A function whose result is written `Iterator<T ? E>` (T35b) and whose body holds a `yield`
+(§6.10) - its own: one in a lambda written in it is the lambda's - is a **generator**. Calling it runs none of its body:
+it gives a `Generator<T ? E>`, a value whose `Next()` runs the body on from where it last stopped to its next `yield`,
+whose value that `Next()` gives. `Iterator<T ? E>` is where the declaration says what its caller is given; the
+`Generator<T ? E>` it stands for is the call's type (`g := evens(10)` declares one; a field holds one as
+`Generator<I64>`). A generator may be a method, and generic.
+
+```
+fn evens(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i += 2
+    }
+}
+
+for x in evens(10) { ... }        # 0 2 4 6 8
+total := evens(10).Sum()          # 20
+```
+
+Its errors are its `Next()`'s: `E`, written in its result (`Iterator<String ? io.Error>`), and `Exhausted` - an error
+a `try` in its body lets out ends it as its end does, `Exhausted` among them, so `a := try it.Next()` in a generator
+over another iterator ends the walk where that one ends. A `?` after its result is a compile-time error naming
+`Iterator<T ? E>`. Its parameters are its own locals from its first `Next()` on: set from the arguments when it is
+called, written as a function's are. Its contract's requirements (D17) are checked when it is called. A function whose
+result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a trait is no type.
+
+**D18a (how a generator ends).** Its body's end, and a `return` - which takes no value, a `return v` being a
+compile-time error - end the walk: that `Next()` fails with `Exhausted`, and so does every `Next()` after it. An error
+leaving its body ends it the same way: that `Next()` fails with the error, every one after it with `Exhausted`.
+
+**D18b (where a generator's storage is).** A generator's storage - its locals, what its body builds in its blocks, the
+scopes it has open while it is stopped - is made where the generator lands, as a function value's environment is
+(D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
+as long as it is walked. A walk stopped part way and never finished is dropped with the scope it lives in: the scopes
+it holds open close then, innermost first, their destructors running (O15). The value a `yield` gives is built where
+that `Next()`'s result goes, which no local of the generator outlives: `&return` in a generator is a compile-time error,
+and no local is moved into the result scope (O26a) - a yielded local whose references are the generator's own storage
+is O26's error, and the value to yield is a copy built where it goes (`$x`, `x.Clone()`). A value array yielded is
+copied there (T7b).
+
+**D18c (what a generator may yield).** A yielded reference is judged as a returned one (O13, O14): new storage, built
+where the `Next()`'s result goes, or storage that outlives every place a `Next()` result may go. A reference into what
+the generator's arguments refer to (`yield t[a:b]` of a parameter `t String&`) is a compile-time error (T22a: a call
+through the `Next` it is cannot show it outlives where its result goes) - yield a copy. Values (`Iterator<String>`,
+`Iterator<I64>`) are the caller's own.
+
+**D18d (a generator's cost).** A `Next()` is a call through a function value that resumes the body where it stopped -
+no thread, no stack of its own, no allocation per value: the generator's storage is made once, where it lands, and its
+state is a number saying where it stopped. Its value is a function value's two words.
 
 ### 3.5 Variable declarations
 
@@ -2251,7 +2334,11 @@ with no import, and no module may declare a type, a global, a function, a local 
 (D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
-(T29) and gives that its methods.
+(T29) and gives that its methods. The prelude's methods taking a callback - an array's `Some`, `Every`, `FindIndex`,
+`Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `List`'s and a `Vec`'s `Sort`, the iterator helpers
+(T35b) - fail with what the callback fails with, an error-set parameter (G1a) bound to it, and stop where it fails
+(a `Sort` leaving its elements permuted): `try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parse(x) })`; with
+a callback that cannot fail they cannot either, and are called without `try`.
 
 **The numbers.** The prelude's constants are `Pi`, `Euler` (e), `Inf` (the positive infinity) and `NaN` (the quiet NaN
 with no sign and no payload), each an `F64`: `F32(Pi)` is the `F32` nearest pi, and other constants are computed where
@@ -2643,7 +2730,7 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | { unary-op } postfix
+unary    ::= "not" binary | text | "embed" unary | { unary-op } postfix   (embed: E38)
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
@@ -3742,6 +3829,27 @@ In every other respect they are methods (§4.4 M19). A declared type extending a
 its base's other methods, and may not declare a method of the same name (T29e); a declared type that does not extend
 its base has none of them. They are not supplied for a float, whose bits E33 reads.
 
+### 5.21 Embedding a file
+
+**E38.** `embed PATH` gives the bytes of the file PATH names, read **while compiling**: a read-only `Array<U8>&` whose
+length is the file's, and which is constant data of the program, as text written in it is (T25d) - no file is read
+when the program runs, and the evaluator reads the same bytes (K1), so a table parsed from one bakes (K2). `embed`
+binds as a prefix operator does: its operand is a `unary`, so `embed "a.bin"[0]` is the embed of `"a.bin"[0]`, and an
+embed read through is parenthesized (`(embed "a.bin")[0]`). PATH is text known while compiling - a literal, or an
+expression reading no local (a global, a build constant, a call), evaluated once the program checks; one that cannot
+be is a compile-time error. It names a file as a relative import does (M23): against the directory of the source file
+the `embed` is written in (an absolute path as itself), and inside `std` or a remote repository it may not leave it. A
+path naming nothing, a directory, or a file that cannot be read is a compile-time error. Text is a view of the bytes,
+`String(embed "help.txt")` (T29a: no copy). Each `embed` written is one instance, as each literal is (T25d); a file
+embedded at two places is in the program twice - embed it once, in a global, to share it. An object holding an embed is
+made from the file as from its source: a build after the file changes rebuilds it (B3, B3i). Only files: no directory
+or pattern.
+
+```
+Help := String(embed "help.txt")
+Weights := embed "model.bin"           # an Array<U8>&, the file's bytes
+```
+
 ### 5.18 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles
@@ -3790,8 +3898,9 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
-`try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9.
+| defer-stmnt | errdefer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
+`try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` and `errdefer-stmnt` in §6.9;
+`yield-stmnt` in §6.10.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
 either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
@@ -4752,6 +4861,39 @@ deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
+**S19e.** `errdefer-stmnt ::= "errdefer" ( block | statement )`. An `errdefer` registers deferred code as `defer` does
+(S19), checked as S19a and S19b check it, but its code runs only when its block is left by an **error moving
+outward**: an error leaving the function (an `error` statement, a `try` whose error no clause inside the block takes),
+an error going to a clause of a `try` outside the block - a `for x in try c` ended by its own error (S9e) included -
+and a `join` block's tasks failing (P4b), whose clauses or callers then take the error. An error a clause inside the
+block takes does not leave the block, and the block's ordinary ways out - its end, `return`, `break`, `continue` -
+run no errdefer code. Neither do the ways S19c lists, which end the test or the process rather than leave a block. One
+list holds both kinds: on an error's way out every piece registered runs, last registered first, so
+`x := alloc(); errdefer free(x); y := build(x); defer log(y)` logs `y` before freeing `x`; on any other way out only
+the `defer`s run. A `join` block is the one exception to that order: its tasks' failure is known only once it has
+waited, so its errdefer code runs after its wait, after its `defer`s (S19a) - a failure of one of its own statements
+runs both before the wait, in order. The error is no value inside (T20), as in a clause that does not bind it. An
+`errdefer` in a test body runs when an error ends the test; like a `defer`, one may not be pending around a `yield`
+(S20).
+
+```
+f := try os.Create(path)
+errdefer os.Remove(path)!
+try write(f, data)            # if this fails, the half-written file is removed
+```
+
+### 6.10 `yield`
+
+**S20.** `yield-stmnt ::= "yield" expr STMNT_END`, only in a generator's body (D18). `expr` must fit the generator's
+element type `T`, as a returned value fits a result (E12, O13, O14, D18c); it is the value the `Next()` that resumed the
+body gives, and the body stops there, every local and every scope it has open kept as they are, until the next
+`Next()` goes on after it. A `yield` is no statement that leaves (D10a). A `yield` outside a generator - in a function
+whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-time error, and so is one:
+- in deferred code (S19b: it runs while its block is left, and runs to its end);
+- in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do);
+- with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
+  a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list.
+
 ## 7. Error Handling
 
 olang has no exceptions. Errors are values (of a declared error type, §2.6) that a function's
@@ -4763,7 +4905,8 @@ signature declares it may produce; propagation and handling are both explicit.
 §9) may declare zero or more
 error types via its `error-list` (D8): `? ErrA, ErrB, ...`. This is the function's own **error
 union** — the complete set of errors it may produce, to `try` callers (§7.4) and to a coverage-checking `catch`
-(§7.5): every word of a type the list names, or the words it names of one (R1c). A written list is a
+(§7.5): every word of a type the list names, or the words it names of one (R1c), and what a named set it names
+stands for (T19a). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
 
@@ -4802,13 +4945,18 @@ type.
 
 ### 7.2 The `error` statement
 
-**R3.** `error-stmnt ::= "error" alias-chain IDEN "." IDEN STMNT_END` (`alias-chain`, §4.4 M8,
+**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
 possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
 and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
 error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
 so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
+
+**R3a (raising what was caught).** `error e`, with `e` the name a catch clause gave the error it took (R11b), raises
+that same error - its type and word - again, from that clause's block. It is held to the enclosing function's set as
+`error T.WORD` is (R3): every error `e` can be there - what the clause took, less what a test of `e` has excluded
+(R11b) - must be in a written set, or is taken on by an inferred one (R1a).
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
 specific (type, word) pair as its result, in place of a normal `return`ed value — see §7.3. In a
@@ -4912,19 +5060,50 @@ written would be kept by neither.
 evaluates the operand; if it produced its success value, that value is discarded (the statement form never
 binds one — see §7.5) and control continues after the statement; if it produced an error, the first
 clause that handles it runs (§7.5) and, if its block does not leave, control continues after the
-statement. The error is never exposed to the block — no error object or word is bound to a name. A clause
+statement. The error is not a value of the block; a clause may only name it, for use in the clause alone (R11b). A clause
 of a statement has no value to give, so it always has a block and never a `default`. `try join { ... }` (§6.8 P4c) is
 this statement with a join in place of the call, and a spawned `try` without targets (P4a) takes clauses on these
 terms too, run on the task's thread.
 
 ### 7.5 `catch`
 
-**R11.** `catch-clause ::= "catch" [ catch-list ] [ block ] [ "default" unary { "," unary } ]`, with at
+**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] [ block ] [ "default" unary { "," unary } ]`, with at
 least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of
-that error type. Several `catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on
-the clause's line (`catch A, B.X`). A clause may begin on a line after the one before it.
+that error type; an item naming a named set (T19a) matches everything the set stands for (`catch LoadError`), and one
+naming an error-set parameter (G1a) everything the set it is bound to holds - nothing, for the empty set, a clause
+covering nothing in one instance of a generic and something in another (R8). Several
+`catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on the clause's line (`catch
+A, B.X`). A clause may begin on a line after the one before it. An `IDEN` after the items, with no `,` before it,
+names the error the clause took (R11b); `catch e { }` with no items is one bare name that names no error type, read as
+that name.
+
+**R11b (the error a clause took).** `catch os.Error e { ... }`, `catch os.Error, ParseError e { ... }`, `catch e
+default ...` name the error the clause took, for the clause alone - its block and its defaults - as a for-in names
+its element. The name's set is what the clause took: the words of what the tried operand can fail with that the
+clause's items name (everything left, for a clause with none), less what earlier clauses took. It is used in five
+ways and no other:
+
+- `$e`, rendering it as an error's name prints (B5): `os.Error.DENIED` - another module's type by its module's name,
+  the prelude's and the root program's bare;
+- `e == T.WORD` and `e != T.WORD`, a word; `e == T` and `e != T`, an error type or a named set, true where the error is
+  of that type, or of what the set stands for. Each side names something `e` can be, else the test is a compile-time
+  error (it could never hold);
+- narrowing: in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e != X {
+  leave }`, `e`'s set is what of `X` it holds; in the else of `if e == X`, and after `if e == X { leave }`, it is its set
+  less `X` (as S8d narrows a case);
+- `match e { case os.Error.DENIED { } case ParseError { } ... }`, each case's items words, types or sets as a catch
+  clause's, tried in order, a `case _` or `nomatch` taking the rest; without one the cases must cover `e`'s set, and a
+  case naming nothing `e` can be is a compile-time error. A case's block narrows `e` to what the case names. `match e`
+  gives a value too (S12b), `case X => v`;
+- `error e`, raising it again (R3a).
+
+Anything else naming `e` is a compile-time error naming `$e` where text is wanted: assigning it or to it, `:=` from
+it, passing it to a function, a constructor or a lambda, capturing it, storing it, returning it, `try e` (which names
+`error e`). The name is declared as any local is (D3, D3a: it may not reuse another's name), and a clause that never
+uses its name is a compile-time error naming the clause without it. Nothing about the error-union ABI changes: the name
+holds the error's code under the clause's own set (R6), recoded where the clause is entered.
 
 **R11a.** A `try` may carry **several clauses**, and an error runs the **first** that handles it, in the
 order written. A clause with no `catch-list` handles every error no earlier clause did, and so may only be
@@ -4957,7 +5136,8 @@ nothing actually escapes uncaught.
 `error-list` (R1) - the words it names, or, where it names a type whole, every one of that type's words, even if the
 callee happens to only ever produce a subset of them internally. A callee written `? ListError.EMPTY` is covered by
 `catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
-type it does not name is (R13).
+type it does not name is (R13). A named set (T19a) as an item is an error only where nothing it stands for can come
+from the operand.
 
 ### 7.6 The prelude's errors
 
@@ -5157,7 +5337,9 @@ A reference read from what a place holds that is still in use after the place le
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
 (a function value, an `extern`), code in a module compiled on its own (B3i), a cycle of calls not settled - the place
-keeps, as O8c says; nothing is reclaimed on a guess. Which places keep, and why, `-memory` reports (B18). Reclaiming
+keeps, as O8c says; nothing is reclaimed on a guess. A generator (D18) lets go as a function does, its `yield` giving
+a value as a `return` does; what its frame holds when a walk stops part way is reclaimed with the scopes the frame holds.
+An error leaving a block reclaims what was made in it as its other ways out do, after its `errdefer` code (S19e). Which places keep, and why, `-memory` reports (B18). Reclaiming
 early changes no value a program can read, runs no destructor (O15), and is not otherwise observable: a program's
 memory use is the only way to see it.
 
@@ -6058,7 +6240,9 @@ only where the compiler proves `x` the only way left to reach the instance, by t
 `x` is not read after the call - later in its function, in deferred code registered before the call, or in a later turn
 of a loop around it that `x` is declared outside of - even after it is given another value: a `return`, an `error` or an
 `unreachable` after the call in its block ends that path. `defer x.Destroy()` runs it where its block ends, so `x` may
-be used until then, and is not returned there. A value taken out of a collection is destroyed only in code compiled with
+be used until then, and is not returned there; `errdefer x.Destroy()` runs it only where an error leaves the block
+(S19e), so `x` may also be returned there - on that way out nothing is returned. A generator's `yield` gives a value as
+a `return` does and ends no path (D18). A value taken out of a collection is destroyed only in code compiled with
 the program it is in - its own module, or an instance (B3i, B3d). Where the proof fails it is a compile-time error
 naming what else may reach the instance. So every destructor runs exactly once, at its scope's close or at a proven
 `Destroy()`, and early destruction never leaves a reference to what it ended. A struct type declaring a destructor may
@@ -6321,6 +6505,7 @@ covers every change to the instantiation set. Copies a `compile` object of anoth
 first to name them in the program's order of modules (the root's own last), names; what is built is the same either way.
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
+files their embeds read (E38), the
 compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
 made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
 build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still
@@ -6979,13 +7164,13 @@ already named - `void *` above all - is a `CVoid?&`, an extern type the output d
 
 ## 12. Generics
 
-A function or a struct type may be **generic**: parameterized over one or more types, with a separate copy compiled
+A function, a struct type or an enum type may be **generic**: parameterized over one or more types, with a separate copy compiled
 for each distinct set of arguments it is used with. A type's parameters are types only: a length, a flag or any other
 value a declaration is compiled for is never written as a parameter - a function taking an array by value is compiled
-per length instead (§12.7), and a value known while compiling decides what it can there (T7c, K1). Enum and error types can
-never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
-parameterize - and neither can a declared number or array type (T29); a type-parameter list on any of them is a
-compile-time error at its declaration. A trait may be (T35a).
+per length instead (§12.7), and a value known while compiling decides what it can there (T7c, K1). An error type can
+never be generic - it references no other type (T19), so there is nothing to parameterize - and neither can a declared
+number or array type (T29); a type-parameter list on any of them is a compile-time error at its declaration. An enum
+may be (G6b), and so may a trait (T35a).
 
 ### 12.1 Type variables
 
@@ -6995,8 +7180,9 @@ constructor's (G10d) - or by a method's receiver (G3b), and written as its bare 
 its declaration (G8b):
 
 ```
-fn-type-params ::= "<" list(type-param) ">"
+fn-type-params ::= "<" ( list(type-param) [ errset-param ] | errset-param ) ">"
 type-param     ::= IDEN [ type-expr ]
+errset-param   ::= "?" IDEN
 ```
 
 An `IDEN` alone, or followed by a trait, introduces a type variable (the trait its constraint, G19); followed by any
@@ -7006,6 +7192,28 @@ by value, §12.7). The names of one list are distinct. `IDEN` must not
 name a type the referencing module can name - one it declares or imports by bare name (D2), a prelude type, `Array` or
 a primitive; listing such a name (or declaring it as a generic type's parameter) is a compile-time error, reported once
 where it is written, since `<Point>` would otherwise read as parameterizing over something already concrete.
+
+**G1a (error-set parameters).** A type parameter list - a struct type's, a trait's or a function's or method's, not a
+constructor's - may end in one **error-set parameter**, `? E` after the last type parameter, or alone: `type Iterator<T
+? E> trait`, `fn apply<T, U ? E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ?
+E`. A method's receiver introduces one written as its type's error-set argument (G8), as it introduces a type variable
+(G3b): `fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`. `E` stands for a set of errors, bound per instantiation,
+and is written only where an error set is - an item of a signature's, a function type's or a trait method's `? ...`
+(R1, R1b), beside other items (`? E, Exhausted`); a type's error-set argument (G8); a catch clause's item (R11), which
+takes every error the set holds; and a constraint's (`<I Iterator<T ? E>, T ? E>`). Written as a type, or a type
+variable written where an error set is, it is a compile-time error. Where it is written, `E` holds what it is bound to,
+the other items beside it: with `E` bound to `io.Error`, `? E, Exhausted` is `? io.Error, Exhausted`, and with `E` the
+empty set, `? Exhausted`; a set every item of which is `E` bound to the empty set is no set at all, so the function
+cannot fail (R7) and is called with no `try` (R8). An error-set parameter is no stored error: no value holds an error
+(T20), and an instance at one set is compiled as if its sets were written out (G16).
+
+A call binds `E` (G9) to the **union** of what every function value and iterator matched against it fails with -
+beyond the other items of the set it stands in, so `fn(x T) U ? E` matched with a function failing with `ParseError`
+binds `ParseError`, and `Next() T ? E, Exhausted` matched with one failing with `io.Error, Exhausted` binds `io.Error`.
+Two arguments never conflict over it: each adds what it fails with. A lambda given for a parameter whose function type
+names `E` infers its set from its body (D16b) and then fails, as a value, with the set the parameter is given. An `E`
+nothing fallible binds is the **empty set**. A type's error-set argument left out is the empty set too:
+`Iterator<I64>` is `Iterator<I64 ? >`, an iterator that fails with nothing but `Exhausted`.
 
 **G2.** A type variable may carry a reference marker exactly as any type does (T24), and is written as an array's
 element as any type is — `T&`, `Array<T>&`, `Array<T&>&` — and the marker rules of §2.9 apply to it unchanged once the
@@ -7048,10 +7256,10 @@ parameters), and `less` is called inside the body as an ordinary function value.
 `x.Narrow<I32>()`. A call that writes none, so that nothing determines the variable, is a compile-time error at the
 call naming the variable and the form to write (`Narrow<...>(...)`); the declaration itself is no error.
 
-**G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
-is the same for every instantiation.
+**G5.** A generic function's error set (D8) may not mention a type variable - an error-set parameter (G1a) is what
+lets it differ between instantiations, as an inferred set (R1a) does too.
 
-### 12.3 Generic struct types
+### 12.3 Generic struct and enum types
 
 **G6.** `type-decl` (D4) is extended to
 `"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
@@ -7068,15 +7276,48 @@ type Buf<T> struct(cap I64) {
 }
 ```
 
+**G6b.** An enum type (T17) may declare `type-params` as a struct type does - its parameters in scope in every case's
+payload, written bare there - and is instantiated as one is (G8, G10): `type Tree<T> enum { Leaf(v T)  Node(l
+Tree<T>&, r Tree<T>&) }` makes `Tree<I64>` and `Tree<String&>` two enum types, each with the payload types its
+arguments give, laid out, compared (`==`, E10), hashed (E10b), rendered (`$`, E11a) and walked by section 8 (T17c)
+as the enum written with those types would be. A case's value names its instance as written, `Tree<I64>.Leaf(3)`, or
+names the enum bare, `Tree.Leaf(3)` - then the instance is the type the value lands in (an initializer's written type,
+a parameter, a returned result, another case's payload) where that is one of this enum's instances, and else is
+inferred from the case's arguments as a generic constructor's are (G10c, G9a): a reference binds read-only, an array
+value as a reference to it, `Tree.Node(a, b)` from `a`'s and `b`'s types, `Opt.Some("s")` an `Opt<String&>`. A
+variable neither gives - `x := Opt.None` - is a compile-time error saying to write the arguments. A pattern, a case
+test (E32) and an `as` name a case the same two ways: `case Tree.Leaf(v)` against a `Tree<I64>` is that instance's
+case; a case of another instance written with its arguments (`Opt<F64>.Some` against an `Opt<I64>`) is none of the
+subject's. Exhaustiveness (S13a) is judged per instance, over its cases. `$` writes a case as its enum's name and the
+case, the arguments left out (`Tree.Leaf(3)`), as a case is written.
+
+```
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+fn (o Opt<T>) Or(d T) T {
+    return match o {
+        case Opt.Some(v) => v
+        case Opt.None => d
+    }
+}
+x Opt<I64> = Opt.None          # the instance the value lands in
+y := Opt.Some(2.5)             # an Opt<F64>, from its argument
+```
+
 **G7.** Within such a declaration a type parameter is written bare — `T` — the list having introduced it
 (G8b), as a generic function writes its variables. The `type-params` list fixes the parameters' **order**, which is
 what a type argument list (G8) supplies positionally; a function's list fixes no order anything relies on, since its
 arguments are inferred (G9) and never written.
 
 **G8.** `type-ref` (T24) is extended to accept a **type argument list**:
-`type-args ::= "<" list(type-expr) ">"`, written immediately after the name and before any reference marker. The
-count must equal the named type's own `type-params` count exactly - `Array`'s being one (T7), so `Array<I32, 3>` is
-that error. A generic
+`type-args ::= "<" ( list(type-expr) [ errset-arg ] | errset-arg ) ">"`, `errset-arg ::= "?" error-list-item { ","
+error-list-item }` (R1), written immediately after the name and before any reference marker. The
+count of types must equal the named type's own type parameters' exactly - `Array`'s being one (T7), so `Array<I32, 3>` is
+that error. A type whose list ends in an error-set parameter (G1a) takes its set after `?`, the last argument -
+`Iterator<String ? io.Error>`, `Retry<I64 ? A, B>`, a named set (T19a) as any item - or, left out, the empty set;
+`?` among the arguments of a type with no error-set parameter is a compile-time error. A generic
 type is never valid without one — a bare reference to a generic type name is a compile-time error.
 Within a `type-args` list a type variable is written as anywhere else (G8b) - bare, so a
 generic declaration may instantiate another generic with its own parameter (`Vec<T>` inside a declaration that
@@ -7214,7 +7455,9 @@ are two types.
 instantiated but never read as a `func-type` value (T2). A fully instantiated one is an ordinary
 value and may be used wherever a function value is expected. A generic function's **instance** is named by type
 arguments written after its name (`type-args`, G8), one for each variable its list introduces (G3), in that order -
-`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Called so, its variables
+`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Its error-set parameter
+(G1a) is given after `?` (`apply<I64, I64 ? ParseError>`) or not at all: a call then infers it as always, and a
+function value takes the empty set. Called so, its variables
 are what the type arguments say and nothing the arguments are (G9 binds none of them): each argument fits the
 instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
 constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a

@@ -5,7 +5,7 @@ type Dir enum {
   south
   Hold(v I32)
 }
-error Err {
+type Err error {
   Loud
   quiet
 }

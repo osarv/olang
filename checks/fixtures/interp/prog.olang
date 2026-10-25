@@ -30,7 +30,7 @@ fn fold(e Expr&) Expr&e {
     }
 }
 
-error Oops {
+type Oops error {
     BAD
 }
 fn risky(n I32) I32 ? Oops {

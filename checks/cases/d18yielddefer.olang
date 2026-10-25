@@ -1,0 +1,12 @@
+# check: fail error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
+# S20: a walk stopped at a yield with deferred code pending, and dropped, would never run that code
+fn tidy() {
+}
+
+fn f() Iterator<I64> {
+    defer tidy()
+    yield 2
+}
+
+fn main() ? {
+}

@@ -1,6 +1,6 @@
 # E11b/E11c: joins reaching a Str left by continue and by a propagated error leave nothing behind
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 type Big struct(n I64) {

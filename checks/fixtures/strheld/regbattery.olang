@@ -13,7 +13,7 @@ type Res struct(k I64) {
     gone = true
     Gone++
 }
-error E { X }
+type E error { X }
 type FRes struct(k I64) ? E {
     k
     gone Bool = false

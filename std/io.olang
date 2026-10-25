@@ -8,7 +8,7 @@ extern fn open(path Array<U8>, flags I32) I32
 extern fn close(fd I32) I32
 extern fn pipe(fds Array<I32>) I32
 
-error Error {
+type Error error {
     FAILED
     PARTIAL
 }

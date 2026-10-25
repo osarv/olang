@@ -1,5 +1,5 @@
 import "ctlib"
-error E { X }
+type E error { X }
 type CtPair struct(a I32, b F64) {
     a
     b

@@ -1,7 +1,7 @@
 # check: fail error[R11, O25]: a reference default lives where the call's result does
 # R9a: a returned call lands in the result scope, which the function's own by-value parameter does not live in. (A local
 # built here and returned as the default lives in the result scope instead, O26a.)
-error Stop {
+type Stop error {
     HERE
 }
 type Node struct(v I32) {

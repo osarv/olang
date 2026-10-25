@@ -1,0 +1,9 @@
+# check: fail error[S19b]: an error may not leave deferred code - catch it here
+# S19b, S19e: an errdefer's code may not let an error out either - it runs while one is already leaving
+type E error { BAD }
+fn g() ? E { error E.BAD }
+fn f() ? E {
+    errdefer try g()
+    error E.BAD
+}
+fn main() ? { try f() catch { } }

@@ -16,11 +16,11 @@ import sh "shared"
 import "Base"
 import rn "runner"
 
-error WorkerError {
+type WorkerError error {
     BAD_INPUT
 }
 
-error InputError {
+type InputError error {
     NEGATIVE
     TOO_BIG
 }

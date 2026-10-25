@@ -34,7 +34,7 @@
 
 # what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
 # (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
-error ListError {
+type ListError error {
     EMPTY
     NOT_FOUND
     OUT_OF_RANGE
@@ -332,10 +332,10 @@ fn (l mut List<T>&) Reverse() {
 
 # sorts the list in place so that less(l[i], l[i - 1]) holds nowhere - stable, as an array's Sort is: the elements are
 # copied into one contiguous array, sorted there by Array.Sort, and copied back, so it costs two copies beside the sort
-fn (l mut List<T>&) Sort(less fn(x T, y T) Bool) {
+fn (l mut List<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
     s := l.s
     a := l.ToArray()
-    a.Sort(less)
+    try a.Sort(less)
     at I64 = 0
     for k in range s.nChunks {
         c := s.chunk(k)
@@ -412,12 +412,12 @@ fn (l List<T>&) Iter() ListIter<T> { return ListIter<T>(l) }
 # stopped at, or at the end
 
 # true when keep holds for at least one remaining element
-fn (it mut ListIter<T>&) Some(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for j, x in run {
-            if keep(x) {
+            if try keep(x) {
                 it.i += j + 1
                 it.at += j + 1
                 return true
@@ -430,12 +430,12 @@ fn (it mut ListIter<T>&) Some(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every remaining element - so for none, when there are none
-fn (it mut ListIter<T>&) Every(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for j, x in run {
-            if not keep(x) {
+            if not try keep(x) {
                 it.i += j + 1
                 it.at += j + 1
                 return false
@@ -448,13 +448,13 @@ fn (it mut ListIter<T>&) Every(keep fn(x T) Bool) Bool {
 }
 
 # how many remaining elements keep holds for
-fn (it mut ListIter<T>&) Count(keep fn(x T) Bool) I64 {
+fn (it mut ListIter<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
     c I64 = 0
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            if keep(x) { c++ }
+            if try keep(x) { c++ }
         }
         it.i += run.Len()
         it.at += run.Len()
@@ -463,13 +463,13 @@ fn (it mut ListIter<T>&) Count(keep fn(x T) Bool) I64 {
 }
 
 # every remaining element folded into one, starting from init
-fn (it mut ListIter<T>&) Fold<U>(init U, f fn(acc U, x T) U) U {
+fn (it mut ListIter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
     acc U = init
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            acc = f(acc, x)
+            acc = try f(acc, x)
         }
         it.i += run.Len()
         it.at += run.Len()
@@ -478,13 +478,13 @@ fn (it mut ListIter<T>&) Fold<U>(init U, f fn(acc U, x T) U) U {
 }
 
 # a new List - in the caller's scope - of f applied to every remaining element
-fn (it mut ListIter<T>&) Map<U>(f fn(x T) U) List<U>& {
+fn (it mut ListIter<T>&) Map<U ? E>(f fn(x T) U ? E) List<U>& ? E {
     out mut List<U>&return = List<U>()
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            out.Push(f(x))
+            out.Push(try f(x))
         }
         it.i += run.Len()
         it.at += run.Len()
@@ -493,13 +493,13 @@ fn (it mut ListIter<T>&) Map<U>(f fn(x T) U) List<U>& {
 }
 
 # a new List - in the caller's scope - of the remaining elements keep holds for
-fn (it mut ListIter<T>&) Filter(keep fn(x T) Bool) List<T>& {
+fn (it mut ListIter<T>&) Filter<? E>(keep fn(x T) Bool ? E) List<T>& ? E {
     out mut List<T>&return = List<T>()
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
         for x in run {
-            if keep(x) { out.Push(x) }
+            if try keep(x) { out.Push(x) }
         }
         it.i += run.Len()
         it.at += run.Len()

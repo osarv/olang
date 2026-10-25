@@ -1,6 +1,6 @@
 # check: run
 # T19/QY: words on one line are separated by ",", on different lines by the line break
-error E { A, B }
+type E error { A, B }
 fn f(b Bool) ? E {
     if b { error E.B }
 }

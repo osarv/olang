@@ -14,13 +14,13 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
 | 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
-| 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
-| 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
+| 6 | Embedding a file | Zig, Rust | decided 2026-10-18; built 2026-10-25 (SPEC E38) |
+| 7 | `errdefer` | Zig | decided 2026-10-18; built 2026-10-25 (SPEC S19e) |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
 | 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 | 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
-| 12 | Generic enums | Rust, Swift, ML | decided 2026-10-18 (the user: "generic enums go in for sure"), after self-hosting |
+| 12 | Generic enums | Rust, Swift, ML | decided 2026-10-18 (the user: "generic enums go in for sure"); built 2026-10-25 (SPEC G6b) |
 
 ## 1. Generators (`yield`)
 
@@ -218,7 +218,7 @@ while compiling). An object is rebuilt when an embedded file changes (its conten
 to 64 KB is an LLVM constant, so the optimizer can fold reads of known bytes (a small lookup table); a larger one is
 placed in the object as raw bytes (assembler `.incbin`), since nothing is folded out of a large blob and LLVM would
 only be slow on it. Not now: directories,
-globs. Built in the port after self-hosting.
+globs. Built 2026-10-25 (SPEC E38) - every file an LLVM constant after all, measured: see HISTORY.md.
 
 **What:** a file's bytes become constant data in the binary, read while compiling.
 
@@ -246,7 +246,7 @@ by its own error; an error a clause catches inside the block does not leave it. 
 (a failed assert, `unreachable`, `!`, `os.Exit`), as for `defer`. One list with `defer`, in reverse registration order
 (an error exit runs both kinds, a normal exit only the defers - two lists would misorder `x := alloc(); errdefer
 free(x); y := build(x); defer log(y)`). The error is not available inside (errors are no values, T20); restricting it
-to some words (`errdefer io.Error.FULL { }`) can be added later. Built in the port after self-hosting.
+to some words (`errdefer io.Error.FULL { }`) can be added later. Built 2026-10-25 (SPEC S19e; CLAUDE.md, HISTORY.md).
 
 **What:** a deferred block that runs only when its block is left by an error.
 
@@ -345,4 +345,7 @@ layout and `match` patterns are per instance; reflection's `T.Cases` sees the in
 It reuses the struct machinery wholesale.
 
 **Not:** std gets no `Option<T>` or `Result<T, E>` - those are `null` and `? E` in olang, and stay so.
+
+**Built 2026-10-25** (SPEC G6b; CLAUDE.md, HISTORY.md): as described, with `$` writing a case without its enum's
+arguments (`Opt.Some(4)`); `T.Cases` waits for reflection.
 

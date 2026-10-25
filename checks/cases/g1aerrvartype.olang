@@ -1,0 +1,10 @@
+# check: fail error[G1a]: 'E' is an error-set parameter, not a type - it stands where an error set is written, '? E'
+# G1a: an error-set parameter is written only where an error set is - never as a value's type
+fn keep<T ? E>(x T, f fn(x T) T ? E) T ? E {
+    y E = x
+    return try f(x)
+}
+
+fn main() {
+    keep(1, fn(x I64) I64 { return x })
+}

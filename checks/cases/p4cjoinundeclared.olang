@@ -1,7 +1,7 @@
 # check: fail error[R9]: E.WORSE can escape here, and this function does not declare it - add it after '?', or catch it
 # P4c/R13: what the clauses of a "try join" do not take propagates, so the function declares it
 import "std/io"
-error E {
+type E error {
     BAD
     WORSE
 }

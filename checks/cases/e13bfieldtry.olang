@@ -1,6 +1,6 @@
 # check: fail error[E15]: this call can fail
 # E13b: a field holding a fallible function is called as any fallible call is - with "try"
-error E { BAD }
+type E error { BAD }
 type Risky struct(g fn(n I32) I32 ? E) { g }
 fn chk(n I32) I32 ? E {
   if n < 0 { error E.BAD }

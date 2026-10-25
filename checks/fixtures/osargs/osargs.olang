@@ -3,7 +3,7 @@
 import "std/os"
 import "std/io"
 
-error Bad {
+type Bad error {
     OUTPUT
 }
 

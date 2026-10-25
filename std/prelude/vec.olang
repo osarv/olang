@@ -21,7 +21,7 @@
 
 # what a Vec's operations fail with: a First, Last or Pop of an empty Vec (EMPTY), an IndexOf finding nothing
 # (NOT_FOUND), and a position outside it given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
-error VecError {
+type VecError error {
     EMPTY
     NOT_FOUND
     OUT_OF_RANGE
@@ -198,7 +198,7 @@ fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
 fn (v mut Vec<T>&) Reverse() { v.s.data[:v.s.n].Reverse() }
 
 # sorts the elements in place so that less(v[i], v[i - 1]) holds nowhere - stable, as an array's Sort is, and done by it
-fn (v mut Vec<T>&) Sort(less fn(x T, y T) Bool) { v.s.data[:v.s.n].Sort(less) }
+fn (v mut Vec<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E { try v.s.data[:v.s.n].Sort(less) }
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none
 fn (v Vec<T>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {

@@ -59,7 +59,7 @@ fn run<T>(n I64, m I64, threads I64, reps I64, mode String&, like T) ? io.Error,
     try io.Print($n " " $threads " " $secs "s " $rate " GFLOPS check " $c.Sum() "\n")
 }
 
-error Usage {
+type Usage error {
     ARGS
 }
 

@@ -457,7 +457,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
         case ast.Decl.Link(sp, _) {
             if not w.skipped(sp.Start) { w.line("LINK", sp) }
         }
-        case ast.Decl.Errors(sp, _, _) {
+        case ast.Decl.Errors(sp, _, _, _) {
             if not w.skipped(sp.Start) { w.line("ERRORS", sp) }
         }
         case ast.Decl.Test(sp, _, body) {
@@ -593,6 +593,10 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.line("RETURN", sp)
             w.exprs(vals)
         }
+        case ast.Stmt.Yield(sp, x) {
+            w.line("YIELD", sp)
+            w.expr(x)
+        }
         case ast.Stmt.Jump(sp, k, msg) {
             kind := match k {
                 case token.Tok.Break => "BREAK"
@@ -618,8 +622,8 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.stmts(j.Body)
             w.clauses(j.Clauses)
         }
-        case ast.Stmt.Defer(sp, inner) {
-            w.line("DEFER", sp)
+        case ast.Stmt.Defer(sp, inner, onError) {
+            w.line("ERRDEFER" if onError else "DEFER", sp)
             match inner {
                 case ast.Stmt.Block(_, body) { w.stmts(body) }
                 nomatch { w.stmt(inner) }

@@ -1,5 +1,5 @@
 # check: fail error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
-error E { X }
+type E error { X }
 fn f() Bool { return true }
 if f() {
     fn h() Bool { return true }

@@ -1,4 +1,4 @@
 # check: build
-error E { X }
+type E error { X }
 fn main() ? E { }
 Last I32 = 7

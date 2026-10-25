@@ -1,0 +1,4 @@
+# check: fail error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+# E38: the path is known while compiling, so it reads no local
+fn load(path String&) I64 { return (embed path).Len() }
+fn main() ? { assert load("x") >= 0 }

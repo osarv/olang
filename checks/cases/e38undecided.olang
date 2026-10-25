@@ -1,0 +1,6 @@
+# check: fail error[E38]: this embed's path cannot be computed while compiling - write it so it can, or as a literal
+# E38: a path whose evaluation reaches what the evaluator does not run (an extern, K1) is an error at the embed
+import "std/os"
+fn where() String { return try os.Env("OLANG_EMBED_NOWHERE") catch default "x.txt" }
+Data := embed where()
+fn main() ? { assert Data.Len() >= 0 }

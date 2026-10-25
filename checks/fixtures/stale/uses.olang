@@ -1,5 +1,5 @@
 import "plain"
-error E { X }
+type E error { X }
 # read at run time, so plain's code is in the program and its object is built (a compiler that compiles only what a
 # program reaches makes none for a module whose every call is decided while compiling)
 Seen mut I32 = 0

@@ -1,6 +1,6 @@
 # check: fail unknown
 # flags: -define Level=1
-error E { X }
+type E error { X }
 fn main() ? E {
     x := 0
     if Level > 2 {

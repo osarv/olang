@@ -1,0 +1,14 @@
+# check: fail error[S20]: a join block may not yield - its tasks are waited for before it is left
+# S20, P1b: a join's tasks are waited for before its block is left - a walk may not stop inside it
+fn work() {
+}
+
+fn f() Iterator<I64> {
+    join {
+        spawn work()
+        yield 1
+    }
+}
+
+fn main() ? {
+}
