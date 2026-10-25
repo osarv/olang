@@ -3937,6 +3937,114 @@ redefd.olang:6:4: error[B10]: 'Level' is a build constant - choose another name
     6 | fn Level() I32 { return 1 }
       |    ^~~~~
 compilation failed with 1 error
+=== reflargcompr.olang
+reflargcompr.olang:11:27: error[G37]: a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'
+   11 |     p := Point(x for x in xs)
+      |                           ^~
+compilation failed with 1 error
+=== reflcaseother.olang
+reflcaseother.olang:15:13: error[G34]: this case is Other's, and the value is Shape
+   15 |     if s == Other.Cases[0] { }
+      |             ^~~~~~~~~~~~~~
+compilation failed with 1 error
+=== reflcaseunreachable.olang
+reflcaseunreachable.olang:12:14: error[G36]: no type can reach this case - a case before it takes every type it does
+   12 |         case I64 => 2
+      |              ^~~
+reflcaseunreachable.olang:15:18: note: instantiated here, with T = I64
+   15 | fn main() { n := f<I64>() }
+      |                  ^~~~~~
+compilation failed with 1 error
+=== refldescnomember.olang
+refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset and Of
+    9 | fn main() { n := Point.Fields[0].Width }
+      |                                  ^~~~~
+compilation failed with 1 error
+=== reflfilterargs.olang
+reflfilterargs.olang:5:61: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+    5 | fn g(k I64) Point { return Point(k for p in Point.Params if k > 0) }
+      |                                                             ^~~~~
+compilation failed with 1 error
+=== reflfilterundecided.olang
+reflfilterundecided.olang:9:77: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
+    9 | fn g(k I64) Array<String&> { return String&[f.Name for f in Point.Fields if k > 0] }
+      |                                                                             ^~~~~
+compilation failed with 1 error
+=== reflindexnotconst.olang
+reflindexnotconst.olang:9:42: error[G33]: a list known while compiling is indexed by a constant - this index is known only at run time
+    9 | fn f(i I64) String { return Point.Fields[i].Name }
+      |                                          ^
+compilation failed with 1 error
+=== reflindexrange.olang
+reflindexrange.olang:9:18: error[G33]: index 2 is outside the list, which holds 2
+    9 | fn main() { s := Point.Fields[2].Name }
+      |                  ^~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== refllistvalue.olang
+refllistvalue.olang:9:19: error[G33]: Point.Fields is a list known while compiling, no value - walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension
+    9 | fn main() { fs := Point.Fields }
+      |                   ^~~~~~~~~~~~
+compilation failed with 1 error
+=== reflmatchsubject.olang
+reflmatchsubject.olang:8:15: error[G13]: 'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names
+    8 |         match f.Type { nomatch { } }
+      |               ^~~~~~
+compilation failed with 1 error
+=== reflnodefault.olang
+reflnodefault.olang:11:12: error[G34]: parameter 'x' of Point has no default - read 'p.Default' only where 'p.HasDefault' holds
+   11 |     return p.Default
+      |            ^~~~~~~~~
+compilation failed with 1 error
+=== reflnokind.olang
+reflnokind.olang:10:20: error[G32]: E has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference and a function type have one
+   10 | fn main() { k := E.Kind }
+      |                    ^~~~
+compilation failed with 1 error
+=== reflnolength.olang
+reflnolength.olang:9:24: error[G32]: Point has no Length - only an array whose length is known while compiling has one
+    9 | fn main() { n := Point.Length }
+      |                        ^~~~~~
+compilation failed with 1 error
+=== reflnomember.olang
+reflnomember.olang:9:24: error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align
+    9 | fn main() { n := Point.Width }
+      |                        ^~~~~
+compilation failed with 1 error
+=== reflnotlist.olang
+reflnotlist.olang:9:18: error[G33]: I64 has no Fields - only a struct and an enum's case have fields
+    9 | fn main() { n := I64.Fields.Len() }
+      |                  ^~~~~~~~~~
+compilation failed with 1 error
+=== reflnotype.olang
+reflnotype.olang:9:15: error[G38]: 'Element' of I64: only an array has an Element
+    9 | fn main() { x I64.Element = 3 }
+      |               ^~~~~~~~~~~
+compilation failed with 1 error
+=== reflofargs.olang
+reflofargs.olang:11:10: error[G34]: 'Of' takes one value, found 2
+   11 |     n := Point.Fields[0].Of(v, v)
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== reflofttype.olang
+reflofttype.olang:11:29: error[G34]: this field is Point's, and the value is Shape
+   11 |     n := Point.Fields[0].Of(s)
+      |                             ^
+compilation failed with 1 error
+=== refltrylist.olang
+refltrylist.olang:10:5: error[G33]: a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'
+   10 |     for f in try Point.Fields { }
+      |     ^~~
+compilation failed with 1 error
+=== refltypenotvalue.olang
+refltypenotvalue.olang:9:18: error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes, as 'x Point.Fields[0].Type = ...'
+    9 | fn main() { t := Point.Fields[0].Type }
+      |                  ^~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== reflunknownhead.olang
+reflunknownhead.olang:5:7: error[M10]: 'zz' is no import here
+    5 |     x zz.T = 3
+      |       ^~
+compilation failed with 1 error
 === rendercopyc2d.olang
 rendercopyc2d.olang:25:16: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    25 |     s := $Wrap(x)
@@ -5228,9 +5336,9 @@ t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values -
 t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |            ^
-t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == E.A { } }')
+t20errorparam.olang:13:36: error[G32]: E has no reflected member 'A' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align
    13 | fn final(e E) Bool { return e != E.A }
-      |                                  ^~~
+      |                                    ^
 t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    15 |     x E
       |       ^
