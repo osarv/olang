@@ -106,6 +106,7 @@ WhyFfiFind String& = "it calls an external function -i cannot find in this proce
 WhyFfiPass String& = "it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
+WhyGenRunning String& = "it asks a generator for its next value from inside the generator's own walk"
 
 # ---- pointers ----
 
@@ -172,9 +173,12 @@ type scope struct() {
     Errors I64 = 0       # a join's error list (a ListId)
 }
 
-# a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P
+# a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P; or
+# a generator living in the scope (D18), by its index in gens (Ty), whose walk's scopes close with it if it stopped
+# part way
 gDtor I64 = 0
 gOwner I64 = 1
+gGen I64 = 2
 
 type reg struct() {
     Kind I64 = 0
@@ -223,6 +227,20 @@ type frame struct() {
     # -1 for none
     ErrKind I64 = -1
     ErrAt I32 = 0
+    Gen I32 = -1         # D18: a generator's Next running - its record in gens; -1 for any other frame
+}
+
+# a generator (D18): its Next's function and what its walk is - not started (0), suspended (1) with its frame, the
+# frame's words (locals, scopes, scope variables: WsN of genWords from At) and the scopes it holds open, innermost
+# first, its frame's storage last (HeldN from At + WsN), running (2), or over (3). Its words are made at its first
+# suspend, room for every scope its function opens
+type genRec struct() {
+    State I64 = 0
+    Fn I64 = 0
+    Fr frame = frame()
+    At I64 = -1
+    WsN I64 = 0
+    HeldN I64 = 0
 }
 
 # S18d: what a place in an error's trace did
@@ -380,6 +398,8 @@ type Machine struct(T mut types.Table&, When Mode) {
     ws mut Array<I64>& = Array<I64>(1024)
     nWs I64 = 0
     closing List<I64>
+    gens List<genRec>    # D18: every generator made, by the index its environment holds
+    genWords List<I64>   # their suspended frames' words (genRec.At)
     # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together: the frame
     # each is registered in, the scope it is registered at, and its entry block - run, under interpret, for the blocks a
     # stop leaves. A frame's own are the last ones while it runs, since every frame above it has returned
@@ -721,7 +741,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
     return match t {
         case mir.Term.Branch(c, _, _) => opNamesGlobal(c)
         case mir.Term.Switch(x, _, _) => opNamesGlobal(x)
-        case mir.Term.Return(_, x) => opNamesGlobal(x)
+        case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _) => opNamesGlobal(x)
         case mir.Term.Call(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
         case _ => false
     }
@@ -1406,6 +1426,8 @@ fn (m mut Machine&) stepClose() {
         m.freeRegs.Push(r)
         if g.Kind == gDtor {
             m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
+        } else if g.Kind == gGen {
+            m.closeGen(g.Ty)
         } else {
             m.releaseSlot(Ptr(g.Id, g.Off))
         }
@@ -2174,6 +2196,11 @@ fn (m mut Machine&) codePtr(k mir.FnKey) Ptr {
 # in (D16c); none for a named function
 fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, args mir.Range) {
     cp := m.codePtr(code)
+    gi := try m.fnOf.Get(code) catch default -1
+    if gi >= 0 and m.fns[gi].Gen {
+        m.genClosure(fi, dst, cp, gi, s, args)
+        return
+    }
     if args.N == I32(0) {
         m.wrPtr(dst, cp)
         m.wrPtr(Ptr(dst.Id, dst.Off + 8), NullPtr)
@@ -2199,6 +2226,131 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
     }
     m.wrPtr(dst, cp)
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), env)
+}
+
+# a generator's value (D18): its Next's code with an environment of its own in s - the captures as any closure's, then
+# the index of the generator's record, made here and registered in s, where it is closed with the scope if it stopped
+# part way
+fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, args mir.Range) {
+    f := m.fnOfFrame(fi)
+    tys := Array<types.TypeId>(I64(args.N))
+    for i in range args.N { tys[i] = m.opType(fi, f.Ops[I64(args.At) + i]) }
+    offs, total := m.pack(tys)
+    sc := m.buildScope(fi, s)
+    if m.halted { return }
+    env := m.allocate(total + 8 * I64(args.N) + 8, aValue, sc)
+    for i in range args.N {
+        x := f.Ops[I64(args.At) + i]
+        m.put(fi, Ptr(env.Id, offs[i]), tys[i], x)
+        held := sc
+        if m.shape(tys[i]) == vPtr or m.shape(tys[i]) == vPair {
+            q := m.rdPtr(Ptr(env.Id, offs[i] + (8 if m.shape(tys[i]) == vPair else 0)))
+            if q.Id != 0 { held = m.al[q.Id & slotMask].Scope }
+        }
+        m.wr(Ptr(env.Id, total + 8 * i), 8, held)
+    }
+    m.gens.Push(genRec())
+    ri := m.gens.Len() - 1
+    m.gens[ri].Fn = gi
+    m.wr(Ptr(env.Id, total + 8 * I64(args.N)), 8, ri)
+    m.addReg(sc, gGen, ri, NullPtr)
+    m.wrPtr(dst, cp)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), env)
+}
+
+# the index of the generator a Next's environment names (genClosure)
+fn (m mut Machine&) genIndex(g mir.Fn&, env Ptr) I64 {
+    tys := Array<types.TypeId>(g.Captures.Len())
+    for i in range g.Captures.Len() { tys[i] = g.Locals[I64(g.Captures[i])].Ty }
+    _, total := m.pack(tys)
+    return m.rd(Ptr(env.Id, env.Off + total + 8 * g.Captures.Len()), 8)
+}
+
+# a suspended generator's frame pushed again as it was (D18): its words back, returning where this call does
+fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
+    if m.nFs >= m.DepthBudget {
+        m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
+        return -1
+    }
+    rec := m.gens[ri]
+    fr := rec.Fr
+    fi := fr.Fn
+    nl, ns := m.cf[fi].Locals.Len(), m.cf[fi].Scopes.Len()
+    need := m.nWs + rec.WsN
+    if need > m.ws.Len() {
+        old := m.ws
+        n := old.Len()
+        for n < need { n *= 2 }
+        m.ws = Array<I64>(n)
+        for i in range m.nWs { m.ws[i] = old[i] }
+    }
+    for i in range rec.WsN { m.ws[m.nWs + i] = m.genWords[rec.At + i] }
+    fr.Locals, fr.Scopes, fr.Vars = m.nWs, m.nWs + nl, m.nWs + nl + ns
+    fr.Ret, fr.RetArg = ret, retArg
+    fr.Closing = m.closing.Len()
+    fr.Pending, fr.Done, fr.Raised = false, false, false
+    m.nWs = need
+    if m.nFs >= m.fs.Len() {
+        old := m.fs
+        m.fs = Array<frame>(2 * old.Len())
+        for i in range m.nFs { m.fs[i] = old[i] }
+    }
+    m.fs[m.nFs] = fr
+    m.nFs++
+    return m.nFs - 1
+}
+
+# S20: a generator's value given to the call that resumed it, its frame then put aside as it is - its storage, its
+# scopes and its words kept - to go on at resume when it is next asked
+fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.Range) {
+    ri := I64(m.fs[fi].Gen)
+    if ri < 0 {
+        m.notModelled()
+        return
+    }
+    m.deliver(fi, x)
+    if m.halted { return }
+    fr := m.fs[fi]
+    fr.Block = I64(resume)
+    fr.Stmt = 0
+    rec := m.gens[ri]
+    n := m.nWs - fr.Locals
+    if rec.At < 0 {
+        rec.At = m.genWords.Len()
+        for i in range n + m.cf[fr.Fn].Scopes.Len() + 1 { m.genWords.Push(0) }
+    }
+    rec.WsN = n
+    for i in range n { m.genWords[rec.At + i] = m.ws[fr.Locals + i] }
+    f := m.fns[fr.Fn]
+    k := rec.At + n
+    for i in range held.N {
+        match f.Refs[I64(held.At) + i] {
+            case mir.ScopeRef.Scope(sid) {
+                m.genWords[k] = m.ws[fr.Scopes + I64(sid)]
+                k++
+            }
+            case _ { }
+        }
+    }
+    m.genWords[k] = fr.Store
+    rec.HeldN = k + 1 - (rec.At + n)
+    rec.Fr = fr
+    rec.State = 1
+    m.gens[ri] = rec
+    m.popFrame()
+    m.returned(fr)
+}
+
+# D18: a generator's scope closing with the generator stopped part way - the scopes its walk holds closed, innermost
+# first, its frame's storage last, as its end would have closed them
+fn (m mut Machine&) closeGen(ri I64) {
+    rec := m.gens[ri]
+    if rec.State != 1 { return }
+    m.gens[ri].State = 3
+    for i in range rec.HeldN {
+        id := m.genWords[rec.At + rec.WsN + rec.HeldN - 1 - i]
+        if m.live(id) { m.closing.Push(id) }
+    }
 }
 
 # types laid out one after another, each at its own alignment, as a record is: their offsets and the whole size
@@ -3108,7 +3260,27 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     if m.halted { return -2 }
     vty := m.calleeType(fi, c)
     if isExtern { return -2 }
-    nf := m.pushFrame(callee, ret, retArg)
+    # D18: a generator's Next resumes its walk where it stopped - or, over, fails with Exhausted at once
+    ri I64 = -1
+    restored := false
+    if m.fns[callee].Gen {
+        if env.Id == 0 {
+            m.refuse(WhyNullCall)
+            return -2
+        }
+        ri = m.genIndex(m.fns[callee], env)
+        st := m.gens[ri].State
+        if st == 2 {
+            m.refuse(WhyGenRunning)
+            return -2
+        }
+        if st == 3 {
+            m.genOver(fi, callee, c, ret, retArg)
+            return -2
+        }
+        restored = st == 1
+    }
+    nf := m.restoreGen(ri, ret, retArg) if restored else m.pushFrame(callee, ret, retArg)
     if nf < 0 { return -2 }
     g := m.fns[callee]
     dispatched := match c {
@@ -3126,7 +3298,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
             m.put(fi, m.localPtr(nf, l), g.Locals[I64(l)].Ty, f.Ops[I64(args.At) + i])
         }
     }
-    m.ownParams(nf, callee)
+    if not restored { m.ownParams(nf, callee) }
     # the passed scope variables: in order for a direct call, mapped through the value's type for a function value
     # whose code's own type differs (T22a)
     passed := 0
@@ -3158,7 +3330,11 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         }
         m.ws[m.fs[nf].Vars + i] = s
     }
-    if g.Captures.Len() > 0 {
+    if ri >= 0 {
+        m.fs[nf].Gen = I32(ri)
+        m.gens[ri].State = 2
+    }
+    if g.Captures.Len() > 0 and not restored {
         if env.Id == 0 {
             m.refuse(WhyNullCall)
             return -2
@@ -3175,6 +3351,25 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     }
     if m.halted { return -2 }
     return nf
+}
+
+# D18a: a generator asked for a value once its walk is over - the call fails with Exhausted, no frame run
+fn (m mut Machine&) genOver(fi I64, callee I64, c mir.Callee, ret I64, retArg I64) {
+    if ret != rCall {
+        m.notModelled()
+        return
+    }
+    call := m.fnOfFrame(fi).Calls[retArg]
+    if call.Err == mir.NoBlock {
+        m.notModelled()
+        return
+    }
+    code := m.fns[callee].GenEnd
+    its := m.T.Errors(m.fns[callee].Ty)
+    seen := m.T.Errors(m.calleeType(fi, c))
+    if its != seen { code = m.recode(code, its, seen) }
+    m.wr(m.localPtr(fi, call.Code), 4, code)
+    m.jump(fi, call.Err)
 }
 
 # an extern called now (X1, X8, B3e): its arguments marshalled for the dynamic call, its result stored at dst
@@ -3489,8 +3684,15 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }
             m.leave(fi, false, x, 0)
         }
+        case mir.Term.Suspend(sp, x, resume, held) {
+            m.atK(k, sp)
+            if glob and not m.operandReady(fi, x) { return }
+            m.suspend(fi, x, resume, held)
+        }
         case mir.Term.Raise(sp, x) {
             m.atK(k, sp)
+            # D18a: a generator's walk is over once it fails, its end an Exhausted
+            if not m.fs[fi].Done and m.fs[fi].Gen >= I32(0) { m.gens[I64(m.fs[fi].Gen)].State = 3 }
             if not m.fs[fi].Done { m.traced(fi, k, sp) }
             # read once: when the frame's storage has closed, the code is already kept on the frame
             code := m.fs[fi].Code if m.fs[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)

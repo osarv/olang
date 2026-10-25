@@ -592,6 +592,9 @@ type Stmt enum {
     Join(sp source.Span, j Join&)
     Spawn(sp source.Span, s Spawn&)
     Yield(sp source.Span, x Expr&)                  # appended to the innermost Collect
+    # a generator's value (S20): x the result of the Next that asked (never null - typed as Return's, so the two are
+    # walked as one), its body going on after this at the next
+    Suspend(sp source.Span, x Expr?&)
 }
 
 type If struct(Test Expr&, Then Block&, Else Block?&) {
@@ -662,6 +665,7 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # (D17) - by the Raise's span's start; "raised here" where none is given
     RaiseAt List<I32>
     RaiseWhat List<String&>
+    Gen Bool = false    # a generator's Next (D18): a lambda its Suspends give values from, its end an Exhausted
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
@@ -820,6 +824,7 @@ fn (s Stmt&) Span() source.Span {
         case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _, _), Stmt.Assert(sp, _, _) => sp
         case Stmt.Reraise(sp, _, _) => sp
         case Stmt.Block(sp, _), Stmt.Defer(sp, _), Stmt.Join(sp, _), Stmt.Spawn(sp, _), Stmt.Yield(sp, _) => sp
+        case Stmt.Suspend(sp, _) => sp
     }
 }
 
@@ -887,6 +892,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         }
         case Stmt.Spawn(_, sp) { w.line(d, "spawn " $w.expr(sp.Task) " site " $sp.Site) }
         case Stmt.Yield(_, x) { w.line(d, "yield " $w.expr(x)) }
+        case Stmt.Suspend(_, x) { w.line(d, "suspend " $w.expr(x!)) }
     }
 }
 

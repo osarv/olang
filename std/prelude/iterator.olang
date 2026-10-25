@@ -13,6 +13,17 @@ type Iterator<T ? E> trait {
     mut Next() T ? E, Exhausted
 }
 
+# what a generator gives its caller (D18): a function whose result is written Iterator<T ? E> and whose body yields
+# gives a Generator<T ? E>. Each Next runs the body on from where it stopped to its next yield, whose value it gives;
+# it fails with Exhausted once the body has ended - and again whenever it is asked after - or with the error the body
+# failed with, after which the body is over. A copy is a second name for the same walk, as a List's copy is the same
+# list. next is the walk itself: a Generator made of any such function value walks it
+type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) {
+    next
+}
+
+fn (g mut Generator<T ? E>&) Next() T ? E, Exhausted { return try g.next() }
+
 # what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
 # "l.Iter().Count(f)", "m.Iter().Some(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
 # Each walks the iterator onward from where it stands. Each fails with what the iterator and its callbacks fail with

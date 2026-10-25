@@ -817,6 +817,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Return(_, values) {
             for x in values { r.expr(x) }
         }
+        case ast.Stmt.Yield(_, x) { r.expr(x) }
         case ast.Stmt.Assert(_, c, msg) {
             r.expr(c)
             if msg is not null { r.expr(msg) }

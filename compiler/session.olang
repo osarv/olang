@@ -358,7 +358,7 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
             f.block(body)
             f.block(post)
         }
-        case typed.Stmt.Return(_, v) { f.expr(v) }
+        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { f.expr(v) }
         case typed.Stmt.Exit(_, _, m) { f.expr(m) }
         case typed.Stmt.Assert(_, cond, m) {
             f.expr(cond)
@@ -931,7 +931,7 @@ fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
             f.place(p)
             f.expr(v)
         }
-        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { f.expr(x) }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Suspend(_, x) { f.expr(x) }
         case typed.Stmt.If(_, i) {
             f.expr(i.Test)
             f.block(i.Then)

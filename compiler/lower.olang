@@ -135,6 +135,12 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
         f.RaiseAt.Push(b.RaiseAt[i])
         f.RaiseWhat.Push(b.RaiseWhat[i])
     }
+    if b.Gen {
+        # D18: a generator's Next, a coroutine - its end the code Exhausted.END has under its own list
+        f.Gen = true
+        ex := lw.P.PreludeType("std/prelude/iterator", "Exhausted")
+        if ex != types.UnknownT { f.GenEnd = mir.ErrorCode(lw.P.T, lw.P.T.Errors(b.Ty), ex, 0) }
+    }
     ln := lowering(lw, b, lw.P.T, f)
     ln.file = b.File
     if id < lw.Plans.Len() {
@@ -697,6 +703,7 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             }
         }
         case typed.Stmt.Eval(_, x) { ln.val(x) }
+        case typed.Stmt.Suspend(sp, x) { ln.suspend(sp, x!) }
         case typed.Stmt.If(sp, i) { ln.ifStmt(sp, i) }
         case typed.Stmt.Loop(sp, body, post) { ln.loop(sp, body, post) }
         case typed.Stmt.Jump(sp, kind, loop) { ln.jump(sp, kind, loop) }
@@ -906,6 +913,21 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     ln.retArrays(l, res, value, sp)
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# a generator's value (S20): computed as a return's is, an array value among it copied into the result scope (T7b), then
+# the function suspended with every scope it has open held, to go on at the block made here when it is next called
+fn (ln mut lowering&) suspend(sp source.Span, value typed.Expr&) {
+    res := ln.T.Result(ln.B.Ty)
+    v := ln.fit(ln.val(value), value, res, sp)
+    if ln.dead { return }
+    l := ln.local(v, res, sp)
+    ln.retArrays(l, res, value, sp)
+    held := Array<mir.ScopeRef>(ln.levels.Len(), mir.ScopeRef.Frame)
+    for i in range ln.levels.Len() { held[i] = mir.ScopeRef.Scope(ln.levels[ln.levels.Len() - 1 - i].S) }
+    resume := ln.F.NewBlock()
+    ln.end(mir.Term.Suspend(sp, mir.Operand.Copy(mir.L(l)), resume, ln.F.ScopeRefs(held)))
+    ln.start(resume)
 }
 
 # T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
@@ -2233,6 +2255,9 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
     if ln.dead { return mir.Operand.None }
     s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
+    # D18: a generator's Next is its walk - its storage (its coroutine's frame, its locals, the scopes it holds open)
+    # where the generator lands, which its captures outlive (O14a)
+    if ln.L.Bodies[I64(body)].Gen { s = ln.resultScope() }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
 }
 

@@ -89,6 +89,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     varsN Map<I64, I64>
     vars List<varRow>
     errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
+    genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
     typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
@@ -328,6 +329,23 @@ fn (p mut Program&) SelfType(d types.DeclId) types.TypeId {
 # whether a type is an error-set variable: a variable its list writes after "?"
 fn (p mut Program&) IsErrVar(t types.TypeId) Bool {
     return p.T.KindOf(t) == types.Kind.Var and (try p.errVars.Get(pair.Pair(p.T.A(t), p.T.B(t))) catch default false)
+}
+
+# whether function f is a generator (D18): its result written Iterator<T ? E>, its body yielding - known once its
+# signature is
+fn (p mut Program&) IsGenerator(f I64) Bool {
+    p.Sig(f)
+    return try p.genFns.Get(f) catch default false
+}
+
+# D18: the Generator<T ? E> a generator's result written t, an Iterator<T ? E>, stands for; Unknown where t is no
+# Iterator
+fn (p mut Program&) generatorOf(t types.TypeId) types.TypeId {
+    if p.T.KindOf(t) != types.Kind.Named { return types.UnknownT }
+    it := try p.FindDecl("std/prelude/iterator", "Iterator") catch { return types.UnknownT }
+    if p.T.DeclOf(t) != it { return types.UnknownT }
+    g := try p.FindDecl("std/prelude/iterator", "Generator") catch { return types.UnknownT }
+    return p.Instance(g, p.T.Args(t))
 }
 
 fn (p mut Program&) ErrVarAt(owner I64, i I64) Bool { return try p.errVars.Get(pair.Pair(owner, i)) catch default false }
@@ -2329,6 +2347,15 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
+    # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
+    if ast.FirstYield(row.F.Body).Start >= I32(0) {
+        g := p.generatorOf(p.T.Result(sig))
+        if g != types.UnknownT {
+            p.genFns.Put(f, true)
+            sig = p.T.Func(p.T.Params(sig), g, types.ListId(0), p.T.ScopesOf(sig))
+        }
+    }
     if ns.Len() > written {
         ps := p.T.Items(p.T.Params(sig))
         out := Array<types.TypeId>(ps.Len())

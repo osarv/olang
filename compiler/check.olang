@@ -59,6 +59,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     LoopFails I64 = 0      # how many of a for-in's own calls can fail with more than Exhausted (S9e)
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
+    Gen Bool = false       # a generator's body, its Next's (D18): a lambda whose yields give its values (S20)
+    deferBlocks List<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
     Settles Bool = false       # a function's or constructor's body whose set is inferred (R1a)
@@ -2463,7 +2465,7 @@ fn (c mut Checker&) b5aStmt(w mut b5aWalk&, st typed.Stmt?&) {
             c.b5aBlock(w, body)
             c.b5aBlock(w, post)
         }
-        case typed.Stmt.Return(_, x) { c.b5aExpr(w, x) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { c.b5aExpr(w, x) }
         case typed.Stmt.Assert(_, cd, m) {
             c.b5aExpr(w, cd)
             c.b5aExpr(w, m)
@@ -2661,8 +2663,15 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     if fd.Recv is not null { c.writtenMet(fd.Recv!.Ty) }
     for prm in fd.S.Params { c.writtenMet(prm.Ty) }
     c.paramTypes = false
+    gen := c.P.IsGenerator(f)
     if fd.S.Results.Len() > 0 {
-        for r in fd.S.Results { c.writtenMet(r) }
+        for r in fd.S.Results {
+            if gen { c.genResultMet(r) } else { c.writtenMet(r) }
+        }
+    }
+    # D18: a generator fails as its Next does, its errors written in its result
+    if gen and fd.S.HasErrors {
+        c.err(c.nameSpan(fd), msgs.GenErrors(c.ty(c.P.T.Items(c.P.T.Args(c.P.T.Result(sig)))[0])))
     }
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, fd.Sp)
     ps := c.P.T.Items(c.P.T.Params(sig))
@@ -2698,6 +2707,13 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     body := fd.Body
     dropped := big and c.P.T.Items(c.P.InstanceArgs(inst)).Len() > 0
     if dropped { body = Array<ast.Stmt&>(0) }
+    if gen and not dropped {
+        c.cur().Root = c.genRoot(fd, sig)
+        c.pop()
+        for k2 in range pushed { c.P.L.Diags.PopContext() }
+        c.P.L.Diags.ContextBase(base)
+        return
+    }
     root := c.rootStmts(body)
     c.cur().Root = root
     if dropped and fd.Bodied {
@@ -3904,6 +3920,7 @@ fn (c mut Checker&) close(id I64, outer I64, mark I64, from I64) typed.Block&c {
     for fr.narrows.Len() > 0 and (try fr.narrows.Last() catch { unreachable }).Block == id { fr.narrows.Pop()! }
     for fr.nulls.Len() > 0 and (try fr.nulls.Last() catch { unreachable }).Block == id { try fr.nulls.Pop() catch { } }
     for fr.errNarrows.Len() > 0 and (try fr.errNarrows.Last() catch { unreachable }).Block == id { fr.errNarrows.Pop()! }
+    for fr.deferBlocks.Len() > 0 and (try fr.deferBlocks.Last() catch { unreachable }) == id { fr.deferBlocks.Pop()! }
     c.fr().Block = outer
     return typed.Block(typed.BlockId(I32(id)), stmts)
 }
@@ -4583,8 +4600,13 @@ fn (c mut Checker&) markOf(t ast.TypeRef?&) typed.Mark {
         case ast.TypeRef.Ref(sp, _, sc, _) {
             if sc == source.NameId(0) { return typed.Mark.Bare }
             if c.text(sc) == "return" {
-                # O26: only where there is a result scope - a result built, not one borrowed or none
-                if not c.hasResultScope() { c.err(sp, msgs.ReturnScopeNone()) }
+                # O26: only where there is a result scope - a result built, not one borrowed or none; a generator's is
+                # one Next call's, which its locals outlive (D18b)
+                if c.fr().Gen {
+                    c.err(sp, msgs.GenReturnScope())
+                } else if not c.hasResultScope() {
+                    c.err(sp, msgs.ReturnScopeNone())
+                }
                 return typed.Mark.Return
             }
             # in a lambda, a variable of a body around it is its capture (D16c)
@@ -7079,6 +7101,7 @@ fn (c mut Checker&) borrowedResult(k typed.Call&) Bool {
 # (the program's), or the result scope; recorded on the call for section 8
 fn (c mut Checker&) scoped(sp source.Span, x typed.Expr&c, sc source.NameId) typed.Expr&c {
     m := typed.Mark.Return
+    if c.text(sc) == "return" and c.fr().Gen { c.err(sp, msgs.GenReturnScope()) }   # D18b
     if c.text(sc) != "return" {
         id := c.localOrCapture(sc, sp)
         if id < 0 and c.P.GlobalDecl(c.fr().Mi, sc) is null {
@@ -11358,7 +11381,7 @@ fn (c mut Checker&) escapeRules(at source.Span, mark I64, k I64) {
             c.spellQualified = true
             spelled := c.ty(u)
             c.spellQualified = was
-            c.err(at, msgs.TryErrorNotDeclared(spelled))
+            c.err(at, msgs.GenErrorNotDeclared(spelled) if c.fr().Gen else msgs.TryErrorNotDeclared(spelled))
             return
         }
     }
@@ -12087,6 +12110,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.ForIn(sp, f) { c.forIn(sp, f) }
         case ast.Stmt.DoFor(sp, body, k) { c.doFor(sp, body, k) }
         case ast.Stmt.Return(sp, values) { c.returnStmt(sp, values) }
+        case ast.Stmt.Yield(sp, x) { c.yieldStmt(sp, x) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
         case ast.Stmt.Assert(sp, k, msg) if c.fr().Contract != 0 { c.ctCond(sp, k) }
@@ -12117,6 +12141,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         }
         case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
         case ast.Stmt.Defer(sp, inner) {
+            c.fr().deferBlocks.Push(c.fr().Block)   # S20: pending until its block is left
             from := c.stmts.Len()
             id, outer, mark := c.open(typed.BlockKind.Defer, sp)
             # S19b: deferred code runs while its block is left - nothing may leave it
@@ -14413,6 +14438,12 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.emit(typed.Stmt.Return(sp, null))   # said: the path still leaves, for R11 and D10a
         return
     }
+    if fr.Gen {
+        # D18a: a generator's return ends it - its Next fails with Exhausted from here on
+        if nv > 0 { c.err(source.Span(sp.Start, sp.Start + 6), msgs.GenReturnValue()) }
+        c.emit(c.genEnd(sp))
+        return
+    }
     if fr.InferResult {
         c.inferReturn(sp, values)
         return
@@ -14459,6 +14490,128 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
     xs := gather(c.exprs, from)
     c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null, typed.SiteId(-1)
                                                                    typed.Check.None))))
+}
+
+# ---- generators (D18, S20) ----
+
+# "yield v" (S20): v given to the Next that asked, the generator's body going on from here at the next one - checked as
+# the value its Next returns, so what it may be is what a return of it may (O13, O14, O26)
+fn (c mut Checker&) yieldStmt(sp source.Span, x ast.Expr&) {
+    fr := c.fr()
+    ysp := source.Span(sp.Start, sp.Start + 5)
+    if not fr.Gen {
+        c.err(ysp, msgs.YieldInLambda() if fr.Parent >= 0 and fr.DeferLoops < 0 else msgs.YieldOutside())
+        c.expr(x, types.UnknownT)
+        return
+    }
+    if fr.DeferLoops >= 0 {
+        c.err(ysp, msgs.YieldInDefer())
+        return
+    }
+    if fr.joins.Len() > 0 {
+        c.err(ysp, msgs.YieldInJoin())
+        return
+    }
+    if fr.deferBlocks.Len() > 0 {
+        c.err(ysp, msgs.YieldPastDefer())
+        return
+    }
+    rt := fr.Result
+    wasNull := c.nullDecl
+    c.nullDecl = c.resultAt(0)
+    v := c.exprTo(x, rt)
+    c.nullDecl = wasNull
+    if rt == c.textType() and c.isRef(typeOf(v)) { v = c.read(sp, typed.Place.Deref(sp, rt, v)) }
+    if not c.isRef(rt) { c.roStore(v, x.Span(), RoReturned) }   # T25c: the caller holds it writably
+    c.emit(typed.Stmt.Suspend(sp, v))
+}
+
+# where a generator's body ends (D18a): its Next fails with Exhausted, now and whenever it is asked after
+fn (c mut Checker&) genEnd(sp source.Span) typed.Stmt&c {
+    return typed.Stmt.Raise(sp, c.P.PreludeType("std/prelude/iterator", "Exhausted"), 0)
+}
+
+# a generator's result, Iterator<T ? E> (D18): no type of its own to meet, its arguments each as any type written is
+fn (c mut Checker&) genResultMet(r ast.TypeRef&) {
+    match r {
+        case ast.TypeRef.Named(_, _, args) {
+            if args.Len() == 0 { return }
+            for a in args {
+                if not generic.IsErrsArgOf(a) { c.writtenMet(a) }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# a generator's own body (D18): "return Generator(next)", next a lambda - the Next its value calls - capturing the
+# generator's parameters where it is made and holding the body written. Its requirements (D17) are checked on entry
+fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId) typed.Block&c {
+    sp := fd.Sp
+    from := c.stmts.Len()
+    c.entryChecks()
+    gt := c.P.T.Result(sig)
+    csig := c.P.CtorSig(gt)
+    if csig == types.UnknownT or c.P.T.Items(c.P.T.Params(csig)).Len() != 1 {
+        c.gap(sp, "a generator whose Generator has no constructor")
+        return typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    }
+    ft := c.P.T.Items(c.P.T.Params(csig))[0]
+    next := c.genLambda(fd, ft)
+    ctor := c.ctorBody(gt)
+    was := c.ctorCalled
+    c.ctorCalled = gt
+    call := c.callBody(sp, sp, csig, typed.Callee.Body(typed.BodyId(I32(ctor))), -1, null, Array<ast.Expr&>(0), typed.Expr&[next])
+    c.ctorCalled = was
+    c.emit(typed.Stmt.Return(sp, call))
+    return typed.Block(typed.BlockId(0), gather(c.stmts, from))
+}
+
+# a generator's Next (D18): a lambda of type ft, no parameters, its result the element and its errors E and Exhausted.
+# The generator's parameters are its locals, each set once, from what was captured where the generator was made, as its
+# body begins - so they are written as a function's are, and are its own from then on
+fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
+    sp := fd.Sp
+    parent := c.fr()
+    pfi := c.frames.Len() - 1
+    id := c.newBody(typed.BodyOf.Lambda(typed.BodyId(I32(parent.Body))), ft, parent.Mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, parent.Mi, c.P.T.Result(ft), c.P.T.Errors(ft))
+    fr.Ctx = parent.Ctx
+    fr.Parent = pfi
+    fr.Gen = true
+    c.cur().Gen = true
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
+    from := c.stmts.Len()
+    pb := c.Bodies[parent.Body]
+    for p in pb.Params {
+        pl := pb.Locals[I64(p)]
+        if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" { continue }
+        cap := c.captureIn(c.frames.Len() - 1, pl.Name, pl.Sp)
+        if cap < 0 { continue }
+        ct := c.localType(cap)
+        x := c.readLocal(pl.Sp, cap)
+        # a value array is captured as a read-only borrow (T7b): the local is the array, copied
+        if ct != pl.Ty and c.isRef(ct) and not c.isRef(pl.Ty) { x = c.read(pl.Sp, typed.Place.Deref(pl.Sp, pl.Ty, x)) }
+        mark := typed.Mark.Infer if c.isRef(pl.Ty) or c.P.T.HoldsRefs(pl.Ty) else typed.Mark.None
+        l := c.local(pl.Name, pl.Sp, pl.Ty, typed.LocalKind.Var, mark)
+        c.emit(typed.Stmt.Let(pl.Sp, typed.LocalId(I32(l)), x))
+    }
+    storedIn(fd.Body, c.fr().stored)
+    if fd.Body.Len() > 0 { c.stmtsOf(fd.Body) }
+    root := typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    if not leavesBlock(root) {
+        # D18a: falling off its end ends it
+        for st in root.Stmts { c.stmts.Push(st) }
+        c.emit(c.genEnd(source.Span(sp.End - 1, sp.End)))
+        root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    }
+    c.cur().Root = root
+    caps := c.fr().captures.ToArray()
+    c.pop()
+    c.state[id] = 2
+    return typed.Expr.Fn(sp, ft, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
 }
 
 # a lambda's first return (D16b): its values checked with nothing expected, the result their types - none for no
@@ -15952,11 +16105,67 @@ fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
             case typed.Stmt.Loop(_, body, post) {
                 if breaks(body, loop) or breaks(post, loop) { return true }
             }
+            # a break in a clause of an expression's try - a for-in's own, at its iterator's end (S9a)
+            case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x) {
+                if exprBreaks(x, loop) { return true }
+            }
+            case typed.Stmt.Assign(_, _, x) {
+                if exprBreaks(x, loop) { return true }
+            }
             nomatch { }
         }
     }
     return false
 }
+
+fn stmtsBreak(ss Array<typed.Stmt&>&, loop typed.BlockId) Bool {
+    if ss.Len() == 0 { return false }
+    return breaks(typed.Block(typed.BlockId(-1), ss), loop)
+}
+
+fn exprsBreak(xs Array<typed.Expr&>&, loop typed.BlockId) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprBreaks(x, loop) { return true }
+    }
+    return false
+}
+
+# whether an expression holds a break of that loop in the statements it carries: a try's clauses, a match's arms, a
+# conditional's values, a call's arguments
+fn exprBreaks(x typed.Expr?&, loop typed.BlockId) Bool {
+    if x is null { return false }
+    return match x {
+        case typed.Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
+        case typed.Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
+        case typed.Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
+                                          (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
+        case typed.Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
+        case typed.Expr.Call(_, _, k) => exprsBreak(k.Args, loop)
+        case typed.Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
+        case typed.Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
+        case typed.Expr.Away(_, _, y) => exprBreaks(y, loop)
+        case _ => false
+    }
+}
+
+fn clausesBreak(cs Array<typed.Clause&>&, loop typed.BlockId) Bool {
+    if cs.Len() == 0 { return false }
+    for k in cs {
+        if breaks(k.Code, loop) or exprsBreak(k.Defaults, loop) { return true }
+    }
+    return false
+}
+
+fn armsBreak(arms Array<typed.Arm&>&, loop typed.BlockId) Bool {
+    if arms.Len() == 0 { return false }
+    for a in arms {
+        if armBreaks(a, loop) { return true }
+    }
+    return false
+}
+
+fn armBreaks(a typed.Arm&, loop typed.BlockId) Bool { return breaks(a.Code, loop) or exprBreaks(a.Value, loop) or exprBreaks(a.Guard, loop) }
 
 # ---- run-time trait values (T32-T34) ----
 

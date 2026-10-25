@@ -57,6 +57,7 @@ type Tok enum {
     Or
     Xor
     Not
+    Yield
     # operators and punctuation (L16)
     Plus
     Minus
@@ -173,6 +174,7 @@ fn (k Tok) Text() String& {
         case Tok.Or => "or"
         case Tok.Xor => "xor"
         case Tok.Not => "not"
+        case Tok.Yield => "yield"
         case Tok.NullLit => "null"
         case Tok.Plus => "+"
         case Tok.Minus => "-"
@@ -242,7 +244,7 @@ fn (k Tok) Describe() String {
 # and the length, then one comparison: no table is built (DESIGN.md 1.1)
 fn Keyword(t String&, at I64, n I64) Tok {
     c := t[at]
-    if n < 2 or n > 11 or c < 'a' or c > 'x' { return Tok.Iden }
+    if n < 2 or n > 11 or c < 'a' or c > 'y' { return Tok.Iden }
     match c {
         case 'a' {
             if n == 2 and t[at + 1] == 's' { return Tok.As }
@@ -315,6 +317,7 @@ fn Keyword(t String&, at I64, n I64) Tok {
         }
         case 'u' { if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable } }
         case 'x' { if n == 3 and spells(t, at, "xor") { return Tok.Xor } }
+        case 'y' { if n == 5 and spells(t, at, "yield") { return Tok.Yield } }
         nomatch { }
     }
     return Tok.Iden
@@ -333,7 +336,7 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
-                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.NullLit] {
+                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.NullLit] {
         w := k.Text()
         assert Keyword(w, 0, w.Len()) == k, "keyword " $w
     }

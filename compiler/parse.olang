@@ -1490,6 +1490,14 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             try p.endStmt()
             return ast.Stmt.Return(sp, values)
         }
+        case token.Tok.Yield {
+            # QAG: a generator's value, handed to the Next that asked for it
+            p.advance()
+            x := try p.expr()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Yield(sp, x)
+        }
         case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable {
             k := p.peek()
             p.advance()

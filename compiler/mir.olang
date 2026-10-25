@@ -283,6 +283,10 @@ type Term enum {
     # runtime's unwinding (S19c, P1d). msg is an Assert's or an Unreachable's message (S17, S16d), None for none
     Exit(sp source.Span, kind ExitKind, msg Operand)
     Resume(sp source.Span)    # a cleanup's end (Stmt.Deferred): the stop it ran for goes on to the next
+    # a generator's value (S20), only in a Gen function: x the result of the call that resumed it, the function then
+    # suspended - its locals and the scopes in held (f.Refs, each a Scope, innermost first) kept as they are, nothing
+    # closed - until the next call resumes it at resume. Read by every analysis as a Goto to resume
+    Suspend(sp source.Span, x Operand, resume BlockId, held Range)
 }
 
 # how an Exit ends: as S16-S16d say, or as a failed check names itself (S18a)
@@ -422,6 +426,11 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     Taken List<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
     RaiseAt List<I32>       # S18d: a Raise's span's start whose trace line says RaiseWhat's text (typed.Body's)
     RaiseWhat List<String&>
+    # D18: a generator's Next - the lambda its body is (typed.Body.Gen), a coroutine: each call through its value runs
+    # it from where it suspended (Term.Suspend) to its next Suspend or its end, a Raise - its Exhausted.END (GenEnd,
+    # under its own error list) when the body ended - after which every call fails with GenEnd
+    Gen Bool = false
+    GenEnd I64 = 0
 }
 
 # S18d: what a Raise at sp says in a kept error return trace: its text where one was given, "" for "raised here"
@@ -911,6 +920,11 @@ fn (v mut verifier&) termShape(t Term) {
             if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " $c) }
         }
         case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { v.operand(x) }
+        case Term.Suspend(_, x, b, held) {
+            v.operand(x)
+            v.block(b)
+            v.within(held, v.F.Refs.Len(), "scope refs")
+        }
         case Term.Wait(_, j, ok, code, failed) {
             v.scope(j)
             v.block(ok)
@@ -934,6 +948,7 @@ fn (v mut verifier&) succs(t Term) Array<BlockId> {
         case Term.Call(_, c) => (BlockId[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
                                  else BlockId[f.Calls[I64(c)].Ok, f.Calls[I64(c)].Err])
         case Term.Wait(_, _, ok, _, failed) => BlockId[ok] if failed == NoBlock else BlockId[ok, failed]
+        case Term.Suspend(_, _, b, _) => BlockId[b]
         case _ => BlockId[]
     }
 }
@@ -1601,6 +1616,10 @@ fn (v mut verifier&) termTypes(term Term) {
                 v.want(v.operandType(x), res, "the value returned")
             }
         }
+        case Term.Suspend(_, x, _, _) {
+            if not f.Gen { v.bad("a suspend in a function that is no generator's") }
+            v.want(v.operandType(x), t.Result(f.Ty), "the value yielded")
+        }
         case Term.Raise(_, code) {
             if t.Items(t.Errors(f.Ty)).Len() == 0 { v.bad("a raise in a function that cannot fail") }
             v.intOf(v.operandType(code), I32T, "the error raised")
@@ -1981,6 +2000,11 @@ fn (v mut verifier&) termFlow(term Term) {
             v.reads(x)
             if v.stack.Len() > 0 { v.bad("leaves the function with " $v.stackText() " open") }
         }
+        # S20: the function stays where it is, every scope it has open still open, until it is resumed at b
+        case Term.Suspend(_, x, b, _) {
+            v.reads(x)
+            v.enter(b)
+        }
         case Term.Exit(_, _, x) { v.reads(x) }
         case Term.Wait(_, j, ok, code, failed) {
             if not v.open(j) { v.bad("a wait for S" $j ", which is not open") }
@@ -2220,6 +2244,7 @@ fn (w mut dumper&) term(term Term) String {
         case Term.Call(_, k) => w.call(f.Calls[I64(k)])
         case Term.Return(_, x) => "return" $(" " $w.operand(x) if x != Operand.None else "")
         case Term.Raise(_, x) => "raise " $w.operand(x)
+        case Term.Suspend(_, x, b, held) => "suspend " $w.operand(x) " then bb" $b " holding " $held.N
         case Term.Wait(_, j, ok, code, failed) => ("wait S" $j " then bb" $ok
                                                   $(" failed L" $code " bb" $failed if failed != NoBlock else ""))
         case Term.Exit(_, kind, msg) => "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")

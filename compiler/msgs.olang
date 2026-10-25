@@ -465,6 +465,7 @@ type Diag enum {
     DeferErrorEscapes
     TryNowhereToGo
     TryErrorNotDeclared
+    GenErrorNotDeclared
     UnknownMethod
     MethodNotInherited
     AtomicNotInteger
@@ -547,6 +548,16 @@ type Diag enum {
     ReturnBorrowAsBuilt
     ReturnOwnStorage
     DeferReturns
+    YieldOutside
+    YieldInLambda
+    YieldInDefer
+    YieldInJoin
+    YieldPastDefer
+    GenReturnValue
+    GenErrors
+    YieldOwnStorage
+    GenYieldsBorrow
+    GenReturnScope
     ReturnCount
     ReturnInCtor
     ReturnInTest
@@ -1998,6 +2009,7 @@ fn DeferErrorEscapes() Msg { return Msg(Diag.DeferErrorEscapes, "S19b", "an erro
 fn TryNowhereToGo() Msg { return Msg(Diag.TryNowhereToGo, "R13", "an error tried here has nowhere to go - catch every one it can be") }
 
 # ERR_TRY_ERROR_NOT_DECLARED
+fn GenErrorNotDeclared(ty String&) Msg { return Msg(Diag.GenErrorNotDeclared, "R9, D18", $ty " can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? " $ty ">', or catch it") }
 fn TryErrorNotDeclared(ty String&) Msg { return Msg(Diag.TryErrorNotDeclared, "R9", $ty " can escape here, and this function does not declare it - add it after '?', or catch it") }
 
 # ERR_UNKNOWN_METHOD
@@ -2283,6 +2295,16 @@ fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value
 
 # ERR_DEFER_RETURNS
 fn DeferReturns() Msg { return Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
+fn YieldOutside() Msg { return Msg(Diag.YieldOutside, "D18, S20", "'yield' is a generator's - a function whose result is written 'Iterator<T>'") }
+fn YieldInLambda() Msg { return Msg(Diag.YieldInLambda, "S20", "a lambda is no generator - 'yield' in the function it is written in") }
+fn YieldInDefer() Msg { return Msg(Diag.YieldInDefer, "S19b, S20", "deferred code may not yield - it runs while its block is left") }
+fn YieldInJoin() Msg { return Msg(Diag.YieldInJoin, "S20", "a join block may not yield - its tasks are waited for before it is left") }
+fn YieldPastDefer() Msg { return Msg(Diag.YieldPastDefer, "S20", "a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block") }
+fn GenReturnValue() Msg { return Msg(Diag.GenReturnValue, "D18a", "a generator gives its values by 'yield' - 'return' ends it and takes none") }
+fn GenYieldsBorrow(name String&) Msg { return Msg(Diag.GenYieldsBorrow, "D18c, T22a", "this generator yields what " $("'" $name "'" if name != "" else "a parameter") " refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')") }
+fn YieldOwnStorage() Msg { return Msg(Diag.YieldOwnStorage, "S20, O26", "this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')") }
+fn GenReturnScope() Msg { return Msg(Diag.GenReturnScope, "D18b", "a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator") }
+fn GenErrors(elem String&) Msg { return Msg(Diag.GenErrors, "D18", "a generator fails as its Next does - write its errors in its result: 'Iterator<" $elem " ? E>'") }
 
 # ERR_RETURN_COUNT
 fn ReturnCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.ReturnCount, "D8c", "this function returns " $n1 " value" $text ", found " $n2) }

@@ -609,6 +609,10 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
                 w.exprs(values)
             }
         }
+        case ast.Stmt.Yield(_, x) {
+            w.put("yield ")
+            w.expr(x)
+        }
         case ast.Stmt.Jump(_, kind, msg) {
             w.put(kind.Text())
             if msg is not null {
