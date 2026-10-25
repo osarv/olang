@@ -7827,6 +7827,26 @@ test "E30: literals in chains adapt; indexes of any integer type; arrays of two 
     assert not fzChain(U64(FzLive - 3), 9)
 }
 
+# E30, G12, E3 (the lang25 review, finding 4): a chain whose operands are a name, a member and a parenthesized
+# expression reads as comparisons whatever the names are - type arguments are written touching the name and the "("
+type ChainP struct(n I64) { n }
+fn chainTwo(a Bool, b Bool) I64 { return (1 if a else 0) + (2 if b else 0) }
+fn chainSpaced(k I64) I64 {
+    p := ChainP(k)
+    m := 5
+    d := 0
+    a := k < m > (0)
+    return chainTwo(a, p.n < m > (d)) + chainTwo(p.n < m, m > (d)) * 4
+}
+ChainSpacedBaked I64 = chainSpaced(3)
+
+test "E30, G12: a chain spaced as comparisons is one, never type arguments" {
+    assert ChainSpacedBaked == 15
+    assert chainSpaced(FzLive) == ChainSpacedBaked and chainSpaced(FzLive + 9) == 8
+    x := 300
+    assert (try x.Narrow<I16>() catch default 0) == 300
+}
+
 # E30 (the second any review, finding 4): a literal in a chain is typed in each comparison beside that comparison's
 # other operand, as the chain written out with "and" is - an F32 and an F64 neighbour each take it at their own type,
 # and an I8 and a U64 neighbour need not meet; an operand that runs is still evaluated once - baked and run alike

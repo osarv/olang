@@ -2669,9 +2669,12 @@ type, where it names the instantiation whose constructor is being called (G10a),
 the instance being called (G12). A method call takes them too, after the method's name: `x.Narrow<I32>()`,
 `xs.Map<U>(f)` (G12). Where `IDEN <` begins type arguments rather than a comparison is decided by the name - a type,
 or a generic function, the module declares or reaches through its imports' aliases - and otherwise, after any name,
-by what follows (C#'s rule): a `<` whose tokens up to its matching `>` are those a type is made of (names, `.`, `,`,
-`&`, `?`, `mut`, `fn`, `return`, parentheses), on one line, with `(` directly after that `>`, begins type arguments
-of a call. So `a < b and c > (d)` is a comparison, and `f<I32>(x)` a call, whatever `f` is.
+by what follows (C#'s rule): a `<` written directly after the name, whose tokens up to its matching `>` are those a
+type is made of (names, `.`, `,`, `&`, `?`, `mut`, `fn`, `return`, parentheses), on one line, with `(` directly after
+that `>` - no space on either side - begins type arguments of a call. So `f<I32>(x)` and `x.Narrow<I32>()` are calls,
+whatever `f` is, and `a < b and c > (d)`, `k < m > (0)` and `p.n < m > (d)` - spaced as comparisons are written - are
+comparisons (E30's chains among them). Written with spaces and an empty `()` after, which no comparison has
+(`x.Narrow <I32> ()`), it is a compile-time error naming the touching form.
 
 **E4.** `literal ::= BOOL_LIT | NULL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
@@ -7161,7 +7164,7 @@ are what the type arguments say and nothing the arguments are (G9 binds none of 
 instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
 constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a
 length an array taken by value gives (G29) - is a value in no instance; called, such variables are inferred from its
-arguments as always. A **method** takes type arguments the same way, written after its name at a call - `x.Narrow<I32>()`,
+arguments as always. A **method** takes type arguments the same way, written directly after its name at a call (E3) - `x.Narrow<I32>()`,
 `xs.Map<U>(f)` - one for each variable its list introduces that its receiver's type does not name, in the list's
 order: `fn (l List<T>&) Map<U>(f fn(x T) U) List<U>` takes `U`, the receiver's `T` being the receiver's; `fn (x T)
 Narrow<T Number, U Number>() U ? NumberError` takes `U`. Those not written are inferred from the arguments, the

@@ -1,0 +1,8 @@
+# check: fail error[G12]: type arguments are written touching the name and the '(': 'Narrow<...>(...)'
+# G12, E3 (the lang25 review, finding 4): type arguments by C#'s rule are written touching the name and the "(" - with
+# spaces "<" and ">" compare, and an empty "()" after, which no comparison has, says to write them touching
+fn main() ? {
+    x := 300
+    v := try x.Narrow <I32> ()
+    assert v == 300
+}

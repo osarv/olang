@@ -1214,12 +1214,22 @@ fn (p Parser&) closesAngle() Bool {
     return k == token.Tok.Gt or k == token.Tok.Shr or k == token.Tok.Ge or k == token.Tok.ShrEq
 }
 
-# G12, C#'s rule: whether the "<" n tokens ahead opens a type-argument list a call follows - the tokens types are made
-# of (names, ".", ",", "&", "?", "mut", "fn", "return", parentheses), angle brackets balanced on one line, and "("
-# directly after the closing ">". So "x.Narrow<I32>()" and "f<T>(a)" are calls given type arguments, as a known
-# generic function's or type's name always is; "a < b and c > (d)" is a comparison
-fn (p Parser&) typeArgsCall(n I64) Bool {
-    if p.look(n) != token.Tok.Lt { return false }
+# G12, C#'s rule: whether the "<" n tokens ahead opens a type-argument list a call follows - the "<" directly after the
+# name, the tokens types are made of (names, ".", ",", "&", "?", "mut", "fn", "return", parentheses), angle brackets
+# balanced on one line, and "(" directly after the closing ">". So "x.Narrow<I32>()" and "f<T>(a)" are calls given type
+# arguments, as a known generic function's or type's name always is; "a < b and c > (d)" and "k < m > (0)" are
+# comparisons
+fn (p Parser&) typeArgsCall(n I64) Bool { return p.typeArgsShape(n) == 2 }
+
+# whether the "<" n tokens ahead would open type arguments by C#'s rule but for the spaces around them, with "()"
+# after - which no comparison has: written "f <T> ()" for "f<T>()"
+fn (p Parser&) spacedTypeArgs(n I64) Bool { return p.typeArgsShape(n) == 1 }
+
+# 0: no type-argument list; 1: the tokens of one with "()" after, spaced from the name or the "("; 2: one touching both
+fn (p Parser&) typeArgsShape(n I64) I64 {
+    if p.look(n) != token.Tok.Lt or p.half != token.Tok.Eof { return 0 }
+    before := p.prevEnd if n == 0 else p.lookTok(n - 1).End
+    touching := p.lookTok(n).Start == before
     depth I64 = 0
     parens I64 = 0
     i := n
@@ -1234,17 +1244,21 @@ fn (p Parser&) typeArgsCall(n I64) Bool {
         } else if k == token.Tok.LParen {
             parens++
         } else if k == token.Tok.RParen {
-            if parens == 0 { return false }
+            if parens == 0 { return 0 }
             parens--
         } else if k != token.Tok.Iden and k != token.Tok.Dot and k != token.Tok.Comma and k != token.Tok.Amp and
                   k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return {
-            return false
+            return 0
         }
-        if depth < 0 { return false }
-        if depth == 0 { return parens == 0 and p.look(i + 1) == token.Tok.LParen }
+        if depth < 0 { return 0 }
+        if depth == 0 {
+            if parens != 0 or p.look(i + 1) != token.Tok.LParen { return 0 }
+            if touching and p.lookTok(i).End == p.lookTok(i + 1).Start { return 2 }
+            return 1 if p.look(i + 2) == token.Tok.RParen else 0
+        }
         i++
     }
-    return false
+    return 0
 }
 
 # "<" where one opens a type-argument or a type-parameter list
@@ -2469,8 +2483,9 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                     # alias.big<I64>: a generic function's instance through an import (G12)
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
-                } else if p.typeArgsCall(0) {
-                    # x.Narrow<I32>(): a method's type arguments, by C#'s rule (G12)
+                } else if p.typeArgsCall(0) or p.spacedTypeArgs(0) {
+                    # x.Narrow<I32>(): a method's type arguments, by C#'s rule (G12) - written with spaces, said
+                    if p.spacedTypeArgs(0) { p.report(p.here(), p.lookTok(0).End, msgs.TypeArgsSpaced(p.names.Text(n))) }
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
                 }
@@ -2698,8 +2713,9 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
                 return try p.literalAfterType(at, x)
             }
-            if k2 == token.Tok.Lt and (p.oracle.fns.Has(name) or p.typeArgsCall(1)) {
+            if k2 == token.Tok.Lt and (p.oracle.fns.Has(name) or p.typeArgsCall(1) or p.spacedTypeArgs(1)) {
                 # a generic function's instance: big<I64>(x), f := big<I64> (G12)
+                if not p.oracle.fns.Has(name) and p.spacedTypeArgs(1) { p.report(p.lookTok(1).Start, p.lookTok(1).End, msgs.TypeArgsSpaced(p.text(t))) }
                 p.advance()
                 targs := try p.typeArgs()
                 return ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
