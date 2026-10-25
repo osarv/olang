@@ -1,0 +1,15 @@
+import "std/io"
+type Bad error { X }
+fn f(n I64) I64 ? Bad {
+    if n < 0 { error Bad.X }
+    return n
+}
+fn g(n I64) I64 ? Bad {
+    a := try f(n) + 1
+    b := 2 * try f(n) + 3
+    c := try f(n) * 2 + try f(n + 1)
+    d := try f(n) catch default 5 + 1
+    e := checked (n + 1)
+    return a + b + c + d + e
+}
+fn main() ? Bad { io.Println($(try g(3)))! }

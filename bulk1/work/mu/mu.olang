@@ -1,0 +1,53 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    l List<mut Node&>
+}
+
+# gives a value moved out of l - as far as the analysis's must-facts see after their eight rounds - but what it gives
+# at run time is other, passed down a chain of locals written last to first
+fn pick<T>(l mut List<T>&, other T) T {
+    a1 T = other
+    a2 T = other
+    a3 T = other
+    a4 T = other
+    a5 T = other
+    a6 T = other
+    a7 T = other
+    a8 T = other
+    a9 T = other
+    a10 T = other
+    a11 T = other
+    a12 := try l.Pop() catch { unreachable }
+    for k in range 14 {
+        a12 = a11
+        a11 = a10
+        a10 = a9
+        a9 = a8
+        a8 = a7
+        a7 = a6
+        a6 = a5
+        a5 = a4
+        a4 = a3
+        a3 = a2
+        a2 = a1
+        a1 = other
+    }
+    return a12
+}
+
+fn main() {
+    h := Holder()
+    for i in range 6 {
+        tmp mut List<mut Node&>&h = List<mut Node&>()
+        tmp.Push(Node(i))
+        h.l.Push(pick(tmp, Node(100 + i)))     # judged a move out of the List's place: no region of its own
+        if h.l.Len() > 2 { try h.l.Pop() catch { } }   # a dropped move: its region released
+    }
+    for x in h.l { io.Println(x.t)! }
+}

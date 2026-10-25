@@ -1,0 +1,59 @@
+import "std/io"
+
+type E error { X, Y }
+
+Log mut I64 = 0
+Live mut I64 = 0
+
+fn note(k I64) { Log = Log * 10 + k }
+
+fn fails(n I64) ? E {
+    if n == 1 { error E.X }
+}
+
+fn a(n I64) I64 ? E {
+    defer note(1)
+    errdefer note(2)
+    {
+        defer note(3)
+        errdefer note(4)
+        if n == 0 { return 7 }
+        try fails(n)
+    }
+    errdefer note(5)
+    if n == 2 { error E.Y }
+    return 9
+}
+
+fn b(n I64) I64 ? E {
+    errdefer note(6)
+    try join {
+        defer note(7)
+        errdefer note(8)
+        spawn try fails(n)
+    }
+    return 3
+}
+
+fn c(n I64) I64 {
+    v := try a(n) catch E.X default -1 catch E.Y default -2
+    w := try b(n) catch E default -3
+    return v * 100 + w
+}
+
+fn all(z I64) String {
+    s := ""
+    for n in range z, z + 3 {
+        Log = 0
+        r := c(n)
+        s = $s " " $r ":" $Log
+    }
+    return s
+}
+
+Baked := all(0)
+
+fn main() {
+    io.Println(Baked)!
+    io.Println(all(Live))!
+}

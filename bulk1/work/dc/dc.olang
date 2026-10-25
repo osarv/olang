@@ -1,0 +1,22 @@
+import "std/io"
+
+Ends mut I64 = 0
+
+type Res struct(n I64) {
+    n
+} destruct {
+    Ends += 1
+}
+
+fn main() {
+    t I64 = 0
+    for i in range 4 {
+        r := Res(i)
+        if i == 1 {
+            r.Destroy()
+            continue
+        }
+        t += r.n
+    }
+    io.Println($t " " $Ends)!
+}
