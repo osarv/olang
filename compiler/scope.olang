@@ -5213,7 +5213,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             box := s.anyBox
             s.anyBox = false
             s.buildSite(pr.Site, d, pr.X.Span())
-            s.anyItems = box and isMake(pr.X)
+            s.anyItems = box and anyArrayBox(pr.X)
             if s.anyItems and pr.Site >= typed.SiteId(0) and I64(pr.Site) < s.plan.AnyNew.Len() {
                 s.plan.AnyNew[I64(pr.Site)] = s.anyBoxNew(pr.X)
             }
@@ -6204,9 +6204,11 @@ fn (s mut Scoper&) buildsIntoSet(c typed.Call&, i I64, pt types.TypeId, v I64, t
     return s.calleeBuilds(c, s.bodyOf(c.Target), v)
 }
 
-fn isMake(x typed.Expr&) Bool {
+# whether a promote's value is an "any"'s box for an array: the one-part tuple holding it (T32a) - an instance of any
+# other type is put in the box as it is, its parts judged as its own kind's (T17c's payload, a field)
+fn anyArrayBox(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Make(_, _, _) => true
+        case typed.Expr.Make(_, _, m) => m.Kind == typed.MakeKind.Tuple and m.Items.Len() == 1
         case _ => false
     }
 }

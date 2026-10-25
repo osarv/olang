@@ -1,0 +1,19 @@
+# check: fail error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+# never: this array's elements
+# T17c, T32a (the second any review, finding 6): an enum case made an any is put in the box as it is, so what its payload
+# refers to is judged as a payload's - not as the elements of an array copied into the box
+type Named trait {
+    Name() String
+}
+type Tag enum {
+    Txt(s String&)
+    Nil
+}
+fn (t Tag) Name() String { return "tag" }
+fn main() {
+    xs := List<any Named&>()
+    for i in range 4 {
+        s := "e" $i
+        xs.Push(Tag.Txt(s))
+    }
+}
