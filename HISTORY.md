@@ -24221,7 +24221,9 @@ returned, 2M calls, fills 130 MB -> 1.8 MB and literals 82 MB -> 1.7 MB. The blo
 (checks/cases/server, frames, ast, mapremove). A Vec growing to 50M elements peaks at 1.05 GB, round 1's figure: its
 old buffers go back to the thread's pool, not to the system, and `mremap` growth was not adopted (it would need a Vec's
 buffer to be the only allocation of its mapping). The analysis takes about 0.8 s of the compiler's own build (8,300
-bodies), the scope phase 0.6 s -> 1.3 s; memory unchanged.
+bodies), the scope phase 0.6 s -> 1.3 s; memory unchanged. `bench/`: every row's instruction count (callgrind,
+`-target x86-64-v3`, small sizes) equal to round 4's compiler within 14 instructions - none of its programs lets a
+long-lived place go - and its wall times within the shared machine's noise.
 
 **The gate (5.5): nothing reads a freed region.** Three oracles, all clean: the evaluator's dead-region mode
 (`OLANG_DEADREGIONS=1`: a released region is reclaimed and a read of what it held stops evaluation as an internal
