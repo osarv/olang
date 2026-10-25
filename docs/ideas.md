@@ -10,7 +10,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | # | Feature | From | Status |
 |---|---|---|---|
 | 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `fn f(...) Iterator<T>` with `yield`, both compilers |
-| 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
+| 2 | Compile-time reflection | Zig, Rust derive | built 2026-10-25 (SPEC 12.8, G32-G38); `json.Encode`/`Decode` of any value |
 | 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
 | 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
@@ -90,6 +90,9 @@ field attributes. Both compilers (a language construct). The text below is the o
   writes `try src.Field(p.Name, p.Type) catch DecodeError.MISSING default p.Default`. A reflected member's type is
   usable as a type, constant per instance (`fn arg<P>(p P, ...) P.Type`).
 - Reflection on a value is a generic call (`Describe(x)` binds T); no `x.Type`.
+
+**Built 2026-10-25** (SPEC 12.8, G32-G38; CLAUDE.md, HISTORY.md "Compile-time reflection"): as decided, the kind enum
+named `TypeKind`; a case descriptor called builds its case (`c(args)`); std/json encodes and decodes any value.
 
 **What:** generic code that walks a type's fields and enum cases while compiling, with no run-time type information.
 
@@ -347,5 +350,5 @@ It reuses the struct machinery wholesale.
 **Not:** std gets no `Option<T>` or `Result<T, E>` - those are `null` and `? E` in olang, and stay so.
 
 **Built 2026-10-25** (SPEC G6b; CLAUDE.md, HISTORY.md): as described, with `$` writing a case without its enum's
-arguments (`Opt.Some(4)`); `T.Cases` waits for reflection.
+arguments (`Opt.Some(4)`); `T.Cases` reads an instance's cases (built with reflection, 2026-10-25).
 

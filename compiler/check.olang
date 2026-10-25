@@ -9058,8 +9058,13 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 c.gap(nsp, "a call of this kind")
                 return c.unknown(sp)
             }
-            # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)"
-            if generic.ProjectsType(c.text(n)) {
+            # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)" - unless the
+            # name is a case of the enum named ("ast.Decl.Type(...)")
+            et0 := c.typeNamed(x)
+            caseNamed := et0 >= types.TypeId(0) and c.isEnum(et0) and c.hasCase(et0, n)
+            gd0 := c.genericNamed(x)
+            if gd0 >= types.DeclId(0) and c.P.T.DeclKindOf(gd0) == types.DeclKind.Enum { caseNamed = true }
+            if generic.ProjectsType(c.text(n)) and not caseNamed {
                 rt := c.reflType(f)
                 if rt == types.UnknownT {
                     c.dropArgs(args)
