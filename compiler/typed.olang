@@ -344,6 +344,18 @@ fn ScopedCall(c Call&) Bool {
     }
 }
 
+# whether an expression is a call given a scope argument, converted or not: an array value whose storage is where the
+# scope argument says (E25), never built where the expression stands
+fn ScopedArray(x Expr&) Bool {
+    return match x {
+        case Expr.Call(_, _, c) => ScopedCall(c)
+        case Expr.Prim(_, _, op, _, args) => PassesRefs(op) and args.Len() > 0 and ScopedArray(args[0])
+        case Expr.Away(_, _, y) => ScopedArray(y)
+        case Expr.Seq(_, _, q) => q.X is not null and ScopedArray(q.X!)
+        case _ => false
+    }
+}
+
 # T32a: whether the array an "any"'s box holds is provably new storage, built where the box is - then the box holds it
 # as it is; anything else the box copies. One answer for every pass that makes a box - the scope pass, lowering with or
 # without a plan, so the compile-time evaluator too. A conditional, a match or a try is new only if every value it can

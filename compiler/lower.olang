@@ -728,7 +728,11 @@ fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
     return match x {
         case typed.Expr.Read(_, _, _, _) => true
         # a fixed array a reference names, converted (it names that storage)
-        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and derefOf(args[0]) is not null
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or typed.ScopedArray(args[0]))
+        # a call given a scope argument builds its array where that says, which may close first (E25)
+        case typed.Expr.Call(_, _, c) => typed.ScopedCall(c)
+        case typed.Expr.Away(_, _, y) => ln.copiesArray(y, ty)
+        case typed.Expr.Seq(_, _, q) => q.X is not null and ln.copiesArray(q.X!, ty)
         case _ => false
     }
 }
