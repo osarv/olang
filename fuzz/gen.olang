@@ -556,7 +556,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
             et I32 = g.vt[e] - 200
             for c in range g.en[et] {
                 if g.epn[et * 4 + c] == 1 and g.ept[(et * 4 + c) * 2] == t {
-                    return "(try (" $g.use(e) " as E" $g.ci "_" $et ".C" $c ") catch default " $g.lit(t) ")"
+                    return "(try " $g.use(e) " as E" $g.ci "_" $et ".C" $c " catch default " $g.lit(t) ")"
                 }
             }
         }
@@ -1973,7 +1973,8 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
     if g.vlen[a] > 0 and g.chance(50) { n = g.vlen[a] }
     v String& = "(" $g.use(a) "[0:" $n "])"
     if n == g.vlen[a] and g.chance(60) { return $v "[" $g.r(n) "]" }
-    return "(try " $v ".Get(" $g.solid(g.idxT(), d - 1) ") catch default " $g.lit(t) ")"
+    # the slice checked as the index is: n may pass the array's length
+    return "(try " $g.use(a) ".SliceOf(0, " $n ").Get(" $g.solid(g.idxT(), d - 1) ") catch default " $g.lit(t) ")"
 }
 
 # a conversion to t of x - of a literal, which a conversion requires fits (D17g), a literal of t in its place

@@ -188,21 +188,21 @@ modgold: build/compiler_tools_dump build/compiler_tools_modgraph
 # the seed need not be - an older seed builds the current source as long as that source uses nothing the seed's
 # compiler lacks - and "make seed" writes it again from the current source. The third build reuses every object of the
 # second (an object is named by its IR) when the two compilers write the same IR, so it costs seconds.
-SEED = seed
-SEED_FILES = $(wildcard $(SEED)/*.ll.xz)
-SEED_OBJ = $(patsubst $(SEED)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
+SEED_DIR = seed
+SEED_FILES = $(wildcard $(SEED_DIR)/*.ll.xz)
+SEED_OBJ = $(patsubst $(SEED_DIR)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
 SEED_CLANG ?= clang
 # the compiler that builds the seed tool: the one make bootstrap installed (made by its steps when missing). Which one it
 # is changes nothing in the seed - the tool runs the current source's passes over the current source
 SEED_OLANG = build/olang
 
-build/seed/%.o: $(SEED)/%.ll.xz
+build/seed/%.o: $(SEED_DIR)/%.ll.xz
 	@mkdir -p build/seed
 	xz -dc $< > build/seed/$*.ll
 	$(SEED_CLANG) -O2 -c build/seed/$*.ll -o $@
 
 build/olang.seed: $(SEED_OBJ)
-	@test -n "$(SEED_OBJ)" || { echo "bootstrap: no seed in $(SEED)/ - make seed writes one"; exit 1; }
+	@test -n "$(SEED_OBJ)" || { echo "bootstrap: no seed in $(SEED_DIR)/ - make seed writes one"; exit 1; }
 	$(SEED_CLANG) $(SEED_OBJ) -o $@ -lm -lpthread -ldl -lffi
 
 define BOOTSTRAP
@@ -259,13 +259,13 @@ build/compiler_tools_seed: $(SEED_OLANG) compiler/tools/seed.olang $(wildcard co
 
 seed: build/compiler_tools_seed
 	OLANG_STD=std build/compiler_tools_seed build/seed.new
-	@mkdir -p $(SEED)
-	@for f in $(SEED)/*.ll.xz; do \
+	@mkdir -p $(SEED_DIR)
+	@for f in $(SEED_DIR)/*.ll.xz; do \
 		[ -e "$$f" ] || continue; b=$$(basename $$f .xz); [ -e build/seed.new/$$b ] || rm -f $$f; done
 	@for f in build/seed.new/*.ll; do \
 		b=$$(basename $$f); \
-		if [ -e $(SEED)/$$b.xz ] && xz -dc $(SEED)/$$b.xz | cmp -s - $$f; then continue; fi; \
-		echo "seed: $(SEED)/$$b.xz"; xz -9 -T1 -c $$f > $(SEED)/$$b.xz; done
+		if [ -e $(SEED_DIR)/$$b.xz ] && xz -dc $(SEED_DIR)/$$b.xz | cmp -s - $$f; then continue; fi; \
+		echo "seed: $(SEED_DIR)/$$b.xz"; xz -9 -T1 -c $$f > $(SEED_DIR)/$$b.xz; done
 
 run: $(OLANG)
 	$(OLANG_ENV) $(OLANG) build tests/runner.olang
