@@ -41,14 +41,14 @@ type BasePoint struct(X I32, Y I32) {
     Y
 }
 
-error BaseError {
+type BaseError error {
     BROKEN
 }
 
 # the same rule for error words: a lowercase word is this module's own. "quiet" cannot be NAMED from
 # another module, but the type still can, so a foreign catch can handle "some BaseQuiet" without being
 # able to say which one - see runner.olang.
-error BaseQuiet {
+type BaseQuiet error {
     quiet
 }
 

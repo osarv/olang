@@ -174,7 +174,7 @@ fn callExtent(l String&, col I64) I64, I64 ? {
     return start, k + 1
 }
 
-error Unparsed {
+type Unparsed error {
     CALL
     SIGNATURE
 }

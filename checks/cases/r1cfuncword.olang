@@ -1,6 +1,6 @@
 # check: fail error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
 # R1c/T22: a function value fits a type whose set holds every word it can fail with
-error LE {
+type LE error {
     EMPTY
     GONE
 }

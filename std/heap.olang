@@ -7,7 +7,7 @@
 # is a second name for the same heap.
 
 # what a Heap's operations fail with: a Peek or Pop of an empty heap
-error Error {
+type Error error {
     EMPTY
 }
 

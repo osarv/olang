@@ -149,7 +149,7 @@ type Date struct(Year I64, Month I64, Day I64, Hour I64 = 0, Minute I64 = 0, Sec
 
 # what Parse fails with: text that is not an RFC 3339 date and time (SYNTAX), or one naming a day, hour, minute, second
 # or offset that does not exist (RANGE)
-error Error {
+type Error error {
     SYNTAX
     RANGE
 }

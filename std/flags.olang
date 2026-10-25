@@ -21,7 +21,7 @@
 # why Parse failed - Message() says it in a sentence, naming the argument: HELP: "-h" or "--help" was given; UNKNOWN: a
 # flag nothing declared; MISSING: a flag that takes a value came last; BAD_VALUE: a value that is not the flag's type;
 # DECLARED_TWICE: two declarations share a name or a short name
-error Error {
+type Error error {
     HELP
     UNKNOWN
     MISSING

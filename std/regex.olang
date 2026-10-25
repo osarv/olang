@@ -32,7 +32,7 @@ import "utf8"
 # why a pattern does not compile: a group or class not closed, an escape that is not one, a repetition with nothing
 # to repeat or a count past 1000 or inverted, a class range written backwards, a group name repeated or not a name, a
 # flag that is not one, or a program too large (over 100,000 instructions once counted repetitions are written out)
-error SyntaxError {
+type SyntaxError error {
     UNCLOSED_GROUP
     UNMATCHED_PAREN
     UNCLOSED_CLASS
@@ -45,7 +45,7 @@ error SyntaxError {
 }
 
 # what Find fails with when the pattern matches nowhere, and Group when a group took part in no match
-error NotFound {
+type NotFound error {
     NOT_FOUND
 }
 

@@ -1,9 +1,9 @@
 # check: fail error[R14]: the call does not fail with F
 # P4a: a task's clause names what its call can fail with, as any clause does
-error E {
+type E error {
     BAD
 }
-error F {
+type F error {
     NOPE
 }
 fn work(n I32) ? E {

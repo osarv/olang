@@ -1,9 +1,9 @@
 # check: fail error[R11]: a try written as a statement gives no value, so it takes no default
-error E {
+type E error {
     A
     B
 }
-error F { C }
+type F error { C }
 fn f() I32 ? E, F { error E.A }
 fn main() ? E { }
 fn t() I32 ? E {

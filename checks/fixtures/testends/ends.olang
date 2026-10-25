@@ -100,7 +100,7 @@ test "the stack's code ran, and the caller's handle was destructed" { assert OnS
 
 # S16, S18d: an error a try lets out of a test fails it, naming the error, with the places it went
 Depth mut I64 = 3    # read at run time, so no assert below is decided while compiling (S18c)
-error FxErr {
+type FxErr error {
     GONE
 }
 fn inner(n I64) I64 ? {

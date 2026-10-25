@@ -2,7 +2,7 @@
 # E11c/R9a: a call in a catch default whose result scope is still landing takes the try's result scope - here the
 # receiver's node, f's result being borrowed from it - so the walk counts it where the default lands (C1)
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 type Node struct(v I64) {

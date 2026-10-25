@@ -14,7 +14,7 @@ import "interp"
 import typecheck "check"
 
 # a name the root module does not declare
-error Missing { NAME }
+type Missing error { NAME }
 
 # the item name names in module mi - "Type.Method" for a method - as text ending in a line break
 fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? Missing {

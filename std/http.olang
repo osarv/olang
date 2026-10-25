@@ -14,7 +14,7 @@
 import "os"
 
 # why no response arrived
-error Error {
+type Error error {
     NO_CURL             # the curl program is not installed (not on PATH), or cannot be run
     BAD_URL             # the URL is malformed, or names a scheme other than http and https
     INVALID             # a method, a header or a URL that cannot be sent as given - a line break or a zero byte in
@@ -43,7 +43,7 @@ type Response struct(Status I32, Headers Array<Header>&, Body String&) {
 }
 
 # what a response's Header fails with: no field by that name
-error HeaderError {
+type HeaderError error {
     MISSING
 }
 

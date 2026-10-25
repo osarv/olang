@@ -6,7 +6,7 @@ type Box struct() {
 }
 fn (b mut Box&) Put(n I32) { b.n = n }
 fn feed<W Writer>(w W&) { w.Put(1) }
-error E { X }
+type E error { X }
 fn main() ? E {
     b Box& = Box()
     feed(b)

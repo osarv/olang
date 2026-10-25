@@ -1,5 +1,5 @@
 # check: fail error[S17]: 'break' may not leave an assert's message
-error E {
+type E error {
     BAD
 }
 fn h(k I64) I64 ? E {

@@ -1,7 +1,7 @@
 # check: run
 # E35/B4: "!" ends the program on what fails as written, so main needs no "?" for it; here nothing fails
 import "std/io"
-error E {
+type E error {
     BAD
 }
 fn half(n I64) I64 ? {

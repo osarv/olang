@@ -1,5 +1,5 @@
 # E35, P4, P6: "spawn f(x)!" - the task's failure ends the program from its thread, in a -d build and under -i too
-error TaskErr {
+type TaskErr error {
     LOST
 }
 Left mut I64 = 0

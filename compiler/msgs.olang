@@ -662,6 +662,9 @@ type Diag enum {
     ContractNeedsArgumentError
     ConversionDoesNotFit
     NoteContractCondition
+    NotAnErrorType
+    ErrorSetHoldsItself
+    ErrorWordOfMember
 }
 
 # one function each, under the id it is known by
@@ -1009,6 +1012,15 @@ fn UnknownFunctionMeant(tok String&, text String&) Msg { return Msg(Diag.Unknown
 
 # ERR_UNKNOWN_ERROR_TYPE
 fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok) }
+
+# ERR_ERROR_SET_HOLDS_ITSELF
+fn ErrorSetHoldsItself(tok String&, text String&) Msg { return Msg(Diag.ErrorSetHoldsItself, "T19a", $tok " reaches itself through its member '" $text "' - a set holds its members' errors, never itself") }
+
+# ERR_ERROR_WORD_OF_MEMBER
+fn ErrorWordOfMember(tok String&, ty String&) Msg { return Msg(Diag.ErrorWordOfMember, "T19a", "word " $tok " is " $ty "'s too, a member of this set - name it another way") }
+
+# ERR_NOT_AN_ERROR_TYPE
+fn NotAnErrorType(tok String&) Msg { return Msg(Diag.NotAnErrorType, "R1", $tok " is no error type - an error set names error types, their words and named sets") }
 
 # ERR_FUNC_TYPE_ERRS_UNWRITTEN
 fn FuncTypeErrsUnwritten() Msg { return Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? io.Error' - since no body says what it is") }

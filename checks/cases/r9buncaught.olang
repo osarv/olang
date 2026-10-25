@@ -1,9 +1,9 @@
 # check: fail error[R9]: F can escape here, and this function does not declare it
-error E {
+type E error {
     A
     B
 }
-error F { C }
+type F error { C }
 fn f() I32 ? E, F { error E.A }
 fn main() ? E { }
 fn t() I32 ? E {

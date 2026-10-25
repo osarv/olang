@@ -483,7 +483,7 @@ fn (x T) Clamp<T Number>(lo T, hi T) T {
 # ---- the integers' methods ----
 
 # what an integer's square root fails with, and a narrowing x.Narrow<T>(), which the compiler supplies (E26b)
-error NumberError {
+type NumberError error {
     NEGATIVE       # a negative value, which has no square root among the integers
     OVERFLOW       # a narrowing that changes the value: an integer out of T's range, a finite float made infinite
     INVALID        # a NaN or an infinity narrowed to an integer

@@ -1,5 +1,5 @@
 # check: fail B9a
-error E { X }
+type E error { X }
 A I32 = B
 B I32 = A
 if A == 1 {

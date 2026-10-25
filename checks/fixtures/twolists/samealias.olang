@@ -1,4 +1,4 @@
 import "std/io"
 import "io"
-error E { X }
+type E error { X }
 fn main() ? E { }

@@ -1,5 +1,5 @@
 # check: fail error[S17]: an error may not leave an assert's message - catch it here
-error E {
+type E error {
     BAD
 }
 fn h(k I64) I64 ? E {

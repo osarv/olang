@@ -2,7 +2,7 @@
 # P2: a lambda made inside the join block lives in the block it was made in - a task calling through it could
 # outlive it
 type Slot struct() { v I32 = 0 }
-error E { X }
+type E error { X }
 fn main() ? E {
     s mut Slot& = Slot()
     join {

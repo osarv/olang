@@ -172,7 +172,7 @@ type CommandLine struct() {
 }
 
 # a mistake in the command line: reported to the diagnostics already
-error Bad { USAGE }
+type Bad error { USAGE }
 
 fn usage(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
@@ -936,7 +936,7 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(String&["help"]) == "no mistake: help"
 }
 
-explainedSrc String& = ("error MathError { ZERO }\n"
+explainedSrc String& = ("type MathError error { ZERO }\n"
                      "type N struct(v I64, next N?&) { v, next }\n"
                      "fn (n N&) Value() I64 { return n.v }\n"
                      "type H struct(n N&) { n }\n"

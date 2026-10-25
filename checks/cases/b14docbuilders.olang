@@ -12,7 +12,7 @@
 # also:     fn Of<T>(x T) Pair<T>
 # a module whose functions that build a type are listed under it (B14): the type's one constructor, then the others
 
-error ColorError { BAD }
+type ColorError error { BAD }
 
 type Color struct(R U8, G U8, B U8) { }
 

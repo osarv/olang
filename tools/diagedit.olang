@@ -23,7 +23,7 @@ type Request struct(Path String&, Line I64, Col I64, Kind String&, Arg String&, 
 Taken mut I64 = 0
 
 # what ParseRow fails with: the row is no compiler diagnostic
-error NotARow {
+type NotARow error {
     ROW
 }
 

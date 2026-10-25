@@ -231,7 +231,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv is not null, null)
             }
             case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
-            case ast.Decl.Errors(sp, name, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
+            case ast.Decl.Errors(sp, name, _, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
             case ast.Decl.Global(_, v) {
                 for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
             }
@@ -261,7 +261,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.If(_, ti) { r.waitAside(mi, ti) }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
             case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
-            case ast.Decl.Errors(_, name, _) { t.waiting.Put(name, true) }
+            case ast.Decl.Errors(_, name, _, _) { t.waiting.Put(name, true) }
             case ast.Decl.Global(_, v) {
                 for n in v.Names { t.waiting.Put(n, true) }
             }
@@ -534,6 +534,10 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
             case ast.Decl.Test(_, _, body) {
                 r.startItem(mi)
                 r.block(body)
+            }
+            case ast.Decl.Errors(_, _, _, members) {
+                r.startItem(mi)
+                for m in members { r.path(m) }
             }
             nomatch { }
         }

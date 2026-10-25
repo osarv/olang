@@ -3,7 +3,7 @@ type Dir enum {
     North
     South
 }
-error E { X }
+type E error { X }
 fn main() ? E {
     choice := Dir.South
     assert choice != Dir.North

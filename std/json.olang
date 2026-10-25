@@ -18,7 +18,7 @@
 # is written into a Position its caller passes ("try json.Parse(text, at)"), when it passes one.
 
 # why a text is not JSON, or what a question asked of a value could not answer
-error Error {
+type Error error {
     UNEXPECTED          # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control
                         # character in a string
     UNTERMINATED        # the text ends inside a string, an array or an object - or before any value at all

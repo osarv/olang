@@ -16,7 +16,7 @@ import "diag"
 import "msgs"
 import "std/os"
 
-error Fail { SYNTAX }
+type Fail error { SYNTAX }
 
 # L21: how deep blocks, operands and operator chains may nest
 MaxNesting I64 = 20000
@@ -568,20 +568,6 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             try p.endStmt()
             return ast.Decl.Extern(ast.Func(sp, null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
         }
-        case token.Tok.Error {
-            p.advance()
-            name := try p.name()
-            try p.want(token.Tok.LBrace)
-            from := p.ids.Len()
-            p.skipEnds()
-            for not p.sees(token.Tok.RBrace) {
-                w := try p.name()
-                p.ids.Push(w)
-                try p.entryEnd()
-            }
-            p.advance()
-            return ast.Decl.Errors(p.from(at), name, gather(p.ids, from))
-        }
         case token.Tok.Test {
             p.advance()
             if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
@@ -669,10 +655,48 @@ fn (p mut Parser&) topBranch() ast.TopBranch&p ? Fail {
 fn (p mut Parser&) typeDecl() ast.Decl&p ? Fail {
     at := try p.want(token.Tok.Type)
     name := try p.name()
+    if p.sees(token.Tok.Error) { return try p.errorDecl(at, name) }
     return try p.typeDeclRest(at, name) catch {
         p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, p.typeParamsRead, false, null)))
         error Fail.SYNTAX
     }
+}
+
+# "type Name error [Member, ...] [{ WORDS }]" (T19, T19a): an error type's words, a named set's members on the line
+# after "error", or both - at least one of the two, the braces last
+fn (p mut Parser&) errorDecl(at I32, name source.NameId) ast.Decl&p ? Fail {
+    p.advance()
+    ms mut List<ast.Path&>&p = List<ast.Path&>()
+    if p.sees(token.Tok.Iden) {
+        for {
+            ms.Push(try p.path())
+            if not p.accept(token.Tok.Comma) { break }
+        }
+    }
+    words Array<source.NameId>&p = Array<source.NameId>(0)
+    if p.sees(token.Tok.LBrace) {
+        words = try p.errorWords()
+    } else if ms.Len() == 0 {
+        try p.fail("an error type's words or a set's members")
+    }
+    sp := p.from(at)
+    if p.sees(token.Tok.StmtEnd) { p.advance() }
+    return ast.Decl.Errors(sp, name, words, ms.ToArray())
+}
+
+# an error type's words: "{" then one per line, or several on one line separated by "," (T19, QY), at least one
+fn (p mut Parser&) errorWords() Array<source.NameId>&p ? Fail {
+    try p.want(token.Tok.LBrace)
+    from := p.ids.Len()
+    p.skipEnds()
+    if p.sees(token.Tok.RBrace) { try p.fail("an error word") }
+    for not p.sees(token.Tok.RBrace) {
+        w := try p.name()
+        p.ids.Push(w)
+        try p.entryEnd()
+    }
+    p.advance()
+    return gather(p.ids, from)
 }
 
 fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl&p ? Fail {
@@ -2214,6 +2238,14 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
                 if not p.accept(token.Tok.Comma) { break }
             }
         }
+        # R11b: a name after the items, the error the clause took ("catch os.Error e")
+        bind := source.NameId(0)
+        bsp := source.Span(0, 0)
+        if items.Len() > 0 and p.sees(token.Tok.Iden) {
+            bt := p.tk()
+            bind = try p.name()
+            bsp = source.Span(bt.Start, bt.End)
+        }
         body Array<ast.Stmt&>&p = Array<ast.Stmt&>(0)
         braced := p.sees(token.Tok.LBrace)
         if braced { body = try p.block() }
@@ -2226,7 +2258,7 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
             try p.fail(token.Tok.LBrace.Describe())
         }
         defaults := gather(p.exprs, from)
-        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced))
+        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced, bind, bsp))
     }
     return l.ToArray()
 }

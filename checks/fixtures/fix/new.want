@@ -1,7 +1,7 @@
 # written when a type variable was <T> everywhere, an error set joined by +, and io's error was IoError
 import "std/io"
 
-error Bad { WORD }
+type Bad error { WORD }
 
 fn id<T>(x T) T { return x }
 

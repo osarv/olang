@@ -17,7 +17,7 @@
 # map, which every call checks (O10b).
 
 # what a Map's Get fails with: no value for the key
-error MapError {
+type MapError error {
     MISSING
 }
 

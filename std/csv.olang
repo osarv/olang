@@ -28,7 +28,7 @@
 # Record, one line of text each, to wherever text goes (an io.Writer, a StringBuilder).
 
 # why a text is not CSV
-error Error {
+type Error error {
     BARE_QUOTE          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
     TEXT_AFTER_QUOTE    # something other than a separator or a line break after a field's closing quote: "a"b
     BAD_SEPARATOR       # a separator that is a quote or a line break, which could never be told apart from the text

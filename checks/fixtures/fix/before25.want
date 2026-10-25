@@ -2,7 +2,7 @@
 # the result - which olang fix rewrites where the meaning holds and lists where the text cannot settle it
 import "std/io"
 import "std/os"
-error E { BAD }
+type E error { BAD }
 type Shape enum {
   Circle(r F64)
   Square(s F64)

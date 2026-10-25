@@ -44,7 +44,7 @@ fn helper() I64 { return 1 }
 Limit I64 = 10     # how many shapes at most
                    # continues the trailing comment
 
-error ShapeError { NONE }   # no shape at all
+type ShapeError error { NONE }   # no shape at all
 
 # a box
 type Box struct(W F64, H F64) {

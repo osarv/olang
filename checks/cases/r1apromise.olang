@@ -1,9 +1,9 @@
 # check: fail can escape here, and this function does not declare it
 # R1: a written error set is a promise the body is held to - only "?" alone takes on what the body can fail with
-error A {
+type A error {
     X
 }
-error B {
+type B error {
     Y
 }
 fn g(n I64) ? B {

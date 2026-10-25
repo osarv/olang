@@ -3288,7 +3288,7 @@ test "a function lowers to straight-line MIR: its operands in temporaries, its f
 
 test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
     text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
-             "error E {\n    BAD\n    WORSE\n}\n"
+             "type E error {\n    BAD\n    WORSE\n}\n"
              "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
              "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
              "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"

@@ -1,6 +1,6 @@
 # check: fail error[R9]: LE.GONE can escape here, and this function does not declare it
 # R1c/R9: a try letting through a word the written set does not name
-error LE {
+type LE error {
     EMPTY
     GONE
 }

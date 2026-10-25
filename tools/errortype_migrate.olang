@@ -1,0 +1,128 @@
+# errortype_migrate - an error type is declared as a type (T19, 2026-10-25, the user's call): "error IoError { FULL }"
+# becomes "type IoError error { FULL }". A declaration is the keyword "error" first in its statement, a name, then "{" -
+# an error statement ("error IoError.FULL", "error e") never has a "{" after its name, and "type L error A {" (a set with
+# words of its own) has a name before its "error", so neither is touched and running the tool again changes nothing.
+# Comments and string literals are left alone (programs written inside strings are migrated by hand). Files are
+# rewritten in place and a count printed; --check writes nothing and the exit status says whether anything would
+# change. A Markdown file has its "```olang" blocks migrated.
+#
+#     $OLANG build tools/errortype_migrate.olang && build/tools_errortype_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+type Count struct() { n I64 = 0 }
+
+fn migrate(src String&, c mut Count&) String {
+    ts := scan.Scan(src).Toks
+    out := StringBuilder()
+    at I64 = 0
+    for i in range ts.Len() - 2 {
+        t := ts[i]
+        if t.Kind != token.Tok.Error or ts[i + 1].Kind != token.Tok.Iden or ts[i + 2].Kind != token.Tok.LBrace { continue }
+        # first in its statement: first on its line, or after the end of one or a brace
+        if i > 0 and not t.Has(token.LineBreak) {
+            k := ts[i - 1].Kind
+            if k != token.Tok.StmtEnd and k != token.Tok.LBrace and k != token.Tok.RBrace { continue }
+        }
+        name := ts[i + 1]
+        out.Push(src[at:I64(t.Start)])
+        out.Push("type ")
+        out.Push(src[I64(name.Start):I64(name.End)])
+        out.Push(" error")
+        at = I64(name.End)
+        c.n++
+    }
+    if at == 0 { return src }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks migrated, the rest kept
+fn migrateMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    inBlock := false
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        last := k == lines.Len() - 1
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), n))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if not last { out.PushChar('\n') }
+    }
+    if inBlock { out.Push(block.ToString()) }
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_errortype_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("errortype_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrateMarkdown(src, total) if path.EndsWith(".md") else migrate(src, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("errortype_migrate: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " declarations")
+    if check and changed > 0 { os.Exit(1) }
+}
+
+test "an error type declared with its keyword first becomes a type; statements and new declarations are left" {
+    n := Count()
+    assert migrate("error IoError { FULL, DENIED }\n", n) == "type IoError error { FULL, DENIED }\n"
+    assert migrate("error E {\n    A\n    B\n}\nfn f() ? E { error E.A }\n", n) == "type E error {\n    A\n    B\n}\nfn f() ? E { error E.A }\n"
+    assert migrate("if TestBuild {\n    error T { X }\n}\n", n) == "if TestBuild {\n    type T error { X }\n}\n"
+    src := "type E error { A }\ntype L error io.Error, E { T }\ntype M error E {\n    U\n}\nfn g() ? L {\n    try f() catch E e { error e }\n}\n# error X { Y }\ns := \"error Z { W }\"\n"
+    assert migrate(src, n) == src
+    assert migrate("type S extends Array<Char>\n\nerror P {\n    E\n}\n", n) == "type S extends Array<Char>\n\ntype P error {\n    E\n}\n"
+    assert n.n == 4
+    assert migrateMarkdown("text\n```olang\nerror E { A }\n```\nerror F { B }\n", n) == "text\n```olang\ntype E error { A }\n```\nerror F { B }\n"
+}

@@ -1,6 +1,6 @@
 # check: fail this operator calls Minus, which can fail - write 'try' before the expression
 # E31: an operator whose method can fail fails as written, so it is written under try as a call is
-error MoneyError {
+type MoneyError error {
     NEGATIVE
 }
 type Money struct(c I64) {

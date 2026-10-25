@@ -72,18 +72,25 @@ fn (w mut writer&) decl(d ast.Decl&) {
             }
             w.span(path)
         }
-        case ast.Decl.Errors(_, name, words) {
-            w.put("error ")
+        case ast.Decl.Errors(_, name, words, members) {
+            w.put("type ")
             w.name(name)
-            w.put(" {")
-            w.ind++
-            for x in words {
-                w.nl()
-                w.name(x)
+            w.put(" error")
+            for i, m in members {
+                w.put(", " if i > 0 else " ")
+                w.path(m)
             }
-            w.ind--
-            w.nl()
-            w.put("}")
+            if words.Len() > 0 {
+                w.put(" {")
+                w.ind++
+                for x in words {
+                    w.nl()
+                    w.name(x)
+                }
+                w.ind--
+                w.nl()
+                w.put("}")
+            }
         }
         case ast.Decl.Test(_, name, body) {
             w.put("test ")
@@ -495,7 +502,10 @@ fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
             w.put(", " if i > 0 else " ")
             w.path(it)
         }
-
+        if c.Bind != source.NameId(0) {
+            w.put(" ")
+            w.name(c.Bind)
+        }
         if c.Braced {
             w.put(" ")
             w.block(c.Body)

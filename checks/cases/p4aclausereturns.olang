@@ -1,7 +1,7 @@
 # check: fail error[P4a]: a task's clause runs on the task and may not return - it ends where its block does
 # P4a: a task's clause is code of the task, a function of its own - a return there would leave the task, not the spawner
 import "std/io"
-error E {
+type E error {
     BAD
 }
 fn work(n I32) ? E {

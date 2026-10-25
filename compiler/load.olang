@@ -160,14 +160,14 @@ fn (l mut Loader&) LoadPrelude() {
     for f in files { l.load(f, l.rootIdentity(f), true) }
 }
 
-# a file's type and error names, in every branch: "type Name", and "error Name {" (an error statement has no name)
+# a file's type names, error types and sets included, in every branch: "type Name"
 fn typeNames(text String&, ts scan.Tokens&) List<String&>&text {
     out mut List<String&>&text = List<String&>()
     toks := ts.Toks
     for i in range toks.Len() - 2 {
         k := toks[i].Kind
         if toks[i + 1].Kind != token.Tok.Iden { continue }
-        if k == token.Tok.Type or (k == token.Tok.Error and toks[i + 2].Kind == token.Tok.LBrace) {
+        if k == token.Tok.Type {
             out.Push(text[toks[i + 1].Start:toks[i + 1].End])
         }
     }
@@ -489,7 +489,7 @@ fn (l mut Loader&) loadImports(mi I64) {
 }
 
 # resolve's failure, already reported: an import that names no file it may reach
-error unresolved {
+type unresolved error {
     IMPORT
 }
 

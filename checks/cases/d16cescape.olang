@@ -5,5 +5,5 @@ fn leak() fn(n I32) I32 {
     p Point& = Point(5)
     return fn(n) { return n + p.x }
 }
-error E { X }
+type E error { X }
 fn main() ? E { }

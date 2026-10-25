@@ -1,6 +1,6 @@
 # check: fail error[R3]: this function's '?' names LE.EMPTY, not this word - add it after '?'
 # R1c/R3: a written set naming words is held word by word - an 'error' statement may raise only those
-error LE {
+type LE error {
     EMPTY
     GONE
 }

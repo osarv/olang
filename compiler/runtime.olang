@@ -22,7 +22,7 @@ FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2]
 FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1]
 
 # a runtime file that is not there or cannot be read as a runtime file: said already
-error Bad { UNREADABLE }
+type Bad error { UNREADABLE }
 
 fn archRow(arch String&) I64 {
     for i in range Archs.Len() {

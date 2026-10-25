@@ -1,10 +1,10 @@
 # check: run
 # R1a/D16b: a lambda's errors found from its body are in an inferred set's canonical order, whatever order they
 # appear in, so it fits a function type writing them in that order
-error Zeta {
+type Zeta error {
     Z
 }
-error Alpha {
+type Alpha error {
     A
 }
 N mut I64 = 1

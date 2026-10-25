@@ -73,7 +73,7 @@ fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, thread
     return loss / F32(batch)
 }
 
-error Usage {
+type Usage error {
     ARGS
 }
 

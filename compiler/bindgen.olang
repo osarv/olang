@@ -63,7 +63,7 @@ type cFunc struct(Name String&, Type String&, Params Array<String&>&, Static Boo
     Static
 }
 
-error Skip { WHY }
+type Skip error { WHY }
 
 # what was read from clang's tree
 type gen struct(header String&) {

@@ -5,7 +5,7 @@
 # R11: a catch clause in value position whose block ends in a value, as Rust or Kotlin write it, is one error saying to
 # give the value with "default" (study 4's r20)
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 fn half(n I64) I64 ? {

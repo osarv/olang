@@ -334,7 +334,7 @@ test "T32a: arrays and conversions of them are copied into the box" {
 # T32a (the second any review, finding 1): an array chosen by a conditional, a value match or a catch default is
 # existing storage too, so the box copies it - a block's text put in an any that outlives the block reads back after
 # the arena churns, and writing through a mut any changes the box, never the text it was made of
-error ChOops {
+type ChOops error {
     BAD
 }
 fn chBad(k I64) String ? ChOops {

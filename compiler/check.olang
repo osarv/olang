@@ -611,7 +611,6 @@ fn (c mut Checker&) attempt() {
         if c.P.FnIsExtern(f) or not c.P.FnDecl(f).Bodied { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
-        c.errorSetKnown(f)
         if c.P.FnDecl(f).Recv is null and c.P.FnDecl(f).S.Commutes {
             c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
             c.err(c.nameSpan(c.P.FnDecl(f)), msgs.CommutesNotHere(c.tok(c.P.FnDecl(f).Name)))
@@ -635,21 +634,6 @@ fn (c mut Checker&) attempt() {
     c.drain()
     c.failForms()
     c.roSettle()
-}
-
-# R1: every item of a function's written error set names an error type, or one of its words
-fn (c mut Checker&) errorSetKnown(f I64) {
-    fd := c.P.FnDecl(f)
-    if fd.S.Errors.Len() == 0 { return }
-    mi := c.P.FnModule(f)
-    ctx := generic.Context(mi, -1)
-    for e in fd.S.Errors {
-        if e.Parts.Len() == 0 or c.P.ErrorType(ctx, e) != types.UnknownT { continue }
-        n := e.Parts.Len()
-        if n >= 2 and c.P.ErrorType(ctx, ast.Path(e.Sp, e.Parts[:n - 1])) != types.UnknownT { continue }
-        text := c.P.L.Mods[mi].Src!.Text[I64(e.Sp.Start):I64(e.Sp.End)]
-        c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(e.Sp.Start), I64(e.Sp.End)), msgs.UnknownErrorType(msgs.Tok(text)))
-    }
 }
 
 # X2: what crosses the C boundary - a number or a Bool, an extern type's reference (X10), a plain-data struct by value or
@@ -1205,9 +1189,101 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.traitContracts(mi, td)
             }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
+            case ast.Decl.Errors(esp, name, words, members) {
+                c.push(-1, mi, types.VoidT, types.ListId(0))
+                c.errorDeclRules(mi, esp, name, words, members)
+                c.pop()
+            }
             nomatch { }
         }
     }
+}
+
+# T19, T19a: an error type's words differ; a named set's members are error types, their words or sets, none reaching
+# the set again, and its own words repeat no word of a member's
+fn (c mut Checker&) errorDeclRules(mi I64, sp source.Span, name source.NameId, words Array<source.NameId>&
+                                   members Array<ast.Path&>&) {
+    file := c.P.L.Mods[mi].File
+    text := c.P.L.Mods[mi].Src!.Text
+    for i in range words.Len() {
+        for j in range i {
+            if words[j] == words[i] {
+                at := wordAt(text, I64(sp.Start), c.text(words[i]), 2)
+                c.P.L.Diags.Error(diag.Where.Span(file, at, at + c.text(words[i]).Len()), msgs.ErrorWordInUse(c.tok(words[i])))
+            }
+        }
+    }
+    if members.Len() == 0 { return }
+    ctx := generic.Context(mi, -1)
+    ok := true
+    for m in members {
+        if not c.P.ErrorItemKnown(ctx, m) { ok = false }
+    }
+    if not ok { return }
+    ei := c.P.TypeEntry(mi, name)
+    if ei < 0 { return }
+    me := c.P.DeclFor(mi, ei)
+    nsp := source.Span(sp.Start + 5, sp.Start + 5 + I32(c.text(name).Len()))
+    # T19a: a set reaching itself through its members stands for nothing
+    for m in members {
+        if c.setReaches(c.P.ErrorSetItem(ctx, m), me, 0) {
+            c.P.L.Diags.Error(diag.Where.Span(file, I64(nsp.Start), I64(nsp.End)), msgs.ErrorSetHoldsItself(c.tok(name), c.src(m.Sp)))
+            return
+        }
+    }
+    if words.Len() == 0 { return }
+    es List<types.TypeId>
+    for m in members { c.P.ErrorSetEntries(ctx, m, es) }
+    for w in words {
+        for e in es {
+            if e == types.UnknownT { continue }
+            ws := c.P.ErrorWords(c.P.T.DeclOf(c.P.T.ErrOf(e)))
+            mask := c.P.T.ErrMask(e)
+            for k in range ws.Len() {
+                if ws[k] == w and (k >= 64 or (mask & (U64(1) << k)) != 0) {
+                    at := wordAt(text, I64(sp.Start), c.text(w), 1)
+                    c.P.L.Diags.Error(diag.Where.Span(file, at, at + c.text(w).Len()), msgs.ErrorWordOfMember(c.tok(w), c.ty(c.P.T.ErrOf(e))))
+                }
+            }
+        }
+    }
+}
+
+# whether error set entry t reaches declaration d through the members of the sets it is (T19a)
+fn (c mut Checker&) setReaches(t types.TypeId, d types.DeclId, depth I64) Bool {
+    if t == types.UnknownT or c.P.T.KindOf(t) != types.Kind.Named or depth > 64 { return false }
+    td := c.P.T.DeclOf(t)
+    if td == d { return true }
+    ms := c.P.ErrorMembers(td)
+    if ms.Len() == 0 { return false }
+    mc := generic.Context(c.P.T.DeclModule(td), -1)
+    for m in ms {
+        if c.setReaches(c.P.ErrorSetItem(mc, m), d, depth + 1) { return true }
+    }
+    return false
+}
+
+# where word w is written in a declaration's braces, its k-th time there (1 the first): its offset, the declaration's
+# start where it is not found
+fn wordAt(text String&, from I64, w String&, k I64) I64 {
+    i := from
+    for i < text.Len() and text[i] != '{' { i++ }
+    seen I64 = 0
+    for i < text.Len() and text[i] != '}' {
+        if text[i] == '#' {
+            for i < text.Len() and text[i] != '\n' { i++ }
+            continue
+        }
+        if text[i:].StartsWith(w) and not text[i - 1].IsLetter() and not text[i - 1].IsDigit() and text[i - 1] != '_' {
+            e := i + w.Len()
+            if e >= text.Len() or not (text[e].IsLetter() or text[e].IsDigit() or text[e] == '_') {
+                seen++
+                if seen == k { return i }
+            }
+        }
+        i++
+    }
+    return from
 }
 
 # what a type declaration may be over (T29) and extend (T29f)
@@ -11148,6 +11224,19 @@ fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
             w I64 = -1
             if et == types.UnknownT { w, et = c.errorWord(p) }
             if et == types.UnknownT { continue }
+            # T19a: a named set names what the operand can fail with where one of its entries does
+            if c.P.IsErrorSet(et) {
+                es List<types.TypeId>
+                c.P.EntriesOf(et, es)
+                some := false
+                for e in es {
+                    for h in have {
+                        if e != types.UnknownT and c.P.T.ErrOf(h) == c.P.T.ErrOf(e) and (c.P.T.ErrMask(h) & c.P.T.ErrMask(e)) != 0 { some = true }
+                    }
+                }
+                if not some { c.err(c.pathPart(p, 0), msgs.CatchNotProduced(c.ty(et))) }
+                continue
+            }
             entry := types.UnknownT
             for h in have {
                 if c.P.T.ErrOf(h) == et { entry = h }
@@ -11200,16 +11289,32 @@ fn (c mut Checker&) caught(mark I64, end I64, cls List<typed.Clause&>&) I64 {
     return left
 }
 
-# a catch clause's item: an error type, or one of its words (R10)
+# a catch clause's item: an error type, or one of its words (R10); a named set every entry it stands for (T19a)
 fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
     et := c.P.ErrorType(c.fr().Ctx, p)
     if et != types.UnknownT {
-        items.Push(typed.Item(et, -1))
+        if not c.P.IsErrorSet(et) {
+            items.Push(typed.Item(et, -1))
+            return
+        }
+        es List<types.TypeId>
+        c.P.EntriesOf(et, es)
+        for e in es {
+            if e == types.UnknownT { continue }
+            if c.P.T.KindOf(e) != types.Kind.ErrWords {
+                items.Push(typed.Item(e, -1))
+                continue
+            }
+            m := c.P.T.ErrMask(e)
+            for w in range 64 {
+                if (m & (U64(1) << w)) != 0 { items.Push(typed.Item(c.P.T.ErrOf(e), w)) }
+            }
+        }
         return
     }
     w, et2 := c.errorWord(p)
     if w < 0 {
-        c.gap(p.Sp, "a catch item the checker cannot find")
+        c.P.ErrorItemKnown(c.fr().Ctx, p)
         return
     }
     items.Push(typed.Item(et2, w))
@@ -12951,10 +13056,7 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
         # R1a: "?" alone is what the body is found to fail with, as a function's is
         inferErrs = true
     } else if f.S.HasErrors {
-        es List<types.TypeId>
-        if f.S.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
-        for e in f.S.Errors { es.Push(c.P.ErrorType(c.fr().Ctx, e)) }
-        errs = c.P.T.List(es.ToArray())
+        errs = c.P.ErrorList(c.fr().Ctx, true, f.S.Errors)
     } else if w != types.UnknownT {
         errs = c.P.T.Errors(w)
     } else {
@@ -13711,7 +13813,7 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path?&) {
     if word is null { return }
     w, et := c.errorWord(word)
     if w < 0 {
-        c.gap(sp, "an error word the checker cannot find")
+        c.P.ErrorItemKnown(c.fr().Ctx, word)
         return
     }
     raised := c.P.T.ErrWords(et, U64(1) << w) if w < 64 else et
@@ -15609,7 +15711,7 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
 test "join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
                        "fn work(n I64) { }\n"
                        "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
                        "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { return }\n"
@@ -15627,7 +15729,7 @@ test "join and spawn: targets, failing tasks, clauses on the task, try join (P1,
 test "join and spawn errors (P1, P1a, P4, P4c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("error E {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
+    l := testLoad(dir, ("type E error {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
                        "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
@@ -15641,7 +15743,7 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
 test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (R1a, R1c, E26b, D8e, E35)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
                        "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
                        "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
                        "fn half(a I32, b I32) I32 ? E.B { return try I64(a).Narrow<I32>() catch NumberError default 0 }\n"
@@ -15662,7 +15764,7 @@ test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
+    l := testLoad(dir, ("type E error {\n    A\n    B\n}\ntype F error {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
                        "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
                        "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
                        "fn n() I32 { return try 1 + 2 catch default 0 }\nfn q() I32 { return 3! }\n"

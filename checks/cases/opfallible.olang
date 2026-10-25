@@ -1,7 +1,7 @@
 # check: run
 # E31/QQ1: a plain operator method may declare errors - the operator then fails as written, under 'try' like a call
 # (it used to be E31a's "Mul cannot fail")
-error VErr {
+type VErr error {
     ZERO
 }
 type V struct(x I32) {
