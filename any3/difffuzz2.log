@@ -1,1 +1,2 @@
 seed 9639 case -1: does not compile at -d (step 1)
+fuzz: 200 programs, 5970 cases (5970 globals baked while compiling), 1 findings (in /home/user/wt/rvany3/build/fz/rungSv70I)

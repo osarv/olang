@@ -1,0 +1,2 @@
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: p_2ec29 yet
+olang: error: the self-hosted compiler cannot build this yet: p.olang:1846:27: it does not lower an unknown type (a check error or gap): an expression yet

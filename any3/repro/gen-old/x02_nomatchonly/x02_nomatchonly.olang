@@ -1,0 +1,28 @@
+import "std/io"
+# S12b (outside the any work, found by the differential fuzzer, seed 9639): a value match whose only clause is a
+# nomatch is typed unknown with no error - lowering then stops with an internal gap
+fn c(x0 I8) I8 {
+    a := match x0 { nomatch => I8(x0) }
+    return a
+}
+fn main() {
+    say($c(100))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

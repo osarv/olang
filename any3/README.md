@@ -143,7 +143,14 @@ run-time-length `{len, ptr}` pair:
   '{ i64, ptr }'"). Interpret says "a value compile-time evaluation does not model".
 - Without the conversion, the same arrays work, through an any too (`c19`).
 
-### 8. Fuzzer drift (older): the differential generator writes an index that E16 rejects
+### 8. CONFIRMED internal gap (older, outside the any work): a value match with only a `nomatch` is typed unknown, silently
+
+The differential fuzzer found this (seed 9639, `fuzzfound/9639`). `x := match x0 { nomatch => I8(x0) }` gets no type
+error, but its type is unknown, so lowering stops: "the self-hosted compiler cannot build this yet: ... does not lower
+an unknown type (a check error or gap)". Interpret says "calls a function whose body is not available". Reproducer:
+`x02_nomatchonly`. f29a774 does the same.
+
+### 9. Fuzzer drift (older): the differential generator writes an index that E16 rejects
 
 `gen.olang`'s `checked x[...]` index can be the U64 literal `18446744073709551615`, but "a literal index is an I64"
 (E16, `T6` error). The seed is then reported as "does not compile at -d (step 1)" (`fuzzfound/9031`, line 1580 of its
@@ -203,5 +210,8 @@ run-time-length `{len, ptr}` pair:
 
   It writes no scope arguments, so findings 1 and 2 are outside its shapes. The same holds for finding 3's shape: a
   callee storing a borrow of what it returns.
-- **Differential fuzzer**, seeds 9000-9149: 150 programs, 4,470 cases, every global baked. Its one finding is the
-  generator drift in 8. A second batch is in `difffuzz2.log`.
+- **Differential fuzzer**, every global baked while compiling:
+  - seeds 9000-9149: 150 programs, 4,470 cases. Its one finding is the generator drift in 9;
+  - seeds 9500-9699: 200 programs, 5,970 cases. Its one finding is the nomatch gap in 8.
+
+  The generator writes no anys, so it only covers the round's checker changes (chains, literals).
