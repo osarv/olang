@@ -419,3 +419,7 @@ on sight per rules.md, "Code rules".
 - 2026-10-25 CEST: wt-small2 MERGED (db11954, verified; fast-forward): errdefer (S19e), embed (E38), generic enums
   (G6b; `Tree<I64>.Leaf(3)`, bare `Tree.Leaf(3)` inferred). Not fixed (found): a global whose initializer failed is
   still read by the evaluator - `X := String(1)` then `assert X.Len() > 0` adds a second S18c error. Queue it.
+- 2026-10-25 22:50 CEST: refl merged (e28a90f): compile-time reflection G32-G38 (T.Fields/Cases/Params..., unrolled
+  walks, match T on traits, building through constructors), json.Encode(any value)/json.Decode<T>. Verified at abf8c93
+  (goldens recaptured at 5e47b17). Left: nullability not reflected (no T.Nullable), `x Tree.Cases` unknown silently,
+  G38 vs G13 wording. mem47 (rounds 4/6/7) is merging this tip, then verifies.
