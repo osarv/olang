@@ -3769,7 +3769,7 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     }
     offs, total := m.taskLayout(f, k, fi)
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
-    buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16, aValue, js)
+    buf := m.allocate(total + 8 * nt + 16 * nc + 8 * ns + 16 + 8 * nt, aValue, js)
     if m.halted { return }
     for i in range k.Args.N {
         x := f.Ops[I64(k.Args.At) + i]
@@ -3791,6 +3791,14 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     match k.Target {
         case mir.Callee.Value(x) { m.put(fi, Ptr(buf.Id, at), m.opType(fi, x), x) }
         case _ { }
+    }
+    # P1g: where each target holding an array by value takes a copy of the result - its storage's scope, 0 for none
+    at += 16
+    for i in range k.Copies.N {
+        r := f.Refs[I64(k.Copies.At) + i]
+        w I64 = 0
+        if r != mir.ScopeRef.Frame { w = m.scopeOf(fi, r) }
+        m.wr(Ptr(buf.Id, at + 8 * i), 8, w)
     }
     slot := try m.freeTasks.Pop() catch default m.newTaskSlot()
     tk := task()
@@ -3916,13 +3924,39 @@ fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) 
     nt := I64(k.Targets.N)
     if nt == 0 { return }
     src := m.addr(fi, x, 1)
-    if nt == 1 {
-        m.copy(m.rdPtr(Ptr(tk.Buf, total)), src, m.size(xt))
+    for i in range nt {
+        dst := m.rdPtr(Ptr(tk.Buf, total + 8 * i))
+        pt := xt if nt == 1 else m.partType(xt, i)
+        from := src if nt == 1 else Ptr(src.Id, src.Off + m.partOffset(xt, i))
+        if i < I64(k.Copies.N) and m.T.KindOf(m.T.Repr(pt)) == types.Kind.Array and m.T.Length(m.T.Repr(pt)) == types.TypeId(0) {
+            cs := m.rd(Ptr(tk.Buf, total + 8 * nt + 16 * I64(k.Clauses.N) + 8 * I64(k.Scopes.N) + 16 + 8 * i), 8)
+            m.arrayTarget(dst, from, pt, cs)
+            continue
+        }
+        m.copy(dst, from, m.size(pt))
+    }
+}
+
+# P1g, T11b: an array value stored into a task's target as the assignment it is - its elements written into the
+# storage the target holds where the length is unchanged, else the target given its storage, or a copy of it made in
+# scope cs (0: none) where that assignment copies
+fn (m mut Machine&) arrayTarget(dst Ptr, src Ptr, ty types.TypeId, cs I64) {
+    od, on := m.arrayView(dst, ty)
+    sd, sn := m.arrayView(src, ty)
+    es := m.size(m.elemOf(ty))
+    if on == sn {
+        m.copy(od, sd, sn * es)
         return
     }
-    for i in range nt {
-        m.copy(m.rdPtr(Ptr(tk.Buf, total + 8 * i)), Ptr(src.Id, src.Off + m.partOffset(xt, i)), m.size(m.partType(xt, i)))
+    if cs == 0 {
+        m.copy(dst, src, 16)
+        return
     }
+    p := m.allocate(sn * es, aValue, cs)
+    if m.halted { return }
+    m.copy(p, sd, sn * es)
+    m.wr(dst, 8, sn)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
 }
 
 # whether the task in slot is "spawn f(x)!", its failure ending the program (E35)

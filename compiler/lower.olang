@@ -1154,12 +1154,34 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             if ln.dead { return }
             ends := mir.Empty
             if banged { ends = ln.F.Args(ln.bangNames(ln.T.Errors(ty), sp)) }
+            # a target holding an array by value is stored as the assignment it is judged as (P1g, T11b): a copy where
+            # that assignment copies, made where the target's storage is
+            cps := mir.Range(0, 0)
+            if ln.valueTargets(sw) {
+                xs := Array<mir.ScopeRef>(sw.Targets.Len())
+                for i in range sw.Targets.Len() {
+                    xs[i] = mir.ScopeRef.Frame
+                    tg := sw.Targets[i]
+                    if tg is not null and ln.valueArray(tg.Type()) and ln.copiesArray(task, tg.Type()) {
+                        xs[i] = ln.placeStorage(tg)
+                    }
+                }
+                cps = ln.F.ScopeRefs(xs)
+            }
             k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls, ends
-                              sw.Task.Span())
+                              sw.Task.Span(), cps)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
     }
+}
+
+# whether some target of a spawn holds an array by value (P1g)
+fn (ln mut lowering&) valueTargets(sw typed.Spawn&) Bool {
+    for tg in sw.Targets {
+        if tg is not null and ln.valueArray(tg.Type()) { return true }
+    }
+    return false
 }
 
 # ---- places ----

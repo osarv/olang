@@ -5716,6 +5716,28 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             vals.Push(fe.val(h, fe.otype(h)))
         }
     }
+    # P1g: where a target's copy is made, the target's storage - a stand-in for it, folded at the join (P2), null for
+    # the program's; copyF is each target's field, -1 for none
+    copyF := Array<I64>(I64(k.Targets.N), -1)
+    for i in range k.Copies.N {
+        r := fe.F.Refs[I64(k.Copies.At) + i]
+        match r {
+            case mir.ScopeRef.Frame { }
+            case mir.ScopeRef.Program {
+                copyF[i] = fields.Len()
+                fields.Push("ptr")
+                vals.Push("null")
+            }
+            case _ {
+                e.declare("__olang_standin", "ptr @__olang_standin(ptr)")
+                sub := fe.let("call ptr @__olang_standin(ptr " $fe.scope(r) ")")
+                subs.Push($sub)
+                copyF[i] = fields.Len()
+                fields.Push("ptr")
+                vals.Push($sub)
+            }
+        }
+    }
     et := StringBuilder()
     et.Push("{ ")
     for i in range fields.Len() {
@@ -5749,7 +5771,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     fe.store("ptr", head, fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 2"))
     fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 1"))
     fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 3"))
-    name := fe.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), k, fe.F.Scopes[I64(j)].Errors)
+    name := fe.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), k, fe.F.Scopes[I64(j)].Errors, copyF)
     e.declare("__olang_worker_get", "ptr @__olang_worker_get()")
     e.declare("__olang_worker_start", "void @__olang_worker_start(ptr, ptr, ptr, ptr)")
     w := fe.let("call ptr @__olang_worker_get()")
@@ -5761,7 +5783,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
 # a task's trampoline, fn(ptr env) ptr: the call made from what the environment holds, its results stored, and the
 # error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
 fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, callee String&, ty types.TypeId
-                             nscopes I64, k mir.Task, joinErrs types.ListId) String {
+                             nscopes I64, k mir.Task, joinErrs types.ListId, copyF Array<I64>&) String {
     e := fe.E
     t := e.T
     ntargets := I64(k.Targets.N)
@@ -5772,6 +5794,8 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
     for i in range fields.Len() {
         b.Push("  %f" $i " = getelementptr " $envT ", ptr %env, i32 0, i32 " $i "\n")
     }
+    tfield := (1 if isValue else 0) + t.Items(t.Params(ty)).Len() + nscopes
+    fe.taskOld(b, k, tfield)
     at I64 = 0
     target := callee
     args := StringBuilder()
@@ -5843,7 +5867,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
         code := "%r" if (via or res == types.VoidT) else "%c"
         if code == "%c" { b.Push("  %c = extractvalue " $rt " %r, 0\n") }
         b.Push("  %bad = icmp ne i32 " $code ", 0\n  br i1 %bad, label %fail, label %ok\nfail:\n")
-        fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes)
+        fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes, copyF)
         if k.Ends.N > I32(0) {
             fe.taskEnds(b, code, k)
             b.Push("ok:\n")
@@ -5879,16 +5903,69 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
                 b.Push("  store " $e.ty(parts[i]) " %x" $i ", ptr %d" $i "\n")
             }
         }
+        fe.taskFix(b, k, at + ps.Len() + nscopes, copyF, "s")
     }
     b.Push("  ret ptr null\n}\n\n")
     e.item(name, HomeLocal, b.ToString())
     return name
 }
 
+# whether a task's target i holds an array by value (P1g)
+fn (fe mut fnEm&) valueTarget(k mir.Task, i I64) Bool {
+    if k.Copies.N == I32(0) { return false }
+    t := fe.E.T
+    r := t.Repr(fe.placeType(fe.F.Places[I64(k.Targets.At) + i]))
+    return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
+}
+
+# the value each target holding an array by value has when the task starts, for taskFix
+fn (fe mut fnEm&) taskOld(b mut StringBuilder&, k mir.Task, tfield I64) {
+    for i in range k.Targets.N {
+        if not fe.valueTarget(k, i) { continue }
+        b.Push("  %od" $i " = load ptr, ptr %f" $(tfield + i) "\n  %old" $i " = load { i64, ptr }, ptr %od" $i "\n")
+    }
+}
+
+# P1g, T11b: a target holding an array by value, just given the task's result, stored as the assignment it is - the
+# result's elements written into the storage the target held where the length is unchanged, else the target keeps the
+# result's storage, or a copy of it made where the target's storage is (copyF) where that assignment copies
+fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Array<I64>&, tag String&) {
+    e := fe.E
+    t := e.T
+    for i in range k.Targets.N {
+        if not fe.valueTarget(k, i) { continue }
+        r := t.Repr(fe.placeType(fe.F.Places[I64(k.Targets.At) + i]))
+        el := t.Elem(r)
+        e.P.Layout(el)
+        e.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+        n := "%tf" $tag "_" $i
+        l := "tf" $tag "_" $i
+        b.Push("  " $n "d = load ptr, ptr %f" $(tfield + i) "\n  " $n "v = load { i64, ptr }, ptr " $n "d\n")
+        b.Push("  " $n "n = extractvalue { i64, ptr } " $n "v, 0\n  " $n "p = extractvalue { i64, ptr } " $n "v, 1\n")
+        b.Push("  " $n "on = extractvalue { i64, ptr } %old" $i ", 0\n  " $n "op = extractvalue { i64, ptr } %old" $i ", 1\n")
+        b.Push("  " $n "b = mul i64 " $n "n, " $t.Size(el) "\n  " $n "s = icmp eq i64 " $n "n, " $n "on\n")
+        b.Push("  br i1 " $n "s, label %" $l "i, label %" $l "f\n" $l "i:\n")
+        b.Push("  call void @llvm.memmove.p0.p0.i64(ptr " $n "op, ptr " $n "p, i64 " $n "b, i1 false)\n")
+        b.Push("  store { i64, ptr } %old" $i ", ptr " $n "d\n  br label %" $l "e\n" $l "f:\n")
+        if copyF[i] >= 0 {
+            e.runtime("__olang_scope_alloc")
+            e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
+            b.Push("  " $n "c = load ptr, ptr %f" $copyF[i] "\n  " $n "z = icmp eq ptr " $n "c, null\n")
+            b.Push("  " $n "g = load ptr, ptr @__olang_prog_scope\n  " $n "w = select i1 " $n "z, ptr " $n "g, ptr " $n "c\n")
+            b.Push("  " $n "q = call ptr @__olang_scope_alloc(ptr " $n "w, i64 " $n "b)\n")
+            b.Push("  call void @llvm.memmove.p0.p0.i64(ptr " $n "q, ptr " $n "p, i64 " $n "b, i1 false)\n")
+            b.Push("  " $n "x = insertvalue { i64, ptr } undef, i64 " $n "n, 0\n")
+            b.Push("  " $n "y = insertvalue { i64, ptr } " $n "x, ptr " $n "q, 1\n  store { i64, ptr } " $n "y, ptr " $n "d\n")
+        }
+        b.Push("  br label %" $l "e\n" $l "e:\n")
+    }
+}
+
 # a task's clauses (P4a), in order, over the error code its call failed with: the first one taking it runs its handler
 # on the task's thread, the handler's result the targets' value, and the task ends with no error; one with no handler
 # ("catch E { }") just takes it. What none takes falls through to what follows
-fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty types.TypeId, hfield I64, tfield I64) {
+fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty types.TypeId, hfield I64, tfield I64
+                          copyF Array<I64>&) {
     e := fe.E
     t := e.T
     errs := t.Errors(ty)
@@ -5953,6 +6030,7 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
                         b.Push("  store " $e.ty(parts[i]) " %hx" $ci "_" $i ", ptr %hd" $ci "_" $i "\n")
                     }
                 }
+                fe.taskFix(b, k, tfield, copyF, "c" $ci)
             }
             h++
         }
