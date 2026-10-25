@@ -725,21 +725,33 @@ fn (ln mut lowering&) valueArray(ty types.TypeId) Bool {
 # not a temporary whose storage the target takes
 fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.valueArray(ty) { return false }
-    return copiesValue(x)
+    return ln.copiesValue(x)
 }
 
 # whether x, an array value, is existing storage rather than a temporary whose storage its target takes
-fn copiesValue(x typed.Expr&) Bool {
+fn (ln mut lowering&) copiesValue(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Read(_, _, _, _) => true
-        # a conversion names its argument's storage (T29a): a fixed array a reference names, a place, a scoped call
-        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or copiesValue(args[0]))
+        # a conversion names its argument's storage (T29a): a fixed array a reference names, an array of a run-time
+        # length (a place, a scoped call) - one of fixed storage made a run-time value is copied out, new storage
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or (ln.valueArray(args[0].Type()) and ln.copiesValue(args[0])))
         # a call given a scope argument builds its array where that says, which may close first (E25)
         case typed.Expr.Call(_, _, c) => typed.ScopedCall(c)
-        case typed.Expr.Away(_, _, y) => copiesValue(y)
-        case typed.Expr.Seq(_, _, q) => q.X is not null and copiesValue(q.X!)
+        case typed.Expr.Away(_, _, y) => ln.copiesValue(y)
+        case typed.Expr.Seq(_, _, q) => q.X is not null and ln.copiesValue(q.X!)
         case _ => false
     }
+}
+
+# x with the conversions around it taken off (T29a: each names its argument's storage)
+fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr&x {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(args[0].Type()) { return ln.unconvert(args[0]) }
+        }
+        case _ { }
+    }
+    return x
 }
 
 # the reference a read of what it names reads through, else null
@@ -936,7 +948,8 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     for lv in ln.levels {
         if lv.Kind == mir.ScopeKind.Join { return true }
     }
-    match x {
+    # a conversion names its argument's storage (T29a): the local it reads, under it
+    match ln.unconvert(x) {
         case typed.Expr.Read(_, _, p, _) {
             match p {
                 # a local living in the result scope is the result as it is only where nothing else can name it
