@@ -382,3 +382,5 @@ on sight per rules.md, "Code rules".
   all, usable after `?` and in function types, parenthesized form only inside a list); catch bindings used inside the
   clause (`$e`, `e == Word`, `e == Type` + narrowing, `match e`, `error e`). LEFT OUT (open, (a)/(b)): storing errors
   (assign/pass/fields/type args), the zero value, Result. Migration tool for the declaration syntax; olang fix.
+- 2026-10-25 CEST: wt-builders merged (61bbfe0 + goldens, full verify on the merged tip passed after a container
+  restart killed the first run): doc/explain/lsp list a module's builders under their type (B14/B11b).
