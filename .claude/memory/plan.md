@@ -324,3 +324,14 @@ on sight per rules.md, "Code rules".
   prelude iterator adapters through an any); (6) diagnostic. Fix agent on wt-any with decisions: one shared
   copy-unless-fresh predicate; per-instance method keys; program-wide-demand thunks in the root object (B3d); a chain
   = its written-out form. Another review before merging.
+- 2026-10-25 CEST: any fix round 2 done (wt-any 5d0529f, verified): box copy decided by the scope pass alone
+  (Plan.AnyNew), per-instance methods (M21; overlapping pairs an error - found a duplicate Checker.readLocal),
+  default-slot thunks homed in the root (B3d), chain literal typed per comparison (E30), any R<T>& substitution + G4,
+  adapters through an any refused at the call (limit), B3k empty-lock fix. Third review (narrow, xhigh) running ->
+  /home/user/review/any3; merge if clean.
+- 2026-10-25 CEST: any review 3 (/home/user/review/any3): the round's targets held; found (older) the box trusting any
+  call result as new (UAF via scope arguments `mk&t(i)`), §8 never judging a call with a scope argument where it stands
+  (UAF on master too: `h.p = mkp&t(i)`, `return mkp&t(..)`), a returned local with a second name aliasing; NEW: the
+  evaluator ignores Plan.AnyNew (baked global/assert disagree with run time). Plus AnyNoCopy through references,
+  per-instance Eq, a crash on inline nested arrays in Grid(a), nomatch-only value match, fuzzer drift. Sent back to the
+  fix agent (decisions in its brief); a narrow review of 1-3 after, then merge.
