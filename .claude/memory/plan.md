@@ -317,3 +317,10 @@ on sight per rules.md, "Code rules".
   ToC/StringFromC, net.Lookup/Resolve, `olang bindgen` (zlib, sqlite3 bind and run). Agent decisions 1-6 in HISTORY.
   Open: R9's diagnostic writes another module's error words bare (net.Error.UNREACHABLE) - small fix, queue it.
   Direction question QAS (asked): `p.StringFromC(max)` (E33 precedent) vs type-level functions `String.FromC(p, max)`.
+- 2026-10-25 CEST: any review 2 (/home/user/review/any2): the first review's findings all closed, but new/older:
+  (1) UAF - conditional/match/catch default boxed without a copy (older); (2) two instances' own methods - first wins
+  silently (new); (3) stale lazy default thunk in a reused module object -> unreachable at run time (new); (4) chain
+  literal adapts to its left neighbour for both comparisons (new); (5) older refusals (any R<T>& substitution, G4,
+  prelude iterator adapters through an any); (6) diagnostic. Fix agent on wt-any with decisions: one shared
+  copy-unless-fresh predicate; per-instance method keys; program-wide-demand thunks in the root object (B3d); a chain
+  = its written-out form. Another review before merging.
