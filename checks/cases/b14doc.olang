@@ -9,7 +9,7 @@
 # also: Limit I64 = 10
 # also:     how many shapes at most
 # also:     continues the trailing comment
-# also: error ShapeError
+# also: type ShapeError error
 # also:     no shape at all
 # never:         no shape at all
 # also: type Box struct(W F64, H F64)
