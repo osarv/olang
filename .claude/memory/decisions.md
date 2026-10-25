@@ -1128,3 +1128,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   one generic method + closed trait (rec) vs per-type operator overloads; (3) built-in on the left `2.0 * v`: (a) not
   supported (rec) vs (b) right-hand methods; (4) Checked<T> wrapper + AddChecked methods (rec both); (5) fallible
   operators kept (rec); (6) the operator list unchanged (rec).
+- QAW DECIDED 2026-10-25 (the user: "Keep everything", "keep the try form and require it where there can be errors"):
+  (1) keep operators, (2) one generic method + closed trait, (3) no right-hand methods, (5) fallible operators need try,
+  (6) list unchanged. (4) checked arithmetic moved to the try talk. NEW, the user's idea: `commutes` on an operator
+  method so `2.0 * v` finds `v.Mul(2.0)`, "required the other type never implements the method too". Proposed rules:
+  only + * & | ^; parameter type differs from the receiver's; the other type has no such operator for the pair (both
+  declared = error at the second); operands evaluated as written; keyword after the result like noreturn. ASKED to
+  confirm. NEXT (the user): change try's binding ("probably change the binding of try a bit") and checked with try -
+  asked whether they mean Swift's loose try (covers everything to its right) and what they want of checked.
