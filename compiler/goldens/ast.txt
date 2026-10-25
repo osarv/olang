@@ -1550,7 +1550,7 @@ b13bb956960ffc47 c450e8c6c3141be5 compiler/ast.olang
 2494ab84f96d98b7 bc4bc882c60264bb compiler/bindgen.olang
 d3b1c2e469e9ab8b a5a5eac72897a2c5 compiler/build.olang
 43a0a19252b9d386 9bb98179fabd2ed6 compiler/cabi.olang
-d6200f2740c4cb60 74d7ea0fc08275bc compiler/check.olang
+e3aa951bd667328c ed96791df71962a7 compiler/check.olang
 ad03b6ba630815f1 194b673d1d712003 compiler/cond.olang
 d70e1e3f803ddbb7 fa1d844a4ab40b59 compiler/diag.olang
 e7074ce05610d9ae 0edd055de302c59e compiler/doc.olang
