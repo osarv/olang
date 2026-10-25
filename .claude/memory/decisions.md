@@ -1147,3 +1147,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (3) a default stays a single term (`try f() catch default 0 == 3` compares the result). A try ends at a closing
   bracket, a list's `,`, `catch` or the statement's end; `!` stays postfix and tight. Recommended: do it. ASKED; then
   checked-with-try (the user's next topic).
+- try binding DECIDED 2026-10-25 (the user): try takes the whole following expression, ending at its end or at
+  `catch`; each `,`-separated item of a list is its own expression; after the clauses the expression continues
+  (`try f() catch default 0 + x` does not try the +; a default is one term, compound parenthesized); a try within
+  another's reach is an error (`try f(try g())`); parentheses directly around a try's operand are an error (redundant).
+  Explained `catch default 0` (catch-all clause, fallback value). NEXT: checked with try.
