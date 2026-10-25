@@ -1,0 +1,12 @@
+# check: fail 'Describe' is declared twice for Box<I64> - declare one per instance
+# M21 (the second any review, finding 2): two methods of one name for one instance - the first declared was taken
+# silently; a method of a plain struct declared twice is the same error
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<I64>&) Describe() String { return "one" }
+fn (b Box<I64>&) Describe() String { return "two" }
+fn main() {
+    b := Box<I64>(1)
+    s := b.Describe()
+}

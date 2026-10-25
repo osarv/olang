@@ -280,6 +280,7 @@ type Diag enum {
     MethodOnForeignType
     DefaultShadowsRequired
     MethodClashesInherited
+    MethodOverlap
     MethodClashesSupplied
     MethodOnBuiltinType
     MethodInUse
@@ -1397,6 +1398,9 @@ fn DefaultShadowsRequired(text1 String&, text2 String&) Msg { return Msg(Diag.De
 
 # ERR_METHOD_CLASHES_INHERITED
 fn MethodClashesInherited(ty String&, text String&) Msg { return Msg(Diag.MethodClashesInherited, "T29e", $ty " inherits a method " $text " from its base - choose another name") }
+
+# M21: two methods of one name whose receivers some one instance meets alike
+fn MethodOverlap(name String&, ty String&) Msg { return Msg(Diag.MethodOverlap, "M21", "'" $name "' is declared twice for " $ty " - declare one per instance") }
 
 # ERR_METHOD_CLASHES_SUPPLIED
 fn MethodClashesSupplied(text String&, ty String&) Msg { return Msg(Diag.MethodClashesSupplied, "E23, E33, E37, P9, T17e", "the compiler supplies " $text " for " $ty " - choose another name") }

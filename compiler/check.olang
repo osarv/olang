@@ -616,6 +616,7 @@ fn (c mut Checker&) attempt() {
             c.operatorMethod(f)
             c.inheritClash(f)
             c.overrideClash(f)
+            c.methodOverlap(f)
         }
         c.fnTypeParams(f)
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
@@ -1026,6 +1027,23 @@ fn (c mut Checker&) bothSpellings(f I64, rt types.TypeId, name String&, n I64) {
     m := c.P.MethodOf(rt, c.P.L.Names.Intern(low))
     if m < 0 or (k >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() - 1 != n) { return }
     c.err(c.nameSpan(c.P.FnDecl(f)), msgs.ProtocolBothSpellings(c.ty(c.P.T.Plain(rt)), name, name, low))
+}
+
+# M21: a method of one name per instance - two that some one instance meets alike are an error at the later, with a
+# note at the other
+fn (c mut Checker&) methodOverlap(f I64) {
+    g := c.P.MethodOverlap(f)
+    if g < 0 { return }
+    fd := c.P.FnDecl(f)
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+    if ps.Len() == 0 { return }
+    c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    rec := c.err(c.nameSpan(fd), msgs.MethodOverlap(c.text(fd.Name), c.ty(c.P.T.Plain(c.deref(ps[0])))))
+    c.pop()
+    gd := c.P.FnDecl(g)
+    c.push(-1, c.P.FnModule(g), types.VoidT, types.ListId(0))
+    c.P.L.Diags.Note(rec, c.at(c.nameSpan(gd)), msgs.NoteDeclaredHere("'" $c.text(gd.Name) "'"))
+    c.pop()
 }
 
 # how many operands a method the compiler calls takes besides its receiver: -1 for any, -2 for no such method

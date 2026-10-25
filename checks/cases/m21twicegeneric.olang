@@ -1,0 +1,11 @@
+# check: fail 'Name' is declared twice for Box<U> - declare one per instance
+# M21: two methods of one name written with variables apply to the same instances alike - neither can win
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<T>&) Name() String { return "one" }
+fn (b Box<U>&) Name() String { return "two" }
+fn main() {
+    b := Box<I64>(1)
+    s := b.Name()
+}

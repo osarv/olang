@@ -99,7 +99,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     fnsAll I64 = -1                    # how many modules there were when allFns last added every one's
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
-    methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the method
+    methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the first method declared
+    sameKey Map<I64, I64>              # by method: the next declared of its receiver key and name (M21: one per instance)
     defaultFns List<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
     defaultTraits List<I64>            # beside each, its trait's DeclId
     instances List<instance>
@@ -1718,7 +1719,13 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
     k := p.recvKey(mi, f.Recv!.Ty, f.TypeParams)
     if k < 0 { return }
     mk := pair.Pair(k, I64(f.Name))
-    if (try p.methods.Get(mk) catch default -1) < 0 { p.methods.Put(mk, i) }
+    head := try p.methods.Get(mk) catch default -1
+    if head < 0 {
+        p.methods.Put(mk, i)
+    } else {
+        for p.sameKey.Has(head) { head = try p.sameKey.Get(head) catch default -1 }
+        p.sameKey.Put(head, i)
+    }
     if (k >> 40) == 4 {
         p.defaultFns.Push(i)
         p.defaultTraits.Push(k & ((I64(1) << 40) - 1))
@@ -1816,14 +1823,72 @@ fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
         m := try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
         if m >= 0 {
             # a method declared for one instance of a generic type (M21: "fn (b Box<String&>&) Describe()") is not
-            # another's
-            return m if p.recvApplies(m, x) else -1
+            # another's: of those declared that apply to x, one for x's instance exactly wins, else the one written
+            # with variables (G8a's precedence) - two that apply alike are an error at the declaration (MethodOverlap)
+            found := -1
+            for m >= 0 {
+                if p.recvApplies(m, x) {
+                    if p.recvExact(m) { return m }
+                    if found < 0 { found = m }
+                }
+                m = try p.sameKey.Get(m) catch default -1
+            }
+            return found
         }
         if p.T.KindOf(x) != types.Kind.Named or not p.Body(x) { return -1 }
         if p.T.DeclKindOf(p.T.DeclOf(x)) != types.DeclKind.Over or not p.extends(p.T.DeclOf(x)) { return -1 }
         x = p.T.Base(x)
     }
     return -1
+}
+
+# a method's receiver, its referent where it is a reference; Unknown for none
+fn (p mut Program&) recvOf(f I64) types.TypeId {
+    ps := p.T.Items(p.T.Params(p.Sig(f)))
+    if ps.Len() == 0 { return types.UnknownT }
+    return p.T.Referent(ps[0]) if p.T.KindOf(ps[0]) == types.Kind.Ref else ps[0]
+}
+
+# whether method f's receiver is one type, no variable in it (M21): it beats one written with variables
+fn (p mut Program&) recvExact(f I64) Bool {
+    r := p.recvOf(f)
+    return r != types.UnknownT and p.T.Closed(r)
+}
+
+# the method declared before f with f's receiver key and name whose receiver some one type meets as f's does, alike
+# in precedence (M21): f is then an error - -1 for none. A variable in either receiver matches anything there
+fn (p mut Program&) MethodOverlap(f I64) I64 {
+    row := p.fns[f]
+    if row.F.Recv is null { return -1 }
+    k := p.recvKey(row.Mi, row.F.Recv!.Ty, row.F.TypeParams)
+    if k < 0 { return -1 }
+    g := try p.methods.Get(pair.Pair(k, I64(row.F.Name))) catch default -1
+    for g >= 0 and g != f {
+        if p.recvExact(g) == p.recvExact(f) and p.typesOverlap(p.recvOf(g), p.recvOf(f), 0) { return g }
+        g = try p.sameKey.Get(g) catch default -1
+    }
+    return -1
+}
+
+fn (p mut Program&) typesOverlap(a types.TypeId, b types.TypeId, depth I64) Bool {
+    if depth > 32 { return true }
+    ka := p.T.KindOf(a)
+    kb := p.T.KindOf(b)
+    if ka == types.Kind.Var or kb == types.Kind.Var or a == types.UnknownT or b == types.UnknownT { return true }
+    if ka == types.Kind.Named and kb == types.Kind.Named {
+        if p.T.DeclOf(a) != p.T.DeclOf(b) { return false }
+        xs := p.T.Items(p.T.Args(a))
+        ys := p.T.Items(p.T.Args(b))
+        if xs.Len() != ys.Len() { return false }
+        if xs.Len() == 0 { return p.T.Same(p.T.Plain(a), p.T.Plain(b)) }
+        for i in range xs.Len() {
+            if not p.typesOverlap(xs[i], ys[i], depth + 1) { return false }
+        }
+        return true
+    }
+    if p.T.Closed(a) and p.T.Closed(b) { return p.T.Same(p.T.Plain(a), p.T.Plain(b)) }
+    # a compound type with a variable inside: taken to overlap (a declaration so written is refused, never mistaken)
+    return true
 }
 
 # whether method f's receiver is written for x (M19, M21): its receiver's type arguments x's, or variables binding them

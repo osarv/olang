@@ -551,3 +551,44 @@ test "M21: a method of one instance is not another's" {
     assert BakedDescribed == "default 2|default 2|default 2|text box t2|text box t2|text box t2"
     assert described(Live - 1) == BakedDescribed
 }
+
+# M21 (the second any review, finding 2): two instances of one generic type each declaring the method are each found
+# for their own instance, and one declared for an instance exactly beats one written with a variable, whichever is
+# declared first - directly, from generic code and through an any alike
+type KBox<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b KBox<T>&) Area() I64 { return b.n }
+fn (b KBox<String&>&) Describe() String { return "text box " $b.v }
+fn (b KBox<I64>&) Describe() String { return "int box " $b.v }
+type JBox<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b JBox<T>&) Area() I64 { return b.n }
+fn (b JBox<I64>&) Describe() String { return "int jbox " $b.v }
+fn (b JBox<T>&) Describe() String { return "jbox " $b.n }
+fn twoInstances(n I64) String {
+    a := KBox<I64>(5, n)
+    t := KBox<String&>("t" $n, n)
+    j := JBox<I64>(7, n)
+    k := JBox<Bool>(true, n)
+    xs := List<any IShape&>()
+    xs.Push(a)
+    xs.Push(t)
+    xs.Push(j)
+    xs.Push(k)
+    b := StringBuilder()
+    b.Push($a.Describe() "|" $t.Describe() "|" $describeGen(a) "|" $describeGen(t) "|" $j.Describe() "|" $k.Describe())
+    for x in xs { b.Push("|" $x.Describe()) }
+    return b.ToString()
+}
+BakedTwoInstances String = twoInstances(2)
+
+test "M21: two instances' methods each found for their own instance, an exact receiver first" {
+    want := "int box 5|text box t2|int box 5|text box t2|int jbox 7|jbox 2|int box 5|text box t2|int jbox 7|jbox 2"
+    assert BakedTwoInstances == want
+    churn()
+    assert twoInstances(Live - 1) == want
+}

@@ -1,0 +1,10 @@
+# check: fail 'Area' is declared twice for P - declare one per instance
+# M21: a method of a struct declared twice
+type P struct(x I64) {
+    x
+}
+fn (p P&) Area() I64 { return 1 }
+fn (p P&) Area() I64 { return 2 }
+fn main() {
+    a := P(1).Area()
+}
