@@ -1072,3 +1072,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   CheckedPlus etc. by name, `try a.CheckedAt(i)`/`CheckedSlice` (maybe Get/SliceOf), `try narrow<I32>(x)`, `as` keeps
   aborting (rec yes); (5) a prelude `Checked<T>` with failing operators for whole computations (rec yes, both). In
   effect: contracts and checked as built.
+- QAU, the user 2026-10-25: "These would then be runtime checks on entry and they would need to be able to fail with
+  something like 'bad parameters'. It's all runtime or comptime now, nothing silently works." DECIDED: parameter
+  conditions are decided while compiling where they can be, else checked on entry in every build, failing the call
+  with a prelude error; `outlives` stays compile-time only. ASKED: (1) a call needs try by its signature even where the
+  compiler sees the condition holds (rec yes); (2) drop result conditions (rec yes - a false one is the callee's bug,
+  an assert); (3) the error `ArgumentError.INVALID`, the message naming parameter and condition (rec yes). Next topic
+  (the user): removing `checked` as its own thing.
