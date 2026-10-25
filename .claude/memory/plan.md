@@ -397,3 +397,5 @@ on sight per rules.md, "Code rules".
   spaces) - with spaces a comparison; D17e's compile error only where nothing catches ArgumentError (reverses my call
   this morning: tests must be able to exercise the failure); Rem(MIN, -1) = 0; fix wraps old try sites only where both
   readings agree, else lists and exits 1.
+- SMALL, next batch: `make releasetest` also runs `olang explain T6a` in the unpacked release (SPEC.md must ship
+  beside bin/, as std/ and tools/ do; the user asked 2026-10-25).
