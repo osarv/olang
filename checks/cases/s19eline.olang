@@ -1,0 +1,6 @@
+# check: fail error[S1b]: a one-line body is one simple statement, not an errdefer - write a block, '{ ... }'
+# S1b, S19e: an errdefer is no simple statement, so it is no one-line body
+fn f(x I64) {
+    if x > 0: errdefer x = 2
+}
+fn main() { f(1) }

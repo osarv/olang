@@ -15,7 +15,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
 | 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
-| 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
+| 7 | `errdefer` | Zig | decided 2026-10-18; built 2026-10-25 (SPEC S19e) |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
 | 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
@@ -246,7 +246,7 @@ by its own error; an error a clause catches inside the block does not leave it. 
 (a failed assert, `unreachable`, `!`, `os.Exit`), as for `defer`. One list with `defer`, in reverse registration order
 (an error exit runs both kinds, a normal exit only the defers - two lists would misorder `x := alloc(); errdefer
 free(x); y := build(x); defer log(y)`). The error is not available inside (errors are no values, T20); restricting it
-to some words (`errdefer io.Error.FULL { }`) can be added later. Built in the port after self-hosting.
+to some words (`errdefer io.Error.FULL { }`) can be added later. Built 2026-10-25 (SPEC S19e; CLAUDE.md, HISTORY.md).
 
 **What:** a deferred block that runs only when its block is left by an error.
 

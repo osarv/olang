@@ -622,8 +622,8 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.stmts(j.Body)
             w.clauses(j.Clauses)
         }
-        case ast.Stmt.Defer(sp, inner) {
-            w.line("DEFER", sp)
+        case ast.Stmt.Defer(sp, inner, onError) {
+            w.line("ERRDEFER" if onError else "DEFER", sp)
             match inner {
                 case ast.Stmt.Block(_, body) { w.stmts(body) }
                 nomatch { w.stmt(inner) }

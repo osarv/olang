@@ -836,7 +836,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             r.block(j.Body)
             r.clauses(j.Clauses)
         }
-        case ast.Stmt.Defer(_, inner) {
+        case ast.Stmt.Defer(_, inner, _) {
             m := r.mark()
             r.stmt(inner)
             r.popTo(m)

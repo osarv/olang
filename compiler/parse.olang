@@ -1555,16 +1555,17 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             j := try p.joinRest(false)
             return ast.Stmt.Join(p.from(at), j)
         }
-        case token.Tok.Defer {
+        case token.Tok.Defer, token.Tok.ErrDefer {
+            onError := p.sees(token.Tok.ErrDefer)
             p.advance()
             if p.sees(token.Tok.LBrace) {
                 body := try p.block()
                 sp := p.from(at)
                 if p.sees(token.Tok.StmtEnd) { p.advance() }
-                return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body))
+                return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body), onError)
             }
             s := try p.stmt()
-            return ast.Stmt.Defer(p.from(at), s)
+            return ast.Stmt.Defer(p.from(at), s, onError)
         }
         case token.Tok.LBrace {
             body := try p.block()
@@ -2004,6 +2005,7 @@ fn lineBodyRefused(k token.Tok) String {
         case token.Tok.LBrace => "a block (a block takes no ':')"
         case token.Tok.Join => "a join"
         case token.Tok.Defer => "a defer"
+        case token.Tok.ErrDefer => "an errdefer"
         case _ => ""
     }
 }

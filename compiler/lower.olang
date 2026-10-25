@@ -593,31 +593,16 @@ fn (ln mut lowering&) leave(to I64) {
     for i := ln.levels.Len() - 1, i >= to, i-- { ln.exitLevel(i) }
 }
 
+# whether deferred code k is an errdefer's (S19e): run only on a way out an error takes
+fn (ln lowering&) onError(k I64) Bool { return ln.B.Blocks[I64(ln.defers[k].Id)].Kind == typed.BlockKind.ErrDefer }
+
 # level i left - every level above it already left on this path: its deferred code (lowered as if the levels above
-# were closed, which they are here), its wait if it is a join, its close
+# were closed, which they are here) - an errdefer's only where an error is leaving (S19e) -, its wait if it is a join,
+# its close
 fn (ln mut lowering&) exitLevel(i I64) {
     if ln.dead { return }
     lv := ln.levels[i]
-    # the levels above i, set aside while i's deferred code is lowered
-    saved List<level>
-    for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
-    mine List<I64>
-    for k in range ln.defers.Len() {
-        if ln.deferAt[k] == lv.S { mine.Push(k) }
-    }
-    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
-    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
-    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
-    for k := mine.Len() - 1, k >= 0, k-- {
-        # no longer pending once it runs here (B3e): a stop inside it does not run it again
-        if ln.L.Cleanups {
-            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
-        }
-        # deferred code runs as a block of its own, inside the block it is registered in
-        ln.block(ln.defers[mine[k]])
-    }
-    for k in mine { ln.deferAt[k] = lv.S }
-    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+    ln.runDefers(i, false)
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
     if lv.Kind == mir.ScopeKind.Join {
@@ -633,12 +618,43 @@ fn (ln mut lowering&) exitLevel(i I64) {
             failed := ln.F.NewBlock()
             ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
             ln.start(failed)
+            # S19e: the join failed, which is known only once it has waited - its errdefers run now, after its defers
+            ln.runDefers(i, true)
             ln.emit(mir.Stmt.Close(sp, lv.S))
             ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
         }
         ln.start(ok)
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
+}
+
+# level i's deferred code, last registered first, lowered as the block's last statements with the levels above it set
+# aside: what runs on this way out - every defer's, and an errdefer's where an error is leaving (S19e) - or, failed,
+# only the errdefers' (a join failing after its wait)
+fn (ln mut lowering&) runDefers(i I64, failed Bool) {
+    lv := ln.levels[i]
+    # the levels above i, set aside while i's deferred code is lowered
+    saved List<level>
+    for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
+    mine List<I64>
+    for k in range ln.defers.Len() {
+        if ln.deferAt[k] != lv.S { continue }
+        e := ln.onError(k)
+        if (e and (ln.erroring or failed)) or (not e and not failed) { mine.Push(k) }
+    }
+    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
+    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
+    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
+    for k := mine.Len() - 1, k >= 0, k-- {
+        # no longer pending once it runs here (B3e): a stop inside it does not run it again - an errdefer has no cleanup
+        if ln.L.Cleanups and not ln.onError(mine[k]) {
+            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
+        }
+        # deferred code runs as a block of its own, inside the block it is registered in
+        ln.block(ln.defers[mine[k]])
+    }
+    for k in mine { ln.deferAt[k] = lv.S }
+    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
 }
 
 # B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
@@ -733,7 +749,8 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Defer(sp, bl) {
             ln.defers.Push(bl)
             ln.deferAt.Push(ln.top().S)
-            if ln.L.Cleanups { ln.cleanup(sp, ln.defers.Len() - 1) }
+            # B3e: a stop interpret meets is no error leaving, so an errdefer has no cleanup (S19c, S19e)
+            if ln.L.Cleanups and not ln.onError(ln.defers.Len() - 1) { ln.cleanup(sp, ln.defers.Len() - 1) }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }

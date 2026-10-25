@@ -649,8 +649,8 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.block(j.Body)
             w.clauses(j.Clauses)
         }
-        case ast.Stmt.Defer(_, inner) {
-            w.put("defer ")
+        case ast.Stmt.Defer(_, inner, onError) {
+            w.put("errdefer " if onError else "defer ")
             w.stmt(inner)
         }
         case ast.Stmt.Block(_, body) { w.block(body) }

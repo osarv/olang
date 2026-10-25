@@ -172,6 +172,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
+- **`errdefer` (S19e, the user's decision 2026-10-18; built 2026-10-25).** `errdefer STATEMENT` / `errdefer { }`: deferred
+  code of its block run only when an error leaves the block outward - out of the function, to a clause outside it, a
+  join's tasks failing; never on its end, `return`, `break`, `continue`, an error a clause inside takes, or what S19c
+  lists. One list with `defer`, last registered first. **Decided (mine)**: a join block's errdefer code runs after its
+  wait when its tasks fail - after its defers, the one place the order bends, since the failure is known only then (a
+  failure of its own statements runs both before the wait, in order); one may not be pending around a `yield` (S20's
+  rule over the one list - relaxable with defer's); no interpret cleanup (a stop is no error). Built in lowering: the
+  block's kind (`typed.BlockKind.ErrDefer`), `lowering.runDefers` taking it only where `erroring` (raise, a clause) or
+  after a failed wait - nothing new in the evaluator or emit.
 - **`match` (S12-S13f).** Several values per case, guards (`case P if c`), nested patterns, literals in payload
   positions, `case _` (alone, last); `match` as a value with `case P => v` (S12b); exhaustiveness over the patterns
   (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).

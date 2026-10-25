@@ -24368,3 +24368,36 @@ Next call's `catch Exhausted`, inside an expression. So `fn f(l List<I64>&) I64 
 aborted with "unreachable reached" when called; `breaks` now looks into a try's clauses, a match's arms, a
 conditional's values and a call's arguments (`exprBreaks`). Nothing in the corpus relied on it. The genLambda's appended
 end raise depended on the same answer, which is how it was found.
+
+## `errdefer` (S19e, 2026-10-25)
+
+**The decision** (docs/ideas.md #7, the user 2026-10-18: "1) errdefer 2) that's good 3) good"): Zig's word; deferred
+code of its block run only when an error leaves the block outward; one list with `defer` in reverse registration order,
+so `x := alloc(); errdefer free(x); y := build(x); defer log(y)` unwinds in the order it was built; the error is no value
+inside (T20); nothing on what ends the test or the process (S19c).
+
+**How it is built.** The parser takes `errdefer` where it takes `defer` (`ast.Stmt.Defer` gained `onError`); check
+treats it as a defer in every respect - S19a's checking, S19b's "may not leave", S20's pending-around-a-yield - but opens
+its block as `typed.BlockKind.ErrDefer`, so the typed tree, section 8 and every walker over it need nothing. Lowering
+already knew when an error was leaving: `erroring` is set by `raise` (an error leaving the body, after every scope is
+closed) and by `toClause` (an error going to a try's clause, leaving the blocks inside the try). `exitLevel` now lowers
+its deferred code through `runDefers`, which takes an errdefer's only while `erroring`. So an errdefer inside a block a
+clause outside it takes the error for runs, and one in the block holding that try does not - the clause is inside it.
+The evaluator runs the MIR, so it agrees by construction: a baked global and S18c-decided asserts (`edAll`) show it
+beside the run time.
+
+**Decided (mine).**
+1. A `join` block's tasks failing is an error leaving the join block - the case the decision lists - but the failure is
+   known only once the block has waited, and S19a runs a join block's deferred code *before* the wait (so a deferred
+   `Cancel()` lets its tasks finish). So on a failed wait the block's errdefer code runs then, after its defers: the
+   one place the reverse order bends. Running every piece after the wait would break S19a's reason; running none would
+   drop the decision's case. A failure of the join block's own statements leaves before the wait and runs both kinds in
+   order.
+2. An errdefer may not be pending around a `yield` (S20's rule). A dropped walk is not an error leaving, so an errdefer
+   there would be sound where a defer is not; but the coordinator asked for errdefer consistent with the generator rule,
+   and the rule is over the one list. Relaxable with defer's.
+3. No interpret cleanup (B3e): a stop interpret meets is no error leaving, and the built program would not run it.
+
+**Tests.** shared.olang's S19e section (out of a function, a try passing it on, a loop's iteration, a caught error, a
+`for x in try c` ended by its error, a join failing, a test body passing) baked and decided while compiling and run;
+checks cases for a return, an error escaping, a one-line body and a yield.

@@ -3177,7 +3177,7 @@ fn storedStmt(st ast.Stmt?&, out mut Map<source.NameId, Bool>&) {
             storedIn(j.Body, out)
             storedCatches(j.Clauses, out)
         }
-        case ast.Stmt.Defer(_, d) { storedStmt(d, out) }
+        case ast.Stmt.Defer(_, d, _) { storedStmt(d, out) }
         nomatch { }
     }
 }
@@ -12142,10 +12142,11 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
             }
         }
         case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
-        case ast.Stmt.Defer(sp, inner) {
-            c.fr().deferBlocks.Push(c.fr().Block)   # S20: pending until its block is left
+        case ast.Stmt.Defer(sp, inner, onError) {
+            # S20: pending until its block is left - an errdefer's too (S19e: the same list, its code checked alike)
+            c.fr().deferBlocks.Push(c.fr().Block)
             from := c.stmts.Len()
-            id, outer, mark := c.open(typed.BlockKind.Defer, sp)
+            id, outer, mark := c.open(typed.BlockKind.ErrDefer if onError else typed.BlockKind.Defer, sp)
             # S19b: deferred code runs while its block is left - nothing may leave it
             was := c.fr().DeferLoops
             wasJ := c.fr().DeferJoins
@@ -15915,7 +15916,7 @@ fn stmtAssigns(st ast.Stmt?&, n Array<source.NameId>&) Bool {
         case ast.Stmt.ForIn(_, f) { return assignsName(f.Body, n) or clausesAssign(f.Clauses, n) }
         case ast.Stmt.MatchS(_, m) { return matchAssigns(m, n) }
         case ast.Stmt.Join(_, j) { return assignsName(j.Body, n) or clausesAssign(j.Clauses, n) }
-        case ast.Stmt.Defer(_, inner) { return stmtAssigns(inner, n) }
+        case ast.Stmt.Defer(_, inner, _) { return stmtAssigns(inner, n) }
         case ast.Stmt.Spawn(_, targets, _) {
             for t in targets {
                 if hitsPath(t, n) { return true }

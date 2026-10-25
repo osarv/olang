@@ -141,8 +141,8 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join    defer   yield
-import    test    destruct
+trait     spawn   join    defer   errdefer yield
+import    test    destruct embed
 unreachable
 extern    default
 ```
@@ -3870,8 +3870,8 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| defer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
-`try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9;
+| defer-stmnt | errdefer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
+`try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` and `errdefer-stmnt` in §6.9;
 `yield-stmnt` in §6.10.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
@@ -4833,6 +4833,27 @@ deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
 
+**S19e.** `errdefer-stmnt ::= "errdefer" ( block | statement )`. An `errdefer` registers deferred code as `defer` does
+(S19), checked as S19a and S19b check it, but its code runs only when its block is left by an **error moving
+outward**: an error leaving the function (an `error` statement, a `try` whose error no clause inside the block takes),
+an error going to a clause of a `try` outside the block - a `for x in try c` ended by its own error (S9e) included -
+and a `join` block's tasks failing (P4b), whose clauses or callers then take the error. An error a clause inside the
+block takes does not leave the block, and the block's ordinary ways out - its end, `return`, `break`, `continue` -
+run no errdefer code. Neither do the ways S19c lists, which end the test or the process rather than leave a block. One
+list holds both kinds: on an error's way out every piece registered runs, last registered first, so
+`x := alloc(); errdefer free(x); y := build(x); defer log(y)` logs `y` before freeing `x`; on any other way out only
+the `defer`s run. A `join` block is the one exception to that order: its tasks' failure is known only once it has
+waited, so its errdefer code runs after its wait, after its `defer`s (S19a) - a failure of one of its own statements
+runs both before the wait, in order. The error is no value inside (T20), as in a clause that does not bind it. An
+`errdefer` in a test body runs when an error ends the test; like a `defer`, one may not be pending around a `yield`
+(S20).
+
+```
+f := try os.Create(path)
+errdefer os.Remove(path)!
+try write(f, data)            # if this fails, the half-written file is removed
+```
+
 ### 6.10 `yield`
 
 **S20.** `yield-stmnt ::= "yield" expr STMNT_END`, only in a generator's body (D18). `expr` must fit the generator's
@@ -4843,7 +4864,7 @@ whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-t
 - in deferred code (S19b: it runs while its block is left, and runs to its end);
 - in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do);
 - with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
-  a dropped walk could run it).
+  a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list.
 
 ## 7. Error Handling
 

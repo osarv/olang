@@ -153,6 +153,7 @@ type BlockKind enum {
     Clause     # a catch clause in value position
     Join       # a join block: on every way out it waits for its tasks (P1b) and fails with theirs (P4b)
     Defer      # deferred code, run on every way out of the block it is registered in (S19)
+    ErrDefer   # an errdefer's: run only on the ways out of that block an error takes (S19e)
     Collect    # a comprehension's loop (E27)
 }
 

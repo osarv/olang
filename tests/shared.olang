@@ -10841,6 +10841,96 @@ test "S19: deferred code runs on every way out of its block, while compiling and
     assert DeferBaked
 }
 
+# S19e: an errdefer's code runs only when its block is left by an error moving outward - out of the function, to a
+# clause outside the block (a "for x in try c" ended by its own error), a join's tasks failing - in one list with the
+# defers, last registered first; never on the block's ordinary ways out or for an error a clause inside it takes.
+# Run while compiling (ErrDeferBaked, K2) exactly as at run time.
+fn edFails(l mut DfLog&, n I64) I64 ? DfErr {
+    defer l.Note(1)
+    errdefer l.Note(2)
+    defer l.Note(3)
+    if n < 0 { error DfErr.BAD }
+    return n
+}
+fn edLoop(l mut DfLog&, bad I64) ? DfErr {
+    for i in range 4 {
+        errdefer l.Note(5)              # only the iteration the error leaves runs it
+        defer l.Note(4)
+        if i == 2 { continue }
+        if i == bad { error DfErr.BAD }
+    }
+}
+fn edCaught(l mut DfLog&) {
+    errdefer l.Note(9)                  # the error below is taken inside this block: it never leaves it
+    try edFails(l, -1) catch DfErr { l.Note(6) }
+}
+fn edPassed(l mut DfLog&, n I64) I64 ? DfErr {
+    errdefer { l.Note(7) }
+    return try edFails(l, n)            # a try's error no clause takes leaves the function
+}
+fn edWalk(l mut DfLog&, failAt I32) I32 ? TxErr {
+    t I32 = 0
+    if failAt > 0 {
+        errdefer l.Note(8)
+        w mut TxLines& = TxLines(4, failAt)
+        for x in try w { t += x }       # the walk's own error leaves the block, then the function
+    }
+    return t
+}
+fn edJoin(l mut DfLog&, a I64) I64 {
+    out := Array<I64>(2)
+    try join {
+        defer l.Note(1)
+        errdefer l.Note(2)              # S19e: a join's failure is known after its wait, after its defers
+        spawn out[0] = try peSq(a)
+        spawn out[1] = try peSq(2)
+    } catch peErr { return -1 }
+    return out[0] + out[1]
+}
+fn edAll(k I64) Bool {
+    l := DfLog()
+    ok Bool = (try edFails(l, k) catch default -1) == k and l.n == 31
+    l.n = 0
+    r := try edFails(l, -k) catch default -9
+    failed Bool = r == -9 and l.n == 321
+    l.n = 0
+    try edLoop(l, k + 10) catch { }
+    loops Bool = l.n == 4444
+    l.n = 0
+    try edLoop(l, 1) catch { }
+    loopFails Bool = l.n == 445
+    l.n = 0
+    edCaught(l)
+    caught Bool = l.n == 3216
+    l.n = 0
+    p := try edPassed(l, -1) catch default -5
+    passed Bool = p == -5 and l.n == 3217
+    l.n = 0
+    w1 := try edWalk(l, 9) catch default -1
+    w2 := try edWalk(l, 2) catch TxErr default -2
+    walked Bool = w1 == 10 and w2 == -2 and l.n == 8
+    l.n = 0
+    joined Bool = edJoin(l, k) == k * k + 4 and l.n == 1 and edJoin(l, -1) == -1 and l.n == 112
+    return ok and failed and loops and loopFails and caught and passed and walked and joined
+}
+ErrDeferBaked := edAll(3)
+
+test "S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time" {
+    assert edAll(WdMutable / 1000000000 + 1)
+    assert edAll(3)                     # S18c: decided while compiling
+    assert ErrDeferBaked
+}
+
+# S19e: an errdefer in a test body runs when an error ends the test - shown by the test after it
+edTestLog mut I64 = 0
+test "errdefer pending in a test body is not run when the test passes" {
+    errdefer edTestLog = 5
+    edTestLog = 1
+}
+test "...and was not run" {
+    assert edTestLog == 1
+}
+
 # S19a: a block's deferred code runs before its scope closes - so it reads the block's locals and what was allocated
 # there - and before the destructors registered there (a join block's, before it waits for its tasks: std/cancel's
 # tests show a deferred Cancel). Run time only: building a value with a destructor is not evaluated (K1).
