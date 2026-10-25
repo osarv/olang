@@ -1140,3 +1140,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   implementation ... exists too. Or we just leave it completely." Answered: automatic is out (silent wrong answers:
   Matrix*Vec, quaternion*vector - only the author knows the method commutes). ASKED: explicit `commutes` (rec) or leave
   it out (`2.0 * v` an error naming `v * 2.0`, additive later).
+- commutes DECIDED 2026-10-25 (the user: "Nah, keep it"): explicit `commutes` on + * & | ^ operator methods, rules as
+  proposed.
+- try binding, the user asked the downside of try covering the whole following expression: (1) the reader cannot see
+  which part fails (Swift accepts; a try covering nothing stays an error); (2) a default replaces the whole expression;
+  (3) a default stays a single term (`try f() catch default 0 == 3` compares the result). A try ends at a closing
+  bracket, a list's `,`, `catch` or the statement's end; `!` stays postfix and tight. Recommended: do it. ASKED; then
+  checked-with-try (the user's next topic).
