@@ -411,3 +411,8 @@ on sight per rules.md, "Code rules".
   `type X error { }` (tools/errortype_migrate.olang, ~263 files), T19a named sets, R11b/R3a clause-only catch names ($e,
   ==, narrowing, match, error e; storing refused), releasetest runs explain, seed regenerated. Agent decision worth
   telling the user: an unused catch name is an error.
+- 2026-10-25 CEST: wt-esgen MERGED (10e9e1f, verified per round; fast-forward): QAH `<T ? E>` error-set parameters
+  (union inference, Iterator<T ? E>, std helpers take fallible callbacks), QAG generators (`fn f() Iterator<T ? E>` +
+  `yield`, LLVM coroutine, frame where the generator lands, yielded values reclaimed per turn), D10a fix (for-in's
+  break inside Next's catch). FOLLOW-UP recorded: generator speed (~6 ns per value vs 0.25 for a hand iterator -
+  coroutine elision where a for-in makes and finishes the walk), defer across yield.

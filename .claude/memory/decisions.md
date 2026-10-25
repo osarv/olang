@@ -1248,3 +1248,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   where nothing at the call catches ArgumentError (a test must be able to exercise the failure). And G12/method type
   arguments: `<...>` after a name is type arguments only when it touches the name and the `(` (no whitespace); with
   spaces it is a comparison chain (`k < m > (0)` was misread).
+- **QBB ASKED 2026-10-25 (from the generators batch):** may a generator yield references borrowing its inputs (`yield
+  t[a:b]`, elements living as long as the generator, as List<String&> does - every new reference element then stays
+  allocated until the generator is dropped)? In effect: no - yielded values are built per Next call and reclaimed each
+  turn; a borrow of an input is refused (T22a) with "yield a copy". Recommended: keep until real code asks.
