@@ -1,0 +1,14 @@
+== b21_arraylit
+  san:    refused: b21_arraylit.olang:27:25: error[O25c]: the array outlives what this element refers to - build the element where the array goes
+  O3:     refused
+  interp: exit 0 arraylit 1|arraylit 12|
+--- compile (-debug -sanitize)
+b21_arraylit.olang:27:25: error[O25c]: the array outlives what this element refers to - build the element where the array goes
+   27 |         out.Push(P&[mkp&t(i * 11 + 1)])
+      |                         ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+arraylit 1
+arraylit 12

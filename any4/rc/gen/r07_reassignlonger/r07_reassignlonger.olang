@@ -1,0 +1,35 @@
+import "std/io"
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# a moved returned local reassigned with text of another length before it is returned - its new storage
+fn f(i I64) String {
+    s := "abc" $i
+    s = "a much longer text " $i " " $(i * 1000)
+    return s
+}
+fn main() {
+    a := f(1)
+    b := f(2)
+    assert churn() > 0
+    say($a " / " $b)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

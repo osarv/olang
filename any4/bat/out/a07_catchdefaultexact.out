@@ -1,0 +1,12 @@
+== a07_catchdefaultexact
+  san:    exit 0 catchdefaultexact 12|
+  O3:     exit 0 catchdefaultexact 12|
+  interp: exit 0 catchdefaultexact 12|
+--- compile (-debug -sanitize)
+built ./build/a07_catchdefaultexact.debug.san
+--- run san
+catchdefaultexact 12
+--- run O3
+catchdefaultexact 12
+--- interpret
+catchdefaultexact 12

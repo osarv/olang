@@ -1,0 +1,7 @@
+b09_catchdefault.olang:27:43: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+   27 |         h.p = try fp(i) catch default mkp&t(i * 11 + 1)
+      |                                           ^
+b09_catchdefault.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   27 |         h.p = try fp(i) catch default mkp&t(i * 11 + 1)
+      |             ^
+compilation failed with 2 errors

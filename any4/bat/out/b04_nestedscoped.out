@@ -1,0 +1,14 @@
+== b04_nestedscoped
+  san:    refused: b04_nestedscoped.olang:29:27: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the in
+  O3:     refused
+  interp: exit 0 nested 1|nested 12|
+--- compile (-debug -sanitize)
+b04_nestedscoped.olang:29:27: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   29 |         out.Push(wrap&out(mkp&t(i * 11 + 1)))
+      |                           ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+nested 1
+nested 12

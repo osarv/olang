@@ -1,0 +1,12 @@
+== b18_setat
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 setat 12|
+  interp: exit 1 olang interpret: b18_setat.olang:31: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b18_setat.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+setat 12
+--- interpret
+olang interpret: b18_setat.olang:31: it uses storage after the scope it was made in closed

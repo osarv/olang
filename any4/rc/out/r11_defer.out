@@ -1,0 +1,15 @@
+== r11_defer
+  san:    exit 0 run: abc1|baked: abc1|
+  O3:     exit 0 run: abc1|baked: abc1|
+  interp: exit 0 run: abc1|baked: abc1|
+--- compile (-debug -sanitize)
+built ./build/r11_defer.debug.san
+--- run san
+run: abc1
+baked: abc1
+--- run O3
+run: abc1
+baked: abc1
+--- interpret
+run: abc1
+baked: abc1

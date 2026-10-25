@@ -1,0 +1,4 @@
+r01b_lambdaarg.olang:10:9: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+   10 |     run(fn() { k.s = s })
+      |         ^~
+compilation failed with 1 error

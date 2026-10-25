@@ -1,0 +1,15 @@
+== a12_returnexisting
+  san:    exit 0 returnexisting 1|returnexisting 12|
+  O3:     exit 0 returnexisting 1|returnexisting 12|
+  interp: exit 0 returnexisting 1|returnexisting 12|
+--- compile (-debug -sanitize)
+built ./build/a12_returnexisting.debug.san
+--- run san
+returnexisting 1
+returnexisting 12
+--- run O3
+returnexisting 1
+returnexisting 12
+--- interpret
+returnexisting 1
+returnexisting 12

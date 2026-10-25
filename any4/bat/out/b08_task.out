@@ -1,0 +1,12 @@
+== b08_task
+  san:    refused: b08_task.olang:33:27: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
+  O3:     refused
+  interp: exit 124 
+--- compile (-debug -sanitize)
+b08_task.olang:33:27: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
+   33 |             spawn use(mkp&t(i * 11 + 1))
+      |                           ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret

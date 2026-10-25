@@ -1,0 +1,15 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# a deferred write of the returned local after the result is computed (lowering copies when a defer is pending)
+fn f(i I64) String {
+    s := "abc" $i
+    defer { s[0] = 'Z' }
+    return s
+}
+G := f(1)
+fn main() {
+    say("run: " $f(1))
+    say("baked: " $G)
+}

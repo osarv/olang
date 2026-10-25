@@ -1,0 +1,12 @@
+== b27_textintoref
+  san:    exit 0 textintoref text1-7|
+  O3:     exit 0 textintoref text1-7|
+  interp: exit 0 textintoref text1-7|
+--- compile (-debug -sanitize)
+built ./build/b27_textintoref.debug.san
+--- run san
+textintoref text1-7
+--- run O3
+textintoref text1-7
+--- interpret
+textintoref text1-7

@@ -1,0 +1,12 @@
+== b34_destructreturn
+  san:    exit 0 two3 two6|
+  O3:     exit 0 two3 two6|
+  interp: exit 0 two3 two6|
+--- compile (-debug -sanitize)
+built ./build/b34_destructreturn.debug.san
+--- run san
+two3 two6
+--- run O3
+two3 two6
+--- interpret
+two3 two6

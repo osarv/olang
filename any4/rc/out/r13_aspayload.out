@@ -1,0 +1,23 @@
+== r13_aspayload
+  san:    refused: r13_aspayload.olang:15:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 run: l List<String&>["abc1"] x Qbc1|baked: l List<String&>["abc1"] x Qbc1|
+--- compile (-debug -sanitize)
+r13_aspayload.olang:15:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |     l.Push(q)
+      |       ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+r13_aspayload.olang:13:5: note: 'e' is declared here, in a block that closes first - declare it where 'l' lives: 'e mut E&l = ...'
+   13 |     e := E.T(s)
+      |     ^
+r13_aspayload.olang:15:12: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   15 |     l.Push(q)
+      |            ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1

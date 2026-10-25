@@ -1,0 +1,10 @@
+== b08_task
+  san:    exit 124 
+  O3:     exit 0 task done|
+  interp: exit 124 
+--- compile (-debug -sanitize)
+built ./build/b08_task.debug.san
+--- run san
+--- run O3
+task done
+--- interpret

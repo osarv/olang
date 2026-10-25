@@ -1,0 +1,15 @@
+== r03_conversion
+  san:    exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+  O3:     exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+  interp: exit 0 run: k.l abc1 x Qbc1|baked: k.l abc1 x Qbc1|
+--- compile (-debug -sanitize)
+built ./build/r03_conversion.debug.san
+--- run san
+run: k.l abc1 x Qbc1
+baked: k.l abc1 x Qbc1
+--- run O3
+run: k.l abc1 x Qbc1
+baked: k.l abc1 x Qbc1
+--- interpret
+run: k.l abc1 x Qbc1
+baked: k.l abc1 x Qbc1

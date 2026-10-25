@@ -1,0 +1,1 @@
+olang interpret: b20_payload.olang:36: it uses storage after the scope it was made in closed

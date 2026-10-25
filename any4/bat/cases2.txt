@@ -1,0 +1,100 @@
+=== b31_paramreturnbox
+# a callee returns as its value result a scoped call naming its parameter (built where the caller's argument lives); the
+# caller makes an any of it in an outer list - AnyItemNew takes the unscoped outer call for new storage built there
+fn g(p String&, i I64) String { return mk&p(i) }
+fn main() {
+    l := List<any Sh&>()
+    for i in range 3 {
+        t := "inner" $i
+        l.Push(Lab(g(t, i)))
+    }
+    assert churn() > 0
+    for x in l { say($x.Show()) }
+}
+=== b31b_paramlocalbox
+# b31 with the callee's result held in a local first (O26a moves it, T7b returns it uncopied)
+fn g(p String&, i I64) String {
+    x := mk&p(i)
+    return x
+}
+fn main() {
+    l := List<any Sh&>()
+    for i in range 3 {
+        t := "inner" $i
+        l.Push(Lab(g(t, i)))
+    }
+    assert churn() > 0
+    for x in l { say($x.Show()) }
+}
+=== b32_paramreturnchain
+# b31's callee called from a function returning its result: the text lives where h's own local does
+fn g(p String&, i I64) String { return mk&p(i) }
+fn h(i I64) String {
+    t := "inner" $i
+    return g(t, i)
+}
+fn main() {
+    a := h(1)
+    b := h(2)
+    assert churn() > 0
+    say($a " " $b)
+}
+=== b33_condreturn
+# a conditional of a scoped call naming the function's own local and written text, returned as a value
+fn g(i I64) String {
+    t := "local" $i
+    return mk&t(i) if i >= 0 else "neg"
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}
+=== b34_destructreturn
+# a destructured scoped call's array naming the function's own local, returned
+fn mk2(i I64) String, String { return "one" $i, "two" $(i * 3) }
+fn g(i I64) String {
+    t := "local" $i
+    a, b := mk2&t(i)
+    return b
+}
+fn main() {
+    x := g(1)
+    y := g(2)
+    assert churn() > 0
+    say($x " " $y)
+}
+=== b35_scopedbox
+# a scoped call naming an inner local, made an any directly in an outer list (the round's finding 1, as fixed)
+fn main() {
+    l := List<any Sh&>()
+    for i in range 3 {
+        t := "inner" $i
+        l.Push(Lab(mk&t(i)))
+    }
+    assert churn() > 0
+    for x in l { say($x.Show()) }
+}
+=== b36_returnmarkvalue
+# &return on a value array returned: built in the result scope (expected fine)
+fn g(i I64) String { return mk&return(i) }
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}
+=== b37_scopedvaluestruct
+# a struct value with an array field of known length (no references) from a scoped call, returned
+type FA struct(a Array<I64, 3>) { a }
+fn mkfa(i I64) FA { return FA(Array<I64, 3>(i, i + 1, i + 2)) }
+fn g(i I64) FA {
+    t := "local" $i
+    return mkfa&t(i)
+}
+fn main() {
+    a := g(1)
+    assert churn() > 0
+    say($a.a[0])
+}

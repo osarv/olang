@@ -1,0 +1,14 @@
+== r01c_spawnlambda
+  san:    refused: r01c_spawnlambda.olang:9:18: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+  O3:     refused
+  interp: exit 0 run: k.s abc1 x Qbc1|baked: k.s abc1 x Qbc1|
+--- compile (-debug -sanitize)
+r01c_spawnlambda.olang:9:18: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+    9 |     join { spawn fn() { k.s = s }() }
+      |                  ^~
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+run: k.s abc1 x Qbc1
+baked: k.s abc1 x Qbc1

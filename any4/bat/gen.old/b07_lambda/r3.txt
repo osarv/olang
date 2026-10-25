@@ -1,0 +1,1 @@
+olang interpret: b07_lambda.olang:31: it uses storage after the scope it was made in closed

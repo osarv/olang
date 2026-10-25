@@ -1,0 +1,7 @@
+b25_slice.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   27 |         h.s = mk&t(i)[0:6]
+      |             ^
+b25_slice.olang:27:22: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+   27 |         h.s = mk&t(i)[0:6]
+      |                      ^
+compilation failed with 1 error

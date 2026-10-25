@@ -1,0 +1,13 @@
+== b21_arraylit
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 arraylit 12|arraylit 3289376|
+  interp: exit 1 olang interpret: b21_arraylit.olang:30: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b21_arraylit.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+arraylit 12
+arraylit 3289376
+--- interpret
+olang interpret: b21_arraylit.olang:30: it uses storage after the scope it was made in closed

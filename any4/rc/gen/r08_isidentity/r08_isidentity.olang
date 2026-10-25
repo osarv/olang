@@ -1,0 +1,41 @@
+import "std/io"
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# RetCopy and is: a reference stored by the callee compared with the caller's value by identity
+type KR struct(s Array<I64>&) { s }
+fn f(k mut KR&) Array<I64> {
+    s := Array<I64>(3, 7)
+    k.s = s
+    return s
+}
+fn probe() String {
+    k := KR(Array<I64>(1, 0))
+    x := f(k)
+    x[0] = 99
+    return "k.s[0] " $k.s[0] " x[0] " $x[0]
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

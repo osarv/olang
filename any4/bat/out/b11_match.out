@@ -1,0 +1,13 @@
+== b11_match
+  san:    refused: b11_match.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 match 12|
+--- compile (-debug -sanitize)
+b11_match.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   27 |         h.p = match i {
+      |             ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+match 12

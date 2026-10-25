@@ -1,0 +1,7 @@
+b37_scopedvaluestruct.olang:23:29: error: expected a type, found '3'
+   23 | type FA struct(a Array<I64, 3>) { a }
+      |                             ^
+b37_scopedvaluestruct.olang:24:42: error: expected a type, found '3'
+   24 | fn mkfa(i I64) FA { return FA(Array<I64, 3>(i, i + 1, i + 2)) }
+      |                                          ^
+compilation failed with 2 errors

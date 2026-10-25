@@ -1,0 +1,4 @@
+r01c_spawnlambda.olang:9:18: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
+    9 |     join { spawn fn() { k.s = s }() }
+      |                  ^~
+compilation failed with 1 error

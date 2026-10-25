@@ -1,0 +1,47 @@
+import "std/io"
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+type HS struct(s String&) { s }
+type V struct(p P&) { p }
+type Sh trait {
+    Show() String
+}
+fn (p P&) Show() String { return "P" $p.n }
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mkp(i I64) P& { return P(i) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn mkv(i I64) V { return V(P(i)) }
+error Fail {
+    BAD
+}
+fn fp(i I64) P& ? Fail {
+    if i >= 0 { error Fail.BAD }
+    return P(i)
+}
+# accepted expected: &return returned
+fn g(i I64) P& { return mkp&return(i) }
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("returnmark " $x.n) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

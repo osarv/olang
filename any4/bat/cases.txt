@@ -1,0 +1,485 @@
+=== b01_partfield
+# a reference read out of a scoped call's value result, stored in an outer struct's field
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mkv&t(i * 11 + 1).p
+    }
+    assert churn() > 0
+    say("field " $h.p!.n)
+}
+=== b02_partpush
+# a reference read out of a scoped call's value result, pushed into an outer list
+fn main() {
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(mkv&t(i * 11 + 1).p)
+    }
+    assert churn() > 0
+    for x in xs { say("push " $x.n) }
+}
+=== b03_borrowedthrough
+# a scoped call passed through a function giving back its argument (a borrowed result), pushed outward
+fn id(q P&) P&q { return q }
+fn main() {
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(id(mkp&t(i * 11 + 1)))
+    }
+    assert churn() > 0
+    for x in xs { say("push " $x.n) }
+}
+=== b04_nestedscoped
+# a scoped call's result as the argument of another scoped call whose result holds it: built where out lives, holding a
+# P built where an inner block's local lives
+fn wrap(q P&) V { return V(q) }
+fn main() {
+    out := List<V>()
+    for i in range 2 {
+        t := "inner" $i
+        out.Push(wrap&out(mkp&t(i * 11 + 1)))
+    }
+    assert churn() > 0
+    for v in out { say("nested " $v.p.n) }
+}
+=== b05_method
+# a method call given a scope argument, its result stored outward
+fn (h H&) mkm(i I64) P& { return P(i) }
+fn main() {
+    g := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h := H(null)
+        g.p = h.mkm&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("method " $g.p!.n)
+}
+=== b06_generic
+# a generic call given a scope argument, its result stored outward
+type Box<T> struct(v T) { v }
+type HB struct(b Box<I64>?&) { b }
+fn mkb(x <T>) Box<T>& { return Box<T>(x) }
+fn main() {
+    h := HB(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.b = mkb&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("generic " $h.b!.v)
+}
+=== b07_lambda
+# a call through a function value given a scope argument
+fn main() {
+    f := fn(i I64) P& { return P(i) }
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = f&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("lambda " $h.p!.n)
+}
+=== b08_task
+# a task handed a scoped call's result built where a local of the join's loop body lives
+fn use(p P&) I64 {
+    s := 0
+    for k in range 2000 { s += churn() % 7 }
+    return p.n + s - s
+}
+fn main() {
+    total := 0
+    join {
+        for i in range 4 {
+            t := "inner" $i
+            spawn use(mkp&t(i * 11 + 1))
+        }
+    }
+    assert churn() > 0
+    say("task done")
+}
+=== b09_catchdefault
+# a catch default given a scope argument naming an inner block's local, stored outward
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = try fp(i) catch default mkp&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("default " $h.p!.n)
+}
+=== b10_cond
+# a conditional of scoped calls stored outward
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mkp&t(i * 11 + 1) if i > 0 else mkp&t(i + 5)
+    }
+    assert churn() > 0
+    say("cond " $h.p!.n)
+}
+=== b10b_condmixed
+# a conditional of a scoped call and a new value, stored outward
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mkp&t(i * 11 + 1) if i >= 0 else P(5)
+    }
+    assert churn() > 0
+    say("condmixed " $h.p!.n)
+}
+=== b11_match
+# a match value of scoped calls stored outward
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = match i {
+            case 0 => mkp&t(3)
+            nomatch => mkp&t(i * 11 + 1)
+        }
+    }
+    assert churn() > 0
+    say("match " $h.p!.n)
+}
+=== b12_destruct
+# a destructured scoped call: one of its results stored outward
+fn mk2p(i I64) P&, P& { return P(i), P(i + 1) }
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        a, b := mk2p&t(i * 11 + 1)
+        h.p = b
+    }
+    assert churn() > 0
+    say("destruct " $h.p!.n)
+}
+=== b13_global
+# a scoped call naming an inner block's local assigned to a global
+G mut P?& = null
+fn main() {
+    for i in range 2 {
+        t := "inner" $i
+        G = mkp&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("global " $G!.n)
+}
+=== b14_own
+# an owned result given a scope argument
+fn mko(i I64) own mut P& { return P(i) }
+fn main() {
+    for i in range 2 {
+        t := "inner" $i
+        o own mut P& = mko&t(i * 11 + 1)
+        say("own " $o.n)
+    }
+}
+=== b15_any
+# a scoped call's built reference made an any in an outer list
+fn main() {
+    xs := List<any Sh&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(mkp&t(i * 11 + 1))
+    }
+    assert churn() > 0
+    for x in xs { say("any " x.Show()) }
+}
+=== b16_returncond
+# a conditional of a scoped call naming the function's own local and a new value, returned
+fn g(i I64) P& {
+    t := "local" $i
+    return mkp&t(i * 11 + 1) if i >= 0 else P(4)
+}
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i)) }
+    assert churn() > 0
+    for x in l { say("returncond " $x.n) }
+}
+=== b17_parallel
+# a parallel assignment of a scoped call to an outer field
+fn main() {
+    h := H(null)
+    k := 0
+    for i in range 2 {
+        t := "inner" $i
+        h.p, k = mkp&t(i * 11 + 1), i
+    }
+    assert churn() > 0
+    say("parallel " $h.p!.n " " $k)
+}
+=== b18_setat
+# a scoped call stored into an outer list's element (SetAt)
+fn main() {
+    l := List<P&>()
+    l.Push(P(0))
+    for i in range 2 {
+        t := "inner" $i
+        l[0] = mkp&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("setat " $l[0].n)
+}
+=== b19_ctorarg
+# a scoped call as a constructor's argument, the instance pushed outward
+fn main() {
+    out := List<V>()
+    for i in range 2 {
+        t := "inner" $i
+        out.Push(V(mkp&t(i * 11 + 1)))
+    }
+    assert churn() > 0
+    for v in out { say("ctorarg " $v.p.n) }
+}
+=== b20_payload
+# a scoped call as an enum case's payload, pushed outward
+type E enum {
+    C(p P&)
+    N
+}
+fn main() {
+    out := List<E>()
+    for i in range 2 {
+        t := "inner" $i
+        out.Push(E.C(mkp&t(i * 11 + 1)))
+    }
+    assert churn() > 0
+    for e in out {
+        match e {
+            case E.C(p) { say("payload " $p.n) }
+            nomatch { }
+        }
+    }
+}
+=== b21_arraylit
+# a scoped call as an array literal's element, pushed outward
+fn main() {
+    out := List<Array<P&>&>()
+    for i in range 2 {
+        t := "inner" $i
+        out.Push(P&[mkp&t(i * 11 + 1)])
+    }
+    assert churn() > 0
+    for a in out { say("arraylit " $a[0].n) }
+}
+=== b22_keepcall
+# a scoped call handed to a callee that keeps it in another argument
+fn keep(h mut H&, p P&) { h.p = p }
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        keep(h, mkp&t(i * 11 + 1))
+    }
+    assert churn() > 0
+    say("keep " $h.p!.n)
+}
+=== b23_lambdareturn
+# a lambda building with &return, kept outward through its result
+fn main() {
+    f := fn(i I64) P& { return mkp&return(i) }
+    h := H(null)
+    for i in range 2 {
+        h.p = f(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("lambdareturn " $h.p!.n)
+}
+=== b25_slice
+# a slice of a scoped call's text stored in an outer struct's String& field
+fn main() {
+    h := HS("x")
+    for i in range 2 {
+        t := "inner" $i
+        h.s = mk&t(i)[0:6]
+    }
+    assert churn() > 0
+    say("slice " h.s)
+}
+=== b26_valuelocalstore
+# the declared-first form: a value local from a scoped call, a borrow of it stored outward (expected refused)
+fn main() {
+    h := HS("x")
+    for i in range 2 {
+        t := "inner" $i
+        x := mk&t(i)
+        h.s = x
+    }
+    assert churn() > 0
+    say("valuelocal " h.s)
+}
+=== b27_textintoref
+# a scoped call's text (an array value) stored straight into an outer struct's String& field
+fn main() {
+    h := HS("x")
+    for i in range 2 {
+        t := "inner" $i
+        h.s = mk&t(i)
+    }
+    assert churn() > 0
+    say("textintoref " h.s)
+}
+=== b28_textpush
+# a scoped call's text pushed straight into an outer List<String&>
+fn main() {
+    l := List<String&>()
+    for i in range 2 {
+        t := "inner" $i
+        l.Push(mk&t(i))
+    }
+    assert churn() > 0
+    say("textpush " $l)
+}
+=== b29_textreturnref
+# a scoped call's text naming the function's own local returned as a String& built result
+fn g(i I64) String& {
+    t := "local" $i
+    return mk&t(i)
+}
+fn main() {
+    l := List<String&>()
+    for i in range 2 { l.Push(g(i)) }
+    assert churn() > 0
+    say("textreturnref " $l)
+}
+=== b30_textreturnvalue
+# a scoped call's text naming the function's own local returned as a String value directly
+fn g(i I64) String {
+    t := "local" $i
+    return mk&t(i)
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say("textreturnvalue " a " " b)
+}
+=== a01_exactfield
+# accepted expected: a scoped call naming the struct it is stored in
+fn main() {
+    h := H(null)
+    for i in range 2 { h.p = mkp&h(i * 11 + 1) }
+    assert churn() > 0
+    say("exactfield " $h.p!.n)
+}
+=== a01b_exactfielddeclared
+# accepted expected: the declared-first form of a01
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        x := mkp&h(i * 11 + 1)
+        h.p = x
+    }
+    assert churn() > 0
+    say("exactfielddeclared " $h.p!.n)
+}
+=== a02_exactpush
+# accepted expected: a scoped call naming the list it is pushed into
+fn main() {
+    xs := List<P&>()
+    for i in range 2 { xs.Push(mkp&xs(i * 11 + 1)) }
+    assert churn() > 0
+    for x in xs { say("exactpush " $x.n) }
+}
+=== a03_returnmark
+# accepted expected: &return returned
+fn g(i I64) P& { return mkp&return(i) }
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("returnmark " $x.n) }
+}
+=== a05_textexactpush
+# accepted expected: text built where the list lives, pushed into it
+fn main() {
+    l := List<String&>()
+    for i in range 2 { l.Push(mk&l(i)) }
+    assert churn() > 0
+    say("textexactpush " $l)
+}
+=== a06_anyexact
+# accepted expected: an any of a scoped reference naming the list
+fn main() {
+    xs := List<any Sh&>()
+    for i in range 2 { xs.Push(mkp&xs(i * 11 + 1)) }
+    assert churn() > 0
+    for x in xs { say("anyexact " x.Show()) }
+}
+=== a07_catchdefaultexact
+# accepted expected: a catch default built where the field's struct lives
+fn main() {
+    h := H(null)
+    for i in range 2 { h.p = try fp(i) catch default mkp&h(i * 11 + 1) }
+    assert churn() > 0
+    say("catchdefaultexact " $h.p!.n)
+}
+=== a08_taskouter
+# accepted expected: a task handed a scoped call's result built where a local outside the join lives
+fn use(p P&) I64 { return p.n }
+fn main() {
+    keep := "outer"
+    join {
+        for i in range 4 { spawn use(mkp&keep(i * 11 + 1)) }
+    }
+    say("taskouter done")
+}
+=== a09_ctorexact
+# accepted expected: a scoped call naming the list, as a constructor's argument pushed into it
+fn main() {
+    out := List<V>()
+    for i in range 2 { out.Push(V(mkp&out(i * 11 + 1))) }
+    assert churn() > 0
+    for v in out { say("ctorexact " $v.p.n) }
+}
+=== a10_condexact
+# accepted expected: a conditional of a scoped call naming the struct and a new value
+fn main() {
+    h := H(null)
+    for i in range 2 { h.p = mkp&h(i * 11 + 1) if i > 0 else P(5) }
+    assert churn() > 0
+    say("condexact " $h.p!.n)
+}
+=== a11_globalassign
+# accepted expected: a scoped call building where a global's referent... (no: E25 forbids); a scoped call in a global's
+# own block-local use
+fn main() {
+    for i in range 2 {
+        t := "inner" $i
+        x := mkp&t(i)
+        say("local " $x.n " " t)
+    }
+}
+=== a12_returnexisting
+# accepted expected: returning a scoped call naming a parameter whose scope outlives the result (an obligation)
+fn g(q String&, i I64) P& { return mkp&q(i) }
+fn main() {
+    keep := "outer"
+    l := List<P&>()
+    for i in range 2 { l.Push(g(keep, i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("returnexisting " $x.n) }
+}
+=== a13_destructexact
+# accepted expected: SPEC's own E25 example, destructured results built where rows lives, pushed into it
+fn mk2p(i I64) P&, P& { return P(i), P(i + 1) }
+fn main() {
+    rows := List<P&>()
+    for i in range 2 {
+        a, b := mk2p&rows(i * 11 + 1)
+        rows.Push(a)
+        rows.Push(b)
+    }
+    assert churn() > 0
+    for x in rows { say("destructexact " $x.n) }
+}

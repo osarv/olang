@@ -1,0 +1,4 @@
+b16_returncond.olang:25:30: error[O10d]: this value lives in this function's own scope, which closes first
+   25 |     return mkp&t(i * 11 + 1) if i >= 0 else P(4)
+      |                              ^~
+compilation failed with 1 error

@@ -1,0 +1,2 @@
+local 0 inner0
+local 1 inner1

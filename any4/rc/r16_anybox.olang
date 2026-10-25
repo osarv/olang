@@ -1,0 +1,27 @@
+type K struct(s String&) { s }
+type KL struct(l Lab&) { l }
+type HS struct(s String&) { s }
+type Lab extends String
+# r01's missed name through an any's box: the box holds the call's array as it is (AnyItemNew), which the lambda's
+# store also names
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    put := fn() { k.s = s }
+    put()
+    return s
+}
+fn probe() String {
+    k := K("x")
+    b mut any W& = Lab(f(k, 2))
+    b.Bump()
+    return "k.s " $k.s
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

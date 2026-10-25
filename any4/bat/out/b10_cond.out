@@ -1,0 +1,13 @@
+== b10_cond
+  san:    refused: b10_cond.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 cond 12|
+--- compile (-debug -sanitize)
+b10_cond.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   27 |         h.p = mkp&t(i * 11 + 1) if i > 0 else mkp&t(i + 5)
+      |             ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+cond 12

@@ -1,0 +1,17 @@
+== b03_borrowedthrough
+  san:    refused: b03_borrowedthrough.olang:28:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 push 1|push 12|
+--- compile (-debug -sanitize)
+b03_borrowedthrough.olang:28:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   28 |         xs.Push(id(mkp&t(i * 11 + 1)))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+push 1
+push 12

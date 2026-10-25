@@ -1,0 +1,13 @@
+== b17_parallel
+  san:    refused: b17_parallel.olang:28:16: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 parallel 12 1|
+--- compile (-debug -sanitize)
+b17_parallel.olang:28:16: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   28 |         h.p, k = mkp&t(i * 11 + 1), i
+      |                ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+parallel 12 1

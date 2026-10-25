@@ -1,0 +1,13 @@
+== b19_ctorarg
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 ctorarg 12|ctorarg 12849|
+  interp: exit 1 olang interpret: b19_ctorarg.olang:30: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b19_ctorarg.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+ctorarg 12
+ctorarg 12849
+--- interpret
+olang interpret: b19_ctorarg.olang:30: it uses storage after the scope it was made in closed

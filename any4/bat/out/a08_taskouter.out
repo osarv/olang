@@ -1,0 +1,12 @@
+== a08_taskouter
+  san:    exit 0 taskouter done|
+  O3:     exit 0 taskouter done|
+  interp: exit 0 taskouter done|
+--- compile (-debug -sanitize)
+built ./build/a08_taskouter.debug.san
+--- run san
+taskouter done
+--- run O3
+taskouter done
+--- interpret
+taskouter done

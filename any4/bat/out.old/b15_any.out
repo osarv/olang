@@ -1,0 +1,13 @@
+== b15_any
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 any P12|any P14127969047506529|
+  interp: exit 1 olang interpret: b15_any.olang:9: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b15_any.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+any P12
+any P14127969047506529
+--- interpret
+olang interpret: b15_any.olang:9: it uses storage after the scope it was made in closed

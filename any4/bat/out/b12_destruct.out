@@ -1,0 +1,13 @@
+== b12_destruct
+  san:    refused: b12_destruct.olang:29:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 destruct 13|
+--- compile (-debug -sanitize)
+b12_destruct.olang:29:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   29 |         h.p = b
+      |             ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+destruct 13

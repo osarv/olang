@@ -1,0 +1,172 @@
+== a01_exactfield
+  san:    exit 0 exactfield 12|
+  O3:     exit 0 exactfield 12|
+  interp: exit 0 exactfield 12|
+== a01b_exactfielddeclared
+  san:    exit 0 exactfielddeclared 12|
+  O3:     exit 0 exactfielddeclared 12|
+  interp: exit 0 exactfielddeclared 12|
+== a02_exactpush
+  san:    exit 0 exactpush 1|exactpush 12|
+  O3:     exit 0 exactpush 1|exactpush 12|
+  interp: exit 0 exactpush 1|exactpush 12|
+== a03_returnmark
+  san:    exit 0 returnmark 1|returnmark 12|
+  O3:     exit 0 returnmark 1|returnmark 12|
+  interp: exit 0 returnmark 1|returnmark 12|
+== a05_textexactpush
+  san:    exit 0 textexactpush List<String&>["text0-0", "text1-7"]|
+  O3:     exit 0 textexactpush List<String&>["text0-0", "text1-7"]|
+  interp: exit 0 textexactpush List<String&>["text0-0", "text1-7"]|
+== a06_anyexact
+  san:    refused: a06_anyexact.olang:27:35: error[E11b]: a join piece is a text literal or a '$' rendering - write '$x.Show()'
+  O3:     refused
+  interp: exit 1 a06_anyexact.olang:27:35: error[E11b]: a join piece is a text literal or a '$' rendering - write '$x.Show()'|compilation failed with 1 error
+== a07_catchdefaultexact
+  san:    exit 0 catchdefaultexact 12|
+  O3:     exit 0 catchdefaultexact 12|
+  interp: exit 0 catchdefaultexact 12|
+== a08_taskouter
+  san:    exit 0 taskouter done|
+  O3:     exit 0 taskouter done|
+  interp: exit 0 taskouter done|
+== a09_ctorexact
+  san:    exit 0 ctorexact 1|ctorexact 12|
+  O3:     exit 0 ctorexact 1|ctorexact 12|
+  interp: exit 0 ctorexact 1|ctorexact 12|
+== a10_condexact
+  san:    exit 0 condexact 12|
+  O3:     exit 0 condexact 12|
+  interp: exit 0 condexact 12|
+== a11_globalassign
+  san:    refused: a11_globalassign.olang:28:31: error[E11b]: a join piece is a text literal or a '$' rendering - write '$t'
+  O3:     refused
+  interp: exit 1 a11_globalassign.olang:28:31: error[E11b]: a join piece is a text literal or a '$' rendering - write '$t'|compilation failed with 1 error|
+== a12_returnexisting
+  san:    exit 0 returnexisting 1|returnexisting 12|
+  O3:     exit 0 returnexisting 1|returnexisting 12|
+  interp: exit 0 returnexisting 1|returnexisting 12|
+== a13_destructexact
+  san:    exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+  O3:     exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+  interp: exit 0 destructexact 1|destructexact 2|destructexact 12|destructexact 13|
+== b01_partfield
+  san:    refused: b01_partfield.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 field 12|
+== b02_partpush
+  san:    refused: b02_partpush.olang:27:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 push 1|push 12|
+== b03_borrowedthrough
+  san:    refused: b03_borrowedthrough.olang:28:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 push 1|push 12|
+== b04_nestedscoped
+  san:    refused: b04_nestedscoped.olang:29:27: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the in
+  O3:     refused
+  interp: exit 0 nested 1|nested 12|
+== b05_method
+  san:    refused: b05_method.olang:29:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 method 12|
+== b06_generic
+  san:    refused: b06_generic.olang:25:10: error: expected a name, found '<'
+  O3:     refused
+  interp: exit 1 b06_generic.olang:25:10: error: expected a name, found '<'|compilation failed with 1 error|
+== b07_lambda
+  san:    refused: b07_lambda.olang:28:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 lambda 12|
+== b08_task
+  san:    refused: b08_task.olang:33:27: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
+  O3:     refused
+  interp: exit 124 
+== b09_catchdefault
+  san:    refused: b09_catchdefault.olang:27:43: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+  O3:     refused
+  interp: exit 0 default 12|
+== b10_cond
+  san:    refused: b10_cond.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 cond 12|
+== b10b_condmixed
+  san:    refused: b10b_condmixed.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 condmixed 12|
+== b11_match
+  san:    refused: b11_match.olang:27:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 match 12|
+== b12_destruct
+  san:    refused: b12_destruct.olang:29:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 destruct 13|
+== b13_global
+  san:    refused: b13_global.olang:27:11: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  O3:     refused
+  interp: exit 0 global 12|
+== b14_own
+  san:    refused: b14_own.olang:27:15: error: expected end of line, found 'mut'
+  O3:     refused
+  interp: exit 1 b14_own.olang:27:15: error: expected end of line, found 'mut'|compilation failed with 1 error|
+== b15_any
+  san:    refused: b15_any.olang:27:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 any P1|any P12|
+== b16_returncond
+  san:    refused: b16_returncond.olang:25:30: error[O10d]: this value lives in this function's own scope, which closes first
+  O3:     refused
+  interp: exit 0 returncond 1|returncond 12|
+== b17_parallel
+  san:    refused: b17_parallel.olang:28:16: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  O3:     refused
+  interp: exit 0 parallel 12 1|
+== b18_setat
+  san:    refused: b18_setat.olang:28:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 0 setat 12|
+== b19_ctorarg
+  san:    refused: b19_ctorarg.olang:27:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instanc
+  O3:     refused
+  interp: exit 0 ctorarg 1|ctorarg 12|
+== b20_payload
+  san:    refused: b20_payload.olang:31:26: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+  O3:     refused
+  interp: exit 0 payload 1|payload 12|
+== b21_arraylit
+  san:    refused: b21_arraylit.olang:27:25: error[O25c]: the array outlives what this element refers to - build the element where the array goes
+  O3:     refused
+  interp: exit 0 arraylit 1|arraylit 12|
+== b22_keepcall
+  san:    refused: b22_keepcall.olang:28:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  O3:     refused
+  interp: exit 1 b22_keepcall.olang:37:5: error[D3a]: 'keep' names a function of this module - a name means one thing in it, so name this apart|b22_keepcall.
+== b23_lambdareturn
+  san:    exit 0 lambdareturn 12|
+  O3:     exit 0 lambdareturn 12|
+  interp: exit 0 lambdareturn 12|
+== b25_slice
+  san:    refused: b25_slice.olang:30:18: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'
+  O3:     refused
+  interp: exit 1 b25_slice.olang:30:18: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'|compilation failed with 1 error|
+== b26_valuelocalstore
+  san:    refused: b26_valuelocalstore.olang:31:23: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'
+  O3:     refused
+  interp: exit 1 b26_valuelocalstore.olang:31:23: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'|compilation failed with 1 err
+== b27_textintoref
+  san:    refused: b27_textintoref.olang:30:24: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'
+  O3:     refused
+  interp: exit 1 b27_textintoref.olang:30:24: error[E11b]: a join piece is a text literal or a '$' rendering - write '$h.s'|compilation failed with 1 error|
+== b28_textpush
+  san:    exit 0 textpush List<String&>["text0-0", "text1-7"]|
+  O3:     exit 0 textpush List<String&>["text0-0", "text1-7"]|
+  interp: exit 0 textpush List<String&>["text0-0", "text1-7"]|
+== b29_textreturnref
+  san:    exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+  O3:     exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+  interp: exit 0 textreturnref List<String&>["text0-0", "text1-7"]|
+== b30_textreturnvalue
+  san:    refused: b30_textreturnvalue.olang:31:28: error[E11b]: a join piece is a text literal or a '$' rendering - write '$a'
+  O3:     refused
+  interp: exit 1 b30_textreturnvalue.olang:31:28: error[E11b]: a join piece is a text literal or a '$' rendering - write '$a'|compilation failed with 1 error

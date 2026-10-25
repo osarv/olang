@@ -1,0 +1,4 @@
+b20_payload.olang:31:26: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+   31 |         out.Push(E.C(mkp&t(i * 11 + 1)))
+      |                          ^
+compilation failed with 1 error
