@@ -181,3 +181,33 @@ test "G12: an instance named with its error set, and one whose set is left to in
     ys := I64[1, 2].Map<F64>(fn(x I64) F64 { return F64(x) / 2.0 })
     assert ys == F64[0.5, 1.0]
 }
+
+# a fallible iterator as a run-time trait value (T32), and one whose Next writes its set in another order (T31: held by)
+type Countdown struct(n I64) { n }
+
+fn (r mut Countdown&) Next() I64 ? Exhausted, Bad {
+    if r.n == 0 { error Exhausted.END }
+    r.n--
+    if r.n == 5 { error Bad.NEG }
+    return r.n
+}
+
+fn sumAny(it mut any Iterator<I64 ? Bad>&) I64 ? Bad {
+    s I64 = 0
+    for x in try it { s += x }
+    return s
+}
+
+test "T32, T31: an any of a fallible iterator, and a set written in another order" {
+    a := Countdown(3)
+    it mut any Iterator<I64 ? Bad>& = a
+    assert (try sumAny(it) catch Bad default -1) == 3
+    b := Countdown(7)
+    jt mut any Iterator<I64 ? Bad>& = b
+    assert (try sumAny(jt) catch Bad default -1) == -1
+    c := Countdown(7)
+    assert (try total(c) catch Bad default -1) == -1
+    d := Countdown(3)
+    kt mut any Iterator<I64 ? Bad>& = d
+    assert (try kt.Count(fn(x I64) Bool { return x > 0 }) catch Bad default -1) == 2
+}
