@@ -542,14 +542,16 @@ fn (t Table&) Role(f TypeId) I64 {
     return s[0] if s.Len() > 0 else RoleFn
 }
 
+# a parameter or result the record has no entry for - a result of a function with none, read as its first - is
+# OwnScope, as every entry of a plain record is (an index past the record read memory beyond it, E16e)
 fn (t Table&) ShareOf(f TypeId, i I64) I64 {
     s := t.scopes[I64(t.ScopesOf(f))]
-    return s[2 + i] if s.Len() > 0 else OwnScope
+    return s[2 + i] if s.Len() > 0 and i >= 0 and 2 + i < s.Len() else OwnScope
 }
 
 fn (t Table&) ResultFrom(f TypeId, k I64) I64 {
     s := t.scopes[I64(t.ScopesOf(f))]
-    return s[2 + s[1] + k] if s.Len() > 0 else OwnScope
+    return s[2 + s[1] + k] if s.Len() > 0 and k >= 0 and 2 + s[1] + k < s.Len() else OwnScope
 }
 
 # a function type's results: none (Void), one, or a Tuple's parts (D8c)
@@ -1379,6 +1381,9 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     ctor := t.Func(t.List1(i64), n, ListId(0), t.Scopes(RoleCtor, I64[OwnScope], I64[OwnScope]))
     dtor := t.Func(t.List1(mutN), VoidT, ListId(0), t.Scopes(RoleDtor, I64[OwnScope], I64[]))
     assert t.ScopeVarsOf(ctor) == I64[ResultVar] and t.ScopeVarsOf(dtor) == I64[ClosingVar]
+    # a function with no result read as having a first one, or a parameter past its last, is OwnScope - the record has
+    # no entry there (the scope pass asked shared's result 0 and read beyond the record: a crash building target.olang)
+    assert t.ResultFrom(shared, 0) == OwnScope and t.ResultFrom(dtor, 0) == OwnScope and t.ShareOf(shared, 3) == OwnScope
     # an array of them keeps its element's scopes, one of plain ones is its plain type; an instance's arguments are held
     # plain, so it is one instance whatever scopes its arguments were written with
     arr := t.Array(shared, TypeId(0))
