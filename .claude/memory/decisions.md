@@ -1207,3 +1207,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   caught by type/word, never stored, passed, or a type argument, so Result<T, os.Error> needs errors as values (QAM,
   build list 14: `catch os.Error e`, `error e`, error types as ordinary types, named sets, `$e`). ASKED: build errors as
   values, then Result, in that order?
+- Errors as values, the user 2026-10-25: "do we want errors as say variables? I am not sold on the idea of storing
+  errors actually". PROPOSED (rec): a catch clause may name what it took (`catch os.Error e`), usable ONLY inside the
+  clause - rendered `$e`, compared with words, re-raised `error e` - never assigned, passed, stored or a type argument;
+  the rest of QAM (error types in generics, named sets as types, storable errors) dropped; keeping failures for later
+  is the user's own enum (and Result<T, E> with user types). ASKED; in effect: errors not values (T20), QAM on the
+  build list until answered.
