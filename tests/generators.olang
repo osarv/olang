@@ -214,3 +214,32 @@ test "D18c: a generator yields copies of what it was given" {
     }
     assert n == 4
 }
+
+# S19e: an errdefer in a block of a generator's body that closes before its yield runs when the walk's error leaves it
+EdLog mut I64 = 0
+
+fn edCheck(n I64) ? Bad {
+    if n < 0 { error Bad.NEG }
+}
+
+fn edWalk(n I64) Iterator<I64 ? Bad> {
+    for i in range 3 {
+        {
+            errdefer EdLog = EdLog * 10 + 1
+            try edCheck(n - i)
+        }
+        yield i
+    }
+}
+
+fn edTotal(n I64) I64 {
+    t I64 = 0
+    for x in try edWalk(n) { t += x } catch Bad { t += 100 }
+    return t
+}
+
+test "S19e: an errdefer in a generator's body runs when the walk fails, not when it ends" {
+    EdLog = 0
+    assert edTotal(5) == 3 and EdLog == 0
+    assert edTotal(1) == 101 and EdLog == 1
+}
