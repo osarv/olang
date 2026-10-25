@@ -1228,3 +1228,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `error e` re-raises (checked against the function's set); no assign/pass/store/capture (error naming `$e`); no
   generics involvement (error-set parameters `<T ? E>` are separate); `try e` an error naming `error e`; e is the
   32-bit code in a local, the evaluator binds it alike. ASKED to take it as the design.
+- The user 2026-10-25: errors must stay "their own specific thing that creates a set with listing etc." - not both
+  sides of the union as normal variables; `fn f() I32 ? MyStruct` makes no sense. Confirmed: only error types after `?`
+  and in catch; sets are lists, not variable types; the clause-local `e` is a name for the error being handled (as a
+  for-in names its element), never data. ASKED to decide the clause-only name.
