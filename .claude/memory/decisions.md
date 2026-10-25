@@ -1192,3 +1192,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QAZ DECIDED 2026-10-25 (the user: "I don't want the option type for values, the ref one earns its keep especially
   through narrowing ... Values are just not worth it"): no `T?` on values (a flag per value, niches only for some
   types); `?&` unchanged; `T?&` results stay allowed (my question 3 withdrawn). Open: the tuples talk, which Result waits on.
+- TUPLES TALK started 2026-10-25 (the user: "If we do tuples we index with [] right? How does python do it?"):
+  explained Python's run-time indexing and the typed languages' (Rust t.0, C++ get<0>, TypeScript literal index);
+  proposed `t[k]` with k known while compiling (each position its own type; a run-time index an error naming Array),
+  `(1, "a")` literals, `a, b := t` unpacking. Open clashes: (1) `(...)` grouping in type lists vs a tuple type (make
+  grouping BE a tuple?), (2) several results as tuples (one concept; solves Result<(I64, I64), E>). ASKED whether to
+  work both out in full.
