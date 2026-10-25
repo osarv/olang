@@ -1061,3 +1061,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   fails with CheckError.CONTRACT); "This whole thing is starting to cost more than it tastes no?" ASKED: shelve the
   prover (contracts kept as they are, docs/prover.md as the record, a separate `olang prove` tool if ever revived) -
   recommended yes. In effect: prover last on the list (already decided), nothing built.
+- PROVER REMOVED (the user 2026-10-25: "Let's get rid of the prover"): off the list; docs/prover.md kept as history.
+- **QAU ASKED 2026-10-25** (the user: revisit `checked` - "better solved with wrappers"; keep static scope contracts
+  optional in the signature; "move checks into the normal parameters", e.g. `fn f(x Handle& outlives y, y Handle&)`,
+  `fn f(x I32, y I32 > x)`). Proposed: (1) parameter conditions - `outlives NAME` after a reference parameter
+  (optional; obligations still inferred; body held to it), a comparison chain on the parameter after its type
+  (`> x`, `>= 0 and <= 100`, earlier parameters and constants), the bracket block, entry values, for/if/fits in
+  contracts and `checked f(x)` removed; (2) conditions decided at compile time where known, checked at run time only in
+  test and -debug builds (rec) or never; (3) result conditions `) I64 >= 0` too (rec yes); (4) remove `checked`:
+  CheckedPlus etc. by name, `try a.CheckedAt(i)`/`CheckedSlice` (maybe Get/SliceOf), `try narrow<I32>(x)`, `as` keeps
+  aborting (rec yes); (5) a prelude `Checked<T>` with failing operators for whole computations (rec yes, both). In
+  effect: contracts and checked as built.
