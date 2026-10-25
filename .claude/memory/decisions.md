@@ -1244,3 +1244,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   directly); (3) arrays get `try a.Set(i, v)` beside `Get` (symmetry; replaces the checked store); (4) a requirement the
   compiler decides false stays a compile error even when the caller handles ArgumentError (such a call never succeeds).
   To be built in lang25's follow-up after its review.
+- REVISED 2026-10-25 (mine, from lang25's review): (4) above - a requirement decided false is a compile error only
+  where nothing at the call catches ArgumentError (a test must be able to exercise the failure). And G12/method type
+  arguments: `<...>` after a name is type arguments only when it touches the name and the `(` (no whitespace); with
+  spaces it is a comparison chain (`k < m > (0)` was misread).

@@ -389,3 +389,11 @@ on sight per rules.md, "Code rules".
   binding, commutes) + tools (checked/contracts/try/as_migrate in olang fix). Review running (/home/user/review/lang25);
   then a follow-up round: the review's fixes + decisions (1) condition text in `!`'s message, (3) `a.Set(i, v)`; then
   merge, then the queued errors batch.
+- 2026-10-25 CEST: lang25's review (/home/user/review/lang25, stopped early at the user's "full reviews in bulk", then
+  written up from what it had): 8 confirmed - a Call adapter ignoring error sets (miscompile, older, now reachable),
+  `olang fix` changing old code's meaning (checked_migrate/try_migrate/as_migrate), `x.Len()` on a type without Len
+  compiling (older), comparison chains read as type-argument calls, nested checks dropped, fuzz generator. Merge
+  aborted; fix round on wt-lang25 (fresh agent). DECIDED (mine): type arguments only touching (`x.Narrow<I32>()`, no
+  spaces) - with spaces a comparison; D17e's compile error only where nothing catches ArgumentError (reverses my call
+  this morning: tests must be able to exercise the failure); Rem(MIN, -1) = 0; fix wraps old try sites only where both
+  readings agree, else lists and exits 1.
