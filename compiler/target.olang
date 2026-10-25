@@ -74,18 +74,77 @@ fn cField(buf Array<U8>&, at I64) String {
     return b.ToString()
 }
 
-# the clang to build with: the first of clang-20 and clang found on PATH, by name (os.Exec looks it up the same way),
-# or "" when there is none
+# the clang to build with (B12d): OLANG_CLANG where it is set (a name looked up on PATH, or a path); else the clang a
+# release bundles beside the compiler (its directory's "../llvm/bin/clang"); else the newest of clang-20, clang-19,
+# clang-18 and clang found on PATH, by name (os.Exec looks it up the same way); "" when there is none
 fn FindClang() String {
-    path := try os.Env("PATH") catch default ""
-    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
-    for name in String&["clang-20", "clang"] {
-        for dir in dirs.Split(":") {
-            cand := $dir "/" $name if dir != "" else $name
-            if access($cand "\0", 1) == 0 { return $name } # 1 is X_OK
-        }
+    env := try os.Env("OLANG_CLANG") catch default ""
+    if env != "" { return $env if executable(env) else "" }
+    exe := try os.ReadLink("/proc/self/exe") catch default ""
+    slash := try exe.FindLast("/") catch default -1
+    if slash >= 0 {
+        bundled := $exe[:slash] "/../llvm/bin/clang"
+        if access($bundled "\0", 1) == 0 { return bundled }
+    }
+    for name in Clangs {
+        if executable(name) { return $name }
     }
     return ""
+}
+
+# the clangs looked for on PATH, newest first: the LLVM versions olang's IR is written for (B12d)
+Clangs := String&["clang-20", "clang-19", "clang-18", "clang"]
+
+# whether name - a path, or a name looked up on PATH - is a program this process may run
+fn executable(name String&) Bool { return whereIs(name) != "" }
+
+# the file a command's name runs - a path, or a name found on PATH as the system finds it - "" where there is none
+# this process may run
+fn whereIs(name String&) String {
+    if name.Contains("/") { return $name if access($name "\0", 1) == 0 else "" } # 1 is X_OK
+    path := try os.Env("PATH") catch default ""
+    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
+    for dir in dirs.Split(":") {
+        cand := $dir "/" $name if dir != "" else $name
+        if access($cand "\0", 1) == 0 { return cand }
+    }
+    return ""
+}
+
+# ---- another architecture's programs (B12a) ----
+
+# the C library a build for t links against: OLANG_SYSROOT where it is set, else "" - clang finds a cross C library
+# installed where the distribution puts one (Debian's /usr/aarch64-linux-gnu) by itself
+fn Sysroot() String { return try os.Env("OLANG_SYSROOT") catch default "" }
+
+# how a program built for t is run here: nothing before it for this machine's; for another architecture an emulator -
+# OLANG_EMULATOR (a command, its words split at spaces), else qemu-ARCH or qemu-ARCH-static found on PATH, told where the
+# architecture's C library is (OLANG_SYSROOT, else /usr/ARCH-linux-gnu where that exists). Fails where there is none
+fn (t Target&) Runner() Array<String&> ? Bad {
+    out List<String&>
+    if not t.Foreign { return out.ToArray() }
+    env := try os.Env("OLANG_EMULATOR") catch default ""
+    if env != "" {
+        for w in env.Split(" ") {
+            if w != "" { out.Push($w) }
+        }
+        if out.Len() == 0 or not executable(out[0]) { error Bad.TARGET }
+        out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
+        return out.ToArray()
+    }
+    for name in String&[$"qemu-" $t.Arch, $"qemu-" $t.Arch "-static"] {
+        at := whereIs(name)
+        if at == "" { continue }
+        out.Push($at)
+        root := Sysroot()
+        if root == "" and os.IsDir($"/usr/" $t.Arch "-linux-gnu") { root = $"/usr/" $t.Arch "-linux-gnu" }
+        if root != "" {
+            out.Push("-L")
+            out.Push($root)
+        }
+        return out.ToArray()
+    }
+    error Bad.TARGET
 }
 
 # ---- resolving ----
@@ -312,18 +371,6 @@ fn probeKey(args Array<String&>&, input String&) String {
     return b.ToString()
 }
 
-# the file a command's name runs, found in PATH as the system finds it ("" for none)
-fn whereIs(name String&) String {
-    if name.Contains("/") { return $name }
-    path := try os.Env("PATH") catch default ""
-    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
-    for dir in dirs.Split(":") {
-        cand := $dir "/" $name if dir != "" else $name
-        if access($cand "\0", 1) == 0 { return $cand } # 1 is X_OK
-    }
-    return ""
-}
-
 # this processor's model, as /proc/cpuinfo names it ("" where it cannot be read)
 fn cpuModel() String {
     info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
@@ -458,8 +505,8 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
     assert mistake("a:b", "", false, "linux", "x86_64").Contains("unknown target 'a:b'")
     assert mistake("aarch64-linux-gnu", "", true, "linux", "x86_64") ==
-        "olang: error[B12a]: interpret builds and runs on this machine, and '-target aarch64-linux-gnu' is another " $
-        "architecture or system - only compile builds for it\n"
+        "olang: error[B12a]: interpret runs on this machine, and '-target aarch64-linux-gnu' is another " $
+        "architecture or system - build, compile and test build for it\n"
     assert mistake("native", "", false, "linux", "x86_64").Contains("clang not found on PATH")
     assert mistake("native", "", false, "linux", "riscv64").Contains("does not build for 'riscv64'")
     # without clang interpret knows this machine and the x86-64 levels, and the triple naming this machine
@@ -486,4 +533,20 @@ test "with clang, native is this machine's CPU, a triple of this machine its bas
     # LLVM 18 cannot build the runtime's BF16 code for aarch64 (B12a); a later clang might
     a := mistake("aarch64-linux-gnu", clang, false, "linux", "x86_64")
     assert a == "" or a.Contains("error[B12a]: this clang cannot build for 'aarch64-linux-gnu'")
+}
+
+test "B12a: this machine's programs run as they are, another architecture's through an emulator" {
+    here := Target()
+    assert (try here.Runner() catch Bad { unreachable }).Len() == 0
+    arm := Target()
+    arm.Arch = "aarch64"
+    arm.Foreign = true
+    run := try arm.Runner() catch Bad { return } # no emulator on this machine: nothing to run through
+    assert run.Len() > 0 and run[0].Contains("/")
+}
+
+test "B12d: the clangs looked for on PATH, newest first, and a name found as a path" {
+    assert Clangs[0] == "clang-20" and Clangs[Clangs.Len() - 1] == "clang"
+    assert whereIs("sh").EndsWith("/sh") and whereIs("olang-no-such-program") == ""
+    assert whereIs("/bin/sh") == "/bin/sh" and whereIs("/olang/no/such") == ""
 }

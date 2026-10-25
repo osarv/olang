@@ -71,6 +71,7 @@ type Diag enum {
     TargetForeignMode
     TargetNoBackend
     TargetNoClang
+    TargetNoEmulator
     ExplainNeedsRule
     ExplainNeedsName
     ExplainNoItem
@@ -734,13 +735,16 @@ fn TargetUnsupported(text String&) Msg { return Msg(Diag.TargetUnsupported, "B12
 fn TargetNativeForeign(text String&) Msg { return Msg(Diag.TargetNativeForeign, "B12", "'-target " $text "': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default") }
 
 # ERR_TARGET_FOREIGN_MODE
-fn TargetForeignMode(text1 String&, text2 String&) Msg { return Msg(Diag.TargetForeignMode, "B12a", $text1 " builds and runs on this machine, and '-target " $text2 "' is another architecture or system - only compile builds for it") }
+fn TargetForeignMode(text1 String&, text2 String&) Msg { return Msg(Diag.TargetForeignMode, "B12a", $text1 " runs on this machine, and '-target " $text2 "' is another architecture or system - build, compile and test build for it") }
 
 # ERR_TARGET_NO_BACKEND
-fn TargetNoBackend(text String&) Msg { return Msg(Diag.TargetNoBackend, "B12a", "this clang cannot build for '" $text "': its back end for that architecture cannot generate the BF16 code the runtime holds") }
+fn TargetNoBackend(text String&) Msg { return Msg(Diag.TargetNoBackend, "B12a", "this clang cannot build for '" $text "': its back end for that architecture cannot generate the BF16 code the runtime holds - clang 19 or newer can (OLANG_CLANG names the one to use)") }
 
 # ERR_TARGET_NO_CLANG
 fn TargetNoClang(text String&) Msg { return Msg(Diag.TargetNoClang, "B12", "clang not found on PATH - it is what builds the program, and what says what target '" $text "' is") }
+
+# ERR_TARGET_NO_EMULATOR
+fn TargetNoEmulator(text String&) Msg { return Msg(Diag.TargetNoEmulator, "B12a", "nothing here runs " $text " programs - install qemu-user (qemu-" $text "), or name an emulator with OLANG_EMULATOR") }
 
 # ERR_EXPLAIN_NEEDS_RULE
 fn ExplainNeedsRule() Msg { return Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }

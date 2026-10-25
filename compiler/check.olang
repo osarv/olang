@@ -4558,6 +4558,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             # R1c: "T.W, T.V", as a signature writes the words it names
             et := c.P.T.ErrOf(t)
             name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
+            if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
             ws := c.P.ErrorWords(c.P.T.DeclOf(et))
             mask := c.P.T.ErrMask(t)
             first := true
@@ -8628,6 +8629,7 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
         if c.P.T.KindOf(x) == types.Kind.ErrWords {
             et := c.P.T.ErrOf(x)
             name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
+            if c.spellQualified { name = $c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(et))) $name }
             ws := c.P.ErrorWords(c.P.T.DeclOf(et))
             mask := c.P.T.ErrMask(x)
             all := true
@@ -11450,7 +11452,12 @@ fn (c mut Checker&) escapeRules(at source.Span, mark I64, k I64) {
         }
         u := c.uncovered(fr.Errors, e)
         if u != types.UnknownT {
-            c.err(at, msgs.TryErrorNotDeclared(c.ty(u)))
+            # another module's error as code here names it, "net.Error.UNREACHABLE" (B11)
+            was := c.spellQualified
+            c.spellQualified = true
+            spelled := c.ty(u)
+            c.spellQualified = was
+            c.err(at, msgs.TryErrorNotDeclared(spelled))
             return
         }
     }
@@ -13785,6 +13792,12 @@ fn (c mut Checker&) qualifierFor(m I64) String {
             alias = imp.Spec[k + 1:]
         }
         return $alias "."
+    }
+    # a module this one does not import (reached through another): by its file's name, as an import of it would alias it
+    if m >= 0 and m < c.P.L.Mods.Len() and not c.P.L.Mods[m].Prelude {
+        id := c.P.L.Mods[m].Identity
+        k := try id.FindLast("/") catch default -1
+        return $id[k + 1:] "."
     }
     return ""
 }

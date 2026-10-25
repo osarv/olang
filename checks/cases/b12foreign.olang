@@ -1,4 +1,5 @@
-# check: fail error[B12a]
-# flags: -target aarch64-linux-gnu
-# B12a: another architecture is built for with -c only, and only where clang can compile the runtime's code for it
+# check: fail error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU
+# flags: -target aarch64-linux-gnu:native
+# B12, B12a: another architecture is built for with its own CPU named, never this machine's - refused before clang is
+# asked anything, so with every clang alike
 fn main() ? { }

@@ -49,7 +49,16 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
-Checks Array<String&>& = withParts(Scenarios)
+Checks Array<String&>& = withParts(Scenarios) if Target == "" else Array<String&>(0)
+
+# CHECKS_TARGET (make cross): another architecture the cases are built for (B12a) - "-target" added to each case's
+# flags, a run case run through the emulator olang finds - while the scenarios, which look at this machine's own builds,
+# are not run
+Target String& = try os.Env("CHECKS_TARGET") catch default ""
+
+# the cases not built for another architecture: what links libffi for std/ffi's calls, which the cross C library of
+# the distribution does not hold
+CrossSkip := String&["externruntime2.olang"]
 
 fn withParts(names Array<String&>&) Array<String&>& {
     all List<String&>
@@ -140,6 +149,7 @@ fn runCheck(k I64) String& {
 
 # whether the scenario named "name" passed, printing what went wrong when it did not
 fn passed(name String&) Bool {
+    if Target != "" { return true } # not run for another architecture
     found := false
     ok := true
     for i, s in Checks {
@@ -256,7 +266,12 @@ fn runCase(name String&) String& {
     if not name.EndsWith(".olang") { return "" }
     src := try os.ReadFile("checks/cases/" $name) catch default ""
     check := lineAfter(src, "# check: ")
-    flags := lineAfter(src, "# flags: ")
+    written := lineAfter(src, "# flags: ")
+    # for another architecture, every case but those naming their own target, and the documentation's (which no
+    # target changes) - and those needing what a cross C library holds alone (CrossSkip)
+    cross := Target != "" and not written.Contains("-target") and not check.StartsWith("doc")
+    if Target != "" and CrossSkip.Has(name) { return "" }
+    flags := $written " -target " $Target if cross else written
     base := name[:name.Len() - 6]
     dir := fresh("cases/" $base)
     os.Run("cp checks/cases/" $name " " $os.Quote(dir))
@@ -292,7 +307,9 @@ fn runCase(name String&) String& {
     }
     if san { bin = $bin ".san" }
     if check.Eq("run") {
-        if sh(dir, "./build/" $bin " > out.txt 2> err.txt") != 0 {
+        # another architecture's program is run by olang, through its emulator (B3g, B12a)
+        run := "./build/" $bin if not cross else $store() " \"$OLANG\" " $flags " " $name
+        if sh(dir, $run " > out.txt 2> err.txt") != 0 {
             return $failure($name " built but did not run cleanly", dir) $(try os.ReadFile($dir "/err.txt") catch default "")
         }
         want := storedOutput(name)
@@ -1494,6 +1511,19 @@ fn cinterop(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s abi.txt abi.out") == 0, "abi printed otherwise than abi.out says", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize -output abi.ds abi.olang > out.txt 2>&1 && ./abi.ds > abi.ds.txt") == 0, "abi -debug -sanitize", dir)
     try r.expect(sh(dir, "cmp -s abi.ds.txt abi.out") == 0, "abi under -debug -sanitize printed otherwise", dir)
+    # X11 on AAPCS64: the same calls against abi.c compiled by GCC for aarch64 - another compiler's C ABI - run through
+    # the emulator, where olang builds for aarch64 here (B12a)
+    if crossLibc("aarch64") and hasEmulator("aarch64") and sh(dir, "command -v aarch64-linux-gnu-gcc > /dev/null") == 0 {
+        os.Run("mkdir -p " $os.Quote($dir "/arm") " && cp " $os.Quote($dir "/abi.c") " " $os.Quote($dir "/abi.olang") " " $
+               os.Quote($dir "/arm"))
+        try r.expect(sh($dir "/arm", "aarch64-linux-gnu-gcc -c -O2 abi.c -o abi.o > out.txt 2>&1") == 0, "abi.c for aarch64", dir)
+        if sh($dir "/arm", "\"$OLANG\" build -target aarch64-linux-gnu abi.olang > out.txt 2>&1") == 0 {
+            ran := sh($dir "/arm", "\"$OLANG\" -target aarch64-linux-gnu abi.olang > abi.txt 2>&1 && cmp -s abi.txt ../abi.out")
+            try r.expect(ran == 0, "abi on aarch64 printed otherwise than abi.out says", dir)
+        } else {
+            try r.expect(outOf($dir "/arm").Contains("error[B12a]"), "abi.olang for aarch64", dir)
+        }
+    }
     try r.expect(sh(dir, "\"$OLANG\" build -library mylib.olang > out.txt 2>&1") == 0, "mylib.olang did not build as a library", dir)
     try r.expect(sh(dir, "test -f build/libmylib.so && test -f build/mylib.h") == 0, "no libmylib.so and mylib.h", dir)
     # only the export fns' entries are shown
@@ -1563,9 +1593,29 @@ fn target(r mut report&) ? Failed {
     # interpreted: the build constants and the results the built program gives
     try r.expect(sh(dir, "\"$OLANG\" interpret loop.olang | cmp -s - native.txt") == 0, "-i", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret -target x86-64 loop.olang | cmp -s - base.txt") == 0, "-a x86-64 -i", dir)
-    # another architecture: -c at most, and with this clang not even that
-    try r.expect(sh(dir, "\"$OLANG\" build -target aarch64-linux-gnu loop.olang > out.txt 2>&1") != 0 and
-                 outOf(dir).Contains("error[B12a]"), "aarch64", dir)
+    # another architecture (B12a): built where this clang can and its C library is installed (else refused, naming
+    # why), and run through an emulator where there is one - computing what this machine computed (B12c)
+    if sh(dir, "\"$OLANG\" build -target aarch64-linux-gnu loop.olang > out.txt 2>&1") != 0 {
+        try r.expect(outOf(dir).Contains("error[B12a]") or not crossLibc("aarch64"), "aarch64 refused for no reason", dir)
+        return
+    }
+    try r.expect(sh(dir, "file build/loop | grep -q 'ARM aarch64'") == 0, "-target aarch64 built no aarch64 program", dir)
+    if not hasEmulator("aarch64") { return }
+    try r.expect(sh(dir, "\"$OLANG\" -target aarch64-linux-gnu loop.olang > arm.txt 2>&1") == 0, "aarch64 run", dir)
+    arm := try os.ReadFile($dir "/arm.txt") catch default ""
+    try r.expect(arm.StartsWith("generic ") and arm.EndsWith($"\n" $results), "aarch64 printed " $arm, dir)
+}
+
+# whether the C library of arch's Linux is installed where clang finds a cross one, or OLANG_SYSROOT names one (B12a)
+fn crossLibc(arch String&) Bool {
+    sysroot := try os.Env("OLANG_SYSROOT") catch default ""
+    return sysroot != "" or os.Exists($"/usr/" $arch "-linux-gnu/lib/libc.so")
+}
+
+# whether an emulator olang would run arch's programs through is here (B12a)
+fn hasEmulator(arch String&) Bool {
+    e := try os.Env("OLANG_EMULATOR") catch default ""
+    return e != "" or os.Run($"command -v qemu-" $arch " > /dev/null 2>&1 || command -v qemu-" $arch "-static > /dev/null 2>&1") == 0
 }
 
 # G8b: a generic type first resolved from inside another module's signature - b.olang's ReadA names a.Wrap before a's

@@ -157,7 +157,11 @@ fn (c Config&) modeSuffix() String {
 # -O3 with full LTO
 fn (c Config&) ModeFlags() List<String&> {
     out List<String&>
-    if c.Target.Foreign { out.Push($"--target=" $c.Target.Triple) }
+    if c.Target.Foreign {
+        out.Push($"--target=" $c.Target.Triple)
+        root := target.Sysroot() # B12a: another architecture's C library, where it is not where clang looks
+        if root != "" { out.Push($"--sysroot=" $root) }
+    }
     if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
     if c.Library { out.Push("-fPIC") }      # X14: code a shared library holds, wherever it is loaded
     if c.Debug {
@@ -747,10 +751,13 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     c.Quiet = true
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
+    run := try c.runner(d) catch Failed { return finish(d) }
     av List<String&>
-    av.Push($file)
+    # B12a: another architecture's program runs in an emulator, given the program's path
+    for w in run { av.Push($w) }
+    av.Push($file if run.Len() == 0 else Shown(c.Built))
     for a in args { av.Push($a) }
-    try os.ExecInPlace(Shown(c.Built), av.ToArray()) catch os.Error {
+    try os.ExecInPlace(Shown(c.Built) if run.Len() == 0 else $run[0], av.ToArray()) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
@@ -775,11 +782,24 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     }
     Phase("link")
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
-    out := try os.Exec(String&[Shown(bin)], "", false) catch os.Error { return 1 }
+    run := try c.runner(d) catch Failed { return finish(d) }
+    cmd List<String&>
+    for w in run { cmd.Push($w) }
+    cmd.Push(Shown(bin))
+    out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
     return 0 if out.Status == 0 else 1
+}
+
+# what a built program runs under here (B12a): nothing for this machine's, an emulator for another architecture's -
+# reported where there is none
+fn (c Config&) runner(d mut diag.Diagnostics&) Array<String&> ? Failed {
+    return try c.Target.Runner() catch target.Bad {
+        d.Fatal(diag.Where.Nowhere, msgs.TargetNoEmulator(c.Target.Arch))
+        error Failed.REPORTED
+    }
 }
 
 # a listed file that is no file to build: said, and the others still run (B3a)

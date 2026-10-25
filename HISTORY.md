@@ -23715,6 +23715,67 @@ written), the second-name ones checked against a baked global. Seeds 1-80: 67 fi
 between -d -s and -i, 41 uses after a scope closed `-i` stopped on, 16 failed self-checks), none after; seeds 1-240 on
 the final compiler (1,463 scenarios run), none.
 
+## Platforms: LLVM 18-20, aarch64 through qemu, a release (B12a, B12d, R9, 2026-10-25)
+
+The survey's first shortlist item (docs/survey.md 1, the user: "platforms YES"): more than one LLVM, a second
+architecture really built and run, and a release someone can unpack.
+
+**LLVM versions.** clang 19 and 20 were installed beside 18 (Ubuntu 24.04's `clang-19`, `clang-20`, their `lld` and
+`libclang-rt` packages) and the whole suite run under 20 (`make quick` with `OLANG_CLANG`): every test file, std, the
+compiler's own tests and all of checks/checks.olang passed, the bootstrap from the seed reached its fixed point (stage 2
+== stage 3) with clang 20 as well as 18, and the compiler built by clang 20 writes the same IR as the one built by 18 on
+the compiler's own source. **Nothing in the emitted IR needed to change**: textual IR is read forward by newer LLVMs
+(the debug intrinsics olang writes are upgraded to 19's debug records on reading, `memory(...)`, the TBAA tags and the
+intrinsic signatures it uses are unchanged through 20). What did differ was only the environment: drvdiff's golden
+recorded what `-target aarch64-linux-gnu` says, which depends on the clang found, so those lines now ask what is said
+whichever clang it is (`aarch64-linux-gnu:native`, interpret), and two compiler tests that compared those messages ask
+the same. A first bootstrap under clang 20 failed its fixed point - which turned out to be my own edit landing between
+stages 2 and 3, not clang. **Decided (mine)**: the clang is `OLANG_CLANG` (a path or a name), else a release's own
+(`../llvm/bin/clang` from the compiler's directory), else the newest of clang-20, clang-19, clang-18 and clang on PATH
+(clang-19 was not looked for at all). Installing clang-20 on the shared machine made every agent's compiler pick it, so
+`/usr/bin/clang-20` was moved off PATH for this session (`/usr/lib/llvm-20/bin/clang` is used by path).
+
+**aarch64.** LLVM 18's AArch64 back end cannot select `bfloat` (B12a's refusal); 19 and 20 can - checked on the same
+probe `canCompileBf16` runs. With the cross C library (`libc6-dev-arm64-cross`, `libgcc-13-dev-arm64-cross`,
+`gcc-aarch64-linux-gnu` for binutils) clang links `-flto` for `--target=aarch64-linux-gnu` with no sysroot flag, and
+`qemu-aarch64-static -L /usr/aarch64-linux-gnu` runs the result. **Decided (mine)**: B12a's "compile only" goes -
+`build` links for another architecture, `test` and running a file run through an emulator (`OLANG_EMULATOR`, else
+`qemu-ARCH` or `qemu-ARCH-static` on PATH with `-L` the sysroot: `OLANG_SYSROOT` or `/usr/ARCH-linux-gnu`), and only
+`interpret` and the analysis tools (doc, explain, lsp, mcp), which run in this process, stay refused; no emulator is an
+error naming qemu-user (`TargetNoEmulator`). Results under qemu, clang 20: tests/ (shared.olang's 739, any 29, runner 25,
+worker 16, geom) all pass; every std and prelude test file passes but std/os (30 of 32 - the two that start a program
+that does not exist: qemu-user emulates posix_spawn's `CLONE_VFORK` exec failure as a child exiting 127, shown with a
+four-line C program) and std/ffi (no aarch64 libffi installed); every checks case passes built for aarch64
+(`CHECKS_TARGET`, the run cases run through olang's own run mode, so through the emulator - cases naming their own
+`-target`, the doc cases and externruntime2, which links libffi, as written). `make cross` runs all of that. The
+cinterop scenario now also compiles `abi.c` with GCC for aarch64 (an independent implementation of AAPCS64) and runs
+`abi.olang` against it under qemu - the same output as on x86-64, so cabi.olang's AAPCS64 classification agrees with
+GCC's on every case abi.olang has. The target scenario builds loop.olang for aarch64 and checks it computes what this
+machine computed (B12c). b12foreign.olang, which asserted aarch64's refusal under clang 18, now checks a refusal no
+clang changes (`aarch64-linux-gnu:native`).
+
+**A crash found on the way (pre-existing).** Building target.olang's new FindClang crashed the scope pass: `canKeep`
+read a callee's result scope with `ResultFrom(f, 0)` for a function with no result, past the end of its scope record
+(an unchecked index, E16e) - garbage, then a fault in `ShareOf`. `ShareOf`/`ResultFrom` now answer `OwnScope` for an
+entry the record does not hold, which every caller reading result 0 of a void function relied on. The seed's compiler
+has the bug, so the seed was regenerated (it could no longer build the source).
+
+**Release.** `make release` writes `build/release/olang-VERSION-ARCH-linux.tar.xz`: bin/olang built for the
+architecture's baseline (so it runs on any x86-64, not only this AVX-512 machine), std/, SPEC.md, editors/, tools/,
+docs/install.md as its README, and `llvm/` - RELEASE_LLVM's clang (Ubuntu's clang-20, dynamically linked against
+libLLVM and libclang-cpp, found through its `$ORIGIN/../lib` RUNPATH), LLVMgold.so for the LTO link through the system
+`ld`, the resource directory without i386 and the sanitizers olang never uses, and every shared library those need
+besides glibc, libstdc++ and libgcc_s (ICU, libxml2, libedit ...). `make releasetest` unpacks it in a fresh directory
+with only `ld`, `as`, `sh` and `cat` on PATH and builds and runs hello world. **Decided (mine)**: bundle the
+distribution's LLVM rather than an upstream static build (no 1 GB download, the same clang the suite ran with), and
+leave the linker, crt files and libgcc to the host (`binutils libc6-dev libgcc-dev`) - bundling those would mean
+bundling a C runtime too. The host's glibc must be as new as the build machine's.
+
+**R9 (small fix).** The diagnostic for an error escaping wrote another module's error type bare - `Error.UNREACHABLE
+can escape here` for `net.Error.UNREACHABLE` - while every other place spells types as code in the module writes them.
+It now spells the type qualified (`spellQualified`, as emptyArray's note does), the word form too; a module reached
+only through another is qualified by its file's base name, as an import of it would alias it.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name

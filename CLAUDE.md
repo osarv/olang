@@ -647,9 +647,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   development build at -O2 without LTO, 20.8 s clean and 3.8 s for an edit inlined everywhere against 18 s, proposed
   to the user); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
   the scope sanitizer (B2f: closed chunks poisoned and protected).
-- **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile (`compile` only); target
+- **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile; target
   constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
   call).
+- **Platforms (B12a, B12d, 2026-10-25, the platforms batch; details mine).** LLVM 18, 19 and 20 all build the suite
+  unchanged - the IR olang writes is one all three read (nothing version-specific had to change). The clang is
+  `OLANG_CLANG`, else a release's own (`../llvm/bin/clang` beside the compiler), else the newest of `clang-20`,
+  `clang-19`, `clang-18`, `clang` on PATH. **Another architecture is built, linked and tested for** (it was `compile`
+  only): `build` links with the cross C library clang finds (`/usr/aarch64-linux-gnu`) or `OLANG_SYSROOT`; `test` and
+  running a file run through an emulator (`OLANG_EMULATOR`, else `qemu-ARCH[-static]` with `-L` the sysroot); only
+  `interpret` and the analysis tools stay this-machine-only. aarch64 needs clang 19+ (LLVM 18's back end cannot select
+  `bfloat`). Measured under qemu-aarch64 with clang 20: the whole corpus (shared.olang's 739 tests and the rest), std's
+  and the prelude's tests and every checks case built for aarch64 pass (`make cross`), and the cinterop scenario runs
+  `abi.olang` against GCC's aarch64 `abi.c` (AAPCS64, X11). Left out of `make cross`: std/os's two tests of a program
+  that cannot start (qemu-user turns posix_spawn's failed exec into a child exiting 127) and std/ffi (no target libffi).
+  **`make release`** packs the compiler built for the architecture's baseline, std, SPEC.md, editors, tools and clang
+  with LLVM's libraries and their non-glibc dependencies (`llvm/`); `releasetest` unpacks it in a fresh directory and
+  builds hello world with only `ld` on PATH. R9 names another module's error by its alias (`io.Error`).
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b, the user's call); a constant condition not depending on the build is a dead-branch error
