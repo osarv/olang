@@ -1097,3 +1097,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   types" - DECIDED: methods take written type arguments (`x.Narrow<I32>()`), C#'s rule: after a name, a `<...>` reading
   as type arguments directly followed by `(` is type arguments, for free functions and methods alike; narrowing is
   `try x.Narrow<I32>()` (OVERFLOW). NEXT: operators.
+- QAV (3) DECIDED 2026-10-25 (the user: "Yes as should work that way"): `as` always fails as written - `try e as C`
+  (CaseError.WRONG_CASE) or `(e as C)!`. Clarified to the user: a parameter condition is part of the parameter's
+  declaration, the same as `if not cond { error ArgumentError.INVALID }` at the body's top, checked in parameter order
+  (each may read earlier parameters and itself); the function's error set gains ArgumentError automatically.
