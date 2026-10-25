@@ -620,7 +620,9 @@ which holds at most 128 bytes (D9c); and a destructured result (S4b) is not copi
 the array the call built for it. A function returning an array value that already lives somewhere - a local of its own, a parameter's
 array - builds its result from it: the elements are copied into the result scope (§8 O13) before the function's own
 scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
-allocating, say) can reach it. A result whose length is known (D8f) is a value as a struct is, its elements returned in
+allocating, say) can reach it. A local the result scope already holds (O26a) is the result as it is - unless a borrow of
+it is kept elsewhere (stored in a field, a list, given to a call that keeps it, captured), a second name of its storage:
+then it is copied too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`). A result whose length is known (D8f) is a value as a struct is, its elements returned in
 it.
 
 **T7c (known lengths).** An array's length is **known** while compiling exactly where the program fixes it:
@@ -1462,7 +1464,7 @@ member, T31a) becomes one, `T` its instance's type:
   their value, from a variable too, is put in new storage built where the `any` lands - there are no references to
   numbers (T24), and an array's elements are copied with it (T7b). An array is copied unless it is provably new
   storage built where the `any` lands - an array literal, a fill, a comprehension, written text, a call's array result
-  (T7b), a conversion of one of these - so a variable, a slice, a conversion of either to a type declared over it
+  (T7b) where no scope argument (E25) puts it elsewhere, a conversion of one of these - so a variable, a slice, a conversion of either to a type declared over it
   (`Lab(s)`, which elsewhere names its argument's storage, T29a), and a conditional, a match or a `try` any of whose
   values (a `catch default` among them) is one of those, or constant data, are copied. The
   copy's elements still name what they named, so what they refer to must outlive where the `any` lands, as an array
@@ -1478,7 +1480,8 @@ from its receiver, a parameter sharing another's scope, T22), or that carries a 
 an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
-keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`) - has no copy to keep of an
+keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`), or a `List` of it, which
+holds its elements behind its reference to its state - has no copy to keep of an
 `any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
 naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
 through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
@@ -2630,7 +2633,10 @@ receiver naming the instance exactly is chosen before one written with variables
 precedence). Two methods of one name that some one instance would take alike - two for the same instance, or two written
 with variables that one instance meets (a variable matching anything, so `Box<T>` and `Box<U>` meet) - are a
 compile-time error at the later declaration, with a note at the earlier; a method of a type that is not generic
-declared twice is the same error.
+declared twice is the same error, and a receiver naming a type not known meets no instance (one error, where the type is
+written). Whatever the compiler asks of a type's own methods - whether it declares `Eq` or `Hash` (E10a, E10b), its own
+methods before its base's (T29f) - it asks of the instance: `Box<I64>`'s `Eq` is not `Box<Bool>`'s, which keeps the
+supplied `Hash` and part-by-part `==`.
 
 This is what lets two types declared in one module both satisfy one trait (T31): without it a given
 method name could be written only once per module, and two shapes in one file would not compile. It
@@ -3338,6 +3344,11 @@ holds lives there, so `rows.Push(rec)` keeps it.
 The `&` must be **adjacent** to what precedes it and the `IDEN` adjacent to the `&` — no whitespace or
 comment anywhere in the run, and all on one line. Without that requirement `f&a(x)` could not be
 told from the binary `&` of `f & a(x)` (E7), which is a legal expression.
+
+A call given a scope argument builds its result where that says, never where the call stands: the result is **existing
+storage** there, judged wherever it is put - stored, pushed, passed, returned, made an `any` - exactly as the same value
+declared first would be (`x := mkp&t(i); h.p = x`, O25h). So `h.p = mkp&t(i)` with `t` an inner block's local is the
+same compile-time error, and `return mkp&t(...)` with `t` the function's own local is O10d's.
 
 A scope argument on a call whose target has no result scope — one returning nothing, nothing holding
 references, or a result borrowed from a parameter (O13) — is a compile-time error.
@@ -4119,7 +4130,8 @@ written text or `null`, to which those adapt as in `a if c else b` (E28) - a con
 counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
 values that are all numeric literals (or such) take the widest, values that are all written text are a `String` (T29c),
 and values that are all array literals of one element type are an array of it whatever their lengths (`case 1 =>
-I64[1, 2, 3]` beside `nomatch => I64[4, 5]` is an `Array<I64>`), as in `a if c else b`. Each value then fits the match's target on
+I64[1, 2, 3]` beside `nomatch => I64[4, 5]` is an `Array<I64>`), as in `a if c else b`; a match whose only value is
+its `nomatch`'s has that value's type (`match x { nomatch => I8(x) }` is an `I8`). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.

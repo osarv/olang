@@ -23532,6 +23532,60 @@ treated a lock with no number; a test in `build.olang` holds it.
 default (`anyOp` k 16-19, a fallible `textFail` in the program's header): seeds 1-80 give 8 findings on f29a774 (every
 one these shapes, the interpreter or the sanitizer reporting the use after free), none after; seeds 100-399 none.
 
+## `any Trait&`: the third review, fixed (E25, T32a, O26a, T7b, K1, T32, M21, T7a, S12b, 2026-10-25)
+
+A third read-only review (/home/user/review/any3) of the second round found two older use-after-free classes the round's
+predicate kept, an evaluator/run-time disagreement it introduced, and smaller items. All are fixed, each with a test.
+
+**1-2. A call given a scope argument was taken for a temporary where it stood (use-after-free, older, §8 in general).**
+`s.call` placed the result where the scope argument said (`beta[rv] = whereLives(x)`) and then returned `fresh(...)`, and
+`isFresh` called the call new - so the result was judged as a temporary built wherever it was put: `h.p = mkp&t(i)`,
+`xs.Push(mkp&t(i))`, `return mkp&t(...)`, `Lab(mk&t(i))` in an any's box, `&return` in a callee storing into a parameter -
+all accepted, all dangling. The spelled-out form (`x := mkp&t(i); h.p = x`) was refused (O25h). Decided (the
+coordinator's): one rule, no shape list - such a result is **existing storage** where the scope argument puts it.
+`typed.ScopedCall` says which calls; `isFresh` is false for them; `s.call` returns `existing(beta[rv])`, a constructor's
+too. Every consumer then judges it as it judges a declared value: O25h at a field, O10c at a push, O10d at a return, the
+box copying. One case's message changed with it (`vec72ctorscopearg`, still C2d: the instance now holds the argument the
+field's text lives in).
+
+**3a. The box's answer is one pure function.** The second round recorded the scope pass's decision in `Plan.AnyNew`; the
+compile-time evaluator lowers with no plan, so it copied where the run time did not, and a baked global or a decided
+assert could disagree with the program. Decided: `typed.AnyItemNew`, a function of the typed tree and the type table
+alone, is asked by lowering (with or without a plan) - so by the evaluator - and the plan field is gone. A call is new
+only where no scope argument puts it elsewhere.
+
+**3b. A returned local a kept borrow also names was the result itself (value semantics broken, older).** O26a moves a
+returned local into the result scope and T7b returned it uncopied; if the function also stored a borrow of it
+(`k.s = s; return s`, `log.Push(s); return s`), the caller's value and the borrow were one storage. Decided (the
+coordinator's): the local still lives in the result scope (so the borrow is valid), and is **copied at its return**:
+O26a's flow analysis runs a third mode (the "kept beyond its block" mode with its returns left out) for a moved array
+local, and `Plan.RetCopy` tells `retCopies`. The moved, uncopied path stays for a local nothing else names. While
+compiling nothing is placed, so the evaluator now copies every returned array - the same values, as the run time copies
+exactly where a second name exists.
+
+**4. AnyNoCopy through a reference.** `HoldsVarByValue` stopped at a reference, so a default returning a `List<G>` of its
+receiver (`l.Push(g); return l`) through an any made a `List` of anys without their marker, then internal errors. The
+walk goes through references now; a reference to the variable itself still holds it by reference.
+
+**5-6. M21's per-instance methods, the rest of the way.** `ownMethod` (whether a type declares `Eq`, `Hash`, its own
+method before its base's) looked the generic declaration up, so `Box<I64>`'s `Eq` made `Box<Bool>` "declare Eq" and lose
+its supplied `Hash`; it walks the instance's chain now. A receiver naming an unknown type no longer overlaps every other
+instance (a second "declared twice").
+
+**7. A type over an array of arrays (older, crash and invalid IR).** `type Grid extends Array<Array<I64>>` was accepted,
+and converting rows laid out in place (T7a/T7d) to it read each row as a run-time pair. Its rows have no length a type
+can give, as a field's cannot (t7aelem): it is T7a's error at the declaration, naming `Array<I64>&`.
+
+**8. A value match with only a `nomatch`** was typed unknown, silently, and lowering stopped; it takes its value's type.
+
+**9. The differential generator** wrote a U64 literal past `I64`'s maximum as an index (E16: a literal index is an
+`I64`); a U64 index is written converted now.
+
+**Fuzzer.** The scope fuzzer writes scope arguments: a node built `&t` in an inner block stored outward or pushed, a
+callee's `&return` storing into a parameter from a loop, and text built `&t` boxed into anys (`scopeArgNode`, `listOp`,
+`anyOp` k 20-22, helpers `mkText`, `putRet`, `stashLab`). Seeds 1-120: 37 findings on 5d0529f, none after; seeds
+1000-1299, none.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name

@@ -220,6 +220,10 @@ Prelude := (
     "    return 0\n"
     "}\n"
     "fn mkNode(v I64) mut Node& { return Node(v) }\n"
+    "# for scope arguments (E25): a call's result built where \"&t\" or \"&return\" says, never where it stands\n"
+    "fn mkText(v I64) String { return \"t\" $v \"-\" $(v * 3) }\n"
+    "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode&return(v)\n    return \"r\" $v\n}\n"
+    "fn stashLab(l mut List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText&return(v)))\n    return \"r\" $v\n}\n"
     "fn mkChain(v I64) mut Node& {\n"
     "    n := Node(v)\n"
     "    n.next = Node(v + 1)\n"
@@ -392,6 +396,7 @@ fn (g mut SG&) newNode() String& {
 
 # a statement storing a new node through the node a (a writable reference)
 fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
+    if g.chance(8) { return g.scopeArgNode(a, ind) }
     k := g.r(14)
     if g.chance(35) { return g.condOp(a, ind) }
     if g.chance(15) { return g.failOp(a, ind) }
@@ -434,6 +439,27 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
         return $ind $q " := " $g.newNode() "\n" $ind "churn()\n" $ind $a ".next = " $q "\n"
     }
     return $ind $a ".next = " $g.newNode() "\n"
+}
+
+# E25: a statement storing through the node a a result a scope argument places - in an inner block's scope (refused:
+# the result lives there, judged where it is stored as the same value declared first is), or through a callee's
+# "&return" whose result lands in a loop body
+fn (g mut SG&) scopeArgNode(a String&, ind String&) String& {
+    v := g.val()
+    t := g.name("t")
+    k := g.r(4)
+    if k == 0 { return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $a ".next = mkNode&" $t "(" $v ")\n" $ind "}\n" }
+    if k == 1 {
+        q := g.name("q")
+        return ($ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $q " := mkNode&" $t "(" $v ")\n" $ind "    churn()\n"
+                $ind "    " $a ".next = " $q "\n" $ind "}\n")
+    }
+    if k == 2 {
+        i := g.name("i")
+        r := g.name("r")
+        return $ind "for " $i " in range 2 {\n" $ind "    " $r " := putRet(" $a ", " $v " + " $i ")\n" $ind "}\n"
+    }
+    return $ind $t " := \"out\" $" $v "\n" $ind $a ".next = mkNode&" $t "(" $v ")\n"
 }
 
 # a statement storing a conditional or a match of references through the node a - values from different scopes: one
@@ -586,6 +612,11 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
 # a statement storing a new node into the List l
 fn (g mut SG&) listOp(l String&, ind String&) String& {
     if g.chance(30) { return g.listElemOp(l, ind) }
+    if g.chance(8) {    # E25: a node a scope argument places in an inner block, pushed outward (refused)
+        t := g.name("t")
+        v := g.val()
+        return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $l ".Push(mkNode&" $t "(" $v "))\n" $ind "}\n"
+    }
     k := g.r(9)
     v := g.val()
     if k == 1 {
@@ -758,8 +789,19 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
 fn (g mut SG&) anyOp(b String&, ind String&) String& {
     v := g.val()
     q := g.name("q")
-    k := g.r(20)
+    k := g.r(23)
     if k == 0 { return $ind $b ".anys.Push(" $g.newNode() ")\n" }
+    if k >= 20 {    # E25: text a scope argument puts in an inner block, boxed outward - copied into the box (T32a)
+        t := g.name("t")
+        if k == 22 {
+            i := g.name("i")
+            r := g.name("r")
+            return $ind "for " $i " in range 2 {\n" $ind "    " $r " := stashLab(" $b ".anys, " $v " + " $i ")\n" $ind "}\n"
+        }
+        item := $"Lab(mkText&" $t "(" $v "))" if k == 20 else $"mkText&" $t "(" $v ")"
+        list := ".anys" if k == 20 else ".szs"
+        return $ind "{\n" $ind "    " $t " := \"in\" $" $v "\n" $ind "    " $b $list ".Push(" $item ")\n" $ind "    churn()\n" $ind "}\n"
+    }
     if k >= 16 {    # an inner block's text chosen by a conditional, a match or a catch default: copied into the box (T32a)
         q2 := g.name("q")
         texts := $ind "{\n" $ind "    " $q " := \"t\" $" $v " \"-\" $(" $v " * 3)\n" $ind "    " $q2 " := \"o\" $" $v "\n"

@@ -383,6 +383,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `unreachable`; `any R<T>&` is substituted, unified and counted for G4; an adapter keeping a copy of its receiver
   (`Take`, `Zip` ...) through an any is an error at the call (a limit: an any has no copy); M21 keeps every instance's
   method (an exact receiver first, two that apply alike an error); E30 types a chain's literal beside each comparison.
+  **The third review's round (2026-10-25, HISTORY.md "`any Trait&`: the third review, fixed"):** a call given a scope
+  argument (E25) is existing storage where that says, judged wherever it is put (it was taken for a temporary where it
+  stood - use-after-frees through fields, lists, returns, anys); the box's "new storage" answer is one pure function,
+  `typed.AnyItemNew`, which the scope pass, lowering and the compile-time evaluator all ask; a returned local that a kept
+  borrow also names is copied at its return (`Plan.RetCopy`, O26a's flow in a third mode), so the caller's value is its own;
+  M21's per-instance methods reach Eq/Hash; a type over an array of arrays is T7a's error.
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk
