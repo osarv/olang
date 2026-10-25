@@ -1,0 +1,35 @@
+# T7b: a conversion of a value local returned through a conditional, a match, a catch default, or as one of several
+# results - none copied; the local lives in the frame block
+type Lab extends String
+error Oops {
+    BAD
+}
+fn bad(k I64) Lab ? Oops {
+    if k < 100 { error Oops.BAD }
+    return Lab("never")
+}
+fn rc(i I64) Lab {
+    s := "cond" $i
+    u := "else" $i
+    return Lab(s) if i % 2 == 0 else Lab(u)
+}
+fn rm(i I64) Lab {
+    s := "match" $i
+    return match i { case 0 => Lab(s) case _ => Lab(s) }
+}
+fn rt(i I64) Lab {
+    s := "dflt" $i
+    return try bad(i) catch default Lab(s)
+}
+fn rtup(i I64) Lab, I64 {
+    s := "tup" $i
+    return Lab(s), i
+}
+fn main() {
+    a := rc(2)
+    b := rm(3)
+    c := rt(4)
+    d, n := rtup(5)
+    churn()
+    say("a " $a " b " $b " c " $c " d " $d " " $n)
+}

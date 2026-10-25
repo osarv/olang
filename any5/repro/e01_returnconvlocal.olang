@@ -1,0 +1,15 @@
+# T7b/O26a: `return Lab(s)`, s a value local - a conversion of the local is returned as it is, built in the frame block
+type Lab extends String
+fn convloc(i I64) Lab {
+    s := "abc" $i "-" $(i * 7)
+    return Lab(s)
+}
+fn main() {
+    keep := List<Lab&>()
+    for i in range 4 { keep.Push(convloc(i)) }
+    churn()
+    say("kept " $keep)
+    x := convloc(5)
+    churn()
+    say("x " $x)
+}

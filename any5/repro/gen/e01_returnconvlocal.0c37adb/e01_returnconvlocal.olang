@@ -1,0 +1,34 @@
+import "std/io"
+# T7b/O26a: `return Lab(s)`, s a value local - a conversion of the local is returned as it is, built in the frame block
+type Lab extends String
+fn convloc(i I64) Lab {
+    s := "abc" $i "-" $(i * 7)
+    return Lab(s)
+}
+fn main() {
+    keep := List<Lab&>()
+    for i in range 4 { keep.Push(convloc(i)) }
+    churn()
+    say("kept " $keep)
+    x := convloc(5)
+    churn()
+    say("x " $x)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

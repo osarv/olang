@@ -1,0 +1,20 @@
+# decision 1: a conversion of a reference parameter returned as a value (T29a: a conversion names its argument's storage)
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn conv(p String&) Lab { return Lab(p) }
+fn probe(i I64) String {
+    t := "abc" $i
+    x := conv(t)
+    x[1] = 'Q'
+    b mut any W& = conv(t)
+    b.Bump()
+    return "t " $t " x " $x " b " $b
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

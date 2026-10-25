@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run: M Zutable x Zutable
+G Qlobal y Qlobal
+status 0
+== build
+run: M Zutable x Zutable
+G Qlobal y Qlobal
+status 0
+== interpret
+run: M Zutable x Zutable
+G Qlobal y Qlobal
+status 0

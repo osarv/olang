@@ -1,0 +1,35 @@
+import "std/io"
+# value semantics: a function returning a slice of its parameter as an array value
+fn sl(p String&) String { return p[0:3] }
+fn mk(i I64) String {
+    t := "abc" $i "def"
+    return sl(t)
+}
+fn main() {
+    t := "abcdef" $1
+    x := sl(t)
+    x[0] = 'Z'
+    say("t " $t " x " $x)
+    keep := List<String&>()
+    for i in range 3 { keep.Push(mk(i)) }
+    churn()
+    say("kept " $keep)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}
