@@ -210,6 +210,7 @@ type Free struct(P mut generic.Program&, Bodies List<mut typed.Body&>, Sc mut sc
     # parameter's scope - so in a region a call of it builds into (F4): a destructor still to run when the region's
     # place would let go of it (O16, condition 4)
     regOut List<Bool>
+    exports List<I64>          # the export fns' bodies (X12): C may call them from any extern call (F6)
     changed Bool = false
     # the program: whether it has tasks (or an extern given a function value), whether a destructor, Str, Eq or Hash
     # lets go of something (they run where no call is written)
@@ -556,6 +557,10 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) 
         f.mustRes.Push(MustTop)
         f.resFresh.Push(true)
         f.regOut.Push(false)
+        match f.Bodies[b].Of {
+            case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export { f.exports.Push(b) } }
+            case _ { }
+        }
         f.mustLocals.Push(List<I64>())
         f.withinLocals.Push(List<I64>())
         f.freshLocals.Push(List<Bool>())
@@ -800,6 +805,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     elseFrom List<I64>
     elseTo List<I64>
     declAt List<I64>           # by local: the statement declaring it
+    declSp List<source.Span>   # by local: its initializer, as written - what a hidden one (a walk's) is said by
     lastAt List<I64>           # the statements a return follows
     loops I64 = 0              # the loops the statement being walked is in
     useLocal List<I64>         # local uses: the local, the statement, where
@@ -862,11 +868,13 @@ fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
     n := body.Locals.Len()
     w.origins.Truncate(n)
     w.declAt.Clear()
+    w.declSp.Clear()
     w.seen.Clear()
     for i in range n {
         w.seen.Push(false)
         if i < w.origins.Len() { w.origins[i].Clear() } else { w.origins.Push(List<I64>()) }
         w.declAt.Push(0)
+        w.declSp.Push(source.Span(0, 0))
     }
     for j in range body.Params.Len() {
         l := I64(body.Params[j])
@@ -1052,6 +1060,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Let(sp, l, x) {
             w.declAt[I64(l)] = n
+            w.declSp[I64(l)] = x.Span()
             o := w.expr(x)
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
@@ -1874,6 +1883,14 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) List<I64
         for a in c.Args {
             if w.T().KindOf(w.T().Repr(a.Type())) == types.Kind.Func: f.tasks = true
         }
+        # C may call any export fn (X12) before it returns: where one may let go, the extern call may let go of
+        # anything (F6) - walked again when an export fn's summary changes
+        lets := false
+        for e in f.exports {
+            if not w.Final { addTo(f.callers[e], w.Id) }
+            if f.lets[e].Len() > 0 or f.letsAll[e]: lets = true
+        }
+        if lets { w.goAll(sp, c, -1) }
     } else if not helper {
         w.goAll(sp, c, -1)
     }
@@ -2334,17 +2351,25 @@ fn (w mut walker&) views() {
             name := f.P.L.Names.Text(body.Locals[l].Name)
             line := f.P.L.Diags.LineAt(body.File, I64(body.Locals[l].Sp.Start))
             gl := f.P.L.Diags.LineAt(body.File, I64(w.goSp[g].Start))
+            # a local of the program's own is said by its name; a hidden one - what a for-in walks - by what it holds
+            who := $"'" $name "' (line " $line ")"
+            from := $" from '" $name "'"
+            if name == "" {
+                walked := f.textOf(body.File, w.declSp[l])
+                who = $"what the loop on line " $line " walks" $(", '" $walked "'," if walked != "" and not walked.Contains("\n") else "")
+                from = ""
+            }
             after := ""
             if kind == LYield {
-                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), where the generator's caller may let go of it; read what you need from '" $name "' before the yield"
+                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), where the generator's caller may let go of it; read what you need" $from " before the yield"
             } else if kind == LCall {
-                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), which " $w.removes(k) "; read what you need from '" $name "' before the call"
+                after = $"after '" $f.textOf(body.File, w.goSp[g]) "' (line " $gl "), which " $w.removes(k) "; read what you need" $from " before the call"
             } else {
-                after = $"after it lets go of it (line " $gl "); read what you need from '" $name "' before"
+                after = $"after it lets go of it (line " $gl "); read what you need" $from " before"
             }
             for q in viewed[l] {
                 if (k < 0 or q == k) and f.whyKind[q] == RNone and not f.isDestroy(q) {
-                    f.keepView(q, body.File, w.useSp[u], $"'" $name "' (line " $line ") is used here, " $after, at)
+                    f.keepView(q, body.File, w.useSp[u], $who " is used here, " $after, at)
                 }
             }
             if k >= 0: break
@@ -2554,6 +2579,7 @@ fn (w mut walker&) loopUse(l I64, s I64, uses List<I64>&) I64 {
 # what a call that lets go of place k does to it, as the note says: "removes frames" - the name of the collection a
 # removal in this body is called on - or "lets go of it"
 fn (w mut walker&) removes(k I64) String {
+    if k < 0 { return "may let go of anything" }
     for g in range w.goPlace.Len() {
         # the collection a removal of the library's is called on - not the receiver of the program's own call
         c := w.goCallee[g]
@@ -3544,6 +3570,8 @@ fn (f mut Free&) Report() String {
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
         g := f.goes[row]
         at := f.lineStart(g.File, I64(g.At.Start))
+        # a row at a call that may let go of anything says the place as its own let-go writes it
+        if g.Place == AnyPlace and f.goes[first].Place == k { g = f.goes[first] }
         what := ""
         if f.keyField[k] < 0 or f.isContents(k) {
             what = $"removed elements of '" $f.collection(k, g.Body, g) "' are kept until " $f.scopeName(g, k) " closes"
@@ -3626,7 +3654,7 @@ fn (f mut Free&) recvOf(g letGo) String { return f.textOf(g.File, g.RecvSp) }
 # row's own call
 fn (f mut Free&) collection(k I64, b I64, row letGo) String {
     for g in f.goes {
-        if g.Of(k) and g.Body == b and g.Kind != LAssign and g.Callee >= 0 and not f.programCode[g.Callee] {
+        if g.Place == k and g.Body == b and g.Kind != LAssign and g.Callee >= 0 and not f.programCode[g.Callee] {
             r := f.recvOf(g)
             if r != "": return r
         }
@@ -3642,7 +3670,7 @@ fn (f mut Free&) scopeName(g letGo, k I64) String {
     text := rv if f.keyField[k] < 0 and rv != "" else f.placeName(g)
     if f.keyField[k] < 0 {
         for g2 in f.goes {
-            if g2.Of(k) and g2.Body == g.Body {
+            if g2.Place == k and g2.Body == g.Body {
                 r2 := f.recvOf(g2)
                 if r2 != "": text = r2
             }

@@ -2128,11 +2128,18 @@ fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, 
     b.Push(e.header(k, f.Ty, symbol, passed, true, "internal"))
     b.Push("entry:\n  %done = call i1 @llvm.coro.done(ptr %env)\n  br i1 %done, label %over, label %go\ngo:\n")
     b.Push("  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
+    # S20: asked while its walk runs - a Next called from inside it - a guaranteed check fails: resuming a coroutine
+    # that is not suspended is undefined. One compare a Next, on the flag the promise holds for genDrop already
+    e.runtime("__olang_check_failed")
+    loc := e.cstr($e.where(f.File, f.Sp) ": " $mir.ExitText(mir.ExitKind.GenRunning) "\n")
+    b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %running = load i32, ptr %pr\n")
+    b.Push("  %busy = icmp ne i32 %running, 0\n  br i1 %busy, label %again, label %run\nagain:\n")
+    b.Push("  call void @__olang_check_failed(ptr " $loc ")\n  unreachable\nrun:\n")
     if via { b.Push("  %po = getelementptr " $promTy ", ptr %p, i32 0, i32 2\n  store ptr %out, ptr %po\n") }
     for i in range passed {
         b.Push("  %pv" $i " = getelementptr " $promTy ", ptr %p, i32 0, i32 " $(3 + i) "\n  store ptr %v" $i ", ptr %pv" $i "\n")
     }
-    b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  store i32 1, ptr %pr\n")
+    b.Push("  store i32 1, ptr %pr\n")
     b.Push("  call void @llvm.coro.resume(ptr %env)\n  store i32 0, ptr %pr\n")
     b.Push("  %r = load " $rt ", ptr %p\n  ret " $rt " %r\nover:\n")
     if rt == "i32" {
