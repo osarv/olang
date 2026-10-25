@@ -213,8 +213,8 @@ So every O10c, O25 or C2d program above that the build refuses is run by `interp
   (`held/n03`). Targets read while the scope argument's local lives are correct (`held/d02`).
 - **E.** The scope-argument errors are given as SPEC says (`prev/d2`).
 - **Fuzzers.**
-  - The scope fuzzer on fresh seeds: 7000-7299, then 7300-8499 (1,200 programs, 7,241 scenarios run, 7,159 refused),
-    then 10000-11999, all with 0 findings (`scopefuzz*.log`).
+  - The scope fuzzer on fresh seeds: 7000-7299 (300 programs, 1,836 scenarios run), then 7300-8499 (1,200 programs, 7,241 scenarios run, 7,159 refused),
+    then 10000-11999 (2,000 programs, 12,213 scenarios run, 11,787 refused), all with 0 findings (`scopefuzz*.log`).
   - The differential fuzzer: seeds 9100-9249 (150 programs, 4,500 cases, every global baked), 0 findings.
   - The generators produce none of the shapes above: no shared-scope parameter, no conversion of a value place to a
     type over `String`, no `spawn` of a scoped call, and no returned conditional of parameters compared with a baked
