@@ -24152,3 +24152,66 @@ undefined there (E6a), so `Rem` returns 0 for any divisor -1 without computing i
 `try x.SliceOf(0, n).Get(i)`. `make fuzz`'s default seed was the text `seed`: the bootstrap's `SEED = seed` (the seed's
 directory) overrode the fuzz targets' `SEED ?= 1` - the directory is `SEED_DIR` now. Seeds 7100-7139 and 7300-7359: no
 findings; the scope fuzzer on 9500-9539 none.
+
+## Error types as types, named error sets, the error a clause took (T19, T19a, R11b, R3a, R1, R14, 2026-10-25)
+
+The user's decisions: QAM of 2026-10-18 (error types declared `type IoError error { ... }`, named sets `type LoadError
+error os.Error, ParseError { TIMEOUT }`, members and words last) and the talk of 2026-10-25, which settled the catch
+binding as **a name for the clause alone** and left open whether errors become storable values (not built: no
+assignment, passing, fields or type arguments of an error, no zero value, no Result).
+
+**Declarations.** `type Name error [Member, ...] [{ WORDS }]` is the one form; `error X { }` is gone (a removed spelling,
+simply unknown). The parser makes the same `ast.Decl.Errors` it made, with the members beside the words, so names, the
+type table (`DeclKind.Error`), sessions and doc needed nothing but the extra field. `tools/errortype_migrate.olang`
+rewrites `error X {` - the keyword first in its statement (first on its line, or after a statement end or a brace), a
+name, a brace - and nothing else, so it is idempotent: `type L error A {` has a name before its `error`, and an error
+statement never has a `{` after its name. It is the last of `olang fix`'s text tools; `errors_migrate` (a driven tool,
+run after it) learned to see the new form. The tree's 330 declarations, the fixtures' `.want`s and the programs written
+inside strings (the checker's, lowering's and generic's tests, drvdiff, the fuzz generator, the scope generator, the
+explain test) were migrated; the tests of the old tools (errors_migrate, stutter_rename) keep the old text they test.
+
+**Sets (T19a).** A set stands for its members, flattened in order, then its own words where it declares any (its own
+type is then a member of its own set). It is expanded in one place, `generic.errorList` (`errorSetEntries` /
+`EntriesOf`), so a signature's `?`, a function type, a trait method and a lambda's written set all expand alike, and in
+`check.catchItem` for a catch item. A set adds no code space: the expanded list is an ordinary error list, so R6's codes,
+re-encoding, R14 and T22's in-order comparison of function types are unchanged - `? LoadError` and `? os.Error,
+ParseError, LoadError` are one function type. Decided (mine): a member naming an unknown type, a non-error type or an
+unknown word is an error at the member; a set reaching itself (through any depth) is an error at its name and stands for
+nothing; a set's own word sharing a name with a member's word is an error (QAM's "only against confusion"); R14 accepts
+a set as a catch item where anything it stands for can come from the operand.
+
+**Found on the way, all pre-existing and fixed:** `fn f() ? Pt` with `Pt` a struct was accepted silently (errorType took
+any declared type); an unknown error type in a function type's or a lambda's written set was never reported; a lambda's
+written set ignored words (`ErrorType` per item instead of `errorList`); `error T.NOPE`, `catch T.NOPE` and `? T.NOPE`
+were a checker "gap" with no diagnostic of their own (`NoSuchErrorWord` existed and was never used), and so was an error
+word declared twice (`ErrorWordInUse`, also unused). All now go through `ErrorItemKnown`, reported once per line where
+the set is resolved; check's `errorSetKnown` went (it duplicated the report and missed the other places). `errsText`
+joined a set with ` + `, a spelling QY removed.
+
+**Catch bindings (R11b).** `catch os.Error e { }`, `catch A, B e`, `catch e` (one bare item resolving to no type, read
+so by the resolver - `names.LoneCatchName` - and the checker alike). The name is declared for the clause's block and its
+defaults (D3, D3a apply). Uses, each an AST form recognised before the general expression path: `$e` (a conditional of
+text constants, one per word the error can be, qualified as `!` and `main` print errors - `ErrQualifier` moved to
+`load` so the checker shares it); `e == X` / `e != X` (a word, a type or a set; a test on the code's type ordinal where
+X covers every word the clause's entry holds, word by word otherwise); narrowing, by a stack of (name, set left, block)
+popped as blocks close - after `==`/`!=` in a branch, in an else, after a leaving `if`, through `and`/`or`/`not`; `match
+e`, which is rewritten into the `if` chain it means (so narrowing, D10a and the checker's if handling all apply), with
+its exhaustiveness decided first (the last case, unguarded, becomes the plain else); `error e`, a new
+`typed.Stmt.Reraise` lowered as a recode to the body's set and a raise. Anything else naming it - assignment, `:=`, an
+argument, a capture by a lambda, `try e` - is an error naming what to write. Decided (mine): **a name a clause gives and
+never uses is an error** - with the bare `catch e` form, a misspelled error type would otherwise silently become a
+catch-all; **a spawned call's clause names no error** (it is a lambda run on the task's thread, and the name would have
+to be its parameter); a value `match e` gives every value with `=>` (a leaving block arm is not supported there); a case
+after the cases cover every error, or naming nothing the error can be, is an error.
+
+**Representation.** The name is a hidden `I32` local; lowering assigns it in `toClause`, where each error site enters the
+clause, by `Rvalue.Recode` from the site's list to the clause's own set (its canonical order). So the evaluator and
+`interpret`, which run MIR, needed nothing new: tests/errsets.olang bakes globals and decides asserts through every form
+(rendering, compare, match, re-raise) beside the same computations at run time on a mutable input. Measured: nothing is
+emitted unless a clause names its error (one recode at clause entry).
+
+**Not done / limits.** explain spells another module's types bare in signatures (`Error` for `os.Error`) - pre-existing,
+seen with sets because explain prints the expanded set.
+
+**`make releasetest`** also runs `olang explain T6a` in the unpacked release, so a release whose SPEC.md is not beside
+`bin/` fails it.
