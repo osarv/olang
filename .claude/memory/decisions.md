@@ -1111,3 +1111,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - Condition form RE-ASKED 2026-10-25 (the user: "ask me about the condition form then again"): (1) short form + `if`;
   (2) always `if` (`y I32 if y > x`) - recommended now (one spelling; short form's `Array<I32> > x` parsing trap);
   (3) brackets `y I32 [y > x]`. In effect: undecided.
+- Conditions naming later parameters, asked by the user 2026-10-25: recommended NO - itself and earlier parameters only
+  (all arguments are evaluated before the call anyway, so a relation goes on the later parameter; one place per
+  condition; checked in order). In effect: earlier only (as proposed).
