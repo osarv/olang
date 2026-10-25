@@ -463,10 +463,10 @@ fn earlyfree(r mut report&) ? Failed {
     small := String&["300", "100", "2000", "2000", "5", "300"]
     full := String&["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "7999996000000\n"]
+                    "3071\n", "12000000000000\n"]
     part := String&["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "179400\n"]
+                    "3071\n", "270000\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)

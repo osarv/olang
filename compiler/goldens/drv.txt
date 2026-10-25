@@ -271,6 +271,7 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
 | stderr:
 | status 0
 === olang help run
@@ -286,6 +287,7 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
 | stderr:
 | status 0
 === olang help compile
@@ -317,6 +319,7 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
+|   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
 | stderr:
 | status 0
 === olang help interpret
@@ -423,7 +426,7 @@
 | mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
 |             | "bindgen"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-|             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
+|             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -443,6 +446,7 @@
 | | `-check` | format, fix | B13, B17 |
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
+| | `-memory` | running a file, build, test | B18 |
 | 
 | `build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 | `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`

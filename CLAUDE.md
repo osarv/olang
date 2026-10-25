@@ -597,8 +597,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   it").** One rule: everything lives in a scope. Storage a place lets go of while it was its only holder (assigned,
   removed from its collection, a local given something moved out of one leaving its block) may be reclaimed then rather
   than at the scope's close - the compiler's optimization, unobservable but in memory, never running a destructor
-  early (O15). *Not yet implemented*: stage 0 reclaims nothing early (O8c); the port's scope pass will (round 6). A
-  Vec's replaced buffer is such storage: it stays where the Vec lives until that scope closes. `own`, `take`, loans and
+  early (O15). A Vec's replaced buffer goes back to the thread's pool (no `mremap` growth). `own`, `take`, loans and
   borrowed copies (O30-O42, T25e, E34, built 2026-10-10 to -11) are removed from the language; the rule numbers are
   retired, and `docs/own.md` is the record. The runtime keeps its region functions, renamed `__olang_region_*` and
   driven from C by a checks scenario, for the port. **Round 4 (2026-10-25)**: the prelude says what it lets go of -
@@ -607,9 +606,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a duplicate. Compiled as a plain read, so nothing changes at run time (a removal loop of them is deleted; callgrind
   over Pop/TakeAt/SwapTake/Insert/Truncate/Clear/Remove unchanged). Decided (mine): `Vec.Clear` is `Truncate(0)`;
   `SwapTake` of the last element moves nothing into its own place; `List.Clear`/`Truncate` vacate by counted loops, which
-  the optimizer can delete.
-- **Recorded limits:** long-lived mutated structures only grow (ledger QF; `docs/memory.md`'s early freeing, round
-  6); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
+  the optimizer can delete. **Round 6 (2026-10-25): early freeing, in the port** (compiler/free.olang, after the scope
+  pass, at the program's root). Candidate places are per type - a reference field, a handle field, an array type's
+  elements; a sole one's values are built in regions of their own (a kid of the scope, the word before each object
+  naming it) and each let-go releases one. Keep wherever a fact is missing: a function value, an extern, a module
+  compiled on its own (B3i: only the root's object makes regions and releases), a task anywhere, a destructor or
+  Str/Eq/Hash letting go; a view used after the let-go in the same function keeps too. `-memory` (B18) lists the
+  program's places that keep and why. Measured: 2.7's five programs 118 MB-1.49 GB -> under 2.5 MB; a fixed array widened
+  to a run-time value is now made where it is kept (it took a copy in the program's scope - 130 MB over 2M calls).
+  Gate: the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`) over the suite, the suite under `-sanitize`, and
+  `fuzz free` (440 programs, ~4,900 places freed, nothing found; a planted unsound decision found in all 20 tried).
+- **Recorded limits:** long-lived mutated structures holding values a task can reach, or with destructors, still only
+  grow (ledger QF); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result

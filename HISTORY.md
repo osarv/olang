@@ -24185,3 +24185,75 @@ outside the prelude is an unknown method.
 The two-step build this needed, worth knowing: the compiler's own source uses the prelude's List and Map, so a compiler
 that does not know `vacate` cannot build a prelude that uses it. The compiler was built first with the old prelude, then
 by itself with the new one; the seed is regenerated (`make seed`) so the bootstrap from nothing goes through.
+
+## Memory round 6: early freeing in the port (O8d, B18, T7c, 2026-10-25)
+
+docs/memory.md's round 6: what a long-lived place lets go of is freed at once where the compiler proves the place was
+its only holder. Built in three pieces.
+
+**The runtime, the MIR and the evaluator (3.4).** A region is a scope of its own, a kid of the scope its value would
+otherwise have been built in (closed with it unless released first), and everything allocated in it has a word before
+it naming the region - so a value's region is found from the value alone (`__olang_region_or`,
+`__olang_region_release`). Constant data carries a zero word before it, so a sole place may hold it too. A region's
+first allocation of at most 2 KB is a block of its own sized to it, so a small value (a key's text, a record) costs about
+its size, not a 4 KB chunk. MIR gained `Region`, `RegionOr` and `Release`; the evaluator models them (a released region
+is reclaimed with its kids).
+
+**The analysis (compiler/free.olang, M6).** Run after the scope pass, at the program's root, over every body. Candidate
+places are per type (2.1): a reference field of a struct type, a field holding a handle (List, Map, Vec), and an array
+type's elements - so a collection's contents are its chunks' or buckets' element place. Origins (what a value may refer
+into: a parameter, a view of a place, a value moved out of one, a site of the body, nothing known) are flow-insensitive
+within a body; may-summaries (what a result carries, which parameters a body stores where or keeps, which places it lets
+go of) and must-summaries (what every result and every local is) are fixed points by worklist in callees-first order;
+a final walk records the stores, let-goes and views the decisions are made from. A place is sole when every value
+stored into it was made for it, no reference into it is stored anywhere else, none is in use across a let-go of it, no
+task can reach it and nothing it holds has a destructor; then each site making its values builds in a region of its own
+(the plans' Region fields - lowering makes the region at the site) and each let-go releases one. The first version keeps
+wherever docs/memory.md 2.6 says - a call through a function value, an extern, a body the scope pass did not judge, a
+module compiled on its own (B3i: only code in the root's object makes regions and releases, so an object another
+program reuses never depends on this one). `-memory` (B18) lists the program's places that keep, with the reason.
+
+**Measured** (peak resident, the five programs of 2.7 and the recorded fixed-array leak, as checks' `earlyfree` runs them
+under `ulimit -v 8192`): a server's per-request headers 130 MB -> 2.5 MB; an interpreter's frames (the one-line-fixed
+form) 118 MB -> 1.9 MB; a Map with entries removed 163 MB -> 1.9 MB; text reassigned into a long-lived field 260 MB ->
+1.7 MB; a syntax tree rewritten by passes 1.49 GB -> 2.0 MB; a fixed local array made a run-time value, assigned and
+returned, 2M calls, fills 130 MB -> 1.8 MB and literals 82 MB -> 1.7 MB. The blocked variants give 2.7's rows exactly
+(checks/cases/server, frames, ast, mapremove). A Vec growing to 50M elements peaks at 1.05 GB, round 1's figure: its
+old buffers go back to the thread's pool, not to the system, and `mremap` growth was not adopted (it would need a Vec's
+buffer to be the only allocation of its mapping). The analysis takes about 0.8 s of the compiler's own build (8,300
+bodies), the scope phase 0.6 s -> 1.3 s; memory unchanged.
+
+**The gate (5.5): nothing reads a freed region.** Three oracles, all clean: the evaluator's dead-region mode
+(`OLANG_DEADREGIONS=1`: a released region is reclaimed and a read of what it held stops evaluation as an internal
+compiler error) over the whole suite; the suite under `-debug -sanitize` (`make scopesan`); and the early-free fuzzer,
+`fuzz free` (scopegen's FreeProgram: scenarios replacing, removing, taking out of a Map, keeping views across let-goes,
+storing views elsewhere, capturing them in lambdas - each scenario with a holder type of its own, so what keeps in one
+keeps in that one alone - built `-debug -sanitize -memory` and interpreted in dead-region mode, the outputs compared):
+440 programs, 3,440 scenarios, about 4,900 places freed at once, no finding. Checked that it can fail: with the view
+condition switched off in the compiler, every one of 20 programs was found, by both oracles.
+
+**Decided (mine):**
+1. Only root-emitted code makes regions and releases (B3i), so there is no per-collection flag (3.4) and no external
+   constant (3.5): an instance's code is in the root's object (B3d).
+2. A view used after its place lets go in the same function makes the place keep - SPEC O8d revised; the earlier text's
+   delay of the release to the view's last use is a relaxation for later.
+3. The report lists the program's places only - fields of its types, and what its collections hold - owning storage
+   made for them, let go in code that runs again (a loop, or a function other than `main`); a row for one cause once,
+   at the place's own let-go rather than at a call.
+4. A struct value copied into a struct held in place gives each of its candidate leaves a value not made for it,
+   unless it is the type's constructor call, whose stores are the leaves'.
+5. A constructor's stores of its arguments are no escape of them (the instance's leaves are places of their own).
+6. A store a return follows is the last on its path, so Map.Put's store in its loop and its add are one store.
+7. A conversion of one value passes must-facts through; borrowing a container is no view of its leaves.
+8. A call's value result copied into a region is built in the region.
+
+**Found and fixed on the way, pre-existing:** the code lowering gives a zero value (a Map's, a List's) ignored the
+scope it was asked to build in and built it in the program's - every zero collection lived for the whole program; and
+the recorded T7c leak - a fixed array widened to a run-time-length value, assigned or returned, took a copy in the
+program's scope - is closed: the widening is made where the value is kept (the local's storage, the result scope),
+else in the innermost block.
+
+**Relaxations recorded, not built** (each needs a soundness review): a view in the same function delaying the release
+to its last use; pins (QAD); per-callback summaries for calls through function values; a prelude-marked dead slot so
+SetAt can free; a per-site task reach (any task now disables freeing); a destructor, Str, Eq or Hash letting go
+anywhere disables freeing for the whole program.

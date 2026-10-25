@@ -1,7 +1,7 @@
 # Memory: one rule, and freeing early as the compiler's optimization
 
-Status: design for review, 2026-10-17. Rounds 1-3 (Vec as a handle, the view rule M19g, `own` removed - section 5.5) are
-built; the rest is not. The user
+Status: design for review, 2026-10-17. Rounds 1-4 and 6 (Vec as a handle, the view rule M19g, `own` removed, the
+prelude's let-go, early freeing in the port - section 5.5) are built; rounds 5 and 7 are not. The user
 decided the direction (ledger QAB, 2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an
 implementation agent follows, round by round; what each round built and measured is in HISTORY.md. This replaces owned
 references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
@@ -912,7 +912,7 @@ tags - HISTORY.md "The view rule M19g".)*
     `own` is byte-identical before and after the round, collected as for the move to `bootstrap/` (743 files then);
   - the scope fuzzer, in its remaining modes, finds nothing at its fixed seeds.
 
-**Round 4 - the prelude lets go explicitly.**
+**Round 4 - the prelude lets go explicitly.** *(Built 2026-10-25 - HISTORY.md "Memory round 4".)*
 - **Compiler (stage 0)**: `p.vacate()` on any place, callable only from the prelude's modules. Stage 0 and the evaluator
   compile it as a plain read: the slot keeps its bits, which nothing reads, since the prelude vacates only dead
   positions.
@@ -928,7 +928,8 @@ tags - HISTORY.md "The view rule M19g".)*
 - **Accept when**: the port's acceptance so far still passes (`tokdiff`, `astdiff`, `namesdiff`, `layoutdiff`, the
   modules' own tests).
 
-**Round 6 - early freeing, in the port (M6, M7, M9).**
+**Round 6 - early freeing, in the port (M6, M7, M9).** *(Built 2026-10-25 - HISTORY.md "Memory round 6": the five
+programs flat, the gate's three oracles clean, `mremap` not adopted.)*
 - The analysis of section 2 (M6), lowering (M7), the runtime of 3.4, the report (B14), the three oracles of 3.6, and
   4.6's `mremap` row.
 - **The gate.** Early freeing is unsafe in one way only: a place wrongly proved sole while a reference into its region

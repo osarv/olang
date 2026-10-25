@@ -1,6 +1,7 @@
 import "std/io"
 
-# T7c: a fixed array's value made a run-time one is made where it is kept - in a loop it grew the program's scope
+# T7c: a fixed array's value made a run-time one is made where it is kept - in a loop it grew the program's scope.
+# Fills and literals both: a fixed local assigned to a run-time-length one, and returned as one
 N I64 = 2000000
 
 fn sum3(a I64) I64 {
@@ -17,12 +18,28 @@ fn mk(a I64) Array<I64> {
     return x
 }
 
+fn sumLit(i I64) I64 {
+    x := I64[i, 3]
+    v Array<I64> = I64[0]
+    v = x
+    t I64 = 0
+    for e in v { t += e }
+    return t
+}
+
+fn mkLit(i I64) Array<I64> {
+    x := I64[i, 3, 4]
+    return x
+}
+
 fn main() {
     total I64 = 0
     for i in range N {
-        total += sum3(i)
+        total += sum3(i) + sumLit(i)
         r := mk(i)
         total += r[0]
+        q := mkLit(i)
+        total += q[0]
     }
     io.Println($total)!
 }
