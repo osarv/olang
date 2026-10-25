@@ -1,0 +1,27 @@
+== build -debug -sanitize
+a mk1-7 b mk2-14
+label mk0-0
+label mk0-0
+label mk1-7
+label mk1-7
+label mk2-14
+label mk2-14
+status 0
+== build
+a mk1-7 b mk2-14
+label mk0-0
+label mk0-0
+label mk1-7
+label mk1-7
+label mk2-14
+label mk2-14
+status 0
+== interpret
+a mk1-7 b mk2-14
+label mk0-0
+label mk0-0
+label mk1-7
+label mk1-7
+label mk2-14
+label mk2-14
+status 0

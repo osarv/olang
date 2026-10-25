@@ -1,0 +1,50 @@
+import "std/io"
+# A: a call through a function value given a scope argument (E25), its text built where the argument says - returned,
+# kept through a local, boxed outward
+type Named trait {
+    Name() String
+}
+type Label extends String
+fn (l Label&) Name() String { return "label " $l }
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn ret(f fn(k I64) String, i I64) String {
+    t := "t" $i
+    return f&t(i)
+}
+fn viaLocal(f fn(k I64) String, i I64) String {
+    t := "t" $i
+    x := f&t(i)
+    return x
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        t := "w" $i
+        xs.Push(Label(mk&t(i)))
+        g := mk
+        xs.Push(Label(g&t(i)))
+    }
+    a := ret(mk, 1)
+    b := viaLocal(mk, 2)
+    churn()
+    say("a " $a " b " $b)
+    for x in xs { say(x.Name()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

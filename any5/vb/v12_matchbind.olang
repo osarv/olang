@@ -1,0 +1,25 @@
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type E enum {
+    T(s String&)
+    N
+}
+fn get(e E&) String {
+    return match e { case E.T(q) => q nomatch => "none" }
+}
+fn probe(i I64) String {
+    e := E.T("abc" $i)
+    b mut any W& = Lab(get(e))
+    b.Bump()
+    x := get(e)
+    x[1] = 'Q'
+    return "src " $(e as E.T) " b " $b " x " $x
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

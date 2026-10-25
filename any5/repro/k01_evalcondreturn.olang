@@ -1,0 +1,30 @@
+# K1 vs the run time: a returned conditional, value match or catch default of existing arrays is copied at run time
+# (retCopies looks inside them) but not while compiling (the unplanned path asks copiesArray of the whole expression,
+# false for a Cond, Match or Try) - so a baked global aliases the caller's array where the program does not
+error Oops {
+    BAD
+}
+fn fails(k I64) String ? Oops {
+    if k < 100 { error Oops.BAD }
+    return "never"
+}
+fn pick(p String&, q String&, c Bool) String { return p if c else q }
+fn pickm(p String&, k I64) String { return match k { case 0 => p case _ => p } }
+fn pickt(p String&, k I64) String { return try fails(k) catch default p }
+fn probe(i I64) String {
+    s := "cond" $i
+    x := pick(s, s, i > 0)
+    x[0] = 'Q'
+    t := "match" $i
+    y := pickm(t, i)
+    y[0] = 'Q'
+    u := "dflt" $i
+    z := pickt(u, i)
+    z[0] = 'Q'
+    return $s " " $t " " $u
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

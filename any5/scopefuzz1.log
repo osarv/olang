@@ -1,1 +1,2 @@
 built ./build/fuzz_fuzz.debug
+fuzz scope: 300 programs, 1836 scenarios run, 1764 refused by the compiler, 0 findings

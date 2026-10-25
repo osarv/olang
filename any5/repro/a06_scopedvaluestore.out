@@ -1,0 +1,9 @@
+== build -debug -sanitize
+h.s mk2-14 keep List<String&>["mk10-70", "mk11-77", "mk12-84"]
+status 0
+== build
+h.s mk2-14 keep List<String&>["mk10-70", "mk11-77", "mk12-84"]
+status 0
+== interpret
+h.s mk2-14 keep List<String&>["mk10-70", "mk11-77", "mk12-84"]
+status 0

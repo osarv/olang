@@ -1,0 +1,52 @@
+import "std/io"
+# D: "spawn x = mk&t(i)" - a call given a scope argument as a task's call, its target set from the task's thread
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn mkl(l List<String&>&, i I64) String { return "l" $i }
+fn main() {
+    t := "outer"
+    x := ""
+    y := ""
+    keep := List<String&>()
+    join {
+        spawn x = mk&t(1)
+        spawn y = mk&keep(2)
+    }
+    churn()
+    say("x " $x " y " $y)
+    z := ""
+    for i in range 3 {
+        u := "inner" $i
+        join {
+            spawn z = mk&u(i)
+        }
+        churn()
+        say("z " $z)
+    }
+    churn()
+    say("after " $z)
+    w := ""
+    for i in range 3 {
+        u := "assign" $i "-" $(i * 7)
+        w = mk&u(i)
+    }
+    churn()
+    say("w " $w)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

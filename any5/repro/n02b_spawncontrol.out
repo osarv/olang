@@ -1,0 +1,12 @@
+== build -debug -sanitize
+a two2-14 2
+b try2-14
+c I64[2, 14, 22]
+h none
+status 0
+== build
+a two2-14 2
+b try2-14
+c I64[2, 14, 22]
+h none
+status 0

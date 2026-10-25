@@ -1,0 +1,24 @@
+== build -debug -sanitize
+k09_genericvalue.olang:8:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    8 |     l.Push(x)
+      |       ^~~~
+k09_genericvalue.olang:13:5: note: instantiated here, with T = String
+   13 |     keepV(keep, s)
+      |     ^~~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+== build
+k09_genericvalue.olang:8:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    8 |     l.Push(x)
+      |       ^~~~
+k09_genericvalue.olang:13:5: note: instantiated here, with T = String
+   13 |     keepV(keep, s)
+      |     ^~~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+== interpret
+run:   keep List<String&>["Qbc1"] h List<String&>["Qbc1"]
+baked: keep List<String&>["Qbc1"] h List<String&>["Qbc1"]
+status 0

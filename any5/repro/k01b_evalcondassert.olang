@@ -1,0 +1,13 @@
+# k01 asserted: a correct assertion (true at run time, as the built program shows) decided false while compiling, so
+# the program is refused
+fn pick(p String&, q String&, c Bool) String { return p if c else q }
+fn probe(i I64) String {
+    s := "cond" $i
+    x := pick(s, s, i > 0)
+    x[0] = 'Q'
+    return $s
+}
+fn main() {
+    assert probe(1) == "cond1"
+    say("passed")
+}

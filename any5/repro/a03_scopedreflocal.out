@@ -1,0 +1,24 @@
+== build -debug -sanitize
+a03_scopedreflocal.olang:14:12: error[O10d]: this value lives in this function's own scope, which closes first
+   14 |     return x
+      |            ^
+a03_scopedreflocal.olang:18:16: error[O10]: this reference lives in a scope that may not outlive where it is put
+   18 |     b := mkBox&t(i)
+      |                ^
+compilation failed with 2 errors
+== build
+a03_scopedreflocal.olang:14:12: error[O10d]: this value lives in this function's own scope, which closes first
+   14 |     return x
+      |            ^
+a03_scopedreflocal.olang:18:16: error[O10]: this reference lives in a scope that may not outlive where it is put
+   18 |     b := mkBox&t(i)
+      |                ^
+compilation failed with 2 errors
+== interpret
+n 0
+n 1
+n 2
+b 10
+b 11
+b 12
+status 0

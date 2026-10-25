@@ -1,0 +1,29 @@
+== build -debug -sanitize
+a05_scopedtupleborrow.olang:15:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   15 |         h.s = r
+      |             ^
+a05_scopedtupleborrow.olang:16:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   16 |         keep.Push(r)
+      |              ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+a05_scopedtupleborrow.olang:14:12: note: 'r' is declared here, in a block that closes first - declare it where 'keep' lives: 'r String&keep = ...'
+   14 |         n, r := two&t(i, u)
+      |            ^
+a05_scopedtupleborrow.olang:16:19: note: this text lives in a block that closes first - pass a copy, which is made where 'keep' lives: write '$' before it
+   16 |         keep.Push(r)
+      |                   ^
+compilation failed with 2 errors
+== build
+a05_scopedtupleborrow.olang:15:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   15 |         h.s = r
+      |             ^
+a05_scopedtupleborrow.olang:16:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   16 |         keep.Push(r)
+      |              ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+== interpret
+h.s inner2-14 keep List<String&>["inner0-0", "inner1-7", "inner2-14"]
+status 0

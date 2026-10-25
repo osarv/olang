@@ -1,0 +1,33 @@
+# D: "spawn x = mk&t(i)" - a call given a scope argument as a task's call, its target set from the task's thread
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn mkl(l List<String&>&, i I64) String { return "l" $i }
+fn main() {
+    t := "outer"
+    x := ""
+    y := ""
+    keep := List<String&>()
+    join {
+        spawn x = mk&t(1)
+        spawn y = mk&keep(2)
+    }
+    churn()
+    say("x " $x " y " $y)
+    z := ""
+    for i in range 3 {
+        u := "inner" $i
+        join {
+            spawn z = mk&u(i)
+        }
+        churn()
+        say("z " $z)
+    }
+    churn()
+    say("after " $z)
+    w := ""
+    for i in range 3 {
+        u := "assign" $i "-" $(i * 7)
+        w = mk&u(i)
+    }
+    churn()
+    say("w " $w)
+}

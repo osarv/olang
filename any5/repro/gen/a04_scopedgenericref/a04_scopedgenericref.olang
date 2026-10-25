@@ -1,0 +1,38 @@
+import "std/io"
+# E25 on a generic whose result is its type-variable argument (ResultFrom = FromTypeVar, so not "borrowed" to E25):
+# T bound to a reference, the result is the argument itself - does the scope argument say where it lives?
+type Node struct(v I64) {
+    v
+}
+type H struct() {
+    p Node?& = null
+}
+fn gid<T>(x T) T { return x }
+fn main() {
+    t := Node(0)
+    h := H()
+    for i in range 3 {
+        n := Node(i + 100)
+        h.p = gid&t(n)
+    }
+    churn()
+    say("h.p " $h.p!.v)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

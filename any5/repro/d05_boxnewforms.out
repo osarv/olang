@@ -1,0 +1,39 @@
+== build -debug -sanitize
+label rc0
+label txt0-0
+nums I64[0, 0, 0]
+nums I64[0, 0]
+nums I64[5, 5]
+label src0
+label rc1
+label txt1-7
+nums I64[1, 1, 1]
+nums I64[1, 2]
+nums I64[9]
+label src1
+label rc2
+label txt2-14
+nums I64[2, 2, 2]
+nums I64[2, 4]
+nums I64[18]
+label c2
+status 0
+== build
+label rc0
+label txt0-0
+nums I64[0, 0, 0]
+nums I64[0, 0]
+nums I64[5, 5]
+label src0
+label rc1
+label txt1-7
+nums I64[1, 1, 1]
+nums I64[1, 2]
+nums I64[9]
+label src1
+label rc2
+label txt2-14
+nums I64[2, 2, 2]
+nums I64[2, 4]
+nums I64[18]
+label c2

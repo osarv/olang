@@ -1,0 +1,52 @@
+import "std/io"
+# n01's other forms: several targets (one of several results), a catch default, numbers, a struct holding text by
+# reference built where u lives - each target outside the loop, read after the loop body closes
+error Oops {
+    BAD
+}
+fn mk2(i I64) String, I64 { return "two" $i "-" $(i * 7), i }
+fn mkf(i I64) String ? Oops {
+    if i > 100 { error Oops.BAD }
+    return "try" $i "-" $(i * 7)
+}
+fn nums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
+type H struct(s String&) { s }
+fn mkh(i I64) H { return H("h" $i "-" $(i * 7)) }
+fn main() {
+    a := ""
+    n I64 = 0
+    b := ""
+    c := Array<I64>(0)
+    h := H("none")
+    for i in range 3 {
+        u := "inner" $i
+        join {
+            spawn a, n = mk2&u(i)
+            spawn b = try mkf&u(i) catch default "dflt"
+            spawn c = nums&u(i)
+        }
+    }
+    churn()
+    say("a " $a " " $n)
+    say("b " $b)
+    say("c " $c)
+    say("h " $h.s)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

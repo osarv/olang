@@ -1,0 +1,28 @@
+# A / O26a: a reference local declared from a scoped call (its result holds references, so madeHere still counts the call
+# "made here") - is it moved to the result scope while its referent is where the scope argument said?
+type Node struct(v I64) {
+    v
+    next Node?& = null
+}
+type Box struct(n Node&) { n }
+fn mkNode(i I64) Node& { return Node(i) }
+fn mkBox(i I64) Box { return Box(Node(i)) }
+fn viaLocal(i I64) Node& {
+    t := Node(0)
+    x := mkNode&t(i)
+    return x
+}
+fn viaValue(i I64) Box {
+    t := Node(0)
+    b := mkBox&t(i)
+    return b
+}
+fn main() {
+    keep := List<Node&>()
+    for i in range 3 { keep.Push(viaLocal(i)) }
+    bs := List<Box&>()
+    for i in range 3 { bs.Push(viaValue(i + 10)) }
+    churn()
+    for n in keep { say("n " $n.v) }
+    for b in bs { say("b " $b.n.v) }
+}

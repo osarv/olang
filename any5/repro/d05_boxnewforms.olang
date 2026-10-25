@@ -1,0 +1,23 @@
+# decision 1 / T32a: the other "new storage" items a box holds as they are - a comprehension, written text, a fill, an
+# array literal, a conversion of each, mixed in a conditional - made in a loop body, the anys outside, read after churn
+type Named trait {
+    Name() String
+}
+type Label extends String
+fn (l Label&) Name() String { return "label " $l }
+type Nums extends Array<I64>
+fn (n Nums&) Name() String { return "nums " $n }
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        t := "src" $i
+        xs.Push(Label(Char[c for c in t if c != 's']))
+        xs.Push(Label("txt" $i "-" $(i * 7)))
+        xs.Push(Nums(Array<I64>(3, i)))
+        xs.Push(Nums(I64[i, i * 2]))
+        xs.Push(Nums(I64[i * 9] if i > 0 else Array<I64>(2, 5)))
+        xs.Push(Label(String("c" $i) if i > 1 else String(Char[c for c in t])))
+    }
+    churn()
+    for x in xs { say(x.Name()) }
+}

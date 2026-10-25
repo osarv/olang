@@ -1,0 +1,18 @@
+# A: a scoped call through a function value, its text stored into an outer reference field and pushed into an outer
+# list - is it judged (rv for a function value's type)?
+type H struct() {
+    s String& = "none"
+}
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn main() {
+    h := H()
+    keep := List<String&>()
+    f := mk
+    for i in range 3 {
+        u := "inner" $i
+        h.s = f&u(i)
+        keep.Push(f&u(i + 10))
+    }
+    churn()
+    say("h.s " $h.s " keep " $keep)
+}

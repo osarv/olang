@@ -59,3 +59,10 @@ type Box struct(x String&) { x }
 fn (b Box&) Into(h mut Holder&b) I64 { return h.Add(b.x) }" "Box(s).Into(h)"
 mk k08_method "$H
 fn (x String&) AddTo(h mut Holder&x) I64 { return h.Add(x) }" "s.AddTo(h)"
+mk k09_genericvalue "$H
+fn keepV<T>(l mut List<T&>&, x T) I64 {
+    l.Push(x)
+    return 9
+}" "keepV(keep, s)"
+mk k10_sharedslice "$H" "h.Add(s[1:3])"
+mk k11_shareddefer "$H" "defer { h.Add(s) }"

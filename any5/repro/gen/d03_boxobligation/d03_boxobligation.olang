@@ -1,0 +1,42 @@
+import "std/io"
+# decision 1: a callee whose result scope must outlive another argument's (an obligation: it pushes its returned local
+# into that list) - the call's result held by a box made in a loop body, the list outside the loop
+type Lab extends String
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn mkk(l mut List<String&>&, i I64) String {
+    s := "kept" $i "-" $(i * 7)
+    l.Push(s)
+    return s
+}
+fn main() {
+    outer := List<String&>()
+    for i in range 3 {
+        b mut any W& = Lab(mkk(outer, i))
+        b.Bump()
+        x := mkk(outer, i + 10)
+        x[1] = 'Q'
+    }
+    churn()
+    say("outer " $outer)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}
