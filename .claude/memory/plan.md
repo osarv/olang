@@ -370,3 +370,8 @@ on sight per rules.md, "Code rules".
   container: apt-get install -y clang-19 clang-20 lld-19 lld-20 libclang-rt-19-dev libclang-rt-20-dev
   qemu-user-static libc6-dev-arm64-cross libgcc-13-dev-arm64-cross gcc-aarch64-linux-gnu libffi-dev; then
   rm /usr/bin/clang-20 (so clang-18 stays the default; clang-20 by path /usr/lib/llvm-20/bin/clang).
+- 2026-10-25 CEST: the user tired, design talk paused (open: errors as values (a)/(b), QBA zero vs uninit). Started
+  wt-lang25 (opus high, PROGRESS.md rounds): prover removed, requirement block `fn f(x I32, y I32) [y > x] I32`
+  (entry checks, ArgumentError.INVALID, outlives in the block), `checked` + CheckError removed (Get/SliceOf/Narrow,
+  `as` fallible, std/arith Checked<T> + free functions), method type arguments, try binding + nesting rule, commutes;
+  migration tools in olang fix. A soundness/semantics review before merging (it touches try and the evaluator).
