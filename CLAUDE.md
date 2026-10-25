@@ -73,7 +73,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   line break. A line break separates where L18 would end a statement (so a line ending in an operator continues the
   item), or after an item ending in `}`, `>` or a bare `&` when the next token starts a later line. A comma before a
   line break is an error (reversing L18a's trailing comma and T17/T19/C2's comma-is-an-error), and so is one before the
-  closing bracket on its line. `+` is gone from error sets and catch items (`? IoError, ParseError`, `catch A, B.X`). A
+  closing bracket on its line. `+` is gone from error sets and catch items (`? io.Error, ParseError`, `catch A, B.X`). A
   function type's or a lambda's error set is one item or parenthesized (`fn(I64) ? (A, B)`) - always, so a `,` after
   it separates the list it stands in (mine). A parenthesized expression and a comprehension are one item, not lists:
   line breaks inside separate nothing (mine). `x, y I64` (D12b) is unchanged. `tools/syntax_migrate.olang` migrates.
@@ -529,7 +529,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
   uncovered `as` `(x as C)!`.
 - **`!` ends the program on what fails as written (E35, the user's decision QV).** `f(x)!`, `a.F().G()!`,
-  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.IoError.W`
+  `(f(x) + g(y))!` - `try`'s reach, no checks; a failure fails the running test, else prints `FILE:LINE: io.Error.W`
   and aborts; needs no `?` (`fn main() { io.Println("hi")! }`). While compiling it is K1's abort class. `spawn f(x)!`
   ends the program from the task's thread (P4, P6).
 - **Operators may fail (E31, E31a, the user's calls).** A plain operator method (all but `Len`, `Eq`, `Str`) may
@@ -757,7 +757,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   meets no other (mine). Hidden routes stay the evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
-  `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on
+  `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
   its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
