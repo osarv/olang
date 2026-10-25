@@ -1449,7 +1449,7 @@ d1ad7ad67e4eade4 c76dc9e81587b931 checks/fixtures/vecalias/p1.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 af6fe9dd3edb60c1 fa2e3caf3837e3b3 compiler/ast.olang
 ff3d67ce3fe24091 d899e4811b9374cb compiler/bindgen.olang
-1b037a2362ca6361 6538ea49c5a8b7d0 compiler/build.olang
+cf5c05adda12d782 85a3db317c3935a9 compiler/build.olang
 43a0a19252b9d386 9bb98179fabd2ed6 compiler/cabi.olang
 9f556d5b5875ac81 2ca210a6ed83f102 compiler/check.olang
 8185bf6dae884df4 baf2c82cdcc2dcfd compiler/cond.olang
