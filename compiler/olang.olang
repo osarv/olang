@@ -783,7 +783,11 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
-    x.Place()
+    # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
+    # not run
+    plans := placement(c, cfg)
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    x.Lw.Plans = plans
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     os.OnCrash(eval.InterpCrash)
     status := x.RunMain(d)
