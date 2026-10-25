@@ -1,0 +1,40 @@
+import "std/io"
+# a trait default method with a parameter default, called through an any leaving it off; and an override of that default
+# with its own parameter default
+type A trait {
+    Area() I64
+}
+fn (s S) Sc<S A>(k I64 = 3) I64 { return s.Area() * k }
+type Sq struct(n I64) { n }
+fn (q Sq&) Area() I64 { return q.n }
+type Ov struct(n I64) { n }
+fn (q Ov&) Area() I64 { return q.n }
+fn (q Ov&) Sc(k I64 = 5) I64 { return q.n * k + 1 }
+fn run(n I64) String {
+    a any A& = Sq(n)
+    b any A& = Ov(n)
+    return $a.Sc() " " $b.Sc() " " $a.Sc(2) " " $Ov(n).Sc()
+}
+G String = run(2)
+fn main() {
+    say(G)
+    say(run(2))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

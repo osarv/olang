@@ -1,0 +1,12 @@
+== build -debug -sanitize
+default 1|int box 40|default 1|int box 40|default 1|int box 40
+default 2|int box 40|default 2|int box 40|default 2|int box 40
+status 0
+== build
+default 1|int box 40|default 1|int box 40|default 1|int box 40
+default 2|int box 40|default 2|int box 40|default 2|int box 40
+status 0
+== interpret
+default 1|int box 40|default 1|int box 40|default 1|int box 40
+default 2|int box 40|default 2|int box 40|default 2|int box 40
+status 0

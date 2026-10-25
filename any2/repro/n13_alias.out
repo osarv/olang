@@ -1,0 +1,9 @@
+== build -debug -sanitize
+Zond Zatch call field slice Zatch plain trim
+status 0
+== build
+Zond Zatch call field slice Zatch plain trim
+status 0
+== interpret
+Zond Zatch call field slice Zatch plain trim
+status 0

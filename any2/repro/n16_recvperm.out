@@ -1,0 +1,29 @@
+== build -debug -sanitize
+n16_recvperm.olang:18:11: error[M19]: Box<mut String&> has no method 'Describe'
+   18 |     say(m.Describe())
+      |           ^~~~~~~~
+n16_recvperm.olang:19:16: error[T32a, T31]: Box<mut String&> cannot be an 'any D&': it has no method 'Describe' that fits
+   19 |     x any D& = m
+      |                ^
+n16_recvperm.olang:21:24: error[M19]: Box<I64> has no method 'Describe'
+   21 |     say(Box<I64>(4, 3).Describe())
+      |                        ^~~~~~~~
+compilation failed with 3 errors
+== build
+n16_recvperm.olang:18:11: error[M19]: Box<mut String&> has no method 'Describe'
+   18 |     say(m.Describe())
+      |           ^~~~~~~~
+n16_recvperm.olang:19:16: error[T32a, T31]: Box<mut String&> cannot be an 'any D&': it has no method 'Describe' that fits
+   19 |     x any D& = m
+== interpret
+n16_recvperm.olang:18:11: error[M19]: Box<mut String&> has no method 'Describe'
+   18 |     say(m.Describe())
+      |           ^~~~~~~~
+n16_recvperm.olang:19:16: error[T32a, T31]: Box<mut String&> cannot be an 'any D&': it has no method 'Describe' that fits
+   19 |     x any D& = m
+      |                ^
+n16_recvperm.olang:21:24: error[M19]: Box<I64> has no method 'Describe'
+   21 |     say(Box<I64>(4, 3).Describe())
+      |                        ^~~~~~~~
+compilation failed with 3 errors
+status 1

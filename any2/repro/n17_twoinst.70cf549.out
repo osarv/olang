@@ -1,0 +1,35 @@
+== build -debug -sanitize
+n17_twoinst.olang:14:39: error[E12]: expected Box<String&>&, found Box<I64>
+   14 | fn gen<S IShape>(s S) String { return s.Describe() }
+      |                                       ^
+n17_twoinst.olang:20:61: note: instantiated here, with S = Box<I64>
+   20 |     return $t.Describe() "|" $i.Describe() "|" $gen(t) "|" $gen(i) "|" $x.Describe() "|" $y.Describe()
+      |                                                             ^~~
+n17_twoinst.olang:19:21: error[E12]: expected Box<String&>&, found Box<I64>
+   19 |     y any IShape& = i
+      |                     ^
+n17_twoinst.olang:20:31: error[E12]: expected Box<String&>&, found Box<I64>
+   20 |     return $t.Describe() "|" $i.Describe() "|" $gen(t) "|" $gen(i) "|" $x.Describe() "|" $y.Describe()
+      |                               ^
+compilation failed with 3 errors
+== build
+n17_twoinst.olang:14:39: error[E12]: expected Box<String&>&, found Box<I64>
+   14 | fn gen<S IShape>(s S) String { return s.Describe() }
+      |                                       ^
+n17_twoinst.olang:20:61: note: instantiated here, with S = Box<I64>
+   20 |     return $t.Describe() "|" $i.Describe() "|" $gen(t) "|" $gen(i) "|" $x.Describe() "|" $y.Describe()
+== interpret
+n17_twoinst.olang:14:39: error[E12]: expected Box<String&>&, found Box<I64>
+   14 | fn gen<S IShape>(s S) String { return s.Describe() }
+      |                                       ^
+n17_twoinst.olang:20:61: note: instantiated here, with S = Box<I64>
+   20 |     return $t.Describe() "|" $i.Describe() "|" $gen(t) "|" $gen(i) "|" $x.Describe() "|" $y.Describe()
+      |                                                             ^~~
+n17_twoinst.olang:19:21: error[E12]: expected Box<String&>&, found Box<I64>
+   19 |     y any IShape& = i
+      |                     ^
+n17_twoinst.olang:20:31: error[E12]: expected Box<String&>&, found Box<I64>
+   20 |     return $t.Describe() "|" $i.Describe() "|" $gen(t) "|" $gen(i) "|" $x.Describe() "|" $y.Describe()
+      |                               ^
+compilation failed with 3 errors
+status 1

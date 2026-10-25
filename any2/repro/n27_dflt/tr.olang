@@ -1,0 +1,10 @@
+# a trait whose method's parameter defaults read this module's private function and global, and build text
+pre mut I64 = 0
+fn label() String { 
+    pre += 1
+    return "p" $pre
+}
+Base I64 = 7
+type Drawn trait {
+    Draw(scale I64 = Base * 2, tag String& = $label() "!") String
+}

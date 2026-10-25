@@ -1,7 +1,7 @@
 #!/bin/bash
 # cmp.sh DIR NAME...: runs each three ways, prints a one-line verdict per program (SAME/DIFF/REFUSED)
 D=$1; shift
-O=${OLANG:-/home/user/wt/rvany2/build/olang}
+O=${OLANG:?set OLANG to the compiler}
 for n in "$@"; do
  (cd /home/user/review/any2/$D; mkdir -p gen
   { grep -q 'import "std/io"' $n.olang || echo 'import "std/io"'; cat $n.olang /home/user/review/any2/common.inc; } > gen/$n.olang

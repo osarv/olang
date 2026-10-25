@@ -1,0 +1,17 @@
+# n05's catch-default shape without an any: block-local text as a catch default pushed into an outer List<String&> (refs)
+error Oops {
+    BAD
+}
+fn bad(k I64) String ? Oops {
+    if k < 10 { error Oops.BAD }
+    return "never"
+}
+fn main() {
+    xs := List<String&>()
+    for i in range 3 {
+        s := "text" $i "-" $(i * 7)
+        xs.Push(try bad(i) catch default s)
+    }
+    churn()
+    for x in xs { say(x) }
+}

@@ -3,7 +3,7 @@
 # plainly (-O3) and run, then interpreted. DIR defaults to repro.
 D=repro
 if [ "$1" = "-d" ]; then D=$2; shift 2; fi
-O=${2:-/home/user/wt/rvany2/build/olang}
+O=${2:?pass the compiler: ./run.sh NAME OLANG}
 cd /home/user/review/any2/$D
 mkdir -p gen
 n=$1

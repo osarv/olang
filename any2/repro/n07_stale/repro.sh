@@ -1,7 +1,7 @@
 #!/bin/bash
 # n07: a module's reused record (B3i) holds its tables' lazy default slots as "unreachable"; an importer that starts
 # calling a default through the any then reaches it. ./repro.sh [OLANG]
-O=${1:-/home/user/wt/rvany2/build/olang}
+O=${1:?pass the compiler}
 cd "$(dirname "$0")"
 rm -rf build
 cp main1.olang main.olang; $O build main.olang && ./build/main

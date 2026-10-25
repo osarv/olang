@@ -1,0 +1,69 @@
+== build -debug -sanitize
+n25_genericany.olang:22:36: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
+   22 | fn cnt<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
+      |                                    ^
+n25_genericany.olang:24:52: error[E12]: expected List<I64>&, found List<T>&
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      |                                                    ^~~~~~
+n25_genericany.olang:30:39: note: instantiated here, with T = I64
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                       ^~~~~~
+n25_genericany.olang:24:52: error[E12]: expected List<String>&, found List<T>&
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      |                                                    ^~~~~~
+n25_genericany.olang:30:55: note: instantiated here, with T = String
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                                       ^~~~~~
+n25_genericany.olang:25:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/list.olang:631:47: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                                               ^
+n25_genericany.olang:25:1: note: instantiated here, with T = String
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[G9]: the type arguments of typeWritten cannot be inferred from these arguments
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/list.olang:631:29: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                             ^~~~~~~~~~~
+== build
+n25_genericany.olang:22:36: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
+   22 | fn cnt<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
+      |                                    ^
+n25_genericany.olang:24:52: error[E12]: expected List<I64>&, found List<T>&
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+== interpret
+n25_genericany.olang:22:36: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
+   22 | fn cnt<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
+      |                                    ^
+n25_genericany.olang:24:52: error[E12]: expected List<I64>&, found List<T>&
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      |                                                    ^~~~~~
+n25_genericany.olang:30:39: note: instantiated here, with T = I64
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                       ^~~~~~
+n25_genericany.olang:24:52: error[E12]: expected List<String>&, found List<T>&
+   24 | fn (s mut Src<T>&) Firsts() List<T>& { return s.it.ToList() }
+      |                                                    ^~~~~~
+n25_genericany.olang:30:55: note: instantiated here, with T = String
+   30 |     return $cnt(a) " " $cnt(b) " " $s.Firsts() " " $t.Firsts()
+      |                                                       ^~~~~~
+n25_genericany.olang:25:1: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/list.olang:631:47: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                                               ^
+n25_genericany.olang:25:1: note: instantiated here, with T = String
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+n25_genericany.olang:25:1: error[G9]: the type arguments of typeWritten cannot be inferred from these arguments
+   25 | fn run(n I64) String {
+      | ^~~~~~~~~~~~~~~~~~~~~~
+/home/user/wt/rvany2/std/prelude/list.olang:631:29: note: in the standard library's code, here
+  631 |             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+      |                             ^~~~~~~~~~~
+status 1

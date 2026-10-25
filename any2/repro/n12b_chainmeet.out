@@ -1,0 +1,16 @@
+== build -debug -sanitize
+n12b_chainmeet.olang:3:45: error[T6b]: I8 and U64 do not meet - neither flows into the other; convert one
+    3 | fn chained(a I8, b U64) Bool { return a < 5 < b }
+      |                                             ^
+compilation failed with 1 error
+== build
+n12b_chainmeet.olang:3:45: error[T6b]: I8 and U64 do not meet - neither flows into the other; convert one
+    3 | fn chained(a I8, b U64) Bool { return a < 5 < b }
+      |                                             ^
+compilation failed with 1 error
+== interpret
+n12b_chainmeet.olang:3:45: error[T6b]: I8 and U64 do not meet - neither flows into the other; convert one
+    3 | fn chained(a I8, b U64) Bool { return a < 5 < b }
+      |                                             ^
+compilation failed with 1 error
+status 1
