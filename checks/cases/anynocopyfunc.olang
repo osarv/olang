@@ -1,0 +1,24 @@
+# check: fail error[T32]: 'Later' keeps a copy of the value it is called on, and an any Gen& has none
+# T32 (the fourth any review, C): a default whose result is a function giving its receiver by value keeps a copy of
+# it as surely as one returning it - looked for inside function types, refused at the call
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+type Gen trait {
+    mut Step() I64
+}
+fn (u mut Ups&) Step() I64 {
+    u.at += 1
+    return u.at
+}
+type Wrap<T> struct(l List<T>&) { l }
+fn (g mut G&) Later<G Gen>() fn() G {
+    return fn() G { return g }
+}
+fn main() {
+    a mut any Gen& = Ups(5)
+    f := a.Later()
+    x := f()
+    assert x > 0
+}

@@ -224,6 +224,20 @@ Prelude := (
     "fn mkText(v I64) String { return \"t\" $v \"-\" $(v * 3) }\n"
     "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode&return(v)\n    return \"r\" $v\n}\n"
     "fn stashLab(l mut List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText&return(v)))\n    return \"r\" $v\n}\n"
+    "# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on\n"
+    "fn mkNums(v I64) Array<I64> { return I64[v, v * 2, v * 3] }\n"
+    "fn retAt(p String&, v I64) String { return mkText&p(v) }\n"
+    "fn retAtChain(p String&, v I64) String { return retAt(p, v) }\n"
+    "fn retNumsAt(p String&, v I64) Array<I64> { return mkNums&p(v) }\n"
+    "fn retLocal(v I64) String {\n    t := \"loc\" $v\n    r := mkText&t(v)\n    return r\n}\n"
+    "fn retDirect(v I64) String {\n    t := \"dir\" $v\n    return mkText&t(v)\n}\n"
+    "fn retTup(v I64) String, I64 {\n    t := \"tup\" $v\n    return mkText&t(v), v\n}\n"
+    "fn retCond(p String&, v I64) String { return mkText&p(v) if Run > 0 else mkText(v) }\n"
+    "fn retTry(v I64) String {\n    t := \"try\" $v\n    return try textFail&t(v) catch default mkText&t(v + 1)\n}\n"
+    "fn hashNums(a Array<I64>&) I64 {\n    t I64 = 0\n    for x in a { t = t * 31 + x }\n    return t\n}\n"
+    "# for second-name scenarios (the fourth any review's B): a returned text local something else names\n"
+    "type TK struct(s String&) { s }\n"
+    "fn (k mut TK&) Set(t String&) { k.s = t }\n"
     "fn mkChain(v I64) mut Node& {\n"
     "    n := Node(v)\n"
     "    n.next = Node(v + 1)\n"
@@ -1056,6 +1070,92 @@ fn (g mut SG&) strScenario(k I64) String& {
             "    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)\n}\n")
 }
 
+# a text scenario (the fourth any review's A): text and arrays of numbers a call given a scope argument builds where a
+# loop body's local lives - returned on by helpers, chained, returned as one of several results, from a conditional and
+# a catch default, kept as a local past a churn, captured by a lambda and boxed into anys outside the loop - each read
+# back after a churn
+fn (g mut SG&) textScenario(k I64) String& {
+    body mut String& = ""
+    for c in range 2 + g.r(4) { body = $body $g.textOp("        ") }
+    return ("fn s" $k "() I64 {\n    bag := Bag()\n    acc I64 = 0\n    for i in range 3 {\n        t := \"in\" $i\n" $body
+            "        churn()\n    }\n    churn()\n    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
+}
+
+fn (g mut SG&) textOp(ind String&) String& {
+    v := g.val()
+    q := g.name("q")
+    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText&t("]
+    call String& = $texts[g.r(texts.Len())] $v ")"
+    k := g.r(8)
+    if k == 0 {    # numbers a scope argument puts in the loop body, returned on or made here
+        nums mut String& = $"mkNums&t(" $v ")"
+        if g.chance(50) { nums = $"retNumsAt(t, " $v ")" }
+        return $ind $q " := " $nums "\n" $ind "churn()\n" $ind "acc = acc * 31 + hashNums(" $q ")\n"
+    }
+    if k == 1 {    # one of several results
+        n := g.name("n")
+        return $ind $q ", " $n " := retTup(" $v ")\n" $ind "churn()\n" $ind "acc = acc * 31 + " $q ".Hash() + " $n "\n"
+    }
+    if k == 2 { return $ind "bag.szs.Push(Lab(" $call "))\n" }
+    if k == 3 { return $ind "bag.anys.Push(Lab(" $call "))\n" }
+    if k == 4 {    # captured by a lambda called after a churn
+        f := g.name("f")
+        return ($ind $q " := " $call "\n" $ind $f " := fn() I64 { return " $q ".Len() * 7 + I64(U8(" $q "[0])) }\n" $ind
+                "churn()\n" $ind "acc = acc * 31 + " $f "()\n")
+    }
+    return $ind $q " := " $call "\n" $ind "churn()\n" $ind "acc = acc * 31 + " $q ".Hash()\n"
+}
+
+# a second-name scenario (the fourth any review's B): a helper returns a text local something else also names - a push
+# through a reference local, a handle's copy, a method on a list's element, a chain of borrows, a lambda kept in a list,
+# a field, a destructor of its block. The caller writes into what it was given; the probe's value is computed while
+# compiling (a global) and at run time, and the two must agree - a line "BAD" says they do not
+fn (g mut SG&) secondScenario(k I64) String& {
+    f := "sn" $k
+    b := "sb" $k
+    v := g.val()
+    kind := g.r(7)
+    sbody String& = "    s := \"abc\" $i\n"
+    head mut String& = ""
+    probe mut String& = ""
+    if kind == 0 or kind == 1 {
+        par String& = "lst mut List<String&>&" if kind == 0 else "lst List<String&>"
+        head = "fn " $f "(" $par ", i I64) String {\n" $sbody "    l := lst\n    l.Push(s)\n    return s\n}\n"
+        probe = "    lst := List<String&>()\n    x := " $f "(lst, i)\n    x[0] = 'Q'\n    return $lst \" \" $x\n"
+    } else if kind == 2 {
+        head = "fn " $f "(ks mut List<mut TK&>&, i I64) String {\n" $sbody "    ks[0].Set(s)\n    return s\n}\n"
+        probe = ("    ks := List<mut TK&>()\n    ks.Push(TK(\"k\"))\n    x := " $f "(ks, i)\n    x[0] = 'Q'\n"
+                 "    return $ks[0].s \" \" $x\n")
+    } else if kind == 3 or kind == 5 {
+        n := 2 + g.r(9)
+        refs mut String& = ""
+        loop mut String& = ""
+        if kind == 3 {
+            for j in range n { refs = $refs "    r" $(j + 1) " String&s = \"\"\n" }
+            loop = "        k.s = r" $n "\n"
+            for j in range n - 1 { loop = $loop "        r" $(n - j) " = r" $(n - j - 1) "\n" }
+            loop = "    for j in range " $(n + 2) " {\n" $loop "        r1 = s\n    }\n"
+        } else {
+            loop = "    k.s = s\n"
+        }
+        head = "fn " $f "(k mut TK&, i I64) String {\n" $sbody $refs $loop "    return s\n}\n"
+        probe = "    k := TK(\"c\")\n    x := " $f "(k, i)\n    x[0] = 'Q'\n    return $k.s \" \" $x\n"
+    } else if kind == 4 {
+        head = "fn " $f "(fs mut List<fn() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
+        probe = "    fs := List<fn() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
+    } else {
+        # a destructor of the helper's block writes what it holds as the scopes close - after the result was computed;
+        # no global (a destructor is never run while compiling): the caller checks its own value instead
+        rz := "Rz" $k
+        return ("type " $rz " struct(r mut String&) { r } destruct { r[0] = 'Z' }\n" "fn " $f "(i I64) String {\n" $sbody
+                "    d := " $rz "(s)\n    return s\n}\n" "fn s" $k "() I64 {\n    x := " $f "(Run + " $v ")\n    churn()\n"
+                "    if x[0] != 'a' { say(\"BAD dtor " $k ": \" $x) }\n    return x.Hash()\n}\n")
+    }
+    return ($head "fn " $b "(i I64) String {\n" $probe "}\n" "B" $k " String = " $b "(" $v ")\n" "fn s" $k "() I64 {\n    w := " $b
+            "(Run + " $(v - 1) ")\n    if w != B" $k " { say(\"BAD baked " $k ": \" $w \" / \" $B" $k ") }\n    churn()\n"
+            "    return w.Hash()\n}\n")
+}
+
 # n statements around what t declares (as a), wrapped in blocks d deep at most
 fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
     out mut String& = ""
@@ -1090,6 +1190,9 @@ fn Scenario(seed U64, k I64) String& {
     g := SG(seed * 1000003 + U64(k) + 1)
     g.k = k
     g.dtors = HasDtors(seed)
+    w := g.r(100)
+    if w < 12 { return "# scenario " $k "\n" $g.textScenario(k) }
+    if w < 22 { return "# scenario " $k "\n" $g.secondScenario(k) }
     t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
     g.global = t == 9
     decl String& = $Decls[t]

@@ -620,9 +620,14 @@ which holds at most 128 bytes (D9c); and a destructured result (S4b) is not copi
 the array the call built for it. A function returning an array value that already lives somewhere - a local of its own, a parameter's
 array - builds its result from it: the elements are copied into the result scope (§8 O13) before the function's own
 scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
-allocating, say) can reach it. A local the result scope already holds (O26a) is the result as it is - unless a borrow of
-it is kept elsewhere (stored in a field, a list, given to a call that keeps it, captured), a second name of its storage:
-then it is copied too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`). A result whose length is known (D8f) is a value as a struct is, its elements returned in
+allocating, say) can reach it. A local the result scope already holds (O26a) is the result as it is **only where nothing else can name its
+storage**: the local is only read, indexed and measured, its elements copied out, sliced or viewed only into values that
+are gone by the return, and lent only to calls that keep nothing of it (§8 O17). Anything else - a borrow of it stored
+in a field, a list or a local reference, pushed through one, handed to a method on another value, to a call that may
+keep it, a lambda, a task or a destructor-bearing value of its block - may be a second name of its storage, and the
+local is copied then too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`).
+Which of the two a return is never changes what the program computes: the compile-time evaluator, which always copies,
+gives the same value. A result whose length is known (D8f) is a value as a struct is, its elements returned in
 it.
 
 **T7c (known lengths).** An array's length is **known** while compiling exactly where the program fixes it:
@@ -1480,8 +1485,8 @@ from its receiver, a parameter sharing another's scope, T22), or that carries a 
 an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
-keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`), or a `List` of it, which
-holds its elements behind its reference to its state - has no copy to keep of an
+keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`), a `List` of it, which
+holds its elements behind its reference to its state, or a function value giving it (`fn() G`) - has no copy to keep of an
 `any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
 naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
 through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
@@ -3346,12 +3351,18 @@ comment anywhere in the run, and all on one line. Without that requirement `f&a(
 told from the binary `&` of `f & a(x)` (E7), which is a legal expression.
 
 A call given a scope argument builds its result where that says, never where the call stands: the result is **existing
-storage** there, judged wherever it is put - stored, pushed, passed, returned, made an `any` - exactly as the same value
-declared first would be (`x := mkp&t(i); h.p = x`, O25h). So `h.p = mkp&t(i)` with `t` an inner block's local is the
-same compile-time error, and `return mkp&t(...)` with `t` the function's own local is O10d's.
+storage** there, judged wherever it is put - stored, pushed, passed, returned, made an `any`, set as a task's target
+(P1g) - exactly as the same value declared first would be (`x := mkp&t(i); h.p = x`, O25h). So `h.p = mkp&t(i)` with
+`t` an inner block's local is the same compile-time error, and `return mkp&t(...)` with `t` the function's own local is
+O10d's. This holds for a run-time-length array holding nothing - text, an array of numbers, a type declared over one -
+too: its storage is where the argument says, so a function returning one (`fn g(p String&) String { return mk&p(1) }`)
+copies it into its own result scope (T7b), a box of one is a copy (T32a), and a local declared from one is not moved to
+the result scope (O26a) - it lives where the argument says.
 
-A scope argument on a call whose target has no result scope — one returning nothing, nothing holding
-references, or a result borrowed from a parameter (O13) — is a compile-time error.
+A scope argument on a call whose target has no result scope — one returning nothing, a number, a struct or an enum
+holding no references (by value, or a constructor's instance, which is copied where it lands), or a result borrowed from
+a parameter (O13) — is a compile-time error, and so is one naming no local or parameter where it is written (a
+parameter's default included: a default has no locals, D8a).
 
 ### 5.12 Explicit numeric conversion
 
@@ -4344,7 +4355,8 @@ starts one **task**: the call runs on its own thread, and the statement itself c
 `join` block is an ordinary block in every other respect, and its end is where every task spawned in it is
 waited for.
 
-The operand of `spawn` is a **call** (§5.4) — ordinary, method, dispatched, or through a function value — or a
+The operand of `spawn` is a **call** (§5.4) — ordinary, method, dispatched, through a function value, or given a scope
+argument (E25), its result then judged as the same call's declared first (`x := mkp&t(i)`) — or a
 **lambda** taking no parameters (D16e), whose body is then the task: what it needs, it captures (D16c), each
 value copied when the `spawn` runs. Neither states everything a task can *reach*: a task reaches globals, and
 anything reachable through a reference it was handed or captured (P3).
@@ -5609,8 +5621,15 @@ it, into a field or an element of it, or given to a call that keeps it there is 
 existing storage stored there must be there exactly where something can be stored through it, and outlive it
 otherwise (O25c, C2d); a borrowed value's callee binds its scope variable to the result scope (O17). A copy of storage
 that already lives somewhere (`t := a[i]`) keeps its references where they are (O25h) and is not moved: returning it is
-O14c's. An array value so returned (T7b) is still handed back as a new array - copied into the result scope at the
-return, where its storage already is - so nothing that refers to the local refers to the caller's array. It is Go's escape analysis, made static and read off the program: the declaration and the `return` say where
+O14c's. An array value so returned (T7b) is handed back as it is only where nothing else can name its storage, else as a
+new array - copied into the result scope at the return, where its storage already is - so nothing that refers to the
+local refers to the caller's array. A local a call given a scope argument (E25) declares, of an array holding nothing -
+text, numbers - is not moved: its storage is where the argument says.
+
+Its limit, refused and never unsound: a borrow of a moved local read back out of a value holding it - a `match`
+binding of an enum case holding it, an `as` payload, a `for ... in` element of an array literal or a local `List` of
+it - and pushed into a parameter's list is O10c's error ("nothing here shows it"); `l.Push(s)` with the local itself is
+correct as written. It is Go's escape analysis, made static and read off the program: the declaration and the `return` say where
 the local lives. The cost is memory, never safety - the result scope is the scope the caller puts the result in (O18a),
 so what is built into the local lives as long as the result does: deferred code, a join's tasks and a destructor
 registered in it (O15, run when the caller's scope closes) see it; a local declared in a loop body and returned from it

@@ -1,0 +1,10 @@
+# check: fail error[E25]: P builds no result a scope argument could place
+# E25 (the fourth any review, E): a constructor of a struct holding no reference, pushed into a list of references -
+# it is copied where it lands, so a scope argument places nothing
+type P struct(n I64) { n }
+fn main() {
+    out := List<P&>()
+    t := "x"
+    out.Push(P&t(1))
+    assert out.Len() == 1
+}

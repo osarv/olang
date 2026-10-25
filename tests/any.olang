@@ -839,3 +839,23 @@ test "O26a, T7b: a returned array local something else names is copied at its re
     assert BakedSecondNames == want
     assert secondNames(Live - 2) == want
 }
+
+# E25, P1g (the fourth any review, D): a spawn target set from a call given a scope argument is the same call declared
+# first - built where the argument says, here a local living past the join
+type SpP struct(n I64) { n }
+fn spMk(i I64) SpP& { return SpP(i) }
+fn spawnScoped(k I64) String {
+    t := "outer" $k
+    x SpP?&t = null
+    y SpP?&t = null
+    join {
+        spawn x = spMk&t(k * 11 + 1)
+        spawn y = spMk&t(k * 11 + 2)
+    }
+    churn()
+    return $x!.n " " $y!.n
+}
+
+test "E25, P1g: a spawn target set by a call given a scope argument" {
+    assert spawnScoped(Live - 2) == "12 13"
+}

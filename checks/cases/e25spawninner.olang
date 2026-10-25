@@ -1,0 +1,15 @@
+# check: fail error[O25]: a reference never narrows
+# E25, P1g (the fourth any review, D): a spawn target set from a call given a scope argument is judged as the same call
+# declared first - here a reference built where a loop body's local lives, set into a local outside the join
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    x P?& = null
+    join {
+        for i in range 2 {
+            t := "inner" $i
+            spawn x = mkp&t(i * 11 + 1)
+        }
+    }
+    assert x!.n > 0
+}

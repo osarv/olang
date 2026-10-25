@@ -1,0 +1,11 @@
+# check: fail error[E25]: num builds no result a scope argument could place
+# E25 (the fourth any review, E): a scope argument on a call whose target has no result scope - a number, a struct of
+# numbers by value or built - is an error, as SPEC E25 says
+type P struct(n I64) { n }
+fn num(i I64) I64 { return i }
+fn mkpv(i I64) P { return P(i) }
+fn main() {
+    t := "x"
+    a := num&t(1)
+    assert a == 1
+}

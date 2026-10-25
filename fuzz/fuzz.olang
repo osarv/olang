@@ -316,6 +316,16 @@ fn scopeSeed(seed I64, dir String&) ? io.Error {
     Total.AtomicAdd(n)
     st := sh(dir, "timeout 120 ./build/p.debug.san > s.txt 2> serr.txt")
     sOut := read(dir, "s.txt")
+    # a scenario that checks itself - a baked global against the same computation at run time, a value a destructor must
+    # not reach - says "BAD k: ..." when the check fails (scopegen's second-name scenarios)
+    for line in sOut.Split("\n") {
+        if not line.StartsWith("BAD ") { continue }
+        rest := try line[(try line[4:].FindByte(' ') catch default 0) + 5:] catch default ""
+        at := try rest.Find(":") catch default 0
+        k := try rest[:at].ParseInt() catch default -1
+        try scopeFinding(dir, seed, k, "a scenario's own check failed (a baked global or the caller's value differs)", line)
+        return
+    }
     #-i runs no destructors, so a program with them is held to itself: built -b, it must print what -d -s does, and every
     #resource made must have been destructed (the last line, "dtors 0")
     if scopegen.HasDtors(U64(seed)) {
