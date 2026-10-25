@@ -919,7 +919,9 @@ asked for it - its type must satisfy the constraint's trait, with every variable
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
 missing, and the instantiation's body is not checked - nor the body of any method or function instantiated for it
 (a parameter or receiver of that instantiation), which would only repeat the one error inside the generic's own code.
-Satisfaction is T31's, and a method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
+Satisfaction is T31's - the same rule for a constraint as for an `any` (T32a), `mut` included: a type whose method
+writes its receiver (`mut T&`) does not meet a trait method that only reads it, in generic code as through an `any`. A
+method the compiler supplies counts as one declared: a `Hash` it supplies (E10b),
 every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
 through `extends` (T29e).
 
@@ -1457,8 +1459,11 @@ member, T31a) becomes one, `T` its instance's type:
   lands (O18a), as a temporary given a reference is;
 - a **number**, a `Bool`, a `Char`, a type declared over one (T29), and an **array** (text among them) are **copied**:
   their value, from a variable too, is put in new storage built where the `any` lands - there are no references to
-  numbers (T24), and an array's elements are copied with it (T7b). A slice of an array, and a conversion of one to a
-  type declared over it (`Lab(s)`, which elsewhere names its argument's storage, T29a), are copied the same way. The
+  numbers (T24), and an array's elements are copied with it (T7b). An array is copied unless it is provably new
+  storage built where the `any` lands - an array literal, a fill, a comprehension, written text, a call's array result
+  (T7b), a conversion of one of these - so a variable, a slice, a conversion of either to a type declared over it
+  (`Lab(s)`, which elsewhere names its argument's storage, T29a), and a conditional, a match or a `try` any of whose
+  values (a `catch default` among them) is one of those, or constant data, are copied. The
   copy's elements still name what they named, so what they refer to must outlive where the `any` lands, as an array
   literal's elements must (O25c) - a compile-time error at the value otherwise;
 - `null` into a nullable `any`, and an `any R&` of the same trait, which is itself (a reference copied, S4a).
@@ -1471,10 +1476,19 @@ must say no more than the signature: one whose references live elsewhere than th
 from its receiver, a parameter sharing another's scope, T22), or that carries a scope obligation (O10b, D17d - storing
 an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
-in the table (T35): it is reached as T32c says. A default the table holds is instantiated for `T` only where some call
+in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
+keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`) - has no copy to keep of an
+`any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
+naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
 through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
 Number`) or its body (`Min`'s `<`) - is an instance for every other method, and where a call does reach that default
-it is a compile-time error at the conversion, with a note at the call.
+it is a compile-time error at the conversion, with a note at the call. Which defaults some call reaches is a fact
+about the whole program, so a table's functions are defined with the instantiations, in the root's object (B3d): an
+object of another module, reused by a later program that reaches another default (B3i), never holds one of them.
+
+A trait's type argument may be a type variable (`any Iterator<T>&`, in a generic function or a generic type's field):
+it is substituted with the rest of the type in each instantiation, binds `T` at a call (G9), and counts as the
+variable's appearance in a parameter (G4).
 
 **T32b (calls).** `s.M(args)`, `s` an `any R&` and `M` a method of `R` or of a trait it extends, calls the function the
 table holds for `M`: one indirect call, its arguments, result and error set those of `R`'s signature, its receiver the
@@ -2609,7 +2623,13 @@ declare a method of `Point`), and an array receiver is identified as M19 says. A
 name with at most one ordinary function. Any other reuse of a name is a compile-time error. A method whose receiver
 names one instance of a generic type (`fn (b Box<String&>&) Describe()`) is that instance's method alone: another
 instance (`Box<I64>`) has no such method of its own, and takes the trait default of that name where there is one
-(M19e).
+(M19e). Several instances may each declare one (`Box<String&>`'s and `Box<I64>`'s `Describe`), each found for its own
+instance, and beside them one written with variables (`fn (b Box<T>&) Describe()`) serves every other instance: a
+receiver naming the instance exactly is chosen before one written with variables, whichever is declared first (G8a's
+precedence). Two methods of one name that some one instance would take alike - two for the same instance, or two written
+with variables that one instance meets (a variable matching anything, so `Box<T>` and `Box<U>` meet) - are a
+compile-time error at the later declaration, with a note at the earlier; a method of a type that is not generic
+declared twice is the same error.
 
 This is what lets two types declared in one module both satisfy one trait (T31): without it a given
 method name could be written only once per module, and two shapes in one file would not compile. It
@@ -3435,9 +3455,13 @@ error, not a loop while `x` is in `c`. That loop is written `for { if x not in c
 
 **E30.** A run of the ordering comparisons `<`, `<=`, `>`, `>=` with no parentheses between them, `a op1 b op2 c
 ...`, is a chain: `a op1 b and b op2 c and ...`, each operand evaluated once, left to right, and evaluation stopping at
-the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. A literal operand adapts to the
-operand beside it as in one comparison (T6, E6d), its left neighbour's type first: `5 > u >= 2` with `u` a `U64` compares
-`U64`s. `==` and `!=` do not chain:
+the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. A literal (a literal-only
+expression, E4a) has no evaluation to share, so in each comparison it takes part in it adapts to that comparison's other
+operand as in one comparison (T6, E6d) - exactly as the chain written out with `and` does: in `f < 0.1 < g`, `f` an `F32`
+and `g` an `F64`, the first `0.1` is an `F32` and the second an `F64`; `a < 5 < b`, `a` an `I8` and `b` a `U64`, compiles
+as `a < 5 and 5 < b` does; and `5 > u >= 2` with `u` a `U64` compares `U64`s. A conditional of literals runs (its
+condition is evaluated), so it is evaluated once, and adapts to the nearest operand that is no literal, its left
+neighbour first. `==` and `!=` do not chain:
 `a == b == c` is `(a == b) == c`, a comparison of `Bool`s.
 
 ### 5.15 Operators declared by types

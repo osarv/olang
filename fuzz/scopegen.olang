@@ -276,6 +276,10 @@ Prelude := (
     "    if Run < 0 { error SgErr.E }\n"
     "    return Node(v)\n"
     "}\n"
+    "fn textFail(v I64) String ? {\n"
+    "    if Run > 0 { error SgErr.E }\n"
+    "    return \"never\" $v\n"
+    "}\n"
     "fn mkFail(v I64) mut Node& ? {\n"
     "    if Run > 0 { error SgErr.E }\n"
     "    return Node(v)\n"
@@ -754,8 +758,22 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
 fn (g mut SG&) anyOp(b String&, ind String&) String& {
     v := g.val()
     q := g.name("q")
-    k := g.r(16)
+    k := g.r(20)
     if k == 0 { return $ind $b ".anys.Push(" $g.newNode() ")\n" }
+    if k >= 16 {    # an inner block's text chosen by a conditional, a match or a catch default: copied into the box (T32a)
+        q2 := g.name("q")
+        texts := $ind "{\n" $ind "    " $q " := \"t\" $" $v " \"-\" $(" $v " * 3)\n" $ind "    " $q2 " := \"o\" $" $v "\n"
+        item := ""
+        if k == 16 { item = $"Lab(" $q " if Run > 0 else " $q2 ")" }
+        if k == 17 { item = $"Lab(match Run { case 0 => " $q2 " case _ => " $q " })" }
+        if k == 18 { item = $"Lab(try textFail(" $v ") catch default " $q ")" }
+        list := ".anys"
+        if k == 19 {
+            list = ".szs"
+            item = ($"try textFail(" $v ") catch default " $q) if g.chance(50) else ($q " if Run > 0 else " $q2)
+        }
+        return $texts $ind "    " $b $list ".Push(" $item ")\n" $ind "    churn()\n" $ind "}\n"
+    }
     if k == 12 {    # an array of nodes made in an inner block, copied into an any kept outward: refused (T32a)
         return ($ind "{\n" $ind "    " $q " := Array<mut Node&>(2, Node(" $v "))\n" $ind "    " $q "[1] = Node(" $v " + 1)\n" $ind "    "
                 $b ".szs.Push(" $q ")\n" $ind "}\n")
