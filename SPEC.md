@@ -755,6 +755,8 @@ constants beside the cases may be declared (T17e), which changes none of this.
 Cases follow the listing rule (L18a), as every list does: on one line they are separated by `,` (`enum { North, South
 }`), on different lines by the line break, and two on one line with nothing between them are a compile-time error.
 
+An enum may declare type parameters, its payloads then written over them (§12.3 G6b).
+
 **T17a.** A case may carry a **payload**, written as a parameter list after its name, or as one type written whole:
 
 ```
@@ -7110,13 +7112,13 @@ already named - `void *` above all - is a `CVoid?&`, an extern type the output d
 
 ## 12. Generics
 
-A function or a struct type may be **generic**: parameterized over one or more types, with a separate copy compiled
+A function, a struct type or an enum type may be **generic**: parameterized over one or more types, with a separate copy compiled
 for each distinct set of arguments it is used with. A type's parameters are types only: a length, a flag or any other
 value a declaration is compiled for is never written as a parameter - a function taking an array by value is compiled
-per length instead (§12.7), and a value known while compiling decides what it can there (T7c, K1). Enum and error types can
-never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
-parameterize - and neither can a declared number or array type (T29); a type-parameter list on any of them is a
-compile-time error at its declaration. A trait may be (T35a).
+per length instead (§12.7), and a value known while compiling decides what it can there (T7c, K1). An error type can
+never be generic - it references no other type (T19), so there is nothing to parameterize - and neither can a declared
+number or array type (T29); a type-parameter list on any of them is a compile-time error at its declaration. An enum
+may be (G6b), and so may a trait (T35a).
 
 ### 12.1 Type variables
 
@@ -7205,7 +7207,7 @@ call naming the variable and the form to write (`Narrow<...>(...)`); the declara
 **G5.** A generic function's error set (D8) may not mention a type variable - an error-set parameter (G1a) is what
 lets it differ between instantiations, as an inferred set (R1a) does too.
 
-### 12.3 Generic struct types
+### 12.3 Generic struct and enum types
 
 **G6.** `type-decl` (D4) is extended to
 `"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
@@ -7220,6 +7222,36 @@ type Buf<T> struct(cap I64) {
     items mut Array<T>& = Array<T>(cap)
     len I64 = 0
 }
+```
+
+**G6b.** An enum type (T17) may declare `type-params` as a struct type does - its parameters in scope in every case's
+payload, written bare there - and is instantiated as one is (G8, G10): `type Tree<T> enum { Leaf(v T)  Node(l
+Tree<T>&, r Tree<T>&) }` makes `Tree<I64>` and `Tree<String&>` two enum types, each with the payload types its
+arguments give, laid out, compared (`==`, E10), hashed (E10b), rendered (`$`, E11a) and walked by section 8 (T17c)
+as the enum written with those types would be. A case's value names its instance as written, `Tree<I64>.Leaf(3)`, or
+names the enum bare, `Tree.Leaf(3)` - then the instance is the type the value lands in (an initializer's written type,
+a parameter, a returned result, another case's payload) where that is one of this enum's instances, and else is
+inferred from the case's arguments as a generic constructor's are (G10c, G9a): a reference binds read-only, an array
+value as a reference to it, `Tree.Node(a, b)` from `a`'s and `b`'s types, `Opt.Some("s")` an `Opt<String&>`. A
+variable neither gives - `x := Opt.None` - is a compile-time error saying to write the arguments. A pattern, a case
+test (E32) and an `as` name a case the same two ways: `case Tree.Leaf(v)` against a `Tree<I64>` is that instance's
+case; a case of another instance written with its arguments (`Opt<F64>.Some` against an `Opt<I64>`) is none of the
+subject's. Exhaustiveness (S13a) is judged per instance, over its cases. `$` writes a case as its enum's name and the
+case, the arguments left out (`Tree.Leaf(3)`), as a case is written.
+
+```
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+fn (o Opt<T>) Or(d T) T {
+    return match o {
+        case Opt.Some(v) => v
+        case Opt.None => d
+    }
+}
+x Opt<I64> = Opt.None          # the instance the value lands in
+y := Opt.Some(2.5)             # an Opt<F64>, from its argument
 ```
 
 **G7.** Within such a declaration a type parameter is written bare — `T` — the list having introduced it

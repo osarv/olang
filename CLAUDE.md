@@ -458,6 +458,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
+- **Generic enums (G6b, the user's decision 2026-10-18: "generic enums go in for sure"; built 2026-10-25).** `type
+  Tree<T> enum { Leaf(v T)  Node(l Tree<T>&, r Tree<T>&) }` is instantiated as a generic struct is - payloads, layout,
+  `==`, Hash, `$` and section 8 (T17c) per instance, which the type machinery already did once G6 stopped refusing it.
+  A case is written with its arguments (`Tree<I64>.Leaf(3)`, `lib.Opt<I64>.None`) or bare (`Tree.Leaf(3)`): then the
+  instance is the type it lands in, else inferred from its arguments as G10c does (`check.genericCase`); `x :=
+  Opt.None` is an error naming the fix. Patterns, case tests and `as` name a case bare against the subject's instance
+  (`namesEnumOf`), a case of another instance is S13's error. **Decided (mine)**: `$` writes the case without the
+  arguments (`Opt.Some(4)`), as it is written; a raw-value enum may be generic (nothing forbids it, nothing needs a
+  rule); std gets no `Option`/`Result` (the decision). Reflection's `T.Cases` is not built yet. **Found on the way
+  (pre-existing)**: `if t == Shape.Rect(_, _)` - a `_` in a local if's case test - was B10's "unknown name '_'"
+  (names.name).
 - **Explicit type arguments (G12, E3, the user's calls 2026-10-24 and 2026-10-25).** `big<I64>` names a generic
   function's instance, as a value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written
   ones are (count, bounds, T7c lengths); a method takes them at a call too (`x.Narrow<I32>()`, `xs.Map<U>(f)`), naming

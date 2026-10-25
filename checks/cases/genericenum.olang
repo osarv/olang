@@ -1,6 +1,5 @@
-# check: fail error[G6]: only a struct or a trait takes type parameters
-# section 12: an enum is never generic - reported at its declaration, once
-# also: compilation failed with 1 error
+# check: run
+# G6b: an enum may be generic (once, section 12 said it never was) - its case written bare takes the instance it lands in
 type Opt<T> enum {
   None
   Some(v T)
@@ -13,4 +12,5 @@ fn show(o Opt<I32>) I32 {
 }
 fn main() ? {
   n := show(Opt.None)
+  assert n == 0 and show(Opt.Some(4)) == 4
 }

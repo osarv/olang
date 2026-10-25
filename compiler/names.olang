@@ -1110,7 +1110,8 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
 fn (r mut Resolver&) name(sp source.Span, n source.NameId) {
     ref := r.lookup(n)
     r.record(sp, ref)
-    if ref.Kind == What.None and r.inCond { r.unknownInCond(sp, n) }
+    # "_" in a condition is a case test's wildcard (E32: "if t == Tree.Node(_, _)"), no build constant
+    if ref.Kind == What.None and r.inCond and r.text(n) != "_" { r.unknownInCond(sp, n) }
 }
 
 # B10: a name nothing declares, in a condition, with nothing near it - most likely a build constant -D did not define.

@@ -24444,3 +24444,43 @@ compiling though its initializer failed. Not traced to its cause here.
 **Tests.** tests/embed.olang (a table parsed and baked, a computed path, a view as text, decided and run, in a loop
 and a generic); checks cases for a missing file, a directory, a path reading a local, one the evaluator cannot compute,
 and the binding; the `embed` scenario (a changed file rebuilds, interpret agrees, std may not be left).
+
+## Generic enums (G6b, G10c, S13, E32, 2026-10-25)
+
+**The decision** (docs/ideas.md #12, the user 2026-10-18: "generic enums go in for sure"): monomorphized exactly as a
+generic struct is, case constructors inferring their arguments as a generic constructor does (G10c), exhaustiveness,
+layout and patterns per instance; no `Option<T>`/`Result<T, E>` in std (those are `null` and `? E`).
+
+**What it took.** Less than expected: the type table already instantiated enums - `Program.Body` substitutes an
+instance's cases, and layout, `==`, the supplied Hash, `$` and the evaluator work from an instance's cases as from a
+plain enum's. G6's check refused the declaration, and nothing else had ever been reached. What was missing was naming
+cases:
+- **With arguments**, `Tree<I64>.Leaf(3)`: the parser already made `Member(Generic(Tree, [I64]), Leaf)`; `typeNamed`
+  now reads a `Generic` naming an enum as its instance (`lib.Opt<I64>` through an import by `Program.Apply`, since the
+  resolver records no type for a span the parser built), so every path naming a case through a type - a call, a member,
+  a pattern, a case test - takes it.
+- **Bare**, `Tree.Leaf(3)`: `genericNamed` finds the generic declaration a name names; a call or member of a case then
+  goes to `genericCase`, which takes the instance the value lands in (`want`, read through a reference) when it is one of
+  this enum's, and otherwise infers - each argument checked once and unified with the case's payload parameters, a
+  literal by its kind (G9a), a reference bound read-only and an array value as a reference (G10c's rules), the checked
+  values handed to `enumCase` (`pre`) so nothing is checked twice. A variable neither gives is an error with the form
+  to write.
+- **In patterns**: `caseTag` and `caseWritten` accept the generic declaration named bare against the subject's instance
+  (`namesEnumOf`); a case written with another instance's arguments is none of the subject's, and a pattern naming a
+  case of another enum or instance now says so (S13's "a case value here is ...") instead of checking its payload as
+  values (`_` and binding names reported as unknown).
+
+**Decided (mine).** `$` writes a case as `Opt.Some(4)`, its enum's arguments left out - how a case is written, and what
+the existing rendering of an instance's name already gave. A raw-value enum may be generic: nothing forbids it and
+nothing in it needs a rule. Reflection (`T.Cases`, ideas #2) is not built in this compiler yet; when it is, it reads an
+instance's cases as everything else does.
+
+**Found on the way, pre-existing.** A `_` in a case test inside a local `if` condition (`if t == Shape.Rect(_, _)`)
+was B10's "unknown name '_' - if it is a build constant ...": the resolver reports names nothing declares in a
+condition, and `_` is a wildcard there. Fixed in `names.name`.
+
+**Tests.** tests/genenums.olang: trees, options, eithers, a constrained parameter, a payload written whole; methods,
+generic functions, nested patterns, case tests, `as`, `$`, `==`, a Map key, baked and decided while compiling and run;
+payloads holding references read back after an arena churn (and clean under `-debug -sanitize`). checks cases: a case
+whose arguments cannot be inferred, exhaustiveness per instance, another instance's case in a pattern; genericenum.olang,
+which said an enum is never generic, now runs.

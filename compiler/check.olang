@@ -1344,9 +1344,9 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
         }
     }
     if td.Params.Len() > 0 {
-        # G6: only a struct or a trait takes type parameters
+        # G6: only a struct, an enum (G6b) or a trait takes type parameters
         match td.Body {
-            case ast.TypeBody.Enum(_, _), ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
+            case ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
             nomatch { }
         }
     }
@@ -4655,9 +4655,81 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
             ref := c.P.R.Member(c.fr().File, sp.End)
             if ref.Kind == names.What.Type and ref.Index >= 0 { return c.declType(c.P.DeclFor(ref.Module, ref.Index)) }
         }
+        case ast.Expr.Generic(sp, g, targs) {
+            # G6b: a generic enum's instance written with its arguments, "Tree<I64>.Leaf(3)"
+            d := c.genericNamed(g)
+            if d < types.DeclId(0) or c.P.T.DeclKindOf(d) != types.DeclKind.Enum { return types.TypeId(-1) }
+            path := typePathOf(g)
+            if path.Len() == 0 { return types.TypeId(-1) }
+            if path.Len() == 1 {
+                t := c.resolve(ast.TypeRef.Named(sp, path, targs))
+                return t if t != types.UnknownT else types.TypeId(-1)
+            }
+            # through an import ("lib.Opt<I64>.None"): the declaration is known, its arguments applied (G8)
+            if not c.P.ArgsFit(d, targs) {
+                c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
+                return types.TypeId(-1)
+            }
+            t := c.P.Apply(c.fr().Ctx, d, targs)
+            if t == types.UnknownT or not c.instancesMet(t, sp) or not c.P.Body(t) { return types.TypeId(-1) }
+            return t
+        }
         nomatch { }
     }
     return types.TypeId(-1)
+}
+
+# G6b: the generic type declaration a name names - "Tree", "lib.Tree" - written without its arguments; -1 for none
+fn (c mut Checker&) genericNamed(x ast.Expr&) types.DeclId {
+    match x {
+        case ast.Expr.Name(sp, _) {
+            ref := c.P.R.Use(c.fr().File, sp.Start)
+            if ref.Kind == names.What.Type and ref.Index >= 0 {
+                d := c.P.DeclFor(ref.Module, ref.Index)
+                if c.P.T.DeclParams(d) > 0 { return d }
+            }
+        }
+        case ast.Expr.Member(sp, _, _) {
+            ref := c.P.R.Member(c.fr().File, sp.End)
+            if ref.Kind == names.What.Type and ref.Index >= 0 {
+                d := c.P.DeclFor(ref.Module, ref.Index)
+                if c.P.T.DeclParams(d) > 0 { return d }
+            }
+        }
+        nomatch { }
+    }
+    return types.DeclId(-1)
+}
+
+# the names of a path written as an expression - "Tree", "lib.Tree" - in order; none where it is no path
+fn typePathOf(x ast.Expr&) Array<source.NameId>&x {
+    match x {
+        case ast.Expr.Name(_, n) { return Array<source.NameId>(1, n) }
+        case ast.Expr.Member(_, b, n) {
+            pre := typePathOf(b)
+            if pre.Len() == 0 { return pre }
+            out := Array<source.NameId>(pre.Len() + 1)
+            for i in range pre.Len() { out[i] = pre[i] }
+            out[pre.Len()] = n
+            return out
+        }
+        nomatch { return Array<source.NameId>(0) }
+    }
+}
+
+# G6b: the enum a pattern's or a case test's path names, compared with et: et itself, or et's generic declaration
+# named bare ("Tree.Leaf" against a Tree<I64>) - the case then et's own
+fn (c mut Checker&) namesEnumOf(prefix ast.Expr&, et types.TypeId) Bool {
+    t := c.typeNamed(prefix)
+    if t >= types.TypeId(0) {
+        if c.P.T.Same(t, et) { return true }
+        if c.P.T.KindOf(t) != types.Kind.Named or c.P.T.KindOf(et) != types.Kind.Named or c.P.T.DeclOf(t) != c.P.T.DeclOf(et) { return false }
+        # one declaration: the same type, unless it is generic and the instance written is another ("Opt<F64>.Some"
+        # against an Opt<I64>)
+        return c.P.T.DeclParams(c.P.T.DeclOf(t)) == 0 or c.P.T.Same(c.P.T.Plain(t), c.P.T.Plain(et))
+    }
+    d := c.genericNamed(prefix)
+    return d >= types.DeclId(0) and c.P.T.KindOf(et) == types.Kind.Named and c.P.T.DeclOf(et) == d
 }
 
 fn (c mut Checker&) declType(d types.DeclId) types.TypeId {
@@ -5750,7 +5822,7 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
             return c.call(sp, f, args, want)
         }
         case ast.Expr.ScopeCall(sp, f, sc, args) { return c.scoped(sp, c.call(sp, f, args, want), sc) }
-        case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n) }
+        case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want) }
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, elem, items) { return c.arrayLit(sp, c.resolve(elem), items) }
         case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
@@ -8949,6 +9021,8 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             et := c.typeNamed(x)
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
+            gd := c.genericNamed(x)
+            if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, args, want) }
             if ref.Kind == names.What.None and c.importPath(x) {
                 # a name the imported module does not declare (or does not export: the resolver said so already)
                 at := match x {
@@ -10339,7 +10413,7 @@ fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
 # ---- members, indices, arrays ----
 
 # x.f: a field of a struct (C2), through references; a case of an enum named by its type (T17); a global of an import
-fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId) typed.Expr&c {
+fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want types.TypeId = types.UnknownT) typed.Expr&c {
     ref := c.P.R.Member(c.fr().File, sp.End)
     nsp := memberSpan(sp, c.text(n).Len())
     if ref.Kind == names.What.Global { return c.read(sp, typed.Place.Global(sp, c.globalType(ref.Module, n), ref.Module, n)) }
@@ -10353,6 +10427,8 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId) typed.E
     et := c.typeNamed(x)
     if et >= types.TypeId(0) and (c.isNumber(et) or (isLimitName(c.text(n)) and not c.isNamed(et))) { return c.limit(sp, nsp, et, n) }
     if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, Array<ast.Expr&>(0)) }
+    gd := c.genericNamed(x)
+    if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, Array<ast.Expr&>(0), want) }
     # S8d: a payload field of a local known to hold one case
     fl := c.narrowedName(x, n)
     if fl >= 0 { return c.readLocal(sp, fl) }
@@ -10485,8 +10561,86 @@ fn limitBits(tt types.Table&, u types.TypeId, k I64) I64 {
     return I64[0x7FEFFFFFFFFFFFFF, 0xFFEFFFFFFFFFFFFF, 0x7FF0000000000000, 0x7FF8000000000000, 0x3CB0000000000000, 0x0010000000000000][k]
 }
 
-# E.Case or E.Case(args): an enum value (T17)
-fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n source.NameId, args Array<ast.Expr&>&) typed.Expr&c {
+# G6b, G10c: a generic enum's case written with the enum bare - "Tree.Leaf(3)": of the instance the expected type is, or
+# else of the one its arguments bind, inferred as a generic constructor's are (a reference read-only, an array value a
+# reference to it); a variable nothing binds is an error saying to write the arguments
+fn (c mut Checker&) genericCase(sp source.Span, nsp source.Span, d types.DeclId, n source.NameId, args Array<ast.Expr&>&
+                                want types.TypeId) typed.Expr&c {
+    w := c.P.T.Plain(c.deref(want)) if want != types.UnknownT else types.UnknownT
+    if w != types.UnknownT and c.P.T.KindOf(w) == types.Kind.Named and c.P.T.DeclOf(w) == d and c.P.T.Args(w) != types.ListId(0) {
+        return c.enumCase(sp, nsp, w, n, args)
+    }
+    self := c.P.SelfType(d)
+    if not c.P.Body(self) {
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    tag I64 = -1
+    cn := c.P.T.CaseNames(self)
+    if cn.Len() > 0 {
+        for i in range cn.Len() {
+            if cn[i] == n { tag = i }
+        }
+    }
+    if tag < 0 {
+        c.err(nsp, c.noCase(self, n))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    sig := c.P.CaseSig(self, tag)
+    if sig == types.UnknownT { return c.unknown(sp) }
+    owner := generic.DeclOwner(d)
+    nv := c.P.T.DeclParams(d)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if args.Len() != ps.Len() {
+        c.err(sp, msgs.ArgCount(ps.Len(), "" if ps.Len() == 1 else "s", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    b := generic.Binding(owner, nv)
+    argVals List<typed.Expr&>
+    for i in range args.Len() {
+        e typed.Expr?&c = null
+        v := c.fold(args[i])
+        if v.Ok or c.litLike(args[i]) {
+            fl := v.IsFloat if v.Ok else c.litFloat(args[i])
+            c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false)
+        } else {
+            match args[i] {
+                case ast.Expr.Lambda(_, _), ast.Expr.Default(_) { }
+                nomatch { e = c.expr(args[i], types.UnknownT) }
+            }
+        }
+        if e is not null and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT { c.unify(ps[i], c.bindType(e), b, false, false) }
+        if e is null { argVals.Push(c.hole) } else { argVals.Push(e) }
+    }
+    c.P.InferThroughBounds(b)
+    for i in range nv {
+        v := b.Vals[i]
+        if v == types.UnknownT and c.P.ErrVarAt(owner, i) {
+            b.Vals[i] = c.P.ErrSetOf(types.ListId(0))
+            continue
+        }
+        if v == types.UnknownT {
+            tn := c.text(c.P.T.DeclName(d))
+            c.err(nsp, msgs.CaseTypeArgsNotInferable(tn, $tn "." $c.text(n)))
+            return c.unknown(sp)
+        }
+        if c.isRef(v) {
+            b.Vals[i] = c.P.T.Ref(c.P.T.Referent(v), types.ReadOnly)
+        } else if c.P.T.KindOf(c.under(v)) == types.Kind.Array {
+            b.Vals[i] = c.P.T.Ref(v, types.ReadOnly)
+        }
+    }
+    t := c.P.Instance(d, c.P.T.List(b.Vals))
+    if not c.instancesMet(t, nsp) or not c.P.Body(t) { return c.unknown(sp) }
+    return c.enumCase(sp, nsp, t, n, args, argVals.ToArray())
+}
+
+# E.Case or E.Case(args): an enum value (T17) - pre, where given, the arguments already checked (genericCase's), c.hole
+# for one still to check
+fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n source.NameId, args Array<ast.Expr&>&
+                             pre Array<typed.Expr&>& = Array<typed.Expr&>(0)) typed.Expr&c {
     if not c.isEnum(t) {
         if c.isNamed(t) and c.declKind(t) == types.DeclKind.Error {
             # T20: an error word is raised and caught, never a value
@@ -10524,7 +10678,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         if cd is not null and cd.Payload.Len() > 0 and i < cd.Payload.Len() {
             c.nullDecl = c.markAt(c.P.DeclModule(c.P.T.DeclOf(t)), cd.Payload[i].Ty)
         }
-        x := c.exprTo(args[i], ps[i])
+        x := c.fit(pre[i], ps[i], c.argSpan(args[i])) if i < pre.Len() and pre[i] != c.hole else c.exprTo(args[i], ps[i])
         c.nullDecl = wasNull
         if not c.isRef(ps[i]) { c.roStore(x, args[i].Span(), RoStored) }   # T25c: a payload is writable storage
         c.exprs.Push(x)
@@ -15514,10 +15668,7 @@ fn (c mut Checker&) caseTag(x ast.Expr&, et types.TypeId) I64 {
     if not c.isEnum(et) { return -1 }
     match x {
         case ast.Expr.Member(_, prefix, n) {
-            t := c.typeNamed(prefix)
-            if t < types.TypeId(0) or not c.P.T.Same(t, et) {
-                if t < types.TypeId(0) or c.P.T.DeclOf(t) != c.P.T.DeclOf(et) { return -1 }
-            }
+            if not c.namesEnumOf(prefix, et) { return -1 }
             cn := c.P.T.CaseNames(et)
             if cn.Len() == 0 { return -1 }
             for i in range cn.Len() {
@@ -15702,10 +15853,34 @@ fn (c mut Checker&) exprPattern(x ast.Expr&, place typed.Place&c, t types.TypeId
                 }
                 return tst
             }
+            # a case of another enum, or of another instance of this one (G6b), with its payload: said as the type
+            # it is, its payload's parts not read as values
+            if c.caseWritten(f) {
+                wt := c.writtenEnum(f)
+                if wt >= types.TypeId(0) {
+                    c.err(x.Span(), msgs.CaseValueType(c.ty(c.deref(t)), c.ty(wt)))
+                    return c.lit(sp, types.BoolT, 0)
+                }
+            }
         }
         nomatch { }
     }
     return c.valueTest(sp, place, x, t)
+}
+
+# the enum a case written names - "Shape.Rect", "Opt<F64>.Some", a generic one bare ("Opt.Some") as its declaration's
+# own type; -1 for none
+fn (c mut Checker&) writtenEnum(f ast.Expr&) types.TypeId {
+    match f {
+        case ast.Expr.Member(_, prefix, _) {
+            t := c.typeNamed(prefix)
+            if t >= types.TypeId(0) { return t }
+            d := c.genericNamed(prefix)
+            if d >= types.DeclId(0) { return c.P.SelfType(d) }
+        }
+        nomatch { }
+    }
+    return types.TypeId(-1)
 }
 
 fn (c mut Checker&) isCase(sp source.Span, place typed.Place&c, tag I64) typed.Expr&c {
@@ -15729,7 +15904,13 @@ fn (c mut Checker&) caseWritten(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Member(_, prefix, n) {
             t := c.typeNamed(prefix)
-            if t < types.TypeId(0) or not c.isEnum(t) { return false }
+            if t < types.TypeId(0) {
+                # G6b: a generic enum's case written with the enum bare
+                d := c.genericNamed(prefix)
+                if d < types.DeclId(0) or c.P.T.DeclKindOf(d) != types.DeclKind.Enum { return false }
+                t = c.P.SelfType(d)
+            }
+            if not c.isEnum(t) { return false }
             cn := c.P.T.CaseNames(t)
             if cn.Len() == 0 { return false }
             for k in cn {

@@ -464,6 +464,7 @@ type Diag enum {
     DefaultArgNotAllowed
     DeferErrorEscapes
     EmbedPathUnknown
+    CaseTypeArgsNotInferable
     EmbedPathUndecided
     EmbedNotRead
     TryNowhereToGo
@@ -1443,7 +1444,7 @@ fn ErrorWordInUse(tok String&) Msg { return Msg(Diag.ErrorWordInUse, "T19", "err
 fn ExtendsNotBase() Msg { return Msg(Diag.ExtendsNotBase, "T29f", "only a type over a number or an array extends its base") }
 
 # ERR_GENERIC_NOT_STRUCT
-fn GenericNotStruct() Msg { return Msg(Diag.GenericNotStruct, "G6", "only a struct or a trait takes type parameters") }
+fn GenericNotStruct() Msg { return Msg(Diag.GenericNotStruct, "G6", "only a struct, an enum or a trait takes type parameters") }
 
 # ERR_DECLARED_OVER_AGGREGATE
 fn DeclaredOverAggregate(ty String&) Msg { return Msg(Diag.DeclaredOverAggregate, "T29", "a type is declared over a number or an array, not over " $ty " - hold it in a struct's field instead") }
@@ -2007,6 +2008,9 @@ fn DefaultArgNotAllowed() Msg { return Msg(Diag.DefaultArgNotAllowed, "E14a", "'
 
 # ERR_DEFER_ERROR_ESCAPES
 fn DeferErrorEscapes() Msg { return Msg(Diag.DeferErrorEscapes, "S19b", "an error may not leave deferred code - catch it here") }
+
+# ERR_CASE_TYPE_ARGS_NOT_INFERABLE
+fn CaseTypeArgsNotInferable(text1 String&, text2 String&) Msg { return Msg(Diag.CaseTypeArgsNotInferable, "G10c", "the type arguments of " $text1 " cannot be inferred from this case - write them, '" $text1 "<...>." $text2[text1.Len() + 1:] "', or give it a type to land in") }
 
 # ERR_EMBED_PATH_UNKNOWN
 fn EmbedPathUnknown() Msg { return Msg(Diag.EmbedPathUnknown, "E38", "an embed's path is text known while compiling - a literal, or what reads no local") }

@@ -20,7 +20,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 9 | Doc tests | Rust | open |
 | 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 | 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
-| 12 | Generic enums | Rust, Swift, ML | decided 2026-10-18 (the user: "generic enums go in for sure"), after self-hosting |
+| 12 | Generic enums | Rust, Swift, ML | decided 2026-10-18 (the user: "generic enums go in for sure"); built 2026-10-25 (SPEC G6b) |
 
 ## 1. Generators (`yield`)
 
@@ -345,4 +345,7 @@ layout and `match` patterns are per instance; reflection's `T.Cases` sees the in
 It reuses the struct machinery wholesale.
 
 **Not:** std gets no `Option<T>` or `Result<T, E>` - those are `null` and `? E` in olang, and stay so.
+
+**Built 2026-10-25** (SPEC G6b; CLAUDE.md, HISTORY.md): as described, with `$` writing a case without its enum's
+arguments (`Opt.Some(4)`); `T.Cases` waits for reflection.
 

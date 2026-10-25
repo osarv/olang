@@ -1,0 +1,10 @@
+# check: fail error[G10c]: the type arguments of Opt cannot be inferred from this case - write them, 'Opt<...>.None', or give it a type to land in
+# G6b: a generic enum's case written bare takes its arguments from where it lands or from its own - here from neither
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+fn main() ? {
+    x := Opt.None
+    assert x == x
+}

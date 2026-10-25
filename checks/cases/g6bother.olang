@@ -1,0 +1,13 @@
+# check: fail error[S13]: a case value here is Opt<I64>, found Opt<F64>
+# G6b: a case of another instance written with its arguments is none of the subject's cases
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+fn get(o Opt<I64>) I64 {
+    match o {
+        case Opt<F64>.Some(_) { return 1 }
+        nomatch { return 0 }
+    }
+}
+fn main() ? { assert get(Opt.Some(1)) == 1 }

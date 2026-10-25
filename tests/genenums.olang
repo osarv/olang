@@ -1,0 +1,162 @@
+# generic enums (G6b): an enum declaring type parameters is instantiated as a generic struct is - its payloads, layout,
+# exhaustiveness, ==, Hash and $ per instance - its cases written with the enum's arguments or bare, the instance then
+# the one the value lands in or the one its arguments bind (G10c). What the evaluator bakes and decides agrees with the
+# run time, and payloads holding references live as T17c says, read back after an arena churn
+
+type Tree<T> enum {
+    Leaf(v T)
+    Node(l Tree<T>&, r Tree<T>&)
+}
+
+type Opt<T> enum {
+    None
+    Some(v T)
+}
+
+type Either<A, B> enum {
+    Left(a A)
+    Right(b B)
+}
+
+type Keyed<K Hashable, V> enum {
+    Empty
+    Entry(k K, v V)
+}
+
+type Wrap<T> enum {
+    One T
+    Two(a T, b T)
+}
+
+fn (t Tree<T>&) Size() I64 {
+    return match t {
+        case Tree.Leaf(_) => 1
+        case Tree.Node(l, r) => l.Size() + r.Size()
+    }
+}
+
+fn depth<T>(t Tree<T>&) I64 {
+    match t {
+        case Tree.Leaf(_) { return 1 }
+        case Tree.Node(l, r) {
+            a := depth(l)
+            b := depth(r)
+            return 1 + (a if a > b else b)
+        }
+    }
+}
+
+fn firstLeaf<T>(t Tree<T>&) T {
+    return match t {
+        case Tree.Leaf(v) => v
+        case Tree.Node(l, _) => firstLeaf(l)
+    }
+}
+
+# a nested pattern through a reference, and a case of the instance named with its arguments
+fn leftLeaf<T>(t Tree<T>&) Opt<T> {
+    return match t {
+        case Tree.Node(Tree.Leaf(a), _) => Opt.Some(a)
+        case _ => Opt<T>.None
+    }
+}
+
+fn (o Opt<T>) Or(d T) T {
+    return match o {
+        case Opt.Some(v) => v
+        case Opt.None => d
+    }
+}
+
+fn build(n I64) Tree<I64>& {
+    if n == 0 { return Tree.Leaf(0) }
+    return Tree.Node(build(n - 1), Tree.Leaf(n))
+}
+
+fn side(e Either<I64, String&>) String {
+    return match e {
+        case Either.Left(a) => $"left " $a
+        case Either.Right(b) => $"right " $b
+    }
+}
+
+fn wrapSum(w Wrap<I64>) I64 {
+    return match w {
+        case Wrap.One(x) => x
+        case Wrap.Two(a, b) => a + b
+    }
+}
+
+fn all(k I64) Bool {
+    t := build(k)
+    trees Bool = t.Size() == k + 1 and depth(t) == k + 1 and firstLeaf(t) == 0
+    s Tree<String&>& = Tree.Node(Tree.Leaf("a"), Tree.Leaf("b"))
+    strs Bool = firstLeaf(s) == "a" and s.Size() == 2 and $s == "Tree.Node(Tree.Leaf(\"a\"), Tree.Leaf(\"b\"))"
+    o Opt<I64> = Opt.None
+    p Opt<I64> = Opt.Some(k)
+    opts Bool = o != p and p == Opt<I64>.Some(k) and p.Or(0) == k and o.Or(9) == 9 and $p == $"Opt.Some(" $k ")"
+    q := Opt.Some(2.5)                  # an Opt<F64>, from its argument
+    floats Bool = q.Or(0.0) == 2.5
+    ll Bool = leftLeaf(build(1)) == Opt.Some(I64(0)) and leftLeaf(Tree<I64>.Leaf(5)) == Opt<I64>.None
+    sides Bool = side(Either.Left(3)) == "left 3" and side(Either.Right("x")) == "right x"
+    w Wrap<I64> = Wrap.One(3)
+    wraps Bool = wrapSum(w) + wrapSum(Wrap.Two(4, 5)) == 12
+    one := Tree<I64>.Leaf(1)
+    tests Bool = t == Tree.Node(_, _) and one == Tree.Leaf(_) and one != Tree.Node(_, _)
+    payload Bool = (try p as Opt.Some catch default -1) == k and (try o as Opt.Some catch default -1) == -1
+    return trees and strs and opts and floats and ll and sides and wraps and tests and payload
+}
+
+AllBaked := all(3)
+SizeBaked := build(4).Size()
+LeafBaked Opt<I64> = Opt.Some(7)
+
+Three mut I64 = 3 # read at run time, so all() runs as the program as well as in the evaluator
+
+test "G6b: generic enums - built, matched, compared, rendered - baked, decided while compiling and run" {
+    assert all(Three)
+    assert all(3)                       # S18c: decided while compiling
+    assert AllBaked and SizeBaked == 5 and LeafBaked == Opt.Some(7)
+}
+
+test "G6b, E10b: an instance of a generic enum is a Map key, hashed per instance" {
+    m Map<Opt<I64>, I64>
+    m.Put(Opt.Some(4), 1)
+    m.Put(Opt.None, 2)
+    assert (try m.Get(Opt.Some(4)) catch default -1) == 1 and (try m.Get(Opt<I64>.None) catch default -1) == 2
+    k := Keyed<String&, I64>.Entry("a", 1)
+    match k {
+        case Keyed.Entry(kk, vv) { assert kk == "a" and vv == 1 }
+        case Keyed.Empty { unreachable }
+    }
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 1000 {
+        a := Array<I64>(64, i)
+        t += a[3]
+    }
+    return t
+}
+
+fn leafOf(i I64) Tree<String&>& {
+    s := $"x" $i
+    return Tree.Leaf(s)
+}
+
+fn leaves(n I64) List<Tree<String&>&> {
+    out List<Tree<String&>&>
+    for i in range n { out.Push(Tree.Leaf($"leaf " $i)) }
+    return out
+}
+
+test "G6b, T17c: payloads holding references live where the value does - read back after an arena churn" {
+    l := leaves(4)
+    v List<Tree<String&>&>
+    for i in range 3 { v.Push(leafOf(i)) }
+    p Tree<String&>& = Tree.Node(leafOf(8), Tree.Leaf("y"))
+    assert churn() > 0
+    assert $l[3] == "Tree.Leaf(\"leaf 3\")" and $v[2] == "Tree.Leaf(\"x2\")"
+    assert $p == "Tree.Node(Tree.Leaf(\"x8\"), Tree.Leaf(\"y\"))"
+}
