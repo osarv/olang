@@ -360,3 +360,6 @@ on sight per rules.md, "Code rules".
   one return-copy function, scoped-call locals' home, interpret refusing what build refuses (B3e). Scope fuzzer: 67
   findings on d4ed05d -> 0. Recorded limits: o1-o4 over-rejections, adapters through an any. No sixth review before
   merging: master gains (many older UAFs closed); a general §8 review on master later.
+- 2026-10-25 CEST: disk full (the ext4 reserve caps usable space near 40G on the 252G disk): freed ~10G by deleting old
+  worktrees' build/ dirs and scratchpad files older than 6 h. Keep build/ only in active worktrees; delete a merged
+  worktree's build/ at merge time. The platforms agent installed clang-19/20 (clang-20 moved off PATH).
