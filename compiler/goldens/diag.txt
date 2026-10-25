@@ -489,6 +489,125 @@ c7destructinbody.olang:5:5: error[C7]: 'destruct' follows the constructor's body
     5 |     destruct { assert n >= 0 }
       |     ^~~~~~~~
 compilation failed with 1 error
+=== c9bafter.olang
+c9bafter.olang:13:16: error[C9b]: 'd' is used after 'd.Destroy()' (line 12)
+   13 |     assert n + d.id == 8
+      |                ^
+c9bafter.olang:12:5: note: 'd.Destroy()' is here; give it a new local if it is needed again
+   12 |     d.Destroy()
+      |     ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bcallkeeps.olang
+c9bcallkeeps.olang:17:5: error[C9b]: 'b.Destroy()' needs 'b' to be the only way left to reach its instance
+   17 |     b.Destroy()
+      |     ^~~~~~~~~~~
+c9bcallkeeps.olang:16:5: note: it is handed here to what may keep it
+   16 |     keep(bx, b)
+      |     ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bcapture.olang
+c9bcapture.olang:12:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+   12 |     c.Destroy()
+      |     ^~~~~~~~~~~
+c9bcapture.olang:11:10: note: it is handed here to what may keep it
+   11 |     g := fn() I64 { return c.id }
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== c9bclash.olang
+c9bclash.olang:9:13: error[C9b]: the compiler supplies Destroy() for Res&, which declares a destructor - choose another name
+    9 | fn (r Res&) Destroy() { }
+      |             ^~~~~~~
+compilation failed with 1 error
+=== c9bdefault.olang
+c9bdefault.olang:12:38: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
+   12 |     c := try m.Take(1) catch default Spare
+      |                                      ^~~~~
+c9bdefault.olang:13:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+   13 |     c.Destroy()
+      |     ^~~~~~~~~~~
+c9bdefault.olang:12:5: note: its value may be a try's default, not built for it
+   12 |     c := try m.Take(1) catch default Spare
+      |     ^
+compilation failed with 2 errors
+=== c9bdeferret.olang
+c9bdeferret.olang:11:11: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
+   11 |     defer r.Destroy()
+      |           ^~~~~~~~~~~
+c9bdeferret.olang:11:11: note: it is returned (line 12), and its Destroy() is deferred: it runs as the function leaves
+   11 |     defer r.Destroy()
+      |           ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9berrdefer.olang
+c9berrdefer.olang:24:12: error[C9b]: 'r' is used after 'r.Destroy()' (line 21)
+   24 |     assert r.id == 4
+      |            ^
+c9berrdefer.olang:21:18: note: 'r.Destroy()' is here; give it a new local if it is needed again
+   21 |         errdefer r.Destroy()
+      |                  ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bfnvalue.olang
+c9bfnvalue.olang:13:5: error[C9b]: 'k.Destroy()' needs 'k' to be the only way left to reach its instance
+   13 |     k.Destroy()
+      |     ^~~~~~~~~~~
+c9bfnvalue.olang:12:5: note: it is handed here to what may keep it
+   12 |     f(k)
+      |     ^~~~
+compilation failed with 1 error
+=== c9bloop.olang
+c9bloop.olang:12:9: error[C9b]: 'x.Destroy()' runs again in the loop's next turn, on what it ended - declare 'x' inside the loop
+   12 |         x.Destroy()
+      |         ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bnodtor.olang
+c9bnodtor.olang:6:7: error[C9b]: Destroy() runs a destructor, and P declares none
+    6 |     p.Destroy()
+      |       ^~~~~~~
+compilation failed with 1 error
+=== c9bnotlocal.olang
+c9bnotlocal.olang:14:8: error[C9b]: Destroy() is called on a local - a variable of this function holding the instance
+   14 |     bx.r.Destroy()
+      |        ^
+compilation failed with 1 error
+=== c9bothermap.olang
+c9bothermap.olang:16:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+   16 |     c.Destroy()
+      |     ^~~~~~~~~~~
+c9bothermap.olang:13:5: note: it is taken out of a collection whose values are not each held only there: its new value is existing storage: 'r'; give it new storage - a constructor call, '$...', 'Clone()'
+   13 |     m.Put(1, r)
+      |     ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bparam.olang
+c9bparam.olang:9:18: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
+    9 | fn end(r Res&) { r.Destroy() }
+      |                  ^~~~~~~~~~~
+c9bparam.olang:9:18: note: 'r' is a parameter: its caller holds the instance too
+    9 | fn end(r Res&) { r.Destroy() }
+      |                  ^~~~~~~~~~~
+compilation failed with 1 error
+=== c9bstored.olang
+c9bstored.olang:17:5: error[C9b]: 'a.Destroy()' needs 'a' to be the only way left to reach its instance
+   17 |     a.Destroy()
+      |     ^~~~~~~~~~~
+c9bstored.olang:16:5: note: a reference to it is stored here, in 'bx.r'
+   16 |     bx.r = a
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== c9btask.olang
+c9btask.olang:15:5: error[C9b]: 't.Destroy()' needs 't' to be the only way left to reach its instance
+   15 |     t.Destroy()
+      |     ^~~~~~~~~~~
+c9btask.olang:13:9: note: it is handed to a task here, which may use it after the Destroy()
+   13 |         spawn show(t)
+      |         ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== c9bview.olang
+c9bview.olang:15:5: error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+   15 |     c.Destroy()
+      |     ^~~~~~~~~~~
+c9bview.olang:16:12: note: it is taken out of a collection whose values are not each held only there: 'v' (line 13) is used here, after it lets go of it (line 15); read what you need from 'v' before
+   16 |     assert v.id == 3
+      |            ^
+compilation failed with 1 error
 === callparammut.olang
 callparammut.olang:12:9: error[E12]: expected fn(n Node&), found Writer
    12 |   apply(w, n)
@@ -664,8 +783,8 @@ compilation failed with 1 error
 d13czeroref.olang:18:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    18 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:177:12: note: in the standard library's code, here
-  177 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:180:12: note: in the standard library's code, here
+  180 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:11:5: note: here
    11 |     Counter++
@@ -833,6 +952,61 @@ d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
       |                                  ^~~~~~~~~
 compilation failed with 1 error
+=== d18argoutlived.olang
+d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   11 |         g = chars(s)
+      |           ^
+compilation failed with 1 error
+=== d18errors.olang
+d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
+    5 | fn f() Iterator<I64> ? Bad {
+      |    ^
+compilation failed with 1 error
+=== d18errundeclared.olang
+d18errundeclared.olang:10:11: error[R9, D18]: Bad can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? Bad>', or catch it
+   10 |     yield try g()
+      |           ^~~
+compilation failed with 1 error
+=== d18returnscope.olang
+d18returnscope.olang:4:7: error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator
+    4 |     s String&return = $3
+      |       ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== d18returnvalue.olang
+d18returnvalue.olang:5:5: error[D18a]: a generator gives its values by 'yield' - 'return' ends it and takes none
+    5 |     return 2
+      |     ^~~~~~
+compilation failed with 1 error
+=== d18yieldborrow.olang
+d18yieldborrow.olang:3:1: error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')
+    3 | fn parts(t String&) Iterator<String&> {
+      | ^~
+compilation failed with 1 error
+=== d18yielddefer.olang
+d18yielddefer.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
+    8 |     yield 2
+      |     ^~~~~
+compilation failed with 1 error
+=== d18yieldjoin.olang
+d18yieldjoin.olang:9:9: error[S20]: a join block may not yield - its tasks are waited for before it is left
+    9 |         yield 1
+      |         ^~~~~
+compilation failed with 1 error
+=== d18yieldlambda.olang
+d18yieldlambda.olang:5:9: error[S20]: a lambda is no generator - 'yield' in the function it is written in
+    5 |         yield 1
+      |         ^~~~~
+compilation failed with 1 error
+=== d18yieldoutside.olang
+d18yieldoutside.olang:4:5: error[D18, S20]: 'yield' is a generator's - a function whose result is written 'Iterator<T>'
+    4 |     yield 1
+      |     ^~~~~
+compilation failed with 1 error
+=== d18yieldown.olang
+d18yieldown.olang:7:15: error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+    7 |         yield l
+      |               ^
+compilation failed with 1 error
 === d2duplicatefn.olang
 d2duplicatefn.olang:4:4: error[D2]: 'f' is already declared in this module
     4 | fn f(x I64) I64 { return x + 1 }
@@ -999,10 +1173,10 @@ compilation failed with 2 errors
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:457:21: note: in the standard library's code, here
-  457 |             if keep(x) { c++ }
-      |                     ^
-derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&
+$ROOT/std/prelude/list.olang:457:25: note: in the standard library's code, here
+  457 |             if try keep(x) { c++ }
+      |                         ^
+derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&, E = nothing
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
 compilation failed with 1 error
@@ -1628,6 +1802,31 @@ e37redeclared.olang:4:13: error[E23, E33, E37, P9, T17e]: the compiler supplies 
     4 | fn (b Bits) LeadingZeros() I64 { return 0 }
       |             ^~~~~~~~~~~~
 compilation failed with 1 error
+=== e38bound.olang
+e38bound.olang:4:12: error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+    4 | X := embed "e38bound.olang"[0]
+      |            ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== e38dir.olang
+e38dir.olang:3:15: error[E38]: embed '.' reads no file: . is a directory
+    3 | Here := embed "."
+      |               ^~~
+compilation failed with 1 error
+=== e38local.olang
+e38local.olang:3:43: error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+    3 | fn load(path String&) I64 { return (embed path).Len() }
+      |                                           ^~~~
+compilation failed with 1 error
+=== e38nofile.olang
+e38nofile.olang:3:15: error[E38]: embed 'missing.bin' reads no file: no file missing.bin
+    3 | Blob := embed "missing.bin"
+      |               ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== e38undecided.olang
+e38undecided.olang:5:15: error[E38]: this embed's path cannot be computed while compiling - write it so it can, or as a literal
+    5 | Data := embed where()
+      |               ^~~~~~~
+compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
     5 |     x I32 = 2147483647 + 1
@@ -1954,6 +2153,40 @@ g19unknowntrait.olang:5:8: error: unknown type 'Nope'
     5 | fn f<V Nope>(m V&) I64 { return 1 }
       |        ^~~~
 compilation failed with 1 error
+=== g1aerrvartype.olang
+g1aerrvartype.olang:4:7: error[G1a]: 'E' is an error-set parameter, not a type - it stands where an error set is written, '? E'
+    4 |     y E = x
+      |       ^
+g1aerrvartype.olang:9:5: note: instantiated here, with T = I64, E = nothing
+    9 |     keep(1, fn(x I64) I64 { return x })
+      |     ^~~~
+compilation failed with 1 error
+=== g1aiternotmet.olang
+g1aiternotmet.olang:21:5: error[G19]: R does not satisfy the constraint Iterator on I: it has no method Next that fits
+   21 |     total(r)
+      |     ^~~~~
+g1aiternotmet.olang:7:15: note: 'Next' is declared here, with another signature
+    7 | fn (r mut R&) Next() I64 ? Bad, Exhausted {
+      |               ^~~~
+compilation failed with 1 error
+=== g1atypevarerrs.olang
+g1atypevarerrs.olang:3:21: error[G1a]: 'T' is a type variable, not an error set - an error-set parameter is written after '?' in its list, '<T ? E>'
+    3 | fn keep<T>(x T) T ? T { return x }
+      |                     ^
+g1atypevarerrs.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    6 |     keep(1)
+      |     ^~~~
+compilation failed with 2 errors
+=== g1auntried.olang
+g1auntried.olang:12:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+   12 |     n := a.Fold(0, fn(acc I64, x I64) I64 { return acc + try pos(x) })
+      |            ^~~~
+compilation failed with 1 error
+=== g1aunwanted.olang
+g1aunwanted.olang:8:15: error[G1a]: Box has no error-set parameter, so its arguments end in no '?'
+    8 |     b Box<I64 ? Bad> = Box<I64>(1)
+      |               ^~~~~
+compilation failed with 1 error
 === g1primname.olang
 g1primname.olang:5:10: error[G1]: type variable 'P' is named after a type - choose a name no type has, as '<T>'
     5 | type Box<P> struct(v P) { v }
@@ -1995,6 +2228,21 @@ g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no paramete
     6 |   a Array<I32> = mk(3)
       |                  ^~
 compilation failed with 1 error
+=== g6bcover.olang
+g6bcover.olang:8:18: error[S13a]: case None of Opt<I64> is not covered - add it, or 'nomatch { }'
+    8 |     return match o {
+      |                  ^
+compilation failed with 1 error
+=== g6binfer.olang
+g6binfer.olang:8:14: error[G10c]: the type arguments of Opt cannot be inferred from this case - write them, 'Opt<...>.None', or give it a type to land in
+    8 |     x := Opt.None
+      |              ^~~~
+compilation failed with 1 error
+=== g6bother.olang
+g6bother.olang:9:14: error[S13]: a case value here is Opt<I64>, found Opt<F64>
+    9 |         case Opt<F64>.Some(_) { return 1 }
+      |              ^~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === g7argcount.olang
 g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
     5 | fn main() ? { b Box<I32, I64> = Box<I32>(1) }
@@ -2026,13 +2274,8 @@ g9dhashable.olang:11:22: error[G19, E10b]: Res& does not satisfy the constraint 
       |                      ^~~~~~
 compilation failed with 1 error
 === genericarray.olang
-genericarray.olang:3:10: error[G6]: only a struct or a trait takes type parameters
+genericarray.olang:3:10: error[G6]: only a struct, an enum or a trait takes type parameters
     3 | type Arr<T> Array<T>
-      |          ^
-compilation failed with 1 error
-=== genericenum.olang
-genericenum.olang:4:10: error[G6]: only a struct or a trait takes type parameters
-    4 | type Opt<T> enum {
       |          ^
 compilation failed with 1 error
 === globaltypename.olang
@@ -3556,6 +3799,76 @@ qwnointro.olang:4:11: error: expected a name, found '<'
     4 | fn pick(a <T>, b T) T { return a }
       |           ^
 compilation failed with 1 error
+=== r11bcaptured.olang
+r11bcaptured.olang:6:50: error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
+    6 |     try f() catch e { k := fn() String { return $e } }
+      |                                                  ^
+compilation failed with 1 error
+=== r11bcaseform.olang
+r11bcaseform.olang:8:18: error[R11b]: a case of a caught error names an error word, an error type or a named set
+    8 |             case 3 { }
+      |                  ^
+compilation failed with 1 error
+=== r11bcasenever.olang
+r11bcasenever.olang:9:13: error[R11b]: this case is never reached: the cases before it take every error 'e' can be
+    9 |             case P.A { }
+      |             ^~~~~~~~~~~~
+compilation failed with 1 error
+=== r11bcomparecaught.olang
+r11bcomparecaught.olang:7:30: error[R11b]: two caught errors are never compared - compare each with an error word or an error type
+    7 |         try f() catch d { if d == e { } }
+      |                              ^~~~~~
+compilation failed with 1 error
+=== r11bcomparewhat.olang
+r11bcomparewhat.olang:6:31: error[R11b]: 'e' is compared with an error word, an error type or a named set - 'e == T.WORD', 'e == T'
+    6 |     try f() catch e { if e == 3 { } }
+      |                               ^
+compilation failed with 1 error
+=== r11blonetypo.olang
+r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
+    6 |     try f() catch PErr { }
+      |                   ^~~~
+compilation failed with 1 error
+=== r11bmatchblock.olang
+r11bmatchblock.olang:8:9: error[R11b]: a match on a caught error giving a value gives it with '=> v' in every case
+    8 |         case P.B { return }
+      |         ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== r11bmatchmissing.olang
+r11bmatchmissing.olang:7:9: error[R11b]: this match does not cover P.B - add a case for it, or 'nomatch'
+    7 |         match e {
+      |         ^~~~~
+compilation failed with 1 error
+=== r11bnever.olang
+r11bnever.olang:7:33: error[R11b]: 'e' is never Q here - it is P
+    7 |     try f() catch P e { if e == Q { } } catch Q { }
+      |                                 ^
+compilation failed with 1 error
+=== r11bnotavalue.olang
+r11bnotavalue.olang:6:28: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
+    6 |     try f() catch e { y := e }
+      |                            ^
+compilation failed with 1 error
+=== r11bpassed.olang
+r11bpassed.olang:7:25: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
+    7 |     try f() catch e { g(e) }
+      |                         ^
+compilation failed with 1 error
+=== r11btask.olang
+r11btask.olang:7:31: error[R11b]: a spawned call's clause runs on the task's thread and names no error - leave 'e' off, or catch it where the join fails
+    7 |         spawn try f() catch P e { }
+      |                               ^
+compilation failed with 1 error
+=== r11btry.olang
+r11btry.olang:6:32: error[R11b]: 'e' is an error already caught, not a call - raise it again with 'error e'
+    6 |     try f() catch e { x := try e }
+      |                                ^
+compilation failed with 1 error
+=== r11bunused.olang
+r11bunused.olang:6:21: error[R11b]: 'e' names the error this clause took, and nothing uses it - leave the name off
+    6 |     try f() catch P e { }
+      |                     ^
+compilation failed with 1 error
 === r11clausevalue.olang
 r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
    18 |         -1
@@ -3568,6 +3881,11 @@ compilation failed with 2 errors
 r11defaultexisting.olang:12:43: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
    12 |     n := (try validate("x") catch default empty).Len()
       |                                           ^~~~~
+compilation failed with 1 error
+=== r14setnotproduced.olang
+r14setnotproduced.olang:8:19: error[R14]: the call does not fail with Q
+    8 |     try f() catch Q { } catch P { }
+      |                   ^
 compilation failed with 1 error
 === r1apromise.olang
 r1apromise.olang:14:5: error[R9]: B can escape here, and this function does not declare it - add it after '?', or catch it
@@ -3607,15 +3925,45 @@ r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not thi
     8 |     if n == 0 { error LE.GONE }
       |                          ^~~~
 compilation failed with 1 error
+=== r1functypeunknown.olang
+r1functypeunknown.olang:3:15: error[R1]: unknown error type 'Nope'
+    3 | fn g(f fn() ? Nope) { }
+      |               ^~~~
+compilation failed with 1 error
+=== r1nosuchword.olang
+r1nosuchword.olang:4:10: error[T19]: C has no word 'W'
+    4 | fn f() ? C.W { }
+      |          ^~~
+compilation failed with 1 error
+=== r1notanerror.olang
+r1notanerror.olang:4:10: error[R1]: 'Pt' is no error type - an error set names error types, their words and named sets
+    4 | fn f() ? Pt { }
+      |          ^~
+compilation failed with 1 error
 === r1unknownerror.olang
 r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
     3 | fn f() I64 ? peErr { return 1 }
       |              ^~~~~
 compilation failed with 1 error
+=== r3areraiseundeclared.olang
+r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare - add it after '?', or test the error first
+    7 |     try f() catch e { error e }
+      |                       ^~~~~
+compilation failed with 1 error
+=== r3areraiseword.olang
+r3areraiseword.olang:6:23: error[R3a]: the error raised again can be P.B, and this function's '?' names P.A - add it after '?', or test the error first
+    6 |     try f() catch e { error e }
+      |                       ^~~~~
+compilation failed with 1 error
 === r3bareerror.olang
 r3bareerror.olang:4:22: error: expected a name, found '}'
     4 |     if n < 0 { error }
       |                      ^
+compilation failed with 1 error
+=== r3raisenotcaught.olang
+r3raisenotcaught.olang:6:11: error[R3]: 'error' raises a word, 'error T.WORD', or the error a clause took - 'x' is neither
+    6 |     error x
+      |           ^
 compilation failed with 1 error
 === r8tryinner.olang
 r8tryinner.olang:6:10: error[R8]: nothing here can fail - write it without 'try'
@@ -3893,8 +4241,8 @@ compilation failed with 1 error
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
-$ROOT/std/prelude/array.olang:98:5: note: 'a' is declared here
-   98 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
+$ROOT/std/prelude/array.olang:101:5: note: 'a' is declared here
+  101 | fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
       |     ^~~~~~~~~~~
 compilation failed with 1 error
 === rv3roforin.olang
@@ -4179,10 +4527,30 @@ s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code - it runs
    10 |             if t > 1 { break }
       |                        ^~~~~
 compilation failed with 1 error
+=== s19eescape.olang
+s19eescape.olang:6:14: error[S19b]: an error may not leave deferred code - catch it here
+    6 |     errdefer try g()
+      |              ^~~
+compilation failed with 1 error
+=== s19eline.olang
+s19eline.olang:4:15: error[S1b]: a one-line body is one simple statement, not an errdefer - write a block, '{ ... }'
+    4 |     if x > 0: errdefer x = 2
+      |               ^~~~~~~~
+compilation failed with 1 error
+=== s19ereturn.olang
+s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while its block is left
+    6 |         if n > 1 { return 3 }
+      |                    ^~~~~~
+compilation failed with 1 error
 === s19error.olang
 s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch it here
     8 |         if n > 1 { error E.BAD }
       |                    ^~~~~
+compilation failed with 1 error
+=== s19eyield.olang
+s19eyield.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
+    8 |     yield 2
+      |     ^~~~~
 compilation failed with 1 error
 === s19later.olang
 s19later.olang:4:16: error: unknown name 'later'
@@ -4591,9 +4959,9 @@ compilation failed with 1 error
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
     9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
       |                     ^~~~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 compilation failed with 1 error
 === strayfnbody.olang
 strayfnbody.olang:4:12: error[L16]: unexpected character '`'
@@ -4607,15 +4975,15 @@ compilation failed with 2 errors
 strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    10 |     n := b.words.Count(fn(s String&) Bool {
       |                  ^~~~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {
       |          ^~~
-$ROOT/std/prelude/array.olang:81:12: note: built here, where the receiver's part it was handed lives
-   81 |         if keep(x) { n++ }
-      |            ^~~~
+$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
+   84 |         if try keep(x) { n++ }
+      |                ^~~~
 compilation failed with 2 errors
 === strcalleeadapter.olang
 strcalleeadapter.olang:30:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -5044,17 +5412,53 @@ t17sep.olang:4:23: error: unknown type 'South'
     4 | type Dir enum { North South }
       |                       ^~~~~
 compilation failed with 1 error
+=== t19asetholdsitself.olang
+t19asetholdsitself.olang:3:6: error[T19a]: 'A' reaches itself through its member 'B' - a set holds its members' errors, never itself
+    3 | type A error B { X }
+      |      ^
+t19asetholdsitself.olang:4:6: error[T19a]: 'B' reaches itself through its member 'A' - a set holds its members' errors, never itself
+    4 | type B error A
+      |      ^
+compilation failed with 2 errors
+=== t19aunknownmember.olang
+t19aunknownmember.olang:5:14: error[R1]: unknown error type 'Nope'
+    5 | type E error Nope, C.Q
+      |              ^~~~
+t19aunknownmember.olang:5:20: error[T19]: C has no word 'Q'
+    5 | type E error Nope, C.Q
+      |                    ^~~
+compilation failed with 2 errors
+=== t19awordofmember.olang
+t19awordofmember.olang:4:18: error[T19a]: word 'Z' is C's too, a member of this set - name it another way
+    4 | type D error C { Z }
+      |                  ^
+compilation failed with 1 error
+=== t19emptywords.olang
+t19emptywords.olang:3:16: error: expected an error word, found '}'
+    3 | type E error { }
+      |                ^
+compilation failed with 1 error
+=== t19nowordsnomembers.olang
+t19nowordsnomembers.olang:3:13: error: expected an error type's words or a set's members, found end of line
+    3 | type E error
+      |             ^
+compilation failed with 1 error
+=== t19worddeclaredtwice.olang
+t19worddeclaredtwice.olang:3:22: error[T19]: error word 'Y' is already declared
+    3 | type C error { Y, Z, Y }
+      |                      ^
+compilation failed with 1 error
 === t20errorparam.olang
-t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    12 | type Holder struct(e E) { e }
       |                      ^
-t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |            ^
-t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause
+t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == E.A { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |                                  ^~~
-t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    15 |     x E
       |       ^
 compilation failed with 4 errors

@@ -731,7 +731,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   O(1) unlink - and on its region's chain, which a release runs first. Decided (mine): a Destroy()'s target is a place of
   its own (free.olang's destroy targets); a collection whose values have destructors is a candidate that never frees on
   its own let-go but builds its values in regions when a Destroy() takes them out; a value taken out of one is destroyed
-  only in root-emitted code (B3i); `defer x.Destroy()` works; a return or error after it ends its path. Measured: 1M
+  only in root-emitted code (B3i); `defer x.Destroy()` works, and `errdefer x.Destroy()` lets `x` be returned; a return
+  or error after it ends its path; a generator's yield is walked as a return's value and ends no path. Measured: 1M
   connections with destructors in a Map 50 MB -> 1.9 MB, 100k std UDP sockets under `ulimit -n 64` 1.7 MB.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
   values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the

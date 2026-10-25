@@ -24340,6 +24340,20 @@ now it keeps exactly the places it may let go of (its may-summary, all of them o
 StringBuilder in `IP.Str` or `Duration.Str` had stopped all early freeing in every program importing std/net or
 std/time.
 
+**With generators and errdefer (merged the same day).** Both landed on master while this round was built. A generator's
+`yield` is a typed `Suspend`, which the early-free analysis did not know: its value was never walked, so a call inside
+it that lets go of a place, or a view it reads, was missed. It is walked now as a `Return`'s value is (its origins the
+body's result, a destroy target yielded under a pending deferred `Destroy()` refused), and it ends no path - the body
+goes on after it. The coroutine holds the scopes open across a yield, so what was made in them, regions included, lives
+until a let-go releases it or the frame is dropped part way, which closes those scopes. An error leaving a block runs
+its `errdefer` code, which may let go as any statement does, before the block's scopes close. **Decided (mine):**
+`errdefer x.Destroy()` lets `x` be returned in its block - on the way out where it runs, nothing is returned (a join's
+failure replacing a return included); a use after the block is still refused, since an error a `try join` clause takes
+goes on in the function (checks/cases/c9berrdefer). Tests: a generator holding a destroy target across a yield (destroyed
+before the instance built after it, and a walk stopped part way destructing what its frame held), and a place let go of
+between a generator's yields and in an errdefer, baked, decided and run alike - clean under `-debug -sanitize` and the
+evaluator's dead-region mode.
+
 ## Error types as types, named error sets, the error a clause took (T19, T19a, R11b, R3a, R1, R14, 2026-10-25)
 
 The user's decisions: QAM of 2026-10-18 (error types declared `type IoError error { ... }`, named sets `type LoadError
