@@ -24074,3 +24074,81 @@ tool's tests.
   among the functions); a method is never a builder; the order is the file's. Computed from the checked signatures
   (`explain.BuilderOf`/`Builders`), not from text. Tests: checks cases `b14docbuilders` and `b14docbuilderitem`, and
   an `explain` assertion in the words scenario. std unchanged - some modules' builders now show under their types.
+
+## The lang25 batch's review, fixed (T22, E31, B17, E24, E32, M19, G12, E3, E30, D17e, D17a, S18d, E16d, std/arith, 2026-10-25)
+
+A review of the batch (`/home/user/review/lang25`, reproducers in `repro/`) found eight things; all are fixed, each with
+a test, with the coordinator's decisions and mine for the details.
+
+**A `Call` used as a function value never compared error sets (T22, E31; pre-existing).** `check.olang`'s `adapter`
+compared parameters and result and said "errors in order" in its comment only. Before the batch it could not be reached
+from correct code - the batch gives every function with conditions `ArgumentError` (D17b), so a master program passing
+an instance whose `Call` has a contract where `fn(x I64) I64` is wanted compiled after `olang fix` and printed `run 0`
+(the error union's code word read as the result); the other way round the run time read a result as an error code and
+`interpret` read it as a value. Now the errors are the function type's, in order (a `Call` is no named function, so R1b's
+re-encoding does not apply), and a mismatch is `error[T22, E31]` naming the function type to write, or a lambda.
+
+**`olang fix` changed what old code computes, silently (B17, E24, E32).** Three causes, each fixed:
+- `checked_migrate` wrote the new reading of an old construct: `2 * checked a[n] + 1` became `2 * try a.Get(n) + 1`,
+  which multiplies by `a.Get(n) + 1` now. It parenthesizes the try wherever an operator follows it (`2 * (try
+  a.Get(n)) + 1`), reading an operator at the start of a later line inside brackets too (L18a).
+- `try_migrate` wrapped a try that read only its postfix and now reads on only with `--old`, so `-try f(n) + 1` took
+  the new meaning under `fix`. Decided (the coordinator, the details mine): where every operator after such a try binds
+  tighter than the one before it (`a + try f() * 2`, `x or try f() == 2 and y`) the two readings are one expression and
+  nothing is done; elsewhere the text cannot say which time it was written for, so the site is listed - and a listing
+  now makes `fix` end with status 1 and a line saying to look at each. A conditional's `if` after it counts as looser
+  than anything (`2 * try f() if c else 3`). `--old` still wraps them. Mine: the coordinator's wording asked to wrap
+  where wrapping is meaning-identical under both readings; it is exactly where the readings already agree, so nothing
+  needs writing there, and the tool leaves those sites alone.
+- An `as` aborted under a try before the batch (only `checked` made it fail) and fails into the try now. `try_migrate`
+  (which knows the old reach; as_migrate, run after it, sees only E32's uncovered `as`) gives `!` to an `as` inside a
+  try's old reach where it reads a plain chain of names and members (`try f(sh as Circle)` -> `try f((sh as
+  Circle)!)`), lists one reading a call or an index (whose failure the try handled - `!` would end the program on it
+  too), and lists `try x as T` with no clause after it (it read `(try x) as T`). `checked (x as C)` - which made the
+  `as` fail into its clauses - is `try x as C` in `checked_migrate`, where nothing else in it was checked.
+- `checked` checked every operation inside its operand; `checked a[i - K]` became `try a.Get(i - K)` with the
+  subtraction no longer checked, unlisted. The rewrite stays and the dropped checks are listed (arithmetic, a shift, a
+  negation, a conversion, an inner index, an `as`), naming std/arith, Narrow and Get. Rewriting into std/arith was not
+  done: the operand's types and grouping are not in the text.
+Shown: a program written for master (checked, tries reading on, a contract after the result, an `as` under checked) is
+fixed, lists the two places it cannot settle, and prints master's output; `checks/fixtures/fix/before25.*` is that
+program, in the `fix` scenario.
+
+**`x.Len()` on a type with no `Len` compiled (M19; pre-existing).** Every compiler-supplied name with no supply for the
+receiver was a "gap" - recorded, never said - so the call lowered to nothing: inside an `or` it was `false`. It is M19's
+unknown method now; `Hash` and `Str` stay gaps (E10b/E11c supply them for some types the checker does not build yet).
+It is why `fix` never showed a tool's listing: `fix.olang` tested `body.Lines().Len() > 1`, and `LineIter` has no
+`Len`. `fix` now counts the `by hand:` lines (and a `for a person:` block's).
+
+**Comparison chains read as type arguments (G12, E3, E30).** C#'s rule took `k < m > (0)` (a local, no diagnostic, a
+lowering gap), `p.n < m > (d)` and `two(p.n < m, m > (d))` as calls given type arguments. Decided (the coordinator): a
+`<...>` after a name is type arguments only when the `<` touches the name and the `>` touches the `(`; with spaces it
+compares - and the formatter spaces comparisons and keeps written type arguments touching. A spaced form with an empty
+`()` after, which no comparison has (`x.Narrow <I32> ()`), is `error[G12]` naming the touching form. Known generic
+functions and types (the parser's oracle) keep their reading. The differential fuzzer's chains, written spaced, read as
+chains again.
+
+**D17e refused handled calls (decided by the coordinator, reversing their earlier call).** A call with closed arguments
+and a false condition is a compile-time error only where no clause at it takes `ArgumentError` - `try pick(5, 3) catch
+ArgumentError { }`, an item-less `catch`, a clause of an enclosing `try` in the same body. Such a call fails at run time
+as written, which is how a test asks for the failure; while compiling (a baked global, a decided assert) it fails the
+same way. Built as a mark on the asks a try's operand made (`ContractHandled`), read by `decideContracts`.
+
+**`!` names a false condition in every build (D17a, S18d; the batch's question).** A build keeping no trace printed
+`ArgumentError.INVALID` and the hint only. A requirement's raise now stores its `FILE:LINE: f: cond` line in a
+thread-local (`__olang_ert_req_set`), cleared where a clause takes an error; `!` and main's unhandled error print it
+before the hint - one write on the failure path, none on success.
+
+**`try a.Set(i, v)` (E16d; the batch's question).** Beside `Get`: the index checked against the length, then the value
+stored, `ArrayError.OUT_OF_RANGE` and nothing stored where it is out of range; the checker builds the store as `a[i] =
+v` with a checked element place, so lowering, the evaluator and `interpret` needed nothing. A declared array type may
+not declare `Set` (T29e).
+
+**`arith.Rem(T.Min, -1)` is 0 (std/arith).** It failed with `OVERFLOW`, though the remainder fits; the `%` itself is
+undefined there (E6a), so `Rem` returns 0 for any divisor -1 without computing it. Baked and run alike.
+
+**The fuzzer.** gen.olang wrote `(try (e as C) catch ...)` - E24's parentheses error - and `(x[0:n]).Get(i)`, a slice
+`checked` used to cover, which aborted when `n` passed the length; it writes `try e as C catch ...` and
+`try x.SliceOf(0, n).Get(i)`. `make fuzz`'s default seed was the text `seed`: the bootstrap's `SEED = seed` (the seed's
+directory) overrode the fuzz targets' `SEED ?= 1` - the directory is `SEED_DIR` now. Seeds 7100-7139 and 7300-7359: no
+findings; the scope fuzzer on 9500-9539 none.

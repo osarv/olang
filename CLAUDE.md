@@ -281,7 +281,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
-  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a.Get(i)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
+  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
   reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
@@ -421,7 +421,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   combinations read the same for structs and arrays.
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
-  keeps its argument cannot become a value; a type's `Call` fits a function type (E31). A
+  keeps its argument cannot become a value; a type's `Call` fits a function type (E31), its errors the type's in order
+  (2026-10-25: never compared, so a `Call` with a contract read its error code as a result). A
   function value returned from a parameter is an obligation (O14a). Where its references live is part of a function
   type (T22, 2026-10-18): a parameter sharing another's scope (`b N&a`) or a borrowed result (`T&p`) makes a function a
   value only of a type saying the same, so `fn link(a mut N&, b N&a)` is no `fn(a mut N&, b N&)` (it was accepted, and
@@ -451,7 +452,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   function's instance, as a value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written
   ones are (count, bounds, T7c lengths); a method takes them at a call too (`x.Narrow<I32>()`, `xs.Map<U>(f)`), naming
   its own variables - those its list introduces that its receiver does not name (mine). After any name, a `<` reading
-  as type arguments on one line with `(` right after its `>` is type arguments (C#'s rule). A variable no parameter
+  as type arguments on one line, touching the name, with `(` touching its `>`, is type arguments (C#'s rule); spaced, it
+  compares, so `k < m > (0)` is a chain (2026-10-25, the lang25 review), and `x.f <T> ()` is an error naming the form. A variable no parameter
   names is no error at the declaration; a call writes it (G4, relaxed 2026-10-25). `U(x)` in an instance is the bound
   type's conversion or constructor (G8b, mine). A generic still is no value unless named so; one taking
   an array by value makes an instance per length (G29) and is never a value - the error says to pass a lambda. A
@@ -513,13 +515,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parenthesized, `2 * (try f()) + 1`. It covers every fallible call and operator in that - arguments, a chain - and never
   turns a check on; every `try` must cover something no `try` or `!` inside it covers, and one covering nothing is an
   error (not in a generic's body, where instantiations differ). `tools/try_migrate.olang` takes the parentheses off
-  (always) and, with `--old`, parenthesizes a `try` that read only its postfix and now reads on (listed without it). What `checked` checked is now a
+  (always); a `try` after an operator and followed by one is left alone where every later operator binds tighter (one
+  expression either way), else wrapped with `--old` and listed without it; an `as` inside an old try's reach is given
+  `!` where it reads a plain chain, else listed - a listing makes `olang fix` end with status 1 (2026-10-25, the review:
+  fix must never change what old code computes silently). What `checked` checked is now a
   call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OUT_OF_RANGE`, a List's and a Vec's `Get`
   their own errors), `try x.Narrow<I32>()` (`NumberError.OVERFLOW`/`INVALID`, supplied by the compiler for every number
   type), `as` failing as written (`CaseError.WRONG_CASE`), and arithmetic in `std/arith` (not the prelude): `try
   arith.Add(a, b)`, `Sub Mul Div Rem Neg ShiftLeft ShiftRight Pow`, and `Checked<T>` whose operators are those
   (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DIVIDE_BY_ZERO INVALID`, each function's set inferred per
-  number type (an integer's Add fails with OVERFLOW alone). Plain `/ %`, indexing and conversions stay unchecked; a
+  number type (an integer's Add fails with OVERFLOW alone; `Rem` by -1 is 0, never OVERFLOW). Plain `/ %`, indexing and conversions stay unchecked; a
   plain slice still aborts once per slice (E16b). `for x in try c` and `try join` stay. No `try { block }`.
   `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
   uncovered `as` `(x as C)!`.
@@ -940,11 +945,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
   what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
   order: a false one fails the call with the prelude's `ArgumentError.INVALID`, its trace line and `!`'s message naming
-  the function and the condition (`pick: y > x`); an error from a call inside a condition leaves as itself. So
+  the function and the condition (`pick: y > x`) - in every build, a build keeping no trace keeping that one line (a
+  thread-local write where the condition is false, cleared where a clause takes the error; 2026-10-25); an error from a call inside a condition leaves as itself. So
   `ArgumentError` is in the function's set: a bare `?` infers it, a function with no `?` has it, a written set must list
   it (an error naming it otherwise); every call needs `try`/`catch`/`!`. Decided while compiling where the evaluator can:
-  at a call whose arguments are all values it computes a false condition is an error at the call, whatever handles the
-  failure; where the evaluator runs a call (a baked global, a decided assert) the conditions are checked as at run time.
+  at a call whose arguments are all values it computes a false condition is an error at the call - unless a `catch`
+  there takes its `ArgumentError`, when it fails at run time as written (a test of the failure path; 2026-10-25, the
+  lang25 review, reversing "whatever handles it"); where the evaluator runs a call (a baked global, a decided assert) the conditions are checked as at run time.
   `outlives` chains are compile-time obligations only (O10b), so such a function is no value (T22a); one with value
   conditions is a value, checked on entry through it. A trait method's contract is checked before a call through an
   `any` dispatches, then the implementation checks its own. **Removed 2026-10-25**: the position after the signature,
@@ -985,7 +992,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   ones over a sample) and changed nothing but the files written in the old form on purpose. (4) **Found on the way:** `errors_migrate` ran the
   compiler as `olang -t FILE` - a flag B1 removed - and so did nothing since; it runs `olang test`. `bare_typevars` found
   std's type names from where its binary sits; it takes `--std DIR` now (the cache is not the repository). A tool's output is shown
-  (to the standard error) when it left something for a person, changed something worth a line or failed. A check
+  (to the standard error) when it left something for a person (its `by hand:` lines, a `for a person:` block) or failed,
+  and then fix says to look at them and ends with status 1, `-check` or not (2026-10-25; the test of "more than one line"
+  had read `Lines().Len()`, which an iterator has none of, and so never showed anything). A check
   scenario (`fix`) fixes an old program (type variables, an error set with `+`, `io.IoError`) and runs it.
 - **Error names print qualified (B5, S16, S18d, E35, 2026-10-24, the coordinator's follow-up to the naming pass).** With
   every module's error named `Error`, a bare name said nothing: wherever the compiler or runtime prints an error's name -
