@@ -281,6 +281,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             fields(b, c, self)
         }
     }
+    builders(b, c, d)
     methods(b, c, self)
     traitsMet(b, c, self)
     return b.ToString()
@@ -368,6 +369,59 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
             b.Push($"    " $fnLine(c, f, c.P.Sig(f), -1) "\n")
         }
     }
+}
+
+# the functions of the type's module that build one: top-level, with one result that is the type, a reference to it or a
+# generic instance of it (B11b, the user's call 2026-10-25 - a type has one constructor, other ways to make a value are
+# ordinary functions ending in a call to it), in the order the file declares them - the exported ones, or every one where
+# all is true
+fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) List<I64> {
+    out List<I64>
+    mi := c.P.DeclModule(d)
+    tab := c.P.R.Tables[mi]
+    order List<I64>
+    for ei in range tab.Entries.Len() {
+        if tab.Entries[ei].Kind == names.What.Func { order.Push(ei) }
+    }
+    order.Sort(fn(a I64, b I64) Bool { return tab.Entries[a].Sp.Start < tab.Entries[b].Sp.Start })
+    for ei in order {
+        name := tab.Entries[ei].Name
+        f := c.P.FnNamed(mi, name)
+        if f < 0 or c.P.FnDecl(f).Recv is not null or c.P.FnIsExtern(f) { continue }
+        text := $c.P.L.Names.Text(name)
+        if not all and not (text.Len() > 0 and text[0].IsUpper()) { continue }
+        if BuilderOf(c, f) == d { out.Push(f) }
+    }
+    return out
+}
+
+# the declared type a function builds (Builders), -1 for none: its one result's type, less a reference, where it is a
+# struct, an enum or a type declared over another, declared by the function's own module
+fn BuilderOf(c mut typecheck.Checker&, f I64) types.DeclId {
+    none := types.DeclId(-1)
+    rs := c.P.T.Results(c.P.Sig(f))
+    if rs.Len() != 1 { return none }
+    r := rs[0]
+    if c.P.T.KindOf(r) == types.Kind.Ref { r = c.P.T.Referent(r) }
+    if c.P.T.KindOf(r) != types.Kind.Named { return none }
+    d := c.P.T.DeclOf(r)
+    k := c.P.T.DeclKindOf(d)
+    if k != types.DeclKind.Struct and k != types.DeclKind.Enum and k != types.DeclKind.Over { return none }
+    return d if c.P.DeclModule(d) == c.P.FnModule(f) else none
+}
+
+# one line per builder, as methods are listed
+fn builders(b mut StringBuilder&, c mut typecheck.Checker&, d types.DeclId) {
+    for f in Builders(c, d, false) { b.Push($"    " $FnLine(c, f) "\n") }
+}
+
+# a function's first line as explain prints it, its instances left out
+fn FnLine(c mut typecheck.Checker&, f I64) String {
+    if c.P.VarCount(generic.FnOwner(f)) == 0 {
+        inst := c.P.FnInstance(f, types.ListId(0))
+        return fnLine(c, f, c.P.InstanceSig(inst), c.BodyOfInstance(inst))
+    }
+    return fnLine(c, f, c.P.Sig(f), -1)
 }
 
 # the traits with no type parameters the type meets, from every module of the program

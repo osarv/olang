@@ -2072,6 +2072,7 @@ test "the command line is words" { assert passed("words") }
 fn words(r mut report&) ? Failed {
     dir := fresh("words")
     os.Run("cp checks/fixtures/output/prog.olang " $os.Quote(dir))
+    os.Run("cp checks/cases/b14docbuilders.olang " $os.Quote(dir) "/b.olang")
     try r.expect(sh(dir, "\"$OLANG\" > out.txt 2>&1") == 1 and outOf(dir).Contains("error[B1]: nothing to do"), "no arguments", dir)
     try r.expect(sh(dir, "\"$OLANG\" bild prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("'bild' is not a mode - the modes are build, compile"), "an unknown mode", dir)
@@ -2089,6 +2090,8 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" help > out.txt 2>&1") == 0 and outOf(dir).Contains("  interpret ") and
                  outOf(dir).Contains("  format "), "help", dir)
     try r.expect(sh(dir, "\"$OLANG\" help format > out.txt 2>&1") == 0 and outOf(dir).Contains("-check"), "help format", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain b.olang Color > out.txt 2>&1") == 0 and outOf(dir).Contains("    fn FromHex(t String&) Color ? ColorError\n    fn Gray(level U8) mut Color&\n    fn (c Color&) Hex()")
+                 "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 0 and
                  outOf(dir) == "written where -output said\n", "interpret", dir)

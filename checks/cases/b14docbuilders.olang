@@ -1,0 +1,42 @@
+# check: doc
+# also: type Color struct(R U8, G U8, B U8)
+# also:     builders
+# also:     fn FromHex(t String&) Color ? ColorError
+# also:         a color from "RRGGBB"
+# also:     fn Gray(level U8) mut Color&
+# also:     fn (c Color&) Hex() String
+# also: fn Luminance(c Color&) F64
+# also: fn Both(c Color&) Color, Color
+# never: fn parse
+# also: type Pair<T> struct(A T, B T)
+# also:     fn Of<T>(x T) Pair<T>
+# a module whose functions that build a type are listed under it (B14): the type's one constructor, then the others
+
+error ColorError { BAD }
+
+type Color struct(R U8, G U8, B U8) { }
+
+type Pair<T> struct(A T, B T) { }
+
+# a color from "RRGGBB"
+fn FromHex(t String&) Color ? ColorError {
+    if t.Len() != 6 { error ColorError.BAD }
+    return Color(0, 0, 0)
+}
+
+fn Gray(level U8) Color& { return Color(level, level, level) }
+
+fn Of<T>(x T) Pair<T> { return Pair(x, x) }
+
+fn parse(t String&) Color { return Color(0, 0, 0) }
+
+fn Luminance(c Color&) F64 { return 0.5 }
+
+# several results: no builder
+fn Both(c Color&) Color, Color { return c, c }
+
+fn Count(c Color&) I64 { return 1 }
+
+fn (c Color&) Hex() String { return "000000" }
+
+fn main() { }

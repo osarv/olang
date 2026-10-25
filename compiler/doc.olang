@@ -178,6 +178,7 @@ type Entry struct(Line String&, Doc String&, Name String&) {
     File I64 = -1
     At I64 = -1
     Members List<Entry>
+    Builder Bool    # a function of the module that builds the type it is listed under (B14)
 }
 
 # a module: its identity, its path, its own documentation and its items
@@ -209,6 +210,9 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
             if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
+            # a builder of a type listed here stands under that type instead
+            bt := explain.BuilderOf(c, f)
+            if bt >= types.DeclId(0) and (all or Exported($nm.Text(c.P.T.DeclName(bt)))) { continue }
         } else if e.Kind != names.What.Global and e.Kind != names.What.Type {
             continue
         }
@@ -268,8 +272,17 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     e.At = at
     if lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ") or lines.Len() == 1 { return e }
     d := typeDecl(c, mi, name)
+    builders List<I64>
+    if d >= types.DeclId(0) { builders = explain.Builders(c, d, all) }
+    pushed := false
     for k in range 1, lines.Len() {
+        if not pushed and lines[k].TrimStart().StartsWith("fn ") {
+            pushed = true
+            pushBuilders(c, sc, x, mi, e, builders, all)
+        }
         line := lines[k].TrimStart()
+        # explain's builder lines (no receiver) are pushed above, with their documentation
+        if line.StartsWith("fn ") and not line.StartsWith("fn (") { continue }
         if line.StartsWith("meets ") {
             e.Members.Push(Entry($line, "", ""))
             continue
@@ -303,6 +316,16 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
         e.Members.Push(me)
     }
     return e
+}
+
+# the builders of a type, among its members (B14): each documented like a function
+fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, e mut Entry&, builders List<I64>, all Bool) {
+    for f in builders {
+        name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
+        bi := try item&e(c, sc, x, mi, name, all) catch explain.Missing { continue }
+        bi.Builder = true
+        e.Members.Push(bi)
+    }
 }
 
 # a method's name in its line, "fn (r R&) Name<...>(...)"
@@ -436,7 +459,12 @@ fn (md Module&) Text() String {
 fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
     for line in e.Line.Lines() { b.Push($indent $line "\n") }
     if e.Doc != "" { indented(b, e.Doc, $indent "    ") }
-    for m in e.Members { entryText(b, m, $indent "    ") }
+    prev := false
+    for m in e.Members {
+        if m.Builder and not prev { b.Push($indent "    builders\n") }
+        prev = m.Builder
+        entryText(b, m, $indent "    ")
+    }
 }
 
 # text written with each line indented, a paragraph break an empty line
@@ -511,7 +539,12 @@ fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
     id := e.Name
     b.Push($"<pre id=\"" $Escape(id) "\">" $Escape(e.Line) "</pre>\n")
     docHtml(b, e.Doc)
-    for m in e.Members { entryHtml(b, m, true) }
+    prev := false
+    for m in e.Members {
+        if m.Builder and not prev { b.Push("<h3 class=\"member\">Builders</h3>\n") }
+        prev = m.Builder
+        entryHtml(b, m, true)
+    }
     if member { b.Push("</div>\n") }
 }
 
