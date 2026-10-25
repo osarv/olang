@@ -416,3 +416,6 @@ on sight per rules.md, "Code rules".
   `yield`, LLVM coroutine, frame where the generator lands, yielded values reclaimed per turn), D10a fix (for-in's
   break inside Next's catch). FOLLOW-UP recorded: generator speed (~6 ns per value vs 0.25 for a hand iterator -
   coroutine elision where a for-in makes and finishes the walk), defer across yield.
+- 2026-10-25 CEST: wt-small2 MERGED (db11954, verified; fast-forward): errdefer (S19e), embed (E38), generic enums
+  (G6b; `Tree<I64>.Leaf(3)`, bare `Tree.Leaf(3)` inferred). Not fixed (found): a global whose initializer failed is
+  still read by the evaluator - `X := String(1)` then `assert X.Len() > 0` adds a second S18c error. Queue it.
