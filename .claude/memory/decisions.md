@@ -1057,3 +1057,7 @@ only as test oracles); 6 DECIDED - the prover is built after everything else alr
 1, 2, 3, 5: the user asked for explanations - given with examples (Clamp's broken requirement: run as written vs UB;
 three answers always-fails / broken-guarantee / might-fail and Dafny's alternative; loop invariants as asserts vs a
 loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED again; in effect: nothing built.
+- Prover, the user 2026-10-25: confirmed contracts as built (unchecked call runs normally, `checked f(x)` checks and
+  fails with CheckError.CONTRACT); "This whole thing is starting to cost more than it tastes no?" ASKED: shelve the
+  prover (contracts kept as they are, docs/prover.md as the record, a separate `olang prove` tool if ever revived) -
+  recommended yes. In effect: prover last on the list (already decided), nothing built.
