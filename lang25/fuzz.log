@@ -1,0 +1,5 @@
+seed 7107 case -1: does not compile at -d (step 1)
+seed 7113 case -1: does not compile at -d (step 1)
+seed 7114 case -1: does not compile at -d (step 1)
+seed 7115 case -1: does not compile at -d (step 1)
+fuzz: 40 programs, 1080 cases (1080 globals baked while compiling), 4 findings (in /home/user/wt/rvl25/build/fz/runGD6LC4)
