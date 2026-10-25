@@ -1182,3 +1182,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   needs try; (2) `try r` / `r!` unwrap a Result (Ok gives v, Err fails with e), match and narrowing as any enum; (3)
   several results: (a) cannot land in a Result (rec) / (b) auto Pair / (c) one Result each; (4) several error types
   need a named error set (errors as values). Rec yes to all, (a).
+- QAY PARKED 2026-10-25 (the user: "Store away results for now until we have talked about tuples"): Result<T, E>
+  integration (landing-place rule, try r, multi-results) waits for a talk about tuples.
+- **QAZ ASKED 2026-10-25** (the user: "Could we integrate option with the ?& system? An option on a value would signal
+  'uninitialised'"): proposed `T?` on values with exactly ?&'s rules (null absent and the zero value, is null, narrowing
+  locals/params, x!, T flows into T?, nothing read through it unnarrowed; a flag beside the value); `T?` with T a
+  reference IS `T?&`. ASKED: (1) T? on values (rec yes); (2) no `T?` function results - errors are errors, and it avoids
+  the bare-`?` clash (rec yes); (3) also forbid `T?&` results for consistency, a change to what is built (rec yes).
