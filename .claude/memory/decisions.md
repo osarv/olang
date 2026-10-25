@@ -1027,3 +1027,11 @@ errors and documentation - generic `+` already works).
 **Asked 2026-10-25 (C interop):** QAS. `String.FromC(p, max)` has no form (nothing is reached through a type's name);
 built as `p.StringFromC(max)`, as `u.F64FromBits()`. Keep, or add type-level functions? In effect: the method form.
 Recommended: keep it until type-level functions are wanted for more than this.
+
+**QAS ANSWERED 2026-10-25 (the user: "Nah. I want to keep the namespaces to modules and objects"):** no type-level
+functions; `p.StringFromC(max)` stays. The user then: "It does sound like we should have several constructors tho no?"
+- **QAT ASKED 2026-10-25:** several constructors. Recommended: no language change - extra builders are ordinary
+  functions in the type's module ending in a call to the one constructor (`color.FromHex(t)`, Go's pattern, as
+  `time.Millis` already is); a module of several types names them for the type (`geom.RectFromCorners`); prelude types
+  keep input methods; `olang doc`/`explain`/lsp list a module's functions returning a type under that type as its
+  builders (godoc's grouping). In effect: nothing changed.
