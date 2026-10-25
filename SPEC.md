@@ -7259,7 +7259,9 @@ are two types.
 instantiated but never read as a `func-type` value (T2). A fully instantiated one is an ordinary
 value and may be used wherever a function value is expected. A generic function's **instance** is named by type
 arguments written after its name (`type-args`, G8), one for each variable its list introduces (G3), in that order -
-`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Called so, its variables
+`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Its error-set parameter
+(G1a) is given after `?` (`apply<I64, I64 ? ParseError>`) or not at all: a call then infers it as always, and a
+function value takes the empty set. Called so, its variables
 are what the type arguments say and nothing the arguments are (G9 binds none of them): each argument fits the
 instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
 constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a

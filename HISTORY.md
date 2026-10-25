@@ -24215,3 +24215,78 @@ seen with sets because explain prints the expanded set.
 
 **`make releasetest`** also runs `olang explain T6a` in the unpacked release, so a release whose SPEC.md is not beside
 `bin/` fails it.
+
+## Error-set parameters (G1a, QAH, G5, G8, G12, G16a, T31, T35b, M19d, R11, 2026-10-25)
+
+The user decided on 2026-10-18 ("If this make sense in general we do it in general yes") that generics range over
+error sets too: a list may end in `? E`, inferred from the function values and iterators passed, the empty set where
+nothing fallible binds it, monomorphized per set, never a stored error. What it is for: a helper taking a callback
+(`Fold`, `Sort`'s comparator, linalg's `Map`) could not take one that fails - a function type writes its set (R1b), so
+`fn(acc U, x T) U` was an infallible one and a lambda whose body tried something was an error - and an iterator that
+fails on its way (a file's lines) could not be an `Iterator<T>`, whose `Next` failed with `Exhausted` alone. An inferred
+set (`?` alone, R1a) did not answer either: it lets a body's own errors differ per instance, not a parameter's type.
+
+**Syntax.** A type parameter list's last item is `? E` (or the list is `<? E>`); a type argument list's last is `? A, B`
+- everything after the `?` up to `>` is the set, since nothing follows it (mine; a function type's set in a list is one
+item, L18c, but here no comma is ambiguous). A receiver's `? E` among its type's arguments introduces `E` as a bare name
+does (G3b). The parser stops a type parameter's constraint at `?`; the formatter needed nothing (it works on tokens).
+
+**What E is.** A variable of its list like a type variable (a `generic.varRow`), marked an error-set one
+(`Program.errVars`, by owner and index - kept apart from `varRow` so no construction of one changed). Where an error set
+is resolved, `E` is an entry of the list (`types.Kind.Var`); where a type argument is given, the argument is a set,
+`types.Kind.ErrSet` - its entries merged (R1c) and sorted canonically (by module and name, R1a's order; variables
+after), so one set is one type and G16a's identity is the set's. A type with an error-set parameter given none gets the
+empty set as its last argument, so `Iterator<I64>` is one type however it is written; the canonical text and the
+diagnostics leave the empty set out, and spell a set after `?`.
+
+**Substitution** splices: an error list naming `E` gets `E`'s set's entries where `E` stands, merged with the rest -
+`? E, Exhausted` with `E = {io.Error}` is `? io.Error, Exhausted`, with the empty set `? Exhausted`, and a list of `E`
+alone with the empty set is no list, so the function cannot fail (R7) and its call takes no `try`.
+
+**Binding (mine: the union).** Matching an error list naming the binding's `E` against a value's binds `E` to what the
+value fails with beyond the pattern's other entries, and a second match adds to it - two arguments never conflict over
+`E`, since each says what else the instance can fail with. This runs where function types unify (a callback), where
+named types' arguments unify (`Iterator<T ? E>` against `Iterator<I64 ? Bad>`), and - the part that makes iterators
+work - where G9c binds a constraint's variables through the bound type's methods: `Next() T ? E, Exhausted` against
+`Reader.Next() I64 ? Bad, Exhausted` binds `E = {Bad}`. An `E` left unbound is the empty set (a function's call, a
+generic constructor's G10c inference, a function value named with explicit arguments).
+
+**Lambdas.** A lambda's expected type naming an unbound `E` supplies no errors (D16a's rule for an unbound variable),
+so it infers its set from its body (D16b); the call then unions that into `E`. The expected type is built with `E`
+always open, even where an earlier argument bound it - else a lambda after a fallible iterator would be held to the
+iterator's set and refused its own errors. Once the instance is made, each such lambda is given, as a value and as its
+body's type, the set its parameter got (`lambdaErrs`): its codes are counted by that list (R6), as an inferred body's
+are by its settled one.
+
+**Satisfaction is "held by".** T31 always said a method's set is held by the trait's; `generic.meets` compared the
+lists for identity, which was the same thing only while every iterator wrote exactly `? Exhausted`. It is
+`ErrsHeld` now (an entry held by one of the same type whose words include its own), so an iterator that cannot fail
+meets `Iterator<I64 ? Bad>` too, and one failing with more than `Exhausted` does not meet `Iterator<I64>` (a check
+case). The constrained call is a direct one, so no code is recoded.
+
+**catch E.** A catch item naming the error-set parameter takes every entry of the set the instance binds it to - none
+for the empty set, a clause covering nothing in that instance, which R8 already allows in a generic's body.
+
+**std.** `Iterator<T ? E>`; Some/Every/Count/Fold/Map/Filter/ToList/Sum/Min/Max/MinBy/MaxBy take
+`<I Iterator<T ? E>, ... ? E>` and their callbacks `? E`, walking with `for x in try it` (a try covering nothing where `E`
+is empty); the adapters carry the set as a parameter of their types (`TakeIter<I, T ? E>`), their `Next` failing with
+`E, Exhausted` - an inferred `?` would have needed satisfaction to read a body's inferred set, which the generic layer
+cannot; the array helpers (`Some<? E>` ...) and `Sort`'s whole merge sort (its helpers `<T ? E>`, every comparison a
+`try`); List's and Vec's `Sort`, ListIter's overrides (which must keep their defaults' signatures, M19e); linalg's
+`Map/Map2/Map3/Mapped` and the `mapInto` family. A sort whose comparator fails stops there, the elements permuted.
+
+**Found on the way.** Section 8's alias analysis (`scope.aliasBlock`), which finds the hidden locals that are second
+names for a reference parameter, did not descend into a `for x in try p` - a try statement whose operand is the loop -
+so walking a receiver under `try` made the hidden cursor look like storage kept in the parameter's region, and the call
+`I64[].Iter().Min()` was refused by O17 once `Min` walked with `try`. And `check.iterShaped` read every error entry as a
+declared type (it crashed on the variable).
+
+**Explain** prints the list as written (`fn apply<T, U ? E>`) and an instance's set after `?` (`apply<I64, I64 ?
+Bad>`, the empty set left out); its constructor line looked for the first " ?" in the whole signature, which a result's
+type arguments now hold - it looks outside brackets.
+
+**Tests.** tests/errsetparams.olang (an own generic, the helpers with failing callbacks, a failing comparator, a
+fallible iterator walked, folded, adapted and passed to a constrained function, a struct type over an error set with
+`catch E`, a named set as the argument, explicit arguments; globals baked through fallible folds and an assert the
+evaluator decides, beside the run time); checks cases g1aerrvartype, g1atypevarerrs, g1aunwanted, g1auntried,
+g1aiternotmet.

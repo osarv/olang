@@ -488,6 +488,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
   exhaustiveness-checked and compiles only the chosen arm; inside it the variable is the concrete type.
 - **A literal default for a type-variable parameter is fitted per call (G18).**
+- **Error-set parameters (G1a, QAH, the user's decision 2026-10-18; built 2026-10-25).** A type's, trait's, function's
+  or method's list may end in `? E` (`type Iterator<T ? E> trait { mut Next() T ? E, Exhausted }`, `fn apply<T, U ?
+  E>(x T, f fn(x T) U ? E) U ? E`, `fn (a Array<T>&) Some<? E>(...)`); a receiver introduces one written as its type's
+  error-set argument (`fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted`). `E` stands only where an error set is
+  written - signatures, function types, trait methods, a type's error-set argument (`Iterator<I64 ? io.Error>`, a
+  named set too), catch items - and is spliced in where it stands; written as a type it is an error, and so is a type
+  variable written as a set. A call binds `E` to the **union** of what the function values and iterators matched against
+  it fail with (beyond the other items of its set; mine: a union never conflicts), to the empty set where nothing
+  fallible binds it - then the instance cannot fail and is called without `try`; a type's argument left out is the
+  empty set (`Iterator<I64>`). A lambda given for a parameter naming `E` infers its set from its body and is then
+  given the parameter's set (mine). Satisfaction is "held by" (T31 as written, which the code had as equality): a Next
+  failing with only `Exhausted` meets `Iterator<T ? Bad>`. `catch E` takes what the instance binds `E` to. Explicit type
+  arguments may give the set after `?` (`apply<I64, I64 ? Bad>`); left out, a call infers it and a value takes the empty
+  set (mine). std: `Iterator<T ? E>`; its helpers, adapters (`TakeIter<I, T ? E>` ...), an array's
+  `Some/Every/FindIndex/Count/Map/Filter/Fold/Sort`, List/Vec `Sort`, ListIter's overrides and linalg's
+  `Map/Map2/Map3/Mapped` fail with what their callbacks and iterators fail with. Not a stored error: no value holds one
+  (T20). Representation: `types.Kind.ErrSet` (a canonical, merged entry list) for an argument or binding, the variable
+  itself an entry of an error list until substituted. Not for a G10d constructor's own list (mine: no use yet). Found
+  on the way: section 8's alias analysis did not look inside `for x in try p` (a try statement), so a helper walking its
+  receiver under `try` was refused by O17 (`scope.aliasExpr`).
 
 ### Errors
 

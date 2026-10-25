@@ -5816,15 +5816,22 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
     # a method's own variables are those its list introduces that its receiver's type does not name (G12)
     at := c.P.OwnVarIndexes(f)
     np := at.Len()
-    if np == 0 {
+    # G1a: its error set given after "?", the last argument - else inferred, as a call's error-set variable always is
+    nt := generic.WrittenTypes(targs)
+    ev := c.P.ErrVarIndex(f)
+    if targs.Len() > nt and ev < 0 {
+        c.err(targs[nt].Span(), msgs.ErrSetArgUnwanted(tn))
+        return Array<types.TypeId>(0)
+    }
+    if np == 0 and nt > 0 {
         c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
         return Array<types.TypeId>(0)
     }
-    if np != targs.Len() {
-        c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, targs.Len()))
+    if np != nt {
+        c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, nt))
         return Array<types.TypeId>(0)
     }
-    width I64 = 0
+    width I64 = ev + 1
     for k in at {
         if k + 1 > width { width = k + 1 }
     }
@@ -5835,6 +5842,7 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
         if r == types.UnknownT { return Array<types.TypeId>(0) }
         out[at[i]] = r
     }
+    if targs.Len() > nt { out[ev] = c.P.ErrsArgOf(c.fr().Ctx, targs[nt]) }
     return out
 }
 
@@ -5855,7 +5863,12 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>&
             c.err(sp, msgs.GenericNotAValue(c.text(d.Name)))
             return c.unknown(sp)
         }
-        args = c.P.T.List(explicit)
+        # G1a: an error set not given is the empty set
+        given := Array<types.TypeId>(explicit.Len())
+        for i in range explicit.Len() { given[i] = explicit[i] }
+        ev := c.P.ErrVarIndex(f)
+        if ev >= 0 and given[ev] == types.UnknownT { given[ev] = c.P.ErrSetOf(types.ListId(0)) }
+        args = c.P.T.List(given)
         if not c.bound(owner, args, sp) { return c.unknown(sp) }
         if c.P.FnTooDeep(f, args, c.fnNameAt(f)) { return c.unknown(sp) }   # G17
     }

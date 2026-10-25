@@ -109,6 +109,11 @@ fn typeArgs(c mut typecheck.Checker&, args types.ListId) String {
     b.PushChar('<')
     k I64 = 0
     for a in c.P.T.Items(args) {
+        # QAH: an error-set argument after "?", left out where it is the empty set
+        if c.P.T.KindOf(a) == types.Kind.ErrSet {
+            if c.P.T.ErrSetItems(a) != types.ListId(0) { b.Push($(" ? " if k > 0 else "? ") $c.Ty(a)) }
+            continue
+        }
         if k > 0 { b.Push(", ") }
         b.Push(c.Ty(a))
         k++
@@ -158,6 +163,11 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
     b.PushChar('<')
     for i in range skip, n {
         v := c.P.VarAt(owner, i)
+        # G1a: an error-set parameter closes the list after "?"
+        if c.P.ErrVarAt(owner, i) {
+            b.Push($(" ? " if i > skip else "? ") $c.P.L.Names.Text(v.Name))
+            continue
+        }
         if i > skip { b.Push(", ") }
         b.Push(c.P.L.Names.Text(v.Name))
         if v.Const != types.UnknownT { b.Push($" " $c.Ty(v.Const)) }
@@ -324,8 +334,15 @@ fn firstItemEndAll(s String&) I64 {
 
 # " ? E" of what follows a constructor's parameters, nothing where it cannot fail
 fn errorsAfter(rest String&) String {
-    at := try rest.Find(" ?") catch default -1
-    return "" if at < 0 else rest[at:]
+    # outside every bracket: a result's type arguments may hold an error set of their own (QAH)
+    depth I64 = 0
+    for i in range rest.Len() {
+        ch := rest[i]
+        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if depth == 0 and ch == '?' and i > 0 and rest[i - 1] == ' ' { return rest[i - 1:] }
+    }
+    return ""
 }
 
 # a struct's fields, as its constructor assembles them (C2a)

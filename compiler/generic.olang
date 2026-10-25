@@ -434,6 +434,18 @@ fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Bindi
     return p.bind(b, vi, p.ErrSetOf(p.T.List(rest.ToArray())), false, false)
 }
 
+# the index of a function's error-set variable among its signature's (G1a), -1 for none
+fn (p mut Program&) ErrVarIndex(f I64) I64 {
+    owner := FnOwner(f)
+    p.Sig(f)
+    for i in range p.VarCount(owner) {
+        if p.ErrVarAt(owner, i) { return i }
+    }
+    return -1
+}
+
+fn (p mut Program&) ErrsArgOf(c Context&, t ast.TypeRef&) types.TypeId { return p.errsArg(c, t) }
+
 fn (p mut Program&) UnifyErrors(pat types.ListId, actual types.ListId, b mut Binding&) Bool { return p.unifyErrs(pat, actual, b) }
 
 # whether an error set's entry is held by one of a list's (R1c: the same error type, its words among theirs)
@@ -2345,6 +2357,7 @@ fn (p mut Program&) OwnVarIndexes(f I64) List<I64> {
         }
         for tp in row.F.TypeParams {
             if row.F.Recv is not null and mentionsName(row.F.Recv!.Ty, tp.Name) { continue }
+            if tp.ErrSet { continue }   # G1a: an error-set parameter is given after "?", or inferred
             for i, n in ns {
                 if n == tp.Name { out.Push(i) }
             }
