@@ -1221,3 +1221,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   any read - no zero value needed, so types with no zero value (effectful constructors, never-null references) could be
   declared first and filled later; it came up with value options ("an option on a value would signal uninitialised").
   In effect: zero values (D13c).
+- Clause-only error names worked out 2026-10-25 (the user: "go through this properly ... What is going to be built?
+  How should it interact with generics? Can we try on an error variable? We can't right, only on the unions"):
+  `catch os.Error e` / `catch A, B e` / `catch e`; e's type the set the clause took; inside the clause (block or
+  default) only: `$e`, `e == Word`, `e == Type` with narrowing, `match e` (exhaustive over what the clause took),
+  `error e` re-raises (checked against the function's set); no assign/pass/store/capture (error naming `$e`); no
+  generics involvement (error-set parameters `<T ? E>` are separate); `try e` an error naming `error e`; e is the
+  32-bit code in a local, the evaluator binds it alike. ASKED to take it as the design.
