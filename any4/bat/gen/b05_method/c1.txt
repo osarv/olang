@@ -1,4 +1,0 @@
-b05_method.olang:29:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   29 |         g.p = h.mkm&t(i * 11 + 1)
-      |             ^
-compilation failed with 1 error

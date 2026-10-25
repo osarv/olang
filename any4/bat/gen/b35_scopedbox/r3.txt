@@ -1,3 +1,0 @@
-lab text0-0
-lab text1-7
-lab text2-14

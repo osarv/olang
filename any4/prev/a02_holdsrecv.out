@@ -1,0 +1,16 @@
+== build -debug -sanitize
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== build
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== interpret
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+status 1

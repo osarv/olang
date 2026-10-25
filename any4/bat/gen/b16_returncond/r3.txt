@@ -1,2 +1,0 @@
-returncond 1
-returncond 12

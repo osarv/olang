@@ -1,4 +1,0 @@
-r16_anybox.olang:14:12: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
-   14 |     put := fn() { k.s = s }
-      |            ^~
-compilation failed with 1 error

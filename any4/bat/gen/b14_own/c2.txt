@@ -1,4 +1,0 @@
-b14_own.olang:27:15: error: expected end of line, found 'mut'
-   27 |         o own mut P& = mko&t(i * 11 + 1)
-      |               ^~~
-compilation failed with 1 error

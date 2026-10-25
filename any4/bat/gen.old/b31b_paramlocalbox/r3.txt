@@ -1,1 +1,0 @@
-olang interpret: b31b_paramlocalbox.olang:11: it uses storage after the scope it was made in closed

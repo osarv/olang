@@ -1,0 +1,13 @@
+== build -debug -sanitize
+c04i_scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.p = mkp&t(i * 11 + 1)
+      |             ^
+compilation failed with 1 error
+== build
+c04i_scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.p = mkp&t(i * 11 + 1)
+      |             ^
+compilation failed with 1 error
+== interpret
+field 12
+status 0

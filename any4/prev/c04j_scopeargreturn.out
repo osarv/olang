@@ -1,0 +1,14 @@
+== build -debug -sanitize
+c04j_scopeargreturn.olang:7:16: error[O10d]: this value lives in this function's own scope, which closes first
+    7 |     return mkp&t(i * 11 + 1)
+      |                ^
+compilation failed with 1 error
+== build
+c04j_scopeargreturn.olang:7:16: error[O10d]: this value lives in this function's own scope, which closes first
+    7 |     return mkp&t(i * 11 + 1)
+      |                ^
+compilation failed with 1 error
+== interpret
+1
+12
+status 0

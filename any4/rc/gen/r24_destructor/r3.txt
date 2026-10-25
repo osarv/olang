@@ -1,2 +1,0 @@
-x Zbc1
-r24_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value

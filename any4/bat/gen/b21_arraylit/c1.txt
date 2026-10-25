@@ -1,4 +1,0 @@
-b21_arraylit.olang:27:25: error[O25c]: the array outlives what this element refers to - build the element where the array goes
-   27 |         out.Push(P&[mkp&t(i * 11 + 1)])
-      |                         ^
-compilation failed with 1 error

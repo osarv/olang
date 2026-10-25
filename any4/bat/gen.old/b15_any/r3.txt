@@ -1,1 +1,0 @@
-olang interpret: b15_any.olang:9: it uses storage after the scope it was made in closed

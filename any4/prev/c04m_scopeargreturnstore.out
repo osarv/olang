@@ -1,0 +1,21 @@
+== build -debug -sanitize
+c04m_scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         r := put(h, i)
+      |              ^~~
+c04m_scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
+    8 |     h.p = mkp&return(i * 11 + 1)
+      |     ^
+compilation failed with 1 error
+== build
+c04m_scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         r := put(h, i)
+      |              ^~~
+c04m_scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
+    8 |     h.p = mkp&return(i * 11 + 1)
+      |     ^
+compilation failed with 1 error
+== interpret
+r0
+r1
+field 12
+status 0

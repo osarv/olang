@@ -1,4 +1,0 @@
-b07_lambda.olang:28:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
-   28 |         h.p = f&t(i * 11 + 1)
-      |             ^
-compilation failed with 1 error

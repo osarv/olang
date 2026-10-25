@@ -1,1 +1,0 @@
-olang interpret: b19_ctorarg.olang:30: it uses storage after the scope it was made in closed

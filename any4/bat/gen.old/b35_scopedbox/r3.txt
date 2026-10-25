@@ -1,1 +1,0 @@
-olang interpret: b35_scopedbox.olang:11: it uses storage after the scope it was made in closed

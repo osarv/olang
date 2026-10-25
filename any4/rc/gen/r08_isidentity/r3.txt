@@ -1,1 +1,0 @@
-olang interpret: r08_isidentity.olang:17: it uses storage after the scope it was made in closed

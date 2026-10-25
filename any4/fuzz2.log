@@ -1,1 +1,2 @@
 fuzz scope: 600 programs, 4422 scenarios run, 7578 refused by the compiler, 0 findings
+fuzz: 200 programs, 6000 cases (6000 globals baked while compiling), 0 findings

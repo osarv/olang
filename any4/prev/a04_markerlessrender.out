@@ -1,0 +1,16 @@
+== build -debug -sanitize
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== build
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== interpret
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+status 1

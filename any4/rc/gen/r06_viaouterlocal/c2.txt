@@ -1,7 +1,0 @@
-r06_viaouterlocal.olang:11:11: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |         r = s
-      |           ^
-r06_viaouterlocal.olang:12:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   12 |         k.s = r
-      |             ^
-compilation failed with 2 errors

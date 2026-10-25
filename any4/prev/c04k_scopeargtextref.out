@@ -1,0 +1,25 @@
+== build -debug -sanitize
+c04k_scopeargtextref.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.s = mkt&t(i)
+      |             ^
+c04k_scopeargtextref.olang:12:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         l.Push(mkt&t(i + 10))
+      |           ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 2 errors
+== build
+c04k_scopeargtextref.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.s = mkt&t(i)
+      |             ^
+c04k_scopeargtextref.olang:12:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         l.Push(mkt&t(i + 10))
+      |           ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+== interpret
+text1-7
+text10-70
+text11-77
+status 0

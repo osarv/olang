@@ -1,2 +1,0 @@
-run: k.s Qbc1
-r18c_passlimitassert.olang:36: assertion failed: k.s changed when the caller wrote its own value

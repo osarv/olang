@@ -1,0 +1,18 @@
+# M21 with E10a/E10b: Eq and Hash declared for one instance of a generic type only (Box<I64>) - the compiler's
+# "does this type declare Eq/Hash" (generic.ownMethod, declaresEq) asks the generic declaration, not the instance,
+# so Box<Bool>, which declares neither, is taken to declare Eq: no supplied Hash, no Map key
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<I64>&) Eq(o Box<I64>&) Bool { return b.v % 10 == o.v % 10 }
+fn (b Box<I64>&) Hash() I64 { return b.v % 10 }
+fn main() {
+    m := Map<Box<I64>, I64>()
+    m.Put(Box<I64>(13), 1)
+    m.Put(Box<I64>(23), 2)
+    say($m.Len() " " $(Box<I64>(13) == Box<I64>(23)))
+    say($(Box<Bool>(true) == Box<Bool>(true)) " " $Box<Bool>(true).Hash())
+    n := Map<Box<Bool>, I64>()
+    n.Put(Box<Bool>(true), 1)
+    say($n.Len())
+}

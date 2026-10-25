@@ -1,2 +1,0 @@
-borrowedresult 1
-borrowedresult 12

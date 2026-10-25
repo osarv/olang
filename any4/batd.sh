@@ -1,6 +1,6 @@
 #!/bin/bash
-# bat.sh OLANG [NAME...]: each bat/NAME.olang (+ common.inc) built -debug -sanitize, built plainly, and interpreted; a
-# one-line summary per mode, the full output in bat/out/NAME.out
+# batd.sh OLANG [NAME...]: each $BDIR/NAME.olang (bat/ by default; + common.inc) built -debug -sanitize, built plainly,
+# and interpreted; a one-line summary per mode, the full output in $BDIR/out$SFX/NAME.out (SFX=.old for the old compiler)
 B=${BDIR:-/home/user/review/any4/bat}
 O=${1:?pass the compiler}; shift
 names=("$@"); [ ${#names[@]} -eq 0 ] && names=($(cd $B && ls *.olang | sed 's/\.olang$//'))

@@ -1,0 +1,9 @@
+== build -debug -sanitize
+Qtem1 List<String&>["item1", "item2"]
+status 0
+== build
+Qtem1 List<String&>["item1", "item2"]
+status 0
+== interpret
+Qtem1 List<String&>["item1", "item2"]
+status 0

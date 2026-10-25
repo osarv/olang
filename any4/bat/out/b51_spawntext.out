@@ -1,0 +1,24 @@
+== b51_spawntext
+  san:    exit 0 task text1-7|task text23-161|task text34-238|task text12-84|done|
+  O3:     exit 0 task text1-7|task text12-84|task text23-161|task text34-238|done|
+  interp: exit 0 task text1-7|task text12-84|task text23-161|task text34-238|done|
+--- compile (-debug -sanitize)
+built ./build/b51_spawntext.debug.san
+--- run san
+task text1-7
+task text23-161
+task text34-238
+task text12-84
+done
+--- run O3
+task text1-7
+task text12-84
+task text23-161
+task text34-238
+done
+--- interpret
+task text1-7
+task text12-84
+task text23-161
+task text34-238
+done

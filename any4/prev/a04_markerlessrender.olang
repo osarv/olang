@@ -1,0 +1,27 @@
+# T32: what a List<G> with G bound to "any Gen" (the any's type, no marker) does: rendered, compared, its elements
+# called - built, interpreted
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Step() I64 {
+    u.at += 1
+    return u.n * 100 + u.at
+}
+type Gen trait {
+    mut Step() I64
+}
+fn (g mut G&) Twice<G Gen>() List<G>& {
+    l := List<G>()
+    l.Push(g)
+    l.Push(g)
+    return l
+}
+fn main() {
+    a mut any Gen& = Ups(1)
+    l := a.Twice()
+    say($l.Len())
+    say($l)
+    say($(l[0] == l[1]))
+    say($a.Step())
+}

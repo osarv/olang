@@ -1,0 +1,13 @@
+== b53_defaultscoped
+  san:    refused: b53_defaultscoped.olang:23:38: error[E25, O1b]: 'q' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
+  O3:     refused
+  interp: exit 0 defaultscoped 5|
+--- compile (-debug -sanitize)
+b53_defaultscoped.olang:23:38: error[E25, O1b]: 'q' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
+   23 | fn g(h mut H&, q String&, p P& = mkp&q(5)) { h.p = p }
+      |                                      ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+defaultscoped 5

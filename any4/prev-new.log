@@ -1,0 +1,280 @@
+##### a02_holdsrecv
+== build -debug -sanitize
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== build
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== interpret
+a02_holdsrecv.olang:25:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   25 |     l := a.Twice()
+      |            ^~~~~
+##### a04_markerlessrender
+== build -debug -sanitize
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== build
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
+== interpret
+a04_markerlessrender.olang:23:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   23 |     l := a.Twice()
+      |            ^~~~~
+##### c03_retshared
+== build -debug -sanitize
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0
+== build
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0
+== interpret
+value: h.s abc1 x Qbc1
+any: h2.s abc2
+status 0
+##### c03b_retsharedbake
+== build -debug -sanitize
+abc1 abc2
+abc1 abc2
+status 0
+== build
+abc1 abc2
+abc1 abc2
+status 0
+== interpret
+abc1 abc2
+abc1 abc2
+status 0
+##### c03c_retsharedassert
+== build -debug -sanitize
+asserted abc2, run time gives abc2
+status 0
+== build
+asserted abc2, run time gives abc2
+status 0
+== interpret
+asserted abc2, run time gives abc2
+status 0
+##### c03d_retsharedlog
+== build -debug -sanitize
+Qtem1 List<String&>["item1", "item2"]
+status 0
+== build
+Qtem1 List<String&>["item1", "item2"]
+status 0
+== interpret
+Qtem1 List<String&>["item1", "item2"]
+status 0
+##### c04_scopearg
+== build -debug -sanitize
+pushed 6
+pushed 6
+pushed 6
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== build
+pushed 6
+pushed 6
+pushed 6
+lab text0-0
+lab text1-7
+##### c04b_scopeargkinds
+== build -debug -sanitize
+pushed 6
+pushed 6
+TEXT0-0
+TEXT0-0
+FALL0-0
+TEXT0-0
+GEN0-0
+TEXT1-7
+TEXT1-7
+FALL1-7
+TEXT1-7
+GEN1-7
+status 0
+##### c04c_scopeargstruct
+== build -debug -sanitize
+c04c_scopeargstruct.olang:14:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         xs.Push(mkp&t(i))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+== build
+c04c_scopeargstruct.olang:14:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         xs.Push(mkp&t(i))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+##### c04g_scopeargbuilt
+== build -debug -sanitize
+c04g_scopeargbuilt.olang:9:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    9 |         xs.Push(mkp&t(i * 11))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+== build
+c04g_scopeargbuilt.olang:9:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    9 |         xs.Push(mkp&t(i * 11))
+      |            ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+##### c04i_scopeargfield
+== build -debug -sanitize
+c04i_scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.p = mkp&t(i * 11 + 1)
+      |             ^
+compilation failed with 1 error
+== build
+c04i_scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.p = mkp&t(i * 11 + 1)
+      |             ^
+compilation failed with 1 error
+== interpret
+field 12
+status 0
+##### c04j_scopeargreturn
+== build -debug -sanitize
+c04j_scopeargreturn.olang:7:16: error[O10d]: this value lives in this function's own scope, which closes first
+    7 |     return mkp&t(i * 11 + 1)
+      |                ^
+compilation failed with 1 error
+== build
+c04j_scopeargreturn.olang:7:16: error[O10d]: this value lives in this function's own scope, which closes first
+    7 |     return mkp&t(i * 11 + 1)
+      |                ^
+compilation failed with 1 error
+== interpret
+1
+12
+status 0
+##### c04k_scopeargtextref
+== build -debug -sanitize
+c04k_scopeargtextref.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.s = mkt&t(i)
+      |             ^
+c04k_scopeargtextref.olang:12:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         l.Push(mkt&t(i + 10))
+      |           ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 2 errors
+== build
+c04k_scopeargtextref.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.s = mkt&t(i)
+##### c04l_scopeargreturnmark
+== build -debug -sanitize
+r0
+r1
+r2
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== build
+r0
+r1
+r2
+lab text0-0
+lab text1-7
+##### c04m_scopeargreturnstore
+== build -debug -sanitize
+c04m_scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         r := put(h, i)
+      |              ^~~
+c04m_scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
+    8 |     h.p = mkp&return(i * 11 + 1)
+      |     ^
+compilation failed with 1 error
+== build
+c04m_scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         r := put(h, i)
+      |              ^~~
+c04m_scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
+    8 |     h.p = mkp&return(i * 11 + 1)
+##### m05_unknowncascade
+== build -debug -sanitize
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+##### m08_ownmethod
+== build -debug -sanitize
+1 true
+true 7046029250330210782
+1
+status 0
+== build
+1 true
+true 7046029250330210782
+1
+status 0
+== interpret
+1 true
+true 7046029250330210782
+1
+##### x01_nestedconv
+== build -debug -sanitize
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+x01_nestedconv.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+##### x01b_nestedconvfill
+== build -debug -sanitize
+x01b_nestedconvfill.olang:3:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    3 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== build
+x01b_nestedconvfill.olang:3:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    3 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+== interpret
+x01b_nestedconvfill.olang:3:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    3 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+##### x02_nomatchonly
+== build -debug -sanitize
+100
+status 0
+== build
+100
+status 0
+== interpret
+100
+status 0

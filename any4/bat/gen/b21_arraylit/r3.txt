@@ -1,2 +1,0 @@
-arraylit 1
-arraylit 12

@@ -1,1 +1,0 @@
-olang interpret: b05_method.olang:32: it uses storage after the scope it was made in closed

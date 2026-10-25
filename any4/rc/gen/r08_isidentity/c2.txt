@@ -1,4 +1,0 @@
-r08_isidentity.olang:10:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   10 |     k.s = s
-      |         ^
-compilation failed with 1 error
