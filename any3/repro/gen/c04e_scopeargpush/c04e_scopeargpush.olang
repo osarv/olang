@@ -1,0 +1,30 @@
+import "std/io"
+# a scope argument (E25) on a temporary passed to Push - no any: is it judged against where Push keeps it?
+type P struct(n I64) { n }
+fn main() {
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(P&t(i * 11))
+    }
+    assert churn() > 0
+    for x in xs { say($x.n) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

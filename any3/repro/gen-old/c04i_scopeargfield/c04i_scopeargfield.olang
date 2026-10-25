@@ -1,0 +1,33 @@
+import "std/io"
+# the E25 hole: a built result given a scope argument naming a loop body's local, assigned to an outer struct's field
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    h := H(null)
+    xs := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mkp&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("field " $h.p!.n)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

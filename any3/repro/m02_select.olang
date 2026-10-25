@@ -1,0 +1,27 @@
+# M21: of a generic type's methods of one name, one for the instance exactly wins over the one written with variables -
+# the same whichever way the call is reached: directly, from a generic function, from the generic type's own method,
+# from generic code constrained by a trait, through an any's table, through a trait's default, while compiling
+type D trait {
+    Describe() String
+}
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<T>&) Describe() String { return "generic" }
+fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+fn (b Box<T>&) Outer() String { return "outer:" $b.Describe() }
+fn viaGen<T>(b Box<T>&) String { return b.Describe() }
+fn viaTrait<X D>(x X&) String { return x.Describe() }
+fn (x I&) Twice<I D>() String { return $x.Describe() "+" $x.Describe() }
+fn viaAny(x any D&) String { return x.Describe() }
+fn all(b Box<I64>&, s Box<String&>&) String {
+    a1 any D&b = b
+    a2 any D&s = s
+    return $b.Describe() "|" $viaGen(b) "|" $b.Outer() "|" $viaTrait(b) "|" $viaAny(b) "|" $b.Twice() "|" $a1.Twice() "||" $s.Describe() "|" $viaGen(s) "|" $s.Outer() "|" $viaTrait(s) "|" $viaAny(s) "|" $a2.Describe()
+}
+fn run() String { return all(Box<I64>(4), Box<String&>("s")) }
+G String = run()
+fn main() {
+    say(G)
+    say(run())
+}

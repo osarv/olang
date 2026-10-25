@@ -1,0 +1,12 @@
+== build -debug -sanitize
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+status 0
+== build
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+status 0
+== interpret
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+exact 4|exact 4|outer:exact 4|exact 4|exact 4|exact 4+exact 4|exact 4+exact 4||generic|generic|outer:generic|generic|generic|generic
+status 0

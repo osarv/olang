@@ -1,0 +1,15 @@
+== build -debug -sanitize
+lit literal
+lit literal
+byref gener slice field global mutglob
+status 0
+== build
+lit literal
+lit literal
+byref gener slice field global mutglob
+status 0
+== interpret
+lit literal
+lit literal
+byref gener slice field global mutglob
+status 0

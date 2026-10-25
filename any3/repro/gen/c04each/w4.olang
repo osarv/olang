@@ -1,0 +1,47 @@
+import "std/io"
+# c04's hole through each shape anyItemNew takes as new: a plain String, a conditional's arm, a try's value, a catch
+# default, a generic call, a conversion of a call - each call's result put in a loop body's scope by a scope argument
+type Up trait {
+    ToUpper() String
+}
+error Oops {
+    BAD
+}
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn mkf(i I64) String ? Oops {
+    if i > 100 { error Oops.BAD }
+    return "fall" $i "-" $(i * 7)
+}
+fn bad(i I64) String ? Oops {
+    if i < 100 { error Oops.BAD }
+    return "never"
+}
+fn mkg<T>(x T, i I64) String { return "gen" $i "-" $(i * 7) }
+fn main() {
+    xs := List<any Up&>()
+    for i in range 2 {
+        t := "inner" $i
+        xs.Push(try bad(i) catch default mk&t(i))
+        say("pushed " $t.Len())
+    }
+    assert churn() > 0
+    for x in xs { say(x.ToUpper()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}
