@@ -23713,7 +23713,7 @@ numbers), callees sharing a parameter's scope (`h.Add(s)`, `h.Add(s[0:2])`, `s.A
 conditionals, matches and catch defaults of parameters, and conversions to a type over `String` (returned, declared and
 written), the second-name ones checked against a baked global. Seeds 1-80: 67 findings on d4ed05d (10 disagreements
 between -d -s and -i, 41 uses after a scope closed `-i` stopped on, 16 failed self-checks), none after; seeds 1-240 on
-the final compiler: FUZZFINAL.
+the final compiler (1,463 scenarios run), none.
 
 ## The std naming pass (2026-10-24)
 
