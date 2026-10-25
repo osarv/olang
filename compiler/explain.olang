@@ -83,6 +83,13 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
     decl := c.P.FnDecl(f)
     name := $c.P.L.Names.Text(decl.Name) $typeVars(c, generic.FnOwner(f), receiverVars(c, f))
     text := sigOf(c, named(c, sig, decl.Recv, decl.S.Params), body)
+    if c.P.IsGenerator(f) {
+        # D18: its result as written, the Generator a call gives said beside it
+        g := c.Ty(c.P.T.Result(sig))
+        if text.EndsWith(g) and g.StartsWith("Generator") {
+            text = $text[:text.Len() - g.Len()] "Iterator" $g[9:] "   # a generator: a call gives a " $g
+        }
+    }
     lead := "extern fn " if c.P.FnIsExtern(f) else "fn "
     inside := text[3:]     # past "fn("
     if decl.Recv is null { return $lead $name "(" $inside }

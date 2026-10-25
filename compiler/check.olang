@@ -4092,7 +4092,9 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     op typed.Place&c = typed.Place.Local(sp, ot, typed.LocalId(I32(outer)))
     it := ot
     ox typed.Expr?&c = null
-    if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT {
+    # a generator's Next holds a copy of a value array it is given, made where the generator lives (D18b): it is walked
+    # after the call that gave it has returned
+    if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT and not fr.Gen {
         it = c.P.T.Ref(ot, types.ReadOnly)
         ox = typed.Expr.Borrow(sp, it, op)
     } else {

@@ -1,0 +1,9 @@
+# check: fail error[D18a]: a generator gives its values by 'yield' - 'return' ends it and takes none
+# D18a: a generator's return ends its walk and takes no value
+fn f() Iterator<I64> {
+    yield 1
+    return 2
+}
+
+fn main() ? {
+}

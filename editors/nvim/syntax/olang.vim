@@ -4,7 +4,7 @@ if exists("b:current_syntax")
 endif
 
 syn keyword olangKeyword fn type struct enum trait extends import test extern destruct
-syn keyword olangStatement return break continue error defer assert unreachable noreturn spawn join
+syn keyword olangStatement return break continue error defer assert unreachable noreturn spawn join yield
 syn keyword olangConditional if else match case nomatch
 syn keyword olangRepeat for in range do
 syn keyword olangException try catch checked default

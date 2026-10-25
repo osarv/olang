@@ -1,0 +1,15 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# D18b: a generator holds its arguments for as long as it is walked - it may not outlive them
+fn chars(t String&) Iterator<Char> {
+    for c in t { yield c }
+}
+
+fn main() ? {
+    g := chars("init")
+    {
+        s := $5 "abc"
+        g = chars(s)
+    }
+    for c in g {
+    }
+}

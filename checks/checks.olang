@@ -40,7 +40,7 @@ fn workers() I64 {
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
 Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "landing", "cgreview", "vechandle", "testends"
-                     "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "runfile"
+                     "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
@@ -438,6 +438,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "capscope" { try capscope(r) }
         case "strheld" { try strheld(r) }
         case "spawnerr" { try spawnerr(r) }
+        case "generators" { try generators(r) }
         case "frameenv" { try frameenv(r) }
         case "testends" { try testends(r) }
         nomatch {
@@ -1361,6 +1362,20 @@ fn spawnerr(r mut report&) ? Failed {
     # built plainly the error ends with the hint, built -d and interpreted with its trace (S18d)
     try r.expect(sh(dir, "cmp -s tasks.want b.txt && cmp -s tasks.d.want d.txt && cmp -s d.txt i.txt") == 0, "tasks output"
                  dir)
+}
+
+# D18: generators walked as built (an LLVM coroutine), built -d -s (where a use after a scope closed stops the program)
+# and interpreted (the evaluator's suspended frames) - the same values, the same destructors run at the same points
+test "generators agree built, sanitized and interpreted" { assert passed("generators") }
+
+fn generators(r mut report&) ? Failed {
+    dir := fresh("generators")
+    os.Run("cp checks/fixtures/generators/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build walks.olang > out.txt 2>&1 && ./build/walks > b.txt 2>&1") == 0, "walks", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize walks.olang > out.txt 2>&1") == 0, "walks -d -s", dir)
+    try r.expect(sh(dir, "./build/walks.debug.san > d.txt 2>&1") == 0, "walks -d -s run", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret walks.olang > i.txt 2>&1") == 0, "walks -i", dir)
+    try r.expect(sh(dir, "cmp -s walks.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "walks output", dir)
 }
 
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at

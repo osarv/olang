@@ -1,0 +1,77 @@
+# D18: generators - a generic one, one over text, a method, scopes dropped part way, nested walks, a copy, a field, an
+# any - printed built, built -d -s and interpreted, all three alike
+import "std/io"
+
+type Res struct(id I64) {
+    id
+} destruct {
+    try io.Println("drop " $id) catch { }
+}
+
+fn repeat<T>(x T, n I64) Iterator<T> {
+    for i in range n { yield x }
+}
+
+fn slices(t String&) Iterator<String> {
+    at I64 = 0
+    for k in range t.Len() {
+        if t[k] == ',' {
+            yield $t[at:k]
+            at = k + 1
+        }
+    }
+    yield $t[at:]
+}
+
+fn (l List<T>&) Twice() Iterator<T> {
+    for x in l {
+        yield x
+        yield x
+    }
+}
+
+fn guarded(n I64) Iterator<I64> {
+    for i in range n {
+        r := Res(i)
+        yield r.id
+    }
+}
+
+fn nested(n I64) Iterator<I64> {
+    for x in guarded(n) {
+        for y in repeat(x, 2) { yield 10 * x + y }
+    }
+}
+
+Total I64 = repeat(3, 4).Sum()
+
+type Holder struct(g Generator<I64>) {
+    g
+}
+
+fn main() ? {
+    try io.Println("total " $Total)
+    for s in slices("a,bb,,ccc") { try io.Println("[" $s "]") }
+    l := List<I64>()
+    l.Push(1)
+    l.Push(2)
+    for x in l.Twice() { try io.Println($x) }
+    {
+        g := guarded(10)
+        a := try g.Next() catch default -1
+        b := try g.Next() catch default -1
+        try io.Println("got " $a " " $b)
+    }
+    try io.Println("after")
+    for z in nested(2) { try io.Println($z) }
+    h := Holder(repeat(7, 2))
+    c := h.g
+    x1 := try h.g.Next() catch default -1
+    x2 := try c.Next() catch default -1
+    x3 := try c.Next() catch default -1
+    try io.Println($x1 " " $x2 " " $x3)
+    a mut any Iterator<I64>& = repeat(5, 3)
+    n I64 = 0
+    for v in a { n += v }
+    try io.Println("any " $n)
+}

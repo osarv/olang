@@ -141,7 +141,7 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join    defer
+trait     spawn   join    defer   yield
 import    test    destruct
 unreachable
 extern    default
@@ -1441,6 +1441,9 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 left - `m.Keys().ToList()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
 (G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
 `Chain`) fail as the iterators they wrap do.
+The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
+`next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
+second name for the same walk, as a `List`'s copy is the same list.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }`; and
@@ -1971,6 +1974,59 @@ lasts until the join.
 **D10.** A function's body is a block (D7); control leaving the block without an explicit `return`
 is equivalent to a bare `return` with no value, which is only valid when the function declares no
 `ret-type`.
+
+### 3.4.2 Generators
+
+**D18 (generators).** A function whose result is written `Iterator<T ? E>` (T35b) and whose body holds a `yield`
+(§6.10) - its own: one in a lambda written in it is the lambda's - is a **generator**. Calling it runs none of its body:
+it gives a `Generator<T ? E>`, a value whose `Next()` runs the body on from where it last stopped to its next `yield`,
+whose value that `Next()` gives. `Iterator<T ? E>` is where the declaration says what its caller is given; the
+`Generator<T ? E>` it stands for is the call's type (`g := evens(10)` declares one; a field holds one as
+`Generator<I64>`). A generator may be a method, and generic.
+
+```
+fn evens(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i += 2
+    }
+}
+
+for x in evens(10) { ... }        # 0 2 4 6 8
+total := evens(10).Sum()          # 20
+```
+
+Its errors are its `Next()`'s: `E`, written in its result (`Iterator<String ? io.Error>`), and `Exhausted` - an error
+a `try` in its body lets out ends it as its end does, `Exhausted` among them, so `a := try it.Next()` in a generator
+over another iterator ends the walk where that one ends. A `?` after its result is a compile-time error naming
+`Iterator<T ? E>`. Its parameters are its own locals from its first `Next()` on: set from the arguments when it is
+called, written as a function's are. Its contract's requirements (D17) are checked when it is called. A function whose
+result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a trait is no type.
+
+**D18a (how a generator ends).** Its body's end, and a `return` - which takes no value, a `return v` being a
+compile-time error - end the walk: that `Next()` fails with `Exhausted`, and so does every `Next()` after it. An error
+leaving its body ends it the same way: that `Next()` fails with the error, every one after it with `Exhausted`.
+
+**D18b (where a generator's storage is).** A generator's storage - its locals, what its body builds in its blocks, the
+scopes it has open while it is stopped - is made where the generator lands, as a function value's environment is
+(D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
+as long as it is walked. A walk stopped part way and never finished is dropped with the scope it lives in: the scopes
+it holds open close then, innermost first, their destructors running (O15). The value a `yield` gives is built where
+that `Next()`'s result goes, which no local of the generator outlives: `&return` in a generator is a compile-time error,
+and no local is moved into the result scope (O26a) - a yielded local whose references are the generator's own storage
+is O26's error, and the value to yield is a copy built where it goes (`$x`, `x.Clone()`). A value array yielded is
+copied there (T7b).
+
+**D18c (what a generator may yield).** A yielded reference is judged as a returned one (O13, O14): new storage, built
+where the `Next()`'s result goes, or storage that outlives every place a `Next()` result may go. A reference into what
+the generator's arguments refer to (`yield t[a:b]` of a parameter `t String&`) is a compile-time error (T22a: a call
+through the `Next` it is cannot show it outlives where its result goes) - yield a copy. Values (`Iterator<String>`,
+`Iterator<I64>`) are the caller's own.
+
+**D18d (a generator's cost).** A `Next()` is a call through a function value that resumes the body where it stopped -
+no thread, no stack of its own, no allocation per value: the generator's storage is made once, where it lands, and its
+state is a number saying where it stopped. Its value is a function value's two words.
 
 ### 3.5 Variable declarations
 
@@ -3814,8 +3870,9 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
-`try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9.
+| defer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
+`try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` in §6.9;
+`yield-stmnt` in §6.10.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
 either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
@@ -4775,6 +4832,18 @@ closes its scopes, destructors included (S18b, P1d); its pending deferred code i
 deferred code.
 
 **S19d.** A `defer` is not a statement that leaves (D10a), whatever its deferred code holds.
+
+### 6.10 `yield`
+
+**S20.** `yield-stmnt ::= "yield" expr STMNT_END`, only in a generator's body (D18). `expr` must fit the generator's
+element type `T`, as a returned value fits a result (E12, O13, O14, D18c); it is the value the `Next()` that resumed the
+body gives, and the body stops there, every local and every scope it has open kept as they are, until the next
+`Next()` goes on after it. A `yield` is no statement that leaves (D10a). A `yield` outside a generator - in a function
+whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-time error, and so is one:
+- in deferred code (S19b: it runs while its block is left, and runs to its end);
+- in a `join` block (P1b: its tasks are waited for before it is left, which a stop part way would not do);
+- with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
+  a dropped walk could run it).
 
 ## 7. Error Handling
 

@@ -508,6 +508,31 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   itself an entry of an error list until substituted. Not for a G10d constructor's own list (mine: no use yet). Found
   on the way: section 8's alias analysis did not look inside `for x in try p` (a try statement), so a helper walking its
   receiver under `try` was refused by O17 (`scope.aliasExpr`).
+- **Generators (D18-D18d, S20, QAG revised, the user's decision 2026-10-18; built 2026-10-25).** A `fn` whose result
+  is written `Iterator<T ? E>` and whose body holds a `yield` of its own is a generator - no keyword, `yield` the one
+  new word. A call runs none of the body and gives the prelude's `Generator<T ? E>` (a struct holding `next (fn() T ? E,
+  Exhausted)`; its `Next` calls `next`), so `for`, the iterator helpers, constraints and `any Iterator<T>&` take it as
+  any iterator; it is nameable (a field holds a `Generator<I64>`) and a copy is the same walk, as a List's. Its errors
+  are `E` and `Exhausted`, written in its result (a `?` on the signature is an error naming that); its end, a bare
+  `return` (`return v` an error) and an error leaving it end the walk, every later `Next` failing with `Exhausted`.
+  **How it is built (mine): its body is a lambda's** - check makes the generator's own body `return Generator(next)`,
+  `next` a lambda of the body capturing the parameters, which become its own writable locals set once at its start
+  (a value array given is copied where the generator lives) - so captures (D16c), placement and every scope rule apply
+  with nothing new; a `yield` is checked and judged by section 8 as that lambda's `return` (a typed `Suspend`). The
+  lambda's MIR is a coroutine (`mir.Fn.Gen`, `Term.Suspend` holding the open scopes): emit writes an LLVM coroutine
+  (`llvm.coro.*`, its frame from the arena where the generator lands, its promise the result slot plus the scopes the
+  Next call passed, a `.drop` registered there destroying a walk stopped part way - closing the scopes it holds - and a
+  wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
+  **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
+  each value per turn - which no local outlives: `&return` is an error in a generator, O26a moves nothing there, a
+  yielded local holding the generator's own storage is O26 worded for yield (write `$x`/`x.Clone()`), and a yielded
+  borrow of a parameter's referent is T22a's (the walk's Next is a function value; worded "yield a copy"). Not allowed:
+  `yield` in a lambda, deferred code, a join block, or with deferred code pending around it (a dropped walk would never
+  run it - relaxable). Cost: about 6 ns a value (an indirect resume per Next, the frame never elided), against 0.25 for a
+  hand-written iterator struct - eliding the frame where the walk is made and finished in one place is future work.
+  **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
+  `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
+  aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).
 
 ### Errors
 

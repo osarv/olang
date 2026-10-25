@@ -1,0 +1,9 @@
+# check: fail error[D18, S20]: 'yield' is a generator's - a function whose result is written 'Iterator<T>'
+# S20: a yield only in a generator's body - one whose result is written Iterator<T ? E>
+fn f() I64 {
+    yield 1
+    return 2
+}
+
+fn main() ? {
+}

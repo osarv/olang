@@ -833,6 +833,61 @@ d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
       |                                  ^~~~~~~~~
 compilation failed with 1 error
+=== d18argoutlived.olang
+d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   11 |         g = chars(s)
+      |           ^
+compilation failed with 1 error
+=== d18errors.olang
+d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
+    5 | fn f() Iterator<I64> ? Bad {
+      |    ^
+compilation failed with 1 error
+=== d18errundeclared.olang
+d18errundeclared.olang:10:11: error[R9, D18]: Bad can escape here, and this generator's result does not say it fails with it - write 'Iterator<T ? Bad>', or catch it
+   10 |     yield try g()
+      |           ^~~
+compilation failed with 1 error
+=== d18returnscope.olang
+d18returnscope.olang:4:7: error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator
+    4 |     s String&return = $3
+      |       ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== d18returnvalue.olang
+d18returnvalue.olang:5:5: error[D18a]: a generator gives its values by 'yield' - 'return' ends it and takes none
+    5 |     return 2
+      |     ^~~~~~
+compilation failed with 1 error
+=== d18yieldborrow.olang
+d18yieldborrow.olang:3:1: error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')
+    3 | fn parts(t String&) Iterator<String&> {
+      | ^~
+compilation failed with 1 error
+=== d18yielddefer.olang
+d18yielddefer.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
+    8 |     yield 2
+      |     ^~~~~
+compilation failed with 1 error
+=== d18yieldjoin.olang
+d18yieldjoin.olang:9:9: error[S20]: a join block may not yield - its tasks are waited for before it is left
+    9 |         yield 1
+      |         ^~~~~
+compilation failed with 1 error
+=== d18yieldlambda.olang
+d18yieldlambda.olang:5:9: error[S20]: a lambda is no generator - 'yield' in the function it is written in
+    5 |         yield 1
+      |         ^~~~~
+compilation failed with 1 error
+=== d18yieldoutside.olang
+d18yieldoutside.olang:4:5: error[D18, S20]: 'yield' is a generator's - a function whose result is written 'Iterator<T>'
+    4 |     yield 1
+      |     ^~~~~
+compilation failed with 1 error
+=== d18yieldown.olang
+d18yieldown.olang:7:15: error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+    7 |         yield l
+      |               ^
+compilation failed with 1 error
 === d2duplicatefn.olang
 d2duplicatefn.olang:4:4: error[D2]: 'f' is already declared in this module
     4 | fn f(x I64) I64 { return x + 1 }

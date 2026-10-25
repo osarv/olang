@@ -2251,13 +2251,18 @@ fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mi
 
 fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, site typed.SiteId, ty types.TypeId
                             sp source.Span) mir.Operand {
-    ops := Array<mir.Operand>(caps.Len())
-    for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
-    if ln.dead { return mir.Operand.None }
+    gen := ln.L.Bodies[I64(body)].Gen
     s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
     # D18: a generator's Next is its walk - its storage (its coroutine's frame, its locals, the scopes it holds open)
-    # where the generator lands, which its captures outlive (O14a)
-    if ln.L.Bodies[I64(body)].Gen { s = ln.resultScope() }
+    # where the generator lands, which its captures outlive (O14a); a value array it is given copied there (D18b)
+    if gen { s = ln.resultScope() }
+    ops := Array<mir.Operand>(caps.Len())
+    for i in range caps.Len() {
+        ops[i] = ln.val(caps[i].Outer)
+        ct := caps[i].Outer.Type()
+        if gen and not ln.dead and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
+    }
+    if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
 }
 

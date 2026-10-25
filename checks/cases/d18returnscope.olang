@@ -1,0 +1,9 @@
+# check: fail error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator
+# D18b: a generator's result scope is one Next call's - no local lives there
+fn f() Iterator<String&> {
+    s String&return = $3
+    yield s
+}
+
+fn main() ? {
+}

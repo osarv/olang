@@ -1,0 +1,14 @@
+# check: fail error[S20, O26]: this value refers to the generator's own storage, which its walk goes on with - yield a copy, built where the value goes ('x.Clone()', '$x')
+# D18b: a yielded value holding what the generator's own blocks hold would outlive it - yield a copy
+fn lists(n I64) Iterator<List<I64>> {
+    l := List<I64>()
+    for i in range n {
+        l.Push(i)
+        yield l
+    }
+}
+
+fn main() ? {
+    for l in lists(3) {
+    }
+}

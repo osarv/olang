@@ -3094,7 +3094,15 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
             # D18: a generator's are its current Next call's, in the promise
             if i < fe.passed and fe.gen { return fe.load("ptr", fe.let("getelementptr " $fe.promTy ", ptr %prom, i32 0, i32 " $(3 + i))) }
             if i < fe.passed { return "%v" $i }
-            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) { return "%vc" $(i - fe.passed) }
+            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) {
+                if fe.gen {
+                    # D18: asked again at each use, a resumed walk's thread perhaps not the one that made it (P2)
+                    j := i - fe.passed
+                    q := fe.let("getelementptr " $fe.envType() ", ptr %env, i32 0, i32 " $(fe.F.Captures.Len() + j))
+                    return fe.let("call ptr @__olang_capture_scope(ptr " $fe.load("ptr", q, ", !tbaa !28") ")")
+                }
+                return "%vc" $(i - fe.passed)
+            }
             return fe.program()
         }
         case mir.ScopeRef.Program { return fe.program() }

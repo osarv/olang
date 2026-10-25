@@ -24290,3 +24290,81 @@ fallible iterator walked, folded, adapted and passed to a constrained function, 
 `catch E`, a named set as the argument, explicit arguments; globals baked through fallible folds and an assert the
 evaluator decides, beside the run time); checks cases g1aerrvartype, g1atypevarerrs, g1aunwanted, g1auntried,
 g1aiternotmet.
+
+## Generators (D18, D18a-D18d, S20, QAG revised, T35b, D10a, 2026-10-25)
+
+**The decision.** QAG, revised by the user on 2026-10-18: "settle on fn evens (n I64) Iterator<T> ... the compiler knows
+this is a generator because of the return type and the yields and the user doesn't need to know". No `generator`
+keyword and no `yields` marker: a `fn` whose result is written `Iterator<T ? E>` and whose body yields is a generator,
+`Iterator<T ? E>` naming the type it hides. It waited for QAH (round 1 of this batch), since its Next fails with `E`.
+
+**What the caller is given.** A struct in the prelude, `Generator<T ? E>`, holding `next (fn() T ? E, Exhausted)` - the
+parentheses L18c's, the field's type a function type of several error items inside a list - whose `Next()` is
+`return try g.next()`. Choosing a struct over a type of its own kind means everything that takes an iterator takes a
+generator with nothing new: `for ... in` finds `Next`, the defaults meet `Iterator<T ? E>` by satisfaction, `any
+Iterator<I64>&` converts it, `Generator<I64>` can be a field's type, and a copy is a second name for the same walk, as
+a List's. A `Generator` made by hand of any function value of that type is an iterator too (the body of `next` the
+walk). `generic.Sig` turns the written `Iterator<...>` result into the `Generator<...>` instance where `ast.FirstYield`
+finds a yield of the body's own (a lambda's aside), and records the function as a generator (`IsGenerator`).
+
+**The body is a lambda's.** The design question was where a generator's locals live between values and how section 8
+judges them. Rather than teach every pass a new kind of body, check makes the generator's own body `return
+Generator(next)` - the generator's contract checked there - and `next` a lambda (`genLambda`) whose body is the
+written one: its captures are the parameters (copied in where the generator is made, a value array as a copy built
+where the generator lives - a lambda's borrow of one would point into the frame of the call that returns it), each
+then declared as a local of the lambda set once at its start, so the parameters stay writable as a function's are. A
+`yield` is checked as the lambda's `return` of its value (`yieldStmt`), emitted as a typed `Suspend`, which section 8
+walks as it walks a `Return` - so what may be yielded is exactly what a lambda may return, with no rule of its own. A
+`return` there is a raise of `Exhausted.END`, as is falling off the end (appended where the body does not leave); `?`
+after the result is an error naming `Iterator<T ? E>`, and a `try` letting out what the result's set does not hold says
+to write it there.
+
+**Where the yielded value lives.** Each `Next` call passes its result scope, so a yielded value is built where that
+call's result goes and `for w in words(t)` reclaims each one per turn. The cost of that choice is that no local of the
+generator may live there: the scope belongs to one call while the locals live across many. So `&return` (a local's
+mark or a scope argument) is an error in a generator, and O26a moves nothing into the result scope for a yield (`flStmt`
+treats `Suspend` as `Yield`, never as a `Return`); a yielded local holding the generator's own storage is O26's error,
+worded for a generator ("yield a copy, built where the value goes"). A yielded borrow of what a parameter refers to
+(`yield t[a:b]`) is the lambda's obligation that its capture outlive its result scope, which T22a refuses for a
+function value - it is worded "yield a copy" (D18c). The alternative recorded: elements living where the generator
+does (G11's container scope), with `Next() T&g`, which would admit the borrow and the per-generator reuse of a result
+scope at the price of every fresh reference element accumulating there for the walk's life.
+
+**The coroutine.** Lowering marks the lambda's MIR function `Gen`, with `GenEnd` - Exhausted.END's code under its own
+list - and lowers a `Suspend` to `Term.Suspend(x, resume, held)`: the value written as a return's would be (an array
+value copied into the result scope, T7b), the scopes open there listed innermost first, and the body going on at
+`resume`. The verifier reads it as a `Goto` to `resume` for initialization and scope nesting. The generator's closure
+is always built in the creator's result scope: the coroutine's frame - its locals, the scope headers it holds open, a
+big arena - lives where the generator lands.
+
+- emit writes the lambda as an LLVM coroutine `SYM.coro(env, home)` (`presplitcoroutine`, switched-resume lowering):
+  `llvm.coro.id` with a promise `{ result, running, out, the passed scopes }` whose first field is the function's own
+  result slot (`%rv`), the frame from `__olang_scope_alloc_a` in `home`, an initial suspend so a call runs nothing, a
+  `coro.suspend` per Suspend whose destroy edge closes the held scopes, and the final suspend at the old `ret`. A
+  passed scope variable is read from the promise at each use, and a capture's scope asked again of the runtime at each
+  use (decision 48: the thread resuming the walk may not be the one that made it). `SYM` itself, the function value's
+  code, stores this call's scopes in the promise, sets "running", resumes, and returns the promise's result; once
+  `coro.done` it returns `Exhausted` without resuming. Creating the closure calls `SYM.coro` and registers `SYM.drop` in
+  the home scope with the runtime's destructor ABI: it destroys the coroutine, closing the scopes a walk stopped part
+  way holds - unless "running" is set, which happens when a failed check inside the walk ended a test: the test's
+  unwinding (P1d) closed those scopes already. In a test build a suspend takes its held scopes off the chain of open
+  scopes and a resume puts them back. LLVM's coroutine passes run in every pipeline olang builds with (checked by hand
+  at -O0, -O3 and -O3 -flto before building, then in every mode).
+- eval keeps a record per generator (`gens`), its index at the end of the closure's environment: a `Suspend` delivers
+  the value as a return would, then copies the frame and its words (locals, scopes, scope variables) into the record and
+  pops the frame without closing anything; a call resumes by pushing the frame back with this call's scope variables,
+  refuses a walk resumed from inside itself, and answers a finished walk with `GenEnd`. A `gGen` registration in the
+  home scope closes a stopped walk's held scopes and its frame's storage, innermost first.
+
+**Measured.** 200M values summed: a generator 1.25 s (6.2 ns a value), a hand-written iterator struct 0.05 s, the plain
+loop 0.02 s (vectorized). The generator's resume is an indirect call through its frame that LLVM never inlines: the
+drop registration lets the handle escape, and the frame is allocated by the runtime, so CoroElide has nothing to take.
+Eliding it where a walk is made and finished in one place (a for-in over a temporary generator, which could destroy it
+at the loop's end) is the recorded next step.
+
+**Found on the way, pre-existing: D10a and for-in.** `leaves` counted any loop with no `break` of its own as one that
+never ends, and `breaks` looked only at statements - but a `for x in it` over an iterator ends by the `break` in its
+Next call's `catch Exhausted`, inside an expression. So `fn f(l List<I64>&) I64 { for x in l { } }` compiled and
+aborted with "unreachable reached" when called; `breaks` now looks into a try's clauses, a match's arms, a
+conditional's values and a call's arguments (`exprBreaks`). Nothing in the corpus relied on it. The genLambda's appended
+end raise depended on the same answer, which is how it was found.

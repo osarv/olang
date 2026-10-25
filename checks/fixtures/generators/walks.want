@@ -1,0 +1,21 @@
+total 12
+[a]
+[bb]
+[]
+[ccc]
+1
+1
+2
+2
+drop 0
+got 0 1
+drop 1
+after
+0
+0
+drop 0
+11
+11
+drop 1
+7 7 -1
+any 15
