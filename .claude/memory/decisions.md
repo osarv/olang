@@ -1079,3 +1079,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   compiler sees the condition holds (rec yes); (2) drop result conditions (rec yes - a false one is the callee's bug,
   an assert); (3) the error `ArgumentError.INVALID`, the message naming parameter and condition (rec yes). Next topic
   (the user): removing `checked` as its own thing.
+- QAU DECIDED 2026-10-25 (the user: "1) yes 2) yes 3) yes"): a call of a function with conditions needs try by its
+  signature; result conditions dropped; `ArgumentError.INVALID`. And: conditions may be ANY expression ("including
+  things like function calls with errors, lambdas etc"). Proposed form: a comparison right after the type keeps the
+  short form (`y I32 > x`), anything else after `if` (`n I64 if n.IsPrime()`).
+- **QAV DECIDED 2026-10-25 (the user): "For checked, I want the keyword gone completely. There is only one error system
+  and it uses try. The operators are a thing we have to talk about separately because it is the only place the language
+  allows overloading."** Proposed mapping: `try a.Get(i)`, `try a.SliceOf(lo, hi)`, `try narrow<I32>(x)`, CheckError
+  gone (each module's own errors). ASKED: (1) a condition's call error leaves as itself (rec yes); (2) a slice out of
+  range keeps aborting, SliceOf the fallible form (rec yes); (3) `as` wrong case keeps aborting, no fallible form (rec
+  yes); (4) narrow as a free function `narrow<I32>(x)` (rec) or method. NEXT: operators (the only overloading).
