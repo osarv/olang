@@ -23879,3 +23879,16 @@ loaded and is an error naming it.
 array as a `{len, ptr}` pair where the extern wants its storage) - fixed in the checker's array marshalling. Not fixed:
 R9's diagnostic writes another module's error words bare (`Error.UNREACHABLE can escape here`) where the naming pass
 made `net.Error` the name a reader writes.
+
+- **Builders in `olang doc` and `explain` (B14, B11b, B15, 2026-10-25, the user: a type has one constructor and other
+  ways to build one are ordinary functions of its module - Go's pattern - made discoverable as godoc does).** An exported
+  top-level function whose single result is a struct, enum or declared type of its own module (the type, `T&`/`T?&`, or a
+  generic instance of it, errors allowed) is listed under that type as a *builder*: after its fields and before its
+  methods, under a `builders` line in text and a "Builders" heading in HTML, and no longer among the plain functions.
+  `doc FILE Type` shows them with the type (every one, private included, as it shows private methods); `explain FILE
+  Type` lists them one line each, and so the language server's hover on a type does; completion after `module.` is as it
+  was. Decided (mine): several results are no builder (a tuple is no single type); an error type, a trait or a foreign
+  type is not a target; a function is grouped only when its type is itself listed (a private type leaves its builders
+  among the functions); a method is never a builder; the order is the file's. Computed from the checked signatures
+  (`explain.BuilderOf`/`Builders`), not from text. Tests: checks cases `b14docbuilders` and `b14docbuilderitem`, and
+  an `explain` assertion in the words scenario. std unchanged - some modules' builders now show under their types.

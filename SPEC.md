@@ -6605,7 +6605,7 @@ their scope markers, results, and its error set, an inferred one (`?` alone, R1a
 conditions (D17), each a line `[cond]` as written, after a comment naming its results where they are named, and its scope
 obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
-constructor's signature, its fields, its methods and the traits with no type parameters it meets; an enum with its
+constructor's signature, its fields, its builders (B14), its methods and the traits with no type parameters it meets; an enum with its
 cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A global is printed with its type and, where it is baked
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
 tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
@@ -6647,7 +6647,7 @@ builds it, once.
 **B14.** `doc FILE [NAME]` prints the documentation of the module `FILE` (L4b): the module's own, then each of its
 exported top-level items - a function, a type, an error type, a global - in the order the file declares them, each with
 its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented; a type's fields, cases,
-words and methods each with their own. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
+words and methods each with their own. A type has one constructor; the other ways to make a value are ordinary functions of the type's module, and a listing groups them under the type as its *builders* - after its fields, before its methods, under a `builders` line, and no longer among the module's plain functions: an exported top-level function with one result (a function with several is none) that is the type, a reference to it, or an instance of it, where the type is a struct, an enum or a type declared over another and is declared by the function's own module (the errors it may fail with do not matter). A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
 item alone. The program `FILE` is the root of is checked first; one with errors reports them instead. `doc -html DIR
 [FILE...]` writes the documentation of each `FILE` - of every module of the standard library when none is named - as
 static HTML into the directory `DIR`, one page per module and an index; a module that does not check is left out, its
