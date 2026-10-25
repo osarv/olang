@@ -534,7 +534,10 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         a := g.pick(t, 9)
         if a >= 0 {
             # an index known while compiling into a length known while compiling is checked there, try or not (E16)
-            i := g.solid(g.intT(), d - 1) if isFixed(g.vt[a]) else g.ex(g.intT(), d - 1)
+            it := g.intT()
+            i := g.solid(it, d - 1) if isFixed(g.vt[a]) else g.ex(it, d - 1)
+            # a literal written as an index is an I64 (E16): a U64 one past I64's maximum is written converted
+            if it == 7 { i = $"U64(" $i ")" }
             return "(checked " $g.use(a) "[" $i "] catch default " $g.lit(t) ")"
         }
         if t == 3 {
