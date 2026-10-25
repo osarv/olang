@@ -1161,3 +1161,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the prelude's NumberError (OVERFLOW, DIVIDE_BY_ZERO, INVALID beside NEGATIVE), CheckError gone (rec yes); (3) plain
   integer division by zero (UB today, E6a): leave, or check-and-abort (one compare per division) - rec abort; the
   user's call since it touches the no-per-operation-check rule.
+- QAX DECIDED 2026-10-25 (the user): (1) the Checked<T> type YES; (2) its errors in its own std module, not the prelude
+  (proposed `std/arith`: `arith.Checked`, `arith.Error.OVERFLOW/DIVIDE_BY_ZERO`); (3) plain / and % stay unchecked,
+  only Checked checks them. "Nothing silently works" is not a rule (it was a suggestion for parameter conditions).
+- **QAY ASKED 2026-10-25** (the user: "If we are doing checked mb we should return Result and Option. I think they are
+  very much in the same box here" - reversing 2026-10-24's drops of Result/QAN and Option/QAO): proposed both as std
+  generic enums (std/option, std/result), needing generic enums + errors as values (build list 10, 14). ASKED: (1)
+  std/arith for Checked; (2) Option<T> for values only, Option<T&> an error naming T?&; (3) Result<T, E> with errors as
+  values (`catch E e`, `Result.Of(fn(): return load(p))`, `try r.Value()`); (4) APIs keep returning errors, never
+  Option/Result (errors are errors) - rec yes to all.
