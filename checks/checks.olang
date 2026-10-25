@@ -891,6 +891,26 @@ fn embedded(r mut report&) ? Failed {
                     "s/std/leak.olang && echo x > s/outside.txt && OLANG_STD=$PWD/s/std \"$OLANG\" build leaks.olang > out.txt " $
                     "2>&1") != 0, "std/leak embedding outside std built", dir)
     try r.expect(outOf(dir).Contains("error[E38]: embed '../outside.txt' reads no file: it leaves std"), "std/leak's error", dir)
+    # ...nor through a link inside it, named by its real path (the bulk review's F7)
+    try r.expect(sh(dir, "ln -s ../outside.txt s/std/link.txt && echo 'X := embed \"link.txt\"' > s/std/leak.olang && " $
+                    "OLANG_STD=$PWD/s/std \"$OLANG\" build leaks.olang > out.txt 2>&1") != 0, "std/leak embedding a link built", dir)
+    try r.expect(outOf(dir).Contains("error[E38]: embed 'link.txt' reads no file: it leaves std, through a link"), "std/leak's link error", dir)
+    # a remote repository's module: a file of its own embedded, a link to one outside refused
+    repo String& = $dir "/remote/example.com/me/tools"
+    env String& = "OLANG_GIT_BASE=file://" $dir "/remote/ OLANG_CACHE=" $dir "/cache "
+    git String& = "git -c user.name=t -c user.email=t@t"
+    try r.expect(os.Run("mkdir -p " $os.Quote($repo "/lib")) == 0, "making the repository", dir)
+    try r.expect(sh(repo, "echo inside > lib/ok.txt && ln -s " $os.Quote($dir "/s/outside.txt") " lib/data.txt && " $
+                    "echo 'Data := String(embed \"data.txt\")' > lib/peek.olang && echo 'Ok := String(embed \"ok.txt\")' > lib/good.olang && " $
+                    "git init -q && git add . && " $git " commit -qm v1") == 0, "the repository", dir)
+    try r.expect(sh(dir, "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/good\"\\nfn main() { io.Print(good.Ok)! }\\n' > good.olang && " $
+                    "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/peek\"\\nfn main() { io.Print(peek.Data)! }\\n' > peek.olang") == 0
+                 "the programs", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0 and outOf(dir) == "inside\n"
+                 "a remote module embedding a file of its repository", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" build peek.olang > out.txt 2>&1") != 0, "a remote module embedding a link out of it built", dir)
+    try r.expect(outOf(dir).Contains("error[E38]: embed 'data.txt' reads no file: it leaves example.com/me/tools, through a link")
+                 "the remote link's error", dir)
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

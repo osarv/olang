@@ -613,6 +613,21 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&l, String {
     if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root "/")) {
         return none, $"it leaves " $root
     }
+    # ...and so does the file it really is: a link inside the repository may name any file (F7) - judged by real
+    # paths, the repository's own root as it really is
+    if root != "" and os.Exists(path) {
+        top := ""
+        if root == "std" {
+            top = $l.stdReal
+        } else {
+            rest := m.Identity[root.Len() + 1:]
+            dir := $m.Path
+            for i in range rest.CountOf("/") + 1 { dir = $filepath.Dir(dir) }
+            top = $(try os.RealPath(dir) catch default dir)
+        }
+        real := try os.RealPath(path) catch default ""
+        if real == "" or not real.StartsWith($top "/") { return none, $"it leaves " $root ", through a link" }
+    }
     if not l.embedded.Has(path) {
         if not os.Exists(path) { return none, $"no file " $path }
         if os.IsDir(path) { return none, $path " is a directory" }
