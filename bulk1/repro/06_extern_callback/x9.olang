@@ -1,0 +1,36 @@
+import "std/io"
+
+link "cb.o"
+extern fn c_run(i I64)
+
+type Holder struct() {
+    t String& = ""
+}
+
+G mut Holder& = Holder()
+
+# C calls this by its name: it lets go of the global holder's text
+export fn olang_reset(i I64) {
+    G.t = $"text number " $i " padded out to many bytes ........................................"
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    olang_reset(-1)
+    for i in range 5 {
+        v := G.t            # a view of the global holder's text
+        c_run(i)            # C calls olang_reset, which lets go of it
+        churn()
+        io.Println(v)!
+    }
+}

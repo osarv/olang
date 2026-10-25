@@ -1,0 +1,11 @@
+# D18 says a generator's contract is checked when it is called, but no spelling compiles: D17 asks for
+# ArgumentError after '?', and D18 refuses a '?' after a generator's result
+fn evens(n I64) [n >= 0] Iterator<I64> {
+    for i in range n { yield 2 * i }
+}
+
+fn evens2(n I64) [n >= 0] Iterator<I64> ? ArgumentError {
+    for i in range n { yield 2 * i }
+}
+
+fn main() { }
