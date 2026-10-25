@@ -335,3 +335,8 @@ on sight per rules.md, "Code rules".
   evaluator ignores Plan.AnyNew (baked global/assert disagree with run time). Plus AnyNoCopy through references,
   per-instance Eq, a crash on inline nested arrays in Grid(a), nomatch-only value match, fuzzer drift. Sent back to the
   fix agent (decisions in its brief); a narrow review of 1-3 after, then merge.
+- 2026-10-25 CEST: any fix round 3 done (wt-any 0c37adb, verified): scope-argument results are existing storage at
+  their scope everywhere (E25, closes a master UAF class), AnyItemNew one pure predicate (evaluator agrees), RetCopy for
+  a returned local with a kept second name, AnyNoCopy through references, per-instance Eq/Hash, `type X extends
+  Array<Array<T>>` refused (T7a). Scope fuzzer writes scope arguments (37 findings -> 0). Fourth (narrow) review running
+  -> /home/user/review/any4; merge if clean.
