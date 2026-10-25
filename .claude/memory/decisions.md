@@ -1155,3 +1155,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - try nesting DECIDED 2026-10-25 (the user: nested trys an error "only when they cover exactly the same thing"; the
   outer of `try try f() catch default 0 + x` extends the whole way): every try must cover something fallible no inner
   try already covers (R8's "a try covering nothing" per level) - replaces "a try within another's reach is an error".
+- **QAX ASKED 2026-10-25 (checked with try):** (1) arithmetic checking as a prelude wrapper `Checked<T>` whose
+  operators fail (one try over a whole computation) plus single-operation methods `try a.AddChecked(b)` (rec yes) - NOT
+  try turning checks on (that is checked renamed: context-dependent operators, hidden costs); (2) errors folded into
+  the prelude's NumberError (OVERFLOW, DIVIDE_BY_ZERO, INVALID beside NEGATIVE), CheckError gone (rec yes); (3) plain
+  integer division by zero (UB today, E6a): leave, or check-and-abort (one compare per division) - rec abort; the
+  user's call since it touches the no-per-operation-check rule.
