@@ -1,0 +1,14 @@
+# check: fail error[C9b]: 'x.Destroy()' runs again in the loop's next turn, on what it ended - declare 'x' inside the loop
+# C9b: a Destroy() in a loop of a local declared outside it would destroy one instance every turn
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn main() {
+    x := Res(2)
+    for i in range 3 {
+        x.Destroy()
+    }
+}

@@ -1,0 +1,15 @@
+# check: fail error[C9b]: Destroy() is called on a local - a variable of this function holding the instance
+# C9b: what a field holds is reached through what holds it - take it out into a local first
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+type Box struct() {
+    r Res& = Res(0)
+}
+fn main() {
+    bx := Box()
+    bx.r.Destroy()
+}

@@ -1,0 +1,17 @@
+# check: fail error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+# C9b: an instance held in two collections - taken out of one, it is still in the other
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn main() ? MapError {
+    m := Map<I64, Res&>()
+    seen := Map<I64, Res&>()
+    r := Res(1)
+    m.Put(1, r)
+    seen.Put(1, r)
+    c := try m.Take(1)
+    c.Destroy()
+}

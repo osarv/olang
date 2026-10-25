@@ -1,0 +1,33 @@
+import "std/io"
+
+# C9b: connections whose destructor closes them, held in a long-lived Map - each taken out and destroyed when done
+# with, its destructor run then and its storage freed, so memory stays what 64 of them hold
+N I64 = 1000000
+Closed mut I64 = 0
+
+type Conn struct(fd I64) {
+    fd
+    hits I64 = 0
+} destruct {
+    Closed += 1
+}
+
+type Server struct() {
+    conns Map<I64, Conn&>
+}
+
+fn (s mut Server&) open(i I64) { s.conns.Put(i, Conn(i)) }
+
+fn (s mut Server&) close(i I64) ? MapError {
+    c := try s.conns.Take(i)
+    c.Destroy()
+}
+
+fn main() {
+    s mut Server& = Server()
+    for i in range N {
+        s.open(i)
+        if i >= 64 { try s.close(i - 64) catch MapError { unreachable } }
+    }
+    io.Println($Closed " " $s.conns.Len())!
+}

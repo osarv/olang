@@ -1,0 +1,25 @@
+# check: run
+# C9b: a call that provably keeps nothing of what it is given leaves its argument the only way to reach the instance -
+# the Destroy() compiles, runs the destructor at once, and every other one still runs at its scope's close, newest first
+Log mut I64 = 0
+type Res struct(id I64) {
+    id
+    t String& = $"res " $id
+} destruct {
+    Log = Log * 10 + id
+}
+fn look(r Res&) I64 { return r.id + r.t.Len() }
+fn ends(k I64) I64 {
+    a := Res(1)
+    b := Res(2)
+    c := Res(3)
+    n := look(b)
+    if k > 0 { b.Destroy() }
+    assert Log == (2 if k > 0 else 0)
+    return n + a.id + c.id
+}
+fn main() {
+    assert ends(1) == 11 and Log == 231
+    Log = 0
+    assert ends(0) == 11 and Log == 321
+}

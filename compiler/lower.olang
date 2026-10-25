@@ -294,6 +294,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     plan typed.Plan = typed.Plan(0, 0, 0)
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
+    tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
+                                    # 0 the value, 1 the handle's state (free.IsHandle)
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -1546,6 +1548,8 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ty := x.Type()
     slot := mir.NoLocal
     if ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
+    relK := ln.tryRel
+    ln.tryRel = -1
     tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
     for c in t.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.tries.Push(tc)
@@ -1554,6 +1558,11 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ends List<mir.BlockId>
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
         ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
+        if relK >= 0 {
+            rel List<Array<I64>&>
+            rel.Push(I64[0] if relK == 1 else Array<I64>(0))
+            ln.releaseAt(slot, rel, sp)
+        }
     }
     ln.leaveOpen(ends)
     ln.clauses(tc, t.Clauses, slot, ty, ends)
@@ -1749,7 +1758,15 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
             c := callOfExpr(x)
             if ln.freeing and c is not null {
                 k := ln.L.Free!.DroppedMove(c)
-                if k >= 0 { rel.Push(I64[0] if ln.L.Free!.IsHandle(k) else Array<I64>(0)) }
+                handle := k >= 0 and ln.L.Free!.IsHandle(k)
+                # a try statement with clauses has its value only on its success path - where a clause takes the
+                # error there is nothing to release - so the try releases it there, before the paths join
+                if k >= 0 and clausedTry(x) {
+                    ln.tryRel = 1 if handle else 0
+                    ln.val(x)
+                    return
+                }
+                if k >= 0 { rel.Push(I64[0] if handle else Array<I64>(0)) }
             }
         }
     }
@@ -1757,6 +1774,14 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
     if rel.Len() == 0 or ln.dead { return }
     l := ln.local(v, x.Type(), sp)
     ln.releaseAt(l, rel, sp)
+}
+
+# whether an expression is a try with clauses
+fn clausedTry(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Try(_, _, t) => t.Clauses.Len() > 0
+        case _ => false
+    }
 }
 
 # the call an expression is, under a try, null for none
@@ -2267,6 +2292,20 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
             ln.check(holds, chk, mir.ExitKind.As, WrongCase, sp)
         }
         return ln.prim(op, ty, mir.Operand[x], sp)
+    }
+    if op == typed.PrimOp.Destroy {
+        # C9b: the region the local's instance was built in released - its destructors run, newest first, and its
+        # storage reclaimed (std/runtime's __olang_region_release) - and the local left null; free.olang made every
+        # value it can hold in a region of its own, or refused the call
+        match args[0] {
+            case typed.Expr.Read(_, _, p, _) {
+                q := ln.mk(ln.place(p))
+                if ln.dead { return mir.Operand.None }
+                ln.emit(mir.Stmt.Release(sp, q))
+            }
+            case _ { }
+        }
+        return mir.Operand.None
     }
     if op == typed.PrimOp.Holds {
         # D17e: a contract's condition under checked - true, or CheckError.CONTRACT to the innermost try

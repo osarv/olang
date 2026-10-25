@@ -11,7 +11,8 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
 1. **No manual memory management, and no garbage collector.** Memory lives in scopes: what a block allocates is
    reclaimed when the block closes, in one step. A reference's scope is part of its type and the compiler proves it
    never outlives what it names (§8). There is no `free`, no reference counting, no collection pause. Resources (a file,
-   a lock) have destructors, run once when their scope closes.
+   a lock) have destructors, run once when their scope closes - or sooner, at an `x.Destroy()` the compiler proves leaves
+   nothing reaching what it ends.
 2. **C-like performance.** You get what the machine can do unless you ask for less: `-O3` and whole-program LTO by
    default, generics compiled per type, data laid out as C lays it out. **No cost is paid per operation that the code
    does not show**: indexing, arithmetic and conversions are unchecked, and a call that can fail - `try a.Get(i)`,

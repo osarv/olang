@@ -1,0 +1,17 @@
+# check: fail error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+# C9b: a view of the collection's value, read before it is taken out and destroyed, is used after - it may be that
+# instance
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn main() ? MapError {
+    m := Map<I64, Res&>()
+    m.Put(1, Res(3))
+    v := try m.Get(1)
+    c := try m.Take(1)
+    c.Destroy()
+    assert v.id == 3
+}

@@ -24259,3 +24259,83 @@ else in the innermost block.
 to its last use; pins (QAD); per-callback summaries for calls through function values; a prelude-marked dead slot so
 SetAt can free; a per-site task reach (any task now disables freeing); a destructor, Str, Eq or Hash letting go
 anywhere disables freeing for the whole program.
+
+## Memory round 7: `x.Destroy()` (C9b, O15, C9, 2026-10-25)
+
+docs/memory.md's round 7, the user's answer to QAD (2026-10-18): a resource is released sooner by `x.Destroy()`, which
+runs the destructor of the instance a local names now and frees its storage. It compiles only where the compiler proves
+`x` the only way left to reach the instance, so early destruction never leaves a reference to what it ended; every
+destructor still runs exactly once - at its scope's close, or at a proven `Destroy()`. Built in the port only, since
+stage 0 is gone.
+
+**The proof is early freeing's (compiler/free.olang).** The local a `Destroy()` is called on becomes a place of its own,
+a destroy target: what it is given (a declaration, an assignment) is a store into that place, judged as any - made for
+it at a site (a constructor call, a call whose result is built), or moved out of a collection's place (`Take`, `Pop`,
+`TakeAt`, `SwapTake`); and the local holds a view of its own place, so every copy of it is one and the existing
+machinery says where one goes: stored in a field or a collection, captured by a lambda, handed to a call whose body
+stores or keeps its parameter, to a call through a function value or an `extern` (a body not known keeps what it is
+given), to a task. Then, against the body's uses: another local holding it and used after the call refuses it; the
+local itself read after the call - later, in a later turn of a loop around it that it is declared outside of, in
+deferred code registered before it - is an error of its own, with a note at the `Destroy()`; a `return`, an `error` or
+an `unreachable` after the call in its block ends that path, so `if bad { r.Destroy(); error E.X }; return r` is
+accepted. `defer x.Destroy()` runs where its block ends: `x` is used freely until then, but not returned (the caller
+would get what the deferred call ends). A parameter, a constructor's field and a match's binding are refused (their
+instance is reached by something else). Refusals are compile-time errors at the call, with the reason as a note; the
+error path of a build that already failed says nothing about them.
+
+**Collections whose values have destructors.** Round 6 never made such a place a candidate (condition 4). Now it is a
+dtor place: never freed by its own let-go - removing a value without destroying it keeps it, its destructor running at
+the scope's close (O15) - but "destroy-sole" when every other condition holds, and then its values are built in regions
+of their own wherever an accepted `Destroy()` takes one out. A `Destroy()` of a value moved out of a collection is a
+let-go of that collection for this body's views and its callers', since one of them may be the very value: a view read
+with `Get` before a `Take` and used after the `Destroy()` refuses it, here or in a caller. Such a value is destroyed
+only in code emitted in the root's object (B3i - which values a collection holds is a fact of the whole program); a
+value built for its local is decided by the body and its callees alone, so it is decided in every build, a module
+compiled on its own included.
+
+**The runtime, and destructor order.** An instance destroyed must be one whose region the release reclaims, so its
+site builds it in a region of its own (the plans' Region fields, as round 6's). But round 6 closed regions after their
+scope's own destructors, which would have run a not-destroyed regioned instance out of construction order (O15: an
+instance built before it in the same scope would have been destructed first). So a registration into a region made in
+a scope that is no region (its owner, kept in the region's header) goes on the owner's list - its close then runs it in
+construction order with everything else - and on the region's own chain; `__olang_region_release` runs the chain first,
+each node taken off the owner's list. That needs an O(1) unlink: destructor nodes gained `pprev` (the field pointing at
+them), kept by every push, pop and splice (`__olang_scope_merge`, `__olang_scope_fold_parts`), 24 -> 32 bytes a node (40
+in a region). A region made inside a region keeps its registrations in itself, as before (its instances destruct as it
+closes - a recorded ordering limit, for collections inside regioned values). The evaluator mirrors it (`reg.Prev`, `In`,
+`RNext`; a region's `Owner` and `DRegs`), so `interpret` destructs in the same order.
+
+**std:** `net.Conn`, `net.Listener` and `net.UDP` lose `Close()`; their destructors close unconditionally (a descriptor
+is never -1 now), `Accept`, `Read`, `Write` and `SetTimeout` lose their closed checks, and net's tests use `Destroy()`
+(the loopback test's server, the refused-dial test's listener). chan.Close is a protocol, not a resource, and stays.
+
+**Measured:** 1M connections holding destructors in a long-lived Map, each taken out and destroyed, 1.9 MB (50 MB
+without the Destroy()); 100k std UDP sockets the same way under `ulimit -v 8192` and `ulimit -n 64`, 1.7 MB - checks'
+earlyfree scenario runs both, and interprets them. The early-free fuzzer writes resources too (built, kept in a Map,
+taken out and destroyed, and the shapes refused - stored, viewed, captured, used after): 520 programs, nothing found; with
+the use-after check switched off it found 15 of 60. The suite is clean under the evaluator's dead-region mode and under
+`-debug -sanitize`. Cost (callgrind, `-target x86-64-v3`): a destructor's registration and its run at the close take
+about 13 instructions more (the region test, `pprev`) - a loop doing nothing but make two destructor instances a pass
+48.3M -> 53.7M instructions over 200k passes; the region path is out of line, or the registration stopped being inlined
+(58.1M); programs with no destructors as before - bench's binarytrees +0.01%, text +0.2%, vec equal.
+
+**Decided (mine):**
+1. The checker accepts `Destroy()` on a local of a reference to a struct declaring a destructor; on another place it is
+   `DestroyNotLocal`, on a type with none `DestroyNoDestructor`; a type with a destructor may not declare `Destroy`.
+2. A use of the local after the call is refused even after it is given another value (flow-insensitive, as round 6's
+   views): write a new local.
+3. A destroy target ignores the program-wide task condition - a local is reached by a task only as it is handed one,
+   which is refused - while a dtor place keeps it (a task may reach a collection).
+4. A dtor place's report row says to take values out and `Destroy()` them; where a `Destroy()` does, it counts as
+   freeing at once (B18).
+
+**Found and fixed on the way:** the code generator dropped a scope's header when nothing but a region's parent named
+it (`findIdle` did not count `Region`/`RegionOr`), so `defer x.Destroy()` in a function allocating nothing else gave
+invalid IR - latent in round 6, whose regions' parents always had something else built in them. And a statement `try
+m.Take(k) catch { ... }` released what it moved out after its paths joined, where a clause had left the value unset
+(invalid IR) - latent in round 6 until the relaxation below reached the prelude's Map; the release is now on the
+success path alone, before the join. **A relaxation of round
+6** (for the bulk review): a destructor, Str, Eq or Hash letting go of something kept every place of the program;
+now it keeps exactly the places it may let go of (its may-summary, all of them only where it may let go of any) - a
+StringBuilder in `IP.Str` or `Duration.Str` had stopped all early freeing in every program importing std/net or
+std/time.

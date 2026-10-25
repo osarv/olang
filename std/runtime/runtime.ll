@@ -379,7 +379,11 @@ done:
 ; pool first reaches it, 0 until then; and a clock, one more for every chunk given to the pool, so a smaller stamp
 ; was given back earlier
 %olang.pool = type { [128 x ptr], i128, i64, i64, i64 }
-%olang.dtornode = type { ptr, ptr, ptr }
+; a destructor registration: next, the instance, its destructor, and pprev - the field pointing at this node (the
+; scope's list head, or the node before's next), kept by every push, pop and splice so that a node is unlinked in O(1)
+; (C9b); a node registered for an instance in a region (O8d) is 40 bytes, its fifth field the next of the region's own
+; (its chain, through the region's header)
+%olang.dtornode = type { ptr, ptr, ptr, ptr, ptr }
 ; P1: one node per task, bump-allocated from the join block's own scope - which is exactly the
 ; lifetime the bookkeeping needs, since the join happens before that scope is reclaimed. An alloca
 ; would not do: a join block inside a loop would grow the stack by a node per task.
@@ -407,6 +411,7 @@ done:
 ;  kids - the regions made in this scope (O8d, docs/memory.md 3.4): closed with it, after its destructors, unless
 ;         released first; a list through each region's own header (%olang.region)
 %olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
+%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr, ptr, ptr }
 ; P1: a thread's pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
 ; exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
 ; correct rather than merely faster
@@ -1769,6 +1774,7 @@ dwalk:
   br i1 %dend, label %dsplice, label %dwalk
 dsplice:
   store ptr %dh, ptr %dnp
+  call void @__olang_dtor_head(ptr %dh, ptr %dnp)
   br label %dtored
 dtored:
   %dh2 = phi ptr [ %dh, %part ], [ %nd, %dsplice ]
@@ -1840,8 +1846,73 @@ done:
 define void @__olang_scope_register_dtor(ptr %scope0, ptr %instance, ptr %dtorFn) {
 entry:
   %scope = call ptr @__olang_scope_mine(ptr %scope0)
-  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 24, i64 8)
+  %hp = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
+  %h = load ptr, ptr %hp
+  %inregion = icmp eq ptr %h, @__olang_region_chunk
+  br i1 %inregion, label %region, label %plain
+plain:
+  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 32, i64 8)
   call void @__olang_scope_push_dtor(ptr %scope, ptr %node, ptr %instance, ptr %dtorFn)
+  ret void
+region:
+  call void @__olang_region_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn)
+  ret void
+}
+
+; C9b, O15: an instance in a region made in a scope that is no region (its owner) is registered in that scope's list -
+; so the scope's close runs it in construction order with everything else - and on the region's own chain, which a
+; release of the region runs first. The node lives in the region, freed with it once unlinked. Out of line, so the
+; plain path above stays small enough to inline where an instance is made
+define void @__olang_region_register_dtor(ptr %scope, ptr %instance, ptr %dtorFn) noinline {
+entry:
+  %ownp = getelementptr %olang.region, ptr %scope, i32 0, i32 6
+  %own = load ptr, ptr %ownp
+  %nested = icmp eq ptr %own, null
+  br i1 %nested, label %plain, label %owner
+  ; ...a region made in another region has no owner: its instances are registered in it, and destructed as it closes
+plain:
+  %node = call ptr @__olang_scope_alloc_a(ptr %scope, i64 32, i64 8)
+  call void @__olang_scope_push_dtor(ptr %scope, ptr %node, ptr %instance, ptr %dtorFn)
+  ret void
+owner:
+  %rnode = call ptr @__olang_scope_alloc_a(ptr %scope, i64 40, i64 8)
+  call void @__olang_scope_push_dtor(ptr %own, ptr %rnode, ptr %instance, ptr %dtorFn)
+  %dnp = getelementptr %olang.region, ptr %scope, i32 0, i32 5
+  %dn = load ptr, ptr %dnp
+  %rnp = getelementptr %olang.dtornode, ptr %rnode, i32 0, i32 4
+  store ptr %dn, ptr %rnp
+  store ptr %rnode, ptr %dnp
+  ret void
+}
+
+; a list of registrations given a new place pointing at its first node (a splice, a fold): that node's pprev (C9b)
+define void @__olang_dtor_head(ptr %node, ptr %at) alwaysinline {
+entry:
+  %has = icmp ne ptr %node, null
+  br i1 %has, label %fix, label %done
+fix:
+  %ppp = getelementptr %olang.dtornode, ptr %node, i32 0, i32 3
+  store ptr %at, ptr %ppp
+  br label %done
+done:
+  ret void
+}
+
+; a registration taken off the list it is in (C9b): through its pprev, in O(1)
+define void @__olang_dtor_unlink(ptr %node) {
+entry:
+  %ppp = getelementptr %olang.dtornode, ptr %node, i32 0, i32 3
+  %pp = load ptr, ptr %ppp
+  %np = getelementptr %olang.dtornode, ptr %node, i32 0, i32 0
+  %n = load ptr, ptr %np
+  store ptr %n, ptr %pp
+  %has = icmp ne ptr %n, null
+  br i1 %has, label %fix, label %done
+fix:
+  %nppp = getelementptr %olang.dtornode, ptr %n, i32 0, i32 3
+  store ptr %pp, ptr %nppp
+  br label %done
+done:
   ret void
 }
 
@@ -1857,6 +1928,15 @@ entry:
   store ptr %instance, ptr %instptr
   %fnptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 2
   store ptr %dtorFn, ptr %fnptr
+  %ppptr = getelementptr %olang.dtornode, ptr %node, i32 0, i32 3
+  store ptr %dheadptr, ptr %ppptr
+  %hadhead = icmp ne ptr %oldhead, null
+  br i1 %hadhead, label %fixold, label %link
+fixold:
+  %oldpp = getelementptr %olang.dtornode, ptr %oldhead, i32 0, i32 3
+  store ptr %nextptr, ptr %oldpp
+  br label %link
+link:
   store ptr %node, ptr %dheadptr
   ret void
 }
@@ -1873,15 +1953,18 @@ entry:
 ;   outer - the scope every allocation names (the region's address), with its destructors and its own kids
 ;   inner - the arena its allocations come from
 ;   prev, next - its neighbours in its parent's kids; parent - the scope it is a kid of, until released
-%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr }
+;   dn - the registrations made for its instances (C9b), newest first: each also in its owner's list, which runs it at
+;        the owner's close unless a release of this region runs it first
+;   owner - its parent where that is no region, else null (a region in a region registers its instances in itself)
+; %olang.region: its fields are said with the region functions below
 @__olang_region_chunk = global %olang.chunk zeroinitializer
 
 ; a new region, a kid of parent: empty, closed with parent unless released before
 define ptr @__olang_region_make(ptr %parent) noinline {
 entry:
-  %r = call ptr @malloc(i64 136)
+  %r = call ptr @malloc(i64 152)
   call void @__olang_alloc_check(ptr %r)
-  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 136, i1 false)
+  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 152, i1 false)
   store ptr @__olang_region_chunk, ptr %r
   %tailp = getelementptr %olang.scope, ptr %r, i32 0, i32 2
   store ptr %r, ptr %tailp
@@ -1899,6 +1982,12 @@ head:
   store ptr %r, ptr %kp
   %pp = getelementptr %olang.region, ptr %r, i32 0, i32 4
   store ptr %parent, ptr %pp
+  %parhp = getelementptr %olang.scope, ptr %parent, i32 0, i32 0
+  %parh = load ptr, ptr %parhp
+  %inregion = icmp eq ptr %parh, @__olang_region_chunk
+  %owner = select i1 %inregion, ptr null, ptr %parent
+  %ownp = getelementptr %olang.region, ptr %r, i32 0, i32 6
+  store ptr %owner, ptr %ownp
   ret ptr %r
 }
 
@@ -2010,6 +2099,26 @@ intoparent:
   br label %close
 close:
   store ptr null, ptr %np
+  br label %chain
+  ; C9b: the destructors registered for its instances, newest first - each taken off the list it is in before it runs,
+  ; as a scope's close takes one off its own (C9a) - then the region closed as any kid, with nothing left on its own list
+chain:
+  %dnp = getelementptr %olang.region, ptr %r, i32 0, i32 5
+  %dn = load ptr, ptr %dnp
+  %nodn = icmp eq ptr %dn, null
+  br i1 %nodn, label %closed, label %run
+run:
+  %rnp = getelementptr %olang.dtornode, ptr %dn, i32 0, i32 4
+  %rn = load ptr, ptr %rnp
+  store ptr %rn, ptr %dnp
+  call void @__olang_dtor_unlink(ptr %dn)
+  %ip = getelementptr %olang.dtornode, ptr %dn, i32 0, i32 1
+  %inst = load ptr, ptr %ip
+  %fp = getelementptr %olang.dtornode, ptr %dn, i32 0, i32 2
+  %fn = load ptr, ptr %fp
+  call void %fn(ptr %inst, ptr %r)
+  br label %chain
+closed:
   call void @__olang_close_kids(ptr %r)
   br label %done
 done:
@@ -2095,7 +2204,9 @@ dsplice:
   %ddhead = load ptr, ptr %ddheadptr
   %dtailnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0
   store ptr %ddhead, ptr %dtailnextptr
+  call void @__olang_dtor_head(ptr %ddhead, ptr %dtailnextptr)
   store ptr %sdhead, ptr %ddheadptr
+  call void @__olang_dtor_head(ptr %sdhead, ptr %ddheadptr)
   store ptr null, ptr %sdheadptr
   br label %chunks
 chunks:
@@ -2151,6 +2262,7 @@ parts:
   %folded = call { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %f, ptr %pd, ptr %ph, ptr %pt)
   %fd = extractvalue { ptr, ptr, ptr } %folded, 0
   store ptr %fd, ptr %pdp, !tbaa !59
+  call void @__olang_dtor_head(ptr %fd, ptr %pdp)
   %fh = extractvalue { ptr, ptr, ptr } %folded, 1
   store ptr %fh, ptr %php, !tbaa !59
   %ft = extractvalue { ptr, ptr, ptr } %folded, 2
@@ -2175,6 +2287,13 @@ dcall:
   %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0
   %dnext = load ptr, ptr %dnextptr
   store ptr %dnext, ptr %dheadptr, !tbaa !59
+  %dhasnext = icmp ne ptr %dnext, null
+  br i1 %dhasnext, label %dfixpp, label %drun
+dfixpp:
+  %dnpp = getelementptr %olang.dtornode, ptr %dnext, i32 0, i32 3
+  store ptr %dheadptr, ptr %dnpp
+  br label %drun
+drun:
   %instptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 1
   %inst = load ptr, ptr %instptr
   %fnptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 2
@@ -2196,6 +2315,7 @@ dparts:
   %wfolded = call { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %wp, ptr %wdh, ptr %wh, ptr %wt)
   %wfd = extractvalue { ptr, ptr, ptr } %wfolded, 0
   store ptr %wfd, ptr %dheadptr, !tbaa !59
+  call void @__olang_dtor_head(ptr %wfd, ptr %dheadptr)
   %wfh = extractvalue { ptr, ptr, ptr } %wfolded, 1
   store ptr %wfh, ptr %whp, !tbaa !59
   %wft = extractvalue { ptr, ptr, ptr } %wfolded, 2

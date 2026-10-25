@@ -18183,3 +18183,82 @@ test "E24: a try covers the whole expression after it, and the evaluator agrees"
     assert TrReachBaked == trAll(n) * 1000 + trLess(-1) * 100 + trMore(3) * 10 + trAfter(-5)
     assert TrReachBaked == 5000 + 100 + 70 + 8
 }
+
+# ---- C9b: x.Destroy() runs an instance's destructor now and reclaims it; every other destructor keeps O15's order ----
+
+DestroyLog mut I64 = 0
+type DestroyRes struct(id I64) {
+    id
+    text String& = $"res " $id " - its text built where it lives"
+} destruct {
+    DestroyLog = DestroyLog * 10 + id
+}
+
+fn destroyOrder(k I64) I64 {
+    a := DestroyRes(1)
+    e := DestroyRes(2)
+    f := DestroyRes(3)
+    if k > 5 { e.Destroy() }
+    churnArena()
+    return a.text.Len() + f.id
+}
+
+fn destroyBuilt(i I64) DestroyRes& { return DestroyRes(i) }
+
+fn destroyLooped() I64 {
+    t I64 = 0
+    for i in range 4 {
+        r := destroyBuilt(i + 1)
+        t += r.text.Len()
+        if i % 2 == 0 { r.Destroy() }
+    }
+    return t
+}
+
+error DestroyFail {
+    NEG
+}
+
+# destroyed on the path that fails, returned on the other: a return or an error after it ends its path
+fn destroyOpen(i I64) DestroyRes& ? DestroyFail {
+    r := DestroyRes(i)
+    if i < 0 {
+        r.Destroy()
+        error DestroyFail.NEG
+    }
+    return r
+}
+
+fn destroyDeferred(i I64) I64 {
+    r := DestroyRes(i)
+    defer r.Destroy()
+    churnArena()
+    return r.text.Len()
+}
+
+fn destroyLen(r DestroyRes&) I64 { return r.text.Len() }
+
+test "C9b: Destroy() runs the destructor now, and the others still run in reverse construction order" {
+    DestroyLog = 0
+    assert destroyOrder(1 + ctRuntimeZero) == 40 and DestroyLog == 321
+    DestroyLog = 0
+    assert destroyOrder(9 + ctRuntimeZero) == 40 and DestroyLog == 231
+    DestroyLog = 0
+    assert destroyLooped() == 4 * 37 and DestroyLog == 1234
+}
+
+test "C9b: a Destroy() before an error, a deferred one, and one after a call that keeps nothing" {
+    DestroyLog = 0
+    try destroyOpen(-7 + ctRuntimeZero) catch DestroyFail { }
+    assert DestroyLog == -7
+    DestroyLog = 0
+    r := destroyOpen(6 + ctRuntimeZero)!
+    churnArena()
+    assert r.text == "res 6 - its text built where it lives" and DestroyLog == 0
+    assert destroyDeferred(8 + ctRuntimeZero) == 37 and DestroyLog == 8
+    DestroyLog = 0
+    k := DestroyRes(5)
+    n := destroyLen(k)
+    k.Destroy()
+    assert n == 37 and DestroyLog == 5
+}

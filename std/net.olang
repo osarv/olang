@@ -5,8 +5,8 @@
 # Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo is read through extern types,
 # X10, and a plain-data struct, X11); ParseIP and ParseAddr read only numbers (and "localhost").
 #
-# A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), and Close()
-# closes it sooner; each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
+# A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), or sooner at
+# x.Destroy() (C9b); each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
 # Imported with `import "std/net"`.
 
 import "time"
@@ -431,18 +431,19 @@ fn Resolve(t String&) Addr ? Error.ADDRESS, Error.UNKNOWN_HOST, Error.UNREACHABL
 
 # ---- TCP ----
 
-# a connection, either side's: read and written as a stream of bytes until Close or the end of its scope
+# a connection, either side's: read and written as a stream of bytes until it is destroyed (its scope's end, or
+# Destroy())
 type Conn struct(fd I32) {
     fd
 } destruct {
-    if fd >= 0: close(fd)
+    close(fd)
 }
 
 # a listening socket: Accept gives each connection made to it
 type Listener struct(fd I32) {
     fd
 } destruct {
-    if fd >= 0: close(fd)
+    close(fd)
 }
 
 # a socket listening at a, which may name port 0 for one the system chooses (Addr() says which), and the "any"
@@ -464,9 +465,8 @@ fn Listen(a Addr&, backlog I32 = 128) Listener& ? Error {
 # the address the listener is at - with the port the system chose, where Listen was given 0
 fn (l Listener&) Addr() Addr ? Error { return try nameOf(l.fd, false) }
 
-# waits for a connection and gives it - failing with CLOSED when the listener has been closed
+# waits for a connection and gives it
 fn (l mut Listener&) Accept() Conn& ? Error {
-    if l.fd < 0 { error Error.CLOSED }
     for {
         sa := Array<U8>(28)
         len := U32[28]
@@ -475,11 +475,6 @@ fn (l mut Listener&) Accept() Conn& ? Error {
         if not interrupted() { try raise(__olang_err()) }
     }
     unreachable
-}
-
-fn (l mut Listener&) Close() {
-    if l.fd >= 0: close(l.fd)
-    l.fd = -1
 }
 
 # a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, TIMEOUT when the system gives up
@@ -498,7 +493,6 @@ fn Dial(a Addr&) Conn& ? Error {
 # waiting until something does. Fails with CLOSED once the other side has closed and everything it sent has been read,
 # TIMEOUT when a timeout set by SetTimeout passes first, RESET when the connection was reset
 fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
-    if c.fd < 0 { error Error.CLOSED }
     if buf.Len() == 0 { return buf[:0] }
     for {
         n := recv(c.fd, buf, buf.Len(), 0)
@@ -512,7 +506,6 @@ fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
 # all of data written, however many sends it takes - failing with RESET when the other side has gone (never a signal:
 # the send asks for none, MSG_NOSIGNAL), TIMEOUT when a timeout set by SetTimeout passes
 fn (c Conn&) Write(data Array<U8>&) ? Error {
-    if c.fd < 0 { error Error.CLOSED }
     sent I64 = 0
     for sent < data.Len() {
         n := send(c.fd, data[sent:], data.Len() - sent, msgNosignal)
@@ -525,13 +518,10 @@ fn (c Conn&) Write(data Array<U8>&) ? Error {
 }
 
 # says no more will be written: the other side reads to the end (CLOSED), and may still write back
-fn (c Conn&) CloseWrite() {
-    if c.fd >= 0: shutdown(c.fd, shutWr)
-}
+fn (c Conn&) CloseWrite() { shutdown(c.fd, shutWr) }
 
 # a Read or Write waiting longer than d fails with TIMEOUT from now on; 0 waits for ever (the default)
 fn (c Conn&) SetTimeout(d time.Duration) {
-    if c.fd < 0 { return }
     tv := Array<U8>(16)
     sec := I64(d) / 1000000000
     usec := I64(d) % 1000000000 / 1000
@@ -547,18 +537,13 @@ fn (c Conn&) SetTimeout(d time.Duration) {
 fn (c Conn&) Local() Addr ? Error { return try nameOf(c.fd, false) }
 fn (c Conn&) Remote() Addr ? Error { return try nameOf(c.fd, true) }
 
-fn (c mut Conn&) Close() {
-    if c.fd >= 0: close(c.fd)
-    c.fd = -1
-}
-
 # ---- UDP ----
 
 # a UDP socket: datagrams sent to and received from any address, each whole or not at all
 type UDP struct(fd I32) {
     fd
 } destruct {
-    if fd >= 0: close(fd)
+    close(fd)
 }
 
 # a UDP socket bound to a (port 0 for one the system chooses, Local() saying which)
@@ -609,10 +594,6 @@ fn (u UDP&) SetTimeout(d time.Duration) {
 
 fn (u UDP&) Local() Addr ? Error { return try nameOf(u.fd, false) }
 
-fn (u mut UDP&) Close() {
-    if u.fd >= 0: close(u.fd)
-    u.fd = -1
-}
 
 # ---- the tests ----
 
@@ -663,7 +644,7 @@ fn echoOnce(l mut Listener&, served mut counted&) ? Error {
         c.Write(out)!
         served.n += got.Len()
     }
-    c.Close()
+    c.Destroy()
 }
 
 type counted struct() {
@@ -701,7 +682,7 @@ test "dialing where nothing listens is refused, and a taken address is in use" {
     l := Listen(Addr(Loopback4(), 0))!
     at := l.Addr()!
     try Listen(at) catch Error.IN_USE { } catch Error { unreachable }
-    l.Close()
+    l.Destroy()
     try Dial(at) catch Error.REFUSED { return }
     unreachable
 }

@@ -615,9 +615,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   program's places that keep and why. Measured: 2.7's five programs 118 MB-1.49 GB -> under 2.5 MB; a fixed array widened
   to a run-time value is now made where it is kept (it took a copy in the program's scope - 130 MB over 2M calls).
   Gate: the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`) over the suite, the suite under `-sanitize`, and
-  `fuzz free` (440 programs, ~4,900 places freed, nothing found; a planted unsound decision found in all 20 tried).
-- **Recorded limits:** long-lived mutated structures holding values a task can reach, or with destructors, still only
-  grow (ledger QF); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
+  `fuzz free` (440 programs, ~4,900 places freed, nothing found; a planted unsound decision found in all 20 tried). **Round 7
+  (2026-10-25): `x.Destroy()` (C9b)**, the user's QAD: runs the destructor of the instance a local names now and frees
+  it, compiled only where the same analysis proves the local the only way left to reach it (made for it at a site, or
+  taken out of a collection holding it alone; never stored, captured, handed to a task or to a call that may keep it;
+  no other name used after), and the local is not read after it. std's resource types lose `Close()` (std/net).
+  Destructor order is kept (O15): an instance in a region is registered on its owner scope's list - now doubly linked,
+  O(1) unlink - and on its region's chain, which a release runs first. Decided (mine): a Destroy()'s target is a place of
+  its own (free.olang's destroy targets); a collection whose values have destructors is a candidate that never frees on
+  its own let-go but builds its values in regions when a Destroy() takes them out; a value taken out of one is destroyed
+  only in root-emitted code (B3i); `defer x.Destroy()` works; a return or error after it ends its path. Measured: 1M
+  connections with destructors in a Map 50 MB -> 1.9 MB, 100k std UDP sockets under `ulimit -n 64` 1.7 MB.
+- **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
+  values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result

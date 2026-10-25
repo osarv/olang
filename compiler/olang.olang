@@ -464,7 +464,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
-        if not d.HasFatal() { placement(c, cfg) }
+        if not d.HasFatal() { placement(c, cfg, -1, false) }
         error build.Failed.REPORTED
     }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
@@ -752,7 +752,7 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut free.Free&cfg {
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free&cfg {
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
@@ -761,7 +761,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut
     # and early freeing's decisions written into its plans (O8d), for a program at its root
     fr mut free.Free&cfg = free.Free(c.P, c.Bodies, sc)
     fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
-    fr.Decide(sc.Plans, root)
+    fr.Decide(sc.Plans, root, destroys)
     return fr
 }
 

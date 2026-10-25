@@ -1,0 +1,13 @@
+# check: fail error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
+# C9b: a parameter's instance is its caller's too
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn end(r Res&) { r.Destroy() }
+fn main() {
+    r := Res(1)
+    end(r)
+}

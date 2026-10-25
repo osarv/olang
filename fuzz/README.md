@@ -29,6 +29,18 @@ and counted.
 make scopefuzz                    # SEED=1 COUNT=100 JOBS=2 SCENARIOS=12
 ```
 
+## The early-free fuzzer (O8d, C9b)
+
+Programs that replace and remove in long-lived places, keep views across the let-goes, store views elsewhere, and
+take resources out of a Map to `Destroy()` them, each scenario with a holder type of its own. Each is built
+`-d -s -memory` and interpreted in the evaluator's dead-region mode (`OLANG_DEADREGIONS=1`), which stops at a read of
+a region a release reclaimed. Scenarios the compiler refuses are left out and counted; the summary counts the places
+the builds' `-memory` reports free at once, so a run that frees nothing is seen to.
+
+```
+build/fuzz_fuzz.debug free 1 400 3 6
+```
+
 ## Driver commands
 
 ```
@@ -36,6 +48,8 @@ build/fuzz_fuzz.debug run START COUNT [JOBS [CASES]]
 build/fuzz_fuzz.debug show SEED [CASES [ONLY]]            # print a program, or one case
 build/fuzz_fuzz.debug scope START COUNT [JOBS [SCENARIOS [avoid]]]
 build/fuzz_fuzz.debug scopeshow SEED [SCENARIOS [ONLY]]
+build/fuzz_fuzz.debug free START COUNT [JOBS [SCENARIOS]]
+build/fuzz_fuzz.debug freeshow SEED [SCENARIOS]
 ```
 
 Build it first with `build/olang build -debug fuzz/fuzz.olang` (the make targets do). Each run works in

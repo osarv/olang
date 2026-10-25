@@ -459,18 +459,20 @@ test "what a long-lived place lets go of is freed at once" { assert passed("earl
 fn earlyfree(r mut report&) ? Failed {
     dir := fresh("earlyfree")
     os.Run("cp checks/fixtures/earlyfree/* " $os.Quote(dir))
-    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv"]
-    small := String&["300", "100", "2000", "2000", "5", "300"]
+    # C9b: conns and sockets hold values with destructors, freed by a Destroy() after each is taken out - sockets'
+    # descriptors too, under a limit of 64 open at once
+    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets"]
+    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200"]
     full := String&["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "12000000000000\n"]
+                    "3071\n", "12000000000000\n", "999936 64\n", "16\n"]
     part := String&["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "270000\n"]
+                    "3071\n", "270000\n", "1936 64\n", "16\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)
-        try r.expect(sh(dir, $"(ulimit -v 8192 && ./build/" $p ") > out.txt 2>&1") == 0, $p " under 8 MB", dir)
+        try r.expect(sh(dir, $"(ulimit -v 8192 && ulimit -n 64 && ./build/" $p ") > out.txt 2>&1") == 0, $p " under 8 MB", dir)
         try r.expect(outOf(dir) == full[i], $p " output", dir)
         try r.expect(sh(dir, $"\"$OLANG\" interpret -define N=" $small[i] " " $p ".olang > out.txt 2>&1") == 0, $p " interpreted", dir)
         try r.expect(outOf(dir) == part[i], $p " interpreted output", dir)

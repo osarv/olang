@@ -3195,6 +3195,8 @@ fn (fe mut fnEm&) findIdle() {
                             frame = fe.useRef(b, used) or frame
                             frame = fe.useRef(into, used) or frame
                         }
+                        # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
+                        case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { frame = fe.useRef(r, used) or frame }
                         case _ { }
                     }
                 }

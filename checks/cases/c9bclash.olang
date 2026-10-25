@@ -1,0 +1,10 @@
+# check: fail error[C9b]: the compiler supplies Destroy() for Res&, which declares a destructor - choose another name
+# C9b: a type declaring a destructor has Destroy() from the compiler - a method of its own of that name would hide it
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn (r Res&) Destroy() { }
+fn main() { }

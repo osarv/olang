@@ -1,0 +1,14 @@
+# check: fail error[C9b]: 'k.Destroy()' needs 'k' to be the only way left to reach its instance
+# C9b: a call through a function value is a body not known - it is taken to have kept what it was given
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn main() {
+    f := fn(r Res&) { }
+    k := Res(7)
+    f(k)
+    k.Destroy()
+}

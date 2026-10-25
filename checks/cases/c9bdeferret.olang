@@ -1,0 +1,14 @@
+# check: fail error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
+# C9b: a deferred Destroy() runs as the function leaves, after its result is computed - the caller would get what it ended
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn open() Res& {
+    r := Res(1)
+    defer r.Destroy()
+    return r
+}
+fn main() { assert open().id == 1 }

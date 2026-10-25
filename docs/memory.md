@@ -1,7 +1,7 @@
 # Memory: one rule, and freeing early as the compiler's optimization
 
-Status: design for review, 2026-10-17. Rounds 1-4 and 6 (Vec as a handle, the view rule M19g, `own` removed, the
-prelude's let-go, early freeing in the port - section 5.5) are built; rounds 5 and 7 are not. The user
+Status: design for review, 2026-10-17. Rounds 1-4, 6 and 7 (Vec as a handle, the view rule M19g, `own` removed, the
+prelude's let-go, early freeing in the port, `x.Destroy()` - section 5.5) are built; round 5 is not. The user
 decided the direction (ledger QAB, 2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an
 implementation agent follows, round by round; what each round built and measured is in HISTORY.md. This replaces owned
 references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
@@ -793,6 +793,7 @@ built in closes, in reverse construction order (O15, O16). Early freeing never m
 **So storage holding an instance whose destructor is still to run is never freed early** (O8d's condition 4). When a
 place lets go of such a value, its region is handed to the scope §8 places it in and closed with it.
 
+*(Superseded by round 7: the written call is `x.Destroy()`, the destructor itself, and std's types have no `Close`.)*
 **Prompt release of a resource becomes a written call** - the one thing `own` did automatically that a program now
 writes. `own` closed a connection's socket the moment the connection left its map. Now the handler writes
 `c.Close()` before removing it.
@@ -961,7 +962,8 @@ programs flat, the gate's three oracles clean, `mremap` not adopted.)*
   - the evaluator's dead-region mode, `-sanitize` and the early-free fuzzer find nothing;
   - `bench/` within 2% of round 5's times outside the rows that allocate into regions.
 
-**Round 7 - `x.Destroy()`, decided by the user 2026-10-18 (replaces disarming, ledger QAD).**
+**Round 7 - `x.Destroy()`, decided by the user 2026-10-18 (replaces disarming, ledger QAD).** *(Built 2026-10-25, in
+the port only - stage 0 is gone - as SPEC C9b: HISTORY.md "Memory round 7". 5.2's `Close()` pattern is superseded.)*
 - **Rule:** `x.Destroy()` runs the destructor of `x`'s object now and marks it run, so nothing runs for it when its
   scope closes: every destructor runs exactly once, at its scope's close or at a proven `Destroy()`. It compiles only
   where the compiler proves `x` is the sole way left to reach the object - the early-free proof of section 2 (no

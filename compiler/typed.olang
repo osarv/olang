@@ -437,6 +437,9 @@ type PrimOp enum {
     # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
     # the collection
     Retire
+    # "x.Destroy()" (C9b): args [a read of the local x] - the instance x names destructed now and its storage reclaimed,
+    # where early freeing's analysis (compiler/free.olang) proves x the only way left to reach it; lowered as a Release
+    Destroy
     # an integer's bits (E37): the three counts give an I64; the rotations take args [x, n], n converted to I64 and taken
     # modulo the width; ByteSwap gives x's type
     LeadingZeros

@@ -361,6 +361,14 @@ type Diag enum {
     AtomicNotPlace
     AtomicNotWritable
     VacateNotPlace
+    DestroyNotLocal
+    DestroyNoDestructor
+    DestroyNotSole
+    DestroyUsedAfter
+    DestroyInLoop
+    DestroyDeclared
+    NoteDestroyWhy
+    NoteDestroyHere
     ConversionRepresentation
     ConvertNotNumber
     NotIndexable
@@ -1633,6 +1641,30 @@ fn AtomicNotWritable() Msg { return Msg(Diag.AtomicNotWritable, "P9", "this atom
 
 # the prelude's vacate() on what is no writable place (docs/memory.md 3.4)
 fn VacateNotPlace() Msg { return Msg(Diag.VacateNotPlace, "M19d", "vacate() empties a place - a writable variable, field or element") }
+
+# x.Destroy() on what is no local of this function (C9b)
+fn DestroyNotLocal() Msg { return Msg(Diag.DestroyNotLocal, "C9b", "Destroy() is called on a local - a variable of this function holding the instance") }
+
+# x.Destroy() on an instance of a type with no destructor (C9b)
+fn DestroyNoDestructor(ty String&) Msg { return Msg(Diag.DestroyNoDestructor, "C9b", "Destroy() runs a destructor, and " $ty " declares none") }
+
+# x.Destroy() where x may not be the only way left to reach its instance (C9b); a note says what else may reach it
+fn DestroyNotSole(name String&) Msg { return Msg(Diag.DestroyNotSole, "C9b", "'" $name ".Destroy()' needs '" $name "' to be the only way left to reach its instance") }
+
+# a local read after its Destroy() (C9b)
+fn DestroyUsedAfter(name String&, line I64) Msg { return Msg(Diag.DestroyUsedAfter, "C9b", "'" $name "' is used after '" $name ".Destroy()' (line " $line ")") }
+
+# x.Destroy() in a loop x is declared outside of: its next turn destroys again (C9b)
+fn DestroyInLoop(name String&) Msg { return Msg(Diag.DestroyInLoop, "C9b", "'" $name ".Destroy()' runs again in the loop's next turn, on what it ended - declare '" $name "' inside the loop") }
+
+# a method named Destroy declared on a type with a destructor, which has the compiler's (C9b)
+fn DestroyDeclared(ty String&) Msg { return Msg(Diag.DestroyDeclared, "C9b", "the compiler supplies Destroy() for " $ty ", which declares a destructor - choose another name") }
+
+# what else may reach an instance a Destroy() is refused for
+fn NoteDestroyWhy(text String&) Msg { return Msg(Diag.NoteDestroyWhy, "", $text) }
+
+# where the Destroy() a use follows is
+fn NoteDestroyHere(name String&) Msg { return Msg(Diag.NoteDestroyHere, "", "'" $name ".Destroy()' is here; give it a new local if it is needed again") }
 
 # ERR_CONVERSION_REPRESENTATION
 fn ConversionRepresentation(ty1 String&, ty2 String&) Msg { return Msg(Diag.ConversionRepresentation, "T29", $ty1 " cannot become " $ty2 " - their representations differ") }

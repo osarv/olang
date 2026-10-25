@@ -1,0 +1,18 @@
+# check: fail error[C9b]: 'b.Destroy()' needs 'b' to be the only way left to reach its instance
+# C9b: a call whose body stores what it is given may have kept it - read off the callee's body
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+type Box struct() {
+    r Res?& = null
+}
+fn keep(bx mut Box&, r Res&) { bx.r = r }
+fn main() {
+    bx mut Box& = Box()
+    b := Res(2)
+    keep(bx, b)
+    b.Destroy()
+}

@@ -1,0 +1,14 @@
+# check: fail error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+# C9b: a lambda capturing the local reaches the instance after the call
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+fn main() {
+    c := Res(3)
+    g := fn() I64 { return c.id }
+    c.Destroy()
+    assert g() == 3
+}

@@ -998,6 +998,11 @@ fn (c mut Checker&) inheritClash(f I64) {
         if (name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire) and c.P.T.IsInt(u) { given = true }
     }
     if name == "Value" and c.isEnum(rt) and c.rawsOf(rt).Ty != types.UnknownT { given = true }   # T17e
+    if name == "Destroy" and c.destructs(rt) {    # C9b
+        c.err(c.nameSpan(fd), msgs.DestroyDeclared(c.ty(ps[0])))
+        c.pop()
+        return
+    }
     if given { c.err(c.nameSpan(fd), msgs.MethodClashesSupplied(name, c.ty(ps[0]))) }
     c.pop()
 }
@@ -4399,6 +4404,12 @@ fn (c mut Checker&) arrayOf(t types.TypeId) types.TypeId {
 
 fn (c mut Checker&) isStruct(t types.TypeId) Bool {
     return c.isNamed(t) and c.declKind(t) == types.DeclKind.Struct and c.P.Body(t)
+}
+
+# whether t - or what a reference t names - is a struct type declaring a destructor (C7, C9b)
+fn (c mut Checker&) destructs(t types.TypeId) Bool {
+    r := c.P.T.Repr(c.deref(t))
+    return c.isStruct(r) and c.P.T.Destructs(r)
 }
 
 fn (c mut Checker&) isEnum(t types.TypeId) Bool {
@@ -9970,6 +9981,28 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         # storage is poisoned; a module that retires arrays gives its arrays chunks of their own there
         c.P.L.Mods[c.fr().Mi].Retires = true
         return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
+    }
+    if name == "Destroy" and args.Len() == 0 and c.isStruct(c.P.T.Repr(rt)) {
+        # C9b: the instance a local names destructed now and its storage reclaimed - compiled only where early
+        # freeing's analysis (compiler/free.olang) proves the local the only way left to reach it, which says so where
+        # it is not
+        if not c.destructs(rt) {
+            c.err(nsp, msgs.DestroyNoDestructor(c.ty(rt)))
+            return c.unknown(sp)
+        }
+        p := readPlace(rx)
+        local := false
+        if p is not null {
+            match p {
+                case typed.Place.Local(_, _, _) { local = true }
+                case _ { }
+            }
+        }
+        if not local {
+            c.err(c.operandAt(x), msgs.DestroyNotLocal())
+            return c.unknown(sp)
+        }
+        return c.prim(sp, types.VoidT, typed.PrimOp.Destroy, rx, null)
     }
     if name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude {
         # docs/memory.md 3.4, O8d: what a place holds given and the place left empty - as a statement, what it held let

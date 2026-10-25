@@ -1,0 +1,18 @@
+# check: fail error[C9b]: 'a.Destroy()' needs 'a' to be the only way left to reach its instance
+# C9b: a reference to the instance stored in a field is a second way to reach it - the Destroy() is refused, a note at
+# the store
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+type Box struct() {
+    r Res?& = null
+}
+fn main() {
+    a := Res(1)
+    bx mut Box& = Box()
+    bx.r = a
+    a.Destroy()
+}

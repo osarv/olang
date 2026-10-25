@@ -8575,15 +8575,15 @@ compiler/eval:dkey	32 8	%"compiler/eval:dkey"	{ i64, i32, i32, i32, i32, i64 }	f
 compiler/eval:frame	128 8	%"compiler/eval:frame"	{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i1, i1, i64, i64, i1, i64, i32 }	fields 0,8,16,24,32,40,48,56,64,72,80,81,82,88,96,104,112,120
 compiler/eval:gkey	16 8	%"compiler/eval:gkey"	{ i64, i32 }	fields 0,8
 compiler/eval:global	48 8	%"compiler/eval:global"	{ i64, i1, i64, i64, i64, i1, i1 }	fields 0,8,16,24,32,40,41
-compiler/eval:reg	40 8	%"compiler/eval:reg"	{ i64, i64, i64, i64, i64 }	fields 0,8,16,24,32
-compiler/eval:scope	120 8	%"compiler/eval:scope"	{ i64, i1, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1 }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112
+compiler/eval:reg	64 8	%"compiler/eval:reg"	{ i64, i64, i64, i64, i64, i64, i64, i64 }	fields 0,8,16,24,32,40,48,56
+compiler/eval:scope	136 8	%"compiler/eval:scope"	{ i64, i1, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i64, i64 }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128
 compiler/eval:task	32 8	%"compiler/eval:task"	{ i64, i64, i64, i64 }	fields 0,8,16,24
 compiler/lower:Gap	32 8	%"compiler/lower:Gap"	{ i64, %"compiler/source:Span", { i64, ptr } }	fields 0,8,16
 compiler/lower:Lowerer	120 8	%"compiler/lower:Lowerer"	{ ptr, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", ptr, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i32, i32 }	fields 0,8,16,24,32,40,41,48,56,64,72,80,88,96,104,112,116
 compiler/lower:collectCtx	32 8	%"compiler/lower:collectCtx"	{ i32, i32, i32, i32, { i64, [1 x i64] } }	fields 0,4,8,12,16
 compiler/lower:level	12 4	%"compiler/lower:level"	{ i32, i32, i32 }	fields 0,4,8
 compiler/lower:loopCtx	40 8	%"compiler/lower:loopCtx"	{ i32, i64, i32, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,24,32
-compiler/lower:lowering	560 8	%"compiler/lower:lowering"	{ ptr, ptr, ptr, %"compiler/mir:Fn", i64, { i64, [4 x i64] }, i32, i1, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, i32, { i64, [1 x i64] }, %"compiler/typed:Plan", i1, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,24,240,248,288,292,293,296,304,312,320,328,336,344,352,360,368,369,372,376,392,544,552
+compiler/lower:lowering	568 8	%"compiler/lower:lowering"	{ ptr, ptr, ptr, %"compiler/mir:Fn", i64, { i64, [4 x i64] }, i32, i1, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, i32, { i64, [1 x i64] }, %"compiler/typed:Plan", i1, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64 }	fields 0,8,16,24,240,248,288,292,293,296,304,312,320,328,336,344,352,360,368,369,372,376,392,544,552,560
 compiler/lower:pl	32 8	%"compiler/lower:pl"	{ { i64, [2 x i64] }, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,24
 compiler/lower:tryCtx	40 8	%"compiler/lower:tryCtx"	{ i64, { i64, ptr }, i1, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,24,25,32
 compiler/mir:Base	24 8	{ i64, [2 x i64] }	-	cases ;0;0,8,12
@@ -8627,7 +8627,7 @@ fn() compiler/eval:cfn	16 8	{ ptr, ptr }	-	ret void pass
 fn() compiler/eval:frame	16 8	{ ptr, ptr }	-	ret %"compiler/eval:frame" pass 
 fn() compiler/eval:global	16 8	{ ptr, ptr }	-	ret %"compiler/eval:global" pass 
 fn() compiler/eval:reg	16 8	{ ptr, ptr }	-	ret %"compiler/eval:reg" pass 
-fn() compiler/eval:scope	16 8	{ ptr, ptr }	-	ret %"compiler/eval:scope" pass 
+fn() compiler/eval:scope	16 8	{ ptr, ptr }	-	ret void pass 
 fn() compiler/eval:task	16 8	{ ptr, ptr }	-	ret %"compiler/eval:task" pass 
 fn() compiler/mir:BasicBlock	16 8	{ ptr, ptr }	-	ret %"compiler/mir:BasicBlock" pass 
 fn() std/prelude/list:List<U8>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" pass 
@@ -9354,8 +9354,8 @@ fn(mut std/prelude/list:List<compiler/eval:global>&, I64, compiler/eval:global)	
 fn(mut std/prelude/list:List<compiler/eval:global>&, compiler/eval:global)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/eval:reg>&, I64, compiler/eval:reg)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/list:List<compiler/eval:reg>&, compiler/eval:reg)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/eval:scope>&, I64, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/list:List<compiler/eval:scope>&, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/eval:scope>&, I64, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vvm
+fn(mut std/prelude/list:List<compiler/eval:scope>&, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vm
 fn(mut std/prelude/list:List<compiler/eval:task>&, I64, compiler/eval:task)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/list:List<compiler/eval:task>&, compiler/eval:task)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/lower:Gap>&, compiler/lower:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
@@ -9410,7 +9410,7 @@ fn(mut std/prelude/list:listState<compiler/emit:Object>&, compiler/emit:Object)	
 fn(mut std/prelude/list:listState<compiler/eval:Blob>&, compiler/eval:Blob)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/eval:global>&, compiler/eval:global)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/eval:reg>&, compiler/eval:reg)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/eval:scope>&, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/eval:scope>&, compiler/eval:scope)	16 8	{ ptr, ptr }	-	ret void pass vm
 fn(mut std/prelude/list:listState<compiler/eval:task>&, compiler/eval:task)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/lower:Gap>&, compiler/lower:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/lower:collectCtx>&)	16 8	{ ptr, ptr }	-	ret void pass v
@@ -9484,7 +9484,7 @@ fn(std/prelude/list:List<compiler/eval:global>&, I64) compiler/eval:global	16 8	
 fn(std/prelude/list:List<compiler/eval:reg>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/eval:reg>&, I64) compiler/eval:reg	16 8	{ ptr, ptr }	-	ret %"compiler/eval:reg" pass vv
 fn(std/prelude/list:List<compiler/eval:scope>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/eval:scope>&, I64) compiler/eval:scope	16 8	{ ptr, ptr }	-	ret %"compiler/eval:scope" pass vv
+fn(std/prelude/list:List<compiler/eval:scope>&, I64) compiler/eval:scope	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(std/prelude/list:List<compiler/eval:task>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/eval:task>&, I64) compiler/eval:task	16 8	{ ptr, ptr }	-	ret %"compiler/eval:task" pass vv
 fn(std/prelude/list:List<compiler/lower:Gap>&, I64) Array<compiler/lower:Gap>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv

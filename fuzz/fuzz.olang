@@ -28,7 +28,8 @@
 #     fuzz scopeshow SEED [SCENARIOS [ONLY]]      prints a scope program - or only its scenario ONLY (-1: all)
 #
 # Its early-free mode (docs/memory.md 3.6) runs scopegen's FreeProgram instead - scenarios replacing and removing in
-# long-lived places, views kept across the let-goes and stored elsewhere - built -d -s -memory, and interpreted in the
+# long-lived places, views kept across the let-goes and stored elsewhere, resources taken out of a Map and destroyed
+# (C9b) - built -d -s -memory, and interpreted in the
 # evaluator's dead-region mode (OLANG_DEADREGIONS), which stops at a read of a region a release reclaimed:
 #
 #     fuzz free START COUNT [JOBS [SCENARIOS]]    seeds START.., the places the -memory reports free at once counted

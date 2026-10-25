@@ -5821,7 +5821,8 @@ run time (because it allocates into it, O6) is an implementation matter with no 
 
 **O15.** If a struct type declares a destructor (§9), every instance of it allocated into a given
 scope (§8.3) has its destructor invoked when that scope closes (O1), in the reverse order the
-instances were constructed - the order their constructor calls completed (O16). Where in the scope an
+instances were constructed - the order their constructor calls completed (O16) - unless a `Destroy()` ran it before
+(C9b). Where in the scope an
 instance's storage lies, and whether it was reserved before its constructor's arguments were built, is not
 observable. A destructor-declaring type is reference-only (C11), so this is the sole
 rule governing when a destructor runs: there is no plain-local, function-return-governed case.
@@ -5837,7 +5838,8 @@ statement, read through (`Wrap(x).a.v`), rendered (`$Wrap(x)`) - is an instance 
 the scope it was built in (where its constructor's instance landed, C2d) and destructed once when that closes.
 
 Reclaiming storage early (O8d) never runs a destructor: storage holding an instance whose destructor is still to run is
-kept until the instance's scope closes, and the destructor runs there, in the order above.
+kept until the instance's scope closes, and the destructor runs there, in the order above. `Destroy()` (C9b) is the one
+way to run one sooner, and reclaims the storage with it.
 
 ## 9. Constructors and Destructors
 
@@ -6024,8 +6026,8 @@ not itself shadowed by a local of the same name) reads that field of the instanc
 something when its instance's scope closes, and an empty one releases nothing.
 
 **C9.** A destructor runs, for a given instance, exactly once: when the scope the instance was
-allocated into closes (§8.3, §8.6 O15), regardless of which function allocated it or which function
-happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
+allocated into closes (§8.3, §8.6 O15), or earlier at a `Destroy()` of it (C9b), regardless of which function
+allocated it or which function happens to be executing at that point. Because a destructor-declaring type is reference-only (C11),
 an instance always has a scope of its own and this is the only case; the enclosing function's return
 governs nothing here beyond closing that function's own scope (O1).
 
@@ -6039,6 +6041,28 @@ the task's to build into as any scope a closure captured is, and what the task b
 nested blocks keep scopes of their own (O2). Each destructor is taken off its scope's list before it runs, so a check
 failing inside one while a test runs (S18) ends that destructor alone: the test's unwind closes the scope, and the
 scope's destructors not yet run still run, each once (C10).
+
+**C9b (Destroy).** `x.Destroy()`, a statement on a local `x` holding a reference to an instance of a struct type that
+declares a destructor, runs that instance's destructor now - and the destructors of what was built where it lives, newest
+first, as its scope's close would - and reclaims its storage; nothing runs for it when its scope closes. It compiles
+only where the compiler proves `x` the only way left to reach the instance, by the analysis that frees early (O8d):
+- every value `x` is given was made for it: built where `x` is given it (a constructor call, or a call whose result is
+  built, O13), or moved out of a collection's place that held it alone (`Take`, `Pop`, `TakeAt`, `SwapTake`) - in a
+  collection whose values, as a place, keep nothing elsewhere (O8d's conditions but 4 and 5);
+- no reference to it, or to anything built where it lives, is stored anywhere else, captured, handed to a task, or given
+  to a call that may keep it - a callee storing it, returning something holding it, or passing it on to one that may,
+  read off the callee's body; a call through a function value, an `extern` or a body not known is taken to have kept it;
+- no other local holding it is used after the call;
+- `x` is not a parameter (its caller holds the instance too), a constructor's field, or a match's binding.
+
+`x` is not read after the call - later in its function, in deferred code registered before the call, or in a later turn
+of a loop around it that `x` is declared outside of - even after it is given another value: a `return`, an `error` or an
+`unreachable` after the call in its block ends that path. `defer x.Destroy()` runs it where its block ends, so `x` may
+be used until then, and is not returned there. A value taken out of a collection is destroyed only in code compiled with
+the program it is in - its own module, or an instance (B3i, B3d). Where the proof fails it is a compile-time error
+naming what else may reach the instance. So every destructor runs exactly once, at its scope's close or at a proven
+`Destroy()`, and early destruction never leaves a reference to what it ended. A struct type declaring a destructor may
+not declare a method named `Destroy`.
 
 **C10.** A destructor never runs for a struct type that declares no `destruct` block, never runs more
 than once for the same instance, and never runs for storage no constructor call ever produced an
@@ -6659,7 +6683,9 @@ destructor (conditions 3 and 4); and last a line counting the places and how man
 the program's places are reported - fields of its types, and what its collections hold - not those inside the
 library's collections, whose storage goes with what holds them. SCOPE is the scope of what the place's expression
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
-scope`). Places that free at once are counted, not listed; rows for one cause are written once.
+scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
+values have destructors keeps what it lets go of (condition 4), and is counted as freeing at once where a `Destroy()`
+takes its values out (C9b).
 
 ## 11. External Functions
 

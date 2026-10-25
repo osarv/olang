@@ -1,0 +1,26 @@
+import "std/io"
+import "std/net"
+
+# C9b: a server holding std sockets in a Map, each taken out and destroyed when done with - its descriptor closed and
+# its storage freed at once, so memory and descriptors stay flat however many it ever held
+N I64 = 100000
+
+type Server struct() {
+    socks Map<I64, net.UDP&>
+}
+
+fn (s mut Server&) open(i I64) ? net.Error { s.socks.Put(i, try net.ListenUDP(net.Addr(net.Loopback4(), 0))) }
+
+fn (s mut Server&) done(i I64) ? MapError {
+    u := try s.socks.Take(i)
+    u.Destroy()
+}
+
+fn main() ? {
+    s mut Server& = Server()
+    for i in range N {
+        try s.open(i)
+        if i >= 16 { try s.done(i - 16) }
+    }
+    io.Println($s.socks.Len())!
+}

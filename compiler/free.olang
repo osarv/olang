@@ -10,6 +10,10 @@
 # are its chunks' or buckets' (2.1, 2.6). It is sole when every value stored into it was made for it (built where the
 # store is, null, constant data, or moved out of the same place), no reference read from it is stored anywhere else,
 # none is in use across a let-go of it, no task can reach it, and what it holds has no destructor (O8d's conditions).
+# The same proof decides each x.Destroy() (C9b): the local x is a place of its own (a destroy target), sole when every
+# value it is given was made for it - built at a site of a block of its body, or moved out of a collection's place
+# whose values have destructors (a dtor place: never freed by a let-go, O15, but its values built in regions when a
+# Destroy() takes one out) - no copy of it is kept elsewhere or used after the call, and x is not read again.
 # Every fact the analysis does not have means keep: a call through a function value, an extern, a body the scope pass
 # did not judge, code in a module compiled on its own (B3i: only code emitted in the root's object - its own module's,
 # every instance's - makes regions and releases them).
@@ -23,6 +27,7 @@ import "std/io"
 import "std/time"
 import "source"
 import "diag"
+import "msgs"
 import "types"
 import "generic"
 import "typed"
@@ -135,6 +140,7 @@ LLeaf I64 = 5      # a struct held in place given another value: its candidate l
 LVacate I64 = 2
 LDrop I64 = 3
 LCall I64 = 4
+LDestroy I64 = 6   # a Destroy() of a value moved out of the place (C9b): what it held may be ended there
 
 # a call given a value of a sole place as the root of an argument: what the callee builds there is built in that
 # value's region (RegionOr)
@@ -204,6 +210,7 @@ type Free struct(P mut generic.Program&, Bodies List<mut typed.Body&>, Sc mut sc
     # lets go of something (they run where no call is written)
     tasks Bool = false
     hidden Bool = false
+    hiddenAt List<I64>         # the places a destructor, Str, Eq or Hash may let go of (where hidden is not set)
     # the final pass's events
     stores List<store>
     goes List<letGo>
@@ -225,6 +232,24 @@ type Free struct(P mut generic.Program&, Bodies List<mut typed.Body&>, Sc mut sc
     saved List<Array<I64>&>
     savedAt List<Array<I64>&>
     viewGo Map<I64, I64>       # a place kept for a view: the let-go (in goes) its report row is at
+    # C9b's destroy targets, each a candidate place of its own (keyField -2): by (body, local), and by place its body,
+    # its local, the Destroy()'s span, a use of the local after it and whether the call compiles (-1 and false for
+    # every other place)
+    destroys I64 = 0
+    destroyOf Map<pair.Pair<I64, I64>, I64>
+    dBody List<I64>
+    dLocal List<I64>
+    dSp List<source.Span>
+    dUseSp List<source.Span>
+    dUsed List<Bool>
+    dLoop List<Bool>
+    dOk List<Bool>
+    dIn List<Bool>             # by body: whether it has a destroy target
+    dtorVal List<Bool>         # by place: what it holds has a destructor - never Sole (O15); a Destroy() takes one out
+    destroySole List<Bool>     # by place: sole but for its values' destructors (condition 4) and condition 5
+    destroyUse List<Bool>      # by place: an accepted Destroy() moves out of it - its values are built in regions
+    curBody I64 = -1           # the body the pre-pass is in
+    sayDestroys Bool = true    # whether a refused Destroy() is reported (not on the error path, where nothing is built)
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
     Debug Bool = false
 }
@@ -317,10 +342,15 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
     cand := false
     vt := types.UnknownT
     hd := false
+    dt := false
     if i < 0 {
         if t.KindOf(r) == types.Kind.Array {
             vt = t.Elem(r)
             cand = f.refCand(vt)
+            if not cand and f.dtorCand(vt) {
+                cand = true
+                dt = true
+            }
         }
     } else if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
         fs := t.Items(t.Fields(r))
@@ -331,23 +361,61 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
                 cand = true
                 hd = true
             }
+            if not cand and f.dtorCand(vt) {
+                cand = true
+                dt = true
+            }
         }
     }
     if not cand {
         f.typeAsked.Put(k, 1)
         return -1
     }
+    n := f.newPlace(r, i, hd, vt, dt)
+    f.placeOf.Put(k, n)
+    f.typeAsked.Put(k, 2)
+    return n
+}
+
+# a candidate place's lists given its entry: its key, whether it holds a handle, its value's type, whether its values
+# have destructors
+fn (f mut Free&) newPlace(ty types.TypeId, field I64, hd Bool, vt types.TypeId, dt Bool) I64 {
     n := f.keyTy.Len()
-    f.keyTy.Push(r)
-    f.keyField.Push(i)
+    f.keyTy.Push(ty)
+    f.keyField.Push(field)
     f.handle.Push(hd)
     f.valTy.Push(vt)
     f.whyKind.Push(RNone)
     f.libTaken.Push(false)
     f.why.Push(reason(RNone, -1, source.Span(0, 0), ""))
-    f.placeOf.Put(k, n)
-    f.typeAsked.Put(k, 2)
+    f.dtorVal.Push(dt)
+    f.destroySole.Push(false)
+    f.destroyUse.Push(false)
+    f.dBody.Push(-1)
+    f.dLocal.Push(-1)
+    f.dSp.Push(source.Span(0, 0))
+    f.dUseSp.Push(source.Span(0, 0))
+    f.dUsed.Push(false)
+    f.dLoop.Push(false)
+    f.dOk.Push(false)
     return n
+}
+
+# whether a candidate place is a destroy target (C9b)
+fn (f Free&) isDestroy(k I64) Bool { return k >= 0 and k < f.keyField.Len() and f.keyField[k] == -2 }
+
+# whether a field or element type is a reference to a struct whose own destructor is all freeing cannot meet: a dtor
+# place's values (C9b), never freed by a let-go
+fn (f mut Free&) dtorCand(ty types.TypeId) Bool {
+    t := f.T()
+    if not t.IsRef(ty) or t.ForeignRef(ty) or t.IsAny(ty) { return false }
+    r := t.Repr(t.Referent(ty))
+    if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct { return false }
+    if not t.Destructs(r) { return false }
+    for p in t.Items(t.Fields(r)) {
+        if not f.safe(p): return false
+    }
+    return true
 }
 
 # the candidate place a typed place is, -1 for none: a field of a struct (through a reference or held in place), an
@@ -464,7 +532,7 @@ fn (f mut Free&) ownCode(b I64) Bool {
 
 # the whole analysis, at a program's root: candidates, summaries to a fixed point, the final pass's events, the
 # decisions, and the regions written into the plans. With no root (a module compiled on its own) nothing is decided
-fn (f mut Free&) Decide(plans List<typed.Plan>, root I64) {
+fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) {
     f.Plans = plans
     f.Root = root
     n := f.Bodies.Len()
@@ -488,12 +556,19 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64) {
         f.callers.Push(List<I64>())
         f.saved.Push(Array<I64>(0))
         f.savedAt.Push(Array<I64>(0))
+        f.dIn.Push(false)
     }
-    if root < 0 { return }
-    # the candidates: places a body assigns or vacates (a let-go of one needs one of those somewhere)
+    # with no root nothing is freed early, but each Destroy() is still decided (C9b) - where it can be, by facts this
+    # module's code and its imports' give alone: a value built for its local
+    if root < 0 and not destroys { return }
+    f.sayDestroys = destroys
+    # the candidates: places a body assigns or vacates (a let-go of one needs one of those somewhere), and the locals
+    # a Destroy() is called on
     for b in range n {
+        f.curBody = b
         if f.Bodies[b].Root is not null { f.findCands(f.Bodies[b].Root!) }
     }
+    if root < 0 and f.destroys == 0 { return }
     if f.keyTy.Len() == 0 { return }
     t0 := time.Now()
     # the must-summaries, greatest fixed point - what the may-summaries' stores read (withinOf): every body once,
@@ -554,7 +629,12 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64) {
     # destructors, Str, Eq and Hash run where no call is written: one that lets go of a place keeps everything
     for b in range n {
         if f.lets[b].Len() > 0 or f.letsAll[b] {
-            if f.implicit(b): f.hidden = true
+            # what it may let go of keeps: it runs where no call is written, so no view can be judged across it - every
+            # place, where it may let go of any
+            if f.implicit(b) {
+                if f.letsAll[b] { f.hidden = true } else { addAllTo(f.hiddenAt, f.lets[b]) }
+                if f.Debug { try io.PrintErr($"free: hidden let-go in " $f.fnName(b) " at " $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) "\n") catch io.Error { } }
+            }
         }
     }
     t3 := time.Now()
@@ -563,6 +643,7 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64) {
     f.decide()
     f.Done = true
     f.writePlans()
+    f.destroyErrors()
     t5 := time.Now()
     if f.Debug { try io.PrintErr($"free: final " $((t4 - t3) / 1000000) " ms, " $f.goes.Len() " let-goes, " $f.stores.Len() " stores; decide " $((t5 - t4) / 1000000) " ms\n") catch io.Error { } }
 }
@@ -593,7 +674,10 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
             f.findExpr(x)
         }
         case typed.Stmt.Let(_, _, x) { f.findExpr(x) }
-        case typed.Stmt.Eval(_, x) { f.findExpr(x) }
+        case typed.Stmt.Eval(sp, x) {
+            f.findExpr(x)
+            f.findDestroy(sp, x)
+        }
         case typed.Stmt.If(_, i) {
             f.findExpr(i.Test)
             f.findCands(i.Then)
@@ -607,6 +691,35 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         case typed.Stmt.Block(_, b) { f.findCands(b) }
         case typed.Stmt.Defer(_, b) { f.findCands(b) }
         case typed.Stmt.Join(_, j) { f.findCands(j.Code) }
+        case _ { }
+    }
+}
+
+# an x.Destroy() statement: a destroy target for its local (C9b)
+fn (f mut Free&) findDestroy(sp source.Span, x typed.Expr&) {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op != typed.PrimOp.Destroy or args.Len() != 1 { return }
+            match args[0] {
+                case typed.Expr.Read(_, ty, p, _) {
+                    match p {
+                        case typed.Place.Local(_, _, l) {
+                            key := pair.Pair(f.curBody, I64(l))
+                            if f.destroyOf.Has(key) { return }
+                            d := f.newPlace(ty, -2, false, ty, false)
+                            f.destroyOf.Put(key, d)
+                            f.dBody[d] = f.curBody
+                            f.dLocal[d] = I64(l)
+                            f.dSp[d] = sp
+                            f.dIn[f.curBody] = true
+                            f.destroys++
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
         case _ { }
     }
 }
@@ -705,6 +818,19 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     parSite List<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
     parSitePlace List<I64>
     parSiteAt List<I64>
+    # C9b, in a body with a destroy target: each Destroy() - its target, its statement, the Defer statement it is in
+    # (-1 none); each return of a view of a target; by use, the Defer statement it is in; the Defer statements being
+    # walked; by Defer statement, the last statement of the block it is in; by statement, the first after it in its
+    # block that leaves the function (a return, an error, an unreachable)
+    dGoD List<I64>
+    dGoAt List<I64>
+    dGoDefer List<I64>
+    dRetD List<I64>
+    dRetAt List<I64>
+    useDefer List<I64>
+    deferStack List<I64>
+    deferEnd Map<I64, I64>
+    leaveAfter Map<I64, I64>
 }
 
 fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
@@ -797,6 +923,7 @@ fn (f mut Free&) walk(b I64, final Bool) {
         w.reset()
         w.block(body.Root!)
         w.views()
+        if f.dIn[b] { w.destroys() }
     }
 }
 
@@ -829,6 +956,15 @@ fn (w mut walker&) reset() {
     w.parSite.Clear()
     w.parSitePlace.Clear()
     w.parSiteAt.Clear()
+    w.dGoD.Clear()
+    w.dGoAt.Clear()
+    w.dGoDefer.Clear()
+    w.dRetD.Clear()
+    w.dRetAt.Clear()
+    w.useDefer.Clear()
+    w.deferStack.Clear()
+    w.deferEnd.Clear()
+    w.leaveAfter.Clear()
 }
 
 fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
@@ -836,10 +972,34 @@ fn (w mut walker&) body() typed.Body& { return w.F.Bodies[w.Id] }
 fn (w mut walker&) T() mut types.Table&w { return w.F.P.T }
 
 fn (w mut walker&) block(bl typed.Block&) {
+    track := w.Final and w.F.dIn[w.Id]
+    nums List<I64>
     for i in range bl.Stmts.Len() {
         # a statement right before a return: what it stores is the last store on its path
         if i + 1 < bl.Stmts.Len() and leaves(bl.Stmts[i + 1]) { w.lastAt.Push(w.no) }
+        if track: nums.Push(w.no)
         w.stmt(bl.Stmts[i])
+    }
+    if not track { return }
+    # C9b: where a Defer statement's code runs (its block's end), and the statements a return, an error or an
+    # unreachable after them in the block ends the path of
+    last := w.no - 1
+    leave := -1
+    for i := bl.Stmts.Len() - 1, i >= 0, i-- {
+        match bl.Stmts[i] {
+            case typed.Stmt.Defer(_, _) { w.deferEnd.Put(nums[i], last) }
+            case _ { }
+        }
+        if leave >= 0: w.leaveAfter.Put(nums[i], leave)
+        if leavesFunction(bl.Stmts[i]): leave = nums[i]
+    }
+}
+
+# a statement after which nothing of its function runs but deferred code: a return, an error, an unreachable
+fn leavesFunction(st typed.Stmt&) Bool {
+    return match st {
+        case typed.Stmt.Return(_, _), typed.Stmt.Raise(_, _, _), typed.Stmt.Exit(_, _, _) => true
+        case _ => false
     }
 }
 
@@ -880,6 +1040,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
+            w.destroyStore(I64(l), x, sp)
         }
         case typed.Stmt.Assign(sp, p, x) { w.assign(sp, p, x) }
         case typed.Stmt.Eval(sp, x) { w.eval(sp, x) }
@@ -907,6 +1068,14 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if x is not null {
                 o := w.expr(x)
                 if not w.Final { w.result(o) }
+                if w.Final and w.F.dIn[w.Id] {
+                    for y in o {
+                        if okind(y) == OPl and w.F.isDestroy(oval(y)) {
+                            w.dRetD.Push(oval(y))
+                            w.dRetAt.Push(n)
+                        }
+                    }
+                }
             }
         }
         case typed.Stmt.Assert(_, c, m) {
@@ -917,7 +1086,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Block(_, b) { w.block(b) }
         case typed.Stmt.Defer(_, b) {
             w.inDefer++
+            w.deferStack.Push(n)
             w.block(b)
+            try w.deferStack.Pop() catch { }
             w.inDefer--
         }
         case typed.Stmt.Join(_, j) {
@@ -927,9 +1098,10 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
                 if c.Code is not null: w.block(c.Code!)
             }
         }
-        case typed.Stmt.Spawn(_, s) {
+        case typed.Stmt.Spawn(sp, s) {
             w.F.tasks = true
             w.expr(s.Task)
+            if w.Final and w.F.dIn[w.Id] { w.handedToTask(sp, s.Task) }
             for c in s.Clauses {
                 if c.Handler is not null: w.expr(c.Handler!)
             }
@@ -953,7 +1125,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
 fn (w mut walker&) result(o List<I64>&) {
     f := w.F
     for x in o {
-        if okind(x) == ONew: continue
+        if okind(x) == ONew or (okind(x) == OPl and f.isDestroy(oval(x))): continue
         if addTo(f.resFrom[w.Id], x) { f.changed = true }
     }
 }
@@ -968,6 +1140,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
+            w.destroyStore(I64(l), x, sp)
             return
         }
         case _ { }
@@ -1106,6 +1279,26 @@ fn baseOf(p typed.Place&) typed.Place?&p {
 fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
     o := w.expr(x)
     match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            # C9b: a Destroy() of a destroy target, its events judged once the body is walked (destroys)
+            if op == typed.PrimOp.Destroy and w.quiet == 0 {
+                l := readLocalOf(args[0])
+                d := w.destroyOf(l)
+                if d >= 0 and w.Final {
+                    w.dGoD.Push(d)
+                    w.dGoAt.Push(w.cur)
+                    w.dGoDefer.Push(w.deferStack[w.deferStack.Len() - 1] if w.deferStack.Len() > 0 else -1)
+                }
+                # a value moved out of a place, ended here: a let-go of that place for this body's views of it and its
+                # callers' - one of them may be this very value
+                if l >= 0 {
+                    for y in w.origins[l] {
+                        if okind(y) == OMov { w.go(oval(y), LDestroy, sp, source.Span(0, 0), -1) }
+                    }
+                }
+            }
+            return
+        }
         case typed.Expr.Take(_, ty, p) {
             k := w.F.placeOfPlace(p)
             if k >= 0 {
@@ -1197,7 +1390,11 @@ fn (w mut walker&) escape(o List<I64>&, sp source.Span, where String&, heap Bool
             }
         }
         if k == OPl and w.Final and oval(y) != q {
-            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is kept here")
+            if f.isDestroy(oval(y)) {
+                f.keep(oval(y), RStore, w.body().File, sp, $"a reference to it is stored here, in '" $where "'" if where != "" else "it is handed here to what may keep it")
+            } else {
+                f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is kept here")
+            }
         }
     }
 }
@@ -1227,6 +1424,7 @@ fn (w mut walker&) use(l I64, sp source.Span) {
     w.useLocal.Push(l)
     w.useAt.Push(w.cur)
     w.useSp.Push(sp)
+    w.useDefer.Push(w.deferStack[w.deferStack.Len() - 1] if w.deferStack.Len() > 0 else -1)
     if w.inDefer > 0 { w.deferred.Push(l) }
 }
 
@@ -1446,7 +1644,13 @@ fn (w mut walker&) arm(a typed.Arm&) List<I64> {
     out List<I64>
     for alt in a.Alts {
         w.expr(alt.Test)
-        for bd in alt.Binds { w.give(I64(bd.To), w.expr(bd.From)) }
+        for bd in alt.Binds {
+            w.give(I64(bd.To), w.expr(bd.From))
+            d := w.destroyOf(I64(bd.To))
+            if d >= 0 and w.Final {
+                w.F.keep(d, RMade, w.body().File, w.stmtSp, $"'" $w.localName(I64(bd.To)) "' is a match's binding, a second name for what the match reads")
+            }
+        }
     }
     if a.Guard is not null { w.expr(a.Guard!) }
     if a.Code is not null { w.block(a.Code!) }
@@ -1597,7 +1801,11 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o List<I64>&, sp source.Span, w
     # old one's storage
     for y in o {
         if okind(y) == OPl and w.Final and oval(y) != w.storeInside and oval(y) != k {
-            f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
+            if f.isDestroy(oval(y)) {
+                f.keep(oval(y), RStore, w.body().File, sp, $"a reference to it is stored here, in '" $where "'" if where != "" else "it is handed here to a call that stores it")
+            } else {
+                f.keep(oval(y), RStore, w.body().File, sp, $"a reference into it is stored here, in '" $where "'; store a copy, '$(...)'" if where != "" else "a reference into it is stored here; store a copy, '$(...)'")
+            }
         }
     }
     if w.Final and has(o, orig(OPl, k)) and k != w.storeInside and w.paramOf(x) < 0 {
@@ -1886,10 +2094,10 @@ fn (w mut walker&) views() {
         if k >= 0 and (k >= f.whyKind.Len() or f.whyKind[k] != RNone): continue
         at := w.goIdx[g]
         # in the statement itself
-        if kind != LAssign and kind != LLeaf {
+        if kind != LAssign and kind != LLeaf and kind != LDestroy {
             for i in range readFrom[s], readFrom[s + 1] {
                 q := reads[i]
-                if (k >= 0 and q != k) or f.whyKind[q] != RNone: continue
+                if (k >= 0 and q != k) or f.whyKind[q] != RNone or f.isDestroy(q): continue
                 f.keepView(q, body.File, w.goSp[g], $"a value of it read in this statement is in use when '" $f.textOf(body.File, w.goSp[g]) "' lets go of it; read what you need first", at)
             }
         }
@@ -1897,7 +2105,7 @@ fn (w mut walker&) views() {
         for l in viewers {
             any := false
             for q in viewed[l] {
-                if (k < 0 or q == k) and f.whyKind[q] == RNone: any = true
+                if (k < 0 or q == k) and f.whyKind[q] == RNone and not f.isDestroy(q): any = true
             }
             if not any: continue
             u := w.usedAfter(l, s, usesOf[l])
@@ -1912,13 +2120,211 @@ fn (w mut walker&) views() {
                 after = $"after it lets go of it (line " $gl "); read what you need from '" $name "' before"
             }
             for q in viewed[l] {
-                if (k < 0 or q == k) and f.whyKind[q] == RNone {
+                if (k < 0 or q == k) and f.whyKind[q] == RNone and not f.isDestroy(q) {
                     f.keepView(q, body.File, w.useSp[u], $"'" $name "' (line " $line ") is used here, " $after, at)
                 }
             }
             if k >= 0: break
         }
     }
+}
+
+# ---- C9b: Destroy() ----
+
+# the local a value is a read of, -1 for none
+fn readLocalOf(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Local(_, _, l) => I64(l)
+            case _ => -1
+        }
+        case _ => -1
+    }
+}
+
+# the destroy target local l of this body is, -1 for none
+fn (w mut walker&) destroyOf(l I64) I64 {
+    if l < 0 or not w.F.dIn[w.Id] { return -1 }
+    return try w.F.destroyOf.Get(pair.Pair(w.Id, l)) catch default -1
+}
+
+fn (w mut walker&) localName(l I64) String { return $w.F.P.L.Names.Text(w.body().Locals[l].Name) }
+
+# a destroy target local l given a value x: l holds a view of its own place, so every copy of it is one; and in the
+# final walk what x is - built for l at a block's site, moved out of a dtor place, or anything else (C9b)
+fn (w mut walker&) destroyStore(l I64, x typed.Expr&, sp source.Span) {
+    d := w.destroyOf(l)
+    if d < 0 { return }
+    mine List<I64>
+    mine.Push(orig(OPl, d))
+    w.give(l, mine)
+    if not w.Final or w.quiet > 0 { return }
+    f := w.F
+    file := w.body().File
+    y := unwrapped(x)
+    kind, of, site, why := w.destroyMade(y)
+    f.stores.Push(store(d, w.Id, file, sp, kind, of, site, y, null))
+    if kind == SFail { f.keep(d, RMade, file, sp, why) }
+}
+
+# what a value is under a try with no default - its operand
+fn unwrapped(x typed.Expr&) typed.Expr&x {
+    match x {
+        case typed.Expr.Try(_, _, t) {
+            if t.X is null { return x }
+            for c in t.Clauses {
+                if c.Defaults.Len() > 0: return x
+            }
+            return unwrapped(t.X!)
+        }
+        case _ { return x }
+    }
+}
+
+# what a destroy target is given: SFresh at its site, SMove out of a place, else SFail and why
+fn (w mut walker&) destroyMade(x typed.Expr&) I64, I64, I64, String {
+    f := w.F
+    match x {
+        case typed.Expr.Away(_, _, y) { return w.destroyMade(y) }
+        case typed.Expr.Try(_, _, t) { return SFail, -1, -1, "its value may be a try's default, not built for it" }
+        case typed.Expr.Take(_, _, p) {
+            q := f.placeOfPlace(p)
+            if q >= 0 { return SMove, q, -1, "" }
+        }
+        case _ { }
+    }
+    site, why := w.freshSite(x)
+    if site >= 0 { return SFresh, -1, site, "" }
+    c := callOf(x)
+    b2 := f.calleeBody(c) if c is not null else -1
+    if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] >= MovBase {
+        return SMove, f.mustRes[b2] - MovBase, -1, ""
+    }
+    if why != "" { return SFail, -1, -1, why }
+    return SFail, -1, -1, $"its value is existing storage: '" $w.text(x.Span()) "' - give it an instance of its own: a constructor call, or a call whose result is built"
+}
+
+# a task's call handed what may be a destroy target's instance: it may use it after the Destroy() (C9b)
+fn (w mut walker&) handedToTask(sp source.Span, task typed.Expr&) {
+    f := w.F
+    o List<I64>
+    w.quiet++
+    match task {
+        case typed.Expr.Call(_, _, c) {
+            for a in c.Args { addAllTo(o, w.expr(a)) }
+            match c.Target {
+                case typed.Callee.Value(v) { addAllTo(o, w.expr(v)) }
+                case _ { }
+            }
+        }
+        case _ { addAllTo(o, w.expr(task)) }
+    }
+    w.quiet--
+    for y in o {
+        if okind(y) == OPl and f.isDestroy(oval(y)) {
+            f.keep(oval(y), RStore, w.body().File, sp, "it is handed to a task here, which may use it after the Destroy()")
+        }
+    }
+}
+
+# the body's Destroy() calls against its uses: the target used after one is an error; another local reaching it and
+# used after one, or a return of it the call's deferred code follows, makes it keep (C9b)
+fn (w mut walker&) destroys() {
+    f := w.F
+    body := w.body()
+    for e in range w.dGoD.Len() {
+        d := w.dGoD[e]
+        s := w.dGoAt[e]
+        ds := w.dGoDefer[e]
+        x := f.dLocal[d]
+        name := w.localName(x)
+        if w.params.Has(x) {
+            f.keep(d, RMade, body.File, f.dSp[d], $"'" $name "' is a parameter: its caller holds the instance too")
+        }
+        if w.fields.Has(x) {
+            f.keep(d, RMade, body.File, f.dSp[d], $"'" $name "' is a field of the instance being built, which holds it too")
+        }
+        # the target itself, read after the call
+        xs List<I64>
+        for u in range w.useLocal.Len() {
+            if w.useLocal[u] == x: xs.Push(u)
+        }
+        u := w.destroyAfter(x, s, ds, xs)
+        if u >= 0 and not f.dUsed[d] {
+            f.dUsed[d] = true
+            f.dUseSp[d] = w.useSp[u]
+            # a use no later than the call: the loop around it, its next turn
+            f.dLoop[d] = w.useAt[u] <= (ds if ds >= 0 else s)
+        }
+        # another name for it, used after
+        for l in range w.origins.Len() {
+            if l == x or w.params.Has(l) or not has(w.origins[l], orig(OPl, d)): continue
+            ls List<I64>
+            for v in range w.useLocal.Len() {
+                if w.useLocal[v] == l: ls.Push(v)
+            }
+            v := w.destroyAfter(l, s, ds, ls)
+            if v < 0: continue
+            line := f.P.L.Diags.LineAt(body.File, I64(body.Locals[l].Sp.Start))
+            f.keep(d, RView, body.File, w.useSp[v], $"'" $w.localName(l) "' (line " $line ") reaches it too, and is used here, after '" $name ".Destroy()'")
+        }
+        # a return of it, which a deferred Destroy() follows as the function leaves
+        if ds >= 0 {
+            end := try w.deferEnd.Get(ds) catch default w.no
+            for i in range w.dRetD.Len() {
+                if w.dRetD[i] == d and w.dRetAt[i] > ds and w.dRetAt[i] <= end {
+                    f.keep(d, RStore, body.File, f.dSp[d], $"it is returned (line " $f.P.L.Diags.LineAt(body.File, I64(w.useSpAt(w.dRetAt[i]).Start)) "), and its Destroy() is deferred: it runs as the function leaves")
+                }
+            }
+        }
+    }
+}
+
+# where statement n is, for a note: the first use there, else the function
+fn (w mut walker&) useSpAt(n I64) source.Span {
+    for u in range w.useAt.Len() {
+        if w.useAt[u] == n: return w.useSp[u]
+    }
+    return w.body().Sp
+}
+
+# the first use of local l among uses that may run after the Destroy() at statement s - in deferred code when ds, its
+# Defer statement, is not -1 - as an index into the uses, -1 for none: later in the function (up to a return, an error
+# or an unreachable after it in its block, which ends its path), in a later turn of a loop around it that l was
+# declared outside of, or in deferred code registered before it (which runs after it)
+fn (w mut walker&) destroyAfter(l I64, s I64, ds I64, uses List<I64>&) I64 {
+    if ds >= 0 {
+        # deferred: it runs where the block its Defer statement is in ends
+        end := try w.deferEnd.Get(ds) catch default w.no
+        for u in uses {
+            a := w.useAt[u]
+            if a > end: return u
+            if w.useDefer[u] >= 0 and w.useDefer[u] != ds and a < ds: return u
+        }
+        return w.loopUse(l, ds, uses)
+    }
+    if w.declAt[l] > s { return -1 }
+    leave := try w.leaveAfter.Get(s) catch default -1
+    limit := w.ends[leave] if leave >= 0 else w.no
+    for u in uses {
+        a := w.useAt[u]
+        if a > w.ends[s] and a <= limit: return u
+        if w.useDefer[u] >= 0 and a < s: return u
+    }
+    if leave >= 0 { return -1 }
+    return w.loopUse(l, s, uses)
+}
+
+# a use of local l in a loop around statement s that l was declared outside of - its next turn - -1 for none
+fn (w mut walker&) loopUse(l I64, s I64, uses List<I64>&) I64 {
+    for i in range w.loopAt.Len() {
+        a := w.loopAt[i]
+        if not (a < s and s <= w.loopEnd[i]) or w.declAt[l] > a: continue
+        for u in uses {
+            if a < w.useAt[u] and w.useAt[u] <= w.loopEnd[i]: return u
+        }
+    }
+    return -1
 }
 
 # what a call that lets go of place k does to it, as the note says: "removes frames" - the name of the collection a
@@ -2333,16 +2739,37 @@ fn (f mut Free&) decide() {
         if g.Kind != LCall and g.Place >= 0 and f.rootEmitted[g.Body] and not (g.Kind == LLeaf and f.prelude[g.Body]) { letsHere[g.Place] = true }
     }
     for k in range n {
+        # a destroy target is a local: a task reaches it only as it is handed one (handedToTask), and no implicit call
+        # can let go of it
+        if f.isDestroy(k): continue
         if f.tasks { f.keep(k, RTask, -1, source.Span(0, 0), "a task can reach it: nothing is freed early where a program has tasks") }
-        if f.hidden { f.keep(k, RDtor, -1, source.Span(0, 0), "a destructor, Str, Eq or Hash lets go of something where no call is written") }
+        if f.hidden or has(f.hiddenAt, k) { f.keep(k, RDtor, -1, source.Span(0, 0), "a destructor, Str, Eq or Hash lets go of it where no call is written") }
     }
     # condition 1's stores that cannot be built where they are
     for st in f.stores {
-        if st.Kind == SFresh and not f.placeable(st) {
+        if st.Kind == SFresh and (not f.placeable(st) or f.topSite(st.X!) < 0) {
             f.keep(st.Place, RMade, st.File, st.Sp, "its new value cannot be built in a region of its own here")
         }
     }
-    for k in range n { f.Sole[k] = letsHere[k] and f.whyKind[k] == RNone }
+    # C9b: a dtor place sole but for its values' destructors - one a Destroy() may take a value out of; a move into it
+    # from a place that is not keeps it
+    for k in range n { f.destroySole[k] = f.dtorVal[k] and f.whyKind[k] == RNone }
+    for round in range 64 {
+        any := false
+        for st in f.stores {
+            if st.Kind == SMove and f.dtorVal[st.Place] and f.destroySole[st.Place] and st.Of != st.Place and not f.destroySole[st.Of] {
+                f.destroySole[st.Place] = false
+                any = true
+            }
+        }
+        if not any: break
+    }
+    for k in range n {
+        if f.dtorVal[k] {
+            f.keep(k, RDtor, -1, source.Span(0, 0), "what it holds has a destructor still to run when it lets go (O15): take each value out ('Take', 'Pop', 'TakeAt') and Destroy() it (C9b)")
+        }
+    }
+    for k in range n { f.Sole[k] = letsHere[k] and f.whyKind[k] == RNone and not f.isDestroy(k) }
     # a move from a place that is not sole moves nothing a region holds
     for round in range 64 {
         any := false
@@ -2354,6 +2781,70 @@ fn (f mut Free&) decide() {
             }
         }
         if not any: break
+    }
+    # C9b: each Destroy() compiles where its target is sole - every value it is given built for it at a block's site
+    # (its region made there, its destructor registered on the block's list and on the region's chain), or moved out
+    # of a dtor place sole but for its destructors, in code of the root's object (B3i)
+    for d in range n {
+        if not f.isDestroy(d): continue
+        ok := f.whyKind[d] == RNone and not f.dUsed[d]
+        given := false
+        for st in f.stores {
+            if st.Place != d: continue
+            given = true
+            if st.Kind == SMove {
+                q := st.Of
+                if not f.dtorVal[q] {
+                    f.keep(d, RMade, st.File, st.Sp, "its value is moved out of a place whose values have no destructor")
+                } else if not f.rootEmitted[st.Body] {
+                    f.keep(d, RMade, st.File, st.Sp, "a value taken out of a collection is destroyed only in code compiled with the program it is in - the program's own module (B3i)")
+                } else if not f.destroySole[q] {
+                    r := f.why[q]
+                    f.keep(d, RMade, r.File if r.File >= 0 else st.File, r.Sp if r.File >= 0 else st.Sp, $"it is taken out of a collection whose values are not each held only there: " $r.Text)
+                }
+            } else if st.Kind == SOk {
+                f.keep(d, RMade, st.File, st.Sp, "its value is constant data, which no Destroy() can end")
+            }
+        }
+        if not given { f.keep(d, RMade, -1, source.Span(0, 0), "it is given no instance built for it here") }
+        f.dOk[d] = ok and f.whyKind[d] == RNone
+        if not f.dOk[d]: continue
+        for st in f.stores {
+            if st.Place == d and st.Kind == SMove: f.destroyUse[st.Of] = true
+        }
+    }
+}
+
+# C9b: a Destroy() refused, said at the call, its reason a note - or, where its local is read after it, at that read
+fn (f mut Free&) destroyErrors() {
+    if not f.sayDestroys { return }
+    d := f.P.L.Diags
+    said List<I64>
+    for k in range f.keyTy.Len() {
+        if not f.isDestroy(k) or f.dOk[k]: continue
+        b := f.dBody[k]
+        body := f.Bodies[b]
+        if has(said, I64(f.dSp[k].Start) * 4096 + body.File): continue
+        said.Push(I64(f.dSp[k].Start) * 4096 + body.File)
+        name := $f.P.L.Names.Text(body.Locals[f.dLocal[k]].Name)
+        at := diag.Where.Span(body.File, I64(f.dSp[k].Start), I64(f.dSp[k].End))
+        if f.dUsed[k] and f.dLoop[k] {
+            d.Error(at, msgs.DestroyInLoop(name))
+            continue
+        }
+        if f.dUsed[k] {
+            u := f.dUseSp[k]
+            rec := d.Error(diag.Where.Span(body.File, I64(u.Start), I64(u.End)), msgs.DestroyUsedAfter(name, d.LineAt(body.File, I64(f.dSp[k].Start))))
+            d.Note(rec, at, msgs.NoteDestroyHere(name))
+            continue
+        }
+        rec := d.Error(at, msgs.DestroyNotSole(name))
+        r := f.why[k]
+        if r.File >= 0 {
+            d.Note(rec, diag.Where.Span(r.File, I64(r.Sp.Start), I64(r.Sp.End)), msgs.NoteDestroyWhy(r.Text))
+        } else {
+            d.Note(rec, at, msgs.NoteDestroyWhy(r.Text))
+        }
     }
 }
 
@@ -2467,7 +2958,10 @@ fn (f mut Free&) relsFit(rels Array<I64>&, set I64) Bool {
 fn (f mut Free&) writePlans() {
     # each value made for a sole place: a region of its own at its site, its parts built with it
     for st in f.stores {
-        if st.Kind != SFresh or not f.Sole[st.Place] or not f.rootEmitted[st.Body]: continue
+        if st.Kind != SFresh: continue
+        k := st.Place
+        # a sole place's values; a dtor place's when a Destroy() takes one out; a Destroy()'s target's (C9b)
+        if not ((f.Sole[k] or (f.dtorVal[k] and f.destroyUse[k])) and f.rootEmitted[st.Body]) and not (f.isDestroy(k) and f.dOk[k]): continue
         x := st.X!
         top := f.topSite(x)
         if top < 0: continue
@@ -2477,6 +2971,15 @@ fn (f mut Free&) writePlans() {
         pl.RegionKind[top] = 1
         pl.RegionParent[top] = at
         f.redirect(st.Body, x, top, at, true)
+    }
+    # C9b: a Destroy() compiles only where every value its target can hold is in a region of its own
+    for st in f.stores {
+        if st.Kind != SFresh or not f.isDestroy(st.Place) or not f.dOk[st.Place]: continue
+        top := f.topSite(st.X!)
+        if top < 0 or f.Plans[st.Body].RegionKind[top] != 1 {
+            f.dOk[st.Place] = false
+            f.keep(st.Place, RMade, st.File, st.Sp, "its value cannot be built in a region of its own here")
+        }
     }
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
@@ -2789,7 +3292,7 @@ fn (f mut Free&) Report() String {
         }
         if first < 0: continue
         places++
-        if f.IsSole(k): continue
+        if f.IsSole(k) or (f.dtorVal[k] and f.destroyUse[k]): continue
         keeps++
         row := first
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
@@ -2833,6 +3336,7 @@ fn (f mut Free&) isContents(k I64) Bool {
 # whether the report speaks of place k: storage made for it - it owns what it lets go of - and the program's: a field
 # of a type the program declares, or what a collection holds, which the library's removals let go of
 fn (f mut Free&) reported(k I64) Bool {
+    if f.isDestroy(k) { return false }
     owns := false
     for st in f.stores {
         if st.Place == k and f.rootEmitted[st.Body] and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true

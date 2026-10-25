@@ -1,0 +1,14 @@
+# check: fail error[C9b]: 'c.Destroy()' needs 'c' to be the only way left to reach its instance
+# C9b: a try's default is a value not built for the local - an instance that may live elsewhere
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed += 1
+}
+Closed mut I64 = 0
+Spare := Res(0)
+fn main() {
+    m := Map<I64, Res&>()
+    c := try m.Take(1) catch default Spare
+    c.Destroy()
+}

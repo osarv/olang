@@ -173,6 +173,8 @@ type scope struct() {
     Kept I64 = 0         # a join's earliest kept error, under its own list; 0 for none
     Errors I64 = 0       # a join's error list (a ListId)
     Early Bool = false   # a region a release closed (O8d): what it held is recorded in dead-region mode
+    Owner I64 = 0        # a region's: its parent where that is no region, whose list its registrations go in (C9b)
+    DRegs I64 = -1       # a region's registrations, newest first, through their RNext - also in its owner's list
 }
 
 # a registration in a scope, run when it closes: a destructor of a type for the instance at P, or an own slot at P
@@ -185,6 +187,9 @@ type reg struct() {
     Id I64 = 0
     Off I64 = 0
     Next I64 = -1
+    Prev I64 = -1        # the one before it in its list, -1 for its head (C9b: unlinked in O(1))
+    In I64 = 0           # the scope whose list it is in
+    RNext I64 = -1       # the next of its region's own chain (C9b), -1 for none
 }
 
 # a task spawned and not yet run (P1): the function and task it came from, the allocation holding its call's
@@ -1342,6 +1347,7 @@ fn (m mut Machine&) newScope(kind I64) I64 {
     s := m.scopes[slot]
     s.Live, s.Kind, s.Allocs, s.Regs, s.Parent, s.Child, s.Sibling = true, kind, 0, -1, 0, 0, 0
     s.Buf, s.BufLen, s.Tasks, s.TasksEnd, s.Kept, s.Errors = 0, 0, -1, -1, 0, 0
+    s.Owner, s.DRegs = 0, -1
     m.scopes[slot] = s
     return s.Gen << slotBits | slot
 }
@@ -1364,10 +1370,31 @@ fn (m mut Machine&) addReg(s I64, kind I64, ty I64, p Ptr) {
     }
     slot := try m.freeRegs.Pop() catch default m.newRegSlot()
     sc := s & slotMask
+    # C9b, O15: an instance in a region made in a scope that is no region is registered in that scope's list - its
+    # close runs it in construction order with the rest - and on the region's chain, which a release runs first
+    into := s
+    if m.scopes[sc].Kind == sRegion and m.live(m.scopes[sc].Owner) { into = m.scopes[sc].Owner }
+    ic := into & slotMask
     r := reg()
-    r.Kind, r.Ty, r.Id, r.Off, r.Next = kind, ty, p.Id, p.Off, m.scopes[sc].Regs
+    r.Kind, r.Ty, r.Id, r.Off, r.Next, r.Prev, r.In = kind, ty, p.Id, p.Off, m.scopes[ic].Regs, -1, into
+    if into != s {
+        r.RNext = m.scopes[sc].DRegs
+        m.scopes[sc].DRegs = slot
+    }
+    if m.scopes[ic].Regs >= 0 { m.regs[m.scopes[ic].Regs].Prev = slot }
     m.regs[slot] = r
-    m.scopes[sc].Regs = slot
+    m.scopes[ic].Regs = slot
+}
+
+# registration slot taken off the list it is in (C9b)
+fn (m mut Machine&) unlinkReg(slot I64) {
+    g := m.regs[slot]
+    if g.Prev >= 0 {
+        m.regs[g.Prev].Next = g.Next
+    } else if m.live(g.In) {
+        m.scopes[g.In & slotMask].Regs = g.Next
+    }
+    if g.Next >= 0 { m.regs[g.Next].Prev = g.Prev }
 }
 
 fn (m mut Machine&) newRegSlot() I64 {
@@ -1414,10 +1441,21 @@ fn (m mut Machine&) stepClose() {
         try m.closing.Pop() catch { }
         return
     }
+    # C9b: a released region's own registrations first, newest first, each taken off its owner's list
+    if m.scopes[sc].Kind == sRegion and m.scopes[sc].Early and m.scopes[sc].DRegs >= 0 {
+        d := m.scopes[sc].DRegs
+        m.scopes[sc].DRegs = m.regs[d].RNext
+        m.unlinkReg(d)
+        g := m.regs[d]
+        m.freeRegs.Push(d)
+        if g.Kind == gDtor { m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off)) }
+        return
+    }
     r := m.scopes[sc].Regs
     if r >= 0 {
         g := m.regs[r]
         m.scopes[sc].Regs = g.Next
+        if g.Next >= 0 { m.regs[g.Next].Prev = -1 }
         m.freeRegs.Push(r)
         if g.Kind == gDtor {
             m.runDtor(id, types.TypeId(I32(g.Ty)), Ptr(g.Id, g.Off))
@@ -2040,6 +2078,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
             if m.halted { return }
             id := m.newScope(sRegion)
             m.adopt(id, parent)
+            if m.scopes[parent & slotMask].Kind != sRegion { m.scopes[id & slotMask].Owner = parent }
             m.wr(dst, 8, id)
         }
         case mir.Rvalue.RegionOr(x, s) {
