@@ -428,3 +428,9 @@ on sight per rules.md, "Code rules".
   early freeing, seed regenerated. Owed to the next bulk review: round 6's relaxations (view last use, pins, callback
   summaries, element stores, per-site task reach) and round 7's (a destructor/Str/Eq/Hash that lets go keeps only what
   it may let go of). Round 5 (removing own/take from compiler/) not built.
+- 2026-10-26 ~00:40 CEST: bulk review 1 (a6c2292..843871e, /home/user/review/bulk1): 10 confirmed - UAFs in early
+  freeing: F1 generator frame across yield, F2 a place's value stored in another of it, F3 fixed point cut at 16
+  rounds, F6 extern callbacks into export fns; F4 destructor run early, F5 generator re-entry segfault, F7 embed via
+  symlink out of a remote repo, F8 json integers > 2^53, F9 generator + contract inexpressible, F10 diagnostics. Only
+  relaxation 6 of mem47's six is built (held). Fixing in wt-bfix1 (directions: when in doubt keep; F5 a guaranteed
+  check per resume; F8 exact integers; F9 ArgumentError in Iterator's E).
