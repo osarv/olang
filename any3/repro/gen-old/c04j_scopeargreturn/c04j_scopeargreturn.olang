@@ -1,0 +1,32 @@
+import "std/io"
+# the E25 hole: a built result given a scope argument naming the function's own local, returned as its built result
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn g(i I64) P& {
+    t := "local" $i
+    return mkp&t(i * 11 + 1)
+}
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i)) }
+    assert churn() > 0
+    for x in l { say($x.n) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

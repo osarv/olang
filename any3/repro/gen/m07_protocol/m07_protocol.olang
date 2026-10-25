@@ -1,0 +1,47 @@
+import "std/io"
+# M21 with methods the compiler calls itself (M6b): an Eq, a Str and a Plus declared for one instance of a generic type
+# and one written with variables - ==, $ and + on each instance, directly and from generic code, baked and at run time
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<I64>&) Eq(o Box<I64>&) Bool { return b.v % 10 == o.v % 10 }
+fn (b Box<T>&) Eq(o Box<T>&) Bool { return false }
+fn (b Box<I64>&) Hash() I64 { return b.v % 10 }
+fn (b Box<T>&) Hash() I64 { return 0 }
+fn (b Box<I64>&) Str() String { return "I(" $b.v ")" }
+fn (b Box<T>&) Str() String { return "G" }
+fn (b Box<I64>&) Plus(o Box<I64>&) Box<I64> { return Box<I64>(b.v + o.v) }
+fn (b Box<T>&) Plus(o Box<T>&) Box<T> { return Box<T>(o.v) }
+fn same<T>(a Box<T>&, b Box<T>&) Bool { return a == b }
+fn show<T>(a Box<T>&) String { return $a }
+fn run() String {
+    a, b := Box<I64>(13), Box<I64>(23)
+    s, t := Box<Bool>(true), Box<Bool>(true)
+    m := Map<Box<I64>, I64>()
+    m.Put(a, 1)
+    m.Put(b, 2)
+    return $(a == b) " " $same(a, b) " " $(s == t) " " $same(s, t) " " $a " " $show(a) " " $s " " $show(s) " " $(a + b) " " $(s + t) " " $m.Len()
+}
+G String = run()
+fn main() {
+    say(G)
+    say(run())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

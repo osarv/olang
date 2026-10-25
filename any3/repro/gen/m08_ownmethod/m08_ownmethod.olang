@@ -1,0 +1,37 @@
+import "std/io"
+# M21 with E10a/E10b: Eq and Hash declared for one instance of a generic type only (Box<I64>) - the compiler's
+# "does this type declare Eq/Hash" (generic.ownMethod, declaresEq) asks the generic declaration, not the instance,
+# so Box<Bool>, which declares neither, is taken to declare Eq: no supplied Hash, no Map key
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<I64>&) Eq(o Box<I64>&) Bool { return b.v % 10 == o.v % 10 }
+fn (b Box<I64>&) Hash() I64 { return b.v % 10 }
+fn main() {
+    m := Map<Box<I64>, I64>()
+    m.Put(Box<I64>(13), 1)
+    m.Put(Box<I64>(23), 2)
+    say($m.Len() " " $(Box<I64>(13) == Box<I64>(23)))
+    say($(Box<Bool>(true) == Box<Bool>(true)) " " $Box<Bool>(true).Hash())
+    n := Map<Box<Bool>, I64>()
+    n.Put(Box<Bool>(true), 1)
+    say($n.Len())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

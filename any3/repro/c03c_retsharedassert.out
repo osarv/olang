@@ -1,0 +1,14 @@
+== build -debug -sanitize
+asserted abc2, run time gives Zbc2
+c03c_retsharedassert.olang:25: assertion failed
+../run.sh: line 15:  3688 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+asserted abc2, run time gives Zbc2
+c03c_retsharedassert.olang:25: assertion failed
+../run.sh: line 15:  3771 Aborted                 timeout 60 ./build/$n
+status 134
+== interpret
+asserted abc2, run time gives Zbc2
+c03c_retsharedassert.olang:25: assertion failed
+status 134

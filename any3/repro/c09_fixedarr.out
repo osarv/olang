@@ -1,0 +1,30 @@
+== build -debug -sanitize
+c09_fixedarr.olang:7:28: error: expected a type, found '3'
+    7 | type Q extends Array<Char, 3>
+      |                            ^
+c09_fixedarr.olang:9:29: error: expected a type, found '3'
+    9 | type H struct(a Array<Char, 3>) { a }
+      |                             ^
+c09_fixedarr.olang:14:23: error: expected a type, found '3'
+   14 |     f2 := Array<Char, 3>(Char['d', 'e', 'f'])
+      |                       ^
+c09_fixedarr.olang:17:24: error: expected a type, found '3'
+   17 |     r3 mut Array<Char, 3>& = Array<Char, 3>(Char['g', 'h', 'i'])
+      |                        ^
+c09_fixedarr.olang:20:24: error: expected a type, found '3'
+   20 |     h := H(Array<Char, 3>(Char['j', 'k', 'l']))
+      |                        ^
+c09_fixedarr.olang:23:9: error[E11b]: a join piece is a text literal or a '$' rendering - write '$String(q1)'
+   23 |     say(String(q1) " " String(f2) " " String(r3) " " String(h.a))
+      |         ^~~~~~
+compilation failed with 6 errors
+== build
+c09_fixedarr.olang:7:28: error: expected a type, found '3'
+    7 | type Q extends Array<Char, 3>
+      |                            ^
+c09_fixedarr.olang:9:29: error: expected a type, found '3'
+    9 | type H struct(a Array<Char, 3>) { a }
+      |                             ^
+c09_fixedarr.olang:14:23: error: expected a type, found '3'
+   14 |     f2 := Array<Char, 3>(Char['d', 'e', 'f'])
+== interpret

@@ -1,0 +1,36 @@
+import "std/io"
+# a scope argument (E25) on an array fill and on a conversion to a declared array type - accepted - their storage put
+# in a loop body's scope, the any's box (holding a fill as it is, as new storage) pushed into an outer list
+type W trait {
+    Show() String
+}
+type Ns extends Array<I64>
+fn (n Ns&) Show() String { return "ns " $n[0] "," $n[2] }
+fn main() {
+    l := List<any W&>()
+    for i in range 2 {
+        t := "inner" $i
+        l.Push(Ns(Array<I64>&t(3, i + 40)))
+        l.Push(Ns&t(Array<I64>(3, i + 70)))
+    }
+    assert churn() > 0
+    for x in l { say(x.Show()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

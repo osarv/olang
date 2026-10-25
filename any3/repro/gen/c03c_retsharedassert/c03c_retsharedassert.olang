@@ -1,0 +1,44 @@
+import "std/io"
+# c03 through an assert the compiler decides (S18c): decided true while compiling (the box copied), the same expression
+# at run time is false (the box holds the call's result, which h2.s names)
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type H struct(s String&) { s }
+fn f(k mut H&, i I64) String {
+    s := "abc" $i
+    k.s = s
+    return s
+}
+fn probe() String {
+    h2 := H("y")
+    b mut any W& = Lab(f(h2, 2))
+    b.Bump()
+    return h2.s
+}
+fn main() {
+    assert probe() == "abc2"
+    r := probe()
+    say("asserted abc2, run time gives " $r)
+    assert r == "abc2"
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

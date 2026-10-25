@@ -1,0 +1,27 @@
+# T32a as a task's argument (P2): the box made by the spawner where the join's scope is, its item a read (copied) or a
+# call's text (held as it is); the task writes through the mut any
+type W trait {
+    mut Bump()
+    Show() String
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mk(i I64) String { return "t" $i "-" $(i * 7) }
+fn work(w mut any W&) String& {
+    w.Bump()
+    return w.Show()
+}
+fn main() {
+    src := "source"
+    out := Array<String&>(4, "")
+    join {
+        for i in range 2 {
+            spawn out[i] = work(Lab(src))
+            spawn out[i + 2] = work(Lab(mk(i)))
+        }
+    }
+    assert churn() > 0
+    for o in out { say(o) }
+    say(src)
+}

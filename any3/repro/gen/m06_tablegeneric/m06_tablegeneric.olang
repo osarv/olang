@@ -1,0 +1,41 @@
+import "std/io"
+# M21 through tables made in generic code: an any of Box<T> made with T a type variable, its table built per
+# instance - the exact receiver's method for Box<I64>, the generic one otherwise; one table per pair reused
+type D trait {
+    Describe() String
+}
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+fn (b Box<T>&) Describe() String { return "generic" }
+fn mkAny<T>(x T) any D& { return Box<T>(x) }
+fn both() String {
+    a := mkAny(I64(3))
+    b := mkAny(true)
+    c any D& = Box<I64>(9)
+    return $a.Describe() "|" $b.Describe() "|" $c.Describe() "|" $(a == c)
+}
+G String = both()
+fn main() {
+    say(G)
+    say(both())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

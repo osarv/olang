@@ -1,0 +1,36 @@
+== build -debug -sanitize
+lab Z0-0
+lab ZrcA
+lab Z0
+lab Z1-7
+lab ZrcA
+lab Z1-7
+lab Z2-14
+lab ZrcA
+lab Z2-14
+srcA
+status 0
+== build
+lab Z0-0
+lab ZrcA
+lab Z0
+lab Z1-7
+lab ZrcA
+lab Z1-7
+lab Z2-14
+lab ZrcA
+lab Z2-14
+srcA
+status 0
+== interpret
+lab Z0-0
+lab ZrcA
+lab Z0
+lab Z1-7
+lab ZrcA
+lab Z1-7
+lab Z2-14
+lab ZrcA
+lab Z2-14
+srcA
+status 0

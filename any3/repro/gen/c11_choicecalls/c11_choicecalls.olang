@@ -1,0 +1,45 @@
+import "std/io"
+# T32a: a conditional, a match and a try whose values are calls' text (new storage, held in the box as it is), the box
+# pushed into an outer list: each call's result must land where the any does, not in an arm's block
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+error Oops {
+    BAD
+}
+fn mk(i I64) String { return "t" $i "-" $(i * 7) }
+fn mkf(i I64) String ? Oops {
+    if i % 2 == 1 { error Oops.BAD }
+    return "f" $i "-" $(i * 7)
+}
+fn main() {
+    l := List<any W&>()
+    for i in range 4 {
+        l.Push(Lab(mk(i) if i % 2 == 0 else mk(i + 100)))
+        l.Push(Lab(match i { case 0 => mk(10) case 1 => mk(11) case _ => mk(i + 20) }))
+        l.Push(Lab(try mkf(i) catch default mk(i + 30)))
+        l.Push(Lab(try mkf(i) catch Oops { continue }))
+    }
+    assert churn() > 0
+    for x in l { say(x.Show()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

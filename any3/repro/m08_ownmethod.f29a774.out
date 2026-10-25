@@ -1,0 +1,5 @@
+== build -debug -sanitize
+m08_ownmethod.olang:16:14: error[G19, E10b]: Box<Bool> does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
+   16 |     n := Map<Box<Bool>, I64>()
+      |              ^~~~~~~~~
+compilation failed with 1 error

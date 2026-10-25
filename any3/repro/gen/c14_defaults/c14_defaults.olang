@@ -1,0 +1,42 @@
+import "std/io"
+# T32a in a parameter default (D8a): an any whose box holds a call's text as it is, built for each call where the
+# parameter's scope is bound - a callee keeping it in a list outliving the call's block
+type W trait {
+    Show() String
+}
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mk(i I64) String { return "t" $i "-" $(i * 7) }
+G mut I64 = 0
+fn next() I64 {
+    G += 1
+    return G
+}
+fn stash(l mut List<any W&>&, w any W& = Lab(mk(next()))) { l.Push(w) }
+fn main() {
+    l := List<any W&>()
+    for i in range 3 {
+        stash(l)
+        stash(l, Lab(mk(i + 50)))
+    }
+    assert churn() > 0
+    for x in l { say(x.Show()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

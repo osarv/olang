@@ -1,0 +1,39 @@
+import "std/io"
+# T32a/T29a: an any made of a struct a call builds (no box: the call's result is the instance), the call's argument a
+# conversion of a loop body's text to a type over String (T29a: it names that text's storage) - is the argument
+# judged as the text's storage, or (an "any box" flag left set from the conversion) as a fresh temporary?
+type Named trait {
+    Name() String
+}
+type Lab extends String
+type Cat struct(n String&) { n }
+fn (c Cat&) Name() String { return "cat " $c.n }
+fn pick(l Lab&) Cat& { return Cat(String(l)) }
+fn main() {
+    xs := List<any Named&>()
+    ys := List<Cat&>()
+    for i in range 3 {
+        s := "text" $i "-" $(i * 7)
+        xs.Push(pick(Lab(s)))
+    }
+    assert churn() > 0
+    for x in xs { say(x.Name()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

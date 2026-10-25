@@ -1,0 +1,27 @@
+# T32/G4/G9: a type variable reached only through an any inside a List's argument and a function type's parameter;
+# and one in an any only in the result (G4: no parameter gives it)
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+fn sumAll<T>(l mut List<mut any Iterator<T>&>&, f fn(x T) I64) I64 {
+    t I64 = 0
+    for it in l {
+        for x in it { t += f(x) }
+    }
+    return t
+}
+fn apply<T>(g fn(it mut any Iterator<T>&) I64, it mut any Iterator<T>&) I64 { return g(it) }
+fn main() {
+    l := List<mut any Iterator<I64>&>()
+    l.Push(Ups(3))
+    l.Push(Ups(2))
+    say($sumAll(l, fn(x I64) I64 { return x * 10 }))
+    u mut any Iterator<I64>& = Ups(4)
+    say($apply(fn(it mut any Iterator<I64>&) I64 { return it.Count(fn(x I64) Bool { return true }) }, u))
+}

@@ -1,0 +1,23 @@
+# T32a: a type declared over a fixed array (T7c) made an any - from a variable, a reference to one, a field, an
+# element - copied (it is "an array"), written through a mut any, the source shown after
+type W trait {
+    mut Bump()
+}
+type Q extends Array<Char, 3>
+fn (q mut Q&) Bump() { q[0] = 'Z' }
+type H struct(a Array<Char, 3>) { a }
+fn main() {
+    q1 := Q(Char['a', 'b', 'c'])
+    b1 mut any W& = q1
+    b1.Bump()
+    f2 := Array<Char, 3>(Char['d', 'e', 'f'])
+    b2 mut any W& = Q(f2)
+    b2.Bump()
+    r3 mut Array<Char, 3>& = Array<Char, 3>(Char['g', 'h', 'i'])
+    b3 mut any W& = Q(r3)
+    b3.Bump()
+    h := H(Array<Char, 3>(Char['j', 'k', 'l']))
+    b4 mut any W& = Q(h.a)
+    b4.Bump()
+    say(String(q1) " " String(f2) " " String(r3) " " String(h.a))
+}
