@@ -993,7 +993,7 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("big") == "fn big<T>(a T, b T) T\n    instance big<I64>: fn(a I64, b I64) I64\n"
     assert explained("N") == "type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n"
     assert explained("N.Value") == "fn (n N&) Value() I64\n"
-    assert explained("MathError") == "error MathError\n    ZERO\n"
+    assert explained("MathError") == "type MathError error\n    ZERO\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: a contract's conditions as written, its results named; a scope relation it writes among the obligations

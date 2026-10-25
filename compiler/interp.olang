@@ -1001,7 +1001,7 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
     dm := x.P.T.DeclModule(dl)
     name := x.P.T.Names.Text(x.P.T.DeclName(dl))
-    return $lower.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $name "." $word   # B5
+    return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $name "." $word   # B5
 }
 
 fn say(t String&) { try io.Print(t) catch io.Error { } }

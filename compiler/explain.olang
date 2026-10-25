@@ -201,7 +201,12 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     match c.P.T.DeclKindOf(d) {
         case types.DeclKind.Foreign { return $"extern type " $name "\n" }
         case types.DeclKind.Error {
-            b.Push($"error " $name "\n")
+            # T19, T19a: its members as written, then its own words
+            src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
+            b.Push($"type " $name " error")
+            ms := c.P.ErrorMembers(d)
+            for i in range ms.Len() { b.Push($(", " if i > 0 else " ") $src[I64(ms[i].Sp.Start):I64(ms[i].Sp.End)]) }
+            b.Push("\n")
             for w in c.P.ErrorWords(d) { b.Push($"    " $nm.Text(w) "\n") }
             return b.ToString()
         }

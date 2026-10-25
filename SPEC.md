@@ -956,19 +956,37 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 
 ### 2.6 Error types
 
-**T19.** `error-decl ::= "error" IDEN "{" list(IDEN) "}"` is a **top-level**
-declaration in its own right — not a `type Name error { ... }` form, and not reachable from a
-general `type-expr` position (T2). An error type declares a closed, ordered set of named words,
-similar in shape to an enum body but declared with its own keyword and usable only
-in the specific positions described in §7. Its words follow the listing rule (L18a), as an enum's cases do (T17):
-`error E { A, B }` on one line, one per line otherwise.
+**T19.** `error-decl ::= "type" IDEN "error" [ error-list ] [ "{" list(IDEN) "}" ]` (the `error-list` on the
+declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
+the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
+`trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
+**error type**: a closed, ordered set of named words, `type IoError error { FULL  DENIED }` - shaped like an enum
+body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
+B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
+qualified by its own type (`IoError.FULL`) and is public by its own first letter (M6a). An error type takes no type
+parameters and extends nothing.
+
+**T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type
+LoadError error os.Error, ParseError`. Its members are what an `error-list` names (D8) - error types, single words
+(`ParseError.EMPTY`) and other named sets - and the set **stands for** its members, flattened: a set among the
+members stands for its own, and the words of one type are one entry (R1c). A set with braces as well, `type LoadError
+error os.Error, ParseError { TIMEOUT }`, is also an error type of its own words (`LoadError.TIMEOUT`), a member of its
+own set after the others. A named set is written wherever an error set is - after a signature's `?` (`fn load() Config
+? LoadError`), in a function type and a trait's method (`fn(I64) ? LoadError`), as a member of another set, and as a
+catch item (R11: `catch LoadError` takes every member) - and is **the same set as its members written out**: `?
+LoadError` and `? os.Error, ParseError` promise the same errors, and two function types differing only in that
+spelling are one type (T27). It is never a code space of its own: codes stay per member type (R6), so a set adds
+nothing to the error-union ABI. A set may not reach itself through its members, and none of its own words may share a
+name with a word of a member (both compile-time errors): words are qualified, so the second rule is only against
+confusion. A member naming no error type, word or set is a compile-time error (R1).
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
 §7. An error is raised (`error E.WORD`) and caught (`catch E.WORD`), never held: an error type is not a value's type,
 so naming one as the type of a parameter, a local, a field, a result, an element or a type argument is a compile-time
-error, and so is a word written as a value (`e != E.A`). Which word failed is told apart by catch clauses
-(`try f() catch E.A { ... } catch E.B { ... }`).
+error, and so is a word written as a value (`e != E.A`) - except where it is compared with the error a catch clause
+took (R11b), the one place an error has a name. Which word failed is told apart by catch clauses
+(`try f() catch E.A { ... } catch E.B { ... }`), or inside one by its name (R11b).
 
 ### 2.7 Function types
 
@@ -1402,7 +1420,7 @@ arguments as type variables, bound through the constrained type's methods (`<I I
 method of a generic type (`fn (b mut Box<T>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
-**T35b (built-in traits).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T> trait {
+**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { END }` and `type Iterator<T> trait {
 mut Next() T ? Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
 `Exhausted` once there are none - running out is an error like any other, never a flag beside a value. It is what
 `for ... in` walks besides an array and a range (S9a); code calling `Next()` itself writes
@@ -1608,17 +1626,17 @@ T29f), with
 (§12.3 G6) declares type parameters and is valid only for a
 struct type, and `type-expr` is defined in
 §2.1; the struct shape (T13) is specified fully in
-§9. The declared name enters
+§9. A name followed by `error` begins an `error-decl` instead (D5, T19). The declared name enters
 the module's `types` set (D2) and is visible throughout the module, and, per §4.3, outside it if
 capitalized.
 
-**D5.** `error-decl` is specified in §2 T19. Its declared name also enters
+**D5.** `error-decl` (`type Name error ...`) is specified in §2 T19 and T19a. Its declared name also enters
 the module's `types` set (D2) — an error type and a struct/enum type may not share a name within
 one module.
 
 **D6.** A named struct or enum type may embed itself (directly or through a chain of other named types) only
-through a reference marker at some point in the chain (T16, T17d). An error type may never reference any other type
-(T19).
+through a reference marker at some point in the chain (T16, T17d). An error type references nothing but, as a named
+set, error types, their words and other sets (T19a).
 
 ### 3.4 Function declarations
 
@@ -1652,7 +1670,8 @@ value) are both unambiguous with nothing but an optional bare type-expr ever app
 value); a function with no `ret-type` returns no value (bare `return`/fall-through only).
 `alias-chain IDEN` (§4.4 M8) never carries an array suffix or reference marker in this position
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
-`error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
+`error-list-item` must name a declared error type (§2.6), one of its words (`ListError.EMPTY`, R1c), or a named set
+(`LoadError`, T19a), which stands for its members. `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
 list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
@@ -4758,7 +4777,8 @@ signature declares it may produce; propagation and handling are both explicit.
 §9) may declare zero or more
 error types via its `error-list` (D8): `? ErrA, ErrB, ...`. This is the function's own **error
 union** — the complete set of errors it may produce, to `try` callers (§7.4) and to a coverage-checking `catch`
-(§7.5): every word of a type the list names, or the words it names of one (R1c). A written list is a
+(§7.5): every word of a type the list names, or the words it names of one (R1c), and what a named set it names
+stands for (T19a). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
 
@@ -4797,13 +4817,18 @@ type.
 
 ### 7.2 The `error` statement
 
-**R3.** `error-stmnt ::= "error" alias-chain IDEN "." IDEN STMNT_END` (`alias-chain`, §4.4 M8,
+**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
 possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
 and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
 error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
 so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
+
+**R3a (raising what was caught).** `error e`, with `e` the name a catch clause gave the error it took (R11b), raises
+that same error - its type and word - again, from that clause's block. It is held to the enclosing function's set as
+`error T.WORD` is (R3): every error `e` can be there - what the clause took, less what a test of `e` has excluded
+(R11b) - must be in a written set, or is taken on by an inferred one (R1a).
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
 specific (type, word) pair as its result, in place of a normal `return`ed value — see §7.3. In a
@@ -4907,19 +4932,48 @@ written would be kept by neither.
 evaluates the operand; if it produced its success value, that value is discarded (the statement form never
 binds one — see §7.5) and control continues after the statement; if it produced an error, the first
 clause that handles it runs (§7.5) and, if its block does not leave, control continues after the
-statement. The error is never exposed to the block — no error object or word is bound to a name. A clause
+statement. The error is not a value of the block; a clause may only name it, for use in the clause alone (R11b). A clause
 of a statement has no value to give, so it always has a block and never a `default`. `try join { ... }` (§6.8 P4c) is
 this statement with a join in place of the call, and a spawned `try` without targets (P4a) takes clauses on these
 terms too, run on the task's thread.
 
 ### 7.5 `catch`
 
-**R11.** `catch-clause ::= "catch" [ catch-list ] [ block ] [ "default" unary { "," unary } ]`, with at
+**R11.** `catch-clause ::= "catch" [ catch-list ] [ IDEN ] [ block ] [ "default" unary { "," unary } ]`, with at
 least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of
-that error type. Several `catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on
-the clause's line (`catch A, B.X`). A clause may begin on a line after the one before it.
+that error type; an item naming a named set (T19a) matches everything the set stands for (`catch LoadError`). Several
+`catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on the clause's line (`catch
+A, B.X`). A clause may begin on a line after the one before it. An `IDEN` after the items, with no `,` before it,
+names the error the clause took (R11b); `catch e { }` with no items is one bare name that names no error type, read as
+that name.
+
+**R11b (the error a clause took).** `catch os.Error e { ... }`, `catch os.Error, ParseError e { ... }`, `catch e
+default ...` name the error the clause took, for the clause alone - its block and its defaults - as a for-in names
+its element. The name's set is what the clause took: the words of what the tried operand can fail with that the
+clause's items name (everything left, for a clause with none), less what earlier clauses took. It is used in five
+ways and no other:
+
+- `$e`, rendering it as an error's name prints (B5): `os.Error.DENIED` - another module's type by its module's name,
+  the prelude's and the root program's bare;
+- `e == T.WORD` and `e != T.WORD`, a word; `e == T` and `e != T`, an error type or a named set, true where the error is
+  of that type, or of what the set stands for. Each side names something `e` can be, else the test is a compile-time
+  error (it could never hold);
+- narrowing: in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e != X {
+  leave }`, `e`'s set is what of `X` it holds; in the else of `if e == X`, and after `if e == X { leave }`, it is its set
+  less `X` (as S8d narrows a case);
+- `match e { case os.Error.DENIED { } case ParseError { } ... }`, each case's items words, types or sets as a catch
+  clause's, tried in order, a `case _` or `nomatch` taking the rest; without one the cases must cover `e`'s set, and a
+  case naming nothing `e` can be is a compile-time error. A case's block narrows `e` to what the case names. `match e`
+  gives a value too (S12b), `case X => v`;
+- `error e`, raising it again (R3a).
+
+Anything else naming `e` is a compile-time error naming `$e` where text is wanted: assigning it or to it, `:=` from
+it, passing it to a function, a constructor or a lambda, capturing it, storing it, returning it, `try e` (which names
+`error e`). The name is declared as any local is (D3, D3a: it may not reuse another's name), and a clause that never
+uses its name is a compile-time error naming the clause without it. Nothing about the error-union ABI changes: the name
+holds the error's code under the clause's own set (R6), recoded where the clause is entered.
 
 **R11a.** A `try` may carry **several clauses**, and an error runs the **first** that handles it, in the
 order written. A clause with no `catch-list` handles every error no earlier clause did, and so may only be
@@ -4952,7 +5006,8 @@ nothing actually escapes uncaught.
 `error-list` (R1) - the words it names, or, where it names a type whole, every one of that type's words, even if the
 callee happens to only ever produce a subset of them internally. A callee written `? ListError.EMPTY` is covered by
 `catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
-type it does not name is (R13).
+type it does not name is (R13). A named set (T19a) as an item is an error only where nothing it stands for can come
+from the operand.
 
 ### 7.6 The prelude's errors
 

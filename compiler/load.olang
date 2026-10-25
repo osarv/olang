@@ -160,6 +160,14 @@ fn (l mut Loader&) LoadPrelude() {
     for f in files { l.load(f, l.rootIdentity(f), true) }
 }
 
+# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
+# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
+fn ErrQualifier(identity String&, inRoot Bool) String {
+    if inRoot or identity.StartsWith("std/prelude") { return "" }
+    k := try identity.FindLast("/") catch default -1
+    return $identity[k + 1:] "."
+}
+
 # a file's type names, error types and sets included, in every branch: "type Name"
 fn typeNames(text String&, ts scan.Tokens&) List<String&>&text {
     out mut List<String&>&text = List<String&>()

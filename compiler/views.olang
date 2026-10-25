@@ -909,7 +909,7 @@ fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
             }
             st.Dead = true
         }
-        case typed.Stmt.Raise(_, _, _) { st.Dead = true }
+        case typed.Stmt.Raise(_, _, _), typed.Stmt.Reraise(_, _, _) { st.Dead = true }
         case typed.Stmt.Exit(_, _, m) {
             if m is not null { v.expr(m, st, scratch) }
             st.Dead = true

@@ -96,6 +96,27 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     ctResults Map<source.NameId, Bool>
     ctSubst Map<I64, I64>
     ctFrom I64 = 0          # where its statements start on the statement stack
+    # R11b: the names the catch clauses around gave the errors they took, innermost last, whether each is used, and what
+    # narrowing leaves of each here, innermost last
+    errBinds List<errBind>
+    errUsed List<Bool>
+    errNarrows List<errNarrow>
+}
+
+# R11b: a name a catch clause gave the error it took - its local (the error's code under Set) and the set the clause
+# took, in the canonical order its codes count by; where it is written
+type errBind struct(Name source.NameId, Local I64, Set types.ListId, Sp source.Span) {
+    Name
+    Local
+    Set
+    Sp
+}
+
+# R11b: what of a caught error's set a test leaves it in a block - its entries
+type errNarrow struct(Bind I64, Now types.ListId, Block I64) {
+    Bind
+    Now
+    Block
 }
 
 CtReq I64 = 1
@@ -3868,6 +3889,7 @@ fn (c mut Checker&) close(id I64, outer I64, mark I64, from I64) typed.Block&c {
     fr := c.fr()
     for fr.narrows.Len() > 0 and (try fr.narrows.Last() catch { unreachable }).Block == id { fr.narrows.Pop()! }
     for fr.nulls.Len() > 0 and (try fr.nulls.Last() catch { unreachable }).Block == id { try fr.nulls.Pop() catch { } }
+    for fr.errNarrows.Len() > 0 and (try fr.errNarrows.Last() catch { unreachable }).Block == id { fr.errNarrows.Pop()! }
     c.fr().Block = outer
     return typed.Block(typed.BlockId(I32(id)), stmts)
 }
@@ -5668,6 +5690,7 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
 # a name read as a value: a local, a global, a build constant (B10)
 fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr?&c {
     ref := c.P.R.Use(c.fr().File, sp.Start)
+    if ref.Kind == names.What.Local and c.caughtMisused(sp, n) { return c.unknown(sp) }
     if ref.Kind == names.What.Local {
         # S8c: in a condition's body, a fixed local of the body it was asked in is its initializer
         if c.fr().fixed.Has(n) {
@@ -5978,6 +6001,8 @@ fn intOnly(op token.Tok) Bool {
 # literal adapting to the other operand where it fits it; on Bools "==", "!=" and xor
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr&c {
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
+        # R11b: a caught error compared with a word, an error type or a set
+        if c.caughtName(a) >= 0 or c.caughtName(b) >= 0 { return c.caughtCompare(sp, op, a, b) }
         # E10c: null is tested with "is", never compared
         if isNullLit(a) or isNullLit(b) {
             o := a if isNullLit(b) else b
@@ -6770,7 +6795,7 @@ fn (c mut Checker&) errsText(es types.ListId) String {
     if items.Len() == 0 { return "nothing" }
     sb := StringBuilder()
     for i in range items.Len() {
-        if i > 0 { sb.Push(" + ") }
+        if i > 0 { sb.Push(", ") }
         sb.Push(c.ty(items[i]))
     }
     return sb.ToString()
@@ -8265,6 +8290,9 @@ fn nameDistance(a String&, b String&) I64 {
 # "$x" as a piece: a function named directly renders as its signature, "name(params) results ? errors", known here
 # (E11a); anything else is rendered where the text is built
 fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece&c {
+    # R11b: a caught error renders as its name prints
+    bi := c.caughtName(y)
+    if bi >= 0 { return typed.Piece.Render(c.caughtText(y.Span(), bi)) }
     x := c.rendered(sp, y)
     match x {
         case typed.Expr.Fn(_, _, f) {
@@ -10683,6 +10711,7 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place?&c {
     match x {
         case ast.Expr.Name(sp, n) {
             ref := c.P.R.Use(c.fr().File, sp.Start)
+            if ref.Kind == names.What.Local and c.caughtMisused(sp, n) { return null }
             if ref.Kind == names.What.Local {
                 id := c.localOrCapture(n, sp)
                 if id < 0 and c.fr().Inst >= 0 { return c.instField(sp, n) }
@@ -10734,6 +10763,11 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         case ast.Expr.Paren(psp, _) { c.err(psp, msgs.TryParens()) }
         nomatch { }
     }
+    # R11b: a caught error is raised again, never tried
+    if c.caughtName(y) >= 0 {
+        c.err(y.Span(), msgs.TryOnCaught(c.src(y.Span())))
+        return c.unknown(sp)
+    }
     asks := c.ContractAsks.Len()
     fr.Tries++
     x := c.expr(y, want)
@@ -10755,7 +10789,8 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     }
     cls List<typed.Clause&>
     if clauses.Len() > 0 {
-        for cl in clauses { cls.Push(c.clause(cl, rt, asValue)) }
+        got := c.leaksBetween(mark, end)
+        for cl in clauses { cls.Push(c.clause(cl, rt, asValue, got, cls)) }
     }
     if c.clauseRules(clauses, cls, asValue, rt) and asValue { return c.unknown(sp) }
     c.handlesContracts(asks, cls)
@@ -10894,7 +10929,8 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     c.produced(clauses, mark, end)
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
     if clauses.Len() > 0 {
-        for cl in clauses { cls.Push(c.clause(cl, types.VoidT)) }
+        got := c.leaksBetween(mark, end)
+        for cl in clauses { cls.Push(c.clause(cl, types.VoidT, false, got, cls)) }
     }
     c.clauseRules(clauses, cls, false, types.VoidT)
     c.handlesContracts(asks, cls)
@@ -10903,10 +10939,26 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
 }
 
-fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) typed.Clause&c {
+fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<types.TypeId>&
+                           earlier List<typed.Clause&>&) typed.Clause&c {
     items List<typed.Item>
-    if cl.Items.Len() > 0 {
+    lone := c.loneBinding(cl)
+    if cl.Items.Len() > 0 and not lone {
         for p in cl.Items { c.catchItem(p, items) }
+    }
+    all := cl.Items.Len() == 0 or lone
+    # R11b: the name the clause gives the error it took, bound for its block and its defaults
+    fr := c.fr()
+    bind I64 = -1
+    bset := types.ListId(0)
+    bi := fr.errBinds.Len()
+    if cl.Bind != source.NameId(0) or lone {
+        bname := cl.Items[0].Parts[0] if lone else cl.Bind
+        bsp := cl.Items[0].Sp if lone else cl.BindSp
+        bset = c.takenSet(got, items, all, earlier)
+        bind = c.hidden(bsp, c.P.T.Prim("I32"))
+        fr.errBinds.Push(errBind(bname, bind, bset, bsp))
+        fr.errUsed.Push(false)
     }
     code typed.Block?&c = null
     if cl.Braced {
@@ -10943,9 +10995,15 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) ty
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
         }
     }
-    all := cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
-    return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
+    if bind >= 0 {
+        b := fr.errBinds[bi]
+        if not fr.errUsed[bi] { c.err(b.Sp, msgs.CatchNameUnused(c.tok(b.Name)) if not lone else msgs.CatchLoneUnused(c.tok(b.Name))) }
+        fr.errBinds.Truncate(bi)
+        fr.errUsed.Truncate(bi)
+        for fr.errNarrows.Len() > 0 and (try fr.errNarrows.Last() catch { unreachable }).Bind >= bi { fr.errNarrows.Pop()! }
+    }
+    return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults, bind, bset)
 }
 
 # a task's default (P4a): built where the call's result lands, so one holding references builds all it holds - a part
@@ -11345,6 +11403,546 @@ fn (c mut Checker&) wordIndex(d types.DeclId, w source.NameId) I64 {
     return -1
 }
 
+# ---- the error a clause took (R11b, R3a) ----
+
+# what of a try's operand lets out, from mark to end
+fn (c mut Checker&) leaksBetween(mark I64, end I64) Array<types.TypeId>& {
+    xs mut List<types.TypeId>& = List<types.TypeId>()
+    fr := c.fr()
+    for i in range mark, end { xs.Push(fr.leaks[i]) }
+    return xs.ToArray()
+}
+
+# R11b: whether a clause's one bare item is the name it gives the error it took, naming no error type (names.olang
+# reads it so too)
+fn (c mut Checker&) loneBinding(cl ast.Catch&) Bool {
+    if cl.Bind != source.NameId(0) or cl.Items.Len() != 1 or cl.Items[0].Parts.Len() != 1 { return false }
+    return names.LoneCatchName(cl, c.P.R.Use(c.fr().File, cl.Items[0].Sp.Start).Kind)
+}
+
+# R11b: the set a clause takes of what its operand lets out (got) - the words its items name, everything for one with
+# none, less what the clauses before it take - merged, each type one entry, in the canonical order (R1a)
+fn (c mut Checker&) takenSet(got Array<types.TypeId>&, items List<typed.Item>&, all Bool, earlier List<typed.Clause&>&) types.ListId {
+    es List<types.TypeId>
+    for e in got {
+        if e == types.DefaultErrT or e == types.UnknownT { continue }
+        r := c.left(e, earlier)
+        if r == types.UnknownT { continue }
+        if all {
+            es.Push(r)
+            continue
+        }
+        et := c.P.T.ErrOf(r)
+        for it in items {
+            if it.Err != et { continue }
+            if it.Word < 0 {
+                es.Push(r)
+            } else if it.Word < 64 and (c.P.T.ErrMask(r) & (U64(1) << it.Word)) != 0 {
+                es.Push(c.P.T.ErrWords(et, U64(1) << it.Word))
+            }
+        }
+    }
+    return c.canonicalErrs(c.normalSet(c.merged(es)))
+}
+
+# the bits of every word an error type declares
+fn (c mut Checker&) allWords(et types.TypeId) U64 {
+    n := c.wordCount(et)
+    return U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
+}
+
+# an entry of type et holding the words of mask: the type whole where that is every word; Unknown for none
+fn (c mut Checker&) entryOf(et types.TypeId, mask U64) types.TypeId {
+    m := mask & c.allWords(et)
+    if m == 0 { return types.UnknownT }
+    return et if m == c.allWords(et) else c.P.T.ErrWords(et, m)
+}
+
+fn (c mut Checker&) normalSet(es List<types.TypeId>&) List<types.TypeId> {
+    out List<types.TypeId>
+    for e in es {
+        n := c.entryOf(c.P.T.ErrOf(e), c.P.T.ErrMask(e))
+        if n != types.UnknownT { out.Push(n) }
+    }
+    return out
+}
+
+# what two sets both hold; what a holds and b does not; what either holds
+fn (c mut Checker&) setMeet(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
+    out List<types.TypeId>
+    for x in a {
+        for y in b {
+            if c.P.T.ErrOf(x) != c.P.T.ErrOf(y) { continue }
+            n := c.entryOf(c.P.T.ErrOf(x), c.P.T.ErrMask(x) & c.P.T.ErrMask(y))
+            if n != types.UnknownT { out.Push(n) }
+        }
+    }
+    return c.normalSet(c.merged(out))
+}
+
+fn (c mut Checker&) setLess(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
+    out List<types.TypeId>
+    for x in a {
+        m := c.P.T.ErrMask(x)
+        for y in b {
+            if c.P.T.ErrOf(x) == c.P.T.ErrOf(y) { m = m & ~c.P.T.ErrMask(y) }
+        }
+        n := c.entryOf(c.P.T.ErrOf(x), m)
+        if n != types.UnknownT { out.Push(n) }
+    }
+    return out
+}
+
+fn (c mut Checker&) setUnion(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
+    all List<types.TypeId>
+    for x in a { all.Push(x) }
+    for y in b { all.Push(y) }
+    return c.normalSet(c.merged(all))
+}
+
+fn (c mut Checker&) setItems(l types.ListId) List<types.TypeId> {
+    out List<types.TypeId>
+    for x in c.P.T.Items(l) { out.Push(x) }
+    return out
+}
+
+# the set as messages write it: its entries, by commas (R1, QY)
+fn (c mut Checker&) setText(es List<types.TypeId>&) String {
+    if es.Len() == 0 { return "nothing" }
+    b := StringBuilder()
+    for i in range es.Len() {
+        if i > 0 { b.Push(", ") }
+        b.Push(c.ty(es[i]))
+    }
+    return b.ToString()
+}
+
+# the clause name n is, innermost first: its index in the frame's names, -1 for none
+fn (c mut Checker&) caughtNamed(n source.NameId) I64 {
+    fr := c.fr()
+    for k := fr.errBinds.Len() - 1, k >= 0, k-- {
+        if fr.errBinds[k].Name == n { return k }
+    }
+    return -1
+}
+
+# R11b: the caught error an expression names - a name, parenthesized or not - its index, -1 for none; used where it is
+fn (c mut Checker&) caughtName(x ast.Expr&) I64 {
+    if c.frames.Len() == 0 or c.fr().errBinds.Len() == 0 { return -1 }
+    match x {
+        case ast.Expr.Paren(_, y) { return c.caughtName(y) }
+        case ast.Expr.Name(sp, n) {
+            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return -1 }
+            k := c.caughtNamed(n)
+            if k >= 0 { c.fr().errUsed[k] = true }
+            return k
+        }
+        nomatch { return -1 }
+    }
+}
+
+# R11b: a caught error named where nothing but rendering, comparing, matching or raising takes it - said, true; a name
+# of a clause around a lambda, captured
+fn (c mut Checker&) caughtMisused(sp source.Span, n source.NameId) Bool {
+    k := c.caughtNamed(n)
+    if k >= 0 {
+        c.fr().errUsed[k] = true
+        c.err(sp, msgs.CaughtNotAValue(c.tok(n), c.text(n)))
+        return true
+    }
+    fi := c.fr().Parent
+    for fi >= 0 {
+        pf := c.frames[fi]
+        for j := pf.errBinds.Len() - 1, j >= 0, j-- {
+            if pf.errBinds[j].Name == n {
+                pf.errUsed[j] = true
+                c.err(sp, msgs.CaughtCaptured(c.tok(n), c.text(n)))
+                return true
+            }
+        }
+        fi = pf.Parent
+    }
+    return false
+}
+
+# what narrowing leaves of caught error k here (R11b): its set, or what the tests around say
+fn (c mut Checker&) caughtNow(k I64) List<types.TypeId> {
+    fr := c.fr()
+    for j := fr.errNarrows.Len() - 1, j >= 0, j-- {
+        if fr.errNarrows[j].Bind == k { return c.setItems(fr.errNarrows[j].Now) }
+    }
+    return c.setItems(fr.errBinds[k].Set)
+}
+
+# a dotted name an expression is ("os.Error.DENIED"), null for another expression
+fn exprPath(x ast.Expr&) ast.Path?&x {
+    ps List<source.NameId>
+    y := x
+    for {
+        match y {
+            case ast.Expr.Name(_, n) {
+                ps.Push(n)
+                break
+            }
+            case ast.Expr.Member(_, z, n) {
+                ps.Push(n)
+                y = z
+            }
+            nomatch { return null }
+        }
+    }
+    ps.Reverse()
+    return ast.Path(x.Span(), ps.ToArray())
+}
+
+# what an item compared with a caught error stands for (R11b): a word, an error type, a set's entries; false where it
+# names none of these
+fn (c mut Checker&) caughtItems(x ast.Expr&) List<types.TypeId>, Bool {
+    out List<types.TypeId>
+    p := exprPath(x)
+    if p is null { return out, false }
+    ctx := c.fr().Ctx
+    et := c.P.ErrorType(ctx, p)
+    if et != types.UnknownT {
+        c.P.EntriesOf(et, out)
+        return c.normalSet(c.merged(out)), true
+    }
+    w, wt := c.errorWord(p)
+    if w < 0 or w >= 64 { return out, false }
+    out.Push(c.entryOf(wt, U64(1) << w))
+    return out, true
+}
+
+# whether caught error k holds one of xs: its code's type ordinal tested where xs holds the type's every word it can
+# be, its words compared one by one otherwise
+fn (c mut Checker&) caughtTest(sp source.Span, k I64, xs List<types.TypeId>&) typed.Expr&c {
+    fr := c.fr()
+    set := c.P.T.Items(fr.errBinds[k].Set)
+    i32 := c.P.T.Prim("I32")
+    code := c.readLocal(sp, fr.errBinds[k].Local)
+    got typed.Expr?&c = null
+    for x in xs {
+        et := c.P.T.ErrOf(x)
+        j I64 = -1
+        for q in range set.Len() {
+            if c.P.T.ErrOf(set[q]) == et { j = q }
+        }
+        if j < 0 { continue }
+        have := c.P.T.ErrMask(set[j]) & c.allWords(et)
+        one typed.Expr?&c = null
+        if (c.P.T.ErrMask(x) & have) == have {
+            hi := c.prim(sp, i32, typed.PrimOp.Shr, code, c.lit(sp, i32, 16))
+            one = c.prim(sp, types.BoolT, typed.PrimOp.Eq, hi, c.lit(sp, i32, j + 1))
+        } else {
+            m := c.P.T.ErrMask(x) & have
+            for w in range 64 {
+                if (m & (U64(1) << w)) == 0 { continue }
+                t1 := c.prim(sp, types.BoolT, typed.PrimOp.Eq, code, c.lit(sp, i32, ((j + 1) << 16) | w))
+                one = t1 if one is null else c.prim(sp, types.BoolT, typed.PrimOp.BitOr, one, t1)
+            }
+        }
+        if one is null { continue }
+        got = one if got is null else c.prim(sp, types.BoolT, typed.PrimOp.BitOr, got, one)
+    }
+    if got is null { return c.lit(sp, types.BoolT, 0) }
+    return got
+}
+
+# R11b: "e == X" and "e != X" - X a word, an error type or a set the caught error can be
+fn (c mut Checker&) caughtCompare(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&) typed.Expr&c {
+    ka, kb := c.caughtName(a), c.caughtName(b)
+    if ka >= 0 and kb >= 0 {
+        c.err(sp, msgs.CaughtComparedToCaught())
+        return c.lit(sp, types.BoolT, 0)
+    }
+    k := ka if ka >= 0 else kb
+    o := b if ka >= 0 else a
+    name := c.fr().errBinds[k].Name
+    xs, ok := c.caughtItems(o)
+    if not ok {
+        p := exprPath(o)
+        kind := names.What.None if p is null else c.P.R.Use(c.fr().File, p.Sp.Start).Kind
+        if kind == names.What.Type or kind == names.What.Import {
+            c.P.ErrorItemKnown(c.fr().Ctx, p!)
+        } else {
+            c.err(o.Span(), msgs.CaughtCompareWhat(c.tok(name)))
+        }
+        return c.lit(sp, types.BoolT, 0)
+    }
+    now := c.caughtNow(k)
+    if c.setMeet(now, xs).Len() == 0 {
+        c.err(o.Span(), msgs.CaughtNeverIs(c.tok(name), c.setText(xs), c.setText(now)))
+        return c.lit(sp, types.BoolT, 0)
+    }
+    t := c.caughtTest(sp, k, xs)
+    return c.negate(sp, t) if op == token.Tok.NotEq else t
+}
+
+# R11b: "$e" - the name the error prints with (B5): a test per word it can be, the last one given whatever
+fn (c mut Checker&) caughtText(sp source.Span, k I64) typed.Expr&c {
+    fr := c.fr()
+    set := c.P.T.Items(fr.errBinds[k].Set)
+    now := c.caughtNow(k)
+    i32 := c.P.T.Prim("I32")
+    tt := c.P.T.Ref(c.textType(), types.ReadOnly)
+    codes List<I64>
+    texts List<String&>
+    for x in now {
+        et := c.P.T.ErrOf(x)
+        j I64 = -1
+        for q in range set.Len() {
+            if c.P.T.ErrOf(set[q]) == et { j = q }
+        }
+        if j < 0 { continue }
+        d := c.P.T.DeclOf(et)
+        dm := c.P.T.DeclModule(d)
+        q := load.ErrQualifier(c.P.L.Mods[dm].Identity, dm == c.P.L.Root)
+        ws := c.P.ErrorWords(d)
+        m := c.P.T.ErrMask(x)
+        for w in range ws.Len() {
+            if w < 64 and (m & (U64(1) << w)) == 0 { continue }
+            codes.Push(((j + 1) << 16) | w)
+            texts.Push($q $c.text(c.P.T.DeclName(d)) "." $c.text(ws[w]))
+        }
+    }
+    if texts.Len() == 0 { return c.unknown(sp) }
+    v := c.textConst(sp, texts[texts.Len() - 1], tt)
+    for i := texts.Len() - 2, i >= 0, i-- {
+        t := c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, fr.errBinds[k].Local), c.lit(sp, i32, codes[i]))
+        v = typed.Expr.Cond(sp, tt, typed.Cond(t, c.textConst(sp, texts[i], tt), v))
+    }
+    return v
+}
+
+fn (c mut Checker&) textConst(sp source.Span, t String&, tt types.TypeId) typed.Expr&c {
+    bs := Array<U8>(t.Len())
+    for i in range t.Len() { bs[i] = U8(t[i]) }
+    return typed.Expr.Data(sp, tt, c.fr().File, typed.Const.Bytes(bs))
+}
+
+# R11b: what a condition says of a caught error, held for a block - where it holds (holds) or does not
+fn (c mut Checker&) pushErrNarrow(x ast.Expr&, holds Bool, block I64) {
+    if c.frames.Len() == 0 or c.fr().errBinds.Len() == 0 { return }
+    k := c.caughtIn(x)
+    if k < 0 { return }
+    now := c.caughtNow(k)
+    n := c.caughtNarrow(x, holds, k, now)
+    c.fr().errNarrows.Push(errNarrow(k, c.canonicalErrs(n), block))
+}
+
+# the caught error a condition first compares, -1 for none
+fn (c mut Checker&) caughtIn(x ast.Expr&) I64 {
+    return match x {
+        case ast.Expr.Paren(_, y) => c.caughtIn(y)
+        case ast.Expr.Unary(_, op, y) => c.caughtIn(y) if op == token.Tok.Not else -1
+        case ast.Expr.Binary(_, op, a, b) => c.caughtOf(op, a, b)
+        case _ => -1
+    }
+}
+
+fn (c mut Checker&) caughtOf(op token.Tok, a ast.Expr&, b ast.Expr&) I64 {
+    if op == token.Tok.EqEq or op == token.Tok.NotEq {
+        ka := c.caughtName(a)
+        return ka if ka >= 0 else c.caughtName(b)
+    }
+    if op != token.Tok.And and op != token.Tok.Or { return -1 }
+    ka := c.caughtIn(a)
+    return ka if ka >= 0 else c.caughtIn(b)
+}
+
+# what of now caught error k can be where condition x holds (holds) or not: a comparison of k meets or leaves out
+# what it names, "and", "or" and "not" combine, and anything else says nothing
+fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, k I64, now List<types.TypeId>&) List<types.TypeId> {
+    match x {
+        case ast.Expr.Paren(_, y) { return c.caughtNarrow(y, holds, k, now) }
+        case ast.Expr.Unary(_, op, y) {
+            if op == token.Tok.Not { return c.caughtNarrow(y, not holds, k, now) }
+        }
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.EqEq or op == token.Tok.NotEq {
+                o := a
+                if c.caughtName(a) == k {
+                    o = b
+                } else if c.caughtName(b) != k {
+                    return now.Clone()
+                }
+                xs, ok := c.caughtItems(o)
+                if not ok { return now.Clone() }
+                return c.setMeet(now, xs) if (op == token.Tok.EqEq) == holds else c.setLess(now, xs)
+            }
+            if op == token.Tok.And {
+                if holds {
+                    na := c.caughtNarrow(a, true, k, now)
+                    return c.caughtNarrow(b, true, k, na)
+                }
+                return c.setUnion(c.caughtNarrow(a, false, k, now), c.caughtNarrow(b, false, k, now))
+            }
+            if op == token.Tok.Or {
+                if not holds {
+                    na := c.caughtNarrow(a, false, k, now)
+                    return c.caughtNarrow(b, false, k, na)
+                }
+                return c.setUnion(c.caughtNarrow(a, true, k, now), c.caughtNarrow(b, true, k, now))
+            }
+        }
+        nomatch { }
+    }
+    return now.Clone()
+}
+
+# R3a: "error e" - what e can be here held to the function's written set as "error T.WORD" is, or taken on by an
+# inferred one, then raised again
+fn (c mut Checker&) reraise(sp source.Span, k I64) {
+    fr := c.fr()
+    now := c.caughtNow(k)
+    if not fr.InferErrors and not fr.InTest {
+        for e in now {
+            et := c.P.T.ErrOf(e)
+            have := types.UnknownT
+            for h in c.P.T.Items(fr.Errors) {
+                if c.P.T.ErrOf(h) == et { have = h }
+            }
+            if have == types.UnknownT {
+                c.err(source.Span(sp.Start, sp.Start + 5), msgs.ReraiseUndeclared(c.ty(e)))
+                break
+            } else if c.uncovered(fr.Errors, e) != types.UnknownT {
+                c.err(source.Span(sp.Start, sp.Start + 5), msgs.ReraiseWordNotInSet(c.ty(c.uncovered(fr.Errors, e)), c.ty(have)))
+                break
+            }
+        }
+    }
+    for e in now { c.leaks1(e) }
+    c.emit(typed.Stmt.Reraise(sp, c.readLocal(sp, fr.errBinds[k].Local), fr.errBinds[k].Set))
+}
+
+# R11b: a match on a caught error, read as the if-chain it is - each case a test of what its items name (with its
+# guard), "case _" and "nomatch" the else, and the last case the else where the cases cover every error it can be
+fn (c mut Checker&) caughtMatch(sp source.Span, m ast.Match&) {
+    ok, covered := c.caughtCases(sp, m)
+    if not ok { return }
+    els ast.Stmt?&m = null
+    if m.NoMatch is not null { els = ast.Stmt.If(m.NoMatch!.Sp, ast.If(null, ast.Branch(m.NoMatch!.Sp, m.NoMatch!.Body, -1), null)) }
+    last := c.caughtLast(m, covered)
+    for i := m.Cases.Len() - 1, i >= 0, i-- {
+        cs := m.Cases[i]
+        if cs.Value is not null { c.err(cs.Sp, msgs.ArrowInStatement()) }
+        br ast.Branch&m = ast.Branch(cs.Sp, cs.Body, -1)
+        if i == last {
+            els = ast.Stmt.If(cs.Sp, ast.If(null, br, null))
+            continue
+        }
+        els = ast.Stmt.If(cs.Sp, ast.If(c.caughtCaseTest(m, cs), br, els))
+    }
+    if els is not null { c.stmt(els) }
+}
+
+# R11b: "match e" giving a value, each case "=> v": the conditional it is
+fn (c mut Checker&) caughtMatchValue(sp source.Span, m ast.Match&, want types.TypeId) typed.Expr&c {
+    ok, covered := c.caughtCases(sp, m)
+    if not ok { return c.unknown(sp) }
+    v ast.Expr?&m = null
+    if m.NoMatch is not null { v = m.NoMatch!.Value }
+    last := c.caughtLast(m, covered)
+    for i := m.Cases.Len() - 1, i >= 0, i-- {
+        cs := m.Cases[i]
+        if cs.Value is null {
+            c.err(cs.Sp, msgs.CaughtMatchBlock())
+            return c.unknown(sp)
+        }
+        if i == last {
+            v = cs.Value
+            continue
+        }
+        v = ast.Expr.Cond(cs.Sp, cs.Value!, c.caughtCaseTest(m, cs), v!)
+    }
+    if v is null { return c.unknown(sp) }
+    return c.expr(v, want)
+}
+
+# a case's test: "e == A or e == B", and its guard
+fn (c mut Checker&) caughtCaseTest(m ast.Match&, cs ast.Case&) ast.Expr&m {
+    t ast.Expr?&m = null
+    for p in cs.Alts {
+        x ast.Expr?&m = null
+        match p {
+            case ast.Pattern.Path(psp, y), ast.Pattern.Value(psp, y) { x = ast.Expr.Binary(psp, token.Tok.EqEq, m.Subject, y) }
+            nomatch { }
+        }
+        if x is null { continue }
+        t = x if t is null else ast.Expr.Binary(cs.Sp, token.Tok.Or, t, x)
+    }
+    if t is null { t = ast.Expr.Lit(cs.Sp, token.Tok.BoolLit) }
+    if cs.Guard is not null { t = ast.Expr.Binary(cs.Sp, token.Tok.And, t!, cs.Guard!) }
+    return t!
+}
+
+# which case is the chain's else (R11b): a "case _", or, with no nomatch, the last where the cases cover every error -
+# -1 for none
+fn (c mut Checker&) caughtLast(m ast.Match&, covered Bool) I64 {
+    for i in range m.Cases.Len() {
+        for p in m.Cases[i].Alts {
+            match p {
+                case ast.Pattern.Wild(_) { return i }
+                nomatch { }
+            }
+        }
+    }
+    if m.NoMatch is not null { return -1 }
+    return m.Cases.Len() - 1 if covered else -1
+}
+
+# R11b: a match's cases checked before it is read as a chain - each names words, error types or sets (or "_"); with no
+# nomatch the cases without guards cover every error the name can be; a case after they have, or naming nothing it can
+# be, is never reached. Whether it may be read (false where it is said why not), and whether the cases cover every error
+fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
+    k := c.caughtName(m.Subject)
+    name := c.fr().errBinds[k].Name
+    now := c.caughtNow(k)
+    covered List<types.TypeId>
+    ok := true
+    wild := false
+    for i in range m.Cases.Len() {
+        cs := m.Cases[i]
+        if wild or c.setLess(now, covered).Len() == 0 {
+            c.err(cs.Sp, msgs.CaughtCaseNever(c.tok(name)))
+            ok = false
+            continue
+        }
+        xs List<types.TypeId>
+        for p in cs.Alts {
+            match p {
+                case ast.Pattern.Wild(_) {
+                    wild = true
+                    xs = c.setUnion(xs, now)
+                }
+                case ast.Pattern.Path(_, y), ast.Pattern.Value(_, y) {
+                    ys, good := c.caughtItems(y)
+                    if not good {
+                        c.err(p.Span(), msgs.CaughtCaseForm())
+                        ok = false
+                    } else if c.setMeet(now, ys).Len() == 0 {
+                        c.err(p.Span(), msgs.CaughtNeverIs(c.tok(name), c.setText(ys), c.setText(now)))
+                        ok = false
+                    } else {
+                        xs = c.setUnion(xs, ys)
+                    }
+                }
+                nomatch {
+                    c.err(p.Span(), msgs.CaughtCaseForm())
+                    ok = false
+                }
+            }
+        }
+        if cs.Guard is null { covered = c.setUnion(covered, c.setMeet(xs, now)) }
+    }
+    all := wild or c.setLess(now, covered).Len() == 0
+    if ok and not all and m.NoMatch is null {
+        c.err(source.Span(sp.Start, sp.Start + 5), msgs.CaughtMatchMissing(c.setText(c.setLess(now, covered))))
+        ok = false
+    }
+    return ok, all
+}
+
 # ---- statements ----
 
 fn (c mut Checker&) emit(s typed.Stmt&c) {
@@ -11525,7 +12123,8 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
         jend := fr.leaks.Len()
         c.produced(j.Clauses, lm, jend)
         if j.Clauses.Len() > 0 {
-            for cl in j.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
+            got := c.leaksBetween(lm, jend)
+            for cl in j.Clauses { cls.Push(c.clause(cl, types.VoidT, false, got, cls)) }
             # P4d: code after the join reads targets a failed task left unwritten - a clause taking that failure leaves
             if fr.TargetFails > targetFails {
                 for i in range cls.Len() {
@@ -11642,10 +12241,15 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
         }
         for cl in clauses {
             items List<typed.Item>
-            if cl.Items.Len() > 0 {
+            lone := c.loneBinding(cl)
+            if cl.Items.Len() > 0 and not lone {
                 for p in cl.Items { c.catchItem(p, items) }
             }
-            all := cl.Items.Len() == 0
+            # R11b: a task's clause runs on the task's thread, a lambda of its own, and names no error yet
+            if cl.Bind != source.NameId(0) or lone {
+                c.err(cl.Items[0].Sp if lone else cl.BindSp, msgs.CatchNameInTask(c.tok(cl.Items[0].Parts[0] if lone else cl.Bind)))
+            }
+            all := cl.Items.Len() == 0 or lone
             tcs.Push(typed.TaskClause(cl.Sp, items.ToArray(), all, c.clauseHandler(cl, crt, places.Len())))
             taken.Push(typed.Clause(cl.Sp, items.ToArray(), all, null, Array<typed.Expr&>(0)))
         }
@@ -12529,6 +13133,8 @@ fn (c mut Checker&) narrowedBranch(b ast.Branch&, id I64, k I64, guard ast.Expr?
     if caseOk { c.narrow(b.Sp, id, k) }
     # S8e: what the condition says is not null, in the branch it holds in
     if guard is not null { c.pushNulls(guard, positive, bid) }
+    # R11b: what it says of a caught error
+    if guard is not null { c.pushErrNarrow(guard, positive, bid) }
     c.stmtsOf(b.Body)
     r := c.close(bid, outer, mark, from)
     if b.Group >= 0 { c.P.L.Diags.EndHold() }
@@ -12553,7 +13159,10 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
     if i.Cond is not null and i.Else is null {
         match st {
             case typed.Stmt.If(_, ti) {
-                if skipsRest(ti.Then) { c.pushNulls(i.Cond!, false, c.fr().Block) }
+                if skipsRest(ti.Then) {
+                    c.pushNulls(i.Cond!, false, c.fr().Block)
+                    c.pushErrNarrow(i.Cond!, false, c.fr().Block)
+                }
             }
             nomatch { }
         }
@@ -12658,6 +13267,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
                     from := c.stmts.Len()
                     id, outer, mark := c.open(typed.BlockKind.Plain, esp)
                     c.pushNulls(i.Cond!, false, id)
+                    c.pushErrNarrow(i.Cond!, false, id)
                     c.emit(c.ifOf(esp, e))
                     els = c.close(id, outer, mark, from)
                 }
@@ -12837,7 +13447,8 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
         # its clauses run once the loop has ended: no loop of theirs to break or continue (S9e) - a stand-in loop says so
         fr.loops.Push(-2)
         fr.exits.Push(-2)
-        for cl in f.Clauses { cls.Push(c.clause(cl, types.VoidT)) }
+        got := c.leaksBetween(lmark, lend)
+        for cl in f.Clauses { cls.Push(c.clause(cl, types.VoidT, false, got, cls)) }
         try fr.loops.Pop() catch { }
         try fr.exits.Pop() catch { }
     }
@@ -13811,6 +14422,17 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path?&) {
         return
     }
     if word is null { return }
+    # R3a: "error e", a caught error raised again
+    if word.Parts.Len() == 1 and c.P.R.Use(c.fr().File, word.Sp.Start).Kind == names.What.Local {
+        bi := c.caughtNamed(word.Parts[0])
+        if bi >= 0 {
+            c.fr().errUsed[bi] = true
+            c.reraise(sp, bi)
+            return
+        }
+        if not c.caughtMisused(word.Sp, word.Parts[0]) { c.err(word.Sp, msgs.RaiseNotCaught(c.tok(word.Parts[0]))) }
+        return
+    }
     w, et := c.errorWord(word)
     if w < 0 {
         c.P.ErrorItemKnown(c.fr().Ctx, word)
@@ -13840,6 +14462,10 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path?&) {
 # a match statement: its arms in order, the first whose pattern and guard hold run (S13); "match T" on a type variable
 # is decided for this instance, its chosen arm alone checked (G15)
 fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
+    if not m.OnType and c.caughtName(m.Subject) >= 0 {
+        c.caughtMatch(sp, m)
+        return
+    }
     if m.OnType {
         k := c.matchOnType(m)
         if k == -2 { return }
@@ -13889,6 +14515,7 @@ fn (c mut Checker&) lenMatch(m ast.Match&) I64 {
 
 # a match giving a value (S12b): "case P => v", or a block that leaves
 fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) typed.Expr&c {
+    if not m.OnType and c.caughtName(m.Subject) >= 0 { return c.caughtMatchValue(sp, m, want) }
     if m.OnType {
         k := c.matchOnType(m)
         if k == -2 { return c.unknown(sp) }
@@ -15133,7 +15760,7 @@ fn leavesBlock(b typed.Block?&) Bool {
 fn leaves(s typed.Stmt&) Bool {
     match s {
         case typed.Stmt.Return(_, _) { return true }
-        case typed.Stmt.Raise(_, _, _) { return true }
+        case typed.Stmt.Raise(_, _, _), typed.Stmt.Reraise(_, _, _) { return true }
         case typed.Stmt.Exit(_, _, _) { return true }
         case typed.Stmt.If(_, i) { return i.Else is not null and leavesBlock(i.Then) and leavesBlock(i.Else) }
         case typed.Stmt.Block(_, b) { return leavesBlock(b) }

@@ -25,6 +25,7 @@ import "std/os"
 import "source"
 import "ast"
 import "diag"
+import "load"
 import "types"
 import "generic"
 import "typed"
@@ -5512,7 +5513,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
 # an error type's name as B5 says it escaping main: as source writes it outside its module ("io.Error")
 fn (e mut Emitter&) errName(et types.TypeId) String {
     d := e.T.DeclOf(et)
-    return $lower.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root) $e.text(e.T.DeclName(d))
+    return $load.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root) $e.text(e.T.DeclName(d))
 }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending
