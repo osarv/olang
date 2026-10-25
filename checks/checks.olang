@@ -2063,6 +2063,13 @@ fn fixing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" o.olang > out.txt 2>&1") == 0 and outOf(dir) == "fixed 7\n4\n", "the fixed program runs", dir)
     try r.expect(sh(dir, "\"$OLANG\" fix -debug o.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("-debug applies to"), "fix -debug", dir)
     try r.expect(sh(dir, "\"$OLANG\" fix missing.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("missing.olang: cannot be read"), "a missing file", dir)
+    # the lang25 review: what fix cannot settle from the text is listed and the status is 1; what it rewrites computes
+    # what the program did when written (master's output, 2026-10-25)
+    os.Run("cd " $os.Quote(dir) " && cp before25.olang b.olang")
+    try r.expect(sh(dir, $env "\"$OLANG\" fix b.olang > out.txt 2> err.txt") == 1 and outOf(dir) == "b.olang\n" and
+                 sh(dir, "grep -q '2 places above may mean something else' err.txt") == 0, "fix lists what it cannot settle", dir)
+    try r.expect(sh(dir, "cmp -s b.olang before25.want") == 0, "fix's result for code before 2026-10-25", dir)
+    try r.expect(sh(dir, "\"$OLANG\" b.olang > out.txt 2>&1") == 0 and outOf(dir) == "5 2 13 3 5 2 false 2 2 2\n", "the program fixed computes what it did", dir)
 }
 
 # B1: the command line is words - a mode, options checked against the modes they apply to, help - and a one-character
