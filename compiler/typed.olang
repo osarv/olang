@@ -685,6 +685,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     Built mut Array<Scope>& = Array<Scope>(Sites)
     Stored mut Array<Scope>& = Array<Scope>(Locals, Scope.Frame)
     MayBuild mut Array<Bool>& = Array<Bool>(Vars)
+    # an "any"'s box made at a site holds its array item as it is, the item being new storage built where the box is
+    # (T32a) - false, the box copies it: decided by the scope pass alone (Scoper.anyItemNew), which lowering follows
+    AnyNew mut Array<Bool>& = Array<Bool>(Sites)
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed List<Scope>

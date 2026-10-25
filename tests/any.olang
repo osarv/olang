@@ -331,6 +331,53 @@ test "T32a: arrays and conversions of them are copied into the box" {
     assert labels(Live - 1) == BakedLabels
 }
 
+# T32a (the second any review, finding 1): an array chosen by a conditional, a value match or a catch default is
+# existing storage too, so the box copies it - a block's text put in an any that outlives the block reads back after
+# the arena churns, and writing through a mut any changes the box, never the text it was made of
+error ChOops {
+    BAD
+}
+fn chBad(k I64) String ? ChOops {
+    if k < 100 { error ChOops.BAD }
+    return "never"
+}
+fn chosen(n I64) String {
+    xs := List<any Named&>()
+    for i in range n {
+        s := "s" $i
+        u := "u" $i
+        xs.Push(Label(s if s.Len() > 1 else u))
+        xs.Push(Label(match s.Len() { case 0 => u case _ => s }))
+        xs.Push(Label(try chBad(i) catch default s))
+    }
+    churn()
+    return names(xs)
+}
+BakedChosen String = chosen(2)
+
+fn chosenBump(k I64) String {
+    s := "cond"
+    u := "else"
+    m := "match"
+    d := "dflt"
+    a mut any Bump& = BLab(s if k > 0 else u)
+    a.Bump()
+    b mut any Bump& = BLab(match k { case 0 => u case _ => m })
+    b.Bump()
+    c mut any Bump& = BLab(try chBad(k) catch default d)
+    c.Bump()
+    return $s " " $m " " $d " " $a " " $b " " $c
+}
+BakedChosenBump String = chosenBump(3)
+
+test "T32a: a conditional, a match or a catch default put in an any is copied into its box" {
+    want := "label s0, label s0, label s0, label s1, label s1, label s1"
+    assert BakedChosen == want
+    assert chosen(Live - 1) == want
+    assert BakedChosenBump == "cond match dflt Zond Zatch Zflt"
+    assert chosenBump(Live) == BakedChosenBump
+}
+
 # E11a, T33 (the any review, finding 3): an any is a reference to $, followed 8 deep and then "...", so a chain through
 # any fields renders as one through plain references does, and a node whose any holds itself stops
 type RNode struct(v I64) {
