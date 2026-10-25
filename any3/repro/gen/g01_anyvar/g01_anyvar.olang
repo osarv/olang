@@ -1,0 +1,57 @@
+import "std/io"
+# T32: "any Iterator<T>&" with T a type variable - inferred at a call (G9), substituted in a generic type's field, at
+# two instances in one program, baked while compiling and computed at run time
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+type Ws struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut Ws&) Next() String ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return "w" $w.at
+}
+fn first<T>(it mut any Iterator<T>&, d T) T { return try it.Next() catch default d }
+fn total<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
+type Src<T> struct(it mut any Iterator<T>&) { it }
+fn (s mut Src<T>&) Take1(d T) T { return try s.it.Next() catch default d }
+fn run() String {
+    a mut any Iterator<I64>& = Ups(3)
+    b mut any Iterator<String>& = Ws(3)
+    s := Src<I64>(Ups(2))
+    t := Src<String>(Ws(2))
+    f1 := first(a, -1)
+    f2 := first(b, "none")
+    return $f1 " " $f2 " " $total(a) " " $total(b) " " $s.Take1(0) " " $t.Take1("z") " " $s.Take1(0) " " $s.Take1(0)
+}
+G String = run()
+fn main() {
+    say(G)
+    say(run())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

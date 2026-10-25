@@ -1,0 +1,9 @@
+== build -debug -sanitize
+match forin aspay param capt field elem glob
+status 0
+== build
+match forin aspay param capt field elem glob
+status 0
+== interpret
+match forin aspay param capt field elem glob
+status 0

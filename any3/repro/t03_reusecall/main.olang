@@ -1,0 +1,6 @@
+import "std/io"
+import "lib"
+import "user"
+fn main() {
+    for x in lib.Make(2) { try io.Println("three " $user.Plain(x)) catch { } }
+}

@@ -1,0 +1,16 @@
+# a library (X14) whose export fns call defaults through anys made here and in another module
+import "helper"
+type Downs struct(n I64) {
+    n
+}
+fn (d mut Downs&) Next() I64 ? Exhausted {
+    if d.n <= 0 { error Exhausted.END }
+    d.n -= 1
+    return d.n
+}
+export fn countUp(n I64) I64 { return helper.Make(n).Count(fn(x I64) Bool { return x > 2 }) }
+export fn sumDown(n I64) I64 {
+    it mut any Iterator<I64>& = Downs(n)
+    return it.Fold(0, fn(a I64, x I64) I64 { return a + x })
+}
+export fn maxUp(n I64) I64 { return try helper.Make(n).Max() catch default -1 }

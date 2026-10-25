@@ -1,0 +1,6 @@
+# generic code over lib's type, and a generic type holding one
+import "lib"
+fn Via<T>(b lib.Box<T>&) String { return b.Describe() }
+type Wrap<T> struct(b lib.Box<T>&) { b }
+fn (w Wrap<T>&) Describe() String { return "wrap " $w.b.Describe() }
+fn Any<X lib.D>(x X&) lib.D& { return x }

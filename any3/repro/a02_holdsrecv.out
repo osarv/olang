@@ -1,0 +1,16 @@
+== build -debug -sanitize
+a02_holdsrecv.olang:27:23: error[E12]: expected any Gen&, found any Gen
+   27 |     for x in l { say($x.Step()) }
+      |                       ^
+compilation failed with 1 error
+== build
+a02_holdsrecv.olang:27:23: error[E12]: expected any Gen&, found any Gen
+   27 |     for x in l { say($x.Step()) }
+      |                       ^
+compilation failed with 1 error
+== interpret
+a02_holdsrecv.olang:27:23: error[E12]: expected any Gen&, found any Gen
+   27 |     for x in l { say($x.Step()) }
+      |                       ^
+compilation failed with 1 error
+status 1

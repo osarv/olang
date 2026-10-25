@@ -1,0 +1,44 @@
+# T32a: "an array is copied ... from a variable too": each source below is existing storage the box must copy - a match
+# binding, a for-in element, an "as" payload, a parameter, a global, a capture read in a lambda, a field of a call's
+# result, an element of a call's result; each written through a mut any, the source shown after
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type E enum {
+    T(s String&)
+    N
+}
+type H struct(s String&) { s }
+GL mut String& = "glob"
+fn mkH(s String&) H& { return H(s) }
+fn arr(a String&, b String&) Array<String&>& { return String&[a, b] }
+fn viaParam(s String&) {
+    b mut any W& = Lab(s)
+    b.Bump()
+}
+fn main() {
+    s1, s2, s3, s4, s5, s6, s7 := "match", "forin", "aspay", "param", "capt", "field", "elem"
+    e := E.T(s1)
+    b1 mut any W& = Lab(match e { case E.T(x) => x case E.N => s1 })
+    b1.Bump()
+    for x in String&[s2] {
+        b2 mut any W& = Lab(x)
+        b2.Bump()
+    }
+    e3 := E.T(s3)
+    b3 mut any W& = Lab(e3 as E.T)
+    b3.Bump()
+    viaParam(s4)
+    f := fn() mut any W& { return Lab(s5) }
+    b5 := f()
+    b5.Bump()
+    b6 mut any W& = Lab(mkH(s6).s)
+    b6.Bump()
+    b7 mut any W& = Lab(arr(s7, s7)[1])
+    b7.Bump()
+    b8 mut any W& = Lab(GL)
+    b8.Bump()
+    say($s1 " " $s2 " " $s3 " " $s4 " " $s5 " " $s6 " " $s7 " " $GL)
+}

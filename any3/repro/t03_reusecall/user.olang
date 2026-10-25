@@ -1,0 +1,4 @@
+# defaults called through an any in a module that is not the root - reused (B3i) by the second build
+fn CountBig(it mut any Iterator<I64>&) I64 { return it.Count(fn(x I64) Bool { return x > 2 }) }
+fn Biggest(it mut any Iterator<I64>&) I64 { return try it.Max() catch default -1 }
+fn Plain(n I64) I64 { return n + 1 }

@@ -1,0 +1,18 @@
+== build -debug -sanitize
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+false 173
+true 68
+status 0
+== build
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+false 173
+true 68
+status 0
+== interpret
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+truetrue falsefalse truetrue truetrue truetrue truetrue truetrue falsefalse truetruetrue
+false 173
+true 68
+status 0

@@ -1,0 +1,47 @@
+import "std/io"
+# T32: a default keeping its receiver by value is refused through an any (AnyNoCopy, by HoldsVarByValue) - here
+# defaults keeping it in ways that walk misses: in a List (through its reference field), in a closure
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+type Gen trait {
+    mut Step() I64
+}
+fn (u mut Ups&) Step() I64 { return try u.Next() catch default -1 }
+fn (g mut G&) Twice<G Gen>() List<G>& {
+    l := List<G>()
+    l.Push(g)
+    l.Push(g)
+    return l
+}
+fn main() {
+    a mut any Gen& = Ups(5)
+    l := a.Twice()
+    say($l.Len())
+    for x in l { say($x.Step()) }
+    say($a.Step())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

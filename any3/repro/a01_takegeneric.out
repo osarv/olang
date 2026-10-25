@@ -1,0 +1,37 @@
+== build -debug -sanitize
+a01_takegeneric.olang:13:64: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   13 | fn firstTwo<I Iterator<I64>>(it mut I&) List<I64>& { return it.Take(2).ToList() }
+      |                                                                ^~~~
+a01_takegeneric.olang:18:27: note: instantiated here, with I = any Iterator<I64>
+   18 |     say($firstTwo(u) " " $firstTwo(a))
+      |                           ^~~~~~~~
+a01_takegeneric.olang:14:56: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   14 | fn skipOne<I Iterator<I64>>(it mut I&) I64 { return it.Skip(1).Count(fn(x I64) Bool { return true }) }
+      |                                                        ^~~~
+a01_takegeneric.olang:21:10: note: instantiated here, with I = any Iterator<I64>
+   21 |     say($skipOne(b) " " $b.Count(fn(x I64) Bool { return true }))
+      |          ^~~~~~~
+compilation failed with 2 errors
+== build
+a01_takegeneric.olang:13:64: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   13 | fn firstTwo<I Iterator<I64>>(it mut I&) List<I64>& { return it.Take(2).ToList() }
+      |                                                                ^~~~
+a01_takegeneric.olang:18:27: note: instantiated here, with I = any Iterator<I64>
+   18 |     say($firstTwo(u) " " $firstTwo(a))
+      |                           ^~~~~~~~
+a01_takegeneric.olang:14:56: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   14 | fn skipOne<I Iterator<I64>>(it mut I&) I64 { return it.Skip(1).Count(fn(x I64) Bool { return true }) }
+== interpret
+a01_takegeneric.olang:13:64: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   13 | fn firstTwo<I Iterator<I64>>(it mut I&) List<I64>& { return it.Take(2).ToList() }
+      |                                                                ^~~~
+a01_takegeneric.olang:18:27: note: instantiated here, with I = any Iterator<I64>
+   18 |     say($firstTwo(u) " " $firstTwo(a))
+      |                           ^~~~~~~~
+a01_takegeneric.olang:14:56: error[T32]: 'Skip' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   14 | fn skipOne<I Iterator<I64>>(it mut I&) I64 { return it.Skip(1).Count(fn(x I64) Bool { return true }) }
+      |                                                        ^~~~
+a01_takegeneric.olang:21:10: note: instantiated here, with I = any Iterator<I64>
+   21 |     say($skipOne(b) " " $b.Count(fn(x I64) Bool { return true }))
+      |          ^~~~~~~
+compilation failed with 2 errors

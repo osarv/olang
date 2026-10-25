@@ -1,0 +1,17 @@
+# a generic type with one method for its I64 instance, one for its Two instance and one written with variables, and a
+# trait they meet
+type D trait {
+    Describe() String
+}
+type Two struct(a I64, b I64) {
+    a
+    b
+}
+type Box<T> struct(v T) {
+    v
+}
+fn (b Box<T>&) Describe() String { return "generic" }
+fn (b Box<Two>&) Describe() String { return "two " $b.v.a }
+fn (b Box<I64>&) Describe() String { return "exact " $b.v }
+fn Make(n I64) any D& { return Box<I64>(n) }
+fn MakeP(n I64) any D& { return Box<Two>(Two(n, n)) }
