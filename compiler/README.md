@@ -50,7 +50,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
 | `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |
-| `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret` |
+| `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret`; which clang (B12d: `OLANG_CLANG`, a release's own, the newest of LLVM 20, 19, 18 on PATH); another architecture's C library and emulator (B12a) |
 | `build.olang` | objects named by their content, compiled side by side, the link, the modes, over a `Frontend` trait |
 | `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it, and the passes behind it |
 
@@ -106,3 +106,17 @@ make evaldiff      # the corpus, std's tests and the checks' run cases run by th
 The `*diff` targets build `build/compiler_tools_dump` first. `make verify` and `make quick` run tokdiff, astdiff,
 namesdiff, layoutdiff, fmtdiff and drvdiff beside the tests, with the compiler `make bootstrap` installs
 (`OLANG ?= build/olang`).
+
+## Platforms (SPEC B12-B12d)
+
+```
+OLANG_CLANG=clang-20 make quick    # the suite with another LLVM (18, 19 and 20 all pass it)
+make cross                         # corpus, std and checks cases built for aarch64, run under qemu-user
+make release                       # build/release/olang-VERSION-ARCH-linux.tar.xz with clang bundled, then releasetest
+```
+
+`make cross` needs clang 19 or newer (LLVM 18 cannot build the runtime's BF16 code for AArch64), the cross C library
+and qemu-user - on Ubuntu 24.04: `apt-get install clang-20 lld-20 libclang-rt-20-dev libc6-dev-arm64-cross
+libgcc-13-dev-arm64-cross gcc-aarch64-linux-gnu qemu-user-static` (`CROSS_TARGET` names another triple,
+`OLANG_EMULATOR` another emulator, `OLANG_SYSROOT` another C library). `make release` bundles `RELEASE_LLVM`'s clang
+(default `/usr/lib/llvm-20`, else 19); docs/install.md is the release's README.

@@ -505,8 +505,8 @@ test "what cannot be built for is said as stage 0 says it, before clang is asked
     assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
     assert mistake("a:b", "", false, "linux", "x86_64").Contains("unknown target 'a:b'")
     assert mistake("aarch64-linux-gnu", "", true, "linux", "x86_64") ==
-        "olang: error[B12a]: interpret builds and runs on this machine, and '-target aarch64-linux-gnu' is another " $
-        "architecture or system - only compile builds for it\n"
+        "olang: error[B12a]: interpret runs on this machine, and '-target aarch64-linux-gnu' is another " $
+        "architecture or system - build, compile and test build for it\n"
     assert mistake("native", "", false, "linux", "x86_64").Contains("clang not found on PATH")
     assert mistake("native", "", false, "linux", "riscv64").Contains("does not build for 'riscv64'")
     # without clang interpret knows this machine and the x86-64 levels, and the triple naming this machine
@@ -533,4 +533,20 @@ test "with clang, native is this machine's CPU, a triple of this machine its bas
     # LLVM 18 cannot build the runtime's BF16 code for aarch64 (B12a); a later clang might
     a := mistake("aarch64-linux-gnu", clang, false, "linux", "x86_64")
     assert a == "" or a.Contains("error[B12a]: this clang cannot build for 'aarch64-linux-gnu'")
+}
+
+test "B12a: this machine's programs run as they are, another architecture's through an emulator" {
+    here := Target()
+    assert (try here.Runner() catch Bad { unreachable }).Len() == 0
+    arm := Target()
+    arm.Arch = "aarch64"
+    arm.Foreign = true
+    run := try arm.Runner() catch Bad { return } # no emulator on this machine: nothing to run through
+    assert run.Len() > 0 and run[0].Contains("/")
+}
+
+test "B12d: the clangs looked for on PATH, newest first, and a name found as a path" {
+    assert Clangs[0] == "clang-20" and Clangs[Clangs.Len() - 1] == "clang"
+    assert whereIs("sh").EndsWith("/sh") and whereIs("olang-no-such-program") == ""
+    assert whereIs("/bin/sh") == "/bin/sh" and whereIs("/olang/no/such") == ""
 }

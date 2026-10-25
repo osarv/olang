@@ -228,7 +228,7 @@ build/olang: $(BOOT_SOURCES)
 
 # boot: make bootstrap, unless a bootstrap of exactly these inputs has passed here before - then the compiler it
 # installed. A bootstrap is a function of its inputs, which the key names: the seed, the compiler's and std's files
-# (all of std, conservatively), this makefile, clang and the linker, the processor (the build is for the machine it
+# (all of std, conservatively), this makefile, every clang the compiler may take (B12d) and the linker, the processor (the build is for the machine it
 # runs on, B12) and this checkout's directory (the compiler holds its absolute std paths). The cache, $(BOOT_CACHE), is
 # outside build/, so make clean keeps it; an entry is written only after build/olang.2 and build/olang.3 compared
 # equal, and only the newest $(BOOT_KEEP) are kept. BOOT_FRESH=1 bootstraps whatever the cache holds
@@ -236,7 +236,8 @@ BOOT_CACHE ?= .bootcache
 BOOT_KEEP ?= 3
 boot:
 	@key=$$( { echo "$(CURDIR)"; sha256sum $(sort $(SEED_FILES) $(BOOT_SOURCES) $(shell find std -type f) makefile); \
-		$(SEED_CLANG) --version; clang --version; ld --version | head -1; \
+		$(SEED_CLANG) --version; for c in "$$OLANG_CLANG" clang-20 clang-19 clang-18 clang; do \
+			[ -n "$$c" ] && command -v $$c > /dev/null && $$c --version | head -1; done; ld --version | head -1; \
 		grep -m1 '^model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo; } | sha256sum | cut -c1-32 ); \
 	d=$(BOOT_CACHE)/$$key; \
 	if [ -z "$(BOOT_FRESH)" ] && [ -x $$d/olang ]; then \
@@ -369,6 +370,48 @@ $(filter-out cross@checks/checks.olang,$(CROSS_RUNS)): cross@%: FORCE
 	@$(OLANG_ENV) $(OLANG) test -target $(CROSS_TARGET) $* || echo "$* ($(CROSS_TARGET))" >> build/failed.txt
 cross@checks/checks.olang: FORCE
 	@CHECKS_TARGET=$(CROSS_TARGET) $(OLANG_ENV) $(OLANG) test checks/checks.olang || echo "checks ($(CROSS_TARGET))" >> build/failed.txt
+
+# B12d: a release - build/release/olang-VERSION-ARCH-linux.tar.xz, VERSION as git describes this checkout. It holds
+# the compiler built for the architecture's baseline (bin/olang, so it runs on every machine of it, whatever this one
+# has), std/, SPEC.md (for "olang explain RULE"), editors/, tools/ (for "olang fix"), docs/install.md as its README, and
+# clang beside it (llvm/), which the compiler finds before any on PATH: RELEASE_LLVM's clang, LLVMgold.so (the LTO
+# link through the system's ld), its resource directory without what olang never uses (i386, and every sanitizer but
+# ThreadSanitizer, -race's), and the shared libraries it needs that are not the C library, libstdc++ or libgcc_s. The
+# machine it is unpacked on needs a linker (binutils) and the C library's development files (libc6-dev, libgcc-dev)
+RELEASE_LLVM ?= $(firstword $(wildcard /usr/lib/llvm-20 /usr/lib/llvm-19))
+RELEASE_VERSION ?= $(shell git describe --always --dirty --tags 2>/dev/null || echo dev)
+RELEASE_NAME = olang-$(RELEASE_VERSION)-$(shell uname -m)-linux
+RELEASE_DIR = build/release/$(RELEASE_NAME)
+RELEASE_SYSTEM_LIBS = libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|ld-linux*|linux-vdso.so.*|libstdc++.so.*|libgcc_s.so.*
+release: $(OLANG)
+	@test -x "$(RELEASE_LLVM)/bin/clang" || { echo "release: no clang in RELEASE_LLVM ($(RELEASE_LLVM))"; exit 1; }
+	rm -rf build/release && mkdir -p $(RELEASE_DIR)/bin $(RELEASE_DIR)/llvm/bin $(RELEASE_DIR)/llvm/lib
+	$(OLANG) build -target $(shell uname -m)-linux-gnu -output $(RELEASE_DIR)/bin/olang compiler/olang.olang
+	cp -r std editors SPEC.md $(RELEASE_DIR)/
+	mkdir -p $(RELEASE_DIR)/tools && cp tools/*.olang tools/README.md $(RELEASE_DIR)/tools/
+	cp docs/install.md $(RELEASE_DIR)/README.md
+	cp -L $(RELEASE_LLVM)/bin/clang $(RELEASE_DIR)/llvm/bin/clang
+	cp -L $(RELEASE_LLVM)/lib/LLVMgold.so $(RELEASE_DIR)/llvm/lib/
+	for lib in $$(ldd $(RELEASE_LLVM)/bin/clang $(RELEASE_LLVM)/lib/LLVMgold.so | awk '$$2 == "=>" { print $$1 " " $$3 }' | sort -u | \
+		while read name path; do case $$name in $(RELEASE_SYSTEM_LIBS)) ;; *) echo $$path ;; esac; done); do \
+		cp -L $$lib $(RELEASE_DIR)/llvm/lib/; done
+	cp -r $(RELEASE_LLVM)/lib/clang $(RELEASE_DIR)/llvm/lib/
+	find $(RELEASE_DIR)/llvm/lib/clang -name '*i386*' -delete
+	find $(RELEASE_DIR)/llvm/lib/clang -name 'libclang_rt.*' ! -name 'libclang_rt.tsan*' ! -name 'libclang_rt.builtins*' -delete
+	tar -C build/release -cJf build/release/$(RELEASE_NAME).tar.xz $(RELEASE_NAME)
+	@du -sh $(RELEASE_DIR) build/release/$(RELEASE_NAME).tar.xz
+	$(MAKE) --no-print-directory releasetest
+
+# a release unpacked into a fresh directory builds and runs a program with nothing but its own clang: PATH holds only
+# the system's tools a build runs (the linker), never a clang
+releasetest:
+	@t=$$(mktemp -d) && tar -C $$t -xJf build/release/$(RELEASE_NAME).tar.xz && mkdir $$t/work $$t/path && \
+	for p in ld ld.bfd as sh cat; do ln -s $$(command -v $$p) $$t/path/$$p; done && \
+	printf 'import "std/io"\n\nfn main() {\n    io.Println("hello from " $$TargetArch)!\n}\n' > $$t/work/hello.olang && \
+	cd $$t/work && env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang hello.olang > out.txt 2>&1; \
+	st=$$?; cat $$t/work/out.txt; \
+	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m)" $$t/work/out.txt; then echo "releasetest: built and ran"; rm -rf $$t; \
+	else echo "releasetest: failed ($$t)"; exit 1; fi
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
 # intentional data race - the "several tasks may be handed the same instance" test, which exists to show

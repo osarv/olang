@@ -925,8 +925,10 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(String&["explain"]) == "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
     assert prepared(String&["build", "-define", "TargetOs=x", "m.olang"]) ==
         "olang: error[B10a]: -define cannot redefine the built-in constant TargetOs\n"
-    assert prepared(String&["build", "-target", "aarch64-linux-gnu", "m.olang"]) ==
-        prepared(String&["compile", "-target", "aarch64-linux-gnu", "m.olang"])
+    # B12a: another architecture is built and tested for where this clang can, interpreted never
+    arm := prepared(String&["build", "-target", "aarch64-linux-gnu", "m.olang"])
+    assert arm == "no mistake: build" or arm.Contains("error[B12a]: this clang cannot build")
+    assert prepared(String&["interpret", "-target", "aarch64-linux-gnu", "m.olang"]).Contains("error[B12a]: interpret runs")
     assert prepared(String&["interpret", "p.olang", "x", "-y"]) == "no mistake: interpret"
     assert prepared(String&["explain", "zz9"]) == "no mistake: explain"
     assert prepared(String&["explain", "m.olang"]) ==

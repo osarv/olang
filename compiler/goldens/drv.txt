@@ -113,24 +113,19 @@
 | olang: error[B12]: unknown target 'x86_64-linux-gnu:a:b' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 | stderr:
 | status 1
-=== olang compile -target aarch64-linux-gnu main.olang
+=== olang compile -target aarch64-linux-gnu:native main.olang
 | stdout:
-| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+| olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
-=== olang build -target aarch64-linux-gnu main.olang
+=== olang build -target aarch64-linux-gnu:native main.olang
 | stdout:
-| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
-| stderr:
-| status 1
-=== olang test -target aarch64-linux-gnu main.olang
-| stdout:
-| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+| olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
 | stderr:
 | status 1
 === olang interpret -target aarch64-linux-gnu main.olang
 | stdout:
-| olang: error[B12a]: interpret builds and runs on this machine, and '-target aarch64-linux-gnu' is another architecture or system - only compile builds for it
+| olang: error[B12a]: interpret runs on this machine, and '-target aarch64-linux-gnu' is another architecture or system - build, compile and test build for it
 | stderr:
 | status 1
 === olang build -define X main.olang
