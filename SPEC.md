@@ -2003,8 +2003,12 @@ Its errors are its `Next()`'s: `E`, written in its result (`Iterator<String ? io
 a `try` in its body lets out ends it as its end does, `Exhausted` among them, so `a := try it.Next()` in a generator
 over another iterator ends the walk where that one ends. A `?` after its result is a compile-time error naming
 `Iterator<T ? E>`. Its parameters are its own locals from its first `Next()` on: set from the arguments when it is
-called, written as a function's are. Its contract's requirements (D17) are checked when it is called. A function whose
-result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a trait is no type.
+called, written as a function's are. Its contract's requirements (D17) are checked as its first `Next()` begins, before
+its body runs - the call making it checks nothing, and D17e decides nothing at it - so a false one is that `Next()`'s
+`ArgumentError.INVALID`, every `Next()` after it failing with `Exhausted` (D18a): `E` lists `ArgumentError`, as D17b
+asks of a written set, a compile-time error naming it otherwise (`fn evens(n I64) [n >= 0] Iterator<I64 ?
+ArgumentError>`). A function whose result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a
+trait is no type.
 
 **D18a (how a generator ends).** Its body's end, and a `return` - which takes no value, a `return v` being a
 compile-time error - end the walk: that `Next()` fails with `Exhausted`, and so does every `Next()` after it. An error
@@ -3841,7 +3845,9 @@ binds as a prefix operator does: its operand is a `unary`, so `embed "a.bin"[0]`
 embed read through is parenthesized (`(embed "a.bin")[0]`). PATH is text known while compiling - a literal, or an
 expression reading no local (a global, a build constant, a call), evaluated once the program checks; one that cannot
 be is a compile-time error. It names a file as a relative import does (M23): against the directory of the source file
-the `embed` is written in (an absolute path as itself), and inside `std` or a remote repository it may not leave it. A
+the `embed` is written in (an absolute path as itself), and inside `std` or a remote repository it may not leave it -
+neither as written nor as the file it really is, a link inside the repository naming a file outside it a compile-time
+error too (its real path is under the repository's real root, or std's). A
 path naming nothing, a directory, or a file that cannot be read is a compile-time error. Text is a view of the bytes,
 `String(embed "help.txt")` (T29a: no copy). Each `embed` written is one instance, as each literal is (T25d); a file
 embedded at two places is in the program twice - embed it once, in a global, to share it. An object holding an embed is
@@ -4387,7 +4393,7 @@ array length out of range (§3.5 D14b), an `as` that does not hold (E32) - print
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
 `FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
-value is not`. An assert's or an `unreachable`'s message (S17, S16d) follows, after
+value is not`, `FILE:LINE: a generator asked for its next value inside its own walk` (S20). An assert's or an `unreachable`'s message (S17, S16d) follows, after
 `: `. A program run with `interpret` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
@@ -4897,6 +4903,11 @@ whose result is not written `Iterator<T ? E>`, a lambda, a test - is a compile-t
 - with deferred code pending in a block around it - a walk stopped there and dropped would never run it (relaxable:
   a dropped walk could run it). An `errdefer`'s counts too (S19e), for one rule over the one list.
 
+A `Next()` asked while the generator's own walk runs - its body, or what it calls, asking the very generator it is
+walked as - fails a check the language guarantees (S18a): `FILE:LINE: a generator asked for its next value inside its
+own walk`, the line the generator's, in a test that test failing and the rest running. It costs one compare a `Next()`,
+as a slice's bounds check costs one a slice.
+
 ## 7. Error Handling
 
 olang has no exceptions. Errors are values (of a declared error type, §2.6) that a function's
@@ -5329,9 +5340,13 @@ closes - when the place was its **only holder**:
    joined, a call's built result, O13), `null`, or constant data (T25d); or moved there from a place that was its only
    holder (a collection's `Pop`, `TakeAt` or `Take`, and the last use of a local given one);
 2. no reference into it - to it, or to anything built where it lives - was **stored anywhere else**: in another place,
-   a global, a closure kept past the call that made it, a task, or a call that may keep it (O10b, O26a);
-3. nothing it holds is reached by more than one thread (§6.8);
-4. nothing it holds is an instance whose destructor is still to run (O15);
+   another value of the same place included (each value is its own: a node one holder holds linked from another
+   holder's node is stored elsewhere), a global, a closure kept past the call that made it, a task, or a call that may
+   keep it (O10b, O26a);
+3. nothing it holds is reached by more than one thread (§6.8) - nor is anything, in a program with an export fn, which
+   C may call from a thread of its own (X12);
+4. nothing it holds, nor anything built where it lives - an instance a constructor builds and no reference takes
+   (O16) among it - is an instance whose destructor is still to run (O15): only a `Destroy()` (C9b) ends that early;
 5. the place can let go again before its scope closes: it is let go of in a loop, or in a function that can run again
    while the place lives;
 6. no reference read from what the place holds is in use across a call that may make the place let go.
@@ -5339,9 +5354,13 @@ closes - when the place was its **only holder**:
 A reference read from what a place holds that is still in use after the place lets go - in the function holding the
 reference, or across a call that may make it let go (condition 6) - makes the place keep what it lets go of. Each
 condition is the compiler's to prove, over the whole program: where a fact it needs cannot be shown - a body not known
-(a function value, an `extern`), code in a module compiled on its own (B3i), a cycle of calls not settled - the place
-keeps, as O8c says; nothing is reclaimed on a guess. A generator (D18) lets go as a function does, its `yield` giving
-a value as a `return` does; what its frame holds when a walk stops part way is reclaimed with the scopes the frame holds.
+(a function value, an `extern` - which may call back any export fn, X12 - so a place one may let go of is let go of
+across it), code in a module compiled on its own (B3i), a cycle of calls not settled - the place keeps, as O8c says;
+nothing is reclaimed on a guess, and no fact is taken from a fixed point not run to its end. A generator (D18) lets go
+as a function does, its `yield` giving a value as a `return` does - and a `yield` is a call that may make any place let
+go, for what its frame holds across it: its consumer runs what it likes before the next `Next()`. What the
+generator was given is held by it for as long as it can be resumed (D18b); what its frame holds when a walk stops part
+way is reclaimed with the scopes the frame holds.
 An error leaving a block reclaims what was made in it as its other ways out do, after its `errdefer` code (S19e). Which places keep, and why, `-memory` reports (B18). Reclaiming
 early changes no value a program can read, runs no destructor (O15), and is not otherwise observable: a program's
 memory use is the only way to see it.
@@ -6242,10 +6261,12 @@ only where the compiler proves `x` the only way left to reach the instance, by t
 
 `x` is not read after the call - later in its function, in deferred code registered before the call, or in a later turn
 of a loop around it that `x` is declared outside of - even after it is given another value: a `return`, an `error` or an
-`unreachable` after the call in its block ends that path. `defer x.Destroy()` runs it where its block ends, so `x` may
+`unreachable` after the call in its block ends that path, and so does a `break` or a `continue` of a loop whose body
+declares `x` (its next turn declares it again). `defer x.Destroy()` runs it where its block ends, so `x` may
 be used until then, and is not returned there; `errdefer x.Destroy()` runs it only where an error leaves the block
 (S19e), so `x` may also be returned there - on that way out nothing is returned. A generator's `yield` gives a value as
-a `return` does and ends no path (D18). A value taken out of a collection is destroyed only in code compiled with
+a `return` does and ends no path (D18) - and an instance a generator holds across a `yield` is reached by it while the
+consumer runs, so no `Destroy()` there ends it. A value taken out of a collection is destroyed only in code compiled with
 the program it is in - its own module, or an instance (B3i, B3d). Where the proof fails it is a compile-time error
 naming what else may reach the instance. So every destructor runs exactly once, at its scope's close or at a proven
 `Destroy()`, and early destruction never leaves a reference to what it ended. A struct type declaring a destructor may

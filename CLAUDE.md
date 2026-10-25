@@ -733,7 +733,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its own let-go but builds its values in regions when a Destroy() takes them out; a value taken out of one is destroyed
   only in root-emitted code (B3i); `defer x.Destroy()` works, and `errdefer x.Destroy()` lets `x` be returned; a return
   or error after it ends its path; a generator's yield is walked as a return's value and ends no path. Measured: 1M
-  connections with destructors in a Map 50 MB -> 1.9 MB, 100k std UDP sockets under `ulimit -n 64` 1.7 MB.
+  connections with destructors in a Map 50 MB -> 1.9 MB, 100k std UDP sockets under `ulimit -n 64` 1.7 MB. **Bulk
+  review 1 (2026-10-25), fixed by "when in doubt, keep"**: a `yield` is a let-go of any place for what the generator's
+  frame holds across it (F1); a value of a place is stored inside another value of it only as itself - same pure path in
+  one statement - since a place key names every instance (F2); every fixed point runs to convergence, never cut at a
+  round count (F3); a place whose made-for value's building may register a destructor in its region (a constructor's
+  O16 temporary, a callee's built result: a may-summary per body) keeps, only `Destroy()` ending such early (F4); an
+  extern call lets go of anything where an export fn may, and a program with an export fn frees nothing early (C may
+  call it from its own threads, condition 3) (F6). Also: a generator resumed inside its own walk fails a guaranteed check
+  (S20, one compare a Next; F5); an embed in std or a remote repository is judged by its real path (E38, F7); std/json
+  keeps whole numbers an F64 cannot hold as `Json.Int`/`Json.Uint`, exact through Decode and Encode, U64's whole range
+  (F8); a generator's contract is its first Next's, `ArgumentError` written among `Iterator<T ? E>`'s errors (D18, F9);
+  `r.Destroy(); continue`/`break` in the loop that declares `r` ends its path (C9b); B18 names a walk's hidden local and
+  a place by its own let-go; a captured caught name is one error (R11b) (F10). Left: a built result returning a global's
+  storage is O10c's error at a call with no arguments (older than the review).
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
   values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.

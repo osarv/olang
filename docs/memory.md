@@ -215,6 +215,14 @@ Each of these only keeps memory; none is ever an error.
    explicitly with two internal operations (section 3.4), so `List`, `Map` and `Vec` removals are exact.
 8. **A place let go of only once before its scope closes** is not worth a region (condition 5): bump allocation is
    cheaper, and the scope's close comes first anyway.
+9. **A generator's `yield`** is a call that may let go of anything, for what its frame holds across it: the consumer
+   runs between two `Next`s (the bulk review's F1).
+10. **A value of a place stored inside another value of it** keeps, unless it is reached through the very reference the
+   container is, in one statement: one key names every instance (F2).
+11. **A value whose building may register a destructor in its region** - a constructor's instance no reference takes
+   (O16), a callee's built result - keeps its place: only a `Destroy()` ends such an instance early (F4).
+12. **An `extern` call** lets go of anything where an export fn may, and **a program with an export fn** frees nothing
+   early: C may call one from a thread of its own (F6).
 
 ### 2.7 Worked examples
 
