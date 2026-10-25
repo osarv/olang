@@ -1,0 +1,10 @@
+# check: fail error[G33]: a list known while compiling is indexed by a constant - this index is known only at run time
+# also: compilation failed with 1 error
+# G33: a list known while compiling is indexed by a constant
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn f(i I64) String { return Point.Fields[i].Name }
+fn main() { s := f(0) }

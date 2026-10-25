@@ -1,0 +1,228 @@
+# compile-time reflection (G32-G38): a type's members read through its name - T.Name, T.Kind, T.Size, T.Fields,
+# T.Cases, T.Params, T.Results, T.Element, T.Target - lists walked by an unrolled for, counted and indexed while
+# compiling, fields read and written through f.Of(v), values built through the constructor, match T on traits and
+# generic cases. What the evaluator bakes and decides agrees with the run time
+import "std/os"
+import "reflmod"
+
+type Point struct(x I64, Y F64 = 1.5, label String& = "pt") {
+    x, Y, label
+}
+
+type Shape enum {
+    Circle(r F64)
+    Rect(w F64, h F64)
+    Empty
+}
+
+type Tree<T> enum {
+    Leaf(v T)
+    Node(l Tree<T>&, r Tree<T>&)
+}
+
+type Meters extends F64
+
+type Bad error { ONE, TWO }
+
+fn risky(x I64) I64 ? Bad {
+    if x < 0 { error Bad.ONE }
+    return x * 2
+}
+
+# a value's fields written out, by name
+fn fields<T>(v T) String {
+    s := $T.Name "("
+    for i, f in T.Fields {
+        if i > 0 { s = $s ", " }
+        s = $s $f.Name "=" $f.Of(v)
+    }
+    return $s ")"
+}
+
+# an enum's case and its fields, or a struct's one case
+fn caseOf<T>(v T) String {
+    for c in T.Cases {
+        if v == c {
+            s := $c.Name
+            for f in c.Fields { s = $s " " $f.Name "=" $f.Of(v) }
+            return s
+        }
+    }
+    unreachable
+}
+
+# a parameter's value: its default where it has one, else a number made from k
+fn arg<P>(p P, k I64) P.Type {
+    if p.HasDefault { return p.Default } else {
+        match P.Type {
+            case I64 { return k }
+            case F64 { return F64(k) }
+            nomatch { unreachable }
+        }
+    }
+}
+
+fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
+
+# every field of a number type doubled, in place
+fn double<T>(v mut T&) {
+    for f in T.Fields {
+        if f.Type.Kind == TypeKind.Integer or f.Type.Kind == TypeKind.Float { f.Of(v) = f.Of(v) * 2 }
+    }
+}
+
+fn what<T>() String {
+    return match T {
+        case List<E> => "a list of " $E.Name
+        case Map<K, V> => "a map from " $K.Name " to " $V.Name
+        case Tree<E> => "a tree of " $E.Name
+        case Hashable => "hashable " $T.Name
+        case _ => "something else: " $T.Kind
+    }
+}
+
+fn call<F>(f F, x I64) I64 ? F.Errors { return try f(x) }
+
+fn sig<F>() String {
+    s := $F.Params.Len() " -> " $F.Results.Len() ":"
+    for p in F.Params { s = $s " " $p.Type.Name if p.Name == "" else $s " " $p.Name }
+    for r in F.Results { s = $s " " $r.Type.Name }
+    return s
+}
+
+fn names<T>() Array<String&> { return String&[f.Name for f in T.Fields if f.Type.Kind != TypeKind.Reference] }
+
+# baked while compiling (K2), through reflection
+Built := build<Point>(4)
+Described := fields(Point(1, 2.5, "a"))
+RectCase := caseOf(Shape.Rect(2.0, 3.0))
+
+test "a type's name, kind and layout are constants of each instance" {
+    assert Point.Name == "Point" and Tree<I64>.Name == "Tree<I64>"
+    assert Point.Kind == TypeKind.Struct and Shape.Kind == TypeKind.Enum and I32.Kind == TypeKind.Integer
+    assert F32.Kind == TypeKind.Float and Bool.Kind == TypeKind.Bool and Array<I64>.Kind == TypeKind.Array
+    assert String.Kind == TypeKind.Array and Meters.Kind == TypeKind.Float
+    assert Point.Size == 32 and Point.Align == 8 and I16.Size == 2
+    assert Point.Fields.Len() == 3 and Shape.Cases.Len() == 3 and Point.Cases.Len() == 1
+    assert Point.Fields[1].Name == "Y" and Point.Fields[1].Offset == 8 and Shape.Cases[1].Fields.Len() == 2
+    assert Meters.Base.Name == "F64" and Point.Base.Name == "Point" and String.Element.Name == "Char"
+}
+
+test "a value's fields walked and read; an enum's case found by ==, its fields read where it is narrowed" {
+    assert fields(Point(3, 2.5, "q")) == "Point(x=3, Y=2.5, label=q)"
+    assert caseOf(Shape.Rect(2.0, 3.0)) == "Rect w=2 h=3"
+    assert caseOf(Shape.Empty) == "Empty"
+    assert caseOf(Point(1, 2.0, "z")) == "Point x=1 Y=2 label=z"
+    assert caseOf(Tree<I64>.Leaf(7)) == "Leaf v=7"
+    p := Point(5, 0.25, "w")
+    s := fields(p)
+    assert s == "Point(x=5, Y=0.25, label=w)"
+    assert names<Point>().Len() == 2 and names<Point>()[1] == "Y"
+}
+
+test "fields are places: written through a writable value" {
+    p := Point(5, 0.25, "w")
+    double(p)
+    assert p.x == 10 and p.Y == 0.5 and p.label == "w"
+}
+
+test "a value built through its constructor, defaults taken where written" {
+    q := build<Point>(9)
+    assert q.x == 9 and q.Y == 1.5 and q.label == "pt"
+    assert Built.x == 4 and Built.label == "pt"
+    assert Described == "Point(x=1, Y=2.5, label=a)" and RectCase == "Rect w=2 h=3"
+}
+
+test "match T: generic cases bind their arguments, traits are met, the first case wins" {
+    assert what<List<I32>>() == "a list of I32"
+    assert what<Map<String&, F64>>() == "a map from String& to F64"
+    assert what<Tree<Bool>>() == "a tree of Bool"
+    assert what<I64>() == "hashable I64"
+    assert what<F64>() == "something else: TypeKind.Float"
+}
+
+test "a function type's parameters, results and errors" {
+    assert sig<fn(a I64, b String&) Bool>() == "2 -> 1: I64 String& Bool"
+    assert sig<(fn(a I64) I64, Bool)>() == "1 -> 2: I64 I64 Bool"
+    assert (try call(risky, 4) catch Bad default 0) == 8
+    assert (try call(risky, -1) catch Bad default 7) == 7
+}
+
+test "a module's private fields are its own: another module's reflection does not see them" {
+    assert reflmod.Secret.Fields.Len() == 1
+    assert reflmod.FieldNames<reflmod.Secret>() == "Open hidden "
+}
+
+test "agrees with the run time: the same walks over values only the run time knows" {
+    k := I64(os.Args().Len())
+    q := build<Point>(k + 3)
+    assert q.x == k + 3
+    assert fields(Point(k, 2.5, "a")) == "Point(x=" $k ", Y=2.5, label=a)"
+}
+
+# the first field whose type is T's kind, skipping text; the walk stops at it
+fn firstNumber<T>() String {
+    s := ""
+    for f in T.Fields {
+        if f.Type.Kind == TypeKind.Reference or f.Type.Kind == TypeKind.Array { continue }
+        s = f.Name
+        break
+    }
+    return s
+}
+
+fn kindWord<T>() String {
+    return match T.Kind {
+        case TypeKind.Struct => "struct"
+        case TypeKind.Enum => "enum"
+        case _ => "other"
+    }
+}
+
+fn bump<T>(v mut T&) {
+    for f in T.Fields {
+        if f.Type.Kind == TypeKind.Integer { f.Of(v)++ }
+    }
+}
+
+type Grid struct(cells Array<Meters>&) { cells }
+
+test "an unrolled walk breaks and continues; a match on a reflected constant is decided per instance" {
+    assert firstNumber<Point>() == "x"
+    assert kindWord<Point>() == "struct" and kindWord<Shape>() == "enum" and kindWord<I64>() == "other"
+    p := Point(1, 0.5, "w")
+    bump(p)
+    assert p.x == 2
+}
+
+test "reflected types chain, and are types" {
+    for f in Grid.Fields {
+        x f.Type.Target.Element.Base = 2.5
+        y Meters.Base = 1.0
+        assert y + x == 3.5
+        assert f.Type.Kind == TypeKind.Reference and f.Type.Target.Element.Name == "Meters"
+    }
+    assert Grid.Fields[0].Type.Kind == TypeKind.Reference
+}
+
+# the first case with no fields, built through its descriptor (G34)
+fn plainCase<T>() T {
+    for c in T.Cases {
+        if c.Fields.Len() == 0 { return c() }
+    }
+    unreachable
+}
+
+fn circle<T>(r F64) T {
+    for c in T.Cases {
+        if c.Name == "Circle" { return c(r) }
+    }
+    unreachable
+}
+
+PlainShape := plainCase<Shape>()
+
+test "a case descriptor called builds its case" {
+    assert PlainShape == Shape.Empty and plainCase<Shape>() == Shape.Empty
+    assert circle<Shape>(2.0) == Shape.Circle(2.0)
+}

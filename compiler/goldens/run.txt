@@ -74,6 +74,22 @@
 | ok - D18b: a generator builds into what it was given, where that lives
 | ok - D18c: a generator yields copies of what it was given
 | ok - S19e: an errdefer in a generator's body runs when the walk fails, not when it ends
+=== test tests/reflect.olang
+| status 0
+| ok - a type's name, kind and layout are constants of each instance
+| ok - a value's fields walked and read; an enum's case found by ==, its fields read where it is narrowed
+| ok - fields are places: written through a writable value
+| ok - a value built through its constructor, defaults taken where written
+| ok - match T: generic cases bind their arguments, traits are met, the first case wins
+| ok - a function type's parameters, results and errors
+| ok - a module's private fields are its own: another module's reflection does not see them
+| ok - agrees with the run time: the same walks over values only the run time knows
+| ok - an unrolled walk breaks and continues; a match on a reflected constant is decided per instance
+| ok - reflected types chain, and are types
+| ok - a case descriptor called builds its case
+=== test tests/reflmod.olang
+| status 0
+| ok - a module's own reflection sees its private fields; its generics see what this module sees
 === test tests/runner.olang
 | status 0
 | ok - calling back across the cycle from runner
@@ -981,6 +997,8 @@
 | ok - a tree lives where its caller puts it, and no longer needs the text
 | ok - the fixture file
 | ok - Parse and Encode give the same while compiling as at run time
+| ok - a value of any type written by its type
+| ok - a value of any type read through its constructor
 === test std/linalg.olang
 | status 0
 | ok - the compile-time values are the run time's

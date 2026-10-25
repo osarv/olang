@@ -1,0 +1,9 @@
+# check: fail error[G38]: 'Point.Fields[0].Type' is a type, not a value - write it where a type goes, as 'x Point.Fields[0].Type = ...'
+# also: compilation failed with 1 error
+# G38: a reflected type is a type, written where a type goes
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { t := Point.Fields[0].Type }

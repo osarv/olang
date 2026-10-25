@@ -1,0 +1,13 @@
+# check: fail error[G34]: parameter 'x' of Point has no default - read 'p.Default' only where 'p.HasDefault' holds
+# also: compilation failed with 1 error
+# G34: p.Default only where p.HasDefault holds
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn f() I64 {
+    p := Point.Params[0]
+    return p.Default
+}
+fn main() { n := f() }

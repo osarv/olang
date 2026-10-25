@@ -1,0 +1,9 @@
+# check: fail error[G32]: Point has no reflected member 'Width' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align
+# also: compilation failed with 1 error
+# G32: a type's reflected members are a fixed set; another name is said with the list
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { n := Point.Width }

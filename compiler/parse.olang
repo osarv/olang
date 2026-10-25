@@ -94,6 +94,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     SaidIn Map<I32, I64>               # where each syntax error said starts: the item it was said in (an item may read past
                                        # its own lines before it fails - into the declaration its recovery then reads)
     vars List<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
+    reflNames List<source.NameId>      # the names an enclosing for-in binds to a reflected list's items (G33): "match f.Type"
     exprs List<ast.Expr&>              # nodes being gathered into lists, nested lists on top
     stmts List<ast.Stmt&>
     tys List<ast.TypeRef&>
@@ -2031,7 +2032,14 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             try p.want(token.Tok.In)
             tried := p.accept(token.Tok.Try)
             src := try p.forSource()
-            body := try p.body()
+            # G13, G33: an item of a reflected list names types its loop's matches take ("match f.Type")
+            reflAt := p.reflNames.Len()
+            if p.reflListPath(src) { p.reflNames.Push(name) }
+            body := try p.body() catch {
+                p.reflNames.Truncate(reflAt)
+                error Fail.SYNTAX
+            }
+            p.reflNames.Truncate(reflAt)
             cl Array<ast.Catch&>&p = Array<ast.Catch&>(0)
             if tried { cl = try p.clauses(false) }
             sp := p.from(at)
@@ -2104,6 +2112,28 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
         for v in p.vars {
             if v == n { onType = true }
         }
+    }
+    # G38: a type a reflected member names - "match T.Element", "match P.Type", "match f.Type" in a loop over a list
+    if not onType and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
+        i := p.pos
+        head := p.names.Intern(p.text(p.ts.Toks[i]))
+        known := false
+        for v in p.vars {
+            if v == head { known = true }
+        }
+        for v in p.reflNames {
+            if v == head { known = true }
+        }
+        i++
+        ok := known
+        steps := 0
+        for ok and p.ts.Toks[i].Kind == token.Tok.Dot and p.ts.Toks[i + 1].Kind == token.Tok.Iden {
+            w := p.text(p.ts.Toks[i + 1])
+            if w != "Type" and w != "Base" and w != "Element" and w != "Target" { ok = false }
+            i += 2
+            steps++
+        }
+        if ok and steps > 0 and p.ts.Toks[i].Kind == token.Tok.LBrace { onType = true }
     }
     subject := try p.expr()
     try p.want(token.Tok.LBrace)
@@ -2240,6 +2270,17 @@ fn pathIds(x ast.Expr&, out mut List<source.NameId>&) {
 }
 
 # a type case's type (T34): a path, with type arguments or none
+# whether a for-in's source is a reflected list (G33): a path ending in Fields, Cases, Params or Results
+fn (p mut Parser&) reflListPath(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Member(_, _, n) {
+            w := p.names.Text(n)
+            return w == "Fields" or w == "Cases" or w == "Params" or w == "Results"
+        }
+        nomatch { return false }
+    }
+}
+
 fn isTypeCasePath(x ast.Expr&) Bool {
     return match x {
         case ast.Expr.Generic(_, gx, _) => isPath(gx)
@@ -2697,6 +2738,16 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
                 p.skip = wasSkip
                 error Fail.SYNTAX
             }
+            # G37: "T(e for p in T.Params)" - a comprehension standing as arguments, its own item of the list
+            if p.comprehends() {
+                at := I32(x.Span().Start)
+                x = try p.comprehension(at, null, x, token.Tok.RParen) catch {
+                    p.exprs.Truncate(from)
+                    p.brackets--
+                    p.skip = wasSkip
+                    error Fail.SYNTAX
+                }
+            }
             p.exprs.Push(x)
         }
         more := try p.sep(token.Tok.RParen) catch {
@@ -2908,7 +2959,7 @@ fn (p mut Parser&) comprehends() Bool {
 
 # a comprehension after its value and "for": "[key,] name in source [if filter] ]" - one item, not a list: a line's end
 # inside it separates nothing (L18a)
-fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef&p, value ast.Expr&p) ast.Expr&p ? Fail {
+fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef?&p, value ast.Expr&p, close token.Tok = token.Tok.RBrack) ast.Expr&p ? Fail {
     wasSkip := p.skip
     p.skip = true
     defer { p.skip = wasSkip }
@@ -2934,6 +2985,7 @@ fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef&p, value ast.Expr&p) a
     }
     filter ast.Expr?&p = null
     if p.accept(token.Tok.If) { filter = try p.binary(1) }
+    if close == token.Tok.RParen { return ast.Expr.Compr(p.from(at), ast.Compr(null, value, key, name, src!, filter, true)) }
     try p.want(token.Tok.RBrack)
     return ast.Expr.Compr(p.from(at), ast.Compr(elem, value, key, name, src!, filter))
 }

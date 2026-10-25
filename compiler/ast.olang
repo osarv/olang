@@ -109,13 +109,16 @@ type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
 }
 
 # a comprehension: its element type, the value, the names it walks with (Key 0 for none), the source and the filter
-type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.NameId, Source Expr&, Filter Expr?&) {
+type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.NameId, Source Expr&, Filter Expr?&
+                 InCall Bool = false, At I64 = -1) {
     Elem
     Value
     Key
     Name
     Source
     Filter
+    InCall     # written as a call's arguments, "T(e for p in T.Params)" (G37): no brackets, no element type
+    At         # one argument it gave: the position of its item (the checker's, never the parser's)
 }
 
 # catch A, B.word e { block } default v, w - a clause with no items takes every error left (R9b); e names the error it
