@@ -1,0 +1,13 @@
+# check: fail error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+# E25, O25h (the third any review, finding 2): a built reference a scope argument puts in a loop body's scope, stored in
+# a field outside the loop - judged as the same value declared first is ("x := mkp&t(i); h.p = x")
+type P struct(n I64) { n }
+type H struct(p P&) { p }
+fn mkp(i I64) P& { return P(i) }
+fn main() {
+    h := H(P(0))
+    for i in range 3 {
+        t := "inner" $i
+        h.p = mkp&t(i)
+    }
+}

@@ -879,7 +879,9 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
 fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Expr&, sp source.Span) {
     t := ln.T
     if not ln.planned {
-        if ln.valueArray(res) and ln.copiesArray(value, res) and not ownLocalRead(value) {
+        # while compiling nothing is placed: a returned array is always copied, so a borrow kept of a returned local
+        # never names the result (the run time copies exactly where one may, Plan.RetCopy - the same values either way)
+        if ln.valueArray(res) and ln.copiesArray(value, res) {
             cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, mir.ScopeRef.Program)
             ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
         }
@@ -889,7 +891,7 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
         sitems := tupleItems(value)
         if sitems.Len() == 0 { return }
         for i in range sparts.Len() {
-            if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) or ownLocalRead(sitems[i]) { continue }
+            if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) { continue }
             at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
             cp := ln.arrayCopy(mir.Operand.Copy(at), sparts[i], sp, mir.ScopeRef.Program)
             ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
@@ -913,17 +915,6 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
         at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
         cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
         ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
-    }
-}
-
-# whether x reads a local of the function as a whole - its own storage, which nothing outside names once it returns
-fn ownLocalRead(x typed.Expr&) Bool {
-    return match x {
-        case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Place.Local(_, _, _) => true
-            case _ => false
-        }
-        case _ => false
     }
 }
 
@@ -962,7 +953,9 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     match x {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() }
+                # a local living in the result scope is the result as it is, unless a borrow kept elsewhere names it
+                # too (O26a: Plan.RetCopy)
+                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or ln.plan.RetCopy[I64(id)] }
                 case _ { }
             }
         }
@@ -2167,7 +2160,7 @@ fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp sour
                         item := m.Items[0]
                         v := ln.val(item)
                         if ln.dead { return mir.Operand.None }
-                        if not ln.anyItemNew(pr.Site) { v = ln.arrayCopy(v, item.Type(), sp, at) }
+                        if not typed.AnyItemNew(ln.T, item) { v = ln.arrayCopy(v, item.Type(), sp, at) }
                         agg := ln.into(st, mir.Rvalue.Aggregate(st, 0, ln.F.Args(mir.Operand[v])), msp)
                         box := ln.into(bt, mir.Rvalue.New(at, agg, bt), sp)
                         return ln.prim(typed.PrimOp.AnyMake, ty, mir.Operand[box, ln.val(args[1])], sp)
@@ -2181,13 +2174,6 @@ fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp sour
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
     return ln.prim(typed.PrimOp.AnyMake, ty, ops, sp)
-}
-
-# whether an "any"'s box made at site holds its array item as it is - the scope pass's decision (typed.Plan.AnyNew);
-# with no plan, never: the box copies
-fn (ln mut lowering&) anyItemNew(site typed.SiteId) Bool {
-    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.AnyNew.Len() { return false }
-    return ln.plan.AnyNew[I64(site)]
 }
 
 # whether what an enum reference names holds a case: false for a null reference (E32, T17d)

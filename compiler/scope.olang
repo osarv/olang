@@ -1236,6 +1236,14 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
             s.flCaps = true
             if flHas(s.flDirect, I64(l)) or (flHas(s.fl, I64(l)) and not s.tiedToBlock(x)) {
                 s.moveTo = rt
+                # an array value returned as it is (T7b) that a borrow kept elsewhere names too - stored in a field, a
+                # list, given to a call that keeps it - is copied at its return: the result is the caller's own value
+                if s.arenaValue(loc.Ty) {
+                    s.flowStart(l, 2)
+                    s.flowRun(ss, from)
+                    s.plan.RetCopy[I64(l)] = s.flKept
+                    s.flMode = 0
+                }
                 return
             }
         }
@@ -1700,14 +1708,14 @@ fn (s mut Scoper&) flAdd(x I64) {
 }
 
 # mode 0 asks which locals the function returns, seeded with those living in the result scope already; mode 1 whether
-# local l is kept beyond its block
+# local l is kept beyond its block; mode 2 the same of a local the function returns, its returns left out
 fn (s mut Scoper&) flowStart(l typed.LocalId, mode I64) {
     s.fl.Clear()
     s.flDirect.Clear()
     s.flKept = false
     s.flMode = mode
     s.flBlock = s.B!.Locals[I64(l)].In
-    if mode == 1 {
+    if mode >= 1 {
         s.fl.Push(I64(l))
         return
     }
@@ -1773,7 +1781,8 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
                     s.flAdd(k)
                     if not flHas(s.flDirect, k) { s.flDirect.Push(k) }
                 }
-            } else if s.carries(x) {
+            } else if s.flMode == 1 and s.carries(x) {
+                # (mode 2 asks of a local the function returns what else keeps it: the return is no second name)
                 s.flKept = true
             }
         }
@@ -1790,11 +1799,11 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
         }
         case typed.Stmt.Spawn(_, sw) {
             s.flExpr(sw.Task)
-            if s.flMode == 1 and s.carries(sw.Task) { s.flKept = true }
+            if s.flMode >= 1 and s.carries(sw.Task) { s.flKept = true }
         }
         case typed.Stmt.Yield(_, x) {
             s.flExpr(x)
-            if s.flMode == 1 and s.carries(x) { s.flKept = true }
+            if s.flMode >= 1 and s.carries(x) { s.flKept = true }
         }
         case _ { }
     }
@@ -5074,7 +5083,8 @@ fn (s mut Scoper&) isFresh(x typed.Expr?&) Bool {
     return match x {
         case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _) => true
         case typed.Expr.Text(_, _, _) => true
-        case typed.Expr.Call(_, ty, c) => s.callBuilds(c, ty)
+        # a call given a scope argument builds its result where that says, not where it stands (E25)
+        case typed.Expr.Call(_, ty, c) => s.callBuilds(c, ty) and not typed.ScopedCall(c)
         case typed.Expr.Seq(_, _, q) => s.isFresh(q.X)
         case typed.Expr.Away(_, _, y) => s.isFresh(y)
         case typed.Expr.Try(_, _, t) => s.isFresh(t.X)
@@ -5085,48 +5095,6 @@ fn (s mut Scoper&) isFresh(x typed.Expr?&) Bool {
         case typed.Expr.Prim(_, _, op, _, args) => typed.PassesRefs(op) and args.Len() > 0 and s.isFresh(args[0])
         case typed.Expr.Fn(_, _, f) => s.fnFresh(f)
         case _ => false
-    }
-}
-
-# T32a: whether the one array an "any"'s box holds (its tuple's item) is provably new storage, built where the box is -
-# then the box holds it as it is; anything else, the box copies, so the box is always new storage (the val of a promote
-# says so). A conditional, a match or a try is new only if every value it can give is, a default included - a constant
-# is not, since a writable any could write through it
-fn (s mut Scoper&) anyBoxNew(box typed.Expr&) Bool {
-    match box {
-        case typed.Expr.Make(_, _, m) {
-            if m.Kind != typed.MakeKind.Tuple or m.Items.Len() != 1 { return false }
-            return s.anyItemNew(m.Items[0])
-        }
-        nomatch { return false }
-    }
-}
-
-fn (s mut Scoper&) anyItemNew(x typed.Expr?&) Bool {
-    if x is null { return false }
-    match x {
-        case typed.Expr.Cond(_, _, c) { return s.anyItemNew(c.A) and s.anyItemNew(c.B) }
-        case typed.Expr.Match(_, _, m) {
-            if not m.IsValue { return false }
-            for a in m.Arms {
-                if a.Value is not null and not s.anyItemNew(a.Value) { return false }
-            }
-            return m.NoMatch is null or m.NoMatch!.Value is null or s.anyItemNew(m.NoMatch!.Value)
-        }
-        case typed.Expr.Try(_, _, t) {
-            for c in t.Clauses {
-                for d in c.Defaults {
-                    if not s.anyItemNew(d) { return false }
-                }
-            }
-            return s.anyItemNew(t.X)
-        }
-        case typed.Expr.Seq(_, _, q) { return s.anyItemNew(q.X) }
-        case typed.Expr.Away(_, _, y) { return s.anyItemNew(y) }
-        case typed.Expr.Prim(_, _, op, _, args) { return typed.PassesRefs(op) and args.Len() > 0 and s.anyItemNew(args[0]) }
-        # an array value a call gives is built in its result scope, where it lands (T7b, builtCall)
-        case typed.Expr.Call(_, ty, _) { return s.isFresh(x) or s.arenaValue(ty) }
-        case _ { return s.isFresh(x) }
     }
 }
 
@@ -5214,9 +5182,6 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.anyBox = false
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
-            if s.anyItems and pr.Site >= typed.SiteId(0) and I64(pr.Site) < s.plan.AnyNew.Len() {
-                s.plan.AnyNew[I64(pr.Site)] = s.anyBoxNew(pr.X)
-            }
             pv := s.val(pr.X, d)
             s.anyItems = false
             # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
@@ -6177,6 +6142,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.bindKids.Push(s.argRec(c.Args[p]))
         }
         s.siteRec.Put(I64(c.Site), s.ctorFrom)
+        if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
         return fresh(beta[rv] if rv >= 0 else here)
     }
     e := s.P.T.ResultFrom(fty, 0)
@@ -6187,6 +6153,9 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         }
         return existing(Term.Untraced)
     }
+    # a result a scope argument put where it says (E25) is existing storage there - judged where it is stored, passed,
+    # returned or made an any as the same value declared first would be ("x := f&t(); h.p = x", O25h)
+    if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
     return fresh(beta[rv] if rv >= 0 else here)
 }
 

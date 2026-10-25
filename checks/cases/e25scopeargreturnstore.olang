@@ -1,0 +1,16 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it
+# E25, O10c (the third any review, finding 2): "&return" in a callee storing into a parameter - the result scope lands in
+# the caller's loop body, the parameter's referent outside it
+type P struct(n I64) { n }
+type H struct(p P&) { p }
+fn mkp(i I64) P& { return P(i) }
+fn put(h mut H&, i I64) String {
+    h.p = mkp&return(i)
+    return "r" $i
+}
+fn main() {
+    h := H(P(0))
+    for i in range 3 {
+        r := put(h, i)
+    }
+}

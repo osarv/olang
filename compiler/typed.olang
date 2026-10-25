@@ -335,6 +335,64 @@ type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check) {
 # atomics). Operands are of the operation's type, widened before it (T6b); "==" here is on numbers and Bools only
 # the operations whose result names the storage their first argument names (a conversion, T29a; a run-time trait value
 # made of a reference, and its instance read back, T32): what is said of the argument's references is said of it
+# whether a call is given a scope argument, "f&x(...)" or "f&return(...)" (E25): its result is built where that says,
+# never where the call stands - so it is no temporary there, and is judged where it is put as existing storage is
+fn ScopedCall(c Call&) Bool {
+    return match c.Scoped {
+        case Mark.Of(_), Mark.Return => true
+        case _ => false
+    }
+}
+
+# T32a: whether the array an "any"'s box holds is provably new storage, built where the box is - then the box holds it
+# as it is; anything else the box copies. One answer for every pass that makes a box - the scope pass, lowering with or
+# without a plan, so the compile-time evaluator too. A conditional, a match or a try is new only if every value it can
+# give is, a default included - a constant is not, since a writable any could write through it; a call only where its
+# result is built where it lands: no scope argument puts it elsewhere, and an array value returned is the caller's own
+# (T7b - a returned local a borrow kept elsewhere names is copied at its return, O26a)
+fn AnyItemNew(t types.Table&, x Expr?&) Bool {
+    if x is null { return false }
+    match x {
+        case Expr.Make(_, _, _), Expr.Promote(_, _, _), Expr.Collect(_, _, _), Expr.Text(_, _, _) { return true }
+        case Expr.Call(_, ty, c) { return not ScopedCall(c) and arenaArray(t, ty) }
+        case Expr.Cond(_, _, c) { return AnyItemNew(t, c.A) and AnyItemNew(t, c.B) }
+        case Expr.Match(_, _, m) {
+            if not m.IsValue { return false }
+            for a in m.Arms {
+                if a.Value is not null and not AnyItemNew(t, a.Value) { return false }
+            }
+            return m.NoMatch is null or m.NoMatch!.Value is null or AnyItemNew(t, m.NoMatch!.Value)
+        }
+        case Expr.Try(_, _, tr) {
+            for c in tr.Clauses {
+                for d in c.Defaults {
+                    if not AnyItemNew(t, d) { return false }
+                }
+            }
+            return AnyItemNew(t, tr.X)
+        }
+        case Expr.Seq(_, _, q) { return AnyItemNew(t, q.X) }
+        case Expr.Away(_, _, y) { return AnyItemNew(t, y) }
+        case Expr.Prim(_, _, op, _, args) { return PassesRefs(op) and args.Len() > 0 and AnyItemNew(t, args[0]) }
+        case _ { return false }
+    }
+}
+
+# whether a value of type ty is, or holds as a part, an array of a run-time length: storage of its own in an arena
+fn arenaArray(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    match t.KindOf(r) {
+        case types.Kind.Array { return t.Length(r) == types.TypeId(0) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for p in t.Items(t.Parts(r)) {
+                if arenaArray(t, p) { return true }
+            }
+            return false
+        }
+        case _ { return false }
+    }
+}
+
 fn PassesRefs(op PrimOp) Bool { return op == PrimOp.Convert or op == PrimOp.AnyMake or op == PrimOp.AnyInstance }
 
 type PrimOp enum {
@@ -685,9 +743,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     Built mut Array<Scope>& = Array<Scope>(Sites)
     Stored mut Array<Scope>& = Array<Scope>(Locals, Scope.Frame)
     MayBuild mut Array<Bool>& = Array<Bool>(Vars)
-    # an "any"'s box made at a site holds its array item as it is, the item being new storage built where the box is
-    # (T32a) - false, the box copies it: decided by the scope pass alone (Scoper.anyItemNew), which lowering follows
-    AnyNew mut Array<Bool>& = Array<Bool>(Sites)
+    # by local: a value array the function returns that a borrow kept elsewhere names too - copied at its return, so the
+    # result is the caller's own value (O26a, T7b)
+    RetCopy mut Array<Bool>& = Array<Bool>(Locals)
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed List<Scope>

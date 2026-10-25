@@ -624,3 +624,66 @@ test "T32: a type variable in an any's trait, substituted and inferred; Map to a
     churn()
     assert anyGeneric(Live - 1) == want
 }
+
+# T32a, E25 (the third any review, finding 1): a call given a scope argument builds its array where that says, not
+# where the box lands - so the box copies it, and a block's scope argument does not leave the box dangling
+fn sArg(i I64) String { return "text" $i "-" $(i * 7) }
+fn sArgStash(l mut List<any Named&>&, i I64) String {
+    l.Push(Label(sArg&return(i)))
+    return "r" $i
+}
+fn scopeArgs(n I64) String {
+    xs := List<any Named&>()
+    for i in range n {
+        t := "inner" $i
+        xs.Push(Label(sArg&t(i)))
+        xs.Push(Label(sArg&t(i) if i >= 0 else "x" $i))
+        r := sArgStash(xs, i)
+    }
+    churn()
+    return names(xs)
+}
+BakedScopeArgs String = scopeArgs(2)
+
+test "T32a: a call's array a scope argument puts elsewhere is copied into the box" {
+    want := "label text0-0, label text0-0, label text0-0, label text1-7, label text1-7, label text1-7"
+    assert BakedScopeArgs == want
+    assert scopeArgs(Live - 1) == want
+}
+
+# O26a, T7b (the third any review, finding 3): a returned local that a borrow kept elsewhere names too is copied at its
+# return - the caller's value is its own, and an any made of the call writes neither the log nor the field; baked while
+# compiling exactly as at run time
+type RsH struct(s String&) { s }
+fn rsKeep(k mut RsH&, i I64) String {
+    s := "abc" $i
+    k.s = s
+    return s
+}
+fn rsLog(log mut List<String&>&, i I64) String {
+    s := "item" $i
+    log.Push(s)
+    return s
+}
+fn retShared(i I64) String {
+    h := RsH("x")
+    x := rsKeep(h, i)
+    x[0] = 'Q'
+    h2 := RsH("y")
+    b mut any Bump& = BLab(rsKeep(h2, i + 1))
+    b.Bump()
+    log := List<String&>()
+    y := rsLog(log, i)
+    y[0] = 'Q'
+    c mut any Bump& = BLab(rsLog(log, i + 1))
+    c.Bump()
+    churn()
+    return $h.s " " $x " " $h2.s " " $y " " $log
+}
+BakedRetShared String = retShared(1)
+
+test "O26a: a returned local a kept borrow names is copied at its return" {
+    want := "abc1 Qbc1 abc2 Qtem1 List<String&>[\"item1\", \"item2\"]"
+    assert BakedRetShared == want
+    assert retShared(Live - 2) == want
+}

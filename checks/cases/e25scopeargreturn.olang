@@ -1,0 +1,12 @@
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# E25, O10d (the third any review, finding 2): returning a built reference a scope argument put in the function's own
+# block - a reference into the dying frame
+type P struct(n I64) { n }
+fn mkp(i I64) P& { return P(i) }
+fn leak(i I64) P& {
+    t := "inner" $i
+    return mkp&t(i)
+}
+fn main() {
+    p := leak(3)
+}

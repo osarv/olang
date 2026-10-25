@@ -1,4 +1,4 @@
-# check: fail error[C2d]: this instance would outlive what its '&p' field refers to
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
 # vec5 (r2a_ctor_scope_argument_no_own): a constructor field made by a call given a scope argument naming a parameter
 # ('y := mk&x(n)', E25)
 import "std/io"
