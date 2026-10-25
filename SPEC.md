@@ -6535,14 +6535,26 @@ evaluator, reading the same constants, takes the same branch (K1). Generated cod
 use.
 
 **B12a (another machine).** A target whose architecture or operating system is not this machine's is **another
-machine**. It is built for with `compile` only, which gives each module's object, for that machine, to be linked there; `build`
-and `test`, which link and run what they build, and `interpret`, which runs it here, are command-line errors for it. An object
-holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another machine is built for
-only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64 back end cannot
-compile `BF16` code, so with it `aarch64` is refused. While compiling for another machine, a call of a function of the C
-math library that is not exact (X8) is not evaluated (K1): the target's own library may give another result. An exact
-one gives the same result everywhere, and is evaluated. The runtime's own functions (X6) read the C library's
-structures as the target's lays them out.
+machine**. `compile` gives each module's object for it; `build` links them with the target's C library, which clang
+finds where the system keeps a cross C library (`/usr/aarch64-linux-gnu`, say) or under the directory
+`OLANG_SYSROOT` names; `test` and running a file (B3g) build the same way and run what they built through an
+**emulator** - `OLANG_EMULATOR`, a command whose words are split at spaces, else `qemu-ARCH` or `qemu-ARCH-static` found
+on `PATH`, told where the target's C library is (`OLANG_SYSROOT`, else `/usr/ARCH-linux-gnu` where that exists) - and
+where there is none, that is an error naming what to install. `interpret`, which runs the program in this process, and
+the tools that analyze for an editor are for this machine only: another machine's target is a command-line error for
+them. An object holds the target's intermediate form (B2d), compiled to the machine's code at the link, so another
+machine is built for only where the clang found can compile all the code the runtime holds for it: LLVM 18's AArch64
+back end cannot compile `BF16` code, so with it `aarch64` is refused, and with clang 19 or newer it is built for. While
+compiling for another machine, a call of a function of the C math library that is not exact (X8) is not evaluated
+(K1): the target's own library may give another result. An exact one gives the same result everywhere, and is
+evaluated. The runtime's own functions (X6) read the C library's structures as the target's lays them out.
+
+**B12d (clang).** A build compiles and links with clang, of LLVM 18, 19 or 20 - the intermediate form written is one
+all three read. The clang used is the first of: the one `OLANG_CLANG` names (a path, or a name looked up on `PATH`);
+the one a release of olang carries beside the compiler, `../llvm/bin/clang` from the compiler's own directory; and the
+newest of `clang-20`, `clang-19`, `clang-18` and `clang` found on `PATH`. Which one is used changes no program's results
+(B12c), only which targets it can build for (B12a); clang's version is part of every object's name (B3), so changing
+clang rebuilds.
 
 **B12b.** What a module compiles to depends on its target - the instructions used, and the build constants' values
 (B10b) - so the target as resolved, its triple, CPU and extensions, is part of every object's name (B3). A build for one

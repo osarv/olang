@@ -47,9 +47,9 @@ Cases Array<String&> = String&[
     "compile -target riscv64-linux-gnu main.olang"
     "compile -target x86_64-apple-darwin main.olang"
     "compile -target x86_64-linux-gnu:a:b main.olang"
-    "compile -target aarch64-linux-gnu main.olang"
-    "build -target aarch64-linux-gnu main.olang"
-    "test -target aarch64-linux-gnu main.olang"
+    # another architecture: what is said whichever clang this machine has (B12a - building for it depends on clang)
+    "compile -target aarch64-linux-gnu:native main.olang"
+    "build -target aarch64-linux-gnu:native main.olang"
     "interpret -target aarch64-linux-gnu main.olang"
     # -define
     "build -define X main.olang"

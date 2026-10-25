@@ -350,6 +350,26 @@ quickolang:
 		echo "quick: build/olang rebuilt by itself"; \
 		build/olang build -output build/olang.next compiler/olang.olang && mv build/olang.next build/olang; fi
 
+# B12a: the corpus's, std's and the prelude's tests and the checks' cases built for another architecture,
+# CROSS_TARGET, and run through its emulator (qemu-user; olang finds it, OLANG_EMULATOR names another), with a clang
+# that builds for it (clang 19 or newer for aarch64 - OLANG_CLANG names one). Not part of verify: it needs a cross C
+# library and qemu-user installed (compiler/README.md). CROSS_SKIP leaves out what an emulator cannot run as the machine
+# would: std/os's tests of a program that cannot be started (qemu-user reports a failed exec of posix_spawn as a child
+# exiting 127), and std/ffi's (libffi for the target is not installed)
+CROSS_TARGET ?= aarch64-linux-gnu
+CROSS_SKIP ?= std/os.olang std/ffi.olang
+CROSS_TESTS = $(filter-out $(CROSS_SKIP),$(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
+	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang))
+CROSS_RUNS = $(addprefix cross@,$(CROSS_TESTS)) cross@checks/checks.olang
+cross: $(OLANG)
+	@rm -f build/failed.txt
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(CROSS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
+	@echo "cross: every test passed on $(CROSS_TARGET)"
+$(filter-out cross@checks/checks.olang,$(CROSS_RUNS)): cross@%: FORCE
+	@$(OLANG_ENV) $(OLANG) test -target $(CROSS_TARGET) $* || echo "$* ($(CROSS_TARGET))" >> build/failed.txt
+cross@checks/checks.olang: FORCE
+	@CHECKS_TARGET=$(CROSS_TARGET) $(OLANG_ENV) $(OLANG) test checks/checks.olang || echo "checks ($(CROSS_TARGET))" >> build/failed.txt
+
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
 # intentional data race - the "several tasks may be handed the same instance" test, which exists to show
 # that the language permits one since P3 was withdrawn - so a correct run of this target REPORTS exactly

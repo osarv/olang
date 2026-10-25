@@ -318,7 +318,10 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp or (tool and c.Clang == ""), d) catch target.Bad {
         error Bad.USAGE
     }
-    if c.Target.Foreign and cl.Mode != Compile { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
+    # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
+    # through an emulator; what runs in this process - interpret, the tools - is for this machine only
+    foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run
+    if c.Target.Foreign and not foreignOk { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
     # an editor's and an agent's files are checked as "olang test" checks them, their tests included (B15, B16)
     try builtins(c, c.Tests or cl.Mode == Lsp or cl.Mode == Mcp, d)
