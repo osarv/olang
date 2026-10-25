@@ -86,12 +86,13 @@ fn Div<T Number>(a T, b T) T ? {
     }
 }
 
-# a % b, an integer's remainder, of a's sign
+# a % b, an integer's remainder, of a's sign - the least value's by -1 is 0, which fits (the "%" itself is undefined
+# there, E6a, so it is not asked)
 fn Rem<T Integer>(a T, b T) T ? {
     if b == 0 { error Error.DIVIDE_BY_ZERO }
     match T {
         case I8, I16, I32, I64 {
-            if a == T.Min and b == -1 { error Error.OVERFLOW }
+            if b == -1 { return 0 }
         }
         nomatch { }
     }
@@ -187,6 +188,7 @@ test "integers: what fits is the plain result, what does not fails" {
     assert Div(I32(-7), I32(2))! == -3
     assert (try Rem(I64(5), I64(0)) catch default 2) == 2
     assert Rem(I64(-7), I64(3))! == -1
+    assert Rem(I32.Min, I32(-1))! == 0 and Rem(I8.Min, I8(-1))! == 0 and Rem(I64(7), I64(-1))! == 0
     assert (try Neg(I8.Min) catch default 1) == 1
     assert (try Neg(U8(1)) catch default 2) == 2
     assert Neg(U8(0))! == 0
@@ -206,6 +208,13 @@ test "integers: what fits is the plain result, what does not fails" {
 three mut I32 = 3
 seventeen mut I64 = 17
 BakedPow I32 = try Pow(I32(3), 21) catch default -1     # does not fit (x.Pow(n) wraps to 1870418611)
+minusOne mut I32 = -1
+BakedRem I32 = try Rem(I32.Min, I32(-1)) catch default 9   # the least value's remainder by -1 fits: 0
+
+test "Rem by -1 is 0, the least value's too - while compiling as at run time (the lang25 review)" {
+    assert BakedRem == 0
+    assert (try Rem(I32.Min, minusOne) catch default 9) == 0 and (try Rem(I32(-7), minusOne) catch default 9) == 0
+}
 
 test "floats: IEEE's exceptions as errors" {
     assert Add(1.5, 2.25)! == 3.75

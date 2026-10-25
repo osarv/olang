@@ -3151,7 +3151,7 @@ results, or undefined (E6a, E16, E26a). A check is asked for by calling somethin
 
 `std/arith` gives each operation as a generic function over the number types (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`,
 `ShiftLeft`, `ShiftRight`) and a struct `Checked<T>` whose operators are those functions, failing where the true result
-does not fit (`OVERFLOW`), on a zero divisor (`DIVIDE_BY_ZERO`) and on IEEE's invalid operation or a shift amount out
+does not fit (`OVERFLOW` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DIVIDE_BY_ZERO`) and on IEEE's invalid operation or a shift amount out
 of range (`INVALID`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
 
 ### 5.5 Indexing and member access
