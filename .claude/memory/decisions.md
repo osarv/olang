@@ -1089,3 +1089,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   gone (each module's own errors). ASKED: (1) a condition's call error leaves as itself (rec yes); (2) a slice out of
   range keeps aborting, SliceOf the fallible form (rec yes); (3) `as` wrong case keeps aborting, no fallible form (rec
   yes); (4) narrow as a free function `narrow<I32>(x)` (rec) or method. NEXT: operators (the only overloading).
+- QAV answers 2026-10-25: (1) a condition's call error leaves as itself - YES; (2) slices keep aborting ("we still do
+  those checks as well since they are comparatively cheap"), SliceOf the fallible form - YES; (3) the user: "how about we
+  add try here?" for `as` - proposed: `as` always fails as written (`try e as C`, `(e as C)!`, CaseError.WRONG_CASE),
+  since try never turns a check on and narrowing covers the tested case - ASKED (rec yes); (4) the user: "the fact that
+  only written functions take type arguments is an inconsistency. Methods are just normal functions bound on object
+  types" - DECIDED: methods take written type arguments (`x.Narrow<I32>()`), C#'s rule: after a name, a `<...>` reading
+  as type arguments directly followed by `(` is type arguments, for free functions and methods alike; narrowing is
+  `try x.Narrow<I32>()` (OVERFLOW). NEXT: operators.
