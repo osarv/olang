@@ -142,7 +142,12 @@ fn rewrite(src String&, mask String&, parts List<I64>&) String, String {
 # whether the operand src[a:b] of a checked holds an operation it checked besides its outermost one (parts' last):
 # arithmetic, a shift, a negation, a conversion, an index or an "as" - checked once, and no longer by what replaces it
 fn innerChecks(src String&, mask String&, a I64, b I64, parts List<I64>&) Bool {
-    last := parts[parts.Len() - 2]
+    return checksIn(src, mask, a, b, parts[parts.Len() - 2], parts[0])
+}
+
+# whether src[a:b] holds an operation checked checked: as innerChecks, the index at last and a conversion at first not
+# counted (-1 for none)
+fn checksIn(src String&, mask String&, a I64, b I64, last I64, first I64) Bool {
     for k in range a, b {
         if mask[k] != 'c' { continue }
         ch := src[k]
@@ -160,10 +165,26 @@ fn innerChecks(src String&, mask String&, a I64, b I64, parts List<I64>&) Bool {
             e := nameEnd(src, k)
             word := src[k:e]
             if word == "as" { return true }
-            if isNumber(word) and e < b and src[e] == '(' and k != parts[0] { return true }
+            if isNumber(word) and e < b and src[e] == '(' and k != first { return true }
         }
     }
     return false
+}
+
+# "(CHAIN as T)" at o, with nothing in CHAIN checked checked: "CHAIN as T" and the index past ")"; "" where o holds none
+fn asOperand(src String&, mask String&, o I64) String, I64 {
+    if o >= src.Len() or src[o] != '(' { return "", -1 }
+    close := srcmask.CloseOf(src, mask, o)
+    if close < 0 { return "", -1 }
+    ps := chain(src, mask, o + 1)
+    if ps.Len() == 0 { return "", -1 }
+    ce := ps[ps.Len() - 1]
+    if not src[ce:].StartsWith(" as ") { return "", -1 }
+    te := ce + 4
+    for te < close - 1 and (srcmask.IsWord(src[te]) or src[te] == '.' or src[te] == '&' or src[te] == '?' or src[te] == '<' or
+        src[te] == '>' or src[te] == ',' or src[te] == ' ') { te++ }
+    if te != close - 1 or checksIn(src, mask, o + 1, ce, -1, -1) { return "", -1 }
+    return $src[o + 1:close - 1], close
 }
 
 # whether text is one postfix chain alone - "a.b[i]", "f(x)" - so a method call after it applies to all of it
@@ -250,6 +271,27 @@ fn migrate(path String&, src String&, c mut Result&) String {
         }
         parts := chain(src, mask, w + 1)
         if parts.Len() == 0 {
+            # "checked (x as C)": the as failed into its clauses, as "try x as C" does now - where nothing else in it was
+            # checked
+            ax, close := asOperand(src, mask, w + 1)
+            if ax.Len() > 0 {
+                bang := i > 0 and src[i - 1] == '(' and src[close:].StartsWith(")!")
+                out.Push(renameWords(src[at:i - 1 if bang else i], kind if renameTo >= 0 else "", c))
+                if bang {
+                    out.Push("(" $ax ")!")
+                    at = close + 2
+                } else {
+                    n := srcmask.SkipGap(src, mask, br, close)
+                    wrap := srcmask.OpAt(src[n:]).Len() > 0
+                    out.Push("(try " $ax ")" if wrap else "try " $ax)
+                    at = close
+                }
+                c.changes++
+                kind = "CaseError"
+                renameTo = statementEnd(src, close)
+                i = at
+                continue
+            }
             if src[w + 1] == '(' { c.left.Push($path ":" $lineOf(src, i) ": " $srcmask.Strip(lineText(src, i))) }
             i++
             continue
@@ -413,4 +455,15 @@ test "a try written inside an operator expression is parenthesized, and the chec
     assert migrate("f", "    v := " $Word " a[b[i]]\n", r) == "    v := try a.Get(b[i])\n" and r.left.Len() == 3
     # a sign, a plain name, a call's arguments that compute nothing: nothing more was checked
     assert migrate("f", "    v := " $Word " a[-1] + " $Word " g(x, y)\n", r) == "    v := (try a.Get(-1)) + try g(x, y)\n" and r.left.Len() == 3
+}
+
+test "a checked 'as' is the try of today, where nothing else in it was checked" {
+    r := Result()
+    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch default -1.0\n", r) == "    r := try s as Shape.Circle catch default -1.0\n"
+    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch " $OldError ".WRONG_CASE default -1.0\n", r) == "    r := try s as Shape.Circle catch CaseError.WRONG_CASE default -1.0\n"
+    assert migrate("f", "    r := 2.0 * " $Word " (a.s as Shape.Circle) + 1.0\n", r) == "    r := 2.0 * (try a.s as Shape.Circle) + 1.0\n"
+    assert migrate("f", "    r := (" $Word " (s as Shape.Circle))!\n", r) == "    r := (s as Shape.Circle)!\n"
+    assert r.left.Len() == 0
+    t := "    r := " $Word " (s[i + 1] as Shape.Circle) catch default -1.0\n"
+    assert migrate("f", t, r) == t and r.left.Len() == 1
 }
