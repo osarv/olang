@@ -1,0 +1,15 @@
+== build -debug -sanitize
+n06b_structs.olang:19:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   19 |         xs.Push(Ps(a))
+      |                 ^~
+compilation failed with 1 error
+== build
+n06b_structs.olang:19:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   19 |         xs.Push(Ps(a))
+      |                 ^~
+compilation failed with 1 error
+== interpret
+ps t0-0
+ps t1-7
+ps t2-14
+status 0

@@ -1,0 +1,6 @@
+== build -debug -sanitize
+r0
+r1
+use after scope closed: storage a closed scope gave back was read or written
+../runold.sh: line 14: 31335 Aborted                 timeout 60 ./build/$n.debug.san
+status 134

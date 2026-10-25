@@ -1,0 +1,25 @@
+== build -debug -sanitize
+n18_mutmeets.olang:15:9: error[G19]: Ctr does not satisfy the constraint Shower on S: it has no method Show that fits
+   15 |     say(showG(c))
+      |         ^~~~~
+n18_mutmeets.olang:8:17: note: 'Show' is declared here, with another signature
+    8 | fn (c mut Ctr&) Show() String {
+      |                 ^~~~
+compilation failed with 1 error
+== build
+n18_mutmeets.olang:15:9: error[G19]: Ctr does not satisfy the constraint Shower on S: it has no method Show that fits
+   15 |     say(showG(c))
+      |         ^~~~~
+n18_mutmeets.olang:8:17: note: 'Show' is declared here, with another signature
+    8 | fn (c mut Ctr&) Show() String {
+      |                 ^~~~
+compilation failed with 1 error
+== interpret
+n18_mutmeets.olang:15:9: error[G19]: Ctr does not satisfy the constraint Shower on S: it has no method Show that fits
+   15 |     say(showG(c))
+      |         ^~~~~
+n18_mutmeets.olang:8:17: note: 'Show' is declared here, with another signature
+    8 | fn (c mut Ctr&) Show() String {
+      |                 ^~~~
+compilation failed with 1 error
+status 1

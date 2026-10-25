@@ -1,0 +1,6 @@
+== build -debug -sanitize
+c03c_retsharedassert.olang:22:20: error[S18c]: this assertion is false, evaluated while compiling
+   22 |     assert probe() == "abc2"
+      |                    ^~
+compilation failed with 1 error
+== build

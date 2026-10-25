@@ -1,0 +1,8 @@
+== build -debug -sanitize
+m05_unknowncascade.olang:11:11: error: unknown type 'Tow'
+   11 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+m05_unknowncascade.olang:14:21: error[M19]: Box<I64> has no method 'Describe'
+   14 |     say(Box<I64>(1).Describe())
+      |                     ^~~~~~~~
+compilation failed with 2 errors

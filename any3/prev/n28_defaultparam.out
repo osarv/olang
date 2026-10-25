@@ -1,0 +1,12 @@
+== build -debug -sanitize
+6 7 4 11
+6 7 4 11
+status 0
+== build
+6 7 4 11
+6 7 4 11
+status 0
+== interpret
+6 7 4 11
+6 7 4 11
+status 0

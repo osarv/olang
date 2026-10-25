@@ -1,0 +1,18 @@
+== build -debug -sanitize
+alias:   hello   / lab Zello
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== build
+alias:   hello   / lab Zello
+lab text0-0
+lab text1-7
+lab text2-14
+status 0
+== interpret
+alias:   hello   / lab Zello
+lab text0-0
+lab text1-7
+lab text2-14
+status 0

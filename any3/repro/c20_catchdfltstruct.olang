@@ -1,0 +1,23 @@
+# T32a: a catch default giving a block-local struct instance (existing storage, borrowed by the any) - the any pushed
+# into an outer list; its conditional and match forms are refused (O10c), this one?
+type Named trait {
+    Name() String
+}
+type Cat struct(n I64) { n }
+fn (c Cat&) Name() String { return "cat " $c.n }
+error Oops {
+    BAD
+}
+fn bad(k I64) Cat ? Oops {
+    if k < 10 { error Oops.BAD }
+    return Cat(0)
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        a := Cat(i * 11 + 1)
+        xs.Push(try bad(i) catch default a)
+    }
+    assert churn() > 0
+    for x in xs { say(x.Name()) }
+}

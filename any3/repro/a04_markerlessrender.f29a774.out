@@ -6,3 +6,13 @@ olang: error: the self-hosted compiler cannot build this yet: it does not emit n
 olang: error: the self-hosted compiler cannot build this yet: /home/user/wt/rvany3-old/std/prelude/array.olang:1:1: it does not lower an Equal helper for a type with no parts yet
 olang: error: the self-hosted compiler cannot build this yet: /home/user/wt/rvany3-old/std/prelude/array.olang:1:1: it does not lower a Render helper for a type with no rendering yet
 == build
+olang: error: the self-hosted compiler cannot build this yet: it does not emit a type with no layout: any a04_markerlessrender:Gen yet
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: olang_2eHelperKind_2eEqual_2eany_20a04__markerlessrender_3aGen yet
+olang: error: the self-hosted compiler cannot build this yet: it does not emit a type with no layout: Array<any a04_markerlessrender:Gen, 0> yet
+olang: error: the self-hosted compiler cannot build this yet: it does not emit not lowered: olang_2eHelperKind_2eRender_2eany_20a04__markerlessrender_3aGen yet
+olang: error: the self-hosted compiler cannot build this yet: /home/user/wt/rvany3-old/std/prelude/array.olang:1:1: it does not lower an Equal helper for a type with no parts yet
+olang: error: the self-hosted compiler cannot build this yet: /home/user/wt/rvany3-old/std/prelude/array.olang:1:1: it does not lower a Render helper for a type with no rendering yet
+== interpret
+2
+olang interpret: /home/user/wt/rvany3-old/std/prelude/array.olang:1: it calls a function whose body is not available
+status 1

@@ -1,0 +1,15 @@
+== build -debug -sanitize
+cat 1
+cat 12
+cat 23
+status 0
+== build
+cat 1
+cat 12
+cat 23
+status 0
+== interpret
+cat 1
+cat 12
+cat 23
+status 0

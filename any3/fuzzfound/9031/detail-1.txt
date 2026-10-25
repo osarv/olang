@@ -1,0 +1,4 @@
+p.olang:1580:127: error[T6]: '18446744073709551615' does not fit I64
+ 1580 | ...5_5((checked x5[(-9223372036854775808)] catch default 0), (checked x5[18446744073709551615] catch default 65535), ((match I32(x0) { case (-2), -1 => F16((-0.000...
+      |                                                                          ^~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error

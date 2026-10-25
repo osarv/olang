@@ -1,0 +1,15 @@
+== build -debug -sanitize
+n06h_dfltarr.olang:19:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   19 |         xs.Push(Rows(checked a[0:5] catch default a))
+      |                 ^~~~
+compilation failed with 1 error
+== build
+n06h_dfltarr.olang:19:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   19 |         xs.Push(Rows(checked a[0:5] catch default a))
+      |                 ^~~~
+compilation failed with 1 error
+== interpret
+rows 1 t0-0
+rows 1 t1-7
+rows 1 t2-14
+status 0

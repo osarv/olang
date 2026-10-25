@@ -1,0 +1,39 @@
+import "std/io"
+# c03 in an ordinary shape: a function returning text it also records in a log - the caller's value and the log's
+# entry are one storage (a write through either changes the other), and an any made of the call holds it too
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn tag(log mut List<String&>&, i I64) String {
+    s := "item" $i
+    log.Push(s)
+    return s
+}
+fn main() {
+    log := List<String&>()
+    x := tag(log, 1)
+    x[0] = 'Q'
+    b mut any W& = Lab(tag(log, 2))
+    b.Bump()
+    say($x " " $log)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

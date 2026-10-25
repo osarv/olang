@@ -1,0 +1,12 @@
+# T32a: an array of arrays held by value, its inner arrays inline (their length known where it is made, T7a), copied
+# into an any's box - the copy made at the element type Array<I64> (a run-time-length array) - and rendered
+type Lenner trait {
+    Len() I64
+}
+fn main() {
+    a := Array<Array<I64>>(2, Array<I64>(3, 5))
+    x any Lenner& = a
+    say($x.Len())
+    say($x)
+    say($a)
+}

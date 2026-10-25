@@ -1,0 +1,14 @@
+== build -debug -sanitize
+build/x01b_nestedconvfill.main.debug.san.25063.tmp.ll:66:22: error: '%t9' defined with type '[2 x i64]' but expected '{ i64, ptr }'
+   66 |   store { i64, ptr } %t9, ptr %t16, !dbg !1004
+      |                      ^
+1 error generated.
+olang: error: clang could not compile build/x01b_nestedconvfill.main.debug.san.ll
+compilation failed with 1 error
+== build
+build/x01b_nestedconvfill.main.25105.tmp.ll:2454:22: error: '%t9' defined with type '[2 x i64]' but expected '{ i64, ptr }'
+ 2454 |   store { i64, ptr } %t9, ptr %t16
+      |                      ^
+1 error generated.
+olang: error: clang could not compile build/x01b_nestedconvfill.main.ll
+compilation failed with 1 error

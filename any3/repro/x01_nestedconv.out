@@ -1,0 +1,9 @@
+== build -debug -sanitize
+../run.sh: line 15: 24998 Segmentation fault      timeout 60 ./build/$n.debug.san
+status 139
+== build
+../run.sh: line 15: 25045 Segmentation fault      timeout 60 ./build/$n
+status 139
+== interpret
+olang interpret: x01_nestedconv.olang:6: it uses a value compile-time evaluation does not model
+status 1

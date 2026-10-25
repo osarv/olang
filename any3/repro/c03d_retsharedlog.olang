@@ -1,0 +1,20 @@
+# c03 in an ordinary shape: a function returning text it also records in a log - the caller's value and the log's
+# entry are one storage (a write through either changes the other), and an any made of the call holds it too
+type W trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn tag(log mut List<String&>&, i I64) String {
+    s := "item" $i
+    log.Push(s)
+    return s
+}
+fn main() {
+    log := List<String&>()
+    x := tag(log, 1)
+    x[0] = 'Q'
+    b mut any W& = Lab(tag(log, 2))
+    b.Bump()
+    say($x " " $log)
+}

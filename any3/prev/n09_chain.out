@@ -1,0 +1,12 @@
+== build -debug -sanitize
+41 400 41 sq
+91 900 91 sq
+status 0
+== build
+41 400 41 sq
+91 900 91 sq
+status 0
+== interpret
+41 400 41 sq
+91 900 91 sq
+status 0

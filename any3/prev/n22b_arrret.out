@@ -1,0 +1,15 @@
+== build -debug -sanitize
+String&["e0", "x"]
+String&["e1", "x"]
+String&["e2", "x"]
+status 0
+== build
+String&["e0", "x"]
+String&["e1", "x"]
+String&["e2", "x"]
+status 0
+== interpret
+String&["e0", "x"]
+String&["e1", "x"]
+String&["e2", "x"]
+status 0
