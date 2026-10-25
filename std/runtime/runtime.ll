@@ -404,7 +404,9 @@ done:
 ;  parts - on a scope with no parent, the PARTS other threads build into it through, one per thread, each a
 ;          scope of its own linked here and closed with it; on a part, the next part
 ;  parent - what a stand-in stands in for, or the scope a part is part of; null on any other scope
-%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr }
+;  kids - the regions made in this scope (O8d, docs/memory.md 3.4): closed with it, after its destructors, unless
+;         released first; a list through each region's own header (%olang.region)
+%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr, ptr }
 ; P1: a thread's pool is thread_local, so two threads never take from or give to the same one. A scope belongs to
 ; exactly one thread, and so do the chunks it takes and gives back, which is what makes a per-thread pool
 ; correct rather than merely faster
@@ -425,7 +427,7 @@ done:
 @__olang_fwd_chunk = global %olang.chunk zeroinitializer
 ; O1b: the program's own scope - what a global's initializer allocates into. Never closed, so what
 ; it holds lives as long as the program. Its owner word marks it, and every part of it, as the program's
-@__olang_global_scope = global %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }
+@__olang_global_scope = global %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null, ptr null }
 ; O1b/P2: the program's scope as this thread reaches it - the scope itself on the main thread, and on a worker a part
 ; of its own, made when the worker starts and kept for every task it runs (never closed, as the program's scope is
 ; not) - so no two threads ever bump one at once. A thread RunOnStack makes reaches it as its caller does
@@ -435,12 +437,6 @@ done:
 ; Not an address of the thread's own: a thread's storage is reused for the next one, which would then take a part
 ; made for the one before, or a stand-in it claimed, for its own
 @__olang_self = thread_local(initialexec) global ptr null
-; the region releases under way on this thread, and the stack of those deferred until the 256th has closed
-; (__olang_region_free) - its entries, its room, how many it holds
-@__olang_rel_depth = thread_local(initialexec) global i64 0
-@__olang_rel_stack = thread_local(initialexec) global ptr null
-@__olang_rel_cap = thread_local(initialexec) global i64 0
-@__olang_rel_len = thread_local(initialexec) global i64 0
 @__olang_thread_next = global i64 1
 
 ; an empty chunk whose data holds at least size bytes, when the spare will not do (__olang_scope_alloc takes that
@@ -785,7 +781,14 @@ entry:
   %classptr0 = getelementptr %olang.chunk, ptr %given, i32 0, i32 5
   %class0 = load i64, ptr %classptr0
   %small = icmp eq i64 %class0, 0
-  br i1 %small, label %spare, label %pool
+  br i1 %small, label %spare, label %notspare
+  ; a region's first block (class -1, __olang_region_alloc): back to the C allocator
+notspare:
+  %block = icmp eq i64 %class0, -1
+  br i1 %block, label %toc, label %pool
+toc:
+  call void @free(ptr %given)
+  ret void
 spare:
   %s = load ptr, ptr @__olang_pool_spare
   store ptr %given, ptr @__olang_pool_spare
@@ -794,7 +797,7 @@ spare:
 done:
   ret void
 pool:
-  %c = phi ptr [ %given, %entry ], [ %s, %spare ]
+  %c = phi ptr [ %given, %notspare ], [ %s, %spare ]
   call void @__olang_pool_keep(ptr @__olang_pool, ptr %c)
   ret void
 }
@@ -995,12 +998,21 @@ bump:
   ; of a loop takes every time, taken here; anything else is __olang_new_chunk's
 needchunk:
   %isfwd = icmp eq ptr %head, @__olang_fwd_chunk
-  br i1 %isfwd, label %forward, label %fresh
+  br i1 %isfwd, label %forward, label %notfwd
 forward:
   %fwdptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
   %fwd = load ptr, ptr %fwdptr, !tbaa !59
   %viafwd = tail call ptr @__olang_scope_alloc_a(ptr %fwd, i64 %rawsize, i64 %aln)
   ret ptr %viafwd
+  ; a region (O8d): its tail names it, and it allocates with the word before each object
+notfwd:
+  %isreg = icmp eq ptr %head, @__olang_region_chunk
+  br i1 %isreg, label %region, label %fresh
+region:
+  %regptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
+  %reg = load ptr, ptr %regptr, !tbaa !59
+  %inreg = tail call ptr @__olang_region_alloc(ptr %reg, i64 %rawsize, i64 %aln)
+  ret ptr %inreg
 fresh:
   %small = icmp ule i64 %size, 4096
   %spare = load ptr, ptr @__olang_pool_spare
@@ -1358,9 +1370,9 @@ define internal ptr @__olang_worker_loop(ptr %w) {
 entry:
   call void @__olang_thread_init()
   ; O1b/P2: this worker's part of the program's scope - every task it runs builds there, and it outlives the worker
-  %prog = call ptr @malloc(i64 48)
+  %prog = call ptr @malloc(i64 56)
   call void @__olang_alloc_check(ptr %prog)
-  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }, ptr %prog
+  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null, ptr null }, ptr %prog
   store ptr %prog, ptr @__olang_prog_scope
   %m = getelementptr %olang.worker, ptr %w, i32 0, i32 5
   %c = getelementptr %olang.worker, ptr %w, i32 0, i32 6
@@ -1676,7 +1688,7 @@ next:
   %nn = load ptr, ptr %nlp
   br label %look
 make:
-  %f = call ptr @malloc(i64 48)
+  %f = call ptr @malloc(i64 56)
   call void @__olang_alloc_check(ptr %f)
   store %olang.scope zeroinitializer, ptr %f
   %fo = getelementptr %olang.scope, ptr %f, i32 0, i32 3
@@ -1725,7 +1737,7 @@ entry:
 prog:
   ret ptr null
 make:
-  %sub = call ptr @__olang_scope_alloc_a(ptr %p, i64 48, i64 8)
+  %sub = call ptr @__olang_scope_alloc_a(ptr %p, i64 56, i64 8)
   store %olang.scope zeroinitializer, ptr %sub
   %pp = getelementptr %olang.scope, ptr %sub, i32 0, i32 5
   store ptr %p, ptr %pp
@@ -1791,9 +1803,6 @@ out:
 ; needs to know which blocks were actually reached.
 define void @__olang_unwind_to(ptr %mark) {
 entry:
-  ; a release the jump abandons is abandoned with what it deferred (__olang_region_free), so the ones after start afresh
-  store i64 0, ptr @__olang_rel_depth
-  store i64 0, ptr @__olang_rel_len
   br label %loop
 loop:
   %cur = load ptr, ptr @__olang_unwind_top
@@ -1836,8 +1845,7 @@ entry:
   ret void
 }
 
-; ...the node given: a region's object made with room for its nodes before its word (__olang_region_new), so
-; registering it allocates nothing - a region of one small object stays one allocation
+; ...the node given, allocated by its caller
 define void @__olang_scope_push_dtor(ptr %scope0, ptr %node, ptr %instance, ptr %dtorFn) {
 entry:
   %scope = call ptr @__olang_scope_mine(ptr %scope0)
@@ -1853,256 +1861,204 @@ entry:
   ret void
 }
 
-; REGIONS (docs/memory.md 3.3-3.4): an object in a region of its own, freed at once when the one place holding it lets
-; go of it - what the self-hosted compiler's early freeing is to call; nothing stage 0 emits uses them, and a test of
-; checks/checks.olang drives them from C. A region is a scope whose 48-byte header is made here (malloc'd, so
-; it outlives every chunk the region takes), the word before the object holding it. The object is the region's
-; first allocation, at its own alignment (at least 8: the word before it); what it builds into itself lands in the
-; same scope - the constructor's %here is the region. %nodes destructor nodes (24 bytes each: the release of the regions
-; it holds, its destructor) are reserved just before the word, for __olang_scope_push_dtor
-define ptr @__olang_region_new(i64 %size, i64 %aln0, i64 %nodes) noinline {
+; REGIONS (O8d, docs/memory.md 3.4): storage a sole place's value is built in, freed at once when the place lets go of
+; it - what the scope pass's early freeing (compiler/free.olang) has lowering make. A region is a scope of its own
+; (%olang.region): a kid of the scope its value would otherwise have been built in, closed with that scope unless
+; released first. Everything allocated in it has a word before it naming the region, so the region of any object built
+; there is found from the object alone (__olang_region_or, __olang_region_release) - the values a sole place holds are
+; always such objects, null, or constant data, whose word before is zero (emit writes every constant so). Allocating
+; into a region takes the scope's slow path: its outer header's head is @__olang_region_chunk, which has no room, and
+; its tail names the region, as a forwarding stand-in's names what it forwards to - so the fast path of every other
+; scope is what it was, and a function's scope header never escapes into the call
+;   outer - the scope every allocation names (the region's address), with its destructors and its own kids
+;   inner - the arena its allocations come from
+;   prev, next - its neighbours in its parent's kids; parent - the scope it is a kid of, until released
+%olang.region = type { %olang.scope, %olang.scope, ptr, ptr, ptr }
+@__olang_region_chunk = global %olang.chunk zeroinitializer
+
+; a new region, a kid of parent: empty, closed with parent unless released before
+define ptr @__olang_region_make(ptr %parent) noinline {
+entry:
+  %r = call ptr @malloc(i64 136)
+  call void @__olang_alloc_check(ptr %r)
+  call void @llvm.memset.p0.i64(ptr %r, i8 0, i64 136, i1 false)
+  store ptr @__olang_region_chunk, ptr %r
+  %tailp = getelementptr %olang.scope, ptr %r, i32 0, i32 2
+  store ptr %r, ptr %tailp
+  %kp = getelementptr %olang.scope, ptr %parent, i32 0, i32 6
+  %first = load ptr, ptr %kp
+  %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
+  store ptr %first, ptr %np
+  %has = icmp ne ptr %first, null
+  br i1 %has, label %link, label %head
+link:
+  %fpp = getelementptr %olang.region, ptr %first, i32 0, i32 2
+  store ptr %r, ptr %fpp
+  br label %head
+head:
+  store ptr %r, ptr %kp
+  %pp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  store ptr %parent, ptr %pp
+  ret ptr %r
+}
+
+; rawsize bytes at alignment aln in region r, the word before them naming r: from its inner arena, as any scope's.
+; A region's first allocation of at most 2KB is a block of its own, sized to it with a little room to spare (class -1:
+; given back to the C allocator, never to the pool), so a small value - a key's text, a record - costs about its size,
+; not a 4KB chunk; what does not fit there takes chunks as any scope does. Under -s every chunk is a mapping of its own
+define ptr @__olang_region_alloc(ptr %r, i64 %rawsize, i64 %aln0) noinline {
 entry:
   %small = icmp ult i64 %aln0, 8
   %aln = select i1 %small, i64 8, i64 %aln0
-  %neg = sub i64 0, %aln
-  %nodeb = mul i64 %nodes, 24
-  %pre0 = add i64 %aln, 7
-  %pre1 = add i64 %pre0, %nodeb
-  %pre = and i64 %pre1, %neg
-  ; a small object - 2KB or less - is one allocation of the C allocator's own size classes: the region's header,
-  ; its destructor nodes, the word, the object, so a region costs about what malloc does rather than a 4KB chunk (a
-  ; million small regions: 4.2GB as chunks, about 0.1GB this way); what it builds later takes
-  ; chunks as any scope does, and __olang_region_free's free of the header frees the object with it. Under -s every region
-  ; takes a chunk, which a release poisons and holds back (B2f)
+  %total = add i64 %rawsize, %aln
+  %inner = getelementptr %olang.region, ptr %r, i32 0, i32 1
 ; @if !san
-  %fits = icmp ule i64 %size, 2048
-  br i1 %fits, label %one, label %chunk
-one:
-  %h1 = add i64 %pre1, 48
-  %off = and i64 %h1, %neg
-  %tot = add i64 %off, %size
-  %plain = icmp ule i64 %aln, 16
-  br i1 %plain, label %viamalloc, label %viaaligned
-viamalloc:
-  %pm = call ptr @malloc(i64 %tot)
-  br label %got1
-viaaligned:
-  %tr0 = add i64 %tot, %aln
-  %tr1 = sub i64 %tr0, 1
-  %tr = and i64 %tr1, %neg
-  %pa = call ptr @aligned_alloc(i64 %aln, i64 %tr)
-  br label %got1
-got1:
-  %blk = phi ptr [ %pm, %viamalloc ], [ %pa, %viaaligned ]
-  %bnull = icmp eq ptr %blk, null
-  br i1 %bnull, label %oom, label %ok1
-ok1:
-  call void @llvm.memset.p0.i64(ptr %blk, i8 0, i64 48, i1 false)
-  %obj1 = getelementptr i8, ptr %blk, i64 %off
-  %word1 = getelementptr i8, ptr %obj1, i64 -8
-  store ptr %blk, ptr %word1
-  ret ptr %obj1
+  %ihp = getelementptr %olang.scope, ptr %inner, i32 0, i32 0
+  %ih = load ptr, ptr %ihp
+  %inone = icmp eq ptr %ih, null
+  %ifits = icmp ule i64 %total, 2048
+  %ifirst = and i1 %inone, %ifits
+  br i1 %ifirst, label %block, label %bump
+block:
+  %t63 = add i64 %total, 63
+  %tr = and i64 %t63, -64
+  %bcap = add i64 %tr, 128
+  %bbytes = add i64 %bcap, 64
+  %b = call ptr @aligned_alloc(i64 64, i64 %bbytes)
+  call void @__olang_alloc_check(ptr %b)
+  store ptr null, ptr %b
+  %bused = getelementptr %olang.chunk, ptr %b, i32 0, i32 1
+  store i64 0, ptr %bused
+  %bcapp = getelementptr %olang.chunk, ptr %b, i32 0, i32 2
+  store i64 %bcap, ptr %bcapp
+  %bmap = getelementptr %olang.chunk, ptr %b, i32 0, i32 3
+  store i64 0, ptr %bmap
+  %bfresh = getelementptr %olang.chunk, ptr %b, i32 0, i32 4
+  store i64 0, ptr %bfresh
+  %bclass = getelementptr %olang.chunk, ptr %b, i32 0, i32 5
+  store i64 -1, ptr %bclass
+  %bprev = getelementptr %olang.chunk, ptr %b, i32 0, i32 6
+  store ptr null, ptr %bprev
+  %bstamp = getelementptr %olang.chunk, ptr %b, i32 0, i32 7
+  store i64 0, ptr %bstamp
+  store ptr %b, ptr %ihp
+  %itp = getelementptr %olang.scope, ptr %inner, i32 0, i32 2
+  store ptr %b, ptr %itp
+  br label %bump
+bump:
 ; @else
-  br label %chunk
+  br label %bump
+bump:
 ; @end
-chunk:
-  %hdr = call ptr @malloc(i64 48)
-  %hnull = icmp eq ptr %hdr, null
-  br i1 %hnull, label %oom, label %ok
-oom:
-  call void @__olang_check_failed(ptr @__olang_msg_oom)
-  unreachable
-ok:
-  call void @llvm.memset.p0.i64(ptr %hdr, i8 0, i64 48, i1 false)
-  %total = add i64 %size, %pre
-  %raw = call ptr @__olang_scope_alloc_a(ptr %hdr, i64 %total, i64 %aln)
-  %obj = getelementptr i8, ptr %raw, i64 %pre
+  %raw = call ptr @__olang_scope_alloc_a(ptr %inner, i64 %total, i64 %aln)
+  %obj = getelementptr i8, ptr %raw, i64 %aln
   %word = getelementptr i8, ptr %obj, i64 -8
-  store ptr %hdr, ptr %word
+  store ptr %r, ptr %word
   ret ptr %obj
 }
 
-; releases the region of the object at obj - nothing for null - by closing it (__olang_region_close). The region's
-; destructors release the regions the object holds, each in turn, so releasing a chain of regions nests as deep as
-; the chain is long: up to 256 releases deep it is done right there, and beyond that a release is pushed on this
-; thread's stack of deferred ones, which the 256th release drains once its own region has closed - each batch a
-; release defers reversed, so they are finished in the order made, depth first. A chain of any length is released
-; with constant stack (a million regions linked through their objects overflowed it)
-define void @__olang_region_free(ptr %obj) noinline {
+; the region the object at obj was built in, or fallback for null or constant data
+define ptr @__olang_region_or(ptr %obj, ptr %fallback) {
 entry:
   %none = icmp eq ptr %obj, null
-  br i1 %none, label %ret, label %go
-go:
+  br i1 %none, label %other, label %look
+look:
   %word = getelementptr i8, ptr %obj, i64 -8
-  %hdr = load ptr, ptr %word
-  %d = load i64, ptr @__olang_rel_depth
-  %deep = icmp uge i64 %d, 256
-  br i1 %deep, label %defer, label %now
-defer:
-  call void @__olang_rel_push(ptr %hdr)
-  br label %ret
-now:
-  %d1 = add i64 %d, 1
-  store i64 %d1, ptr @__olang_rel_depth
-  call void @__olang_region_close(ptr %hdr)
-  %bottom = icmp eq i64 %d1, 256
-  br i1 %bottom, label %drain, label %done
-drain:
-  call void @__olang_rel_drain()
+  %r = load ptr, ptr %word
+  %static = icmp eq ptr %r, null
+  br i1 %static, label %other, label %found
+found:
+  ret ptr %r
+other:
+  ret ptr %fallback
+}
+
+; the region the object at obj was built in released - taken out of its parent's kids and closed, with its own kids -
+; nothing for null or constant data
+define void @__olang_region_release(ptr %obj) noinline {
+entry:
+  %none = icmp eq ptr %obj, null
+  br i1 %none, label %done, label %look
+look:
+  %word = getelementptr i8, ptr %obj, i64 -8
+  %r = load ptr, ptr %word
+  %static = icmp eq ptr %r, null
+  br i1 %static, label %done, label %unlink
+unlink:
+  %pp = getelementptr %olang.region, ptr %r, i32 0, i32 2
+  %prev = load ptr, ptr %pp
+  %np = getelementptr %olang.region, ptr %r, i32 0, i32 3
+  %next = load ptr, ptr %np
+  %hasnext = icmp ne ptr %next, null
+  br i1 %hasnext, label %fixnext, label %fixprev
+fixnext:
+  %npp = getelementptr %olang.region, ptr %next, i32 0, i32 2
+  store ptr %prev, ptr %npp
+  br label %fixprev
+fixprev:
+  %hasprev = icmp ne ptr %prev, null
+  br i1 %hasprev, label %intoprev, label %intoparent
+intoprev:
+  %pnp = getelementptr %olang.region, ptr %prev, i32 0, i32 3
+  store ptr %next, ptr %pnp
+  br label %close
+intoparent:
+  %parp = getelementptr %olang.region, ptr %r, i32 0, i32 4
+  %parent = load ptr, ptr %parp
+  %kp = getelementptr %olang.scope, ptr %parent, i32 0, i32 6
+  store ptr %next, ptr %kp
+  br label %close
+close:
+  store ptr null, ptr %np
+  call void @__olang_close_kids(ptr %r)
   br label %done
 done:
-  store i64 %d, ptr @__olang_rel_depth
-  br label %ret
-ret:
   ret void
 }
 
-; a region closed: its destructors run, its chunks go back to the pool (or, under -s, are poisoned and held back),
-; and its header - with, for a small object, the object - is freed
-define void @__olang_region_close(ptr %hdr) {
+; the regions of a kids list closed, first and every one after it, each with its own kids: walked as one list - a
+; region's kids spliced in after it before it is freed - so a chain of regions nested to any depth closes with
+; constant stack. Each region's destructors run (it holds none an early free could meet, docs/memory.md 2.6), then its
+; arena goes back to the pool and its header is freed
+define void @__olang_close_kids(ptr %first) noinline {
 entry:
-  call void @__olang_scope_close(ptr %hdr)
-  call void @free(ptr %hdr)
-  ret void
-}
-
-define void @__olang_rel_push(ptr %h) noinline {
-entry:
-  %len = load i64, ptr @__olang_rel_len
-  %cap = load i64, ptr @__olang_rel_cap
-  %full = icmp eq i64 %len, %cap
-  br i1 %full, label %grow, label %put
-grow:
-  %c2 = shl i64 %cap, 1
-  %z = icmp eq i64 %cap, 0
-  %nc = select i1 %z, i64 64, i64 %c2
-  %bytes = shl i64 %nc, 3
-  %nb = call ptr @malloc(i64 %bytes)
-  %nn = icmp eq ptr %nb, null
-  br i1 %nn, label %oom, label %grown
-oom:
-  call void @__olang_check_failed(ptr @__olang_msg_oom)
-  unreachable
-grown:
-  br i1 %z, label %install, label %copy
-copy:
-  %old = load ptr, ptr @__olang_rel_stack
-  %ob = shl i64 %len, 3
-  call void @llvm.memcpy.p0.p0.i64(ptr %nb, ptr %old, i64 %ob, i1 false)
-  call void @free(ptr %old)
-  br label %install
-install:
-  store ptr %nb, ptr @__olang_rel_stack
-  store i64 %nc, ptr @__olang_rel_cap
-  br label %put
-put:
-  %st = load ptr, ptr @__olang_rel_stack
-  %sl = getelementptr ptr, ptr %st, i64 %len
-  store ptr %h, ptr %sl
-  %l1 = add i64 %len, 1
-  store i64 %l1, ptr @__olang_rel_len
-  ret void
-}
-
-; the deferred releases from position from up, reversed in place
-define void @__olang_rel_reverse(i64 %from) {
-entry:
-  %len = load i64, ptr @__olang_rel_len
-  %st = load ptr, ptr @__olang_rel_stack
-  %hi0 = sub i64 %len, 1
   br label %loop
 loop:
-  %lo = phi i64 [ %from, %entry ], [ %lo1, %swap ]
-  %hi = phi i64 [ %hi0, %entry ], [ %hi1, %swap ]
-  %more = icmp slt i64 %lo, %hi
-  br i1 %more, label %swap, label %done
-swap:
-  %pl = getelementptr ptr, ptr %st, i64 %lo
-  %ph = getelementptr ptr, ptr %st, i64 %hi
-  %vl = load ptr, ptr %pl
-  %vh = load ptr, ptr %ph
-  store ptr %vh, ptr %pl
-  store ptr %vl, ptr %ph
-  %lo1 = add i64 %lo, 1
-  %hi1 = sub i64 %hi, 1
+  %cur = phi ptr [ %first, %entry ], [ %after, %freed ]
+  %end = icmp eq ptr %cur, null
+  br i1 %end, label %done, label %step
+step:
+  %ckp = getelementptr %olang.scope, ptr %cur, i32 0, i32 6
+  %kids = load ptr, ptr %ckp
+  store ptr null, ptr %ckp
+  %cnp = getelementptr %olang.region, ptr %cur, i32 0, i32 3
+  %next = load ptr, ptr %cnp
+  %haskids = icmp ne ptr %kids, null
+  br i1 %haskids, label %findlast, label %own
+findlast:
+  %k = phi ptr [ %kids, %step ], [ %kn, %findlast ]
+  %knp = getelementptr %olang.region, ptr %k, i32 0, i32 3
+  %kn = load ptr, ptr %knp
+  %last = icmp eq ptr %kn, null
+  br i1 %last, label %splice, label %findlast
+splice:
+  store ptr %next, ptr %knp
+  br label %own
+own:
+  %after = phi ptr [ %next, %step ], [ %kids, %splice ]
+  ; the outer header's head is the region's mark, not a chunk: none for its close
+  store ptr null, ptr %cur
+  call void @__olang_scope_close(ptr %cur)
+  %inner = getelementptr %olang.region, ptr %cur, i32 0, i32 1
+  call void @__olang_scope_close(ptr %inner)
+  call void @free(ptr %cur)
+  br label %freed
+freed:
   br label %loop
 done:
   ret void
 }
 
-define void @__olang_rel_drain() noinline {
-entry:
-  call void @__olang_rel_reverse(i64 0)
-  br label %loop
-loop:
-  %len = load i64, ptr @__olang_rel_len
-  %empty = icmp eq i64 %len, 0
-  br i1 %empty, label %done, label %pop
-pop:
-  %n = sub i64 %len, 1
-  store i64 %n, ptr @__olang_rel_len
-  %st = load ptr, ptr @__olang_rel_stack
-  %sl = getelementptr ptr, ptr %st, i64 %n
-  %h = load ptr, ptr %sl
-  call void @__olang_region_close(ptr %h)
-  call void @__olang_rel_reverse(i64 %n)
-  br label %loop
-done:
-  ret void
-}
-
-; a slot holding a region's object, released as its block's scope closes (a destructor node's function: the slot is
-; its "instance") - what it holds then, null when it was moved on
-define void @__olang_region_drop_slot(ptr %slot, ptr %scope) {
-entry:
-  %obj = load ptr, ptr %slot
-  store ptr null, ptr %slot
-  call void @__olang_region_free(ptr %obj)
-  ret void
-}
-
-; ...an array's whose buffer is a region: the pointer half of the slot's { len, ptr }
-define void @__olang_region_drop_aslot(ptr %slot, ptr %scope) {
-entry:
-  %a = load { i64, ptr }, ptr %slot
-  store { i64, ptr } zeroinitializer, ptr %slot
-  %obj = extractvalue { i64, ptr } %a, 1
-  call void @__olang_region_free(ptr %obj)
-  ret void
-}
-
-; a held slot { object, registered }, released as its scope closes - what it holds then, the mark cleared so a hold
-; evaluated again after the scope's next opening registers again
-define void @__olang_region_drop_held(ptr %slot, ptr %scope) {
-entry:
-  %obj = load ptr, ptr %slot
-  store { ptr, i64 } zeroinitializer, ptr %slot
-  %some = icmp ne ptr %obj, null
-  br i1 %some, label %free, label %done
-free:
-  call void @__olang_region_free(ptr %obj)
-  br label %done
-done:
-  ret void
-}
-
-define void @__olang_region_drop_aheld(ptr %slot, ptr %scope) {
-entry:
-  %a = load { i64, ptr }, ptr %slot
-  store { { i64, ptr }, i64 } zeroinitializer, ptr %slot
-  %obj = extractvalue { i64, ptr } %a, 1
-  %some = icmp ne ptr %obj, null
-  br i1 %some, label %free, label %done
-free:
-  call void @__olang_region_free(ptr %obj)
-  br label %done
-done:
-  ret void
-}
-
-; the region a reference's referent is in, for building there - the word before the object; a null reference's is
-; read from here instead (null: a build into it traps, as reading through the null itself does, T2b)
-@__olang_region_nullhdr = global ptr null
 ; P2: folds a task's sub-scope back into the scope it stands for, on the spawner's thread, after
 ; the join - so the only thread that ever bumps a given arena is the one that owns it. Nothing is
 ; copied or moved: the two chunk lists are relinked, and the sub-scope's dtor nodes (which live in
@@ -2246,7 +2202,18 @@ dparts:
   store ptr %wft, ptr %wtp, !tbaa !59
   store ptr null, ptr %fptr, !tbaa !59
   br label %dloop
+  ; the regions made in this scope (O8d), after its destructors - which may read what this scope's objects hold there -
+  ; and before its chunks: given the list, not the header, so the header does not escape into the call
 chunks:
+  %kidsptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 6
+  %kids = load ptr, ptr %kidsptr, !tbaa !59
+  %haskids = icmp ne ptr %kids, null
+  br i1 %haskids, label %closekids, label %ownchunks
+closekids:
+  store ptr null, ptr %kidsptr, !tbaa !59
+  call void @__olang_close_kids(ptr %kids)
+  br label %ownchunks
+ownchunks:
   %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
   %head = load ptr, ptr %headptr, !tbaa !59
   %empty = icmp eq ptr %head, null
@@ -3001,7 +2968,7 @@ have:
 ; the builder's own scope, on its first growth outside a test build (in one the frame's is made with the builder)
 define ptr @__olang_sb_scratch(ptr %scopep) noinline {
 entry:
-  %h = call ptr @malloc(i64 48)
+  %h = call ptr @malloc(i64 56)
   call void @__olang_alloc_check(ptr %h)
   store %olang.scope zeroinitializer, ptr %h
   store ptr %h, ptr %scopep
@@ -3518,9 +3485,9 @@ done:
 define void @__olang_thread_enter() noinline {
 entry:
   call void @__olang_thread_init()
-  %prog = call ptr @malloc(i64 48)
+  %prog = call ptr @malloc(i64 56)
   call void @__olang_alloc_check(ptr %prog)
-  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }, ptr %prog
+  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null, ptr null }, ptr %prog
   store ptr %prog, ptr @__olang_prog_scope
   ret void
 }

@@ -2896,16 +2896,21 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
     return "{ i64 " $n ", ptr " $g " }"
 }
 
-# constant c of this function's tables, elements of type el, as a private global: its name and its length
+# constant c of this function's tables, elements of type el, as a private global: a pointer to its elements, and its
+# length. A zero word stands before the elements, so that the word before a reference into constant data says it is no
+# region's (O8d: __olang_region_or, __olang_region_release) - a place an early free is made for holds such a reference
 fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) String, I64 {
     lt, init, n := fe.constInit(el, c)
     key := "d:" $lt " " $init if site == "" else "s:" $site
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
     s := "@.d" $fe.E.nconst
     fe.E.nconst++
-    fe.E.item(s[1:], HomeLocal, $s " = private " $("unnamed_addr " if site == "" else "") "constant " $lt " " $init "\n")
-    fe.E.dataAt.Put($key, $s)
-    return s, n
+    wt := "<{ i64, " $lt " }>"
+    value := $wt " <{ i64 0, " $lt " " $init " }>, align 8"
+    fe.E.item(s[1:], HomeLocal, $s " = private " $("unnamed_addr " if site == "" else "") "constant " $value "\n")
+    g := "getelementptr inbounds (" $wt ", ptr " $s ", i32 0, i32 1)"
+    fe.E.dataAt.Put($key, $g)
+    return g, n
 }
 
 # an array constant's LLVM type, initializer and length
@@ -2981,9 +2986,9 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
             if fe.frameScope >= 0 { return "%s" $fe.frameScope }
             return fe.program()
         }
-        case mir.ScopeRef.RegionOf(_) {
-            fe.gap("a region's scope")
-            return fe.program()
+        case mir.ScopeRef.Held(l) {
+            v := fe.load("i64", fe.localAt(l))
+            return fe.let("inttoptr i64 " $v " to ptr")
         }
     }
 }
@@ -3105,7 +3110,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             fe.w("call void @__olang_scope_register_dtor(ptr " $fe.scope(sr) ", ptr " $fe.val(x) ", ptr @" $fe.E.sym(k) "_rt)")
         }
         case mir.Stmt.RegisterOwner(_, _, _) { fe.gap("RegisterOwner") }
-        case mir.Stmt.Release(_, _) { fe.gap("Release") }
+        case mir.Stmt.Release(_, p) {
+            # O8d: the region the reference p holds was built in released (none for null or constant data), p left null
+            at, pty := fe.addr(p)
+            v := fe.load(fe.ty(pty), at)
+            fe.E.runtime("__olang_region_release")
+            fe.w("call void @__olang_region_release(ptr " $fe.objectPtr(v, pty) ")")
+            fe.store(fe.ty(pty), fe.E.constText(pty, 0), at)
+        }
         case mir.Stmt.Write(_, b, how, x) {
             if fe.directRef(b) {
                 fe.pieceKinds.Push(how)
@@ -3452,7 +3464,27 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             fe.w("call void @olang_textcopy(ptr " $out ", ptr " $data ", i64 " $n ")")
             return fe.pair(n, out)
         }
+        case mir.Rvalue.Region(s) {
+            fe.E.runtime("__olang_region_make")
+            r := fe.let("call ptr @__olang_region_make(ptr " $fe.scope(s) ")")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
+        case mir.Rvalue.RegionOr(x, s) {
+            fe.E.runtime("__olang_region_or")
+            o := fe.objectPtr(fe.val(x), fe.otype(x))
+            r := fe.let("call ptr @__olang_region_or(ptr " $o ", ptr " $fe.scope(s) ")")
+            return fe.let("ptrtoint ptr " $r " to i64")
+        }
     }
+}
+
+# the object a reference value v of type ty names: its pointer, the pointer half of a run-time-length array's pair
+fn (fe mut fnEm&) objectPtr(v String&, ty types.TypeId) String {
+    lt := fe.ty(ty)
+    if lt == "ptr" { return v }
+    if lt == "{ i64, ptr }" { return fe.let("extractvalue { i64, ptr } " $v ", 1") }
+    fe.gap("the object of a " $fe.E.T.Canon(ty))
+    return "null"
 }
 
 # a run-time-length array value given storage of its own in scope s: its elements copied there

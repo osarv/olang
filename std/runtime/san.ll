@@ -95,7 +95,14 @@ done:
 define noalias ptr @__olang_san_alloc_own(ptr %scope, i64 %size) noinline {
 entry:
   %empty = icmp eq i64 %size, 0
-  br i1 %empty, label %plain, label %own
+  br i1 %empty, label %plain, label %notempty
+  ; a region's (O8d) as any allocation there, with the word before it naming the region: the region is released as a
+  ; whole, so its arrays need no pages of their own
+notempty:
+  %rheadp = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
+  %rhead = load ptr, ptr %rheadp
+  %inregion = icmp eq ptr %rhead, @__olang_region_chunk
+  br i1 %inregion, label %plain, label %own
 plain:
   %pp = call ptr @__olang_scope_alloc_zeroed(ptr %scope, i64 %size)
   ret ptr %pp

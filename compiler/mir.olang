@@ -133,13 +133,14 @@ type ScopeInfo struct(Kind ScopeKind, Parent ScopeId, Block typed.BlockId, Sp so
 
 # a scope something is built in or passed: one this function opens; one of its scope variables, by index in Vars; the
 # program's (O1b); the frame - storage on the stack, live until the function returns (a temporary nothing keeps, an
-# environment no callee keeps, D16c); or the region of the object a local's reference names (O32, O33)
+# environment no callee keeps, D16c); or the scope an I64 local's handle names - a region an early free made (Region)
+# or found (RegionOr, O8d)
 type ScopeRef enum {
     Scope(s ScopeId)
     Var(i I64)
     Program
     Frame
-    RegionOf(l LocalId)
+    Held(l LocalId)
 }
 
 # what a function's scope variable stands for: the ones a call passes first (types.ScopeVarsOf of its type, in order,
@@ -221,6 +222,12 @@ type Rvalue enum {
     # becomes its default error (R17), which it then names
     Recode(code Operand, from types.ListId, to types.ListId)
     Text(b ScopeRef, into ScopeRef, ty types.TypeId)   # what builder b holds, as text of type ty built in into (E11b)
+    # O8d (docs/memory.md 3.4): a new region, a kid of parent - closed with it unless released first - as a scope handle
+    # (an I64), which ScopeRef.Held names: where a value a sole place is to hold is built
+    Region(parent ScopeRef)
+    # ...the region the object reference x names was built in, or otherwise, for null and constant data: where what is
+    # built through a sole place's value goes
+    RegionOr(x Operand, otherwise ScopeRef)
 }
 
 # what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
@@ -784,7 +791,7 @@ fn (v mut verifier&) ref(r ScopeRef) {
         case ScopeRef.Var(i) {
             if i < 0 or i >= v.F.Vars.Len() { v.bad("no scope variable V" $i) }
         }
-        case ScopeRef.RegionOf(l) { v.local(l) }
+        case ScopeRef.Held(l) { v.local(l) }
         case _ { }
     }
 }
@@ -889,6 +896,11 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
         case Rvalue.Text(b, into, _) {
             v.ref(b)
             v.ref(into)
+        }
+        case Rvalue.Region(s) { v.ref(s) }
+        case Rvalue.RegionOr(x, s) {
+            v.operand(x)
+            v.ref(s)
         }
     }
 }
@@ -1268,7 +1280,15 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.Closure(_, ty, _, _, _) => v.closureType(ty)
         case Rvalue.Recode(x, _, _) => v.intOf(v.operandType(x), I32T, "an error code")
         case Rvalue.Text(b, _, ty) => v.textType(b, ty)
+        case Rvalue.Region(_) => I64T
+        case Rvalue.RegionOr(x, _) => v.regionOrType(v.operandType(x))
     }
+}
+
+# what RegionOr reads: a reference - its object's word before names the region
+fn (v mut verifier&) regionOrType(of types.TypeId) types.TypeId {
+    if of != types.UnknownT and not v.T.IsRef(v.T.Repr(of)) { v.bad("the region of a " $v.canon(of)) }
+    return I64T
 }
 
 fn (v mut verifier&) intOf(got types.TypeId, want types.TypeId, what String&) types.TypeId {
@@ -1800,7 +1820,7 @@ fn (v mut verifier&) buildsIn(s ScopeRef) {
             if not v.open(x) { v.bad("built in S" $x ", which is not open") }
             else if v.F.Scopes[I64(x)].Kind == ScopeKind.Inert { v.bad("built in S" $x ", which is inert") }
         }
-        case ScopeRef.RegionOf(l) { v.used(l) }
+        case ScopeRef.Held(l) { v.used(l) }
         case _ { }
     }
 }
@@ -1811,7 +1831,7 @@ fn (v mut verifier&) usesScope(s ScopeRef) {
         case ScopeRef.Scope(x) {
             if not v.open(x) { v.bad("S" $x " used where it is not open") }
         }
-        case ScopeRef.RegionOf(l) { v.used(l) }
+        case ScopeRef.Held(l) { v.used(l) }
         case _ { }
     }
 }
@@ -1941,6 +1961,11 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
         case Rvalue.Text(b, into, _) {
             v.usesScope(b)
             v.buildsIn(into)
+        }
+        case Rvalue.Region(s) { v.buildsIn(s) }
+        case Rvalue.RegionOr(x, s) {
+            v.reads(x)
+            v.usesScope(s)
         }
     }
 }
@@ -2078,7 +2103,7 @@ fn (w mut dumper&) ref(s ScopeRef) String {
         case ScopeRef.Var(i) => "V" $i
         case ScopeRef.Program => "program"
         case ScopeRef.Frame => "frame"
-        case ScopeRef.RegionOf(l) => "region(L" $l ")"
+        case ScopeRef.Held(l) => "held(L" $l ")"
     }
 }
 
@@ -2157,6 +2182,8 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
                                                     $(" captures " $w.refs(cs) if cs.N > I32(0) else "") ": " $t.Canon(ty))
         case Rvalue.Recode(x, from, to) => "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
         case Rvalue.Text(b, into, ty) => "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
+        case Rvalue.Region(s) => "region in " $w.ref(s)
+        case Rvalue.RegionOr(x, s) => "region of " $w.operand(x) " or " $w.ref(s)
     }
 }
 

@@ -1427,6 +1427,19 @@ fn (m mut Machine&) stepClose() {
     try m.closing.Pop() catch { }
 }
 
+# O8d: the reference at p, of type ty, let go of: the region its object was built in closed - none for null or constant
+# data - and p left null. A read through the reference afterwards finds its allocation freed and stops (K1): the
+# evaluator's own check of an early free
+fn (m mut Machine&) releaseHeld(p Ptr, ty types.TypeId) {
+    q := m.objectAt(p, ty)
+    if m.halted { return }
+    m.zero(p, m.size(ty))
+    region := m.regionOfObject(q)
+    if region == 0 { return }
+    m.disown(region)
+    m.closing.Push(region)
+}
+
 # the own slot at p let go of: its object's region closed and the slot left null (O35)
 fn (m mut Machine&) releaseSlot(p Ptr) {
     q := m.rdPtr(p)
@@ -1634,14 +1647,13 @@ fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
         case mir.ScopeRef.Var(i) => m.ws[fr.Vars + i]
         case mir.ScopeRef.Program => m.program
         case mir.ScopeRef.Frame => fr.Store
-        case mir.ScopeRef.RegionOf(l) => m.regionOf(fi, l)
+        case mir.ScopeRef.Held(l) => m.heldScope(fi, l)
     }
 }
 
-fn (m mut Machine&) regionOf(fi I64, l mir.LocalId) I64 {
-    q := m.rdPtr(m.localPtr(fi, l))
-    if q.Id == 0 { return 0 }
-    return m.al[q.Id & slotMask].Scope
+# the scope an I64 local's handle names (O8d): a region made (Rvalue.Region) or found (RegionOr), by its id
+fn (m mut Machine&) heldScope(fi I64, l mir.LocalId) I64 {
+    return m.intValue(m.rd(m.localPtr(fi, l), 8), mir.I64T)
 }
 
 # where something is built in scope s: refused where s is not open
@@ -2003,7 +2015,42 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
         }
         case mir.Rvalue.Text(b, into, ty) { m.text(fi, dst, b, into) }
+        case mir.Rvalue.Region(s) {
+            parent := m.buildScope(fi, s)
+            if m.halted { return }
+            id := m.newScope(sRegion)
+            m.adopt(id, parent)
+            m.wr(dst, 8, id)
+        }
+        case mir.Rvalue.RegionOr(x, s) {
+            id := m.regionOfObject(m.objectOf(fi, x))
+            if id == 0 { id = m.scopeOf(fi, s) }
+            m.wr(dst, 8, id)
+        }
     }
+}
+
+# the object a reference operand names: what it points at, the pointer half of a run-time-length array's pair
+fn (m mut Machine&) objectOf(fi I64, x mir.Operand) Ptr {
+    p := m.addr(fi, x, 1)
+    return m.objectAt(p, m.opType(fi, x))
+}
+
+fn (m mut Machine&) objectAt(p Ptr, ty types.TypeId) Ptr {
+    a := m.arrayOf(ty)
+    if a != types.UnknownT and m.T.Length(a) == types.TypeId(0) { return m.rdPtr(Ptr(p.Id, p.Off + 8)) }
+    return m.rdPtr(p)
+}
+
+# O8d: the region an object was built in - its allocation's scope, where that is a live region - else 0 (null, constant
+# data, anything built in a scope of another kind)
+fn (m mut Machine&) regionOfObject(q Ptr) I64 {
+    if q.Id == 0 { return 0 }
+    slot := q.Id & slotMask
+    if slot >= m.nAl or m.al[slot].Gen != q.Id >> slotBits { return 0 }
+    sc := m.al[slot].Scope
+    if not m.live(sc) or m.scopes[sc & slotMask].Kind != sRegion { return 0 }
+    return sc
 }
 
 # the array a type is, or a reference names; UnknownT for none
@@ -2766,9 +2813,9 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
         }
         case mir.Stmt.Release(sp, p) {
             m.atK(fk, sp)
-            slot, _ := m.place(fi, p)
+            slot, pty := m.place(fi, p)
             n := m.closing.Len()
-            m.releaseSlot(slot)
+            m.releaseHeld(slot, pty)
             if m.closing.Len() > n {
                 m.fs[fi].Pending = true
                 return
