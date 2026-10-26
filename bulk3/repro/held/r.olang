@@ -1,0 +1,19 @@
+import "std/io"
+fn main() {
+    s, e, st := U8(250), U8(255), U8(3)
+    n I64 = 0
+    for x in range s, e, st {
+        n++
+        if n > 10 { break }
+    }
+    io.Println($n)!
+    a := U8[x for x in range s, e, st]
+    io.Println($a.Len() " " $a)!
+    b := I64[x for x in range 0, 10, 3]
+    io.Println($b)!
+    m := I64.Max
+    c := I64[x for x in range m - 5, m, 2]
+    io.Println($c)!
+    z := I64[x for x in range 5, 0]
+    io.Println($z)!
+}

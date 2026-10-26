@@ -1,0 +1,9 @@
+import "std/io"
+import "std/json"
+type PErr error { EMPTY, BAD }
+type Q struct(M I64, N I64) { M, N }
+type R struct(N I64, E PErr) { N, E }
+fn main() {
+    io.Println(json.Encode(Q(1, 2)))!
+    io.Println(json.Encode(R(3, PErr.BAD)))!
+}

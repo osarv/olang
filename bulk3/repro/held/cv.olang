@@ -1,0 +1,15 @@
+import "std/io"
+fn grow(v mut Vec<I64>&, x I64) I64 {
+    if v.Len() < 6 { v.Push(x + 10) }
+    return x
+}
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    a := I64[grow(v, x) for x in v]
+    io.Println($a.Len() " " $a)!
+    w := I64[1, 2, 3]
+    b := I64[x * 2 for x in w]
+    io.Println($b)!
+}

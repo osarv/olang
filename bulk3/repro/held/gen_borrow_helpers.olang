@@ -1,0 +1,53 @@
+import "std/io"
+
+fn words(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == 0x20 { i++ }
+        j := i
+        for j < t.Len() and t[j] != 0x20 { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 200 {
+        v := Vec<String&>()
+        for k in range 3 { v.Push($i "-churn-churn-churn-" $k) }
+        n += v[2].Len()
+    }
+    return n
+}
+
+fn longest(t String&) String& {
+    best String& = ""
+    for w in words(t) { if w.Len() > best.Len() { best = w } }
+    return best
+}
+
+fn main() {
+    kept := Vec<String&>()
+    {
+        t := $"alpha beta gamma"
+        kept = words(t).ToVec()
+    }
+    churn()
+    io.Println($kept)!
+    l := Vec<String&>()
+    {
+        t2 := $"one three fiftyfive"
+        l.Push(longest(t2))
+    }
+    churn()
+    io.Println($l)!
+    m String& = ""
+    {
+        t3 := $"xx yyy"
+        g := words(t3)
+        m = try g.Next() catch default ""
+    }
+    churn()
+    io.Println(m)!
+}

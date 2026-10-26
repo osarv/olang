@@ -1,0 +1,5 @@
+nice -n 19 build/olang build -debug fuzz/fuzz.olang
+built ./build/fuzz_fuzz.debug
+OLANG=/home/user/wt/rvb3/build/olang nice -n 19 ./build/fuzz_fuzz.debug scope 7331 60 2 12
+fuzz scope: 60 programs, 400 scenarios run, 320 refused by the compiler, 0 findings
+done 0

@@ -1,0 +1,14 @@
+type LibErr error { A, B, C }
+type Zed error { Q }
+type Both error Zed, LibErr
+Kept LibErr = LibErr.B
+KeptB Both = LibErr.C
+fn Fail(k I64) I64 ? Both {
+    if k == 1 { error LibErr.B }
+    if k == 2 { error Zed.Q }
+    return k
+}
+fn Catch(k I64, out mut Vec<Both>&) {
+    try Fail(k) catch Both e { out.Push(e) }
+}
+fn Same<T>(a T, b T) Bool { return a == b }

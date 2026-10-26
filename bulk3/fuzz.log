@@ -1,0 +1,5 @@
+nice -n 19 build/olang build -debug fuzz/fuzz.olang
+built ./build/fuzz_fuzz.debug
+OLANG=/home/user/wt/rvb3/build/olang nice -n 19 ./build/fuzz_fuzz.debug run 4242 80 2 30
+fuzz: 80 programs, 2400 cases (2400 globals baked while compiling), 0 findings
+done 0

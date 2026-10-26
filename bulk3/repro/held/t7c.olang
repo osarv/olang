@@ -1,0 +1,14 @@
+import "std/io"
+fn f(k I64) I64 {
+    n := 3
+    if k > 0 { n = 5 }
+    a := I64[x for x in range n]
+    b := Array<I64>(n)
+    for i in range n { b[i] = i * 2 }
+    c := I64[x * 2 for x in a]
+    m := 2
+    for j in range k { m++ }
+    d := I64[x for x in range m]
+    return a.Len() * 1000 + b.Len() * 100 + c.Len() * 10 + d.Len()
+}
+fn main() { io.Println($f(1) " " $f(0) " " $f(4))! }

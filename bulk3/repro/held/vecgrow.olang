@@ -1,0 +1,44 @@
+import "std/io"
+
+type Holder struct() { v Vec<String&> = Vec<String&>() }
+
+fn addTo(v mut Vec<String&>&, k I64) {
+    for i in range k { v.Push($"s" $i) }
+}
+
+fn gen(v mut Vec<I64>&, n I64) Iterator<I64> {
+    for i in range n {
+        v.Push(i)
+        yield i
+    }
+}
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        w := Vec<String&>()
+        for k in range 30 { w.Push($i "-churn-churn-churn-" $k) }
+        n += w[2].Len()
+    }
+    return n
+}
+
+fn main() {
+    h := Holder()
+    { addTo(h.v, 20) }
+    for i in range 3 { { h.v.Push($"loop" $i) } }
+    hr mut Holder& = h
+    f := fn(k I64) { hr.v.Push($"lam" $k) }
+    for i in range 20 { f(i) }
+    nums := Vec<I64>()
+    join {
+        spawn addTo(h.v, 40)
+    }
+    for x in gen(nums, 30) { churn() }
+    g := gen(nums, 20)
+    for x in g { }
+    churn()
+    t I64 = 0
+    for s in h.v { t += s.Len() }
+    io.Println($h.v.Len() " " $t " " $nums.Len() " " $nums[29])!
+}

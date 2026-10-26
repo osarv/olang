@@ -1,0 +1,11 @@
+import "std/io"
+
+# an immutable global's text written through a 'mut Array<Char>&' parameter - it is accepted; an array global is refused
+T := "hello"
+U String = "world"
+fn w(b mut Array<Char>&) { b[0] = 'z' }
+fn main() {
+    w(T)
+    w(U)
+    io.Println($T " " $U)!
+}
