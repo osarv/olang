@@ -1,0 +1,7 @@
+# check: fail error[E14b]: a call through a function value takes its arguments by position
+# E14b: a function type names no parameters, so a call through a function value takes none by name
+fn connect(host String&, port I64 = 80) I64 { return port }
+fn main() {
+    f := connect
+    x := f("h", port = 2)
+}

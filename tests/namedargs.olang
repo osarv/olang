@@ -1,0 +1,106 @@
+# E14b: a call gives a defaulted parameter by name - in any order, after the arguments by position, each at most once;
+# functions, methods, constructors, generics and a trait's methods through an any. Arguments are evaluated in the order
+# written. Each computation is done as a global the evaluator bakes and an assert it decides (K2, S18c), and on an input
+# it cannot see (Live), at run time
+import "std/io"
+
+Live mut I64 = 0
+
+fn connect(host String&, port I64 = 80, timeout I64 = 30, retries I64 = 3) String {
+    return $host ":" $port " t" $timeout " r" $retries
+}
+
+type Conn struct(host String&, port I64 = 80, secure Bool = false) { host, port, secure }
+
+fn (c Conn&) Url(path String& = "/", query String& = "") String { return $c.host ":" $c.port $path $query }
+
+# a generic with a defaulted parameter of its own type variable, and one of a fixed type
+fn pad<T>(xs Array<T>&, fill T, width I64 = 4, before Bool = false) Vec<T> {
+    out := Vec<T>()
+    if not before { for x in xs { out.Push(x) } }
+    for _i in range xs.Len(), width { out.Push(fill) }
+    if before { for x in xs { out.Push(x) } }
+    return out
+}
+
+# a node whose link is a reference: an argument by name built where the call puts it
+type Node struct(v I64, next Node?& = null) { v, next }
+
+fn total(n Node?&) I64 {
+    s := 0
+    p := n
+    for p is not null {
+        s += p.v
+        p = p.next
+    }
+    return s
+}
+
+# two references given by name out of order: each held, in the order written, where the call puts it
+fn pair(a Node?& = null, b Node?& = null) I64 { return total(a) * 10 + total(b) }
+
+fn pairs(n I64) I64 {
+    s := 0
+    for i in range n { s += pair(b = Node(i, next = Node(1)), a = Node(2)) }
+    return s
+}
+
+type Shape trait { Area(scale I64 = 1) I64 }
+type Sq struct(side I64) { side }
+fn (s Sq&) Area(scale I64 = 1) I64 { return s.side * s.side * scale }
+
+fn area(s any Shape&, k I64) I64 { return s.Area(scale = k) }
+
+# the order an argument list is evaluated in, without effects the evaluator refuses: each argument writes to a builder
+# the lambda reaches through a reference it captured (D16c)
+type Log struct(b mut StringBuilder&) { b }
+fn steps(seed String&) String {
+    lg := Log(StringBuilder())
+    b := lg.b
+    b.Push(seed)
+    step := fn(c String&) I64 {
+        b.Push(c)
+        return b.Len()
+    }
+    r := connect("o", retries = step("r"), port = step("p"))
+    return $b.ToString() " " $r
+}
+
+BakedConnect := connect("h", retries = 5)
+BakedMixed := connect("h", 81, retries = 5, timeout = 9)
+BakedDefault := connect("h", default, timeout = 1)
+BakedConn := $Conn("x", secure = true)
+BakedUrl := Conn("x", port = 8).Url(query = "?a")
+BakedPad := pad(I64[1, 2], 0, before = true)
+BakedTotal := total(Node(1, next = Node(2, next = Node(3))))
+BakedArea := area(Sq(3), 2)
+BakedPairs := pairs(3)
+BakedSteps := steps("s")
+
+test "a defaulted parameter is given by name, in any order, after the arguments by position" {
+    assert BakedConnect == "h:80 t30 r5" and connect("h" $Live, retries = 5) == "h0:80 t30 r5"
+    assert BakedMixed == "h:81 t9 r5" and connect("h", 81 + Live, retries = 5, timeout = 9) == BakedMixed
+    assert BakedDefault == "h:80 t1 r3" and connect("h", default, timeout = 1 + Live) == BakedDefault
+}
+
+test "constructors and methods take arguments by name" {
+    assert BakedConn == "Conn(\"x\", 80, true)"
+    c := Conn("x", secure = Live == 0)
+    assert $c == BakedConn
+    assert BakedUrl == "x:8/?a" and Conn("x", port = 8 + Live).Url(query = "?a") == BakedUrl
+}
+
+test "a generic's, a reference's and an any's parameters by name" {
+    assert BakedPad.Len() == 4 and BakedPad[0] == 0 and BakedPad[3] == 2
+    p := pad(I64[1, 2], Live, width = 3)
+    assert p.Len() == 3 and p[2] == 0
+    assert BakedTotal == 6 and total(Node(1, next = Node(2 + Live, next = Node(3)))) == 6
+    assert BakedArea == 18 and area(Sq(3 + Live), 2) == 18
+    assert BakedPairs == 66 and pairs(3 + Live) == 66
+    assert pairs(100000 + Live) == 2000000 + 4999950000 + 100000
+}
+
+test "arguments are evaluated in the order written" {
+    assert BakedSteps == "srp o:3 t30 r2"
+    assert steps("s" if Live == 0 else "t") == BakedSteps
+}

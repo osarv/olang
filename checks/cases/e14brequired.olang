@@ -1,0 +1,4 @@
+# check: fail error[E14b]: parameter 'host' declares no default, so it is given by position, not by name
+# E14b: arguments by name give defaulted parameters, after the arguments by position, each once
+fn connect(host String&, port I64 = 80, timeout I64 = 30) I64 { return port + timeout }
+fn main() { x := connect(host = "h") }

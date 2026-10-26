@@ -1,0 +1,3 @@
+# check: fail error[E14b]: an argument by name gives a function's, a method's or a constructor's defaulted parameter
+# E14b: a name in a conversion's arguments names nothing
+fn main() { x := I32(v = 3) }

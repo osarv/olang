@@ -1214,7 +1214,7 @@ fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
     }
     return match e {
         case ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
-        case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _) => p.readsLocal(c, x)
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _) => p.readsLocal(c, x)
         case ast.Expr.Binary(_, _, a, b) => p.readsLocal(c, a) or p.readsLocal(c, b)
         case ast.Expr.Cond(_, a, k, b) => p.readsLocal(c, a) or p.readsLocal(c, k) or p.readsLocal(c, b)
         case ast.Expr.Call(_, f, args) => not p.instanceLen(c, f, args) and (p.readsLocal(c, f) or p.anyReadsLocal(c, args))

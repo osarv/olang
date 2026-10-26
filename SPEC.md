@@ -3361,8 +3361,28 @@ in place of a written value, letting a call reach a later parameter without rest
 it: given `connect(host Array<U8>, port I32 = 80, timeout I32 = 30, retries I32 = 3)`, a call
 `connect(h, default, default, 5)` sets only `retries`. As an argument, `default` is valid **only** as a direct argument of
 a call (its other use, introducing a `try`'s fallback value, is §7 R9a), and only where the corresponding parameter declares a default (D8a); it is not an expression and
-may not be assigned, nested, or used as a value anywhere. Parameter *names* are deliberately not part of
-this: they remain internal to the declaration, so renaming one is never a change to the caller's contract.
+may not be assigned, nested, or used as a value anywhere.
+
+**E14b (arguments by name).** A **defaulted** parameter (D8a) may be given by name: `connect(h, retries = 5)`,
+`connect(h, 81, retries = 5, timeout = 9)`.
+
+```
+arg ::= expr | "default" | IDEN "=" expr
+```
+
+Arguments by name follow every argument by position (one by position after one by name is a compile-time error), in
+any order among themselves, each naming a parameter at most once; a parameter given by position is not named again,
+and one with no default is never named - it is given by position, so that a call's required arguments always read
+the same way. The parameters the arguments by name skip take their defaults, as `default` in their place would
+(E14a), and `default` may still stand by position before the names. A name naming no parameter is a compile-time error
+naming the nearest defaulted one. Every argument is **evaluated in the order written**: where names reorder them, each
+but a literal is evaluated into a hidden local where it is written, and the call reads those, so moving an argument
+by name moves when it runs. Functions, methods, constructors (C2), generic functions and constructors (their type
+arguments inferred from the arguments written, G9), and a trait's methods called through an `any` (T31b) take
+arguments by name. A call through a function value does not - a function type names no parameters (T21) - and a name
+anywhere else (a conversion, a case, a built-in) is a compile-time error. The names of a function's defaulted
+parameters are therefore part of what it promises its callers: renaming one changes every call naming it; a required
+parameter's name stays the declaration's own.
 
 **E15.** A call to a function that can fail (§7 R1, R1a) must be covered by a `try` or a `!` (R8, E35) -
 written before it, or before an expression or chain it is part of; a bare, unhandled call to a fallible function is a

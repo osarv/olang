@@ -1,0 +1,4 @@
+# check: fail error[E14b]: parameter 'port' is given by position already
+# E14b: arguments by name give defaulted parameters, after the arguments by position, each once
+fn connect(host String&, port I64 = 80, timeout I64 = 30) I64 { return port + timeout }
+fn main() { x := connect("h", 3, port = 2) }

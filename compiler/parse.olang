@@ -2787,7 +2787,8 @@ fn (p mut Parser&) elem() ast.Expr&p ? Fail {
     return ast.Expr.Row(p.from(at), gather(p.exprs, from))
 }
 
-# "(" [arg {"," arg} [","]] ")" - an arg may be "default" (E14a)
+# "(" [arg {"," arg} [","]] ")" - an arg may be "default" (E14a), or "name = value" naming a defaulted parameter
+# (E14b)
 fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
     try p.want(token.Tok.LParen)
     wasNoGt := p.noGt
@@ -2802,6 +2803,22 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
         if p.sees(token.Tok.Default) {
             at := p.advance()
             p.exprs.Push(ast.Expr.Default(p.from(at)))
+        } else if p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Assign {
+            at := p.tk().Start
+            n := try p.name() catch {
+                p.exprs.Truncate(from)
+                p.brackets--
+                p.skip = wasSkip
+                error Fail.SYNTAX
+            }
+            p.advance()
+            x := try p.expr() catch {
+                p.exprs.Truncate(from)
+                p.brackets--
+                p.skip = wasSkip
+                error Fail.SYNTAX
+            }
+            p.exprs.Push(ast.Expr.Named(p.from(at), n, x))
         } else {
             x := try p.expr() catch {
                 p.exprs.Truncate(from)

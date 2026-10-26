@@ -91,7 +91,9 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
         }
     }
     lead := "extern fn " if c.P.FnIsExtern(f) else "fn "
-    inside := text[3:]     # past "fn("
+    # D8a: each defaulted parameter with its default as the declaration writes it
+    close := firstClose(text)
+    inside := $withDefaults(c, text[3:close], decl.S.Params, c.P.FnModule(f), 1 if decl.Recv is not null else 0) $text[close:]
     if decl.Recv is null { return $lead $name "(" $inside }
     end := firstItemEnd(inside)
     recv := inside[:end]
@@ -135,6 +137,30 @@ fn sigOf(c mut typecheck.Checker&, sig types.TypeId, body I64) String {
     errs := c.ErrorsOf(body)
     full := c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), errs, c.P.T.ScopesOf(sig), c.P.T.NamesIdOf(sig))
     return $c.Ty(full) "   # its error set inferred"
+}
+
+# a parameter list as the checker spells it (its parentheses left off), each defaulted parameter followed by " = " and
+# its default as module mi's source writes it (D8a); skip items come first that are no declared parameter (a receiver)
+fn withDefaults(c mut typecheck.Checker&, list String&, params Array<ast.Param&>&, mi I64, skip I64) String {
+    if params.Len() == 0 or mi < 0 { return $list }
+    src := c.P.L.Mods[mi].Src!.Text
+    b := StringBuilder()
+    rest := list
+    k I64 = 0
+    for rest.Len() > 0 {
+        end := firstItemEnd(rest)
+        b.Push(rest[:end])
+        j := k - skip
+        if j >= 0 and j < params.Len() and params[j].Dflt is not null {
+            dsp := params[j].Dflt!.Span()
+            b.Push($" = " $src[I64(dsp.Start):I64(dsp.End)])
+        }
+        k++
+        if end >= rest.Len() { break }
+        b.Push(rest[end:end + 1])
+        rest = rest[end + 1:]
+    }
+    return b.ToString()
 }
 
 # where the first item of a list spelled from inside its "(" ends: at a comma or the ")" outside every bracket
@@ -286,7 +312,8 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
         case types.DeclKind.Struct {
             sig := c.Ty(named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
-            b.Push($"type " $name " struct" $sig[2:close + 1] $errorsAfter(sig[close + 1:]) "\n")
+            ps := withDefaults(c, sig[3:close], ctorParams(c.P.TypeDecl(d)!), c.P.DeclModule(d), 0)
+            b.Push($"type " $name " struct(" $ps ")" $errorsAfter(sig[close + 1:]) "\n")
             match c.P.TypeDecl(d)!.Body {
                 case ast.TypeBody.Struct(sb) {
                     if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }

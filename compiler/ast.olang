@@ -102,6 +102,7 @@ type Expr enum {
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
     Default(sp source.Span)                            # "default" as an argument (E14a)
+    Named(sp source.Span, name source.NameId, x Expr&)   # "name = x" as an argument, a defaulted parameter by name (E14b)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -359,6 +360,7 @@ fn (e Expr&) Span() source.Span {
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
         case Expr.Default(sp) => sp
+        case Expr.Named(sp, _, _) => sp
     }
 }
 
@@ -460,7 +462,7 @@ fn yieldInExprs(xs Array<Expr&>&) source.Span {
 fn yieldInExpr(x Expr?&) source.Span {
     if x is null { return NoYield }
     return match x {
-        case Expr.Paren(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _) => yieldInExpr(y)
+        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _) => yieldInExpr(y)
         case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _) => yieldInExpr(y)
         case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _) => yieldOr(yieldInExpr(a), yieldInExpr(b))
         case Expr.Cond(_, a, k, b) => yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))

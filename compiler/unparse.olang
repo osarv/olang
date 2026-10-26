@@ -977,6 +977,11 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.exprs(args)
         }
         case ast.Expr.Default(_) { w.put("default") }
+        case ast.Expr.Named(_, n, y) {
+            w.name(n)
+            w.put(" = ")
+            w.expr(y)
+        }
     }
 }
 

@@ -393,8 +393,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (fn() I64) ? E`. Parentheses group nothing else: `(I64)` or a wrapped type that needs none is an error. `$` and
   every diagnostic spell types this way (the checker had written error sets with ` + `). `tools/results_migrate.olang`
   migrates, re-runnable (oann).
-- **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot; named arguments rejected
-  (parameter names stay internal). A default is built per call in its declaration's context.
+- **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot. A default is built per
+  call in its declaration's context.
+- **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
+  every argument by position, in any order, each once (`connect(h, retries = 5)`); naming a required parameter, a name
+  given twice or also by position, an unknown name (the nearest defaulted one suggested) and a name through a function
+  value are errors. Functions, methods, constructors, generics, an `any`'s trait methods. Decided (mine): evaluated in
+  the order written - reordered arguments but literals held in hidden locals (`inWrittenOrder`); a defaulted
+  parameter's name is part of the API, a required one's stays the declaration's; `olang explain`/`doc` show defaults.
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`, nullable, identity by both words (T21).

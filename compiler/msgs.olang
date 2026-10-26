@@ -369,6 +369,14 @@ type Diag enum {
     CtorGenericInferredField
     CtorVarOfGeneric
     DefaultArgNoDefault
+    NamedArgUnknown
+    NamedArgUnknownMeant
+    NamedArgRequired
+    NamedArgTwice
+    NamedArgAlsoPositional
+    PositionalAfterNamed
+    NamedArgThroughValue
+    NamedArgNotHere
     AtomicNotPlace
     AtomicNotWritable
     VacateNotPlace
@@ -1866,6 +1874,30 @@ fn CtorVarOfGeneric(text1 String&, text2 String&, text3 String&) Msg { return Ms
 
 # ERR_DEFAULT_ARG_NO_DEFAULT
 fn DefaultArgNoDefault(text String&) Msg { return Msg(Diag.DefaultArgNoDefault, "E14a", "parameter " $text " declares no default, so 'default' cannot stand in for it") }
+
+# ERR_NAMED_ARG_UNKNOWN
+fn NamedArgUnknown(tok String&, text String&) Msg { return Msg(Diag.NamedArgUnknown, "E14b", $tok " names no parameter of " $text) }
+
+# ERR_NAMED_ARG_UNKNOWN_MEANT
+fn NamedArgUnknownMeant(tok String&, text String&, best String&) Msg { return Msg(Diag.NamedArgUnknownMeant, "E14b", $tok " names no parameter of " $text " - did you mean '" $best "'?") }
+
+# ERR_NAMED_ARG_REQUIRED
+fn NamedArgRequired(tok String&) Msg { return Msg(Diag.NamedArgRequired, "E14b", "parameter " $tok " declares no default, so it is given by position, not by name") }
+
+# ERR_NAMED_ARG_TWICE
+fn NamedArgTwice(tok String&) Msg { return Msg(Diag.NamedArgTwice, "E14b", "parameter " $tok " is named twice") }
+
+# ERR_NAMED_ARG_ALSO_POSITIONAL
+fn NamedArgAlsoPositional(tok String&) Msg { return Msg(Diag.NamedArgAlsoPositional, "E14b", "parameter " $tok " is given by position already") }
+
+# ERR_POSITIONAL_AFTER_NAMED
+fn PositionalAfterNamed() Msg { return Msg(Diag.PositionalAfterNamed, "E14b", "an argument by position comes before every argument by name") }
+
+# ERR_NAMED_ARG_THROUGH_VALUE
+fn NamedArgThroughValue() Msg { return Msg(Diag.NamedArgThroughValue, "E14b", "a call through a function value takes its arguments by position - a function type names no parameters") }
+
+# ERR_NAMED_ARG_NOT_HERE
+fn NamedArgNotHere() Msg { return Msg(Diag.NamedArgNotHere, "E14b", "an argument by name gives a function's, a method's or a constructor's defaulted parameter, in a call") }
 
 # ERR_ATOMIC_NOT_PLACE
 fn AtomicNotPlace() Msg { return Msg(Diag.AtomicNotPlace, "P9", "an atomic operation acts on a place - a variable, a field or an element") }

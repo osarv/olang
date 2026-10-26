@@ -1,0 +1,4 @@
+# check: fail error[E16]: I64 cannot be indexed
+# E16a: a slice of a number is an error where it is written (it gave no error, and the build stopped at a gap)
+Live mut I64 = 0
+fn main() { x := $Live[:1] }

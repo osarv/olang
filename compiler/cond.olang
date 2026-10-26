@@ -409,7 +409,7 @@ fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
     if c is null { return false }
     return match c {
         case ast.Expr.Name(_, n) => e.isLocal(n)
-        case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
         case ast.Expr.Binary(_, _, a, b) => e.mentionsLocal(a) or e.mentionsLocal(b)
         case ast.Expr.Call(_, f, args) => e.mentionsLocal(f) or e.anyLocal(args)
         case ast.Expr.Index(_, x, items) => e.mentionsLocal(x) or e.anyLocal(items)

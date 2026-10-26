@@ -25564,3 +25564,36 @@ t20valuenotheld. The assertloc scenario raises a held null, built and interprete
 while compiling, and at run time on an input it cannot see (`Live`). The computations are fields, a `Vec`, a
 `Map<LoadErr, I64>`, a lambda capture, an array literal of errors with null, a `match` with `case null`, comparisons
 across sets, and re-raising narrowed values. They pass built, under `-debug -sanitize` and interpreted.
+
+## Arguments by name (E14b, D8a, E16, QBG, 2026-10-26)
+
+The user asked for named arguments on 2026-10-26 (QBG). They had been rejected in 2026-09, for two reasons: every
+parameter name of an exported function would become part of its API, and `default` in a slot already reached a later
+parameter. The answer now keeps that concern narrow. Only a **defaulted** parameter is named; a required one is given
+by position, and naming it is an error. So a call's required arguments always read the same way, and only the names
+of optional parameters - the knobs (Gemm's `alpha`, a constructor's flags) - are part of a function's promise. The
+names go after every positional argument, in any order, each once. A name also given by position, a name given twice,
+or an unknown name (the nearest defaulted name is suggested) are errors. So is any name in a call through a function
+value, since a function type carries no parameter names, and a name anywhere else (a conversion, a case).
+
+**How (mine).** `ast.Expr.Named` is parsed in an argument list, where a name followed by `=` cannot be anything else:
+an assignment is no argument, and `==` is its own token. The checker puts the arguments in parameter order where the
+callee is known: functions and methods in `invoke`, constructors in `construct`/`twinCall`/`inferredCtor`, a trait's
+methods in `anyCall`. A gap becomes `default`, the trailing gaps are left off, and E14a's machinery then fills them
+exactly as before. Generic inference, which reads arguments by position, needed nothing. Any `Named` that reaches
+`callBody` or an expression unplaced is an error.
+
+**Evaluation order (decided, mine): as written.** Python, C# and Kotlin evaluate named arguments where they are
+written; Swift forbids reordering. Where names reorder the arguments, each one but a literal is held in a hidden local,
+in the order written, and the call reads those (`inWrittenOrder`, run once the arguments are typed and fitted).
+Arguments already in order cost nothing. The evaluator and `interpret` see the held locals as any `Seq`, so they agree
+by construction. tests/namedargs.olang decides it while compiling (an assert on a builder the arguments write) and
+checks it at run time.
+
+**Shown where a declaration is shown.** `olang explain` and `olang doc` printed parameters without their defaults, so
+a reader could not see which parameters could be named. They now print ` = <default as written>` after each defaulted
+parameter, for functions, methods and constructors (`explain.withDefaults`).
+
+**Found on the way, fixed.** A slice of a number (`$Live[:1]`, `(x * 2)[:1]`) gave no error, and the build then
+stopped at a lowering gap ("it does not lower an unknown type"). It is E16's "cannot be indexed" now, with a check
+case.
