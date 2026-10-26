@@ -1414,7 +1414,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 cee1f07ce5c823a4 9cd868f93b377def checks/cases/zeroeffect.olang
 421c2c81179ecd47 34c5e858c74150fe checks/cases/zerofails.olang
 cac538143f451671 cda792d8be3df98a checks/cases/zeroshared.olang
-1992a095bad65624 8cf6cecf7a8cece1 checks/checks.olang
+5c4c0ab0632aac99 38074cdffef32deb checks/checks.olang
 065c0b56cd69d56d 75eaa027a77b1e8a checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
