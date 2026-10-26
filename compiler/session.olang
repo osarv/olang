@@ -55,6 +55,8 @@ fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, over
     f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names&cfg = source.Names()
     l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    l.Clang = $cfg.Clang
+    for x in cfg.CFlags() { l.CFlags.Push($x) }
     for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
     t0 := time.Now()
     l.Load(root)
@@ -693,6 +695,9 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             w.leaf(b, $"test " $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
         }
         case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }
+        case ast.Decl.ExternBlock(_, _, xs) {
+            for x in xs { w.decl(b, x, nm) }
+        }
         case _ { }
     }
 }

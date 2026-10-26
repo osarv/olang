@@ -13,6 +13,8 @@
 
 extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
 extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+extern fn __olang_dyncall_var(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8, fixed I64) U64
+extern fn __olang_dyncall_var_check(name Array<U8>, kinds Array<U8>, ret U8, fixed I64) I32
 
 # why a call could not be made: no function by its name in what the process has loaded (nor in the C math library),
 # or a kind nothing can pass - a 16-bit float alone, an array as the result, a code that names no kind
@@ -80,7 +82,7 @@ fn Has(name String&) Bool {
 # NOT_FOUND when there is no such function, UNSUPPORTED for a kind nothing can pass, and BAD_ARGUMENTS for kinds
 # holding a 0 or words holding less than the kinds describe; the prototype the kinds describe is the
 # program's word, as an extern declaration's is (X1a): a wrong one is undefined behaviour
-fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0) U64 ? Error {
+fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0, fixed I64 = -1) U64 ? Error {
     need I64 = 0
     for k in kinds {
         if k == 0 { error Error.BAD_ARGUMENTS }
@@ -97,12 +99,13 @@ fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0) U6
     ended := Array<U8>(kinds.Len() + 1)
     for i, k in kinds { ended[i] = k }
     named := $name "\0"
-    match __olang_dyncall_check(named, ended, result) {
+    if fixed > kinds.Len() { error Error.BAD_ARGUMENTS }
+    match __olang_dyncall_var_check(named, ended, result, fixed) {
         case 1 { error Error.NOT_FOUND }
         case 2 { error Error.UNSUPPORTED }
         nomatch { }
     }
-    return __olang_dyncall(named, ended, words, result)
+    return __olang_dyncall_var(named, ended, words, result, fixed)
 }
 
 # the bytes of "bytes" written into words from word "at" on, eight to a word from the lowest - an array argument's

@@ -15,6 +15,7 @@
 ; in its own process (comptime.c).
 declare ptr @dlopen(ptr, i32)
 declare i32 @ffi_prep_cif(ptr, i32, i32, ptr, ptr)
+declare i32 @ffi_prep_cif_var(ptr, i32, i32, i32, ptr, ptr)
 declare void @ffi_call(ptr, ptr, ptr, ptr)
 @ffi_type_void = external global i8
 @ffi_type_uint8 = external global i8
@@ -103,8 +104,9 @@ done:
 
 ; 0 when "name" can be called with these n kinds and that result - its call interface prepared in %cif, the
 ; argument types in %types, the function in %fnslot - 1 when there is no such function, 2 when a kind is one
-; that cannot be passed
-define i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot) {
+; that cannot be passed. %fixed is how many of the arguments are C's named ones where the function takes variable ones
+; after them (X21), -1 where it takes none
+define i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot, i64 %fixed) {
 entry:
   %void = icmp eq i8 %ret, 0
   %isarr = icmp uge i8 %ret, -128
@@ -136,7 +138,17 @@ find:
 prep:
   store ptr %fn, ptr %fnslot
   %n32 = trunc i64 %n to i32
-  %st = call i32 @ffi_prep_cif(ptr %cif, i32 @@FFI_DEFAULT_ABI@@, i32 %n32, ptr %rt, ptr %types)
+  %var = icmp sge i64 %fixed, 0
+  br i1 %var, label %prepvar, label %prepfixed
+prepvar:
+  %f32 = trunc i64 %fixed to i32
+  %stv = call i32 @ffi_prep_cif_var(ptr %cif, i32 @@FFI_DEFAULT_ABI@@, i32 %f32, i32 %n32, ptr %rt, ptr %types)
+  br label %prepped
+prepfixed:
+  %stf = call i32 @ffi_prep_cif(ptr %cif, i32 @@FFI_DEFAULT_ABI@@, i32 %n32, ptr %rt, ptr %types)
+  br label %prepped
+prepped:
+  %st = phi i32 [ %stv, %prepvar ], [ %stf, %prepfixed ]
   %ok = icmp eq i32 %st, 0
   %r = select i1 %ok, i32 0, i32 2
   ret i32 %r
@@ -150,6 +162,13 @@ cannot:
 ; kind is one that cannot be passed
 define i32 @__olang_dyncall_check(ptr %name, ptr %kinds, i8 %ret) {
 entry:
+  %r = call i32 @__olang_dyncall_var_check(ptr %name, ptr %kinds, i8 %ret, i64 -1)
+  ret i32 %r
+}
+
+; as __olang_dyncall_check, for a function taking variable arguments after its first %fixed (X21)
+define i32 @__olang_dyncall_var_check(ptr %name, ptr %kinds, i8 %ret, i64 %fixed) {
+entry:
   %cif = alloca [64 x i8], align 16
   %fnslot = alloca ptr
   %n = call i64 @__olang_dyncall_count(ptr %kinds)
@@ -157,7 +176,7 @@ entry:
   %bytes = mul i64 %n1, 8
   %types = call ptr @malloc(i64 %bytes)
   call void @__olang_alloc_check(ptr %types)
-  %r = call i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot)
+  %r = call i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot, i64 %fixed)
   call void @free(ptr %types)
   ret i32 %r
 }
@@ -166,6 +185,13 @@ entry:
 ; the result's bits returned, an integer's extended as its type extends. A call that cannot be made - the
 ; caller asks __olang_dyncall_check first - stops the program as a failed check does
 define i64 @__olang_dyncall(ptr %name, ptr %kinds, ptr %words, i8 %ret) {
+entry:
+  %r = call i64 @__olang_dyncall_var(ptr %name, ptr %kinds, ptr %words, i8 %ret, i64 -1)
+  ret i64 %r
+}
+
+; as __olang_dyncall, for a function taking variable arguments after its first %fixed (X21): each already promoted
+define i64 @__olang_dyncall_var(ptr %name, ptr %kinds, ptr %words, i8 %ret, i64 %fixed) {
 entry:
   %cif = alloca [64 x i8], align 16
   %fnslot = alloca ptr
@@ -180,7 +206,7 @@ entry:
   call void @__olang_alloc_check(ptr %values)
   %ptrs = call ptr @malloc(i64 %bytes)
   call void @__olang_alloc_check(ptr %ptrs)
-  %ready = call i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot)
+  %ready = call i32 @__olang_dyncall_ready(ptr %name, ptr %kinds, i64 %n, i8 %ret, ptr %cif, ptr %types, ptr %fnslot, i64 %fixed)
   %ok = icmp eq i32 %ready, 0
   br i1 %ok, label %loop, label %refused
 refused:

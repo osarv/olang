@@ -240,6 +240,11 @@ fn (t String&) ToLower() String {
 # a C string - "char *", NUL-terminated - as C gives one (X10): held by reference, read only through StringFromC
 extern type CStr
 
+# what a C pointer of no type of olang's points to - "void *", and any other a C import gives no form of its own (X18):
+# held by reference, never read. A "CVoid?&" parameter takes an array, a plain struct's reference, an extern type's or
+# null (X22)
+extern type CVoid
+
 extern fn strnlen(s CStr&, max I64) I64
 extern fn memcpy(dst Array<U8>, src CStr&, n I64) CStr?&
 

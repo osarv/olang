@@ -153,6 +153,20 @@ fn (c Config&) modeSuffix() String {
     return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "")
 }
 
+# what a C import is translated and its C compiled with (X18, X20): the target's triple and C library for another
+# machine, its CPU (which macros say), and _GNU_SOURCE - glibc's whole interface, as most Linux C programs declare it
+fn (c Config&) CFlags() Vec<String&> {
+    out Vec<String&>
+    if c.Target.Foreign {
+        out.Push($"--target=" $c.Target.Triple)
+        root := target.Sysroot()
+        if root != "" { out.Push($"--sysroot=" $root) }
+    }
+    if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
+    out.Push("-D_GNU_SOURCE")
+    return out
+}
+
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
 # target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, -O2 under -quick (B2g), else
 # -O3 with full LTO

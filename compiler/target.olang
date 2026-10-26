@@ -95,6 +95,12 @@ fn FindClang() String {
 # the clangs looked for on PATH, newest first: the LLVM versions olang's IR is written for (B12d)
 Clangs := String&["clang-20", "clang-19", "clang-18", "clang"]
 
+# the file a command's name runs, for another module: whereIs
+fn WhereIs(name String&) String { return whereIs(name) }
+
+# this process's id
+fn Pid() I32 { return getpid() }
+
 # whether name - a path, or a name looked up on PATH - is a program this process may run
 fn executable(name String&) Bool { return whereIs(name) != "" }
 

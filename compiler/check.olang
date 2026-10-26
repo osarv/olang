@@ -1239,6 +1239,7 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.traitContracts(mi, td)
             }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
+            case ast.Decl.ExternBlock(_, _, xs) { c.decls(mi, xs) }
             case ast.Decl.Errors(esp, name, words, members) {
                 c.push(-1, mi, types.VoidT, types.ListId(0))
                 c.errorDeclRules(mi, esp, name, words, members)
@@ -5621,6 +5622,68 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&c, want types
     if c.isRef(want) { return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(c.P.T.Referent(want), types.Writable)) }
     b := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(want, types.Writable))
     return c.read(sp, typed.Place.Deref(sp, want, b))
+}
+
+# X22: what a C pointer parameter takes beside its own type - "CVoid?&" (C's "void *") an array of any elements or a
+# reference to one, a plain struct (borrowed) or a reference to one, or an extern type's reference; an array parameter
+# of bytes a C string ("CStr&"); a plain struct's reference an array of them (C's pointer to its first). A "mut" one
+# takes only what may be written. The argument as it is, or null where the rule says nothing (fit then judges it)
+fn (c mut Checker&) cPointerArg(target typed.Callee&, x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr?&c {
+    isExtern := match target {
+        case typed.Callee.Extern(_) => true
+        case _ => false
+    }
+    if not isExtern { return null }
+    have := typeOf(x)
+    if have == types.UnknownT or have == types.NullT { return null }
+    hv := c.deref(have)
+    hu := c.under(hv)
+    if c.cVoidRef(want) {
+        if c.foreignRef(have) { return x }
+        if c.P.T.KindOf(hu) == types.Kind.Array or c.plainStruct(hv, 0) { return c.cBorrow(x, want, sp) }
+        return null
+    }
+    wu := c.under(c.deref(want))
+    if c.P.T.KindOf(wu) == types.Kind.Array and c.isCStrRef(have) {
+        e := c.P.T.Elem(wu)
+        if e == c.P.T.Prim("U8") or e == c.P.T.Prim("I8") { return x }
+        return null
+    }
+    if c.isRef(want) and c.plainStruct(c.deref(want), 0) and c.P.T.KindOf(hu) == types.Kind.Array and c.P.T.Same(c.P.T.Elem(hu), c.deref(want)) {
+        return c.cBorrow(x, want, sp)
+    }
+    return null
+}
+
+# an argument C is handed a pointer to: a reference as it is - writable where the parameter is - a place borrowed, a
+# value an array is (its storage)
+fn (c mut Checker&) cBorrow(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
+    have := typeOf(x)
+    if c.isRef(have) {
+        if c.writable(want) and not c.writable(have) { c.err(sp, msgs.CPointerReadOnly(c.ty(have))) }
+        return x
+    }
+    p := readPlace(x)
+    if p is null {
+        if c.P.T.KindOf(c.under(have)) == types.Kind.Array { return x }   # an array made here: its storage
+        c.err(sp, msgs.CPointerTemporary(c.ty(have)))
+        return x
+    }
+    if c.writable(want) { c.mustWrite(p, sp, false) }
+    return typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable if c.writable(want) else 0), p)
+}
+
+# whether t is a reference to the prelude's CVoid (X18)
+fn (c mut Checker&) cVoidRef(t types.TypeId) Bool { return c.preludeForeign(t, "CVoid") }
+
+# whether t is a reference to the prelude's CStr (X15)
+fn (c mut Checker&) isCStrRef(t types.TypeId) Bool { return c.preludeForeign(t, "CStr") }
+
+fn (c mut Checker&) preludeForeign(t types.TypeId, name String&) Bool {
+    if not c.foreignRef(t) { return false }
+    x := c.P.T.Referent(t)
+    d := c.P.T.DeclOf(x)
+    return c.text(c.P.T.DeclName(d)) == name and c.P.L.Mods[c.P.T.DeclModule(d)].Prelude
 }
 
 # a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
@@ -10089,12 +10152,19 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.exprs.Truncate(from)
         return c.unknown(sp)
     }
-    if n > wanted {
+    variadic := f >= 0 and c.P.FnIsExtern(f) and c.P.FnDecl(f).S.Variadic
+    if n > wanted and not (variadic and pre.Len() == 0) {
         c.err(sp, msgs.ArgCount(wanted, "" if wanted == 1 else "s", n))
         c.exprs.Truncate(from)
         return c.unknown(sp)
     }
     for i in range n {
+        if k >= ps.Len() {
+            # X21: a variable argument, as C's default promotions make it
+            c.exprs.Push(c.varArg(args[i]))
+            k++
+            continue
+        }
         e typed.Expr?&c = null
         asp := sp
         if args.Len() > 0 and i < args.Len() { asp = args[i].Span() }
@@ -10121,7 +10191,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     e = c.unknown(asp)
                 } else {
                     if c.writable(ps[k]) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
-                    ex := c.externArray(target, e!, ps[k], c.argSpan(args[i]))
+                    ex := c.cPointerArg(target, e!, ps[k], c.argSpan(args[i]))
+                    if ex is null { ex = c.externArray(target, e!, ps[k], c.argSpan(args[i])) }
                     wasNull := c.nullDecl
                     c.nullDecl = c.paramAt(target, f, k)
                     e = ex if ex is not null else c.fit(e!, ps[k], c.argSpan(args[i]))
@@ -10181,6 +10252,34 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
+}
+
+# X21: a variable argument of a variadic extern - a literal at C's type for it (an integer an I32 where it fits, else an
+# I64 or a U64; a float an F64), any other value at its own type promoted as C promotes it: an integer narrower than
+# I32 an I32, a float narrower than F64 an F64; a reference or an array crosses as its address, as for a parameter (X3)
+fn (c mut Checker&) varArg(x ast.Expr&) typed.Expr&c {
+    v := c.fold(x)
+    if v.Ok {
+        want := c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big else c.P.T.Prim("I32") if v.I >= -2147483648 and v.I <= 2147483647 else c.i64()
+        return c.expr(x, want)
+    }
+    e := c.expr(x, types.UnknownT)
+    t := typeOf(e)
+    if t == types.UnknownT { return e }
+    r := c.P.T.Repr(t)
+    k := c.P.T.KindOf(r)
+    if c.P.T.IsInt(r) and k != types.Kind.Int {
+        if c.P.T.Bits(r) < 32 { return c.convert(x.Span(), e, c.P.T.Prim("I32")) }
+        return c.convert(x.Span(), e, r) if r != t else e
+    }
+    if c.P.T.IsFloat(r) {
+        if k != types.Kind.F64 { return c.convert(x.Span(), e, c.P.T.Prim("F64")) }
+        return c.convert(x.Span(), e, r) if r != t else e
+    }
+    x2 := c.P.T.Referent(r) if c.isRef(r) else r
+    if c.isRef(r) or c.P.T.KindOf(c.P.T.Repr(x2)) == types.Kind.Array { return e }
+    c.err(c.argSpan(x), msgs.VarArgType(c.ty(t)))
+    return c.unknown(x.Span())
 }
 
 # where an argument that does not fit is said (stage 0's token for it): an "as" at its keyword, a conversion to a
@@ -10870,7 +10969,8 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
     }
     # M6a: a member is public by its own first letter - another module's private one is said, its type carried on
     # (of a private type itself, M6 said where the type is named)
-    if not c.text(n)[0].IsUpper() and c.P.T.DeclModule(c.P.T.DeclOf(t)) != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(t)))[0].IsUpper() {
+    dm := c.P.T.DeclModule(c.P.T.DeclOf(t))
+    if not c.text(n)[0].IsUpper() and dm != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(t)))[0].IsUpper() and not c.P.L.Mods[dm].C {
         c.err(nsp, msgs.MemberIsPrivate(c.text(n), c.ty(t)))
     }
     return typed.Place.Field(sp, fs[i], base, i)

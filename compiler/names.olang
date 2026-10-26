@@ -237,6 +237,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
             case ast.Decl.Global(_, v) {
                 for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
             }
+            case ast.Decl.ExternBlock(_, _, ds) { r.collect(mi, ds) }
             nomatch { }
         }
     }
@@ -267,7 +268,16 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.Global(_, v) {
                 for n in v.Names { t.waiting.Put(n, true) }
             }
-            case ast.Decl.Import(_, alias, path) {
+            case ast.Decl.ExternBlock(_, _, ds) {
+                for x in ds {
+                    match x {
+                        case ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
+                        case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
+                        nomatch { }
+                    }
+                }
+            }
+            case ast.Decl.Import(_, alias, path, _) {
                 name := alias
                 if name == source.NameId(0) {
                     spec := scan.LiteralText(r.L.Mods[mi].Src!.Text[path.Start:path.End])
@@ -541,6 +551,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 r.startItem(mi)
                 for m in members { r.path(m) }
             }
+            case ast.Decl.ExternBlock(_, _, ds) { r.bodies(mi, ds) }
             nomatch { }
         }
     }
@@ -1175,7 +1186,7 @@ fn distance(a String&, b String&) I64 {
 # whether an import of the module exports a type of that name
 fn (r mut Resolver&) importedType(n source.NameId) Bool {
     for imp in r.L.Mods[r.mi].Imports {
-        if imp.Target >= 0 and n in r.Tables[imp.Target].types and r.text(n)[0].IsUpper() { return true }
+        if imp.Target >= 0 and n in r.Tables[imp.Target].types and (r.text(n)[0].IsUpper() or r.L.Mods[imp.Target].C) { return true }
     }
     return false
 }
@@ -1376,7 +1387,7 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
 # M6: a name another module declares, reached through an alias, is visible only where it is public - its first letter
 # a capital; one that is not is said where it is written (and resolved still, so nothing else is said of it)
 fn (r mut Resolver&) notPrivate(t I64, ref Ref, n source.NameId, sp source.Span) {
-    if t == r.mi or ref.Kind == What.None or ref.Kind == What.Import or load.Public(r.text(n)) { return }
+    if t == r.mi or ref.Kind == What.None or ref.Kind == What.Import or load.Public(r.text(n)) or r.L.Mods[t].C { return }
     m := msgs.TypeIsPrivate(r.tok(n)) if ref.Kind == What.Type else msgs.VarIsPrivate(r.tok(n))
     r.L.Diags.Error(r.at(r.mi, sp), m)
 }

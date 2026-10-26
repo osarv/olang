@@ -777,6 +777,8 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
     nm mut source.Names&cfg = source.Names()
     l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    l.Clang = $cfg.Clang
+    for x in cfg.CFlags() { l.CFlags.Push($x) }
     l.Load(root)
     p.Loaded = l.Mods.Len()
     if d.Errors() > 0 { error build.Failed.REPORTED }
