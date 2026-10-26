@@ -48,10 +48,10 @@ fn main() ? {
     c := Mat(64, 784)
     for i in range a.Data.Len() { a.Data[i] = 1.0 }
     for i in range b.Data.Len() { b.Data[i] = 0.5 }
-    for i in range 300 { product(c, a, b) }
+    for _ in range 300 { product(c, a, b) }
     pb := Array<F32>(b.Rows * b.Cols)
     pa := Array<F32>(a.Rows * a.Cols)
-    for i in range 300 { productInto(c, a, b, pb, pa) }
+    for _ in range 300 { productInto(c, a, b, pb, pa) }
     assert c.Data[0] == 600.0 * 64.0 and c.Data[63 * 784 + 783] == c.Data[0]
     kb := peakKb()
     assert kb > 0 and kb < 30000

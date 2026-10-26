@@ -346,7 +346,7 @@ type StepByIter<I, T ? E> struct(of I, n I64) {
 
 fn (s mut StepByIter<I, T ? E>&) Next() T ? E, Exhausted {
     if s.started {
-        for k in range s.step - 1 { try s.it.Next() }
+        for _ in range s.step - 1 { try s.it.Next() }
     }
     s.started = true
     return try s.it.Next()

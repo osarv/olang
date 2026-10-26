@@ -14,7 +14,7 @@ fn main() ? {
         for x in range n {
             cr F64 = 2.0 * F64(x) / F64(n) - 1.5
             zr, zi, tr, ti F64
-            for k in range 50 {
+            for _ in range 50 {
                 if tr + ti > 4.0 { break }
                 zi = 2.0 * zr * zi + ci
                 zr = tr - ti + cr

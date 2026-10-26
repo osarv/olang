@@ -946,7 +946,6 @@ fn derefOf(x typed.Expr&) typed.Expr?&x {
 
 # an array value's elements copied into storage of its own (T7b), made in scope at
 fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
-    t := ln.T
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
     buf := ln.temp(ty, sp)
@@ -1204,7 +1203,7 @@ fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr?&) {
 fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
     errs := ln.joinErrors(j.Code)
     tc mut tryCtx&ln = tryCtx(ln.levels.Len(), j.Clauses, false)
-    for c in j.Clauses { tc.entries.Push(mir.NoBlock) }
+    for _ in j.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.openBlock(j.Code, mir.ScopeKind.Join, errs)
     ln.joins.Push(tc)
     ln.joinS.Push(ln.top().S)
@@ -1636,7 +1635,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     relK := ln.tryRel
     ln.tryRel = -1
     tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
-    for c in t.Clauses { tc.entries.Push(mir.NoBlock) }
+    for _ in t.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.tries.Push(tc)
     v := ln.val(t.X)
     try ln.tries.Pop() catch { }
@@ -1696,7 +1695,6 @@ fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
 }
 
 fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {
-    t := ln.T
     ty := x.Type()
     if ty == types.UnknownT {
         ln.gap(x.Span(), "an unknown type (a check error or gap): an expression")
@@ -1750,7 +1748,7 @@ fn (ln mut lowering&) fitAt(x typed.Expr&, ty types.TypeId, sp source.Span, at m
 fn (ln mut lowering&) widens(x typed.Expr&, ty types.TypeId) Bool {
     return match x {
         case typed.Expr.Prim(_, pt, op, _, args) => ln.widening(op, args, pt)
-        case typed.Expr.Away(_, _, y) => false
+        case typed.Expr.Away(_, _, _) => false
         case _ => false
     }
 }
@@ -1783,7 +1781,6 @@ fn (ln mut lowering&) fits(x typed.Expr?&, to types.TypeId) Bool {
 # declaration, the store or the return copies from where it keeps it (T7b) - never the program's, where a loop's
 # conversions grew it every turn
 fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
-    t := ln.T
     src := ln.local(v, from, sp)
     n := mir.Operand.Const(mir.I64T, ln.fixedLen(ln.arrayOf(from)))
     buf := ln.temp(to, sp)
@@ -2411,7 +2408,6 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
     cc := ln.collects[ln.collects.Len() - 1]
     v := ln.val(x)
     if ln.dead { return }
-    t := ln.T
     n := mir.Operand.Copy(mir.L(cc.N))
     if cc.Exact {
         at := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref, mir.Proj.Index(cc.N)] if cc.ByRef else mir.Proj[mir.Proj.Index(cc.N)])
@@ -2537,7 +2533,6 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
 # T32a: an "any" made of a reference to its instance and its table - an array's copy put in the box the conversion
 # made where the "any" lands, its elements copied there with it (T7b): the box is a one-part tuple holding the array
 fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp source.Span) mir.Operand {
-    t := ln.T
     match args[0] {
         case typed.Expr.Promote(_, bt, pr) {
             match pr.X {
@@ -3595,7 +3590,7 @@ fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Spa
 fn (ln mut lowering&) isChar(ty types.TypeId) Bool {
     t := ln.T
     x := ty
-    for k in range 16 {
+    for _ in range 16 {
         if t.Same(x, ln.L.char()) { return true }
         if not (t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Over and t.HasBody(x)) {
             return false

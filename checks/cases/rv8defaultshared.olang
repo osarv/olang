@@ -17,7 +17,7 @@ fn one(a Node&) I64 { return pickd(a).v + boxd(a).v + listd(a) }
 fn deep(b Node&, k I64) I64 {
     s I64 = 0
     if k > 0 {
-        for i in range k { s += pickd(b).v + boxd(b).v }
+        for _ in range k { s += pickd(b).v + boxd(b).v }
     }
     return s
 }

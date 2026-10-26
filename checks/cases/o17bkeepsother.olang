@@ -8,7 +8,7 @@ fn (h mut H&) me() mut H&h { return h }
 fn main() ? {
     m := Map<I64, H>()
     m.Put(1, H())
-    for i in range 3 {
+    for _ in range 3 {
         c := try m.Get(1)
         r := c.me()
         r.s.x++

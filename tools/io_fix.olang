@@ -199,7 +199,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
 
 # builds path again and again, fixing what the compiler says, until nothing is left to fix
 fn fixFile(olang String&, path String&, alias String&) {
-    for attempt in range 40 {
+    for _ in range 40 {
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("io_fix: cannot read " $path)
             os.Exit(1)
@@ -211,7 +211,7 @@ fn fixFile(olang String&, path String&, alias String&) {
         if outcome != 1 {
             if outcome == 0 {
                 for row in errs {
-                    p, line, col, code, msg := try parseDiag(row) catch { continue }
+                    p, line, _, code, msg := try parseDiag(row) catch { continue }
                     if srcmask.AbsPath(p) != srcmask.AbsPath(path) { continue }
                     if code != "R9" and code != "R13" and code != "E15" {
                         srcmask.Say("OTHER " $path " " $line " " $code " " $srcmask.Prefix(msg, 70))

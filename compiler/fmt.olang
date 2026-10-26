@@ -377,7 +377,7 @@ fn (f mut formatter&) track(j I64) {
     k := f.kind(j)
     pops := f.closes[j]
     if isCloser(k) { pops = 1 }
-    for c in range pops {
+    for _ in range pops {
         n := f.stKind.Len()
         if n > 0 {
             f.stKind.Truncate(n - 1)
@@ -395,7 +395,7 @@ fn (f mut formatter&) track(j I64) {
     } else if k == token.Tok.LParen or k == token.Tok.LBrack {
         f.push(1, f.curIndent + 1, f.curIndent)
     } else {
-        for c in range f.argOpen[j] { f.push(1, f.curIndent + 1, f.curIndent) }
+        for _ in range f.argOpen[j] { f.push(1, f.curIndent + 1, f.curIndent) }
     }
 }
 
@@ -587,14 +587,14 @@ fn (f formatter&) write() String {
             if f.lKind[l] == 0 {
                 code := codes[f.lCodeS[l]:f.lCodeE[l]]
                 if code.Len() > 0 or f.lComS[l] >= 0 {
-                    for s in range f.lIndent[l] { out.Push("    ") }
+                    for _ in range f.lIndent[l] { out.Push("    ") }
                 }
                 out.Push(code)
                 if f.lComS[l] >= 0 {
                     if code.Len() > 0 {
                         w := f.lIndent[l] * 4 + code.Len()
                         pad := col - w + 1 if col > 0 else 1
-                        for s in range pad { out.PushChar(' ') }
+                        for _ in range pad { out.PushChar(' ') }
                     }
                     out.Push(f.text[f.lComS[l]:f.lComE[l]])
                 }

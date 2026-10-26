@@ -7,7 +7,7 @@ fn makeTable() Array<U32> {
     t := Array<U32>(256)
     for i in range 256 {
         c := U32(i)
-        for j in range 8 { c = (c >> 1) ^ 0xEDB88320 if (c & 1) == 1 else c >> 1 }
+        for _ in range 8 { c = (c >> 1) ^ 0xEDB88320 if (c & 1) == 1 else c >> 1 }
         t[i] = c
     }
     return t

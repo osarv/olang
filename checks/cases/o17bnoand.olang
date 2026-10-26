@@ -9,7 +9,7 @@ fn (h mut Box&) stash() {
     h.c.kept = h
 }
 fn run(m mut Map<I64, Box>&) ? {
-    for i in range 3 {
+    for _ in range 3 {
         b := try m.Get(1)
         b.stash()
     }

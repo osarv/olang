@@ -15,7 +15,6 @@
 # with the one it fills in, as a row.
 
 import "std/os"
-import "std/io"
 import "toolkit"
 
 fn main() {

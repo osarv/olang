@@ -397,7 +397,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
     for k in order { try chan.Send(queue, k) catch chan.Error { unreachable } }
     workers := width if width < n else n
     join {
-        for w in range workers { spawn runner(queue, cmds, status, said) }
+        for _ in range workers { spawn runner(queue, cmds, status, said) }
         chan.Close(queue)
     }
     return status, said
@@ -485,7 +485,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
 # the process that claimed it), or the one that was has gone - claiming it in j if so
 fn claim(path String&, j mut compiles&) Bool {
     lock := $path ".lock"
-    for tries in range 2 {
+    for _ in range 2 {
         made := true
         try os.MkDir(lock) catch os.Error.EXISTS { made = false } catch os.Error { return true }
         if made {

@@ -10,7 +10,7 @@ fn id<T>(x T) T { return x }
 fn main() ? {
     outer Node& = Node(1)
     keep Holder = Holder(outer)
-    for i in range 2 {
+    for _ in range 2 {
         inner Node& = Node(42)
         h2 := Holder(inner)
         keep = id(h2)

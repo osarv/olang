@@ -1027,7 +1027,7 @@ type printer struct(T mut types.Table&) {
 }
 
 fn (w mut printer&) line(depth I64, text String&) {
-    for k in range depth { w.out.Push("  ") }
+    for _ in range depth { w.out.Push("  ") }
     w.out.Push(text)
     w.out.PushChar('\n')
 }
@@ -1107,7 +1107,7 @@ fn (w mut printer&) expr(x Expr?&) String {
         case Expr.Seq(_, _, s) => "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"
         case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch!.Code!.Stmts.Len() ")"
         case Expr.Try(_, _, t) => "(try " $w.expr(t.X) " " $t.Clauses.Len() " clauses)"
-        case Expr.Fn(_, _, f) => "(fn " $ty ")"
+        case Expr.Fn(_, _, _) => "(fn " $ty ")"
         case Expr.Text(_, _, t) => "(text " $t.Pieces.Len() " site " $t.Site ")"
         case Expr.Away(_, file, y) => "(away " $file " " $w.expr(y) ")"
     }

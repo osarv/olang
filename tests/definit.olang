@@ -252,7 +252,7 @@ test "Array<T>(n) filled by the loop after it (D14d)" {
 }
 
 test "a counted fill whose counter is assigned keeps its clear (D14d)" {
-    for k in range 3 {
+    for _ in range 3 {
         { assert diDirty(100000) == 77 }
         { assert diMoved(100000) == 1 }
     }

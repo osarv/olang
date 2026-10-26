@@ -505,6 +505,7 @@ fn (c mut Checker&) CheckProgram() {
         c.settleUnset()
         c.settleHeldWalks()
         c.settleIdle()
+        c.settleUnread()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
@@ -1747,7 +1748,7 @@ fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
 fn (c mut Checker&) holdsSelf(d types.DeclId, b types.TypeId) Bool {
     e := c.deref(c.P.T.Elem(b))
     seen := Vec<types.DeclId>()
-    for k in range 16 {
+    for _ in range 16 {
         if not c.isNamed(e) or c.declKind(e) != types.DeclKind.Over { return false }
         ed := c.P.T.DeclOf(e)
         if ed == d {
@@ -2990,7 +2991,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     if gen and not dropped {
         c.cur().Root = c.genRoot(fd, sig, c.P.GenElem(f))
         c.pop()
-        for k2 in range pushed { c.P.L.Diags.PopContext() }
+        for _ in range pushed { c.P.L.Diags.PopContext() }
         c.P.L.Diags.ContextBase(base)
         return
     }
@@ -3003,7 +3004,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
-    for k2 in range pushed { c.P.L.Diags.PopContext() }
+    for _ in range pushed { c.P.L.Diags.PopContext() }
     c.P.L.Diags.ContextBase(base)
 }
 
@@ -3012,7 +3013,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
 fn (c mut Checker&) instContexts(inst I64) I64 {
     chain Vec<pair.Pair<generic.Origin, I64>>
     cur := inst
-    for depth in range 32 {
+    for _ in range 32 {
         if c.P.T.Items(c.P.InstanceArgs(cur)).Len() == 0 { break }
         o := c.P.InstanceOrigin(cur)
         if o.File < 0 { break }
@@ -3225,7 +3226,7 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
                 c.fieldTypes(t)
-                for k in range pushed { c.P.L.Diags.PopContext() }
+                for _ in range pushed { c.P.L.Diags.PopContext() }
                 if s.DtorSp.End > 0 {
                     c.pop()
                     c.dtorBody(t, mi)
@@ -3878,7 +3879,7 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?&c {
             if fd.S.Contract is null { return null }
             return ctSource(fd.S.Contract!, fd.Recv, fd.S.Params, c.P.FnModule(f), $c.text(fd.Name))
         }
-        case typed.BodyOf.Ctor(t, twin) {
+        case typed.BodyOf.Ctor(t, _) {
             d := c.P.T.DeclOf(t)
             td := c.P.TypeDecl(d)
             if td is null or td.Body is null { return null }
@@ -4145,7 +4146,7 @@ fn (c mut Checker&) scopeVarOf(sig types.TypeId, vars Array<I64>&, sr ctSource, 
             return -1
         }
         # a parameter sharing an earlier one's scope ("&x", O4b) names that one's
-        for i in range 64 {
+        for _ in range 64 {
             sh := c.P.T.ShareOf(sig, want)
             if sh < 0 { break }
             want = sh
@@ -4230,7 +4231,6 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
         fr.Fallible++
         from := c.exprs.Len()
         c.exprs.Push(v)
-        hsp := info.ReqSps[i]
         c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))))
         c.cur().RaiseAt.Push(sp.Start)
         c.cur().RaiseWhat.Push($info.Name ": " $info.ReqTexts[i])
@@ -5199,7 +5199,7 @@ fn (c mut Checker&) isOver(t types.TypeId) Bool {
 # what a type is past declared types over others (T29): itself where it is none
 fn (c mut Checker&) under(t types.TypeId) types.TypeId {
     r := t
-    for k in range 32 {
+    for _ in range 32 {
         if not c.isOver(r) { return r }
         r = c.P.T.Base(r)
     }
@@ -6225,7 +6225,7 @@ fn (c mut Checker&) tyOf(x typed.Expr&) String {
     match x {
         case typed.Expr.Data(_, dt, _, k) {
             match k {
-                case typed.Const.Bytes(b) {
+                case typed.Const.Bytes(_) {
                     if c.isRef(dt) and c.P.T.Referent(dt) == c.textType() { return "String" }
                 }
                 case _ { }
@@ -8275,7 +8275,7 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Place&c, lo ast.Expr?&, hi a
     # E16a: a slice carries its base's permission - of a value array, the place's own (an immutable global's is
     # read-only, S6, T25c; so is one reached through a read-only reference), of a reference, the reference's
     perm := types.Writable if c.slicedWritable(b) else types.ReadOnly
-    for k in range 4 {
+    for _ in range 4 {
         if not c.isRef(t) { break }
         c.nullRead(base)
         perm = c.P.T.PermOf(t) & types.Writable
@@ -8344,7 +8344,6 @@ fn (c mut Checker&) slicedWritable(p typed.Place&) Bool {
 # T7c, E16a: a slice's length where it is known while compiling - both bounds constants (an absent lo 0, an absent hi
 # the base's known length), or hi written lo + k with k a constant - else 0, a length known only at run time
 fn (c mut Checker&) sliceLength(at types.TypeId, lo ast.Expr?&, hi ast.Expr?&) types.TypeId {
-    ctx := c.fr().Ctx
     lv I64 = 0
     lok := lo is null
     if lo is not null {
@@ -8611,7 +8610,7 @@ fn (c mut Checker&) holdsWritableAt(t types.TypeId, depth I64) Bool {
 # whether what a reference names holds writable references it shares with a copy: an array's elements, any other
 # value as itself
 fn (c mut Checker&) namedHolds(t types.TypeId) Bool {
-    for k in range 8 {
+    for _ in range 8 {
         if c.P.T.KindOf(t) != types.Kind.Array { break }
         t = c.P.T.Elem(t)
     }
@@ -8924,7 +8923,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
 # writable argument, and the function values with such a parameter, said
 fn (c mut Checker&) roSettle() {
     c.roSettleDeep()
-    for round in range c.roDeps.Len() + 1 {
+    for _ in range c.roDeps.Len() + 1 {
         changed := false
         for d in c.roDeps {
             if c.roNeeds.Has(d.Second) and not c.roNeeds.Has(d.First) {
@@ -11877,7 +11876,7 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
 fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n source.NameId) typed.Place?&c {
     base := p
     t := p.Type()
-    for k in range 4 {
+    for _ in range 4 {
         if not c.isRef(t) { break }
         c.nullRead(base)
         base = typed.Place.Deref(sp, c.P.T.Referent(t), c.read(sp, base))
@@ -12499,7 +12498,7 @@ fn (c mut Checker&) reflOf(sp source.Span, nsp source.Span, dt types.TypeId, arg
     if p is null { return null }
     base := p
     t := base.Type()
-    for k in range 4 {
+    for _ in range 4 {
         if not c.isRef(t) { break }
         c.nullRead(base)
         base = typed.Place.Deref(sp, c.P.T.Referent(t), c.read(sp, base))
@@ -13110,7 +13109,7 @@ fn (c mut Checker&) indexPlace(sp source.Span, x ast.Expr&, items Array<ast.Expr
 fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.Expr&>&, chk typed.Check = typed.Check.None) typed.Place?&c {
     base := b
     t := base.Type()
-    for k in range 4 {
+    for _ in range 4 {
         if not c.isRef(t) { break }
         c.nullRead(base)
         base = typed.Place.Deref(sp, c.P.T.Referent(t), c.read(sp, base))
@@ -13546,7 +13545,7 @@ fn (c mut Checker&) taskDefault(x ast.Expr&, t types.TypeId) typed.Expr&c {
 fn (c mut Checker&) existingIn(x typed.Expr?&) source.Span {
     if x is null { return source.Span(-1, -1) }
     match x {
-        case typed.Expr.Read(sp, ty, p, _) {
+        case typed.Expr.Read(sp, ty, _, _) {
             if c.isRef(ty) or c.P.T.HoldsRefs(ty) { return sp }
         }
         case typed.Expr.Borrow(sp, _, _) { return sp }
@@ -14683,7 +14682,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Yield(sp, x) { c.yieldStmt(sp, x) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
-        case ast.Stmt.Assert(sp, k, msg) if c.fr().Contract != 0 { c.ctCond(sp, k) }
+        case ast.Stmt.Assert(sp, k, _) if c.fr().Contract != 0 { c.ctCond(sp, k) }
         case ast.Stmt.Assert(sp, k, msg) {
             # G35, S18c: one reading a reflected member is decided for this instance
             rd := c.reflDecide(k)
@@ -15724,7 +15723,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     # the place: each level's indices held, the outermost's first, left to right
     held mut Vec<Array<I64>&>&c = Vec<Array<I64>&>()
-    for k in range nl { held.Push(Array<I64>(0)) }
+    for _ in range nl { held.Push(Array<I64>(0)) }
     for kk in range nl {
         l := nl - 1 - kk
         args := calls[l]
@@ -15804,7 +15803,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     # each element read by At into a local, the outermost first, the next read out of it
     temps Array<I64> = Array<I64>(nl, -1)
     bases mut Vec<typed.Place?&>&c = Vec<typed.Place?&>()
-    for k in range nl { bases.Push(null) }
+    for _ in range nl { bases.Push(null) }
     for kk in range nl {
         l := nl - 1 - kk
         base := c.atRecs[recs[l]].Base
@@ -18651,7 +18650,7 @@ fn (c mut Checker&) typeCaseOf(tr ast.TypeRef&) typeCase {
     # a generic type or trait named bare takes every instance: its arguments variables of the case's own
     if pt == types.UnknownT {
         match tr {
-            case ast.TypeRef.Named(nsp, path, args) {
+            case ast.TypeRef.Named(nsp, _, args) {
                 ref := c.P.R.Use(c.fr().File, nsp.Start)
                 if args.Len() == 0 and ref.Kind == names.What.Type and ref.Index >= 0 {
                     d := c.P.DeclFor(ref.Module, ref.Index)
@@ -18792,10 +18791,10 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     covered mut Vec<Bool>&c = Vec<Bool>()
     et := c.deref(st)
     if c.isEnum(et) {
-        for k in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
+        for _ in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
     } else if c.P.T.KindOf(et) == types.Kind.Any and c.P.IsClosedTrait(c.P.T.AnyTrait(et)) {
         # T34: a closed trait's "any" covered by a type case for each type the trait lists
-        for k in range c.P.Members(c.P.T.AnyTrait(et)).Len() { covered.Push(false) }
+        for _ in range c.P.Members(c.P.T.AnyTrait(et)).Len() { covered.Push(false) }
     }
     all := false
     allSaid := false
@@ -19262,7 +19261,7 @@ fn patTail(r Array<ast.Pattern&>&, subs Array<ast.Pattern&>&r, n I64) Array<ast.
     if subs.Len() > 0 {
         for q in subs { row.Push(q) }
     } else {
-        for i in range n { row.Push(ast.Pattern.Wild(r[0].Span())) }
+        for _ in range n { row.Push(ast.Pattern.Wild(r[0].Span())) }
     }
     for i in range 1, r.Len() { row.Push(r[i]) }
     return row.ToArray()
@@ -19495,7 +19494,7 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
             }
             return tst
         }
-        case ast.Pattern.Value(sp, x) { return c.exprPattern(x, place, t, binds, arm, true) }
+        case ast.Pattern.Value(_, x) { return c.exprPattern(x, place, t, binds, arm, true) }
     }
 }
 
@@ -20015,6 +20014,32 @@ fn pathOf(x ast.Expr&) Array<source.NameId>&x {
             return out
         }
         case _ { return Array<source.NameId>(0) }
+    }
+}
+
+# ---- locals never read (D3b) ----
+
+# D3b, once an attempt has checked every body: each local names found declared and never read is an error - unless its
+# type has a destructor (its scope's close is what it is held for) or its declaration did not check (said already), in
+# any instance of its body; one in no checked body (a branch evaluation left out, a generic never instantiated) is not
+# judged
+fn (c mut Checker&) settleUnread() {
+    if c.P.R.Unreads.Len() == 0 { return }
+    held Map<pair.Pair<I64, I64>, Bool>   # (file, where the name is written) -> it is to be said
+    for b in c.Bodies {
+        if b.Root is null { continue }
+        for l in b.Locals {
+            if l.Kind != typed.LocalKind.Var or l.Name == source.NameId(0) { continue }
+            k := pair.Pair(b.File, (I64(l.Sp.Start) << 32) | I64(l.Sp.End))
+            say := l.Ty != types.UnknownT and not c.destructs(l.Ty)
+            if held.Has(k) and not (try held.Get(k) catch default true) { continue }
+            held.Put(k, say)
+        }
+    }
+    for u in c.P.R.Unreads {
+        k := pair.Pair(u.File, (I64(u.Sp.Start) << 32) | I64(u.Sp.End))
+        if not (try held.Get(k) catch default false) { continue }
+        c.P.L.Diags.Error(diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End)), msgs.LocalUnused(c.tok(u.Name)))
     }
 }
 
@@ -20600,7 +20625,7 @@ fn (c mut Checker&) traitMethod(sl generic.AnySlot) ast.Func?&c {
 # the owner of the contract a dispatch's trait method has (D17f), -1 for none - made once a trait and slot
 fn (c mut Checker&) slotContract(target typed.Callee&) I64 {
     match target {
-        case typed.Callee.Dispatch(r, slot, sig) {
+        case typed.Callee.Dispatch(r, slot, _) {
             k := slot % c.P.AnySlots(r).Len()
             key := c.P.SlotKey(r, k)
             have := try c.P.SlotContracts.Get(key) catch default -2

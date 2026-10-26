@@ -16,7 +16,7 @@ fn main() ? {
     outer mut Node& = Node(1)
     c Array<mut Node&>& = Array<mut Node&>(1, outer)
     d Array<mut Node&>& = Node&[outer]
-    for i in range 2 {
+    for _ in range 2 {
         inner mut Node& = Node(43)
         c = Array<mut Node&>(1, inner)
         d = Node&[inner]

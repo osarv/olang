@@ -1301,7 +1301,6 @@ fn (v mut verifier&) builder(b ScopeRef) {
 }
 
 fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
-    t := v.T
     return match rv {
         case Rvalue.Use(x) => v.operandType(x)
         case Rvalue.Ref(p, ty) => v.refType(v.placeType(p), ty)
@@ -1497,7 +1496,6 @@ fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) ty
 fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.TypeId {
     t := v.T
     n := I64(r.N)
-    k := t.KindOf(t.Repr(ty))
     a := v.arrayOf(ty)
     if a != types.UnknownT {
         len := t.Length(a)
@@ -2095,7 +2093,7 @@ type dumper struct(F Fn&, T mut types.Table&) {
 }
 
 fn (w mut dumper&) line(depth I64, text String&) {
-    for k in range depth { w.out.Push("  ") }
+    for _ in range depth { w.out.Push("  ") }
     w.out.Push(text)
     w.out.PushChar('\n')
 }

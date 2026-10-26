@@ -124,7 +124,7 @@ type Retry<T ? E> struct(f fn() T ? E, times I64) {
 }
 
 fn (r Retry<T ? E>&) Run() T ? E {
-    for i in range r.n - 1 {
+    for _ in range r.n - 1 {
         v := try r.run() catch E { continue }
         return v
     }

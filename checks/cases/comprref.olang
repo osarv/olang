@@ -2,5 +2,5 @@
 # E27: an element that is or holds a reference would have to live in the array's scope, which is not done yet
 fn main() ? {
     t := "a b"
-    a := String&[t for c in t]
+    a := String&[t for _ in t]
 }

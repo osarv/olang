@@ -73,6 +73,15 @@ type local struct(Name source.NameId, Sp source.Span, Kind What, Check Bool = fa
     Used
 }
 
+# D3b: a local declared with a value or a type, never read: its file, where its name is written, and the name - the
+# checker says it, knowing the local's type (one whose type has a destructor is used by its scope's close, one whose
+# declaration did not check was said already)
+type Unread struct(File I64, Sp source.Span, Name source.NameId) {
+    File
+    Sp
+    Name
+}
+
 # T4, T7: the names every module sees as a type
 fn BuiltinTypeName(t String&) Bool {
     return t == "Bool" or t == "Array" or t == "I8" or t == "I16" or t == "I32" or t == "I64" or t == "U8" or
@@ -104,6 +113,7 @@ type Resolver struct(L mut load.Loader&) {
     # D3b: the local branches of the item the build left out, whose text only is there; M5a: the aliases a module's code
     # names, and the top-level branches of each module the build left out
     skipped Vec<source.Span>
+    Unreads Vec<Unread>
     aliasUsed Map<I64, Bool>
     skippedTop Vec<pair.Pair<I64, source.Span>>
     pendingTop Map<I64, Bool>
@@ -113,7 +123,7 @@ type Resolver struct(L mut load.Loader&) {
 
 # every module's table, then every body resolved
 fn (r mut Resolver&) Resolve() {
-    for mi in range r.L.Mods.Len() { r.Tables.Push(Table()) }
+    for _ in range r.L.Mods.Len() { r.Tables.Push(Table()) }
     for mi in range r.L.Mods.Len() {
         m := r.L.Mods[mi]
         if not m.Prelude { continue }
@@ -177,7 +187,7 @@ fn identChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
     before := r.L.Mods.Len()
     r.L.Decide(mi, condStart, chosen)
-    for k in range before, r.L.Mods.Len() { r.Tables.Push(Table()) }
+    for _ in range before, r.L.Mods.Len() { r.Tables.Push(Table()) }
     for k in range before, r.L.Mods.Len() { r.tableOf(k) }
     r.aliasesOf(mi)
     m := r.L.Mods[mi]
@@ -510,7 +520,11 @@ fn (r mut Resolver&) judge(i I64) {
     for sp in r.skipped {
         if Mentions(r.L.Mods[r.mi].Src!.Text, sp, name) { return }
     }
-    r.L.Diags.Error(r.at(r.mi, l.Sp), msgs.LocalUnusedBare(r.tok(l.Name)) if l.Bare else msgs.LocalUnused(r.tok(l.Name)))
+    if l.Bare {
+        r.L.Diags.Error(r.at(r.mi, l.Sp), msgs.LocalUnusedBare(r.tok(l.Name)))
+    } else {
+        r.Unreads.Push(Unread(r.L.Mods[r.mi].File, l.Sp, l.Name))
+    }
 }
 
 # D3b: a local declared that must be read - bare where "_" may stand in its place
@@ -724,7 +738,7 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
 fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
     if t is null { return }
     match t {
-        case ast.TypeRef.Named(sp, path, args) {
+        case ast.TypeRef.Named(_, _, args) {
             for i in range args.Len() {
                 a := args[i]
                 match a {
@@ -1173,7 +1187,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.expr(f)
             for a in args { r.expr(a) }
         }
-        case ast.Expr.ScopeCall(sp, f, scope, args) {
+        case ast.Expr.ScopeCall(_, f, scope, args) {
             r.read(r.lookup(scope))   # D3b
             r.expr(f)
             for a in args { r.expr(a) }
@@ -1422,7 +1436,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
                 nomatch { }
             }
         }
-        case ast.TypeRef.Ref(sp, of, scope, _) {
+        case ast.TypeRef.Ref(_, of, scope, _) {
             r.typeRef(of)
             if scope != source.NameId(0) and r.text(scope) != "return" {
                 sref := r.lookup(scope)

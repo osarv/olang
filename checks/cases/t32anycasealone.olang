@@ -10,7 +10,7 @@ fn (s aSlider&) Draw() I64 { return s.at }
 
 fn f(x any aWidget&) I64 {
     match x {
-        case aButton b, aSlider s { return 1 }
+        case aButton _, aSlider _ { return 1 }
     }
 }
 fn main() { }

@@ -190,7 +190,7 @@ fn runSeed(seed I64, dir String&) ? io.Error {
         if k != r { try finding(dir, seed, ci, "global baked while compiling is not the -d run time's value", line) }
     }
     # step 2: the asserts, built -O3; one decided false is a finding, and is left out to see the rest
-    for attempt in range 3 {
+    for _ in range 3 {
         if not try write(dir, seed, expect, has) { return }
         if sh(dir, "timeout 600 nice -n 19 \"$OLANG\" build p.olang > c2.txt 2>&1") == 0 { break }
         c2 := read(dir, "c2.txt")
@@ -312,7 +312,7 @@ fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {
 fn scopeSeed(seed I64, dir String&) ? io.Error {
     keep mut Array<Bool>& = Array<Bool>(Scenarios, true)
     built := false
-    for attempt in range 6 {
+    for _ in range 6 {
         src := scopegen.FreeProgram(U64(seed), Scenarios, keep) if FreeMode else scopegen.Program(U64(seed), Scenarios, keep)
         try os.WriteFile($dir "/p.olang", src) catch {
             try scopeFinding(dir, seed, -1, "cannot write the program", "")

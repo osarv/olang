@@ -222,7 +222,7 @@ fn (v mut Viewer&) Run() {
     # every summary starts empty, the least: a component's bodies are walked until theirs stop growing
     for i in range v.Bodies.Len() {
         v.sums.Push(summary())
-        for p in v.Bodies[i].Params { v.sums[i].Passes.Push(false) }
+        for _ in v.Bodies[i].Params { v.sums[i].Passes.Push(false) }
         v.sums[i].Known = v.walkable(i)
     }
     v.components()
@@ -230,7 +230,7 @@ fn (v mut Viewer&) Run() {
     for k in range v.compFrom.Len() {
         end := v.compFrom[k + 1] if k + 1 < v.compFrom.Len() else v.compNodes.Len()
         cyclic := end - v.compFrom[k] > 1 or v.callsItself(v.compNodes[v.compFrom[k]])
-        for round in range 100 {
+        for _ in range 100 {
             v.changed = false
             for i in range v.compFrom[k], end { v.walk(v.compNodes[i], false) }
             if not v.changed or not cyclic { break }
@@ -284,7 +284,7 @@ fn (v mut Viewer&) walk(b I64, check Bool) {
     v.loops.Clear()
     v.targets.Clear()
     v.paramAt.Clear()
-    for l in body.Locals { v.paramAt.Push(-1) }
+    for _ in body.Locals { v.paramAt.Push(-1) }
     for i in range body.Params.Len() { v.paramAt[I64(body.Params[i])] = i }
     st := state()
     if not check {
@@ -627,7 +627,7 @@ fn (v mut Viewer&) rootLocal(p typed.Place&) I64 {
 # the local or global a place is below
 fn (v mut Viewer&) rootPlace(p typed.Place&) typed.Place?&p {
     q typed.Place?&p = p
-    for depth in range 64 {
+    for _ in range 64 {
         if q is null { return null }
         match q {
             case typed.Place.Field(_, _, b, _) { q = b }
@@ -649,7 +649,7 @@ fn (v mut Viewer&) rootPlace(p typed.Place&) typed.Place?&p {
 
 fn unAway(x typed.Expr&) typed.Expr&x {
     y := x
-    for depth in range 16 {
+    for _ in range 16 {
         match y {
             case typed.Expr.Away(_, _, z) { y = z }
             case _ { return y }
@@ -953,7 +953,7 @@ fn (v mut Viewer&) loop(body typed.Block&, post typed.Block?&, st mut state&) {
     frame := v.loops[v.loops.Len() - 1]
     head := st.copy()
     exits := dead()
-    for round in range 12 {
+    for _ in range 12 {
         frame.Breaks.Clear()
         frame.Conts.Clear()
         s := head.copy()
@@ -1385,7 +1385,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     # what its result holds
     for r in fnRefs { viewAdd(out, r) }
     viewed Vec<Bool>
-    for i in range n { viewed.Push(false) }
+    for _ in range n { viewed.Push(false) }
     if known {
         for f in v.sums[callee].Views {
             if f.Param < 0 or f.Param >= n { continue }

@@ -51,6 +51,6 @@ fn main() ? {
     if args.Len() > 1 { n = try args[1].ParseInt() }
     if args.Len() > 2 { times = try args[2].ParseInt() }
     checksum, maxFlips := fannkuch(n)
-    for t in range times - 1 { checksum, maxFlips = fannkuch(n) }
+    for _ in range times - 1 { checksum, maxFlips = fannkuch(n) }
     try io.Print($checksum "\nPfannkuchen(" $n ") = " $maxFlips "\n")
 }

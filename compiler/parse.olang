@@ -571,7 +571,6 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             if p.sees(token.Tok.LBrace) { return try p.externBlock(at, link) }
             if link.End > I32(0) { try p.fail(token.Tok.LBrace.Describe()) }
             f := try p.externFn(at)
-            sp := p.from(at)
             try p.endStmt()
             return ast.Decl.Extern(f)
         }
@@ -1133,7 +1132,7 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
     for not p.sees(token.Tok.RParen) {
         # X21: "..." last, in an extern's list - the rest of the arguments C's variable ones
         if ok and p.ellipsis() {
-            for k in range 3 { p.advance() }
+            for _ in range 3 { p.advance() }
             p.sawVariadic = true
             break
         }
@@ -3265,7 +3264,7 @@ fn (p Parser&) openerOf(i I64) I64 {
 # rendering's "$" before it makes it a join piece already)
 fn (p Parser&) operandStartBefore(last I64) I64 {
     t := last
-    for guard in range 256 {
+    for _ in range 256 {
         k := p.kindAt(t)
         if k == token.Tok.RParen or k == token.Tok.RBrack {
             t = p.openerOf(t)
@@ -3292,7 +3291,7 @@ fn (p Parser&) operandStartBefore(last I64) I64 {
 fn (p Parser&) operandEndAfter(first I64) I64 {
     t := first
     n := p.ts.Toks.Len()
-    for guard in range 256 {
+    for _ in range 256 {
         k := p.kindAt(t)
         if k == token.Tok.LParen or k == token.Tok.LBrack {
             opener := k
@@ -3345,7 +3344,7 @@ fn (p mut Parser&) joinPieceHint(from I64, to I64) Bool {
 fn (p Parser&) endsRendering(i I64) Bool {
     if not p.isOperandEnd(i) { return false }
     s := i
-    for guard in range 256 {
+    for _ in range 256 {
         k := p.kindAt(s)
         if k == token.Tok.RParen or k == token.Tok.RBrack {
             s = p.openerOf(s)
@@ -3541,9 +3540,9 @@ test "a function whose body does not parse is declared by its signature" {
 test "nesting past the limit is one diagnostic (L21), never a crash" {
     deep := StringBuilder()
     deep.Push("fn f() I64 {\n    return ")
-    for i in range 20001 { deep.PushChar('(') }
+    for _ in range 20001 { deep.PushChar('(') }
     deep.PushChar('1')
-    for i in range 20001 { deep.PushChar(')') }
+    for _ in range 20001 { deep.PushChar(')') }
     deep.Push("\n}\nfn g() {\n}\n")
     # the parser recurses as deep as the program nests: it runs on a stack sized for that, as the compiler does
     os.RunOnStack(1 << 30, fn() {
@@ -3557,11 +3556,11 @@ test "a statement met at the limit is too deep at its first token, and one that 
     atLimit := fn(stmt String&) String {
         b := StringBuilder()
         b.Push("fn f() {\n    x := 1\n")
-        for i in range 19999 { b.Push("    if x > 0 {") }
+        for _ in range 19999 { b.Push("    if x > 0 {") }
         b.Push("\n")
         b.Push(stmt)
         b.Push("\n")
-        for i in range 19999 { b.PushChar('}') }
+        for _ in range 19999 { b.PushChar('}') }
         b.Push("\n}\nfn g() {\n}\n")
         return shapeOf(b.ToString())
     }

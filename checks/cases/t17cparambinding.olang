@@ -16,7 +16,7 @@ fn stash(b Box, l mut Vec<Node&>&) {
 }
 fn main() ? {
     l mut Vec<Node&>& = Vec<Node&>()
-    for i in range 2 {
+    for _ in range 2 {
         inner Node& = Node(42)
         stash(Box.Has(inner), l)
     }

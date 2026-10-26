@@ -17,7 +17,7 @@ fn keep(c mut Conn&, d Db?&) { c.db = d }
 fn main() ? {
     c := Conn(null, 1)
     l := Vec<Db?&>()
-    for i in range 3 {
+    for _ in range 3 {
         d Db?& = null
         keep(c, d)
         l.Push(d)

@@ -113,7 +113,7 @@ test "FlatMap walks the iterator each value gives" {
     assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[:x].Iter() }).ToVec().ToArray() == I64[1, 1, 2, 1, 2, 3]
     words := String&["a b", "", "c"]
     n := 0
-    for w in words.Iter().FlatMap(fn(t String&) ArrayIter<String&> { return t.Split(" ").Iter() }) { n++ }
+    for _ in words.Iter().FlatMap(fn(t String&) ArrayIter<String&> { return t.Split(" ").Iter() }) { n++ }
     assert n == 4
     assert I64[].Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a.Iter() }).ToVec().Len() == 0
 }
@@ -133,7 +133,7 @@ test "the walks fail with what their iterator and callbacks fail with" {
     assert (try I64[1, 4].Iter().SkipWhile(odd).ToVec() catch Bad default Vec<I64>()).Len() == 0
     flat := try upToSeven(5).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec()
     assert flat.Len() == 10
-    failed := try upToSeven(9).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec() catch Bad {
+    try upToSeven(9).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec() catch Bad {
         return
     }
     unreachable

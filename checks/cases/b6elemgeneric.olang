@@ -11,7 +11,7 @@ fn (c Bx<T>&) At(i I64) T {
 }
 fn main() ? {
     cells mut Bx<mut Cell&>& = Bx<mut Cell&>()
-    for i in range 3 { cells.l.Push(Cell()) }
+    for _ in range 3 { cells.l.Push(Cell()) }
     for i in range 3 {
         x String& = "w" $i
         cells[i].s = x

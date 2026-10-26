@@ -44,7 +44,7 @@ fn main() ? {
     g.entries.Push(infos.Info(0, 2))
     g.mem[0] = 0.5
     sum F64 = 0.0
-    for t in range 4000000 {
+    for _ in range 4000000 {
         v := g.view(0)
         w := g.viewOf(0)
         sum += v.Data[v.Off] + F64(w.N)

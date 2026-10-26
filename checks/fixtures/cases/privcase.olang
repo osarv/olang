@@ -2,5 +2,5 @@
 import "lib"
 fn main() ? {
   d := lib.Dir.south
-  b Bool = d == lib.Dir.North
+  assert d == lib.Dir.North
 }

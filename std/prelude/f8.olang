@@ -13,7 +13,7 @@
 # 2 to the power e, exactly
 fn f8Pow2(e I32) F64 {
     r F64 = 1
-    for i in range (e if e > 0 else -e) {
+    for _ in range (e if e > 0 else -e) {
         r = r * 2 if e > 0 else r / 2
     }
     return r

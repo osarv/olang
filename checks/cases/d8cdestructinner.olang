@@ -12,7 +12,7 @@ fn main() ? {
     outer Node& = Node(1)
     keep Node& = outer
     for i in range 2 {
-        a, b := two(i)
+        a, _ := two(i)
         keep = a
     }
 }

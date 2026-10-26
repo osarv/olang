@@ -10,7 +10,7 @@ fn compose(f fn(x I64) I64, g fn(x I64) I64) fn(x I64) I64 {
 fn id(x I64) I64 { return x }
 fn main() ? {
     keep fn(x I64) I64 = id
-    for i in range 2 {
+    for _ in range 2 {
         c mut Counter& = Counter()
         g fn(x I64) I64 = fn(x I64) I64 {
             c.n++

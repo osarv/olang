@@ -5,7 +5,7 @@ import "std/io"
 type Job struct() {
     items Vec<I64>
 }
-fn add(j mut Job&) { for i in range 100 { j.items.Push(9) } }
+fn add(j mut Job&) { for _ in range 100 { j.items.Push(9) } }
 fn report(v Vec<I64>, j mut Job&) I64 {
     head := v.View()
     add(j)

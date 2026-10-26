@@ -2113,7 +2113,6 @@ fn (p mut Program&) genericCall(c Context&, g ast.Expr&, args Array<ast.TypeRef&
     p.declVars(d)
     if args.Len() != p.T.DeclParams(d) { return types.UnknownT }
     vs := Array<types.TypeId>(args.Len())
-    owner := DeclOwner(d)
     for i in range args.Len() { vs[i] = p.Resolve(c, args[i]) }
     return p.held(p.Instance(d, p.T.List(vs)))
 }
@@ -2162,7 +2161,7 @@ fn (p mut Program&) Layout(t types.TypeId) Bool {
 # the bodies a type's representation passes through (T29: a declared type over another) made, so that Repr reaches it
 fn (p mut Program&) reprReady(t types.TypeId) {
     r := t
-    for k in range 64 {
+    for _ in range 64 {
         if p.T.KindOf(r) != types.Kind.Named or not p.Body(r) { return }
         if p.T.DeclKindOf(p.T.DeclOf(r)) != types.DeclKind.Over { return }
         r = p.T.Base(r)
@@ -2332,7 +2331,7 @@ fn (p mut Program&) typeKey(t types.TypeId) I64 {
 fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
-    for k in range 16 {
+    for _ in range 16 {
         key := p.typeKey(x)
         if key < 0 { return -1 }
         m := try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
@@ -2582,7 +2581,7 @@ fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, 
             if byValue and p.T.Length(t) == types.TypeId(0) {
                 b := StringBuilder()
                 b.Push(p.text(n))
-                for k in range depth { b.Push("[0]") }
+                for _ in range depth { b.Push("[0]") }
                 b.Push(".Len()")
                 ns.Push(p.L.Names.Intern(b.ToString()))
                 out.Push(depth)
@@ -3098,7 +3097,7 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
 # G9c: a variable named only in a constraint inferred through it - the bound type's methods matched against the
 # trait's, so I bound to ListIter<I64> binds T in Iterator<T> through its Next. Repeated while it binds anything
 fn (p mut Program&) InferThroughBounds(b mut Binding&) {
-    for round in range b.N {
+    for _ in range b.N {
         any := false
         for i in range b.N {
             row := p.VarAt(b.Owner, i)
@@ -3352,7 +3351,7 @@ fn (p mut Program&) suppliedMeets(t types.TypeId, name String&, want types.TypeI
     if name == "Bits" {
         # E33: a float's bits, as the unsigned type of its width
         x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
-        for k in range 16 {
+        for _ in range 16 {
             if p.T.IsFloat(x) {
                 b := p.T.Bits(x)
                 return p.T.Result(want) == p.T.Prim("U64" if b == 64 else "U32" if b == 32 else "U16")
@@ -3366,7 +3365,7 @@ fn (p mut Program&) suppliedMeets(t types.TypeId, name String&, want types.TypeI
     if name == "Hash" { return p.HasHash(t) }
     if name == "Len" {
         x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
-        for k in range 16 {
+        for _ in range 16 {
             if p.T.KindOf(x) == types.Kind.Array { return true }
             if not p.Extends(x) { return false }
             x = p.T.Base(x)
@@ -3813,7 +3812,7 @@ fn (p mut Program&) ReflUnder(t types.TypeId) types.TypeId {
     # T20: an error type or a named set written by name is reflected as the value of it (its words its cases)
     if p.T.KindOf(t) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Error { return p.ErrValOfType(t) }
     r := t
-    for k in range 64 {
+    for _ in range 64 {
         if p.T.KindOf(r) != types.Kind.Named or not p.Body(r) or p.T.DeclKindOf(p.T.DeclOf(r)) != types.DeclKind.Over { break }
         r = p.T.Base(r)
     }

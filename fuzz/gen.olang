@@ -1069,7 +1069,7 @@ fn (g mut Gen&) block(n I64, d I64, ind String&) String& {
 # statements whose locals stay in scope after them - a function's own top level, before its return
 fn (g mut Gen&) stmts(n I64, d I64, ind String&) String& {
     b := StringBuilder()
-    for i in range n { b.Push(g.stmt(d, ind)) }
+    for _ in range n { b.Push(g.stmt(d, ind)) }
     return b.ToString()
 }
 
@@ -2567,8 +2567,8 @@ fn (g mut Gen&) genCase(ci I64) I32 {
     g.inLambda = false
     g.enter()
     g.decls = ""
-    for i in range g.r(3) { g.decls = $g.decls $g.newStruct() }
-    for i in range g.r(3) { g.decls = $g.decls $g.newEnum() }
+    for _ in range g.r(3) { g.decls = $g.decls $g.newStruct() }
+    for _ in range g.r(3) { g.decls = $g.decls $g.newEnum() }
     np I64 = 1 + g.r(4)
     sig := StringBuilder()
     lits := StringBuilder()

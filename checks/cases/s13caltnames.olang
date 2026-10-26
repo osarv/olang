@@ -6,7 +6,7 @@ type S enum {
 }
 fn f(s S) I32 {
     match s {
-        case S.A(x), S.B(x, y) { return x }
+        case S.A(x), S.B(x, _) { return x }
     }
 }
 fn main() ? { }

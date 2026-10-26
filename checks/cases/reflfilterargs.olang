@@ -2,5 +2,5 @@
 # also: compilation failed with 1 error
 # G33, G37: an argument comprehension's filter is decided while compiling too
 type Point struct(x I64, y I64 = 2) { x, y }
-fn g(k I64) Point { return Point(k for p in Point.Params if k > 0) }
+fn g(k I64) Point { return Point(k for _ in Point.Params if k > 0) }
 fn main() { a := g(1) }

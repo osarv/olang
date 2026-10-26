@@ -1,5 +1,5 @@
 # check: fail error[S9a]: I64 cannot be walked
 type E error { X }
 fn main() ? E {
-    for x in 5 { }
+    for _ in 5 { }
 }

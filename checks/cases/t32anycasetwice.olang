@@ -12,7 +12,7 @@ fn f(x any aWidget&) I64 {
     match x {
         case aButton b { return b.n }
         case aSlider s { return s.at }
-        case aButton c { return 0 }
+        case aButton _ { return 0 }
     }
 }
 fn main() { }

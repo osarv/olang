@@ -84,10 +84,12 @@ fn main() ? {
     try io.Println("7: " $(Made - Gone))
     {
         g := Box(Res(10))
+        assert g.x.k == 10
     }
     try io.Println("8: " $(Made - Gone))
     {
         h := pair.Pair(Res(11), 3)
+        assert h.Second == 3
     }
     try io.Println("9: " $(Made - Gone))
     {
@@ -96,6 +98,7 @@ fn main() ? {
     try io.Println("10: " $(Made - Gone))
     {
         j := takeR(id(Res(15)) if c else Res(16))
+        assert j == 15 or j == 16
     }
     try io.Println("11: " $(Made - Gone))
     {
@@ -114,10 +117,12 @@ fn main() ? {
     try io.Println("14: " $(Made - Gone))
     {
         n := Res&[Res(19), id(Res(20))]
+        assert n.Len() == 2
     }
     try io.Println("15: " $(Made - Gone))
     {
         o := Array<Res&>(3, Res(21))
+        assert o.Len() == 3
     }
     try io.Println("16: " $(Made - Gone))
     {
@@ -151,14 +156,17 @@ fn main() ? {
     try io.Println("22: " $(Made - Gone))
     {
         v := $id(Res(30))
+        assert v.Len() > 0
     }
     try io.Println("23: " $(Made - Gone))
     {
         w := id(Res(31)).k
+        assert w == 31
     }
     try io.Println("24: " $(Made - Gone))
     {
         x := takeR(pair.Pair(Res(32), 1).First)
+        assert x == 32
     }
     try io.Println("25: " $(Made - Gone))
     try io.Println("made " $Made " gone " $Gone " twice " $Twice)

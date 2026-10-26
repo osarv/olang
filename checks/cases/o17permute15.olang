@@ -20,7 +20,7 @@ fn setName(r mut Rec&, s String&) { r.name = s }
 fn f(a mut Array<Rec>&, s String&) {
     t := a[0]
     a[1] = t
-    for i in range 1 { t.name = s }
+    for _ in range 1 { t.name = s }
 }
 fn run(h mut H&) {
     recs := h.arr

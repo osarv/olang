@@ -27,7 +27,7 @@ fn main() ? {
     b := flat(v)
     c := flat2(v)
     d := v.Clone()
-    for i in range 100 { v.Push("y") }
+    for _ in range 100 { v.Push("y") }
     churn()
     assert a[1] == "2b" and b[0] == "a" and c[1] == "2b" and d.Len() == 2 and v.Len() == 102
     w := Vec<I64>()

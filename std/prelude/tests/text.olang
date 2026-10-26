@@ -241,7 +241,7 @@ test "base 0 reads an integer as olang writes its literal (L10)" {
 # is a mutable global, which the evaluator may not read
 fn parsedAll(rounds I64) String {
     b := StringBuilder()
-    for r in range rounds {
+    for _ in range rounds {
         for t in String&["0", "-17", "ff", "0xFF_FF", "0b1_0", "-0x10", "1_000", "18446744073709551615", "zz", "", "0x"] {
             for base in I64[0, 2, 10, 16, 36] {
                 b.Push(intIn(t, base))

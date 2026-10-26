@@ -22,7 +22,7 @@ fn viaArg(b Box&) I64 { return twice(fn() I64 { return b.head.v }) }
 fn main() ? {
     seed := Box()
     t := 0
-    for i in range 3 {
+    for _ in range 3 {
         t = t + viaArg(idBox(seed))
         churn()
     }

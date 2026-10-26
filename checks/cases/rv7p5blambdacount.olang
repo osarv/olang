@@ -12,6 +12,7 @@ fn (b Bag&) Str() String {
         b.c.v++
         return true
     })
+    assert n == 2
     return "b" $b.c.v
 }
 fn main() ? {

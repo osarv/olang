@@ -2,5 +2,5 @@
 import "lib"
 fn main() ? {
   b := lib.Box(1)
-  n := b.inner
+  assert b.inner == 1
 }

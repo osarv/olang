@@ -41,7 +41,7 @@ test "E38: embed gives the file's bytes, baked and decided while compiling, read
 }
 
 test "E38: an embed in a loop or a generic is its one instance's bytes each time" {
-    for k in range 2 {
+    for _ in range 2 {
         c := embed "embedded/word.txt"
         assert c == Word and String(c).Trim() == "olang"
     }

@@ -14,7 +14,10 @@ type Res struct(n mut Node&, k I64) {
 } destruct {
     if n.next is not null { Log = Log * 100 + n.next!.v }
     n.next = Node(k)
-    for j in range 20 { t := Node(j) }
+    for j in range 20 {
+        t := Node(j)
+        assert t.v == j
+    }
 }
 fn f() {
     a mut Node& = Node(0)

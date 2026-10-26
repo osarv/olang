@@ -44,7 +44,7 @@ fn main() ? {
     afterPhase := rssKb()
     s += scratch(1048576)                            # 4MB, beyond the bound by itself
     afterBig := rssKb()
-    for i in range 200 { s += scratch(32768) }      # 128KB each time, within the bound
+    for _ in range 200 { s += scratch(32768) }      # 128KB each time, within the bound
     afterLoop := rssKb()
     out := Array<F32>(4)
     join {

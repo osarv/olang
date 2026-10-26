@@ -5,7 +5,8 @@
 #     for i in range n { work() }    ->  for _ in range n { work() }      (a for-in's name, a case's binding, one of
 #     q, r := divmod(a, b)           ->  _, r := divmod(a, b)              several names declared, never read)
 #     x := 3                         ->  (the line left out)               (a declaration whose value calls nothing)
-#     x := build(a)                  ->  build(a)                          (a declaration whose value is one call)
+#     x := build(a)                  ->  build(a)                          (a declaration whose value is one call -
+#                                                                           left out next round where it does nothing)
 #     import "std/os"                ->  (the line left out)
 #     a.Len()                        ->  (the line left out)
 #
@@ -16,7 +17,10 @@
 # made "_" - its declarations, imports and calls are left as they are, the errors they now add beside it harmless. Running
 # it again changes nothing.
 #
-#     $OLANG build tools/unused_migrate.olang && build/tools_unused_migrate [--olang PATH] [-j N] FILE|DIR...
+# --bare makes names "_" and leaves imports out, and lists every declaration and call for a person - for programs whose
+# locals are what they test (where a value lands, when it is destructed), whose declarations a read keeps.
+#
+#     $OLANG build tools/unused_migrate.olang && build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -31,6 +35,9 @@ IdleMessage String& = "gives a value and does nothing else"
 KindBare String& = "bare"
 KindDrop String& = "drop"
 KindDecl String& = "decl"
+
+# --bare: names made "_" and imports left out, nothing else
+Bare mut Bool = false
 
 # the line with the name at column index at made "_"; "" where no name starts there
 fn bareAt(text String&, at I64) String {
@@ -128,11 +135,17 @@ fn closeOf(t String&, mask String&, start I64) I64 {
 }
 
 # what to do with a declaration never read at column index at of a line: drop the line, keep its value as a statement
-# (the new line), or nothing ("" and false) for a person to decide
+# (the new line), or nothing ("" and false) for a person to decide. A value that is a try is kept as the try statement it
+# then is wherever it stands, one block on its line or several lines; any other only on a line of its own
 fn declEdit(text String&, at I64) String, Bool {
+    v := valueAt(text, at)
+    if v >= 0 {
+        k := v
+        for k < text.Len() and text[k] == ' ' { k++ }
+        if text[k:].StartsWith("try ") { return $text[:at] $text[k:], false }
+    }
     code := codeOf(text)
     if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return "", false }
-    v := valueAt(text, at)
     if v < 0 { return "", true }
     value := $srcmask.Strip(text[v:])
     mask := srcmask.Mask(text, true)
@@ -143,8 +156,6 @@ fn declEdit(text String&, at I64) String, Bool {
         }
     }
     if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return "", true }
-    # a constructor's, a case's or a conversion's value made for nothing is no statement either
-    if oneCall(value) and not value.StartsWith("try ") and value[0].IsUpper() { return "", true }
     if oneCall(value) { return $text[:at] $value, false }
     return "", false
 }
@@ -156,7 +167,10 @@ fn main() ? {
     args := os.Args()
     i I64 = 1
     for i < args.Len() {
-        if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
+        if args[i] == "--bare" {
+            Bare = true
+            i++
+        } else if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
             if args[i] == "--olang" {
                 olang = $args[i + 1]
             } else {
@@ -169,7 +183,7 @@ fn main() ? {
         }
     }
     if paths.Len() == 0 {
-        srcmask.SayErr("usage: build/tools_unused_migrate [--olang PATH] [-j N] FILE|DIR...")
+        srcmask.SayErr("usage: build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE|DIR...")
         os.Exit(2)
     }
     if jobs < 1 { jobs = 1 }
@@ -219,6 +233,40 @@ fn main() ? {
     for l in left { srcmask.Say("by hand: " $l) }
 }
 
+# whether the block a declaration on line idx (its name at column index at) stands in names it again after it - an
+# assignment to it, which leaving the declaration out would leave naming nothing: the lines after it to the first one
+# indented less, comments and literals aside
+fn namedAfter(lines Array<String&>&, idx I64, at I64) Bool {
+    text := lines[idx]
+    e := at
+    for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+    name := text[at:e]
+    indent := 0
+    for indent < text.Len() and text[indent] == ' ' { indent++ }
+    if wordIn(text[e:], name) { return true }
+    for k in range idx + 1, lines.Len() {
+        t := lines[k]
+        if srcmask.Strip(t).Len() == 0 { continue }
+        ind := 0
+        for ind < t.Len() and t[ind] == ' ' { ind++ }
+        if ind < indent { return false }
+        if wordIn(t, name) { return true }
+    }
+    return false
+}
+
+# whether the code of a line names name as a word
+fn wordIn(t String&, name String&) Bool {
+    mask := srcmask.Mask(t, true)
+    for i := 0, i + name.Len() <= t.Len(), i++ {
+        if mask[i] != 'c' or t[i:i + name.Len()] != name { continue }
+        if i > 0 and srcmask.IsWord(t[i - 1]) { continue }
+        if i + name.Len() < t.Len() and srcmask.IsWord(t[i + name.Len()]) { continue }
+        return true
+    }
+    return false
+}
+
 # whether a checks/cases header names a line - LINE:COL: - which leaving a line out would make wrong
 fn namesLines(expect Vec<String&>&) Bool {
     for t in expect {
@@ -265,6 +313,14 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             at := r.Col - 1
             # a program that must fail keeps its declarations, its imports and its calls: what fails may be among them
             if expect.Len() > 0 and r.Kind != KindBare { continue }
+            if Bare and r.Kind != KindBare and not r.Why.Contains(ImportMessage) {
+                if not (r.Why in left) { left.Push($r.Why) }
+                continue
+            }
+            if r.Kind == KindBare and namedAfter(lines, idx, at) {
+                if not (r.Why in left) { left.Push($r.Why) }
+                continue
+            }
             if r.Kind == KindBare {
                 out := bareAt(text, at)
                 if out.Len() == 0 {
@@ -276,6 +332,10 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             } else {
                 drop := r.Kind == KindDrop
                 out := ""
+                if r.Kind == KindDecl and namedAfter(lines, idx, at) {
+                    if not (r.Why in left) { left.Push($r.Why) }
+                    continue
+                }
                 if r.Kind == KindDecl { out, drop = declEdit(text, at) }
                 if drop and (keepLines or not balanced(text) or codeOf(text).Contains("{")) {
                     drop = false
@@ -329,8 +389,18 @@ test "a declaration never read: its line left out, or its one call kept" {
     assert not drop6 and out6 == "    try load(p)!"
     out7, drop7 := declEdit("    if c { k := 1 }", 15)
     assert not drop7 and out7 == ""
-    out8, drop8 := declEdit("    v := Vec<I64>()", 4)
-    assert drop8 and out8 == ""
+    out9, drop9 := declEdit("    for _ in range 3 { x := try it.Next() catch Exhausted { unreachable } }", 23)
+    assert not drop9 and out9 == "    for _ in range 3 { try it.Next() catch Exhausted { unreachable } }"
+    out10, drop10 := declEdit("    failed := try f() catch Bad {", 4)
+    assert not drop10 and out10 == "    try f() catch Bad {"
+    out8, drop8 := declEdit("    r Res& = Res(1)", 4)
+    assert not drop8 and out8 == "    Res(1)"
+}
+
+test "a declaration whose block names it again is left" {
+    lines mut Array<String&>& = "fn f() {\n    ty := 0\n    if c {\n        ty = 1\n    }\n}\nfn g() {\n    ty := 2\n}".Split("\n")
+    assert namedAfter(lines, 1, 4)
+    assert not namedAfter(lines, 7, 4)
 }
 
 test "one call, and not an expression holding one" {

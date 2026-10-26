@@ -10,7 +10,7 @@ fn (c mut Cur&) Set(x mut N&) { c.at = x }
 fn main() ? {
     outer mut N& = N(1)
     keep N& = outer
-    for i in range 2 {
+    for _ in range 2 {
         x mut N& = N(42)
         c := Cur(outer)
         arr Array<mut Cur&> = Cur&[c]

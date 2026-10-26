@@ -18,7 +18,7 @@ fn main() {
         kept.Push(M(3))
         t += m.Data[1] + kept[i].Data[2]
     }
-    for i in range 200 {
+    for _ in range 200 {
         a := Array<F64>(4, 9.0)
         assert a[0] == 9.0
     }

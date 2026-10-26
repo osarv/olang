@@ -57,7 +57,7 @@ fn step(h mut Holder&, i I64) {
     a32 String&h = ""
     a33 String&h = ""
     a34 String&h = ""
-    for k in range 39 {
+    for _ in range 39 {
         a34 = a33
         a33 = a32
         a32 = a31

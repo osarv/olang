@@ -148,13 +148,13 @@ fn (o mut Once&) Done() Bool { return o.s.done.AtomicLoad() == 1 }
 if TestBuild {
 
 fn bump(m mut Mutex<I64>&, n I64) {
-    for i in range n { m.Update(fn(v I64) I64 { return v + 1 }) }
+    for _ in range n { m.Update(fn(v I64) I64 { return v + 1 }) }
 }
 
 test "a Mutex keeps every task's increments" {
     m mut Mutex<I64>& = Mutex(I64(0))
     join {
-        for t in range 4 { spawn bump(m, 2000) }
+        for _ in range 4 { spawn bump(m, 2000) }
     }
     assert m.Get() == 8000
     m.Set(5)
@@ -169,7 +169,7 @@ type counter struct() {
 }
 
 fn countTo(m mut Mutex<counter>&, k I64) {
-    for i in range k {
+    for _ in range k {
         m.With(fn(c mut counter&) {
             c.n++
             if c.n > c.max: c.max = c.n
@@ -180,7 +180,7 @@ fn countTo(m mut Mutex<counter>&, k I64) {
 test "With hands the guarded struct over by reference" {
     m mut Mutex<counter>& = Mutex(counter())
     join {
-        for t in range 3 { spawn countTo(m, 1000) }
+        for _ in range 3 { spawn countTo(m, 1000) }
     }
     seen mut Box& = Box()
     m.With(fn(c mut counter&) { seen.n = c.n })
@@ -209,11 +209,11 @@ type Box struct() {
 }
 
 fn readMany(l mut RWLock<counter>&, seen mut Box&) {
-    for i in range 500 { l.Read(fn(c counter&) { if c.n >= 0: seen.n.AtomicAdd(1) }) }
+    for _ in range 500 { l.Read(fn(c counter&) { if c.n >= 0: seen.n.AtomicAdd(1) }) }
 }
 
 fn writeMany(l mut RWLock<counter>&) {
-    for i in range 500 { l.Write(fn(c mut counter&) { c.n += 2 }) }
+    for _ in range 500 { l.Write(fn(c mut counter&) { c.n += 2 }) }
 }
 
 test "an RWLock lets readers share it and a writer have it alone" {
@@ -239,7 +239,7 @@ test "Once runs its callback once, whoever asks first" {
     count mut Box& = Box()
     assert not o.Done()
     join {
-        for t in range 8 { spawn initOnce(o, count) }
+        for _ in range 8 { spawn initOnce(o, count) }
     }
     assert count.n == 1 and o.Done()
     o.Do(fn() { count.n = 100 })

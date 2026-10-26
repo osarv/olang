@@ -1688,6 +1688,18 @@ so within one a name means one thing everywhere — which is also what lets a co
 scopes are known (S8b), and a case written be told apart from a value (E32). Names another module declares are reached only through an import alias, so they
 never collide with a local.
 
+**D3b (every local is read).** A local declared in a body - by a declaration (`x := e`, `x T = e`, `x T`), one of
+several names declared at once (`q, r := f()`), a `for` loop's or a comprehension's names, or a case's binding (S13b) -
+is read somewhere in its scope: its name written anywhere but as what an assignment, a compound assignment or an
+increment changes (`n = 1`, `n += 1` and `n++` read nothing; `n.f = 1` and `n[i] = 1` read `n`, the place written
+through it). One never read is a compile-time error naming it, saying to leave the declaration out - or, for a name that
+holds a place only (a loop's, a case's, one of several results), to write `_` there: `for _ in range n`, `for _, x in
+xs`, `_, r := divmod(a, b)`, `case Shape.Rect(w, _)`. Not judged: a parameter (a function type or a trait method may
+name what an implementation does not read), a constructor's fields (C2a), a catch clause's name (R11b), a declared
+local whose type has a destructor (C7) - the close of its scope is what it is held for - or whose declaration did not
+check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
+instantiated). A name in the text of a branch the build leaves out (S8b) counts as read.
+
 ### 3.3 Type and error declarations
 
 **D4.** `type-decl ::= "type" IDEN [ type-params ] [ "extends" ] type-expr [ prim-ctor ] [ STMNT_END ]` (`extends`:
@@ -2393,6 +2405,11 @@ in either direction, so a lowercase file can still be given a re-exportable alia
 **M5.** Two imports in the same module may not use the same alias (D2). Two imports in the same
 module may not resolve to the same underlying file either, whether both are written directly or one
 is reached transitively through re-export (§4.5) — see §4.6.
+
+**M5a (every import is used).** An import whose alias nothing in its module reaches through - no name, member, type
+or error written with it, the text of a top-level or local branch the build leaves out (B9, S8b) included - is a
+compile-time error naming it, saying to remove it. An import re-exported (its alias capitalized, M14) is its importers'
+and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged.
 
 ### 4.3 Visibility
 

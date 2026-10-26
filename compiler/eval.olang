@@ -2152,11 +2152,11 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
         case mir.Rvalue.New(s, x, ty) { m.newRef(fi, dst, s, x, ty) }
         case mir.Rvalue.NewArray(s, ty, n, fill) { m.newArray(fi, dst, s, ty, n, fill) }
         case mir.Rvalue.Slice(q, lo, hi, ty) { m.slice(fi, dst, q, lo, hi, ty) }
-        case mir.Rvalue.Closure(code, ty, s, args, _) { m.closure(fi, dst, code, s, args) }
+        case mir.Rvalue.Closure(code, _, s, args, _) { m.closure(fi, dst, code, s, args) }
         case mir.Rvalue.Recode(x, from, to) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
         }
-        case mir.Rvalue.Text(b, into, ty) { m.text(fi, dst, b, into) }
+        case mir.Rvalue.Text(b, into, _) { m.text(fi, dst, b, into) }
         case mir.Rvalue.Region(s) {
             parent := m.buildScope(fi, s)
             if m.halted { return }
@@ -2497,7 +2497,7 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     n := m.nWs - fr.Locals
     if rec.At < 0 {
         rec.At = m.genWords.Len()
-        for i in range n + m.cf[fr.Fn].Scopes.Len() + 1 { m.genWords.Push(0) }
+        for _ in range n + m.cf[fr.Fn].Scopes.Len() + 1 { m.genWords.Push(0) }
     }
     rec.WsN = n
     for i in range n { m.genWords[rec.At + i] = m.ws[fr.Locals + i] }
@@ -2914,7 +2914,6 @@ fn (m mut Machine&) intToFloat(v I64, unsigned Bool, to types.TypeId) I64 {
 fn (m mut Machine&) bitcast(bits I64, from types.TypeId) I64 {
     if m.shape(from) == vFloat and m.When == Mode.Compile {
         w := 8 * m.width(from)
-        man := m.T.Bits(m.T.Repr(from))
         mbits := match m.T.Repr(from) {
             case types.TypeId(11) => 10
             case types.TypeId(12) => 7
@@ -3002,7 +3001,7 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
 # whether a float's value, truncated toward zero, fits an integer of w bits and a signedness (E26) - a NaN never
 fn floatFits(v F64, w I64, signed Bool) Bool {
     lim := 1.0
-    for i in range w - 1 { lim = lim * 2.0 }
+    for _ in range w - 1 { lim = lim * 2.0 }
     if v != v { return false }
     if not signed { return v > -1.0 and v < 2.0 * lim }
     # the least is -lim itself; from 54 bits -lim - 1 is not an F64 apart from -lim, so the test is >= there
@@ -3213,7 +3212,7 @@ fn wideText(lo I64, hi I64, signed Bool) String {
     b.Push($U64(l))
     for i in range parts.Len() {
         d := $U64(parts[parts.Len() - 1 - i])
-        for k in range 18 - d.Len() { b.PushChar('0') }
+        for _ in range 18 - d.Len() { b.PushChar('0') }
         b.Push(d)
     }
     return b.ToString()
@@ -3318,7 +3317,6 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
         nomatch { }
     }
     y := m.arg(fi, args, 1)
-    bt := m.opType(fi, y)
     blo, bhi := m.wideOf(fi, y)
     if m.halted { return }
     lo, hi := I64(0), I64(0)
@@ -3474,7 +3472,7 @@ fn (m mut Machine&) wideToFloat(lo I64, hi I64, signed Bool, to types.TypeId) I6
         if cl != 0 or ch != 0 { l = l | 1 }
     }
     x := m.toF64(m.intToFloat(l, true, to), to)
-    for i in range s { x = x * 2.0 }
+    for _ in range s { x = x * 2.0 }
     if neg { x = -x }
     return m.fromF64(x, to)
 }
@@ -3913,7 +3911,7 @@ fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
 # result stored. The new frame's index, -1 for an extern's call done, -2 stopped
 fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range, ret I64, retArg I64) I64 {
     f := m.fnOfFrame(fi)
-    callee, env, isExtern, ext := m.callee(fi, c)
+    callee, env, isExtern, _ := m.callee(fi, c)
     if m.halted { return -2 }
     vty := m.calleeType(fi, c)
     if isExtern { return -2 }
@@ -4399,8 +4397,8 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
             match c.Target {
                 case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
-                case mir.Callee.Value(x) {
-                    _, env, isExtern, e := m.callee(fi, c.Target)
+                case mir.Callee.Value(_) {
+                    _, _, isExtern, e := m.callee(fi, c.Target)
                     if m.halted { return }
                     if isExtern {
                         m.externCall(fi, c, e, m.calleeType(fi, c.Target))
@@ -4669,7 +4667,7 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
     }
     m.fs[fi].ErrKind = -1
     if m.trace.Len() >= 4 * traceKept {
-        for i in range 4 { try m.trace.RemoveAt(0) catch { } }
+        for _ in range 4 { try m.trace.RemoveAt(0) catch { } }
         m.TraceDropped++
     }
     m.trace.Push(m.cf[k].File)
@@ -4795,12 +4793,8 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
     callee := -1
     env := NullPtr
-    ty := types.UnknownT
     match k.Target {
-        case mir.Callee.Fn(key, t) {
-            callee = try m.fnOf.Get(key) catch default -1
-            ty = t
-        }
+        case mir.Callee.Fn(key, _) { callee = try m.fnOf.Get(key) catch default -1 }
         case mir.Callee.Value(_) {
             vp := Ptr(tk.Buf, total + 8 * nt + 16 * nc + 8 * ns)
             code := m.rdPtr(vp)
@@ -6294,7 +6288,7 @@ test "globals while compiling: an immutable one initialized when first read (K2)
     m.DefineGlobal(7, gd, i64, false, tkey(14))
     assert m.Eval(tkey(13), I64[]) == Stop.Refused(WhyCycle, 0, Sp0)
     # K1a: what keeps a function from ever being evaluated, found before running it
-    why, file, sp := m.Why(tkey(3))
+    why, _, sp := m.Why(tkey(3))
     assert why == WhyWritesGlobalVar and sp == tspan(3), why
     why2, _, _ := m.Why(tkey(1))
     assert why2 == "", why2

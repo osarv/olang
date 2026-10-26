@@ -3,7 +3,7 @@
 # made again by the next turn of a loop, before the join; a function taking the collection does "x[i].Push(v)" itself
 fn main() ? {
     users := Vec<Vec<I64>>()
-    for i in range 4 { users.Push(Vec<I64>()) }
+    for _ in range 4 { users.Push(Vec<I64>()) }
     join {
         for i in range 4 { spawn users[i].Push(i) }
     }

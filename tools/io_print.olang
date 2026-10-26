@@ -17,7 +17,6 @@
 # Python's text-mode newlines ("\r\n" and "\r" become "\n"). Called with no PATH it prints the usage line and exits 2.
 
 import "std/os"
-import "std/io"
 import "srcmask"
 
 # the four print words, and what each becomes in std/io

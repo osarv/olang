@@ -12,7 +12,7 @@ fn h1(it mut list.Iter<I64>&) I64 {
 }
 fn (r Reg&) Str() String {
     it := r.l.Iter()
-    n := h1(it)
+    h1(it)
     return "x"
 }
 fn main() ? {

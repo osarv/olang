@@ -27,7 +27,7 @@ fn c0(x0 I32) I64 {
     x9 Vec<I64> = Vec<I64>()
     x9.Push(1)
     s I64 = 0
-    for x11 in range 2 {
+    for _ in range 2 {
         x12 Vec<I64> = x9
         s += x12.Len()
         s += try x12[0] catch default 5

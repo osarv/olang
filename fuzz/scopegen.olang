@@ -1058,7 +1058,7 @@ fn (g mut SG&) strOp(ind String&) String& {
 # a Str's body: a few statements, some in a block, a loop or deferred code
 fn (g mut SG&) strBody(ind String&, d I64) String& {
     out mut String& = ""
-    for c in range 1 + g.r(2) {
+    for _ in range 1 + g.r(2) {
         if d > 0 and g.chance(35) {
             w := g.r(4)
             body := g.strBody($ind "    ", d - 1)
@@ -1098,7 +1098,7 @@ fn (g mut SG&) textScenario(k I64) String& {
     g.outer = ""
     g.after = ""
     body mut String& = ""
-    for c in range 2 + g.r(4) { body = $body $g.textOp("        ") }
+    for _ in range 2 + g.r(4) { body = $body $g.textOp("        ") }
     return ("fn s" $k "() I64 {\n    bag := Bag()\n    acc I64 = 0\n" $g.outer "    for i in range 3 {\n        t := \"in\" $i\n" $body
             "        churn()\n    }\n    churn()\n" $g.after "    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
 }
@@ -1170,7 +1170,7 @@ fn (g mut SG&) genScenario(k I64) String& {
              "fn nw" $k "(v I64, n I64) Iterator<Node&return> {\n    for i in range n {\n        x mut Node&return = Node(v + i)\n"
              "        x.next = Node(i)\n        yield x\n    }\n}\n")
     body mut String& = ""
-    for c in range 2 + g.r(4) {
+    for _ in range 2 + g.r(4) {
         v := g.val()
         n := g.r(7)
         w := g.r(14)
@@ -1316,7 +1316,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
 # n statements around what t declares (as a), wrapped in blocks d deep at most
 fn (g mut SG&) stmts(t I64, a String&, d I64, ind String&) String& {
     out mut String& = ""
-    for c in range 1 + g.r(3) {
+    for _ in range 1 + g.r(3) {
         if d > 0 and g.chance(45) {
             inner := $ind "    "
             w := g.r(8)
@@ -1582,7 +1582,7 @@ fn (g mut SG&) freeScenario(k I64) String& {
     }
     clean := g.chance(50)
     body mut String& = ""
-    for c in range 3 + g.r(5) { body = $body $g.freeOp(h, "        ", clean) }
+    for _ in range 3 + g.r(5) { body = $body $g.freeOp(h, "        ", clean) }
     turns := 20 + g.r(40)
     return ("# scenario " $k "\n" $head "fn s" $k "() I64 {\n" $decl "    acc I64 = 0\n    for i in range " $turns " {\n" $body
             "        if i % 7 == 0 { acc += churn() }\n    }\n    churn()\n    return acc * 7 + sum" $k "(" $h ")\n}\n")

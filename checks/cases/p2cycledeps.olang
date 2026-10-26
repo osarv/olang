@@ -16,7 +16,7 @@ fn cb(n mut Node&, c I64) {
 fn cc(n mut Node&) { ca(fn(x mut Node&) { }, n, 400) }
 fn main() ? {
     total I64 = 0
-    for r in range 300 {
+    for _ in range 300 {
         a := Node(1)
         b := Node(2)
         c := Node(3)

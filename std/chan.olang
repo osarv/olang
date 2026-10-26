@@ -225,7 +225,7 @@ fn produce(c mut Chan<I32>&, n I32) {
 }
 
 fn consume(c mut Chan<I32>&, n I32, total mut sumBox&) {
-    for i in range n {
+    for _ in range n {
         total.v = total.v + (Recv(c)!)
     }
 }
@@ -251,7 +251,7 @@ test "the ring buffer wraps" {
     c mut Chan<I32>& = Chan<I32>(4)
     Init(c)
     total mut sumBox& = sumBox(0)
-    for round in range 5 {
+    for _ in range 5 {
         produce(c, 4)
         consume(c, 4, total)
     }
@@ -333,7 +333,7 @@ fn sendReadings(c mut Chan<reading>&, n I32) {
 }
 
 fn sumReadings(c mut Chan<reading>&, n I32, total mut sumBox&) {
-    for i in range n {
+    for _ in range n {
         r := Recv(c)!
         total.v = total.v + r.sensor
     }
@@ -431,7 +431,7 @@ test "for v in c receives until the channel is closed and drained" {
 
 # several receivers blocked on an empty channel are all woken by the close, each ending its loop
 fn walkCount(c mut Chan<I32>&, seen mut sumBox&) {
-    for v in c { seen.v.AtomicAdd(1) }
+    for _ in c { seen.v.AtomicAdd(1) }
 }
 
 test "Close wakes every task waiting to receive, and RecvUntil sees it before its deadline" {
@@ -442,7 +442,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     tok := cancel.After(60000)
     start := cancel.NowNs()
     join {
-        for w in range 3 { spawn walkCount(c, seen) }
+        for _ in range 3 { spawn walkCount(c, seen) }
         spawn waitClosed(c, tok, seen, got)
         for i in range I32(10) { try Send(c, i) }
         Close(c)
@@ -453,7 +453,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
 
 fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sumBox&) {
     for {
-        v := try RecvUntil(c, tok) catch Error.CLOSED { break } catch cancel.Stopped { return }
+        try RecvUntil(c, tok) catch Error.CLOSED { break } catch cancel.Stopped { return }
         seen.v.AtomicAdd(1)
     }
     got.v = 1
@@ -466,6 +466,6 @@ test "a channel's capacity is an I64" {
     Init(c)
     for x in items { try Send(c, x) }
     total I64 = 0
-    for i in range items.Len() { total += try Recv(c) catch Error { unreachable } }
+    for _ in range items.Len() { total += try Recv(c) catch Error { unreachable } }
     assert total == 15
 }

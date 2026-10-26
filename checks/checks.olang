@@ -124,7 +124,7 @@ fn runAll() Array<String&>& {
     kept := try os.ReadDir(Store) catch default Array<String&>(0)
     if kept.Len() > StoreMost { os.Run("rm -rf " $os.Quote(Store)) }
     join {
-        for w in range Workers { spawn worker(queue, outcomes, took) }
+        for _ in range Workers { spawn worker(queue, outcomes, took) }
         seed := fresh(Seed)
         try os.WriteFile($seed "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, $store() " \"$OLANG\" build seed.olang > out.txt 2>&1")
@@ -711,7 +711,7 @@ fn objnames(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build syms.olang > out.txt 2>&1 && ./build/syms > out.txt") == 0, "syms", dir)
     try r.expect(outOf(dir) == "1 2\n", "syms output", dir)
     work String& = $dir "/work"
-    for round in range 2 {
+    for _ in range 2 {
         try r.expect(sh(work, "\"$OLANG\" build ../x/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "x", work)
         try r.expect(outOf(work) == "I am X\n", "x output", work)
         try r.expect(sh(work, "\"$OLANG\" build ../y/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "y", work)
@@ -1380,9 +1380,9 @@ fn preludestale(r mut report&) ? Failed {
 fn nested(head String&, open String&, middle String&, close String&, tail String&, n I64) String& {
     b := StringBuilder()
     b.Push(head)
-    for i in range n { b.Push(open) }
+    for _ in range n { b.Push(open) }
     b.Push(middle)
-    for i in range n { b.Push(close) }
+    for _ in range n { b.Push(close) }
     b.Push(tail)
     return b.ToString()
 }

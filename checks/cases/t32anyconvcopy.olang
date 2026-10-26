@@ -24,7 +24,6 @@ fn main() {
     for k in range 200 {
         l := Vec<I64>()
         for j in range 40 { l.Push(k + j) }
-        s := "junk " $k
     }
     for x in xs { io.Println($x)! }
     s := "hello"

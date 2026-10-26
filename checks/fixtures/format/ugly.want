@@ -20,7 +20,7 @@ fn main() ? io.Error {
     f := fn(x I64) I64 { return x + 1 }
     a, b := two()
     try io.Println($f(a) $b $s.Len() $l.Len()) ## a block comment ##
-    for i in range 3 { }
+    for _ in range 3 { }
     if n < 0: return
     for x in xs: io.Println($x)!
 }

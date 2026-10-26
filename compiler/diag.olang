@@ -873,7 +873,7 @@ test "what a branch holds is reported once the branch is chosen, never when it i
     untaken := d.Hold()
     d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "untaken"))
     d.EndHold()
-    undecided := d.Hold()
+    d.Hold()
     d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "undecided"))
     d.EndHold()
     d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "", "plain"))
@@ -912,7 +912,7 @@ test "only the innermost contexts and the outermost are named" {
 test "a long line is shown as a window around the span; tabs line up and control bytes do not reach the terminal" {
     d := Diagnostics(false)
     long := StringBuilder()
-    for i in range 200 { long.PushChar('a') }
+    for _ in range 200 { long.PushChar('a') }
     f := d.AddFile("i.olang", long.ToString())
     d.Error(Where.Span(f, 100, 102), msgs.NoMain())
     out := d.Render()

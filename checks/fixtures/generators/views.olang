@@ -49,6 +49,7 @@ fn labels(t String&, n I64) Iterator<String&return> {
         s String&return = $t "-" $i
         yield s
         junk := $i "junk"
+        assert junk.Len() > 4
     }
     for w in spans(t) { yield w }
 }

@@ -138,7 +138,7 @@ mapRuntime mut I64 = 50 #mutable, so the test runs (a call given a constant woul
 fn mapChurn() I64 {
     t I64 = 0
     keep Array<I64>& = Array<I64>(1, 0)
-    for k in range 200 {
+    for _ in range 200 {
         keep = Array<I64>(64, 777)
         t += keep[3]
     }
@@ -306,8 +306,8 @@ test "Clear empties a map, which fills again from its own slots" {
     for i in range 100 { m.Put(I32(i), I32(i) * 2) }
     m.Clear()
     assert m.Len() == 0 and 5 not in m and (try m.Get(5) catch default -1) == -1
-    for e in m { unreachable }
-    for k in m.Keys() { unreachable }
+    for _ in m { unreachable }
+    for _ in m.Keys() { unreachable }
     for i in range 150 { m.Put(I32(i), I32(i) + 1) }
     assert m.Len() == 150 and (try m.Get(149) catch default -1) == 150 and (try m.Get(0) catch default -1) == 1
     assert m.Remove(10) and not m.Remove(10) and m.Len() == 149

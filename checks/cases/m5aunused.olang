@@ -1,0 +1,7 @@
+# check: fail error[M5a]: nothing here is reached through 'os' - remove 'import "std/os"'
+# M5a: an import nothing in its module reaches through
+import "std/os"
+import "std/io"
+fn main() ? {
+    try io.Println("hi")
+}

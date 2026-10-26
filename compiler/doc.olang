@@ -7,11 +7,8 @@
 # always have. A signature is what `explain FILE NAME` gives (B11b), so the documentation shows each item as the
 # compiler sees it - inferred error sets written out, scope obligations included.
 
-import "std/filepath"
-import "source"
 import "ast"
 import "types"
-import "generic"
 import "names"
 import "scope"
 import "interp"

@@ -91,6 +91,6 @@ fn main() ? {
     bodies := planets()
     offsetMomentum(bodies)
     try io.Print($energy(bodies) "\n")
-    for i in range n { advance(bodies, 0.01) }
+    for _ in range n { advance(bodies, 0.01) }
     try io.Print($energy(bodies) "\n")
 }

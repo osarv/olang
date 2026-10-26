@@ -26,6 +26,6 @@ fn (it mut Interp&) call(d I64) I64 {
 fn main() {
     it := Interp()
     total I64 = 0
-    for i in range N { total += it.call(5) }
+    for _ in range N { total += it.call(5) }
     io.Println($total)!
 }

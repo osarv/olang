@@ -16,7 +16,7 @@ fn (b Box&) Str() String {
 }
 fn work(b Box&, k I64) I64 {
     t I64 = 0
-    for i in range 4 {
+    for _ in range 4 {
         s := $b " " $k " " $b.items
         t += s.Len()
     }

@@ -8,7 +8,7 @@ type Big struct(n I64) {
 }
 fn (b Big&) Str() String {
     sb := StringBuilder()
-    for i in range 100 { sb.Push("0123456789") }
+    for _ in range 100 { sb.Push("0123456789") }
     return sb.ToString()
 }
 fn main() ? {

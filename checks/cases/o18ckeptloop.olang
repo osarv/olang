@@ -28,7 +28,7 @@ fn main() ? {
     lx := Lexer("abcdef")
     toks := Vec<Token>()
     names := Vec<String&>()
-    for k in range 2 {
+    for _ in range 2 {
         tk := lx.next()
         toks.Push(tk)
         t := lx.next().text

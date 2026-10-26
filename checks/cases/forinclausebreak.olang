@@ -10,8 +10,8 @@ fn (t mut It&) Next() I32 ? E, Exhausted {
     error E.X
 }
 fn main() ? {
-    for k in range 3 {
+    for _ in range 3 {
         t mut It& = It()
-        for x in try t { } catch { break }
+        for _ in try t { } catch { break }
     }
 }

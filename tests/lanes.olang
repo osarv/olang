@@ -148,6 +148,7 @@ fn overlap(n I64) String {
     a := Array<I64>(n, 1)
     s := a[1:n]
     s += a[0:n - 1]
+    assert s.Len() == n - 1
     return $a
 }
 

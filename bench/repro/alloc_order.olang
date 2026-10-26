@@ -33,7 +33,7 @@ fn check(n Node&) I64 {
 # many trees, each built, walked once and dropped at the end of its iteration - binary-trees' inner loop
 fn walk(depth I64, times I64, parentFirstOrder Bool) I64 {
     total I64 = 0
-    for i in range times {
+    for _ in range times {
         t := parentFirst(depth) if parentFirstOrder else byArgs(depth)
         total += check(t)
     }

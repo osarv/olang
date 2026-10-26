@@ -478,7 +478,6 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
 
 fn (f mut Free&) bodyModule(b I64) I64 {
     p := f.P
-    t := f.T()
     return match f.Bodies[b].Of {
         case typed.BodyOf.Fn(i) => -3 if p.InstanceArgs(i) != types.ListId(0) else p.FnModule(p.InstanceFn(i))
         case typed.BodyOf.Ctor(ty, twin) => -3 if twin != types.ListId(0) else f.typeModule(ty)
@@ -590,7 +589,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
         for b in range n { order[b] = b }
     }
     mustCallers Vec<Vec<I64>>
-    for b in range n { mustCallers.Push(Vec<I64>()) }
+    for _ in range n { mustCallers.Push(Vec<I64>()) }
     for b in range n {
         for c in f.Sc.CalleesOf(b) {
             if c >= 0 and c < n: mustCallers[c].Push(b)
@@ -1186,7 +1185,6 @@ fn (w mut walker&) result(o Vec<I64>&) {
 }
 
 fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
-    t := w.T()
     w.targets.Push(p)
     o := w.expr(x)
     try w.targets.Pop() catch { }
@@ -1711,7 +1709,7 @@ fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
             if m.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(m.Site))) }
             w.makeStores(m, ty, sp)
         }
-        case typed.Expr.Collect(sp, ty, c) {
+        case typed.Expr.Collect(_, ty, c) {
             if c.Reserve is not null { w.expr(c.Reserve!) }
             w.yieldTo.Push(w.F.placeKey(w.F.arrayOf(ty), -1))
             w.yieldOrig.Push(Vec<I64>())
@@ -2021,7 +2019,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         case typed.Expr.Fn(_, _, fv) {
             return match fv {
                 case typed.FnVal.Named(_) => false
-                case typed.FnVal.Lambda(lb, caps, _) => f.regOut[I64(lb)]
+                case typed.FnVal.Lambda(lb, _, _) => f.regOut[I64(lb)]
                 case _ => true
             }
         }
@@ -2516,7 +2514,7 @@ fn (w mut walker&) destroyMade(x typed.Expr&) I64, I64, I64, String {
     f := w.F
     match x {
         case typed.Expr.Away(_, _, y) { return w.destroyMade(y) }
-        case typed.Expr.Try(_, _, t) { return SFail, -1, -1, "its value may be a try's default, not built for it" }
+        case typed.Expr.Try(_, _, _) { return SFail, -1, -1, "its value may be a try's default, not built for it" }
         case typed.Expr.Take(_, _, p) {
             q := f.placeOfPlace(p)
             if q >= 0 { return SMove, q, -1, "" }
@@ -2717,7 +2715,7 @@ fn (f mut Free&) mustOf(b I64) {
     body := f.Bodies[b]
     if body.Root is null { return }
     m mut mustW&f = mustW(f, b)
-    for i in range body.Locals.Len() {
+    for _ in range body.Locals.Len() {
         m.must.Push(MustTop)
         m.within.Push(MustTop)
     }
@@ -3069,7 +3067,7 @@ fn (w mut walker&) orStoreOf(p typed.Place&, x typed.Expr&) {
 
 fn (f mut Free&) decide() {
     n := f.keyTy.Len()
-    for k in range n { f.Sole.Push(false) }
+    for _ in range n { f.Sole.Push(false) }
     # condition 5 (a place let go of again, where its code makes regions) and the program-wide conditions
     letsHere := Array<Bool>(n)
     # a struct overwritten in the prelude's collections overwrites a slot its removals vacated first (add's reuse of a
@@ -3367,7 +3365,6 @@ fn (f mut Free&) writePlans() {
         if not f.Sole[oc.Place]: continue
         pl := f.Plans[oc.Body]
         if pl.RegionKind[oc.Site] != 0: continue
-        c := callOf(oc.Arg)
         v := f.paramVar(oc.Callee, oc.Param)
         if v < 0: continue
         site := typed.SiteId(I32(oc.Site))

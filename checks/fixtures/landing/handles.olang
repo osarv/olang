@@ -9,7 +9,7 @@ type St struct() {
 type H struct() { s mut St& = St() }
 fn (h mut H&) bump() { h.s.x++ }
 fn bumpAll(h mut H&, n I64) {
-    for i in range n { h.bump() }
+    for _ in range n { h.bump() }
 }
 
 fn churn() I64 {
@@ -71,7 +71,7 @@ fn builders() String& ? {
 fn counters() I64 ? {
     m := Map<I64, H>()
     m.Put(1, H())
-    for i in range 5 {
+    for _ in range 5 {
         c := try m.Get(1)
         c.bump()
         bumpAll(c, 2)

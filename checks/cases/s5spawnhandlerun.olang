@@ -8,7 +8,7 @@ fn pushTo(users mut Vec<Vec<I64>>&, i I64) {
 
 fn main() ? {
     users := Vec<Vec<I64>>()
-    for i in range 4 { users.Push(Vec<I64>()) }
+    for _ in range 4 { users.Push(Vec<I64>()) }
     join {
         for i in range 4 { spawn pushTo(users, i) }
     }

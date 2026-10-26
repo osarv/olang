@@ -231,7 +231,7 @@ fn (o Object&) find<K>(key K) I64 ? Error {
     }
     mask I64 = o.index.Len() - 1
     s I64 = nameHash(key) & mask
-    for probe in range o.index.Len() {
+    for _ in range o.index.Len() {
         at I64 = I64(o.index[s])
         if at == 0 { error Error.MISSING }
         if sameName(o.Keys[at - 1], key) { return at - 1 }
@@ -1011,7 +1011,7 @@ type writer struct(indent String&) {
 fn (w mut writer&) newline(depth I64) {
     if w.indent.Len() == 0 { return }
     w.out.PushChar('\n')
-    for i in range depth { w.out.Push(w.indent) }
+    for _ in range depth { w.out.Push(w.indent) }
 }
 
 fn (w mut writer&) value(j Json&, depth I64) {
@@ -1324,14 +1324,14 @@ if TestBuild {
 
     test "nesting is bounded by MaxDepth" {
         deep := StringBuilder()
-        for i in range MaxDepth { deep.PushChar('[') }
-        for i in range MaxDepth { deep.PushChar(']') }
+        for _ in range MaxDepth { deep.PushChar('[') }
+        for _ in range MaxDepth { deep.PushChar(']') }
         assert problem(deep.ToString()) == "ok"
         deeper := StringBuilder()
-        for i in range MaxDepth + 1 { deeper.Push("{\"a\":") }
+        for _ in range MaxDepth + 1 { deeper.Push("{\"a\":") }
         assert problem(deeper.ToString()) == "DEPTH 1:" $(5 * MaxDepth + 1)
         flood := StringBuilder()
-        for i in range 100000 { flood.PushChar('[') }
+        for _ in range 100000 { flood.PushChar('[') }
         assert problem(flood.ToString()) == "DEPTH 1:" $(MaxDepth + 1)
     }
 

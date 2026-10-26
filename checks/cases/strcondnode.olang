@@ -30,7 +30,7 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Node(4, null), "bag", 1)
-    for i in range 3 {
+    for _ in range 3 {
         s := $b
         churn()
         try io.Println(s)

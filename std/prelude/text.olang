@@ -1078,7 +1078,7 @@ fn shortest(v F64) U64, I64 {
 
 # the rounded-to-odd top bits of g * cp, g = g1 * 2^63 + g0
 fn rop(g1 U64, g0 U64, cp U64) U64 {
-    x1, x0 := mul128(g0, cp)
+    x1, _ := mul128(g0, cp)
     y1, y0 := mul128(g1, cp)
     z U64 = (y0 >> 1) + x1
     vbp U64 = y1 + (z >> 63)
@@ -1377,7 +1377,7 @@ if TestBuild {
         b.Push(" {")                         # the String handed back is a copy: the builder keeps growing apart from it
         assert s == "define i32 @f(42)" and b.ToString() == "define i32 @f(42) {"
         long := StringBuilder()
-        for i in range 1000 {
+        for _ in range 1000 {
             long.Push("ab")
             long.PushChar('c')
         }

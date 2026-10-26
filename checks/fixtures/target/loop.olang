@@ -24,7 +24,7 @@ fn main() ? io.Error {
         c[i] = F32(i) / 7.0
         d[i] = c[i]
     }
-    for k in range 3 {
+    for _ in range 3 {
         mulAdd(a, b, c)
         fused(a, b, d)
     }

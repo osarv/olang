@@ -7,7 +7,7 @@ type Reg struct(m Map<String&, I64>, l Vec<I64>, a mut Array<I64>&) {
     a
 }
 fn (r Reg&) Str() String {
-    keys := r.m.Keys().ToVec()
+    r.m.Keys().ToVec()
     return "x"
 }
 fn main() ? {
