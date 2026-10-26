@@ -24962,3 +24962,23 @@ the same count; four differ by 14 instructions at start-up, outside `main` (the 
 lattice and hashing, each computation baked into a global, decided by an assert while compiling, and run on values
 only the run time knows; an array of `U100` read back after an arena churn. checks cases t4abyteswap, t4aatomic,
 t4aextern, t4awideliteral, t4arange, t4anomember.
+
+## Small batch 3 (2026-10-26)
+
+Seven small items decided earlier, built one commit each.
+
+**The seed written again first.** The seed predated T4a and the trait-list line break (QY), so a compiler it builds
+could not read `I128` in its own source or a `for` list across lines. `make seed` wrote it from the current source,
+and `make boot` reached its fixed point from it.
+
+**SPEC section 5's numbering.** The subsections ran 5.5, 5.7, ... 5.12, 5.11, 5.12, ... 5.17, 5.19, ..., 5.22, 5.18:
+5.6 (struct literals) had gone with C2d and nothing was renumbered, and `!` had been added as 5.18 at the end. They are
+numbered in order now (5.6 array literals to 5.22 lane operators, `!` 5.23), and each `§5.x` in SPEC.md was checked for
+the section it meant: twenty were renumbered, and seven were already wrong before - E16b and E16e cited as §5.9 (they
+are 5.5's), E13 as §5.1, E24 as §5.1, G9a's literal ranking as §5.4 (it is E6d's, 5.2), and two citations of the
+removed struct literals (T3, M11), which now cite constructor calls (§9) or nothing. HISTORY.md keeps the numbers it
+wrote at the time; docs/ and compiler/ cite no section of SPEC.md's §5 (their "section 5.x" are their own sections).
+
+**The `Integer` trait's list across lines (T35c).** With the seed reading a line break in a `for` list, the prelude
+lists all 256 widths in `Integer` itself, sixteen to a line, and the sixteen helper traits (`signed1to16` ...) are
+gone. Messages are unchanged: they already named a run of widths by its ends.

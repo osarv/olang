@@ -1464,7 +1464,7 @@ second name for the same walk, as a `List`'s copy is the same list.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
-`U128` (T4a) - listed as closed traits of sixteen widths each, taken in; and `type Number trait for Integer, Float { }`. `Bool` satisfies none of them, and no type a program declares
+`U128` (T4a), listed one by one, a line of sixteen widths at a time; and `type Number trait for Integer, Float { }`. `Bool` satisfies none of them, and no type a program declares
 satisfies one - `Char`, `type Meters extends I32` and `type Dist extends F64` are types of their own - so code
 constrained by a numeric trait may pick its behaviour with `match T` over the built-in types alone, with no `nomatch`.
 Generic numeric code says which numbers it takes - `fn mean<T Float>(a Array<T>&) T`, or a default on the numbers

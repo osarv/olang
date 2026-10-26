@@ -247,7 +247,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   two-word arithmetic). Storage is the next of 1, 2, 4, 8, 16 bytes (LLVM's `iN`, C's `_BitInt`). Decided (mine):
   a literal holds 64 bits (a wider value is computed, `U128(1) << 100`; E4a's exact computation is within 64 bits, an
   error past it); atomics take the 8/16/32/64-bit widths, `ByteSwap` whole bytes, and only the eight cross the C
-  boundary (X2); `Integer` lists every width through closed traits of sixteen; no `Sqrt`/`PadStart` for the new widths
+  boundary (X2); `Integer` lists every width, sixteen to a line; no `Sqrt`/`PadStart` for the new widths
   yet. A declared type may not be named `I2` (it is one now): the cinterop fixture's struct was renamed.
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal
   adapts to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a); a
