@@ -533,6 +533,33 @@ fn TestTarget(d Decl&, names source.Names&) String {
     }
 }
 
+# B7a: the name a test gives a method's receiver, as its declaration writes it - "Array" for "fn (a Array<T>&) Windows",
+# and a type variable's constraint for a default over one: "Iterator" for "fn (it mut I&) TakeWhile<I Iterator<T>, T>";
+# "" for no receiver or one written otherwise
+fn RecvTarget(f Func&, names source.Names&) String {
+    if f.Recv is null { return "" }
+    t := f.Recv!.Ty
+    for t is not null {
+        match t {
+            case TypeRef.Perm(_, of, _, _) { t = of }
+            case TypeRef.Ref(_, of, _, _) { t = of }
+            case TypeRef.Named(_, path, _) {
+                n := path[path.Len() - 1]
+                for tp in f.TypeParams {
+                    if tp.Name != n or tp.Ty is null { continue }
+                    match tp.Ty! {
+                        case TypeRef.Named(_, cpath, _) { return $names.Text(cpath[cpath.Len() - 1]) }
+                        case _ { return "" }
+                    }
+                }
+                return $names.Text(n)
+            }
+            case _ { return "" }
+        }
+    }
+    return ""
+}
+
 # a test's description, between its quotes (B7)
 fn TestDesc(d Decl&, text String&) String {
     match d {

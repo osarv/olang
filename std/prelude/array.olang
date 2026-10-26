@@ -578,13 +578,17 @@ if TestBuild {
     arraySortedBaked := arraySorted()                     # computed while compiling (K2): calls through lambdas
     arraySumBaked I64 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
 
-    # examples (B7a): what olang doc shows under the type
-    test ReversedIter "an array from its last element to its first" {
+    # examples (B7a): what olang doc shows under Array.Reversed
+    test Array.Reversed "an array from its last element to its first" {
         s := 0
         for x in I64[1, 2, 3].Reversed() { s = s * 10 + x }
         assert s == 321 and I64[].Reversed().ToVec().Len() == 0
     }
-    test ReversedIter "text from its last byte to its first" {
+    test Array.Windows "every run of so many consecutive elements, as views" {
+        w := I64[1, 2, 3].Windows(2)
+        assert w.Len() == 2 and w[0] == I64[1, 2] and w[1] == I64[2, 3]
+    }
+    test Array.Reversed "text from its last byte to its first" {
         b := StringBuilder()
         for c in "abc".Reversed() { b.PushChar(c) }
         assert b.ToString() == "cba"

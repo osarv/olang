@@ -2205,7 +2205,10 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
             ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
             if ps.Len() == 0 { continue }
             rt := c.deref(ps[0])
-            if not c.isNamed(rt) or c.P.T.DeclName(c.P.T.DeclOf(rt)) != parts[0] { continue }
+            # a named type's method, or one of an array's or a trait's default over a type variable (Array.Windows,
+            # Iterator.TakeWhile), by the receiver its declaration writes
+            named := c.isNamed(rt) and c.P.T.DeclName(c.P.T.DeclOf(rt)) == parts[0]
+            if not named and (c.isNamed(rt) or ast.RecvTarget(decl, c.P.L.Names) != c.text(parts[0])) { continue }
             if c.P.FnModule(f) == mi { return }
             elsewhere = true
         }
@@ -2227,8 +2230,12 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
         decl := c.P.FnDecl(f)
         if decl.Recv is null or c.P.FnModule(f) != mi { continue }
         ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
-        if ps.Len() == 0 or not c.isNamed(c.deref(ps[0])) { continue }
-        near.Offer($c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name))
+        if ps.Len() == 0 { continue }
+        if c.isNamed(c.deref(ps[0])) {
+            near.Offer($c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name))
+        } else if ast.RecvTarget(decl, c.P.L.Names) != "" {
+            near.Offer($ast.RecvTarget(decl, c.P.L.Names) "." $c.text(decl.Name))
+        }
     }
     if near.Best.Len() > 0 {
         c.err(target.Sp, msgs.TestTargetUnknownMeant(t, near.Best))

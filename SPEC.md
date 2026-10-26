@@ -6919,7 +6919,10 @@ decision.
 
 **B7a (a test's target).** A test may name what it is an example of, before its description: `test Twice "doubles"
 { }` - a function, a type, or `Type.Method`, of its own file (private ones included; for a method, the method's
-declaration is in the file, its type anywhere). A target naming nothing of the file, or something another file
+declaration is in the file, its type anywhere). A method's type is the receiver its declaration writes: `Array` for an
+array's method (`test Array.Windows "..."`, `fn (a Array<T>&) Windows`), and for a default over a constrained type
+variable the trait that constrains it (`test Iterator.TakeWhile "..."`, `fn (it mut I&) TakeWhile<I Iterator<T>, T>`).
+A target naming nothing of the file, or something another file
 declares, is a compile-time error, and so are two tests of one target with one description. Its run reports it by its
 target, `ok - Twice: doubles`, `FAIL - Twice: doubles`; `doc` lists it under the target as an example, its body as the
 file writes it (B14), and a hover on the target shows the first of them (B15). A target changes nothing about how the
