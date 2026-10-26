@@ -1,0 +1,8 @@
+# check: fail error[T25c]: a read-only reference cannot become writable
+# E39, T25c: "x op= v" through a read-only reference read out of x[i] is refused, as "r[0] += v" on an Array of them is
+# (it was accepted and its writes dropped, the second bulk review's F3)
+fn main() ? {
+    w := Vec<Array<I64>&>()
+    w.Push(Array<I64>(3))
+    w[0] += 2
+}

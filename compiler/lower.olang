@@ -1834,6 +1834,15 @@ fn clausedTry(x typed.Expr&) Bool {
     }
 }
 
+# the comprehension an expression is - a lane operation's result, the collect a sequence ends in - null for none
+fn collectOf(x typed.Expr&) typed.Collect?&x {
+    return match x {
+        case typed.Expr.Collect(_, _, c) => c
+        case typed.Expr.Seq(_, _, sq) => collectOf(sq.X!) if sq.X is not null else null
+        case _ => null
+    }
+}
+
 # the call an expression is, under a try, null for none
 fn callOfExpr(x typed.Expr&) typed.Call?&x {
     return match x {
@@ -1851,6 +1860,24 @@ fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span
     t0 := ln.T
     a0 := ln.arrayOf(ty)
     if t0.IsRef(t0.Repr(ty)) and a0 != types.UnknownT and ln.fixedLen(a0) < 0 {
+        # a comprehension or a lane operation's result (E27, E39) - a sequence's statements, then its collect - made
+        # where the reference goes too (the second bulk review: each was made, then copied there)
+        cl := collectOf(pr.X)
+        if cl is not null and cl.Site >= typed.SiteId(0) {
+            match pr.X {
+                case typed.Expr.Seq(_, _, sq) {
+                    for st in sq.Stmts { ln.stmt(st) }
+                    if ln.dead { return mir.Operand.None }
+                }
+                case _ { }
+            }
+            sv, sa := ln.adoptSite, ln.adoptAt
+            ln.adoptSite = cl.Site
+            ln.adoptAt = ln.built(pr.Site)
+            r := ln.collect(cl, ty, sp)
+            ln.adoptSite, ln.adoptAt = sv, sa
+            return r
+        }
         match pr.X {
             case typed.Expr.Make(_, _, m) {
                 if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and m.Site >= typed.SiteId(0) {
@@ -2279,7 +2306,8 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     if ln.dead { return mir.Operand.None }
     if c.Exact and c.Reserve is not null {
         # E39: as many elements as reserved, one each turn - the result made once at that length and filled in place
-        s0 := ln.built(c.Site)
+        # (where a reference it is promoted to goes, when promote adopts it)
+        s0 := ln.madeAt(c.Site)
         out0 := ln.temp(ty, sp)
         # no fill: every element is yielded before anything reads it, and a loop left early leaves the array unread
         ln.emit(mir.Stmt.Assign(sp, mir.L(out0), mir.Rvalue.NewArray(s0, ty, cap, mir.Operand.None)))
@@ -2301,7 +2329,7 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     try ln.collects.Pop() catch { }
     if ln.dead { return mir.Operand.None }
     out := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(s, ty, mir.Operand.Copy(mir.L(n)), mir.Operand.Const(el, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.L(n)), mir.Operand.Const(el, 0))))
     dst := ln.F.Place(mir.Base.Local(out), mir.Proj[mir.Proj.Deref] if t.IsRef(t.Repr(ty)) else mir.Proj[])
     ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref]), mir.Operand.Copy(mir.L(n))))
     return mir.Operand.Copy(mir.L(out))

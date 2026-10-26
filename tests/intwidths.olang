@@ -290,3 +290,46 @@ test "T4a: an array of a new width made in a function is read back after an aren
         "7427640235712281649394745344]")
     assert w.Sum() == U100(6) << 90
 }
+
+# Pow at one bit: x.Pow(0) is 1 wrapped to I1's width, -1, and the product never holds a 1 I1 cannot (the second bulk
+# review's F8); U1's 1 is itself
+fn powCase(n I64) String {
+    a := I1(n)  # -1 for an odd n
+    b := I1(0)
+    u := U1(n)
+    return $a.Pow(0) " " $a.Pow(1) " " $a.Pow(2) " " $a.Pow(3) " " $b.Pow(0) " " $b.Pow(5) " " $u.Pow(0) " " $u.Pow(9)
+}
+
+PowBaked := powCase(1)
+WantPow := "-1 -1 -1 -1 -1 0 1 1"
+
+test "T4a: Pow at one bit wraps its 1 as I1 holds it" {
+    assert PowBaked == WantPow
+    assert powCase(One) == WantPow
+    assert powCase(1) == WantPow # S18c: decided while compiling
+}
+
+# base 0 reads a prefixed literal of up to 128 bits as a program does (L10a): past 64 bits its value read unsigned,
+# fitting the type where that value does (the second bulk review's F9: it read only 64 bits)
+fn wideParseCase(n I64) String {
+    a := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch default U128(n)
+    b := try "-0x1_0000_0000_0000_0000".ParseAs<I128>(0) catch default I128(n)
+    c := try "0xFFFFFFFFFFFFFFFF".ParseAs<I128>(0) catch default I128(n)
+    d := try "0x1FFFFFFFFFFFFFFFF".ParseAs<I65>(0) catch ParseError.OVERFLOW default I65(n) catch default I65(-1)
+    e := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U65>(0) catch default U65(n)
+    f := try "0x100000000000000000000000000000000".ParseAs<U128>(0) catch ParseError.OVERFLOW default U128(n) catch default U128(1)
+    g := try "-0x80000000000000000000000000000000".ParseAs<I128>(0) catch default I128(n)
+    h := try "0x80000000000000000000000000000000".ParseAs<I128>(0) catch ParseError.OVERFLOW default I128(n) catch default I128(1)
+    k := try "-0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch ParseError.INVALID default U128(n) catch default U128(1)
+    return $a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k
+}
+
+WideParseBaked := wideParseCase(3)
+WantWideParse := ("36893488147419103231 -18446744073709551616 -1 3 36893488147419103231 3 "
+    "-170141183460469231731687303715884105728 3 3")
+
+test "L10a: ParseAs reads a prefixed literal of up to 128 bits" {
+    assert WideParseBaked == WantWideParse
+    assert wideParseCase(Three) == WantWideParse
+    assert wideParseCase(3) == WantWideParse # S18c: decided while compiling
+}

@@ -1,0 +1,13 @@
+# check: fail error[T25c]: a read-only reference cannot become writable
+# also: error[T25b]: this writes through a read-only reference
+# E16a, S6, T25c: a slice carries its base's permission - an immutable global's array is read-only, so is every slice
+# of it, lent to a writable parameter or written through (the second bulk review's F4: it wrote constant data)
+G := I64[1, 2, 3]
+
+fn poke(s mut Array<I64>&, k I64) { s[0] = k }
+
+fn main() ? {
+    poke(G[0:2], 9)
+    s := G[1:]
+    s[0] = 9
+}

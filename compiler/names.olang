@@ -1229,6 +1229,14 @@ fn (r mut Resolver&) aliasHop(sp source.Span, inner ast.Expr&, n source.NameId) 
     return next
 }
 
+# whether M10's "no import here" was said for name n - the name's uses then say nothing more (B11)
+fn (r Resolver&) ImportSaid(n source.NameId) Bool {
+    for u in r.unknownSaid {
+        if u.First == n and u.Second == -1 { return true }
+    }
+    return false
+}
+
 # M10: the first name of a dotted path no declaration or import gives, which std has a module of
 fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
     if n in r.Tables[r.mi].waiting { return }
@@ -1345,7 +1353,9 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
             # a path whose head names nothing: std's module of that name, else no import (M10)
             said := r.unknownSaid.Len()
             r.unknownHead(hsp, head)
-            if r.unknownSaid.Len() == said and not os.Exists($r.L.Std "/" $r.text(head) ".olang") and not (head in r.Tables[r.mi].waiting) {
+            if r.unknownSaid.Len() == said and not os.Exists($r.L.Std "/" $r.text(head) ".olang") and not (head in r.Tables[r.mi].waiting) and
+               not r.ImportSaid(head) {
+                r.unknownSaid.Push(pair.Pair(head, I64(-1)))
                 r.L.Diags.Error(r.at(r.mi, hsp), msgs.UnknownImport(r.tok(head)))
             }
             return

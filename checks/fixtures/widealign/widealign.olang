@@ -1,0 +1,26 @@
+# T4a: an array of elements wider than 64 bits, which LLVM holds 16-aligned, takes at least that alignment from the
+# arena - an Array<I128> of one element 16-aligned, not the 8 an array under 32 bytes takes (the second bulk review's
+# P1). Its elements read back after allocations of odd sizes between them, at -O3 and at -debug
+type S struct(a I128) { a }
+
+fn fill(n I64) Array<I128> {
+    a := Array<I128>(n)
+    for i in range n { a[i] = I128(i + 1) << 70 }
+    return a
+}
+
+N mut I64 = 1
+
+fn main() ? {
+    t I128 = 0
+    for k in range 200 {
+        pad := Array<U8>(N * 8 + k % 3)
+        x := fill(N)
+        pad2 := Array<U8>(8)
+        y := Array<S>(N)
+        y[0] = S(x[0] + I128(pad.Len() + pad2.Len()))
+        z := Array<I65>(N + 1, I65(k))
+        t += y[0].a + I128(z[1])
+    }
+    assert t == I128(200) * (I128(1) << 70) + 3200 + 199 + 19900
+}

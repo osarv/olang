@@ -1,0 +1,6 @@
+# check: fail error[S3a, E31]: '++' and '--' step a number, or a type declaring Inc (Dec) or Plus (Minus) - found Array<I64>
+# S3a: "a++" on an array was dropped unseen; it is an error naming what steps
+fn main() ? {
+    a := Array<I64>(3)
+    a++
+}

@@ -1,0 +1,106 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: I33
+# also: this assertion is false, evaluated while compiling: U33
+# also: this assertion is false, evaluated while compiling: I40
+# also: this assertion is false, evaluated while compiling: U40
+# also: this assertion is false, evaluated while compiling: I48
+# also: this assertion is false, evaluated while compiling: I53
+# also: this assertion is false, evaluated while compiling: I63
+# also: this assertion is false, evaluated while compiling: U63
+# also: this assertion is false, evaluated while compiling: I64
+# also: this assertion is false, evaluated while compiling: I65
+# also: this assertion is false, evaluated while compiling: U100
+# also: this assertion is false, evaluated while compiling: I128
+# T4a, K1: the evaluator computes every width exactly - each assert says the digest is not the one the built program
+# computes (tests/intsweep.olang), so each is decided false while compiling only where the evaluator agrees with it
+# (it once computed I33 to I63 as I64s, the second bulk review's F1)
+# a digest of a battery of integer operations at one width, on its edge values: wrapping arithmetic, the bit operations,
+# comparisons, division and remainder where defined, shifts by counts inside the width, conversions and rendering
+fn sweep<T Integer>(z T, k I64) U64 {
+    one := T(k)
+    zero := one - one
+    w I64 = T.Max.PopCount() + (1 if T.Min < 0 else 0)
+    vals := Vec<T>()
+    vals.Push(T.Min)
+    vals.Push(T.Min + one)
+    vals.Push(zero - one)
+    vals.Push(zero)
+    vals.Push(one)
+    vals.Push(one + one)
+    vals.Push(T.Max - one)
+    vals.Push(T.Max)
+    three := T(3 * k)
+    five := T(5 * k)
+    if three != zero and not (T.Min < 0 and three == zero - one) { vals.Push(T.Max / three) }
+    if five != zero and not (T.Min < 0 and five == zero - one) { vals.Push(T.Min / five) }
+    d U64 = 14695981039346656037
+    for i in range vals.Len() {
+        x := vals[i]
+        d = mix(d, x)
+        d = mix(d, -x)
+        d = mix(d, ~x)
+        d = mixU(d, U64(I64(x)))
+        d = mixU(d, U64(F64(x).Bits()))
+        d = mixU(d, U64(($x).Hash()))
+        for s in I64[0, 1 % w, w / 2, w - 1] {
+            d = mix(d, x << s)
+            d = mix(d, x >> s)
+        }
+        for j in range vals.Len() {
+            y := vals[j]
+            a := x + y
+            b := x - y
+            c := x * y
+            d = mix(d, a)
+            d = mix(d, b)
+            d = mix(d, c)
+            d = mixB(d, a < x)
+            d = mixB(d, b < c)
+            d = mix(d, x & y)
+            d = mix(d, x | y)
+            d = mix(d, x ^ y)
+            lt := x < y
+            eq := x == y
+            le := x <= y
+            gt := x > y
+            ge := x >= y
+            ne := x != y
+            d = mixB(d, lt)
+            d = mixB(d, eq)
+            d = mixB(d, le)
+            d = mixB(d, gt)
+            d = mixB(d, ge)
+            d = mixB(d, ne)
+            if y != zero and not (T.Min < 0 and x == T.Min and y == zero - one) {
+                d = mix(d, x / y)
+                d = mix(d, x % y)
+            }
+        }
+    }
+    return d
+}
+
+# one step of the digest: x's low 64 bits, and its high ones where it has more
+fn mix<T Integer>(d U64, x T) U64 {
+    r := mixU(d, U64(x))
+    if T.Size > 8 { r = mixU(r, U64(x >> 64)) }
+    return r
+}
+
+fn mixB(d U64, b Bool) U64 { return mixU(d, 1 if b else 2) }
+
+fn mixU(d U64, v U64) U64 { return (d ^ v) * 1099511628211 }
+
+fn main() ? {
+    assert sweep(I33(0), 1) != 16592714970760744226, "I33"
+    assert sweep(U33(0), 1) != 10458287162955915044, "U33"
+    assert sweep(I40(0), 1) != 9290555130326273806, "I40"
+    assert sweep(U40(0), 1) != 6926590481903395867, "U40"
+    assert sweep(I48(0), 1) != 15527012775371864395, "I48"
+    assert sweep(I53(0), 1) != 3507490326835965484, "I53"
+    assert sweep(I63(0), 1) != 5055733048236022056, "I63"
+    assert sweep(U63(0), 1) != 9566045412393815707, "U63"
+    assert sweep(I64(0), 1) != 7374534488567476693, "I64"
+    assert sweep(I65(0), 1) != 7751525878323856876, "I65"
+    assert sweep(U100(0), 1) != 17546510582155029195, "U100"
+    assert sweep(I128(0), 1) != 7556063593617736900, "I128"
+}

@@ -1,0 +1,6 @@
+# check: fail error[M19, T29f]: Char has no method 'PadStart' - a character is padded as text: '($c).PadStart(n)'
+# T29f: a Char is no Integer and has no PadStart; the error says how its character is padded
+fn main() ? {
+    c := 'q'
+    s := "x" $c.PadStart(3)
+}

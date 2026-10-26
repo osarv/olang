@@ -76,6 +76,12 @@
 | ok - S19e: an errdefer in a generator's body runs when the walk fails, not when it ends
 | ok - D18: a generator's contract, failing its first Next
 | ok - D18b: walks holding no scope and walks holding one, stopped part way, side by side
+=== test tests/intsweep.olang
+| status 0
+| ok - T4a: 1 to 9 bits, signed and unsigned - baked, decided while compiling and run agree
+| ok - T4a: 17 to 33 bits, signed and unsigned - baked, decided while compiling and run agree
+| ok - T4a: 40 to 64 bits, signed and unsigned - baked, decided while compiling and run agree
+| ok - T4a: 65 to 128 bits, signed and unsigned - baked, decided while compiling and run agree
 === test tests/intwidths.olang
 | status 0
 | ok - T4a: one bit, seven bits and 24 bits wrap at their widths - baked, decided while compiling and run
@@ -87,12 +93,17 @@
 | ok - E4a, L10: literals of up to 128 bits are computed exactly and adapt to a type wide enough
 | ok - T4a: Sqrt, PadStart and PadEnd at the new widths
 | ok - T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding
+| ok - T4a: Pow at one bit wraps its 1 as I1 holds it
+| ok - L10a: ParseAs reads a prefixed literal of up to 128 bits
 === test tests/lanes.olang
 | status 0
 | ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
 | ok - E39: a fused total makes no array, and an empty one
 | ok - E39: Min and Max by '<', a float's NaN the answer once met, ties the first
 | ok - E39: lanes made in a function and returned are read back after an arena churn
+| ok - E39, E31b: an in-place lane store through x[i] is written back, or goes where a reference read out of it points
+| ok - E39: an in-place operand overlapping its target reads the lanes already stored
+| ok - E39: Max runs the operation once a lane
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
@@ -916,6 +927,7 @@
 | ok - Rem by -1 is 0, the least value's too - while compiling as at run time (the lang25 review)
 | ok - floats: IEEE's exceptions as errors
 | ok - Checked: each step checked, left to right, the same while compiling as at run time
+| ok - every width: Neg, Shift, Div, Mul, Rem and Pow at widths no case names - baked, decided and run alike (T4a)
 === test std/base64.olang
 | status 0
 | ok - the RFC 4648 test vectors
@@ -1378,6 +1390,8 @@
 === run condcall.olang
 | status 0
 === run condcallvalue.olang
+| status 0
+=== run condchainlit.olang
 | status 0
 === run condvaluesame.olang
 | status 0

@@ -111,3 +111,79 @@ test "E39: lanes made in a function and returned are read back after an arena ch
     assert churn() > 0
     assert $m == "F64[1, 2, 5, 10]"
 }
+
+# E39 through x[i] (E31b): "x[i].a op= v" on an inline array of the element reads it, stores lane by lane into the
+# copy and writes it back with SetAt - the operand's lanes evaluated before the read, so one reading the element itself
+# reads it as it was; through a reference read out of x[i] the store goes where the reference points, nothing written
+# back (the second bulk review's F3: these were dropped)
+type Holds struct() {
+    arr := Array<I64>(3)
+    xs mut Array<I64>& = Array<I64>(3, 1)
+}
+
+# the operand's own effect on the element comes before the element is read, so it is kept
+fn give(v mut Vec<Holds>&) Array<I64> {
+    v[0].arr[0] = 100
+    return Array<I64>(3, 1)
+}
+
+fn throughAt(n I64) String {
+    v := Vec<Holds>()
+    v.Push(Holds())
+    v[0].arr[2] += 5
+    v[0].arr += n
+    v[0].arr += v[0].arr
+    v[0].arr += give(v)
+    v[0].xs += 7
+    w := Vec<mut Array<I64>&>()
+    w.Push(Array<I64>(3))
+    w[0] += 2
+    w[0] *= w[0] + n
+    return $v[0].arr " " $v[0].xs " " $w[0]
+}
+
+# in place, each lane is computed and stored before the next is read, as the loop written by hand: an operand
+# overlapping the target reads the lanes already stored (E39) - a running sum here
+fn overlap(n I64) String {
+    a := Array<I64>(n, 1)
+    s := a[1:n]
+    s += a[0:n - 1]
+    return $a
+}
+
+ThroughAtBaked := throughAt(5)
+OverlapBaked := overlap(5)
+WantThroughAt := "I64[101, 11, 21] I64[8, 8, 8] I64[14, 14, 14]"
+WantOverlap := "I64[1, 2, 3, 4, 5]"
+Five mut I64 = 5
+
+test "E39, E31b: an in-place lane store through x[i] is written back, or goes where a reference read out of it points" {
+    assert ThroughAtBaked == WantThroughAt
+    assert throughAt(Five) == WantThroughAt
+    assert throughAt(5) == WantThroughAt # S18c: decided while compiling
+}
+
+test "E39: an in-place operand overlapping its target reads the lanes already stored" {
+    assert OverlapBaked == WantOverlap
+    assert overlap(Five) == WantOverlap
+    assert overlap(5) == WantOverlap # S18c: decided while compiling
+}
+
+# Min and Max build each lane once: an operator method lanes call runs once a lane (the second bulk review's F7)
+PlusCalls mut I64 = 0
+type Counted struct(v I64) { v }
+fn (a Counted) Plus(b Counted) Counted {
+    PlusCalls++
+    return Counted(a.v + b.v)
+}
+fn (a Counted) Less(b Counted) Bool { return a.v < b.v }
+
+test "E39: Max runs the operation once a lane" {
+    a := Array<Counted>(Four, Counted(1))
+    PlusCalls = 0
+    m := try (a + a).Max() catch default Counted(-1)
+    assert m.v == 2 and PlusCalls == 4
+    PlusCalls = 0
+    n := try (a + a).Min() catch default Counted(-1)
+    assert n.v == 2 and PlusCalls == 4
+}

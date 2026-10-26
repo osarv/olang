@@ -471,6 +471,9 @@ type Diag enum {
     WriteThroughAtBuilds
     CondLentWritable
     WriteThroughAtCall
+    WriteThroughAtOperator
+    CharNoPad
+    StepNotNumber
     DefaultArgNotAllowed
     DeferErrorEscapes
     EmbedPathUnknown
@@ -2100,6 +2103,15 @@ fn CondLentWritable() Msg { return Msg(Diag.CondLentWritable, "E28", "a conditio
 
 # ERR_WRITE_THROUGH_AT_CALL
 fn WriteThroughAtCall() Msg { return Msg(Diag.WriteThroughAtCall, "E31b", "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") }
+
+# ERR_WRITE_THROUGH_AT_OPERATOR
+fn WriteThroughAtOperator(ty String&, method String&) Msg { return Msg(Diag.WriteThroughAtOperator, "E31b", "x[i] gives a copy of the element, and this store would run " $ty "'s " $method " between reading it and writing it back - write 't := x[i]', the store into 't', then 'x[i] = t'") }
+
+# ERR_CHAR_NO_PAD
+fn CharNoPad(tok String&, name String&) Msg { return Msg(Diag.CharNoPad, "M19, T29f", "Char has no method " $tok " - a character is padded as text: '($c)." $name "(n)'") }
+
+# ERR_STEP_NOT_NUMBER
+fn StepNotNumber(ty String&) Msg { return Msg(Diag.StepNotNumber, "S3a, E31", "'++' and '--' step a number, or a type declaring Inc (Dec) or Plus (Minus) - found " $ty) }
 
 # ERR_DEFAULT_ARG_NOT_ALLOWED
 fn DefaultArgNotAllowed() Msg { return Msg(Diag.DefaultArgNotAllowed, "E14a", "'default' stands only for a parameter's declared default, in a call") }

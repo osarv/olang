@@ -2025,8 +2025,60 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
                 case _ => true
             }
         }
-        # statements inside (a sequence, a match, a comprehension's loop): not walked here
+        # a sequence and a comprehension's loop (a lane operation's result, E39; E27): their statements walked, any of a
+        # kind not walked here taken to register (F6 of the second bulk review)
+        case typed.Expr.Seq(_, _, sq) {
+            if f.stmtsMayRegister(sq.Stmts) { return true }
+            return sq.X is not null and f.mayRegister(sq.X!)
+        }
+        case typed.Expr.Collect(_, _, cl) {
+            if cl.Reserve is not null and f.mayRegister(cl.Reserve!) { return true }
+            return f.stmtsMayRegister(cl.Loop.Stmts)
+        }
+        # statements inside a match: not walked here
         case _ { return true }
+    }
+}
+
+# whether running these statements, inside a value being built, may register a destructor (mayRegister's): a local
+# declared, a store, a test, a loop, a jump and a yield walked; any other statement may
+fn (f mut Free&) stmtsMayRegister(sts Array<typed.Stmt&>&) Bool {
+    for st in sts {
+        match st {
+            case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) {
+                if f.mayRegister(x): return true
+            }
+            case typed.Stmt.Assign(_, p, x) {
+                if f.placeMayRegister(p) or f.mayRegister(x): return true
+            }
+            case typed.Stmt.If(_, i) {
+                if f.mayRegister(i.Test) or f.stmtsMayRegister(i.Then.Stmts): return true
+                if i.Else is not null and f.stmtsMayRegister(i.Else!.Stmts): return true
+            }
+            case typed.Stmt.Loop(_, b, post) {
+                if f.stmtsMayRegister(b.Stmts): return true
+                if post is not null and f.stmtsMayRegister(post.Stmts): return true
+            }
+            case typed.Stmt.Block(_, b) {
+                if f.stmtsMayRegister(b.Stmts): return true
+            }
+            case typed.Stmt.Jump(_, _, _) { }
+            case _ { return true }
+        }
+    }
+    return false
+}
+
+# whether evaluating a store's place may register a destructor: a local's and a global's not, the expressions in it
+# walked, a value given storage (Temp) walked as the value
+fn (f mut Free&) placeMayRegister(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, _), typed.Place.Global(_, _, _, _), typed.Place.Target(_, _) => false
+        case typed.Place.Deref(_, _, x) => f.mayRegister(x)
+        case typed.Place.Field(_, _, b, _) => f.placeMayRegister(b)
+        case typed.Place.Elem(_, _, e) => f.placeMayRegister(e.Base) or f.mayRegister(e.Index)
+        case typed.Place.Payload(_, _, pl) => f.placeMayRegister(pl.Base)
+        case typed.Place.Temp(_, _, x, _) => f.mayRegister(x)
     }
 }
 
@@ -3168,6 +3220,7 @@ fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
         case typed.Expr.Collect(_, _, c) => pl.Built[I64(c.Site)]
         case typed.Expr.Call(_, _, c) => pl.Passed(c.Site, f.resultVar(f.calleeBody(c))) if c.Site >= typed.SiteId(0) else typed.Scope.Unset
         case typed.Expr.Away(_, _, y) => f.siteScope(b, y)
+        case typed.Expr.Seq(_, _, sq) => f.siteScope(b, sq.X!) if sq.X is not null else typed.Scope.Unset
         case _ => typed.Scope.Unset
     }
 }
@@ -3475,6 +3528,9 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
         case typed.Expr.Collect(_, _, c) => I64(c.Site)
         case typed.Expr.Call(_, _, c) => I64(c.Site)
         case typed.Expr.Away(_, _, y) => f.topSite(y)
+        # a sequence's value (a lane operation's result, E39): its statements run where it stands, its value built at
+        # its own site
+        case typed.Expr.Seq(_, _, sq) => f.topSite(sq.X!) if sq.X is not null else -1
         case _ => -1
     }
 }
@@ -3519,6 +3575,10 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
             }
         }
         case typed.Expr.Away(_, _, y) { f.redirect(b, y, top, at, self, copied) }
+        # a sequence's value is built in the region, its statements where they stand
+        case typed.Expr.Seq(_, _, sq) {
+            if sq.X is not null { f.redirect(b, sq.X!, top, at, self, copied) }
+        }
         case _ { }
     }
 }

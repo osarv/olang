@@ -1,0 +1,10 @@
+# check: fail error[M10]: 'os' is no import here - std has it: 'import "std/os"'
+# never: unknown name 'os'
+# M10, B11: a missing import is said once, where its name is first used - its other uses, in this body and others, say
+# nothing more (each also said "unknown name 'os'")
+fn main() ? {
+    a := os.Args()
+    os.Exit(1)
+}
+
+fn other() { os.Exit(2) }

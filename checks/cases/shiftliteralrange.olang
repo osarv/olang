@@ -1,0 +1,16 @@
+# check: fail error[E8a]: shifting U8 by 70 is outside its width of 8 bits
+# also: error[E8a]: shifting U7 by 7 is outside its width of 7 bits
+# also: error[E8a]: shifting I128 by 128 is outside its width of 128 bits
+# also: error[E8a]: shifting I24 by -1 is outside its width of 24 bits
+# E8a: a shift amount known while compiling is checked against the shifted operand's width there, at every width
+# (T4a) - in an operator, a compound assignment and lane by lane (the second bulk review's F5: none was checked)
+fn f(x U8) U8 { return x >> 70 }
+fn g(a Array<U7>&) Array<U7> { return a << 7 }
+fn h(x I128) I128 {
+    y := x
+    y <<= 128
+    return y
+}
+fn k(x I24) I24 { return x << -1 }
+fn ok(x U7, y I128) U7 { return (x << 6) >> 0 + U7(y >> 127) }
+fn main() ? { }

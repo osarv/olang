@@ -494,11 +494,27 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
 # "-5".ParseAs<I24>() is -5 - read as ParseInt reads a signed type's and ParseUint an unsigned one's, failing with
 # OVERFLOW outside T's range (and INVALID for a '-' before an unsigned one's). A type wider than 64 bits takes digits up
 # to its own range: "340282366920938463463374607431768211455".ParseAs<U128>() is U128's largest. Base 0's prefixed
-# literal is read as a program reads one (L10a), its 64 bits then fitting T
+# literal is read as a program reads one (L10a): a pattern of at most 64 bits as ParseInt or ParseUint reads it, then
+# fitting T; a wider one's value read unsigned, up to 128 bits, fitting T where that value does
+# ("0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) is 2^65 - 1)
 fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
     if t.Len() == 0 { error ParseError.EMPTY }
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
+    if T.Size > 8 and base == 0 and isPrefixed(digits) {
+        # wider than 64 bits, an olang literal's pattern (L10a): of more than 64 bits its value read unsigned, fitting
+        # T where that value does ('-' negating it exactly); of at most 64, the reading ParseInt or ParseUint gives
+        u := try readWide(digits)
+        if u > U128(U64.Max) {
+            if neg {
+                if T.Min == 0 { error ParseError.INVALID }
+                if u > U128(T.Max) + 1 { error ParseError.OVERFLOW }
+                return T(-I128(u))
+            }
+            if u > U128(T.Max) { error ParseError.OVERFLOW }
+            return T(u)
+        }
+    }
     if T.Size <= 8 or base == 0 and isPrefixed(digits) {
         if T.Min < 0 {
             v := try t.ParseInt(base)
@@ -534,6 +550,29 @@ fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
             if v > cutoff or (v == cutoff and td > cutlim) { error ParseError.OVERFLOW }
             v = v * tb + td
         }
+    }
+    return v
+}
+
+# the bit pattern a prefixed literal's digits write ("0x..." or "0b...", a '_' between two digits, L10a, L10b), of up
+# to 128 bits - OVERFLOW past them
+fn readWide(digits String&) U128 ? ParseError {
+    b U128 = 16 if digits[1] == 'x' or digits[1] == 'X' else 2
+    if digits.Len() == 2 { error ParseError.INVALID }
+    cutoff := U128.Max / b
+    cutlim := U128.Max % b
+    v U128 = 0
+    for i in range 2, digits.Len() {
+        c := digits[i]
+        if c == '_' {
+            if i == 2 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            continue
+        }
+        d := digitWorth(c)
+        if U128(d) >= b { error ParseError.INVALID }
+        ud := U128(d)
+        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.OVERFLOW }
+        v = v * b + ud
     }
     return v
 }
