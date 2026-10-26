@@ -600,7 +600,8 @@ fn (g mut Gen&) checkedInt(t I32, d I64) String& {
     }
     if p == 4 {
         op String& = "ShiftLeft" if g.chance(50) else "ShiftRight"
-        return "(try arith." $op "(" $g.solid(t, d - 1) ", I64(" $g.solid(g.intT(), d - 1) ")) catch default " $dflt ")"
+        # the count masked before it narrows to I64, so a U64 the evaluator computes never fails D17g's fit
+        return "(try arith." $op "(" $g.solid(t, d - 1) ", I64((" $g.solid(g.intT(), d - 1) ") & 255)) catch default " $dflt ")"
     }
     if p == 5 { return "(try arith.Neg(" $g.solid(t, d - 1) ") catch default " $dflt ")" }
     s := g.intT()
@@ -1626,6 +1627,9 @@ fn (g mut Gen&) runWalk(l I64, d I64, ind String&) String& {
     g.curBlock = sb
     g.vwalk[r] = walked
     g.nv = save
+    # the view is declared in the enclosing block, so its name stays taken there; nothing may use it after the walk
+    g.vt[run] = -1
+    g.nv = run + 1
     b := StringBuilder()
     b.Push($ind "x" $at " I64 = 0\n")
     b.Push($ind "x" $run " := " $x ".View()\n")
