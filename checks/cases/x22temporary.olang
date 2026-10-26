@@ -1,0 +1,13 @@
+# check: fail error[X22]: C is handed a pointer to a Pair that is no place - put it in a local first
+# X22: a "CVoid?&" parameter (C's "const void *") takes a plain struct held in a place, never a temporary
+import c "string.h"
+
+type Pair struct() {
+    a I64
+    b I64
+}
+
+fn main() {
+    q := Pair()
+    c.memcpy(q, Pair(), 16)
+}

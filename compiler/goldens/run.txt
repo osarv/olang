@@ -33,6 +33,14 @@
 | ok - T29a: a conversion of a place to a type over String names its storage
 | ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
 | ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+=== test tests/cimport.olang
+| status 0
+| ok - a header's integer, float and text macros are constants
+| ok - a header's enum is constants, and its struct a plain struct held in place
+| ok - a macro taking arguments is a function of its arguments' types
+| ok - a static inline function is reached through the C the build compiles
+| ok - the C library: functions, a C string back, pointer arguments of any array
+| ok - a variadic call: each argument promoted as C promotes it
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -1899,6 +1907,8 @@
 === run x10handles.olang
 | status 0
 === run x13qsort.olang
+| status 0
+=== run x17header.olang
 | status 0
 === run x9linkmath.olang
 | status 0

@@ -6799,15 +6799,60 @@ x13lambda.olang:9:21: error[X13]: a C function is given a function by the name o
     9 |     qsort(xs, 3, 4, fn(a Box&, b Box&) I32 { return a.v - b.v })
       |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== x17broken.olang
+x17broken.olang:3:10: error[X17]: 'bits/waitstatus.h' cannot be imported: "Never include <bits/waitstatus.h> directly; use <sys/wait.h> instead."
+    3 | import b "bits/waitstatus.h"
+      |          ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== x17linkolang.olang
+x17linkolang.olang:3:22: error[X17]: 'link' names the library a C header's declarations are in - an olang module needs none
+    3 | import "std/io" link "z"
+      |                      ^~~
+compilation failed with 1 error
+=== x17missing.olang
+x17missing.olang:3:10: error[X17]: no C header 'olang_no_such_header_here.h' beside this file or where the C compiler looks
+    3 | import h "olang_no_such_header_here.h"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== x17nosource.olang
+x17nosource.olang:3:10: error[X17]: no C file at olang_no_such_source_here.c
+    3 | import k "olang_no_such_source_here.c"
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== x19macro.olang
+x19macro.olang:5:24: error[X19]: the C import has no olang form of 'stdout': a variable - an extern variable has no olang form (X1)
+    5 | fn main() { s.fflush(s.stdout) }
+      |                        ^~~~~~
+compilation failed with 1 error
+=== x21bool.olang
+x21bool.olang:5:38: error[X21]: Bool cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference
+    5 | fn main() { s.printf("%d\n".ToC(), 1 > 0) }
+      |                                      ^
+compilation failed with 1 error
+=== x21struct.olang
+x21struct.olang:11:28: error[X21]: P cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference
+   11 |     s.printf("%p\n".ToC(), p)
+      |                            ^
+compilation failed with 1 error
+=== x22readonly.olang
+x22readonly.olang:7:34: error[X22]: C may write through this pointer, and Array<U8>& is read-only - pass a writable one ('mut')
+    7 | fn fill(a Array<U8>&) { c.memset(a, 0, 8) }
+      |                                  ^
+compilation failed with 1 error
+=== x22temporary.olang
+x22temporary.olang:12:17: error[X22]: C is handed a pointer to a Pair that is no place - put it in a local first
+   12 |     c.memcpy(q, Pair(), 16)
+      |                 ^~~~~~
+compilation failed with 1 error
 === x2result.olang
 x2result.olang:3:21: error[X2]: Array<I64> cannot come back from C - an extern's result is one number of the twelve primitives, Bool, extern type's reference or plain-data struct
     3 | extern fn numbers() Array<I64>
       |                     ^~~~~~~~~~
 compilation failed with 1 error
 === x9linkname.olang
-x9linkname.olang:3:6: error[X9]: 'lib m' names no library and no file - write a library's name, as 'link "m"', or a path to one, as 'link "lib/libx.a"'
-    3 | link "lib m"
-      |      ^~~~~~~
+x9linkname.olang:3:13: error[X9]: 'lib m' names no library and no file - write a library's name, as 'link "m"', or a path to one, as 'link "lib/libx.a"'
+    3 | extern link "lib m" { }
+      |             ^~~~~~~
 compilation failed with 1 error
 === zeroeffect.olang
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
