@@ -1407,6 +1407,7 @@ c908490cf07c2d7f 9d1c9d626ac55f5b checks/cases/x12method.olang
 e0154e0e99041abe f699ff99b450ca8c checks/cases/x12type.olang
 ffdfcd7a08886737 e8c0033edf38e9a2 checks/cases/x13lambda.olang
 f234c4f5adc7a1a0 1c720985558ab10e checks/cases/x13qsort.olang
+b3588e00ef8482c8 8ba3691f4a2a5ae4 checks/cases/x17broken.olang
 959565d10ef9fe02 c9f534876c8b7135 checks/cases/x17header.olang
 89b1351bfe3b6dad 77b91131f9eff890 checks/cases/x17linkolang.olang
 f46a14b595ae1979 7b7c2dbdf32eaa7d checks/cases/x17missing.olang
@@ -1415,6 +1416,7 @@ f46a14b595ae1979 7b7c2dbdf32eaa7d checks/cases/x17missing.olang
 c759cc01455aa788 c320b86448fe7dc2 checks/cases/x21bool.olang
 7d0a516e320c24b0 325ad24ce52684f2 checks/cases/x21struct.olang
 94a9eef4685049bf ad7ec11e94ee0b69 checks/cases/x22readonly.olang
+579842b050e33869 0a8b19923fe46a4f checks/cases/x22temporary.olang
 de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 862c0fa389b69c64 4a696918bc6d4cba checks/cases/x9linkmath.olang
 22b46b70fb914c5f 1798ea54d35fed7d checks/cases/x9linkname.olang
