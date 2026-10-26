@@ -1261,3 +1261,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `v.Iter().Some(f)` inside a Str is a recorded limit; a for loop works).
 - 2026-10-26 (the user: "Don't bother migrating oann before the language is done"): oann is not migrated (olang fix,
   list_vec, etc.) until the language is done; its compiler pin stays where it is.
+- QBC ASKED 2026-10-26 (the user: "BLAS is faster we should probably use libblas no?"): recommended a BLAS backend
+  for std/linalg's large F32/F64 products, chosen by a build constant and linked only when chosen; own kernels stay the
+  default and do everything BLAS lacks (BF16/F16/F8, fused epilogues, causal/batched, patches, small shapes, the
+  evaluator, FPGA). In effect: own kernels only.
+- QBD ASKED 2026-10-26 (the user: "tensor shape part of the matrix/tensor object or a feature of a layer ... either but
+  not both"): recommended the object - Matrix carries rows, cols, stride; a layer stores no shape of its own (its
+  sizes are its weights' shapes), and anything beyond two dimensions (heads, batch) is an operation's argument, never
+  stored. Audit oann for duplicated shape fields when oann is next touched. In effect: as today (object).
+- QBE ASKED 2026-10-26 (the user: "Since we are bundling clang anyways, why are we not doing native imports of c files
+  like Zig?"): recommended yes - `import "zlib.h"` gives a module of the header's declarations, translated while
+  compiling by the bindgen path and cached in the module key; `import "fast.c"` compiles the file with the bundled clang
+  to bitcode and links it under LTO (C inlined into olang); static inline header functions compiled the same way;
+  bindgen kept for writing declarations down. Reverses the old "no @cImport" call, whose reason (an embedded C
+  frontend is disproportionate) went once clang ships with the compiler. In effect: bindgen only.
