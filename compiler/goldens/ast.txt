@@ -1280,6 +1280,12 @@ f507991d525b2695 ea0e182818b6341a checks/cases/t32traitoutlives.olang
 e032ae2bd3919771 0b822c456d178272 checks/cases/t34casebindnote.olang
 9291025090deccd7 650852d23549459f checks/cases/t34casegenericbare.olang
 c207fb5a5d703510 b091868521931dd6 checks/cases/t34caseunknown.olang
+eee6272f95efb829 785359bb60acb607 checks/cases/t4aatomic.olang
+627e8e96c13fd022 75eab50f884ade57 checks/cases/t4abyteswap.olang
+2a6d2c041e43fcc4 8a347f5383defdd1 checks/cases/t4aextern.olang
+4e11967cf3effdc3 01809614e1d885f4 checks/cases/t4anomember.olang
+f58441fd026664f9 8096b2bf80d22932 checks/cases/t4arange.olang
+5368b82269169b78 a2df0a37ca2997cc checks/cases/t4awideliteral.olang
 b8cdeb2e5f7bcd83 f656d79ff06dfc46 checks/cases/t4primname.olang
 28f904ff125f45aa d2c5a50c6cc384bc checks/cases/t6adefine.olang
 b1a91c52d0d5ab73 a391c08a32bccae7 checks/cases/t6alocalnote.olang
@@ -1606,7 +1612,7 @@ ad03b6ba630815f1 194b673d1d712003 compiler/cond.olang
 d70e1e3f803ddbb7 fa1d844a4ab40b59 compiler/diag.olang
 e7074ce05610d9ae 0edd055de302c59e compiler/doc.olang
 d903ca85da0a85bf 7b9bda937f99dee2 compiler/emit.olang
-059abe497285b443 66403df59d96570c compiler/eval.olang
+e3115afe421e0380 66403df59d96570c compiler/eval.olang
 96eef87f681c4473 6587427dea4e72dd compiler/explain.olang
 00f82ea488b565e3 bd81c5aa73e7ac84 compiler/fetch.olang
 975d0f547e044517 d8724ddbc85611db compiler/fix.olang
@@ -1752,6 +1758,7 @@ ababaa60a76db893 da7e7475778671ac tests/genenums.olang
 f81a7b447b8ca9b5 3973d4edd97aeecf tests/generators.olang
 c3154015ef1cc50e e1777a72e9172179 tests/geom/measure.olang
 92220429c12f8095 e4e590d0650bd89b tests/geom/rect.olang
+8e36e6b6570fcbf2 399d4e818ed891a9 tests/intwidths.olang
 3b0e6e988ac6e878 94bab60c1c387ce7 tests/lanes.olang
 da57123e0606607a 66062fdcf6c0c4f5 tests/reflect.olang
 9eae251fdb164a20 4e201838ddeb9973 tests/reflmod.olang

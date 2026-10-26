@@ -5707,7 +5707,7 @@ fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn(x S) I6
         w := m.width(ty)
         for x in xs {
             s := m.Eval(tkey(id), I64[bits(x)])
-            if m.shape(from) == vFloat and m.shape(ty) != vFloat and not floatFits(F64(x), w, m.shape(ty) == vInt) {
+            if m.shape(from) == vFloat and m.shape(ty) != vFloat and not floatFits(F64(x), m.ibits(ty), m.shape(ty) == vInt) {
                 assert s == Stop.Refused(WhyConvert, 0, Sp0), $name " " $x " to " $to ": " $s
                 continue
             }
