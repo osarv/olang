@@ -25019,3 +25019,17 @@ run (`WhyNoGlobal`) - a typed global whose initializer had an error is never low
 been readable through a place. The same pattern looked for elsewhere: a default that does not check and a typed
 constant `N I64 = I64("b")` (and `M := N + 1` from it) already gave one error each - pinned by
 checks/cases/k1faultydefault beside k1faultyglobal.
+
+**`Sqrt`, `PadStart`, `PadEnd` at every width (T4a, M19d, G35).** The lanes batch left the new widths without the
+three; each is now a default over `Integer` beside the eight's own methods, which stay (an exact receiver wins, M21).
+`Sqrt` is one generic body: `if T.Min < 0 { if x < 0 { error NumberError.NEGATIVE } }`, its set inferred (R1a), so an
+unsigned width's cannot fail and a signed one's fails with NEGATIVE; a width past 64 bits takes the F64's root plus
+2^12 (the F64 root is within that of the true one at 128 bits) and Newton's steps down to the floor, then the eight's
+one-step corrections. **G35 decides `T.Min`/`T.Max`** of an integer type where the limit is an `I64` value - without
+it `T.Min < 0` was no reflected constant, every instance was checked with both branches, and a `U100`'s `Sqrt` had to
+be written with `try`. Past `I64` (U64's Max, I65's Min ...) the condition is left undecided, which for a signed width
+past 64 bits is the right set anyway. **Decided (mine):** `U8` gets `PadStart`/`PadEnd` through the default - it was
+left out because a `Char` inherits `U8`'s own methods and would pad its number; a `Char` (no `Integer`) does not reach
+a trait's default, which the test above checks, so `U8` now pads its number like every other width. The rest of the
+eight's methods were already at every width (Format, Hash, Abs, Min, Max, Clamp, Pow, ParseAs, E37's). Tests:
+tests/intwidths.olang's `padCase`, baked, decided and run.

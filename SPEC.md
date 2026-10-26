@@ -2385,7 +2385,7 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
 U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.OVERFLOW` where
-the true power does not fit (E15a); and each of the eight of 8 to 64 bits (T4a: no other width yet) `Sqrt()`, the
+the true power does not fit (E15a); and every integer of every width (T4a) `Sqrt()`, the
 integer square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
@@ -2562,10 +2562,11 @@ digits; a type wider than 64 bits takes digits up to its own range (`"3402823669
 and base `0`'s prefixed literal is read as a program reads one (L10a), its 64 bits then fitting `T`. Text has
 `PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
-never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
-with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
-none, since a `Char` would inherit them (T29f) and pad its number rather than the character - and an integer of another
-width (T4a) none yet. Every integer type of every width, `U8`
+never cut, when it is that wide already. Every integer type of every width (T4a) has the same two, padding its decimal
+rendering, with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is
+`"-007"`); a `Char`, which inherits `U8`'s own methods (T29f), has neither - it is no `Integer`, and `U8`'s two are the
+`Integer` trait's default, which a `Char` does not reach - so a `Char` padded is written `($c).PadStart(n)`, its
+character. Every integer type of every width, `U8`
 included, has `n.Format(base Radix = 10) String`: new text writing `n` in `base`, `2` to `36`, the digits past `9` being the
 lowercase letters, with a `-` before a negative number's digits and nothing else - no prefix, no padding, no `_`
 (`(255).Format(16)` is `"ff"`, `(-255).Format(16)` is `"-ff"`, `I64`'s most negative is written whole). It is what
@@ -7756,8 +7757,8 @@ declared there. So another module's reflection cannot read or build what it coul
 read by every module that reads the case (E32, S13), so `c.Fields` holds them all.
 
 **G35 (decided while compiling).** A condition built from reflected constants - `T.Kind == TypeKind.Struct`,
-`p.HasDefault`, `f.Name == "id"`, `T.Fields.Len() > 2`, with `and`, `or`, `not`, comparisons and `+ - *` - is decided
-per instance: in an `if`, a conditional (E28) and an `assert` (S18c) only the branch or value chosen is checked and
+`p.HasDefault`, `f.Name == "id"`, `T.Fields.Len() > 2`, an integer type's limits (`T.Min < 0`, E36) where they are
+within `I64`'s range, with `and`, `or`, `not`, comparisons and `+ - *` - is decided per instance: in an `if`, a conditional (E28) and an `assert` (S18c) only the branch or value chosen is checked and
 compiled, as G30 says of a length, and an assert decided false is a compile-time error. Such a condition is
 configuration, never S8a's dead code. A `match` on a reflected constant (`match T.Kind { case TypeKind.Struct => ... }`)
 chooses its arm the same way.

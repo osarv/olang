@@ -551,3 +551,28 @@ fn (x I64) Sqrt() I64 ? NumberError {
     if x < 0 { error NumberError.NEGATIVE }
     return I64(sqrtU64(U64(x)))
 }
+
+# every other integer width's (T4a), as the eight's: an unsigned one's cannot fail, a signed one's fails with
+# NumberError.NEGATIVE for a negative x - its error set inferred, so per width (R1a)
+fn (x T) Sqrt<T Integer>() T ? {
+    if T.Min < 0 {
+        if x < 0 { error NumberError.NEGATIVE }
+    }
+    if T.Size <= 8 { return T(sqrtU64(U64(x))) }
+    return T(sqrtU128(U128(x)))
+}
+
+# sqrtU64's floor of the square root, for the widths past 64 bits: from just above the F64's root - within 2^12 of the
+# true one at 128 bits - Newton's steps down to the floor, each step's sum below 2^66
+fn sqrtU128(n U128) U128 {
+    if n < (U128(1) << 64) { return U128(sqrtU64(U64(n))) }
+    r := U128(sqrt(F64(n))) + 4096
+    for {
+        s := (r + n / r) / 2
+        if s >= r { break }
+        r = s
+    }
+    for r > n / r { r-- }
+    for r + 1 <= n / (r + 1) { r++ }
+    return r
+}

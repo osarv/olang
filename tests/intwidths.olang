@@ -71,6 +71,20 @@ fn litCase(n I64) String {
         $(c == I128.Min))
 }
 
+# Sqrt, PadStart and PadEnd at the new widths, as the eight have them (an unsigned one's Sqrt cannot fail)
+fn padCase(n I64) String {
+    a U100 = U100(n) << 90
+    b := I65(-n)
+    c U128 = U128.Max
+    d := I128.Max
+    e U7 = U7(n) * 25
+    f I24 = I24(n) * 1000
+    u U8 = 7
+    return ($a.Sqrt() " " $c.Sqrt() " " $(try d.Sqrt() catch default -1) " " $e.Sqrt() " " $(try b.Sqrt() catch default -1)
+        " " $(try f.Sqrt() catch default -1) " " $e.PadStart(6, '0') " " $b.PadStart(5, '0') " " $a.PadEnd(32, '.') " "
+        $u.PadStart(3, '0'))
+}
+
 # conversions between widths, to and from floats, each rounding once (T4, E26)
 fn convCase(n I64) String {
     w := U128(1) << U128(n) | 1 # 2^100 + 1
@@ -145,6 +159,7 @@ ArithBaked := arithCase(27)
 FlowBaked := flowCase(4)
 HashBaked := hashCase(6)
 LitBaked := litCase(2)
+PadBaked := padCase(4)
 
 # what each computation gives
 WantI1 := "-1 0 -1 0 -1 1"
@@ -164,6 +179,8 @@ WantMethod := ("efcdab bcdefa bcdefa 17 0 8070605040302010000000000000000 3 5 -5
 WantParse := "-170141183460469231731687303715884105728 340282366920938463463374607431768211455 9 127 1 0 2"
 WantArith := "127 0 536870912 -1 7 9 27"
 WantFlow := "-8388481 -18446744073709551614 504"
+WantPad := ("70368744177664 18446744073709551615 13043817825332782212 10 -1 63 000100 -0004 "
+    "4951760157141521099596496896.... 007")
 WantLit := ("340282366920938463463374607431768211455 1267650600228229401496703205376 "
     "-170141183460469231731687303715884105728 340282366920938463444927863358058659840 "
     "633825300114114700748351602687 422550200076076467165567735124 -158456325028528675187087900672 "
@@ -257,6 +274,12 @@ test "E4a, L10: literals of up to 128 bits are computed exactly and adapt to a t
     assert LitBaked == WantLit
     assert litCase(Two) == WantLit
     assert litCase(2) == WantLit # S18c: decided while compiling
+}
+
+test "T4a: Sqrt, PadStart and PadEnd at the new widths" {
+    assert PadBaked == WantPad
+    assert padCase(Four) == WantPad
+    assert padCase(4) == WantPad # S18c: decided while compiling
 }
 
 test "T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding" {

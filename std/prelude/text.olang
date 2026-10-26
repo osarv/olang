@@ -348,9 +348,8 @@ fn (t String&) PadEnd(width I64, fill Char = ' ') String {
 
 # the integers made text and padded, for a column of numbers: "$n.PadStart(5)" right-aligns n in five characters, and
 # a line number before a source line is "$line.PadStart(4) " | "". Zeros go after a sign, as a number is written:
-# I64(-7).PadStart(4, '0') is "-007", where the text "-7".PadStart(4, '0') is "00-7". Every integer type but U8,
-# whose methods Char inherits (T29f) - and a Char padded should be the character, not its number: pad "$c" for that,
-# and "U32(b)" for a U8's number
+# I64(-7).PadStart(4, '0') is "-007", where the text "-7".PadStart(4, '0') is "00-7". The seven below, and every
+# other width through the default after them - U8 too, which a Char padded never reaches: pad "$c" for the character
 fn (n I8) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
 fn (n I16) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
 fn (n I32) PadStart(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
@@ -367,6 +366,11 @@ fn (n I64) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width,
 fn (n U16) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
 fn (n U32) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
 fn (n U64) PadEnd(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
+
+# every other integer width's (T4a), as the eight's. U8 is among them, its number padded: Char, which inherits U8's own
+# methods (T29f), is no Integer and does not reach these (pad "$c" for a character)
+fn (n T) PadStart<T Integer>(width I64, fill Char = ' ') String { return padNumber($n, width, fill) }
+fn (n T) PadEnd<T Integer>(width I64, fill Char = ' ') String { return ($n).PadEnd(width, fill) }
 
 # a number's text padded before: zeros after its sign
 fn padNumber(digits String&, width I64, fill Char) String {

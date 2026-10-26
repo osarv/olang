@@ -11207,6 +11207,18 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
             if not c.P.Layout(t) { return noRefl() }
             return rvInt(c.P.T.Size(t) if name == "Size" else c.P.T.Align(t))
         }
+        if (name == "Min" or name == "Max") and c.P.T.IsInt(t) {
+            # an integer type's limits (E36), where they are I64 values: so "T.Min < 0" tells signed from unsigned
+            c.reflTouched = true
+            w := c.P.T.Bits(t)
+            if c.P.T.IsUnsigned(t) {
+                if name == "Min" { return rvInt(0) }
+                return rvInt((I64(1) << w) - 1) if w < 64 else noRefl()
+            }
+            if w > 64 { return noRefl() }
+            lo := I64(-9223372036854775807) - 1 if w == 64 else -(I64(1) << (w - 1))
+            return rvInt(lo if name == "Min" else -(lo + 1))
+        }
         if name == "Length" {
             c.reflTouched = true
             r := c.under(t)
