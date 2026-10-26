@@ -1452,3 +1452,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   slot; once a named argument appears, no positional one follows; required parameters are positional only;
   constructors and methods too; calls through a function value positional only. Queued after the definite-init batch
   (same checker code).
+- DOC EXAMPLES DECIDED 2026-10-26 (the user, through "why have them as tests and not as examples?", "several tests
+  ... bind to the same function or type?", "extend the test keyword?", "the test on the type/function/method must
+  appear in the same file"): `test "desc" { }` unchanged; `test Target "desc" { }` binds a test to a function, type or
+  method (`Map.Get`); `example Target ["desc"] { }` is a test the docs show under its target (olang doc, lsp hover),
+  compiled, run and decided as a test; a target is declared in the same file as the test or example (private ones
+  too); target + description unique in a file; several examples of one target each need a description (the caption);
+  `olang test FILE Target` runs one target's tests and examples. Doc tests in comments not built (comments stay prose).
+  Queued as a small batch after wt-definit (check/parse) - with named arguments.
