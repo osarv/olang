@@ -1,6 +1,6 @@
 # std - the standard library
 
-Ordinary olang on top of `extern fn` (SPEC §11). No module has a privilege the language does not give. Imports are
+Ordinary olang on top of the C library's headers, imported as modules (SPEC §11, X17). No module has a privilege the language does not give. Imports are
 written `import "std/name"`; a module is one file, and a directory only groups files (M22).
 
 ## Modules
@@ -31,15 +31,17 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
 
-## Calling C: `extern fn` or `std/ffi`
+## Calling C: a header import, an extern block, or `std/ffi`
 
-Call C through `extern fn` (SPEC §11) whenever the function is known when the program is written: the compiler checks
-every call against the prototype, the call costs what C's does, and numbers, Bools, arrays, extern types (`extern type
-Db`, a handle C lays out), plain-data structs by reference or by value and callbacks (`export fn`s) all cross. `link
-"name"` beside the declarations links the library, and `olang bindgen header.h` writes the declarations from a C
-header. `std/ffi` is for the rest: a function whose name, or whose kinds of arguments, are known only while the program
-runs - what an interpreter needs. It looks the function up and builds the call each time, passes only numbers and
-arrays of them, and links libffi into the program that imports it.
+Call C through its header whenever one declares the function: `import c "unistd.h"`, `import z "zlib.h" link "z"`
+(SPEC X17) - the declarations are translated while compiling, the compiler checks every call against them, the call
+costs what C's does, and numbers, Bools, arrays, C's structs (at their exact size), handles, `void *` (`CVoid?&`) and
+callbacks (`export fn`s) all cross; `import fast "fast.c"` compiles C of your own into the program, inlined both ways.
+Where no header exists, `extern link "name" { fn ... type Handle }` declares the functions by hand (`olang bindgen
+header.h` writes such a block from a header), and `extern { }` declares what is linked anyway (the runtime's
+`__olang_` functions). `std/ffi` is for the rest: a function whose name, or whose kinds of arguments, are known only
+while the program runs - what an interpreter needs. It looks the function up and builds the call each time, passes
+only numbers and arrays of them, and links libffi into the program that imports it.
 
 ## Names
 

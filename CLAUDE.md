@@ -997,7 +997,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   pointer), **extern types** (`extern type Db`: held as `Db&`/`Db?&`, passed back, compared, null-tested, never read or
   built, C may return them; outside section 8's tracking, as numbers - X10), **plain-data structs** by reference and by
   value, classified by `compiler/cabi.olang` as clang 18 passes them on x86-64 (System V) and AArch64 (AAPCS64), tested
-  against clang (X11). `link "name"` per module (`-lname`, or a path beside the module, X9). **Callbacks are `export
+  against clang (X11). `link "name"` (`-lname`, or a path beside the module, X9) - since 2026-10-26 only on an extern block or a C import
+  (the C-imports entry below). **Callbacks are `export
   fn`s only** (X13): C is given an export fn by name - a C entry with no closure that sets up olang's per-thread state
   the first time C calls on a thread it made (one load and compare; that state is never released, a recorded limit) -
   context through the user data argument. `build -library` (X14) makes `libNAME.so` (only the export fns visible,
@@ -1007,7 +1008,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   copied into a caller's buffer returning its length); Python reaches it by ctypes. `t.ToC()` and `p.StringFromC(max)`
   over the prelude's `CStr` (X15: not `String.FromC(p, max)` as decided - no type-level functions, E33's precedent).
   `olang bindgen HEADER.h` (X16) writes a header's declarations from clang's tree, macros' values computed by clang;
-  `interpret` loads the linked libraries and refuses structs and extern types (B3e). Still no extern variables, and
+  `interpret` loads the linked libraries; since 2026-10-26 it passes extern types and plain structs by reference too,
+  refusing a struct by value (B3e). Still no extern variables, and
   the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
 - **std API details.** `Vec`, and std/list's `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt
   SwapRemove IndexOf Remove Reverse Sort Join ToArray Clone`, `v[i]` unchecked, `try v.Get(i)` checked (a List's first
@@ -1218,6 +1220,32 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
   bang inside std/io said `Error.X`). The error a catch clause names renders the same way (`$e`, R11b); the rule is
   `load.ErrQualifier` (moved from lower, 2026-10-25).
+- **C headers and C files are imported as modules (X17-X22, X9, X3a, QBE, 2026-10-26, the user's design; details
+  mine).** `import z "zlib.h" link "z"` gives a module of what clang reads in the header and everything it includes,
+  translated while compiling (bindgen's path) and kept in `OLANG_CACHE/cimport` under a key of the import, clang, the
+  compiler and the flags, made again when a file it read changes; a header beside the importer is that file, any other
+  the system's; libc's headers need no `link`. `import fast "fast.c"` compiles the file's own C as IR with the program's
+  target attributes, so the LTO link inlines C into olang and olang into C (measured: no call left); a header's static
+  inline functions are reached through wrappers compiled the same way; `interpret` compiles it into a shared library and
+  dlopens it. `extern link "golib" { fn ... type Handle }` declares a header-less library in one place, `extern { }`
+  what is already linked (the runtime's `__olang_` functions); the standalone `link` declaration is gone
+  (tools/link_migrate.olang, in `olang fix`). Variadic C calls pass C's default promotions, the format unchecked (X1a's
+  hole, stated); olang functions are never variadic. **Translation (mine):** numbers' typedefs are the numbers; a plain
+  record a plain struct, any other complete one opaque words of its exact size and alignment (unions, bitfields); a
+  transparent union parameter its first member; integer macros constants (I32 where they fit), float and text macros
+  too, an expression macro a generic function over its arguments; everything left out is listed with why, and naming one
+  says it (X19's `the C import has no olang form of 'stdin': a variable`); C's reserved names (`__x`, `_X`) are left out.
+  **Pointers (X22, mine):** `void *` is the prelude's `CVoid?&`, taking any array, a plain struct in place, an extern
+  handle or null; a struct pointer also takes an array of numbers (C's cast of a buffer - socket addresses, timespecs)
+  or a pointer C gave. **One C import per library:** a `.c` import exposes everything its file includes, and two
+  headers declaring one C struct give two olang types (`sysstat.timespec`, `ctime.timespec`). **Migration:** std and
+  compiler/ import the system headers they call - 166 hand `extern fn` gone; chan/sync hold `pthread_mutex_t` and its
+  kin at their exact size (X3a's upper-bound reservation is only for types no header declares). The wrapper tag comes
+  from the import alone, so the compiler's build of itself stays a fixed point; the seed was regenerated. **Left:** a C
+  extern variable (`stdin`, `errno`) and a cast macro (`SIG_IGN`) have no form (signal is hand-declared in session);
+  named constants do not adapt like literals (`I16(cpoll.POLLIN)`); a struct by value under interpret is refused; a large
+  header costs its check on every build (openssl/ssl.h: 940 KB of declarations, 3 s per build after a 6 s first
+  translation; the prelude's math.h and string.h add ~0.05 s to a hello world).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made
