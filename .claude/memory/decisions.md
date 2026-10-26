@@ -1360,3 +1360,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   values"). To discuss: readability for many-parameter calls (Gemm's transA, alpha, beta, threads; layer constructors)
   vs API stability, interplay with defaults and `default`, spelling (`name = v` vs `name: v`), whether order may
   change, and whether constructors get it. In effect: positional + `default`.
+- QBH ASKED 2026-10-26 (the user: "Are we really to do linalg when oann will need tensors?"): recommended - kernel
+  tuning now (no API to get wrong, every user gains), Tensor (QBD) built when oann is ported, so its first user shapes
+  it instead of a guessed API being redone. In effect: the tensor agent told to do the kernels only and hold Tensor.
