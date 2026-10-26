@@ -443,3 +443,10 @@ on sight per rules.md, "Code rules".
   saxpy/select level with C, dot ~6% above), T4a I1-I128/U1-U128 (exact in the evaluator, __divti3 for 128-bit
   division). Queued small: 128-bit literals (decisions.md), Sqrt/PadStart/PadEnd for new widths, the trait-list line
   breaks in the prelude once the seed parses them.
+- 2026-10-26 CEST: small3 merged (420cb18, verified): 128-bit literals (E4a), a failed global gives no value (K1a),
+  Sqrt/PadStart/PadEnd at every width, Integer's width list across lines (seed regenerated), generator speed (idle loop
+  scopes lose their headers everywhere: range gen 1.64 -> 0.35 s, filter gen 0.94 -> 0.26; most bench rows fell,
+  mandelbrot +18% instructions but faster), SPEC §5 renumbered, over-rejection 13 kept refused (built result writable,
+  T25c) with one error naming `fn Show() String`. Left: generator frame elision (coro.alloc + coro.destroy where a for-in
+  makes and finishes the walk); "unknown name 'os'" x3 without an import; E11b hint for 'c'.PadStart(3) in a join.
+NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.ToVec()).
