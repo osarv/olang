@@ -818,7 +818,7 @@ d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and nu
 d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
     9 |     y := nothing()
       |          ^~~~~~~~~
-d15null.olang:10:31: error[E4a]: this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'
+d15null.olang:10:31: error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'
    10 |     z := 18446744073709551615 * 2
       |                               ^
 compilation failed with 3 errors
@@ -1861,9 +1861,9 @@ e4ashiftfit.olang:5:15: error[E4a]: this literal expression's value does not fit
       |               ^~
 compilation failed with 1 error
 === e4ashiftunadapted.olang
-e4ashiftunadapted.olang:6:17: error[E8a, E4a]: this shift is past its literal's width, and nothing adapts it to a wider type - convert the literal, as I64(1) << 40
-    6 |     t := $(1 << 64)
-      |                 ^~
+e4ashiftunadapted.olang:5:14: error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'
+    5 |     t := $(1 << 64)
+      |              ^~
 compilation failed with 1 error
 === e4azerodiv.olang
 e4azerodiv.olang:4:20: error[E6a]: division by zero
@@ -2342,8 +2342,13 @@ intfloatmix.olang:6:14: error[T6b]: I32 and F64 do not meet - neither flows into
       |              ^
 compilation failed with 1 error
 === inttoolarge.olang
-inttoolarge.olang:5:13: error[L10]: '99999999999999999999999' is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615
-    5 |     z U64 = 99999999999999999999999
+inttoolarge.olang:5:14: error[L10]: '999999999999999999999999999999999999999999' is beyond 128 bits - the largest integer literal is U128's 340282366920938463463374607431768211455
+    5 |     z U128 = 999999999999999999999999999999999999999999
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== inttoowideu64.olang
+inttoowideu64.olang:4:13: error[T6]: '99999999999999999999999' does not fit U64
+    4 |     z U64 = 99999999999999999999999
       |             ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === isasoperand.olang
@@ -2379,6 +2384,22 @@ k1assertaborts.olang:6:5: note: here
     6 |     assert x % 2 == 0
       |     ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== k1faultydefault.olang
+k1faultydefault.olang:4:18: error[E12]: expected I64, found String&
+    4 | fn f(x I64 = I64("a")) I64 { return x }
+      |                  ^~~
+k1faultydefault.olang:5:13: error[E12]: expected I64, found String&
+    5 | N I64 = I64("b")
+      |             ^~~
+compilation failed with 2 errors
+=== k1faultyglobal.olang
+k1faultyglobal.olang:6:13: error[E12]: expected Array<Char>, found I64
+    6 | X := String(1)
+      |             ^
+k1faultyglobal.olang:7:19: error[E12]: expected Array<Char>, found I64
+    7 | Y String = String(2)
+      |                   ^
+compilation failed with 2 errors
 === k1globalaborts.olang
 k1globalaborts.olang:10:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
    10 | G I32 = pick(5)
@@ -3098,6 +3119,11 @@ compilation failed with 1 error
 o14param.olang:4:24: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
     4 | fn f(p P&) P& { return p }
       |                        ^
+compilation failed with 1 error
+=== o14returnglobal.olang
+o14returnglobal.olang:6:28: error[O14, T25c]: this returns a global's storage, and a built result is new storage its caller may write - return the value, which copies it (a result written without '&', T7b)
+    6 | fn Show() String& { return Data }
+      |                            ^~~~
 compilation failed with 1 error
 === o17bbitand.olang
 o17bbitand.olang:20:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -6189,10 +6215,20 @@ t4arange.olang:4:12: error[T6]: '128' does not fit U7
     4 |     x U7 = 128
       |            ^~~
 compilation failed with 1 error
+=== t4awideint.olang
+t4awideint.olang:4:14: error[T6]: '170141183460469231731687303715884105728' does not fit I128
+    4 |     x I128 = 170141183460469231731687303715884105728
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === t4awideliteral.olang
-t4awideliteral.olang:4:16: error[E4a]: this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'
-    4 |     x I128 = 1 << 100
-      |                ^~
+t4awideliteral.olang:5:12: error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'
+    5 |     x := 1 << 100
+      |            ^~
+compilation failed with 1 error
+=== t4awiderange.olang
+t4awiderange.olang:4:17: error[E4a]: this literal expression has no value - no integer type holds it, from I128's least to U128's greatest
+    4 |     x U128 = (1 << 128) - 1
+      |                 ^~
 compilation failed with 1 error
 === t4primname.olang
 t4primname.olang:4:6: error[D3a]: 'I32' is a built-in type's name - choose another

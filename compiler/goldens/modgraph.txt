@@ -138,6 +138,40 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/generators
+===  tests/intwidths.olang
+| module std/arith
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/intwidths
+|   arith std/arith
+===  tests/lanes.olang
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/lanes
 ===  tests/reflect.olang
 | module std/cancel
 | module std/io
@@ -970,6 +1004,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -1228,6 +1263,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -1416,6 +1452,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -1652,6 +1689,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -1891,6 +1929,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -1997,6 +2036,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -2164,6 +2204,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -2392,6 +2433,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -2624,6 +2666,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -2902,6 +2945,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -3089,6 +3133,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -3102,6 +3147,8 @@
 | module compiler/source
 |   os std/os
 | module compiler/token
+| module compiler/types
+|   source compiler/source
 | module std/cancel
 | module std/filepath
 | module std/io
@@ -3346,6 +3393,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/olang
 |   bindgen compiler/bindgen
 |   build compiler/build
@@ -3662,6 +3710,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -3882,6 +3931,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -4190,6 +4240,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -4360,6 +4411,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -4563,6 +4615,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -4800,6 +4853,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -5038,6 +5092,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -5336,6 +5391,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -5577,6 +5633,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -5861,6 +5918,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/olang
 |   bindgen compiler/bindgen
 |   build compiler/build
@@ -6285,6 +6343,29 @@
 | module std/prelude/vec
 | module std/rand
 | module std/time
+===  bench/gen.olang
+| module bench/gen
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
 ===  bench/ir.olang
 | module bench/benchlib
 |   io std/io
@@ -6313,6 +6394,29 @@
 | module std/prelude/vec
 ===  bench/knucleotide.olang
 | module bench/knucleotide
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+===  bench/lanes.olang
+| module bench/lanes
 |   io std/io
 |   os std/os
 | module std/cancel
@@ -6823,6 +6927,40 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/generators
+=== -t tests/intwidths.olang
+| module std/arith
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/intwidths
+|   arith std/arith
+=== -t tests/lanes.olang
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/lanes
 === -t tests/reflect.olang
 | module std/cancel
 | module std/io
@@ -7669,6 +7807,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -7927,6 +8066,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8127,6 +8267,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8369,6 +8510,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8636,6 +8778,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8748,6 +8891,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -8915,6 +9059,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -9155,6 +9300,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -9393,6 +9539,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -9684,6 +9831,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -9884,6 +10032,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -9897,6 +10046,8 @@
 | module compiler/source
 |   os std/os
 | module compiler/token
+| module compiler/types
+|   source compiler/source
 | module std/cancel
 | module std/filepath
 | module std/io
@@ -10141,6 +10292,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/olang
 |   bindgen compiler/bindgen
 |   build compiler/build
@@ -10486,6 +10638,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -10712,6 +10865,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -11048,6 +11202,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -11224,6 +11379,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -11433,6 +11589,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -11670,6 +11827,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -11920,6 +12078,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -12230,6 +12389,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -12477,6 +12637,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/parse
 |   ast compiler/ast
 |   diag compiler/diag
@@ -12767,6 +12928,7 @@
 |   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
+|   tys compiler/types
 | module compiler/olang
 |   bindgen compiler/bindgen
 |   build compiler/build
@@ -13204,6 +13366,29 @@
 | module std/prelude/vec
 | module std/rand
 | module std/time
+=== -t bench/gen.olang
+| module bench/gen
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
 === -t bench/ir.olang
 | module bench/benchlib
 |   io std/io
@@ -13232,6 +13417,29 @@
 | module std/prelude/vec
 === -t bench/knucleotide.olang
 | module bench/knucleotide
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+=== -t bench/lanes.olang
+| module bench/lanes
 |   io std/io
 |   os std/os
 | module std/cancel

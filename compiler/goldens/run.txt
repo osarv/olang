@@ -74,6 +74,25 @@
 | ok - D18b: a generator builds into what it was given, where that lives
 | ok - D18c: a generator yields copies of what it was given
 | ok - S19e: an errdefer in a generator's body runs when the walk fails, not when it ends
+| ok - D18: a generator's contract, failing its first Next
+| ok - D18b: walks holding no scope and walks holding one, stopped part way, side by side
+=== test tests/intwidths.olang
+| status 0
+| ok - T4a: one bit, seven bits and 24 bits wrap at their widths - baked, decided while compiling and run
+| ok - T4a: 63, 65 and 128 bits, past a word and to its double
+| ok - T4a: conversions between widths and to and from floats round once
+| ok - T4a: bit operations, Format, Abs, Min, Pow and ParseAs at the new widths
+| ok - T4a: std/arith and Narrow fail where a new width cannot hold the result
+| ok - T4a: narrower widths flow into wider ones, and hashing agrees with ==
+| ok - E4a, L10: literals of up to 128 bits are computed exactly and adapt to a type wide enough
+| ok - T4a: Sqrt, PadStart and PadEnd at the new widths
+| ok - T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding
+=== test tests/lanes.olang
+| status 0
+| ok - E39: lane operators - built, fused, totalled, compared and chosen - baked, decided while compiling and run
+| ok - E39: a fused total makes no array, and an empty one
+| ok - E39: Min and Max by '<', a float's NaN the answer once met, ties the first
+| ok - E39: lanes made in a function and returned are read back after an arena churn
 === test tests/reflect.olang
 | status 0
 | ok - a type's name, kind and layout are constants of each instance
@@ -869,6 +888,10 @@
 | ok - C9b: a Destroy() before an error, a deferred one, and one after a call that keeps nothing
 | ok - C9b: an errdefer's Destroy() runs where an error leaves, and a Destroy() between a generator's yields
 | ok - O8d: a place let go of between a generator's yields and in an errdefer - baked, decided and run alike
+| ok - O8d, F1: a view a generator holds across a yield keeps what it names
+| ok - O8d, F2: a value of a place stored inside another value of that place keeps the place
+| ok - O8d, F4: a destructor a let-go would run early runs at its scope's close
+| ok - C9b: r.Destroy(); continue - and break - in the loop that declares r
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1003,6 +1026,7 @@
 | ok - Parse and Encode give the same while compiling as at run time
 | ok - a value of any type written by its type
 | ok - a value of any type read through its constructor
+| ok - whole numbers are read and written exactly, through I64's and U64's ranges
 === test std/linalg.olang
 | status 0
 | ok - the compile-time values are the run time's
@@ -1118,7 +1142,7 @@
 === test std/stats.olang
 | status 0
 | ok - Sum, Mean, Variance and StdDev
-| ok - pairwise sums keep their error small
+| ok - pairwise sums keep the mean's error small
 | ok - Median and Percentile interpolate between the closest ranks, as numpy does
 | ok - Min, Max and Histogram
 | ok - the statistics computed while compiling equal the run time's
@@ -1480,6 +1504,9 @@
 | status 0
 === run o13aloopreturnwrap.olang
 | status 0
+=== run o14returnglobalvalue.olang
+| status 0
+| Zonstant text constant text
 === run o15deepchain.olang
 | status 0
 === run o17bhandleout.olang
