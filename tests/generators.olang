@@ -266,3 +266,22 @@ test "D18: a generator's contract, failing its first Next" {
     b := try g.Next() catch ArgumentError default -5 catch Exhausted default -6
     assert a == -5 and b == -6
 }
+
+# a walk whose loops build nothing holds no scope header at a yield: dropped part way it has nothing to close, and one
+# whose loop body does (guarded's Res) still closes it - side by side, a thousand times
+test "D18b: walks holding no scope and walks holding one, stopped part way, side by side" {
+    d := Dropped
+    t I64 = 0
+    for k in range 1000 {
+        for x in evens(Ten) {
+            if x == 4 { break }
+            t += x
+        }
+        for y in guarded(Ten) {
+            if y == 1 { break }
+            t += y
+        }
+    }
+    assert t == 2000
+    assert Dropped == d + 2000
+}

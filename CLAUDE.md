@@ -569,8 +569,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   yielded local holding the generator's own storage is O26 worded for yield (write `$x`/`x.Clone()`), and a yielded
   borrow of a parameter's referent is T22a's (the walk's Next is a function value; worded "yield a copy"). Not allowed:
   `yield` in a lambda, deferred code, a join block, or with deferred code pending around it (a dropped walk would never
-  run it - relaxable). Cost: about 6 ns a value (an indirect resume per Next, the frame never elided), against 0.25 for a
-  hand-written iterator struct - eliding the frame where the walk is made and finished in one place is future work.
+  run it - relaxable). Cost (2026-10-26): about 1.7 ns a value summing a range, the resume inlined where the walk is made, with the
+  frame's fields in memory per step (the frame comes from the arena and its handle is registered for the drop, so
+  CoroElide cannot take it); a filter generator is 1.2x a hand-written iterator struct. A loop scope nothing uses
+  gets no header (`idle`, as frame and block scopes), and a scope held at a yield is not used by being held.
   **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
   `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
   aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).

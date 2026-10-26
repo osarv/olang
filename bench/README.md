@@ -597,3 +597,22 @@ The fused forms are one loop with no array between (checked in the IR) and vecto
 float `Sum` adds in order, as C's loop does, so dot is the sequential sum in both. The hand loops of saxpy and select
 are slower because `Array<F32>(n)` zero-fills before the loop writes every element; the lane form's new array is made
 with no fill, since the loop writes all of it.
+
+## Generators (`gen.olang`, 2026-10-26)
+
+`gen.olang MODE FORM N PASSES` sums a walk PASSES times: MODE `range` (0 to N-1) or `filter` (the multiples of 3), FORM
+`gen` (a generator, D18), `iter` (the same walk as a struct with `Next`, written by hand) or `loop` (a `for` over a
+range); `c/gen.c` is the plain C loop. `run.olang`'s `gen:` rows, 10M values x 20, median of 3:
+
+| row | before | after | C |
+|---|---|---|---|
+| range, generator | 1.64 s | 0.35 s | 0.002 s |
+| range, iterator | 0.036 s | 0.001 s | 0.001 s |
+| range, loop | 0.001 s | 0.001 s | 0.001 s |
+| filter, generator | 0.94 s | 0.26 s | 0.14 s |
+| filter, iterator | 0.25 s | 0.21 s | 0.14 s |
+| filter, loop | 0.14 s | 0.14 s | 0.17 s |
+
+"After" is a loop scope nothing uses getting no header, and a scope held at a yield not counting as used (HISTORY.md,
+"Generator speed"). The resume is inlined where the walk is made; what is left is the coroutine's frame, kept in the
+arena and reached through memory each step - eliding it needs `llvm.coro.alloc` and a destroy at the for-in's end.

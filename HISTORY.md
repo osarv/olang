@@ -25048,3 +25048,25 @@ call could meet. **Decided (mine):** a reference to the program's storage return
 gives the caller its own copy. No new form for borrowing from a global (`String&Data` would be a new marker for a
 global, and a caller holding a view of a mutable global would need early freeing to see it; the by-value form costs a
 copy the reader can see). checks/cases/o14returnglobal and o14returnglobalvalue.
+
+**Generator speed (D18; emit).** A walk's cost was a scope header per loop turn, not the resume: the resume was
+already devirtualized and inlined where the walk is made (the generator function and its coroutine's ramp are inlined
+into the for-in, and CoroElide replaces the resume's load with the function). What each turn paid was
+`__olang_scope_close` and a header store for the generator's loop scope, held open across the yield, and the same
+again for the for-in's own loop body. Two changes in emit's `findIdle`: a **loop** scope nothing is built in,
+registered with, handed on or captured gets no header, as frame and block scopes already did (28940d5 had named only
+those two, with no reason recorded for leaving loops out - a loop scope is opened and closed by MIR's own Open and
+Close as a block's is); and a scope a `Suspend` holds is not used by being held - one nothing else uses is idle, so a
+dropped walk has nothing of it to close (the drop closes only the non-idle held scopes, as emit's `suspend` already
+filtered). Measured (bench/run.olang's new `gen:` rows, 10M values x 20, median of 3): a range generator 1.64 s ->
+0.35 s, a filter generator 0.94 s -> 0.26 s, the hand-written iterators 0.036 s -> 0.001 s (range, folded to a closed
+form) and 0.25 s -> 0.21 s (filter), plain loops unchanged. **What still separates a generator from the hand iterator**
+is the frame: it comes from `__olang_scope_alloc_a` (no `llvm.coro.alloc`), and the handle is registered with its home
+scope for the drop, so it escapes and every step loads and stores the coroutine's state in memory; eliding it needs
+`coro.alloc`, a `coro.destroy` at the for-in's end where the walk is made and finished there, and no drop registration
+in that case. Adding `alwaysinline` to the generator and its ramp changed nothing measurable (the LTO pipeline
+inlines them already). **Elsewhere**, idle loop scopes cut instructions (callgrind, `-target x86-64-v3`): `sum push`
+7.8M -> 3.2M, `vec sort` 15.5M -> 5.3M, `dispatch any` 5.0M -> 2.8M, `regex` 229M -> 176M, the Fold rows 1.86M ->
+0.57M; three rose from LLVM taking other unrolling decisions with the closes gone - mandelbrot +18% (its escape loop
+no longer unrolled by five; time level, 0.63 s against 0.67 s), sha256 +2.3%, k-nucleotide +0.7% (times within
+noise). Test: tests/generators.olang, walks holding no scope and walks holding one, stopped part way, a thousand times.

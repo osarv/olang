@@ -1,0 +1,84 @@
+# gen: a generator's walk (D18) against the same walk written as an iterator struct and as a plain loop - "MODE FORM N
+# PASSES", MODE
+#   range    the numbers 0 to N-1, summed, PASSES times
+#   filter   the multiples of 3 below N, summed, PASSES times
+# FORM is gen (a generator, fn ... Iterator<I64> with yield), iter (a struct with Next, written by hand) or loop (a for
+# over a range); every mode prints one number, and the C version (c/gen.c) computes the same with a plain loop.
+import "std/io"
+import "std/os"
+
+type Usage error {
+    ARGS
+    MODE
+}
+
+fn upto(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i++
+    }
+}
+
+fn thirds(n I64) Iterator<I64> {
+    for i in range n {
+        if i % 3 == 0 { yield i }
+    }
+}
+
+type Upto struct(n I64) {
+    n
+    i I64 = 0
+}
+
+fn (u mut Upto&) Next() I64 ? Exhausted {
+    if u.i >= u.n { error Exhausted.END }
+    v := u.i
+    u.i++
+    return v
+}
+
+type Thirds struct(n I64) {
+    n
+    i I64 = 0
+}
+
+fn (u mut Thirds&) Next() I64 ? Exhausted {
+    for u.i < u.n {
+        v := u.i
+        u.i++
+        if v % 3 == 0 { return v }
+    }
+    error Exhausted.END
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 5 { error Usage.ARGS }
+    mode := args[1]
+    form := args[2]
+    n := try args[3].ParseInt()
+    passes := try args[4].ParseInt()
+    t I64 = 0
+    for p in range passes {
+        if mode == "range" and form == "gen" {
+            for x in upto(n) { t += x }
+        } else if mode == "range" and form == "iter" {
+            for x in Upto(n) { t += x }
+        } else if mode == "range" and form == "loop" {
+            for x in range n { t += x }
+        } else if mode == "filter" and form == "gen" {
+            for x in thirds(n) { t += x }
+        } else if mode == "filter" and form == "iter" {
+            for x in Thirds(n) { t += x }
+        } else if mode == "filter" and form == "loop" {
+            for x in range n {
+                if x % 3 == 0 { t += x }
+            }
+        } else {
+            error Usage.MODE
+        }
+        t += p
+    }
+    try io.Println($t)
+}

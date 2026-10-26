@@ -1818,7 +1818,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     # E11b: the builders whose text is measured and then written straight where it lands (direct), and the pieces of
     # the one being written
     direct Map<I64, Bool>
-    # the frame and block scopes nothing is built in, registered with, handed on or captured: no header is made for one
+    # the frame, block and loop scopes nothing is built in, registered with, handed on or captured: no header is made for one
     # (a render helper's frame - a recursion through a Str keeps no header per level that it never uses, as stage 0's)
     idle Map<I64, Bool>
     pieceKinds List<mir.WriteKind>
@@ -3322,7 +3322,20 @@ fn (fe mut fnEm&) findIdle() {
     f := fe.F
     used := Array<Bool>(f.Scopes.Len())
     frame := false
-    for r in f.Refs { frame = fe.useRef(r, used) or frame }
+    # D18: the scopes a generator holds open at a yield are not used by being held - one nothing else uses has no
+    # header to close when the walk is dropped
+    held := Array<Bool>(f.Refs.Len())
+    for bb in f.Blocks {
+        match bb.T {
+            case mir.Term.Suspend(_, _, _, h) {
+                for i in range h.N { held[I64(h.At) + i] = true }
+            }
+            case _ { }
+        }
+    }
+    for i in range f.Refs.Len() {
+        if not held[i] { frame = fe.useRef(f.Refs[i], used) or frame }
+    }
     for bb in f.Blocks {
         for st in bb.Stmts {
             match st {
@@ -3358,7 +3371,7 @@ fn (fe mut fnEm&) findIdle() {
     }
     for i in range f.Scopes.Len() {
         k := f.Scopes[i].Kind
-        if k != mir.ScopeKind.Frame and k != mir.ScopeKind.Block { continue }
+        if k != mir.ScopeKind.Frame and k != mir.ScopeKind.Block and k != mir.ScopeKind.Loop { continue }
         if used[i] or (frame and i == fe.frameScope) { continue }
         fe.idle.Put(i, true)
     }

@@ -74,6 +74,12 @@ fn table() Array<String&>& {
         "lanes: saxpy, hand loop|lanes|lanes|saxpy loop 1000000 300"
         "lanes: select|lanes|lanes|select lanes 1000000 300"
         "lanes: select, hand loop|lanes|lanes|select loop 1000000 300"
+        "gen: range|gen|gen|range gen 10000000 20"
+        "gen: range, iterator|gen|gen|range iter 10000000 20"
+        "gen: range, loop|gen|gen|range loop 10000000 20"
+        "gen: filter|gen|gen|filter gen 10000000 20"
+        "gen: filter, iterator|gen|gen|filter iter 10000000 20"
+        "gen: filter, loop|gen|gen|filter loop 10000000 20"
     ]
 }
 
