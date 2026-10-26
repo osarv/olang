@@ -1531,3 +1531,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   T.Cases, T) - e.g. `@json.Keys(json.Keys.Camel)` on a type so every Encode/Decode of it uses that policy; not on
   functions until reflection reads functions (an attribute nothing can read is noise, and function attributes invite
   macro-like uses). Queued with the json key policies after the profiler.
+- QBN extended 2026-10-26 (the user: "Let's do functions too. What is the block for that?" - read "block" as
+  "blocker", stated): attributes on functions and methods too. The blocker was only that reflection cannot read
+  functions; decided (mine) to build it with them: `api.Functions` (a module alias's exported functions, its own
+  module's all) and `T.Methods`, unrolled walks as T.Fields, each a descriptor (`f.Name`, `f.Params`, `f.Results`,
+  `f.Errors`, `f.Attr<A>()`, `f(args)` calls it), so a library collects attributed functions while compiling (an
+  http router, a CLI's subcommands, a test or benchmark table). Attributes stay data; nothing runs because of one.
