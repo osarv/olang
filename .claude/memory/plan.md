@@ -497,3 +497,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   0.30 -> 0.15 s). Decided (mine): a walk a for-in makes and finishes is dropped where the loop's block is left whatever
   it was given (fixes a program-scope leak, 591 MB over 4M walks) - in the QBB batch. Next: stored errors + named
   arguments + tests naming targets (one batch), then QBB (generator borrows, frame views, the walk drop).
+- 2026-10-26 CET: errval merged (edc2624, verified; fast-forward): T20 errors as values (an error type or named set as
+  any value's type but a result, null the zero, `raised a null error` aborts, Hash, match with case null), E14b named
+  arguments for defaulted parameters (written order, hidden locals where names reorder), B7a tests naming targets
+  (examples in doc/hover, `olang test FILE WORD` filters at run time, ok/FAIL - Target: desc). Next: QBB (generator
+  borrows of inputs, frame views, the walk drop), then bulk review 3.
