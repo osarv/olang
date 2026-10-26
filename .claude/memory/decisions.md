@@ -1417,3 +1417,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   batch: (1) make sure a comprehension over a range or a known-length array allocates without clearing (check, fix if
   not) and that SPEC's "not yet implemented" fixed length for such comprehensions is built; (2) skip the clear where the
   next code is a counted loop writing every element before any read. ASKED.
+- QBJ DECIDED 2026-10-26 (the user: "Yes, build as you proposed"): no `Array<T>(n, fn)` form (a comprehension is the
+  computed fill); in the definite-init batch: a comprehension over a range or known-length array allocates without a
+  clear and gets its fixed length (SPEC's "not yet implemented"), and `Array<T>(n)` skips its clear where the next code
+  is a counted loop writing every element before any read.
