@@ -263,6 +263,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
     unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
+    heldWalks Vec<heldCand>     # D18e: the locals walked by a for-in or a comprehension, judged once the attempt has checked
     # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
     # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
     # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
@@ -391,6 +392,14 @@ type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, 
     Field
 }
 
+# D18e: a local a for-in or a comprehension walks, judged once its body is checked (settleHeldWalks): its body, the
+# local and the walk's hidden iterator declared from a read of it
+type heldCand struct(Body I64, G I64, It I64) {
+    Body
+    G
+    It
+}
+
 type ValueKind enum {
     Literal      # a literal through its type's constructor (T29d)
     Zero         # a zero value its constructor makes (D13c)
@@ -471,6 +480,7 @@ fn (c mut Checker&) CheckProgram() {
         mark := c.P.L.Diags.Count()
         c.attempt()
         c.settleUnset()
+        c.settleHeldWalks()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
@@ -559,6 +569,7 @@ fn (c mut Checker&) reset() {
     c.AssertAsks = Vec<AssertAsk>()
     c.ValueAsks = Vec<ValueAsk>()
     c.unsets = Vec<unsetCand>()
+    c.heldWalks = Vec<heldCand>()
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
     c.ContractAsks = Vec<ContractAsk>()
@@ -568,6 +579,25 @@ fn (c mut Checker&) reset() {
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
     c.lastFixed = Vec<I64>()
+}
+
+# D18e, once an attempt has checked every body: a local declared from a generator's call (one whose elements are built
+# per turn) that one for-in or comprehension walks, made once where the local is declared and naming it nowhere else,
+# is that walk's own - made and finished in the local's block, dropped as it closes, as a for-in's own call is
+fn (c mut Checker&) settleHeldWalks() {
+    for h in c.heldWalks {
+        if h.Body < 0 or h.Body >= c.Bodies.Len() or c.Bodies[h.Body].Root is null { continue }
+        b := c.Bodies[h.Body]
+        callee := definit.HeldWalk(b, typed.LocalId(I32(h.G)), typed.LocalId(I32(h.It)))
+        if callee < 0 or callee >= c.Bodies.Len() { continue }
+        match c.Bodies[callee].Of {
+            case typed.BodyOf.Fn(i) {
+                f := c.P.InstanceFn(i)
+                if c.P.IsGenerator(f) and c.P.GenElem(f) == generic.GenPerTurn { b.Walks.Push(typed.LocalId(I32(h.G))) }
+            }
+            case _ { }
+        }
+    }
 }
 
 # D13d, once an attempt has checked every body: each local declared with no value. Assigned on every path before any
@@ -17371,6 +17401,18 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
 fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, next I64, cm ast.Compr?&, ce types.TypeId) {
     it := c.hidden(sp, typeOf(src))
     if c.generatorCall(src) { c.cur().Walks.Push(typed.LocalId(I32(it))) }
+    # D18e: a local walked here - its walk this loop's own where nothing else names it (settleHeldWalks)
+    match src {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, g) {
+                    if c.cur().Local(g).Kind == typed.LocalKind.Var { c.heldWalks.Push(heldCand(c.fr().Body, I64(g), it)) }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
     k I64 = -1
     if f.Key != source.NameId(0) {

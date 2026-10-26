@@ -329,3 +329,216 @@ fn litBool(x typed.Expr&) I64 {
         case _ => -1
     }
 }
+
+# ---- a generator a local holds, walked once in its block (D18e) ----
+
+# whether local g, declared from a generator's call, is walked by it - the hidden iterator of one for-in or
+# comprehension, declared from a read of g - and named nowhere else: never passed, stored, returned, captured, read
+# again, and that walk made once wherever g's declaration runs - after it in its block, in no loop or deferred code
+# there. Then nothing but the walk reaches the generator, which is made and finished there as a for-in's own is. The
+# body g's declaration calls where it is so walked - the caller says whether that is a generator's - else -1
+fn HeldWalk(b typed.Body&, g typed.LocalId, it typed.LocalId) I64 {
+    if b.Root is null { return -1 }
+    w := heldWalker(g, it)
+    w.block(b.Root!, false)
+    return w.callee if w.count == 1 and w.once else -1
+}
+
+type heldWalker struct(g typed.LocalId, it typed.LocalId) {
+    g
+    it
+    count I64 = 0      # the mentions of g anywhere
+    once Bool = false  # the walk's declaration reached once per g's declaration
+    callee I64 = -1    # the body g's declaration calls directly, -1 for none
+}
+
+# a block's statements; armed where g is declared in a block around these, with no loop or deferred code between
+fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
+    if bl is null { return }
+    a := armed
+    for s in bl.Stmts {
+        match s {
+            case typed.Stmt.Let(_, l, init) {
+                if l == w.g {
+                    a = true
+                    match init {
+                        case typed.Expr.Call(_, _, k) {
+                            match k.Target {
+                                case typed.Callee.Body(id) { w.callee = I64(id) }
+                                case _ { }
+                            }
+                        }
+                        case _ { }
+                    }
+                }
+                if l == w.it and a and w.readsG(init) { w.once = true }
+            }
+            case _ { }
+        }
+        w.stmt(s, a)
+    }
+}
+
+fn (w mut heldWalker&) readsG(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => w.isG(p)
+        case _ => false
+    }
+}
+
+fn (w mut heldWalker&) isG(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, id) => id == w.g
+        case _ => false
+    }
+}
+
+fn (w mut heldWalker&) stmts(ss Array<typed.Stmt&>&, armed Bool) {
+    if ss.Len() == 0 { return }
+    w.block(typed.Block(typed.BlockId(-1), ss), armed)
+}
+
+fn (w mut heldWalker&) stmt(s typed.Stmt&, a Bool) {
+    match s {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { w.expr(x, a) }
+        case typed.Stmt.Assign(_, p, x) {
+            w.place(p, a)
+            w.expr(x, a)
+        }
+        case typed.Stmt.If(_, i) {
+            w.expr(i.Test, a)
+            w.block(i.Then, a)
+            w.block(i.Else, a)
+        }
+        # a loop runs its body any number of times, deferred code where it is left: a walk there is not made once
+        case typed.Stmt.Loop(_, body, post) {
+            w.block(body, false)
+            w.block(post, false)
+        }
+        case typed.Stmt.Defer(_, inner) { w.block(inner, false) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { w.expr(x, a) }
+        case typed.Stmt.Raise(_, _, _), typed.Stmt.Jump(_, _, _) { }
+        case typed.Stmt.Reraise(_, x, _) { w.expr(x, a) }
+        case typed.Stmt.Exit(_, _, msg) { w.expr(msg, a) }
+        case typed.Stmt.Assert(_, c, msg) {
+            w.expr(c, a)
+            w.expr(msg, a)
+        }
+        case typed.Stmt.Block(_, inner) { w.block(inner, a) }
+        case typed.Stmt.Join(_, j) {
+            w.block(j.Code, false)
+            w.clauses(j.Clauses, false)
+        }
+        case typed.Stmt.Spawn(_, sp) {
+            for p in sp.Targets {
+                if p is not null { w.place(p, false) }
+            }
+            w.expr(sp.Task, false)
+        }
+    }
+}
+
+fn (w mut heldWalker&) exprs(xs Array<typed.Expr&>&, a Bool) {
+    if xs.Len() == 0 { return }
+    for x in xs { w.expr(x, a) }
+}
+
+fn (w mut heldWalker&) expr(x typed.Expr?&, a Bool) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { w.place(p, a) }
+        case typed.Expr.Promote(_, _, pr) { w.expr(pr.X, a) }
+        case typed.Expr.Call(_, _, k) {
+            match k.Target {
+                case typed.Callee.Value(f) { w.expr(f, a) }
+                case _ { }
+            }
+            w.exprs(k.Args, a)
+        }
+        case typed.Expr.Make(_, _, m) {
+            w.exprs(m.Items, a)
+            w.expr(m.Length, a)
+        }
+        # a comprehension's block runs once, its loop inside it
+        case typed.Expr.Collect(_, _, cl) {
+            w.expr(cl.Reserve, a)
+            w.block(cl.Loop, a)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) { w.exprs(args, a) }
+        case typed.Expr.Slice(_, _, sl) {
+            w.place(sl.Base, a)
+            w.expr(sl.Lo, a)
+            w.expr(sl.Hi, a)
+        }
+        case typed.Expr.Cond(_, _, k) {
+            w.expr(k.C, a)
+            w.expr(k.A, a)
+            w.expr(k.B, a)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            w.stmts(q.Stmts, a)
+            w.expr(q.X, a)
+        }
+        case typed.Expr.Match(_, _, m) {
+            w.stmts(m.Held, a)
+            for arm in m.Arms { w.arm(arm, a) }
+            if m.NoMatch is not null { w.arm(m.NoMatch!, a) }
+        }
+        case typed.Expr.Try(_, _, t) {
+            w.expr(t.X, a)
+            w.clauses(t.Clauses, a)
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(_) { }
+                case typed.FnVal.Lambda(_, caps, _) {
+                    for k in caps { w.expr(k.Outer, false) }
+                }
+                case typed.FnVal.Adapter(_, r, _) { w.expr(r, false) }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for p in t.Pieces {
+                match p {
+                    case typed.Piece.Render(y) { w.expr(y, a) }
+                    case typed.Piece.Lit(_) { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { w.expr(y, a) }
+    }
+}
+
+fn (w mut heldWalker&) arm(arm typed.Arm&, a Bool) {
+    for alt in arm.Alts {
+        w.expr(alt.Test, a)
+        for bd in alt.Binds { w.expr(bd.From, a) }
+    }
+    w.expr(arm.Guard, a)
+    w.block(arm.Code, a)
+    w.expr(arm.Value, a)
+}
+
+fn (w mut heldWalker&) clauses(cs Array<typed.Clause&>&, a Bool) {
+    if cs.Len() == 0 { return }
+    for k in cs {
+        w.block(k.Code, a)
+        w.exprs(k.Defaults, a)
+    }
+}
+
+fn (w mut heldWalker&) place(p typed.Place&, a Bool) {
+    match p {
+        case typed.Place.Local(_, _, id) { if id == w.g: w.count++ }
+        case typed.Place.Global(_, _, _, _), typed.Place.Target(_, _) { }
+        case typed.Place.Deref(_, _, r) { w.expr(r, a) }
+        case typed.Place.Field(_, _, base, _) { w.place(base, a) }
+        case typed.Place.Elem(_, _, e) {
+            w.place(e.Base, a)
+            w.expr(e.Index, a)
+        }
+        case typed.Place.Payload(_, _, pl) { w.place(pl.Base, a) }
+        case typed.Place.Temp(_, _, v, _) { w.expr(v, a) }
+    }
+}
