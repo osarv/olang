@@ -5988,6 +5988,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
         case typed.FnVal.Lambda(id, caps, site) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.firstToken(s.B!.File, sp), I64(id), FnLambda, types.UnknownT)) }
             home := Term.None
+            terms Vec<Term>
             scopes Vec<typed.Scope>
             lb := I64(id)
             for c in caps {
@@ -5995,6 +5996,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                 if not s.holds(c.Outer.Type()) { continue }
                 t := s.valTerm(v, s.here())
                 scopes.Push(s.scopeOf(t))
+                terms.Push(t)
                 home = t if home == Term.None else s.inner(home, t)
                 k := s.captureVar(lb, c.Inner)
                 if s.buildsSum(lb, k) {
@@ -6025,7 +6027,14 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             if s.noBuildTerm(home) { home = d if spawned and d.Runs() else s.here() }
             s.build(site, home if home.Runs() else s.here())
             s.plan.Pass(site, scopes.ToArray())
-            return existing(home)
+            # D16d: it lives no longer than any of its captures - one not shown to outlive the innermost found is a term
+            # of its own beside it, so a slot it is put into is judged against each (a closure capturing two parameters'
+            # referents, returned, holds both to the result scope)
+            whole := home
+            for t in terms {
+                if t != home and s.order(t, home) != Holds { whole = s.setOf(whole, t) }
+            }
+            return existing(whole)
         }
         case typed.FnVal.Adapter(cb, r, site) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.opTok(r), I64(cb), FnCall, r.Type())) }

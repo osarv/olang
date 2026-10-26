@@ -1,0 +1,15 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# D16d: a closure capturing what two parameters refer to, returned, holds both to where it is put - the second too
+fn both(a String&, b String&) fn() String {
+    return fn() { return $a $b }
+}
+
+fn main() {
+    a := "hello"
+    g fn() String
+    {
+        b := $a "x"
+        g = both(a, b)
+    }
+    g()
+}
