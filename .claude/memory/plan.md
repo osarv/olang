@@ -487,3 +487,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   after wt-definit too.
 - 2026-10-26 CEST: nolinalg merged (23a8c26, verified): std/linalg removed (std, bench gemm/fused/mlp, the linalg
   scenario); compiler points kept by rewriting gemmflat (local Mat) and o26alatermodule* (a latermodule scenario).
+- 2026-10-26 CEST: definit merged (4e23e1e + merge + goldens, full verify on the merged tip passed): D13d/D13e definite
+  initialisation for locals, fields and globals assigned in top-level ifs, no zero written where never seen, D14d
+  Array<T>(n) + counted fill skips its clear, comprehensions write once without a clear (0.90 -> 0.25 s), T7c fixed
+  comprehension lengths. Left: baked globals' startup function still emitted; compiler/tools/evaldump.olang doesn't
+  build. Next: merge genelide (9e56fcd, verified on c6e8e5a).
