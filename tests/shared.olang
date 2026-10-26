@@ -18593,3 +18593,24 @@ test "C9b: r.Destroy(); continue - and break - in the loop that declares r" {
     BulkDestroyed = 0
     assert bulkSkipOne(I64(ctRuntimeZero)) == 24 and BulkDestroyed == 4
 }
+
+# S6, T29a: a writable local's text and a 'mut' global's lent as a writable Array<Char> are written; an immutable
+# global's would be refused (checks/cases/roglobaltext.olang)
+Bulk3Text mut String = "mutable"
+
+fn bulk3Zap(b mut Array<Char>&) { b[0] = 'z' }
+
+fn bulk3Texts() String {
+    t := "hello"
+    bulk3Zap(t)
+    bulk3Zap(Bulk3Text)
+    return $t " " $Bulk3Text
+}
+
+Bulk3TextsBaked := bulk3Texts()
+
+test "S6: text lent writably as an Array<Char> where it may be written" {
+    Bulk3Text = "mutable"
+    assert bulk3Texts() == "zello zutable"
+    assert Bulk3TextsBaked == "zello zutable"
+}

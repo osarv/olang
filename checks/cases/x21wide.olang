@@ -1,0 +1,9 @@
+# check: fail error[X21]: U100 cannot be a C variable argument - no C type of olang's holds it; convert it, 'I64(x)' or 'U64(x)'
+# X21, X2, T4a: an integer wider than 64 bits has no C type to be promoted to; narrower widths are promoted (an I32,
+# an I64 or a U64)
+import c "stdio.h"
+fn main() {
+    a U5 = 3
+    w U100 = 7
+    c.printf("%d %d\n".ToC(), a, w)
+}

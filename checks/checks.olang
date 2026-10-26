@@ -496,6 +496,10 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build valueloop.olang > out.txt 2>&1") == 0, "valueloop build", dir)
     try r.expect(sh(dir, "(ulimit -v 150000 && ./build/valueloop) > out.txt 2>&1") == 0, "valueloop", dir)
     try r.expect(outOf(dir) == "50000015000000\n", "valueloop output", dir)
+    # D18e: a generator a local holds and one for-in or comprehension walks is dropped as the local's block closes
+    try r.expect(sh(dir, "\"$OLANG\" build genlocal.olang > out.txt 2>&1") == 0, "genlocal build", dir)
+    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/genlocal) > out.txt 2>&1") == 0, "genlocal under 8 MB", dir)
+    try r.expect(outOf(dir) == "36000000\n", "genlocal output", dir)
     #O26a: a number carries nothing into the result - the master compiler's build needed 96 MB here
     try r.expect(sh(dir, "\"$OLANG\" build numberflow.olang > out.txt 2>&1") == 0, "numberflow build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/numberflow) > out.txt 2>&1") == 0, "numberflow", dir)
@@ -1564,14 +1568,15 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, $"grep -q 'reentryt.olang:6: " $gone "' t.txt && grep -q 'FAIL - a generator resumed inside its own walk' t.txt " $
                     "&& grep -q 'ok - the next test runs' t.txt") == 0, "reentryt's results", dir)
     # D18e: walks a for-in makes and finishes, left by every exit, alike built, -d -s and interpreted (dead regions
-    # kept, so a read of reclaimed storage stops it) - and only those are walk forms, not a local, a result or a field
+    # kept, so a read of reclaimed storage stops it) - and only those and a local walked once are walk forms, not a
+    # result or a field
     try r.expect(sh(dir, "\"$OLANG\" build exits.olang > out.txt 2>&1 && ./build/exits > b.txt 2>&1") == 0, "exits", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize exits.olang > out.txt 2>&1 && ./build/exits.debug.san > d.txt 2>&1") == 0
                  "exits -d -s", dir)
     try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret exits.olang > i.txt 2>&1") == 0, "exits -i", dir)
     try r.expect(sh(dir, "cmp -s exits.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "exits output", dir)
     try r.expect(sh(dir, "grep -c 'call [^@]*@exits_2eheld\\.walk(' build/exits.main.ll > out.txt; " $
-                    "grep -c 'call [^@]*@exits_2eupto\\.walk(' build/exits.main.ll >> out.txt") == 0 and outOf(dir) == "8\n2\n"
+                    "grep -c 'call [^@]*@exits_2eupto\\.walk(' build/exits.main.ll >> out.txt") == 0 and outOf(dir) == "9\n2\n"
                  "exits' walk forms", dir)
     # D18c: views borrowed from what a generator was given and kept by its walk, read after churns, alike built, -d -s
     # and interpreted; D18e: a walk given a global's array is a walk form too, made and dropped in its loop's block

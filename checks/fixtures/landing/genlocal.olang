@@ -1,0 +1,28 @@
+import "std/io"
+
+# D18e: a generator a local holds, walked once by a for-in or a comprehension in the local's block and named nowhere
+# else, is made and dropped there as a for-in's own call is - over program-scope storage it landed in the program's
+# scope, 139 MB over a million calls
+Data := I64[3, 1, 4, 1, 5, 9, 2, 6]
+
+fn each(a Array<I64>&) Iterator<I64> {
+    for x in a { yield x }
+}
+
+fn viaLocal() I64 {
+    t I64 = 0
+    g := each(Data)
+    for x in g { t += x }
+    return t
+}
+
+fn viaCompr() I64 {
+    g := each(Data)
+    return I64[x for x in g if x > 2].Len()
+}
+
+fn main() {
+    t I64 = 0
+    for i in range 1000000 { t += viaLocal() + viaCompr() }
+    io.Println($t)!
+}

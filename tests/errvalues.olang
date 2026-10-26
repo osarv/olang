@@ -153,3 +153,43 @@ test "a caught error is held past its clause" {
     }
     assert xs.Len() == 3 and xs[2] == os.Error.DENIED
 }
+
+# B5, E11a: an error type in a rendering's type is written as its values are - another module's qualified by its name
+fn errRendered() String {
+    v := Vec<os.Error>()
+    v.Push(os.Error.DENIED)
+    a := os.Error[os.Error.DENIED]
+    w := Vec<AnyErr>()
+    w.Push(NetErr.DOWN)
+    return $v " " $a " " $w
+}
+
+ErrRenderedBaked := errRendered()
+
+test "an error type in a rendering is qualified as its values are" {
+    want := "Vec<os.Error>[os.Error.DENIED] os.Error[os.Error.DENIED] Vec<AnyErr>[NetErr.DOWN]"
+    assert errRendered() == want and ErrRenderedBaked == want
+}
+
+# E10b, T20: an error value hashes by the error it holds, so values equal across sets hash alike - a Map keyed by one
+# set finds a key put through another
+fn errHashes() Bool {
+    p ParseErr = ParseErr.BAD
+    l LoadErr = p
+    a AnyErr = l
+    m := Map<AnyErr, I64>()
+    m.Put(p, 1)
+    m.Put(os.Error.DENIED, 2)
+    n LoadErr = os.Error.DENIED
+    return p.Hash() == l.Hash() and l.Hash() == a.Hash() and p == a and (try m.Get(l) catch default 0) == 1 and
+           (try m.Get(n) catch default 0) == 2 and ParseErr.EMPTY.Hash() != ParseErr.BAD.Hash()
+}
+
+ErrHashesBaked := errHashes()
+
+test "error values equal across sets hash alike" {
+    assert errHashes() and ErrHashesBaked
+    q AnyErr = null
+    r LoadErr = null
+    assert q.Hash() == r.Hash()
+}

@@ -1,0 +1,99 @@
+# check: fail error[D13d]: 'a' is read here before it is assigned on every path, and Node& has no zero value
+# also: error[D13d]: 'b' is read here before it is assigned on every path
+# also: error[D13d]: 'c' is read here before it is assigned on every path
+# also: error[D13d]: 'd' is read here before it is assigned on every path
+# also: error[D13d]: 'e' is read here before it is assigned on every path
+# also: error[D13d]: 'f' is read here before it is assigned on every path
+# also: error[D13d]: 'h' is read here before it is assigned on every path
+# also: error[D13d]: 'k' is read here before it is assigned on every path
+# D13d: a loop's only break, in a catch clause inside an expression - an index, a slice bound, an array literal's item,
+# a rendering, a constructor's field read, a return's value, an assert's condition, the function a call goes through -
+# ends the loop, so the read after it is reached with nothing assigned
+type Node struct(v I64) { v }
+type P struct(x I64) { x }
+type E error { STOP }
+fn g(i I64) I64 ? E {
+    if i >= 3 { error E.STOP }
+    return i
+}
+fn pick(i I64) (fn(x I64) I64) ? E {
+    if i >= 3 { error E.STOP }
+    return fn(x I64) I64 { return x + i }
+}
+fn sink(x I64) { }
+fn index(xs Array<I64>&) I64 {
+    a Node&
+    i I64 = 0
+    for {
+        sink(xs[try g(i) catch { break }])
+        i++
+    }
+    return a.v
+}
+fn slice(xs Array<I64>&) I64 {
+    b Node&
+    i I64 = 0
+    for {
+        sink(xs[0:try g(i) catch { break }].Len())
+        i++
+    }
+    return b.v
+}
+fn literal() I64 {
+    c Node&
+    i I64 = 0
+    for {
+        sink(I64[1, try g(i) catch { break }].Len())
+        i++
+    }
+    return c.v
+}
+fn text() I64 {
+    d Node&
+    i I64 = 0
+    for {
+        sink(("v" $(try g(i) catch { break })).Len())
+        i++
+    }
+    return d.v
+}
+fn field() I64 {
+    e Node&
+    i I64 = 0
+    for {
+        sink(P(try g(i) catch { break }).x)
+        i++
+    }
+    return e.v
+}
+fn ret() I64 {
+    f Node&
+    i I64 = 0
+    for {
+        if i > 100 { return try g(i) catch { break } }
+        i++
+    }
+    return f.v
+}
+fn asserted() I64 {
+    h Node&
+    i I64 = 0
+    for {
+        assert (try g(i) catch { break }) >= 0
+        i++
+    }
+    return h.v
+}
+fn through() I64 {
+    k Node&
+    i I64 = 0
+    for {
+        sink((try pick(i) catch { break })(3))
+        i++
+    }
+    return k.v
+}
+fn main() {
+    xs := I64[1, 2, 3, 4]
+    sink(index(xs) + slice(xs) + literal() + text() + field() + ret() + asserted() + through())
+}

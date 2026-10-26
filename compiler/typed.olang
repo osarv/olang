@@ -867,6 +867,150 @@ fn (s Stmt&) Span() source.Span {
     }
 }
 
+# ---- whether a loop can be left by a break of its own ----
+
+# whether a block holds a break of the loop whose body block is loop - anywhere in it: in a nested statement, in the
+# clauses, arms, conditionals and blocks its expressions carry, in a place's index or reference. One walk over every
+# kind, written without a catch-all so a new kind must say what it holds; read by D10a (check) and D13d (definit). A
+# lambda's body is another body, and a break never crosses into one
+fn BreaksOut(b Block?&, loop BlockId) Bool {
+    if b is null { return false }
+    return stmtsBreak(b.Stmts, loop)
+}
+
+fn stmtsBreak(ss Array<Stmt&>&, loop BlockId) Bool {
+    if ss.Len() == 0 { return false }
+    for s in ss {
+        if stmtBreaks(s, loop) { return true }
+    }
+    return false
+}
+
+fn stmtBreaks(s Stmt&, loop BlockId) Bool {
+    return match s {
+        case Stmt.Jump(_, kind, l) => kind == JumpKind.Break and l == loop
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x) => exprBreaks(x, loop)
+        case Stmt.Assign(_, p, x) => placeBreaks(p, loop) or exprBreaks(x, loop)
+        case Stmt.If(_, i) => exprBreaks(i.Test, loop) or BreaksOut(i.Then, loop) or BreaksOut(i.Else, loop)
+        case Stmt.Loop(_, body, post) => BreaksOut(body, loop) or BreaksOut(post, loop)
+        case Stmt.Return(_, x), Stmt.Suspend(_, x) => exprBreaks(x, loop)
+        case Stmt.Raise(_, _, _) => false
+        case Stmt.Reraise(_, x, _) => exprBreaks(x, loop)
+        case Stmt.Exit(_, _, msg) => exprBreaks(msg, loop)
+        case Stmt.Assert(_, c, msg) => exprBreaks(c, loop) or exprBreaks(msg, loop)
+        case Stmt.Block(_, inner), Stmt.Defer(_, inner) => BreaksOut(inner, loop)
+        case Stmt.Join(_, j) => BreaksOut(j.Code, loop) or clausesBreak(j.Clauses, loop)
+        case Stmt.Spawn(_, sp) => targetsBreak(sp.Targets, loop) or exprBreaks(sp.Task, loop)
+    }
+}
+
+fn targetsBreak(ps Array<Place?&>&, loop BlockId) Bool {
+    if ps.Len() == 0 { return false }
+    for p in ps {
+        if p is not null and placeBreaks(p, loop) { return true }
+    }
+    return false
+}
+
+fn exprsBreak(xs Array<Expr&>&, loop BlockId) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprBreaks(x, loop) { return true }
+    }
+    return false
+}
+
+fn exprBreaks(x Expr?&, loop BlockId) Bool {
+    if x is null { return false }
+    return match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) => false
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p) => placeBreaks(p, loop)
+        case Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
+        case Expr.Call(_, _, k) => calleeBreaks(k.Target, loop) or exprsBreak(k.Args, loop)
+        case Expr.Make(_, _, m) => exprsBreak(m.Items, loop) or exprBreaks(m.Length, loop)
+        case Expr.Collect(_, _, c) => exprBreaks(c.Reserve, loop) or BreaksOut(c.Loop, loop)
+        case Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
+        case Expr.Slice(_, _, sl) => placeBreaks(sl.Base, loop) or exprBreaks(sl.Lo, loop) or exprBreaks(sl.Hi, loop)
+        case Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
+        case Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
+        case Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
+                                    (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
+        case Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
+        case Expr.Fn(_, _, f) => fnBreaks(f, loop)
+        case Expr.Text(_, _, t) => piecesBreak(t.Pieces, loop)
+        case Expr.Away(_, _, y) => exprBreaks(y, loop)
+    }
+}
+
+fn calleeBreaks(c Callee&, loop BlockId) Bool {
+    return match c {
+        case Callee.Value(x) => exprBreaks(x, loop)
+        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _) => false
+    }
+}
+
+fn fnBreaks(f FnVal&, loop BlockId) Bool {
+    match f {
+        case FnVal.Named(_) { return false }
+        case FnVal.Lambda(_, caps, _) {
+            for k in caps {
+                if exprBreaks(k.Outer, loop) { return true }
+            }
+            return false
+        }
+        case FnVal.Adapter(_, r, _) { return exprBreaks(r, loop) }
+    }
+}
+
+fn piecesBreak(ps Array<Piece&>&, loop BlockId) Bool {
+    if ps.Len() == 0 { return false }
+    for p in ps {
+        match p {
+            case Piece.Render(x) { if exprBreaks(x, loop): return true }
+            case Piece.Lit(_) { }
+        }
+    }
+    return false
+}
+
+fn placeBreaks(p Place&, loop BlockId) Bool {
+    return match p {
+        case Place.Local(_, _, _), Place.Global(_, _, _, _), Place.Target(_, _) => false
+        case Place.Deref(_, _, r) => exprBreaks(r, loop)
+        case Place.Field(_, _, base, _) => placeBreaks(base, loop)
+        case Place.Elem(_, _, e) => placeBreaks(e.Base, loop) or exprBreaks(e.Index, loop)
+        case Place.Payload(_, _, pl) => placeBreaks(pl.Base, loop)
+        case Place.Temp(_, _, v, _) => exprBreaks(v, loop)
+    }
+}
+
+fn clausesBreak(cs Array<Clause&>&, loop BlockId) Bool {
+    if cs.Len() == 0 { return false }
+    for k in cs {
+        if BreaksOut(k.Code, loop) or exprsBreak(k.Defaults, loop) { return true }
+    }
+    return false
+}
+
+fn armsBreak(arms Array<Arm&>&, loop BlockId) Bool {
+    if arms.Len() == 0 { return false }
+    for a in arms {
+        if armBreaks(a, loop) { return true }
+    }
+    return false
+}
+
+fn armBreaks(a Arm&, loop BlockId) Bool {
+    if exprBreaks(a.Guard, loop) or BreaksOut(a.Code, loop) or exprBreaks(a.Value, loop) { return true }
+    for alt in a.Alts {
+        if exprBreaks(alt.Test, loop) { return true }
+        for bd in alt.Binds {
+            if exprBreaks(bd.From, loop) { return true }
+        }
+    }
+    return false
+}
+
 # ---- printing (DESIGN.md section 4, point 6: "dump typed" serves review and check's tests) ----
 
 # a body as text: a statement a line, indented by its block, an expression as a parenthesized term naming its kind

@@ -442,3 +442,75 @@ test "D18e: a walk a for-in makes is dropped as the loop's block is left, whatev
     for x in holding("eight ch") { n += x }
     assert n == 17 and Dropped == d + 2
 }
+
+# D18e: a generator a local holds, walked once in its block by a for-in or a comprehension and named nowhere else, is
+# that walk's own - dropped as the local's block closes; walked twice, in a loop, or named again, it keeps D18b's path
+HeldData := I64[3, 1, 4, 1, 5, 9, 2, 6]
+
+fn heldEach(a Array<I64>&) Iterator<I64> {
+    for x in a { yield x }
+}
+
+fn heldCompr() I64 {
+    g := heldEach(HeldData)
+    xs := I64[x * 2 for x in g if x > 2]
+    return xs.Len() * 100 + xs[0]
+}
+
+fn heldTwice() I64 {
+    t I64 = 0
+    g := heldEach(HeldData)
+    for x in g {
+        t += x
+        if x == 4 { break }
+    }
+    for x in g { t += 100 * x }
+    return t
+}
+
+fn heldInLoop() I64 {
+    t I64 = 0
+    g := heldEach(HeldData)
+    for k in range 2 {
+        for x in g {
+            t += x
+            if x == 1 { break }
+        }
+    }
+    return t
+}
+
+fn heldEarly(k I64) I64 {
+    g := heldEach(HeldData)
+    if k > 0 { return -1 }
+    t I64 = 0
+    for x in g { t += x }
+    return t
+}
+
+fn heldPassed() I64 {
+    g := heldEach(HeldData)
+    for x in g { if x == 4 { break } }
+    return g.Sum()
+}
+
+fn heldDropped(t String&) I64 {
+    g := holding(t)
+    n I64 = 0
+    for x in g {
+        n += x
+        break
+    }
+    return n
+}
+
+HeldBaked := heldCompr() * 1000000 + heldTwice() * 100 + heldInLoop()
+
+test "D18e: a generator held in a local and walked once there is dropped as the local's block closes" {
+    assert heldCompr() == 506 and heldTwice() == 2308 and heldInLoop() == 9
+    assert heldEarly(0) == 31 and heldEarly(1) == -1 and heldPassed() == 23
+    assert HeldBaked == 506 * 1000000 + 2308 * 100 + 9
+    d := Dropped
+    assert heldDropped("constant") == 8 and Dropped == d + 1
+    for i in range 1000 { assert heldCompr() == 506 }
+}

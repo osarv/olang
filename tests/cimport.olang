@@ -61,3 +61,16 @@ test "a variadic call: each argument promoted as C promotes it" {
     assert String(buf[:n]) == "42 x 2.50 1099511627776 A"
     assert d.cdemo_sum(3, 10, 20, 30) == 60
 }
+
+test "a variadic call: integers of other widths promoted to the C type that holds them (X21, T4a)" {
+    buf := Array<U8>(96)
+    a U5 = 21
+    b I5 = -7
+    e I12 = -2000
+    f U31 = 2147483647
+    g U33 = 8589934591
+    h I40 = -549755813888
+    k I1 = -1
+    n := s.snprintf(buf, 96, "%d %d %d %d %llu %lld %d".ToC(), a, b, e, f, g, h, k)
+    assert String(buf[:n]) == "21 -7 -2000 2147483647 8589934591 -549755813888 -1"
+}

@@ -862,7 +862,8 @@ fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 # name (in their order; another module's private fields are not written), an enum's case with no fields as its name in
 # quotes ("North") and one with fields as an object of one member, the case's name, holding its fields
 # ({"Circle":{"r":2}}), an array, a List and a Vec as an array, a Map with text keys as an object, text as a string, a
-# Char as a string of it, numbers and Bools as themselves, a reference as what it names. "json.Encode(Point(1, 2))".
+# Char as a string of it, numbers and Bools as themselves, a reference as what it names, an error value (T20) as "$"
+# writes it ("io.Error.FULL") and null as null. "json.Encode(Point(1, 2))".
 fn Encode<T>(v T, indent String& = "") String& {
     w := writer(indent)
     w.any(v, 0)
@@ -874,7 +875,8 @@ fn Encode<T>(v T, indent String& = "") String& {
 # member of its name, a missing member taking the parameter's default and failing with MISSING where it has none;
 # members no parameter names are passed over. Text, numbers (an integer only where the number is whole and fits, else
 # WRONG_KIND), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
-# such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34).
+# such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34), an
+# error value from its word's text or null (WRONG_KIND for a word not of its type).
 # Fails with what Parse fails with, with Error.MISSING and Error.WRONG_KIND where the text does not fit
 # the type, and with what a constructor fails with
 fn Decode<T>(text String&, at mut Position?& = null) T ? {
@@ -930,6 +932,18 @@ fn From<T>(j Json&) T ? {
             } else if T.Kind == TypeKind.Struct {
                 o := try j.AsObj()
                 return try T(try member(o, p) for p in T.Params)
+            } else if T.Kind == TypeKind.Error {
+                # an error value (T20) as "$" writes it, "io.Error.FULL"; null for none
+                match j {
+                    case Json.Null { return null }
+                    case Json.Str(name) {
+                        for c in T.Cases {
+                            if name == c.Name { return c() }
+                        }
+                    }
+                    nomatch { }
+                }
+                error Error.WRONG_KIND
             } else if T.Kind == TypeKind.Enum {
                 # a case with no fields as its name; one with fields as an object of one member, its name
                 match j {
@@ -1098,6 +1112,9 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                 w.any(t, depth)
             } else if T.Kind == TypeKind.Struct {
                 w.fields(v, T.Fields.Len(), depth)
+            } else if T.Kind == TypeKind.Error {
+                # an error value (T20) as "$" writes it, "io.Error.FULL"; null for none
+                if v is null { w.out.Push("null") } else { w.text($v) }
             } else if T.Kind == TypeKind.Enum {
                 for c in T.Cases {
                     if v == c {
@@ -1499,6 +1516,33 @@ if TestBuild {
         assert (try Decode<U8>("300") catch Error.WRONG_KIND default 0) == 0
         assert (try Decode<Member>("{\"Name\": \"x\"}") catch Error.MISSING default Member(-1, "")).Id == -1
         assert (try pct("{\"V\": 300}")) == -1 and (try pct("{\"V\": 30}")) == 30
+    }
+
+    # error values (T20) written as "$" writes them and read back by their words (G32's TypeKind.Error, G34): baked while
+    # compiling, and at run time
+    type jsErr error { EMPTY, BAD }
+    type jsAny error os.Error, jsErr { TIMEOUT }
+    type jsRec struct(N I64, E jsErr, A jsAny, Seen Vec<jsErr>) {
+        N, E, A, Seen
+    }
+    fn jsSeen() Vec<jsErr> {
+        v := Vec<jsErr>()
+        v.Push(jsErr.BAD)
+        v.Push(null)
+        return v
+    }
+    errText String = Encode(jsRec(3, jsErr.BAD, jsAny.TIMEOUT, jsSeen()))
+    errBack jsErr = (try Decode<jsRec>(errText) catch default jsRec(0, jsErr.EMPTY, null, Vec<jsErr>())).E
+
+    test "error values are written as their words, and read back" {
+        want := "{\"N\":3,\"E\":\"" $jsErr.BAD "\",\"A\":\"" $jsAny.TIMEOUT "\",\"Seen\":[\"" $jsErr.BAD "\",null]}"
+        assert errText == want and errBack == jsErr.BAD
+        r := try Decode<jsRec>(Encode(jsRec(4, null, os.Error.DENIED, jsSeen())))
+        assert r.N == 4 and r.E is null and r.A == os.Error.DENIED and r.Seen.Len() == 2 and r.Seen[0] == jsErr.BAD
+        assert r.Seen[1] is null and $r.A == "os.Error.DENIED"
+        assert (try Decode<jsErr>("\"jsErr.NOPE\"") catch Error.WRONG_KIND default jsErr.EMPTY) == jsErr.EMPTY
+        assert (try Decode<jsErr>("3") catch Error.WRONG_KIND default jsErr.EMPTY) == jsErr.EMPTY
+        assert jsErr.Kind == TypeKind.Error and jsErr.Cases.Len() == 2 and jsAny.Cases.Len() > 3
     }
 
     # a whole number an F64 does not hold is kept exactly (the bulk review's F8): baked while compiling, and at run time

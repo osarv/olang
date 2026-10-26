@@ -1,0 +1,15 @@
+# check: fail error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
+# also: error[S6]: U cannot be written
+# also: error[S6]: V cannot be written
+# S6: an immutable global's text lent as a writable Array<Char> - or to a C 'char *' - names the global's storage
+# (T29a), so it is written only where the global may be, as an array global is (it was let through, and written)
+import c "string.h"
+T := "hello"
+U String = "world"
+V := "again"
+fn w(b mut Array<Char>&) { b[0] = 'z' }
+fn main() {
+    w(T)
+    w(U)
+    c.strcpy(V, "ab")
+}

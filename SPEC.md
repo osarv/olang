@@ -983,7 +983,7 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
 the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
 `trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
-**error type**: a closed, ordered set of named words, `type IoError error { FULL  DENIED }` - shaped like an enum
+**error type**: a closed, ordered set of named words, `type IoError error { FULL, DENIED }` - shaped like an enum
 body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
 B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
 qualified by its own type (`IoError.FULL`) and is public by its own first letter (M6a). An error type takes no type
@@ -1015,8 +1015,9 @@ as a catch clause's items. An error value is made by a word written, by `null`, 
 took (R11b), and it is used in these ways and no others:
 
 - `==` and `!=` with a word (`e == ParseError.EMPTY`), with an error type or a named set (`e == ParseError`: true
-  where it holds a word of that type, or of what the set stands for), with `null` (`e == null`: whether it holds no
-  error; `e is null` says the same, E10c), and with another error value (the same word). Each side names something the
+  where it holds a word of that type, or of what the set stands for), and with another error value (the same word);
+  whether it holds no error is `e is null` (`e is not null` its negation), the one null test (E10c) - `e == null` is
+  E10c's error, naming it. Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e
@@ -1029,7 +1030,8 @@ took (R11b), and it is used in these ways and no others:
   test has shown is not null (known by the program's structure, never by evaluation). A case's block narrows `e`;
 - `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.EMPTY`, another module's type by
   its module's name - and `null` for none;
-- hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key;
+- hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key - by the error it holds (its type and
+  word), whatever set it is held as, so two error values `==` across sets hash alike;
 - a value fits where its set is expected only when every word it can be is in that set (a wider set's value after
   narrowing has shown it is): `l LoadError = e` with `e` a `ParseError` fits; the other way is a compile-time error
   naming the test that narrows;
@@ -1254,7 +1256,7 @@ pointer identity rather than structural content, unless its type declares `Eq` -
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
   aggregate and the other a pointer to one, and converting between them is an assignability rule
   (§5.3 E12), not an identity one, or
-- both are **anonymous** enums (`x enum { A  B }`, written where a type is) with the same cases in the same order,
+- both are **anonymous** enums (`x enum { A, B }`, written where a type is) with the same cases in the same order,
   each case's payload of the same types, position by position (a payload's field names do not matter), or both are
   several results of the same types (D8c).
 
@@ -2116,12 +2118,16 @@ state is a number saying where it stopped. Its value is a function value's two w
 there (`for x in evens(10)`, `I64[x for x in evens(10)]`), nothing else can reach the walk: it ends where the loop's
 block is left, by its end, `break`, `continue`, `return` or an error, and its storage is made only if the optimizer
 cannot keep it in the caller's own frame - in registers, as a hand-written loop's. What D18b says of where values are
-built and when scopes close holds unchanged: the difference is cost alone. A generator held anywhere else - a local
-(`g := evens(10)`), a field, a result, an argument, an `any` - is walked as D18b says. In a test build every walk is,
-since a failed check closes a test's scopes from outside the function (S18b). Such a walk lives in the block the loop's
-statement is, whatever the generator was given: the generator is made there - not where something it was given lives,
-a constant's text or a global's array in the program's scope - and dropped as that block is left (D18b), its storage
-reclaimed and the scopes it holds closed, their destructors run.
+built and when scopes close holds unchanged: the difference is cost alone. A local declared from such a call (`g :=
+evens(10)`) whose elements are built per turn (D18c's first form) is the same walk where one `for` or comprehension
+walks it, later in the local's block and in no loop or deferred code there, and nothing else names the local - it is
+not walked again, passed, stored, returned or captured: the walk is then made where the local is declared and
+finished as its block is left. A generator held anywhere else - a local named otherwise, a field, a result, an
+argument, an `any` - is walked as D18b says. In a test build every walk is, since a failed check closes a test's
+scopes from outside the function (S18b). Such a walk lives in the block the loop's statement is - a held local's in the
+local's block - whatever the generator was given: the generator is made there - not where something it was given
+lives, a constant's text or a global's array in the program's scope - and dropped as that block is left (D18b), its
+storage reclaimed and the scopes it holds closed, their destructors run.
 
 ### 3.5 Variable declarations
 
@@ -2260,9 +2266,10 @@ handles: no `try` reaches it.
 **D14d (an array the next loop fills).** `Array<T>(n)` with no fill, declared as a local (`a := Array<T>(n)`, `a
 Array<T> = Array<T>(n)`), is not cleared when the statement after its declaration is `for i in range n` or `for i in
 range 0, n` - `n` the same name or the same integer literal - whose body has `a[i] = e` among its own statements (not
-inside a nested block) and mentions `a` nowhere else, nor holds a `break`, `continue` or `return`: the loop writes every
-element before anything can read one. Any other shape - another bound, a conditional store, a second mention, a loop that
-may stop early - keeps the clear (T8), as does an element type that is an array or owns what it holds. A program cannot
+inside a nested block) and mentions `a` nowhere else, never assigns `i` (`i = 0`, `i += 2`, `i++`, anywhere in it), nor
+holds a `break`, `continue` or `return`: the loop writes every element before anything can read one. Any other shape -
+another bound, a conditional store, a second mention, a counter the body moves, a loop that may stop early - keeps the
+clear (T8), as does an element type that is an array or owns what it holds. A program cannot
 tell the two apart.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is the type of `expr`, which may be any
@@ -3213,7 +3220,9 @@ its type: the value written the way it would be in source:
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
 - an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.EMPTY`, `os.Error.DENIED`
-  with another module's type by its module's name; `null` for no error.
+  with another module's type by its module's name; `null` for no error. An error type or a named set written as part
+  of a rendering's type - an array literal's element type, a type argument - is qualified the same way:
+  `Vec<os.Error>[os.Error.DENIED]`.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
   renders as a number, a `type Letter Char` - `extends` or not - as a character).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
@@ -7559,8 +7568,10 @@ declared. `interpret` (B3e) compiles that C into a shared library and loads it a
 **X21 (variadic calls).** A variadic extern function (X1) takes, after the arguments for its parameters, any number of
 **variable arguments**, each passed as C's default argument promotions pass it: an integer literal as an `I32` where
 it fits one (an `I64`, else a `U64`), a floating-point literal as an `F64`; a value of an integer type narrower than
-32 bits as an `I32`, of a float type narrower than 64 as an `F64`, of a declared number type (T29) as its base; any
-other number as itself; a reference or an array as a pointer, as X3 passes one. A `Bool` (write `I32(b)`), a struct by
+32 bits as an `I32` (`U5`, `I12` among them, T4a: its value, sign- or zero-extended), of one between 32 and 64 bits as
+an `I64` or, unsigned, a `U64` (`U33`), of a float type narrower than 64 as an `F64`, of a declared number type (T29)
+as its base; any other number as itself, but an integer wider than 64 bits, which no C type of olang's holds (X2) - a
+compile-time error naming a conversion; a reference or an array as a pointer, as X3 passes one. A `Bool` (write `I32(b)`), a struct by
 value (pass a reference), a function and anything else are compile-time errors. Nothing checks what the arguments are
 against what the function reads - a format string's directives, a count - and a mismatch is undefined behaviour, as a
 wrong prototype is (X1a). An olang function is never variadic.
@@ -8009,9 +8020,10 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
 
 - `T.Name` - the type as source writes it, its module's alias left out (`Point`, `Tree<I64>`, `Array<String&>`), a
   `String`.
-- `T.Kind` - a `TypeKind` (the prelude's enum: `Struct Enum Integer Float Bool Array Reference Function`); a declared
-  type has its base's kind, `String` an `Array`, `Char` an `Integer`. Coarse on purpose: the exact type is `match T`'s
-  (G13). An error type, a trait and an extern type have none, an error.
+- `T.Kind` - a `TypeKind` (the prelude's enum: `Struct Enum Integer Float Bool Array Reference Function Error`); a
+  declared type has its base's kind, `String` an `Array`, `Char` an `Integer`, an error value's type (T20: an error type
+  or a named set as a value's type) `Error`. Coarse on purpose: the exact type is `match T`'s (G13). A trait and an
+  extern type have none, an error.
 - `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
 - `T.Element` - an array's element type (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
@@ -8019,7 +8031,8 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
 - `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
   layout, §10), `I64`s; a type that is not laid out (a trait, an error type, an extern type) has none.
 - `T.Fields`, `T.Cases`, `T.Params`, `T.Results` - lists (G33) of descriptors (G34): a struct's fields; an enum's cases
-  (a struct's being its one case, named as the struct, so one walk covers both); a constructor's parameters, or a
+  (a struct's being its one case, named as the struct, so one walk covers both), an error value's words (each a case
+  of no fields, in its set's order, R1a); a constructor's parameters, or a
   function type's; a function type's results. A struct, an enum and a function type have the lists that apply to
   them; asking another is an error naming what it has (`T.Fields` on an enum names `T.Cases`).
 - `T.Errors` - a function type's error set, written only where an error set is (R1b): `fn call<F>(f F) I64 ? F.Errors`.
@@ -8048,7 +8061,8 @@ constant there. Each has its members, and asking another is an error listing the
   is a value of the field's type's owner (or a reference to one), else an error; one value, else an error. A case's
   field is read only where `v` is known to hold that case - narrowed by a test (S8d), the walk's `if v == c` with `c` a
   case descriptor included - as `as` reads it.
-- A case: `c.Name`, `c.Fields` (a list, G33). `v == c` tests the case (E32): with `v` of the case's own type, the case;
+- A case: `c.Name`, `c.Fields` (a list, G33) - an error value's word named as `$` writes it (`io.Error.FULL`, B5), its
+  fields none, `c()` its value. `v == c` tests the case (E32): with `v` of the case's own type, the case;
   with `v` the struct a struct's one case describes, `true`; with `v` of another type, an error. After such a test `v` is
   narrowed to that case (S8d) and `f.Of(v)` reads its fields. `c(args)` builds the case, as the case's name would
   (`Shape.Circle(2.0)`) - a struct's one case being its constructor - so generic code makes any case it walks to:

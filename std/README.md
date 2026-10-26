@@ -46,7 +46,7 @@ only numbers and arrays of them, and links libffi into the program that imports 
 
 ## Names
 
-A name never repeats its module's: `io.Error`, not `io.Error`; `os.Error`, `json.Error`, `csv.Error`, `stats.Error`,
+A name never repeats its module's: `io.Error`, not `io.IoError`; `os.Error`, `json.Error`, `csv.Error`, `stats.Error`,
 `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` - the module is already written before the dot. Two exceptions:
 
 - a module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `heap.Heap`, `rand.Rand`,

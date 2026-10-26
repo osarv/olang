@@ -263,6 +263,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
     unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
+    heldWalks Vec<heldCand>     # D18e: the locals walked by a for-in or a comprehension, judged once the attempt has checked
     # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
     # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
     # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
@@ -391,6 +392,14 @@ type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, 
     Field
 }
 
+# D18e: a local a for-in or a comprehension walks, judged once its body is checked (settleHeldWalks): its body, the
+# local and the walk's hidden iterator declared from a read of it
+type heldCand struct(Body I64, G I64, It I64) {
+    Body
+    G
+    It
+}
+
 type ValueKind enum {
     Literal      # a literal through its type's constructor (T29d)
     Zero         # a zero value its constructor makes (D13c)
@@ -471,6 +480,7 @@ fn (c mut Checker&) CheckProgram() {
         mark := c.P.L.Diags.Count()
         c.attempt()
         c.settleUnset()
+        c.settleHeldWalks()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
@@ -559,6 +569,7 @@ fn (c mut Checker&) reset() {
     c.AssertAsks = Vec<AssertAsk>()
     c.ValueAsks = Vec<ValueAsk>()
     c.unsets = Vec<unsetCand>()
+    c.heldWalks = Vec<heldCand>()
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
     c.ContractAsks = Vec<ContractAsk>()
@@ -568,6 +579,25 @@ fn (c mut Checker&) reset() {
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
     c.lastFixed = Vec<I64>()
+}
+
+# D18e, once an attempt has checked every body: a local declared from a generator's call (one whose elements are built
+# per turn) that one for-in or comprehension walks, made once where the local is declared and naming it nowhere else,
+# is that walk's own - made and finished in the local's block, dropped as it closes, as a for-in's own call is
+fn (c mut Checker&) settleHeldWalks() {
+    for h in c.heldWalks {
+        if h.Body < 0 or h.Body >= c.Bodies.Len() or c.Bodies[h.Body].Root is null { continue }
+        b := c.Bodies[h.Body]
+        callee := definit.HeldWalk(b, typed.LocalId(I32(h.G)), typed.LocalId(I32(h.It)))
+        if callee < 0 or callee >= c.Bodies.Len() { continue }
+        match c.Bodies[callee].Of {
+            case typed.BodyOf.Fn(i) {
+                f := c.P.InstanceFn(i)
+                if c.P.IsGenerator(f) and c.P.GenElem(f) == generic.GenPerTurn { b.Walks.Push(typed.LocalId(I32(h.G))) }
+            }
+            case _ { }
+        }
+    }
 }
 
 # D13d, once an attempt has checked every body: each local declared with no value. Assigned on every path before any
@@ -6074,6 +6104,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             if d is not null { return d }
             v := c.fit(x, r, sp)
             if p is not null and c.isNamed(have) and c.isOver(have) {
+                # a declared type's place lent as its base names its storage (T29a): written only where the place may
+                # be (S6, T25b, T25c) - a String global as an Array<Char> as much as any
+                if (c.P.T.PermOf(want) & types.Writable) != 0 {
+                    c.mustWrite(p, sp, false)
+                    c.roDeepNeed(x)
+                }
                 return typed.Expr.Borrow(sp, want, p)
             }
             return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
@@ -9929,6 +9965,16 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                     ds := c.P.DescOf(dt)
                     r := c.P.ReflUnder(ds.Of)
                     if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
+                    # T20: an error value's word, a case of no fields - its value
+                    if c.P.T.KindOf(r) == types.Kind.ErrVal {
+                        codes := c.P.ErrValCodes(r)
+                        if args.Len() > 0 or ds.Case >= codes.Len() {
+                            c.err(sp, msgs.ArgCount(0, "s", args.Len()))
+                            c.dropArgs(args)
+                            return c.unknown(sp)
+                        }
+                        return c.lit(sp, r, codes[ds.Case])
+                    }
                     return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
                 }
             }
@@ -10917,7 +10963,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 
 # X21: a variable argument of a variadic extern - a literal at C's type for it (an integer an I32 where it fits, else an
 # I64 or a U64; a float an F64), any other value at its own type promoted as C promotes it: an integer narrower than
-# I32 an I32, a float narrower than F64 an F64; a reference or an array crosses as its address, as for a parameter (X3)
+# I32 an I32 (I5, U20 among them, T4a), one between 32 and 64 bits an I64 or a U64, a float narrower than F64 an F64; a
+# reference or an array crosses as its address, as for a parameter (X3)
 fn (c mut Checker&) varArg(x ast.Expr&) typed.Expr&c {
     v := c.fold(x)
     if v.Ok {
@@ -10929,8 +10976,17 @@ fn (c mut Checker&) varArg(x ast.Expr&) typed.Expr&c {
     if t == types.UnknownT { return e }
     r := c.P.T.Repr(t)
     k := c.P.T.KindOf(r)
-    if c.P.T.IsInt(r) and k != types.Kind.Int {
-        if c.P.T.Bits(r) < 32 { return c.convert(x.Span(), e, c.P.T.Prim("I32")) }
+    if c.P.T.IsInt(r) {
+        w := c.P.T.Bits(r)
+        if w < 32 { return c.convert(x.Span(), e, c.P.T.Prim("I32")) }
+        # T4a: a width C has no type for, between 32 and 64 bits, as the next of C's that holds it; wider, none does
+        if k == types.Kind.Int and w > 64 {
+            c.err(c.argSpan(x), msgs.VarArgWide(c.ty(t)))
+            return c.unknown(x.Span())
+        }
+        if k == types.Kind.Int and w != 32 and w != 64 {
+            return c.convert(x.Span(), e, c.P.T.Prim("U64") if c.P.T.IsUnsigned(r) else c.i64())
+        }
         return c.convert(x.Span(), e, r) if r != t else e
     }
     if c.P.T.IsFloat(r) {
@@ -12252,6 +12308,11 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
     }
     if ds.K == generic.DescCase {
         if c.isStruct(r) { return $c.text(c.P.T.DeclName(c.P.T.DeclOf(r))) }
+        # T20: an error value's word as "$" writes it, "io.Error.FULL"
+        if c.P.T.KindOf(r) == types.Kind.ErrVal {
+            codes := c.P.ErrValCodes(r)
+            return c.P.ErrValWordText(r, codes[ds.Case]) if ds.Case < codes.Len() else ""
+        }
         cn := c.P.T.CaseNames(r)
         return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
     }
@@ -14093,7 +14154,11 @@ fn (c mut Checker&) errItemPath(x ast.Expr&) Bool {
     if kind != names.What.Type and kind != names.What.Import { return false }
     if c.P.ErrorType(c.fr().Ctx, p) != types.UnknownT { return true }
     if p.Parts.Len() < 2 { return false }
-    return c.P.ErrorType(c.fr().Ctx, ast.Path(p.Sp, p.Parts[:p.Parts.Len() - 1])) != types.UnknownT
+    et := c.P.ErrorType(c.fr().Ctx, ast.Path(p.Sp, p.Parts[:p.Parts.Len() - 1]))
+    if et == types.UnknownT { return false }
+    # a word of it - another name after an error type is a reflected member (G32: "os.Error.Kind") or no name at all,
+    # said where it is read
+    return c.wordIndex(c.P.T.DeclOf(et), p.Parts[p.Parts.Len() - 1]) >= 0
 }
 
 fn (c mut Checker&) errWordPath(x ast.Expr&) Bool {
@@ -16547,10 +16612,10 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
 
 # D14d: whether "name := Array<T>(n)" (or typed so) is followed, as the next statement of its block, by a counted loop
 # "for i in range n" (or "range 0, n", the same n - a name or a literal) whose body writes name[i] as a whole at its top
-# level, mentions name nowhere else and holds no break, continue or return - so every element is written before
-# anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a mention is
-# always the name written, so anything more is a mention more, and the clear is kept. An element type that owns or is
-# an array is excluded (a store into one reads what it replaces)
+# level, mentions name nowhere else, never assigns i and holds no break, continue or return - so every element is
+# written before anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a
+# mention is always the name written, so anything more is a mention more, and the clear is kept. An element type that
+# owns or is an array is excluded (a store into one reads what it replaces)
 fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
     fr := c.fr()
     if fr.restAt >= fr.rest.Len() { return false }
@@ -16583,7 +16648,8 @@ fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
                     nomatch { }
                 }
             }
-            if writes != 1 { return false }
+            # the counter written nowhere in the body: the store's index is then each element in turn
+            if writes != 1 or assignsName(f.Body, Array<source.NameId>(1, f.Name)) { return false }
             from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
             text := c.src(source.Span(from, to))
             return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
@@ -17364,6 +17430,18 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
 fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, next I64, cm ast.Compr?&, ce types.TypeId) {
     it := c.hidden(sp, typeOf(src))
     if c.generatorCall(src) { c.cur().Walks.Push(typed.LocalId(I32(it))) }
+    # D18e: a local walked here - its walk this loop's own where nothing else names it (settleHeldWalks)
+    match src {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, g) {
+                    if c.cur().Local(g).Kind == typed.LocalKind.Var { c.heldWalks.Push(heldCand(c.fr().Body, I64(g), it)) }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
     k I64 = -1
     if f.Key != source.NameId(0) {
@@ -19459,9 +19537,15 @@ fn (c mut Checker&) caseCompare(sp source.Span, op token.Tok, xa ast.Expr&, pat 
     if xt == types.UnknownT { return c.unknown(sp) }
     et := c.deref(xt)
     cd := c.caseDesc(pat)
-    if cd.K == generic.DescCase and not c.P.T.Same(cd.Of, et) {
+    if cd.K == generic.DescCase and not c.P.T.Same(cd.Of, et) and not c.P.T.Same(c.P.ReflUnder(cd.Of), et) {
         c.err(pat.Span(), msgs.ReflCaseOther(c.ty(cd.Of), c.ty(et)))
         return c.unknown(sp)
+    }
+    if cd.K == generic.DescCase and c.P.T.KindOf(et) == types.Kind.ErrVal {
+        # T20: an error value's word - its code compared
+        codes := c.P.ErrValCodes(et)
+        if cd.Case >= codes.Len() { return c.unknown(sp) }
+        return c.opValues(sp, sp, op, x, c.lit(pat.Span(), et, codes[cd.Case]), sp, pat.Span())
     }
     if cd.K == generic.DescCase and c.isStruct(et) {
         # G34: a struct's one case - every value holds it
@@ -19655,7 +19739,9 @@ fn casePayload(td ast.TypeDecl?&, k I64) Array<ast.Param&>&td {
 }
 
 # S8d: whether statements assign name n anywhere - "n = ...", "n op= ...", "n++", a target list naming it - in their
-# blocks, branches, loops, clauses and matches (a lambda's capture is a copy, and cannot)
+# blocks, branches, loops, clauses and matches, and in the clauses and match values inside any expression of theirs (a
+# lambda's capture is a copy, and cannot). One walk over every kind, written without a catch-all so a new kind must say
+# what it holds; read by S8d's and S8e's narrowing and D14d's counted fill
 fn assignsName(body Array<ast.Stmt&>&, n Array<source.NameId>&) Bool {
     if body.Len() == 0 { return false }
     for st in body {
@@ -19667,66 +19753,107 @@ fn assignsName(body Array<ast.Stmt&>&, n Array<source.NameId>&) Bool {
 fn stmtAssigns(st ast.Stmt?&, n Array<source.NameId>&) Bool {
     if st is null { return false }
     match st {
-        case ast.Stmt.ExprS(_, x) { return exprAssigns(x, n) }
-        case ast.Stmt.Assign(_, _, t, v) { return hitsPath(t, n) or exprAssigns(v, n) }
+        case ast.Stmt.ExprS(_, x), ast.Stmt.Yield(_, x) { return exprAssigns(x, n) }
+        case ast.Stmt.Var(_, v) { return exprsAssign(v.Values, n) }
+        case ast.Stmt.Assign(_, _, t, v) { return hitsPath(t, n) or exprAssigns(t, n) or exprAssigns(v, n) }
         case ast.Stmt.Multi(_, m) {
             for t in m.Targets {
-                if hitsPath(t, n) { return true }
+                if hitsPath(t, n) or exprAssigns(t, n) { return true }
             }
-            return false
+            return exprsAssign(m.Values, n)
         }
         case ast.Stmt.TryStore(_, inner, cl) { return stmtAssigns(inner, n) or clausesAssign(cl, n) }
         case ast.Stmt.If(_, i) { return ifAssigns(i, n) }
         case ast.Stmt.Forever(_, b), ast.Stmt.Block(_, b) { return assignsName(b, n) }
-        case ast.Stmt.While(_, _, b) { return assignsName(b, n) }
-        case ast.Stmt.DoFor(_, b, _) { return assignsName(b, n) }
-        case ast.Stmt.For3(_, f) { return stmtAssigns(f.Post, n) or assignsName(f.Body, n) }
-        case ast.Stmt.ForIn(_, f) { return assignsName(f.Body, n) or clausesAssign(f.Clauses, n) }
+        case ast.Stmt.While(_, w, b), ast.Stmt.DoFor(_, b, w) { return exprAssigns(w, n) or assignsName(b, n) }
+        case ast.Stmt.For3(_, f) {
+            return stmtAssigns(f.Init, n) or exprAssigns(f.Cond, n) or stmtAssigns(f.Post, n) or assignsName(f.Body, n)
+        }
+        case ast.Stmt.ForIn(_, f) {
+            return exprAssigns(f.Source, n) or assignsName(f.Body, n) or clausesAssign(f.Clauses, n)
+        }
         case ast.Stmt.MatchS(_, m) { return matchAssigns(m, n) }
+        case ast.Stmt.Return(_, xs) { return exprsAssign(xs, n) }
+        case ast.Stmt.Jump(_, _, msg) { return exprAssigns(msg, n) }
+        case ast.Stmt.Assert(_, c, msg) { return exprAssigns(c, n) or exprAssigns(msg, n) }
+        case ast.Stmt.Raise(_, _) { return false }
         case ast.Stmt.Join(_, j) { return assignsName(j.Body, n) or clausesAssign(j.Clauses, n) }
         case ast.Stmt.Defer(_, inner, _) { return stmtAssigns(inner, n) }
-        case ast.Stmt.Spawn(_, targets, _) {
+        case ast.Stmt.Spawn(_, targets, call) {
             for t in targets {
-                if hitsPath(t, n) { return true }
+                if hitsPath(t, n) or exprAssigns(t, n) { return true }
             }
-            return false
+            return exprAssigns(call, n)
         }
-        case _ { return false }
     }
 }
 
 fn ifAssigns(i ast.If&, n Array<source.NameId>&) Bool {
+    if exprAssigns(i.Cond, n) { return true }
     if i.Then is not null and assignsName(i.Then!.Body, n) { return true }
     return stmtAssigns(i.Else, n)
 }
 
 fn matchAssigns(m ast.Match&, n Array<source.NameId>&) Bool {
+    if exprAssigns(m.Subject, n) { return true }
     for cs in m.Cases {
-        if assignsName(cs.Body, n) { return true }
+        if caseAssigns(cs, n) { return true }
     }
-    return m.NoMatch is not null and assignsName(m.NoMatch!.Body, n)
+    return m.NoMatch is not null and caseAssigns(m.NoMatch!, n)
+}
+
+fn caseAssigns(cs ast.Case&, n Array<source.NameId>&) Bool {
+    return exprAssigns(cs.Guard, n) or assignsName(cs.Body, n) or exprAssigns(cs.Value, n)
 }
 
 fn clausesAssign(cl Array<ast.Catch&>&, n Array<source.NameId>&) Bool {
     if cl.Len() == 0 { return false }
     for k in cl {
-        if assignsName(k.Body, n) { return true }
+        if assignsName(k.Body, n) or exprsAssign(k.Defaults, n) { return true }
     }
     return false
 }
 
-# whether an expression's statements - a try's clauses, a match value's blocks - assign n, or it increments n
+fn exprsAssign(xs Array<ast.Expr&>&, n Array<source.NameId>&) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprAssigns(x, n) { return true }
+    }
+    return false
+}
+
+# whether an expression's statements - a try's clauses, a match value's blocks, at any depth in it - assign n, or it
+# increments n
 fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
     if x is null { return false }
     match x {
+        case ast.Expr.Name(_, _), ast.Expr.Lit(_, _), ast.Expr.Default(_) { return false }
+        case ast.Expr.Lambda(_, _) { return false }
         case ast.Expr.Unary(_, op, y), ast.Expr.Postfix(_, op, y) {
             if (op == token.Tok.Inc or op == token.Tok.Dec) and hitsPath(y, n) { return true }
             return exprAssigns(y, n)
         }
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Member(_, y, _), ast.Expr.Generic(_, y, _) {
+            return exprAssigns(y, n)
+        }
+        case ast.Expr.IsType(_, y, _, _), ast.Expr.As(_, y, _) { return exprAssigns(y, n) }
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+            return exprAssigns(a, n) or exprAssigns(b, n)
+        }
+        case ast.Expr.Chain(_, ch) { return exprsAssign(ch.Xs, n) }
+        case ast.Expr.Cond(_, a, c, b) { return exprAssigns(a, n) or exprAssigns(c, n) or exprAssigns(b, n) }
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args), ast.Expr.Index(_, f, args) {
+            return exprAssigns(f, n) or exprsAssign(args, n)
+        }
+        case ast.Expr.Slice(_, y, lo, hi) { return exprAssigns(y, n) or exprAssigns(lo, n) or exprAssigns(hi, n) }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            return exprsAssign(items, n)
+        }
+        case ast.Expr.Compr(_, cm) {
+            return exprAssigns(cm.Value, n) or exprAssigns(cm.Source, n) or exprAssigns(cm.Filter, n)
+        }
         case ast.Expr.Try(_, y, cl) { return exprAssigns(y, n) or clausesAssign(cl, n) }
         case ast.Expr.MatchE(_, m) { return matchAssigns(m, n) }
-        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y) { return exprAssigns(y, n) }
-        case _ { return false }
     }
 }
 
@@ -19841,7 +19968,8 @@ fn leaves(s typed.Stmt&) Bool {
             }
             return true
         }
-        case typed.Stmt.Loop(_, body, _) { return not breaks(body, body.Id) }
+        # a do-while's condition, and so its break, is in its post clause
+        case typed.Stmt.Loop(_, body, post) { return not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id) }
         case typed.Stmt.Eval(_, x) {
             # a call of a noreturn function (D8e)
             if typeOf(x) == types.NoreturnT { return true }
@@ -19858,85 +19986,6 @@ fn leaves(s typed.Stmt&) Bool {
         nomatch { return false }
     }
 }
-
-# whether a loop's body holds a break of that loop
-fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
-    if b is null { return false }
-    for s in b.Stmts {
-        match s {
-            case typed.Stmt.Jump(_, kind, l) {
-                if kind == typed.JumpKind.Break and l == loop { return true }
-            }
-            case typed.Stmt.If(_, i) {
-                if breaks(i.Then, loop) or breaks(i.Else, loop) { return true }
-            }
-            case typed.Stmt.Block(_, inner) {
-                if breaks(inner, loop) { return true }
-            }
-            case typed.Stmt.Loop(_, body, post) {
-                if breaks(body, loop) or breaks(post, loop) { return true }
-            }
-            # a break in a clause of an expression's try - a for-in's own, at its iterator's end (S9a)
-            case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x) {
-                if exprBreaks(x, loop) { return true }
-            }
-            case typed.Stmt.Assign(_, _, x) {
-                if exprBreaks(x, loop) { return true }
-            }
-            nomatch { }
-        }
-    }
-    return false
-}
-
-fn stmtsBreak(ss Array<typed.Stmt&>&, loop typed.BlockId) Bool {
-    if ss.Len() == 0 { return false }
-    return breaks(typed.Block(typed.BlockId(-1), ss), loop)
-}
-
-fn exprsBreak(xs Array<typed.Expr&>&, loop typed.BlockId) Bool {
-    if xs.Len() == 0 { return false }
-    for x in xs {
-        if exprBreaks(x, loop) { return true }
-    }
-    return false
-}
-
-# whether an expression holds a break of that loop in the statements it carries: a try's clauses, a match's arms, a
-# conditional's values, a call's arguments
-fn exprBreaks(x typed.Expr?&, loop typed.BlockId) Bool {
-    if x is null { return false }
-    return match x {
-        case typed.Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
-        case typed.Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
-        case typed.Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
-                                          (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
-        case typed.Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
-        case typed.Expr.Call(_, _, k) => exprsBreak(k.Args, loop)
-        case typed.Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
-        case typed.Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
-        case typed.Expr.Away(_, _, y) => exprBreaks(y, loop)
-        case _ => false
-    }
-}
-
-fn clausesBreak(cs Array<typed.Clause&>&, loop typed.BlockId) Bool {
-    if cs.Len() == 0 { return false }
-    for k in cs {
-        if breaks(k.Code, loop) or exprsBreak(k.Defaults, loop) { return true }
-    }
-    return false
-}
-
-fn armsBreak(arms Array<typed.Arm&>&, loop typed.BlockId) Bool {
-    if arms.Len() == 0 { return false }
-    for a in arms {
-        if armBreaks(a, loop) { return true }
-    }
-    return false
-}
-
-fn armBreaks(a typed.Arm&, loop typed.BlockId) Bool { return breaks(a.Code, loop) or exprBreaks(a.Value, loop) or exprBreaks(a.Guard, loop) }
 
 # ---- run-time trait values (T32-T34) ----
 

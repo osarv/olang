@@ -348,7 +348,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
   carrying a `South`.
 - **Enum raw values (T17e, the user's decision 2026-10-24).** `type Op enum String { Plus = "+" }`, `type Status enum
-  U8 { Ok  Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
+  U8 { Ok, Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
   case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
   are literals (an integer literal-only expression, a character literal; mine: no names, so the table needs nothing
   resolved), fit the type and are distinct. `op.Value()` is supplied (a case-by-case test, the constant itself where
@@ -647,21 +647,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   conservative): the call must be a direct call to a generator function at the for-in's own source, its result scope
   the loop's block, loop or frame, the walk made and closed on every path that closes the scope (a dataflow in emit,
   else the arena path), and never in a test build (a failed check closes scopes from outside, through the
-  registration); a generator in a local, a field, a result, an argument or an `any`, and an iterator helper's walk
-  (`gen(n).Sum()`), keep D18b's arena path. Result: the range generator folds to the hand iterator's closed form
-  (0.35 s -> 0.003 s), the filter generator 0.30 -> 0.15 s, below the iterator struct's 0.22 s. Limit: a walk made
-  inside a loop whose exit leaves that loop too (a `return`, an error) keeps an arena frame - CoroElide does not see
-  a destroy behind the exit's LCSSA phi - still destroyed by the caller.
+  registration); a generator in a field, a result, an argument or an `any`, and an iterator helper's walk
+  (`gen(n).Sum()`), keep D18b's arena path. **A local held so (2026-10-26, bulk review 3, mine)**: `g := gen(x)` whose
+  elements are built per turn, walked by one for-in or comprehension later in its block, in no loop or deferred code
+  there, and named nowhere else, is that walk's own (check's settleHeldWalks, definit.HeldWalk) - made where it is
+  declared, dropped as its block closes (139 MB -> 1.6 MB over 1M calls over a global's array); a local walked in two
+  branches, twice, or borrowing elements (D18c) keeps the arena path, a recorded limit. Result: the range generator
+  folds to the hand iterator's closed form (0.35 s -> 0.003 s), the filter generator 0.30 -> 0.15 s, below the iterator
+  struct's 0.22 s. Limit: a walk made inside a loop whose exit leaves that loop too (a `return`, an error) keeps an
+  arena frame - CoroElide does not see a destroy behind the exit's LCSSA phi - still destroyed by the caller.
   **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
   `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
-  aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).
+  aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses; since bulk review 3 one walk,
+  `typed.BreaksOut`, over every statement, expression and place kind (a do-while's post clause too), read by D10a and
+  D13d alike.
 - **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18; built 2026-10-25).** A
   type's structure read through its name, while compiling only: `T.Name`, `T.Kind` (the prelude's `TypeKind`: `Struct
-  Enum Integer Float Bool Array Reference Function`, a declared type its base's), `T.Base`, `T.Element`, `T.Length`,
-  `T.Target`, `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one case), `T.Params` (a constructor's or
-  a function type's), `T.Results`, and `T.Errors` where an error set is written. A list is no value: a `for` over it is
-  unrolled (the body checked per element, `break` leaving the walk), `.Len()` and a constant index are constants, a
-  comprehension makes an array. Its elements are **descriptors** - prelude structs of no fields typed by the member
+  Enum Integer Float Bool Array Reference Function Error`, a declared type its base's, an error value's type `Error`),
+  `T.Base`, `T.Element`, `T.Length`, `T.Target`, `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one
+  case; an error value's words, each named as `$` writes it, `c()` its value - 2026-10-26, mine), `T.Params` (a
+  constructor's or a function type's), `T.Results`, and `T.Errors` where an error set is written. A list is no value: a
+  `for` over it is unrolled (the body checked per element, `break` leaving the walk), `.Len()` and a constant index are
+  constants, a comprehension makes an array. Its elements are **descriptors** - prelude structs of no fields typed by
+  the member
   (`FieldInfo<T, C, I>` ...), so a generic taking one is instantiated per member: `f.Name`, `f.Type`, `f.Offset`,
   `f.Of(v)` (a place; a case's field where `v` is narrowed to it), `c.Name`, `c.Fields`, `v == c`, `c(args)` building
   the case (mine), `p.HasDefault`, `p.Default`. Conditions over reflected constants decide `if`, conditionals, asserts
@@ -734,7 +742,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
 - **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
-  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL  DENIED }` (the
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL, DENIED }` (the
   listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { TIMEOUT }`
   is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
   type then the last member of its own set; one grammar `type Name error [Member, ...] [{ WORDS }]`. A set is written
@@ -765,7 +773,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Representation (mine): the I32 code under its set's canonical order (module identity, then name), 0 for null - an
   interned `Kind.ErrVal` type over the set's entries; going between sets is `Rvalue.Recode`, which emit, the evaluator
   and `interpret` already had. `e is null` is the null test (E10c), as for references. R11b's "storing refused" rules
-  went, and the cases pinning them became run cases.
+  went, and the cases pinning them became run cases. Since bulk review 3 (mine): Hash is by the error held (its type's
+  identity and word), so values `==` across sets hash alike; an error type in a rendering's type is qualified as its
+  values are (`Vec<lib.Both>[lib.LibErr.B]`); std/json writes a value as `$` does and reads it back by its word.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
@@ -1352,12 +1362,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   - each a compile error. **Arrays:** a comprehension never clears its storage; with no `if` over a range or an array
   of known length it allocates exactly its length and writes each element once, a known count giving a fixed length
   (T7c, no longer "not yet implemented"); `Array<T>(n)` declared and filled by the very next `for i in range n` (or
-  `range 0, n`, same `n`) storing `a[i]` once at the body's top level, mentioning `a` nowhere else, with no
-  break/continue/return, is not cleared (D14d) - every other shape keeps the clear. MIR: `Assign(L, Use(None))` marks a
-  local set with nothing written. Measured: 1,000 `Array<F32>(262144)` filled by a loop on recycled memory 0.073 ->
-  0.049 s; the same as a comprehension 0.90 -> 0.25 s; bench instruction counts unchanged elsewhere. Found on the way: the
-  pre-scan did not take an `if` after a line ending in a bare `&` for a statement start, so a top-level `if` after `X
-  Node&` (or `X Node?&`) was never decided (pre-existing).
+  `range 0, n`, same `n`) storing `a[i]` once at the body's top level, mentioning `a` nowhere else, never assigning `i`,
+  with no break/continue/return, is not cleared (D14d) - every other shape keeps the clear. MIR: `Assign(L, Use(None))`
+  marks a local set with nothing written. Measured: 1,000 `Array<F32>(262144)` filled by a loop on recycled memory 0.073
+  -> 0.049 s; the same as a comprehension 0.90 -> 0.25 s; bench instruction counts unchanged elsewhere. Found on the
+  way: the pre-scan did not take an `if` after a line ending in a bare `&` for a statement start, so a top-level `if`
+  after `X Node&` (or `X Node?&`) was never decided (pre-existing).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

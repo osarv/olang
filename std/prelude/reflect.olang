@@ -14,6 +14,7 @@ type TypeKind enum {
     Array
     Reference
     Function
+    Error        # an error value's type (T20): an error type or a named set - its words its T.Cases
 }
 
 # a field (G34): of a struct, or of an enum's case C - a struct's fields are its one case's - at position I. Its

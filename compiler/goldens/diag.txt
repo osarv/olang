@@ -784,6 +784,11 @@ ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to a
    17 |         m = M(W(b))
       |                 ^
 compilation failed with 1 error
+=== d10adowhile.olang
+d10adowhile.olang:4:4: error[D10a]: the end can be reached without returning I64 - return on every path, or end it with 'unreachable'
+    4 | fn f() I64 {
+      |    ^
+compilation failed with 1 error
 === d10adroppedbranch.olang
 d10adroppedbranch.olang:6:4: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
     6 | fn pick() I32 {
@@ -1354,6 +1359,14 @@ definitdefer.olang:6:5: note: declared here with no value
     6 |     w N&
       |     ^
 compilation failed with 1 error
+=== definitdowhile.olang
+definitdowhile.olang:9:12: error[D13d]: 'n' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+    9 |     return n.v
+      |            ^
+definitdowhile.olang:6:5: note: declared here with no value
+    6 |     n Node&
+      |     ^
+compilation failed with 1 error
 === definiteffect.olang
 definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one - its constructor does not run on zeros while compiling: it reads a mutable global, whose value is the running program's
    11 |     e Eff
@@ -1373,6 +1386,56 @@ definitfield.olang:8:5: note: when this condition is false nothing assigns it - 
     8 |     if c { n = N(1) }
       |     ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== definithiddenbreak.olang
+definithiddenbreak.olang:31:12: error[D13d]: 'a' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   31 |     return a.v
+      |            ^
+definithiddenbreak.olang:25:5: note: declared here with no value
+   25 |     a Node&
+      |     ^
+definithiddenbreak.olang:40:12: error[D13d]: 'b' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   40 |     return b.v
+      |            ^
+definithiddenbreak.olang:34:5: note: declared here with no value
+   34 |     b Node&
+      |     ^
+definithiddenbreak.olang:49:12: error[D13d]: 'c' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   49 |     return c.v
+      |            ^
+definithiddenbreak.olang:43:5: note: declared here with no value
+   43 |     c Node&
+      |     ^
+definithiddenbreak.olang:58:12: error[D13d]: 'd' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   58 |     return d.v
+      |            ^
+definithiddenbreak.olang:52:5: note: declared here with no value
+   52 |     d Node&
+      |     ^
+definithiddenbreak.olang:67:12: error[D13d]: 'e' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   67 |     return e.v
+      |            ^
+definithiddenbreak.olang:61:5: note: declared here with no value
+   61 |     e Node&
+      |     ^
+definithiddenbreak.olang:76:12: error[D13d]: 'f' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   76 |     return f.v
+      |            ^
+definithiddenbreak.olang:70:5: note: declared here with no value
+   70 |     f Node&
+      |     ^
+definithiddenbreak.olang:85:12: error[D13d]: 'h' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   85 |     return h.v
+      |            ^
+definithiddenbreak.olang:79:5: note: declared here with no value
+   79 |     h Node&
+      |     ^
+definithiddenbreak.olang:94:12: error[D13d]: 'k' is read here before it is assigned on every path, and Node& has no zero value - assign it on each path before this read, or give it a value, or write 'Node?&'
+   94 |     return k.v
+      |            ^
+definithiddenbreak.olang:88:5: note: declared here with no value
+   88 |     k Node&
+      |     ^
+compilation failed with 8 errors
 === definitloop.olang
 definitloop.olang:8:12: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
     8 |     return x.v
@@ -2150,6 +2213,14 @@ eqwrites.olang:6:16: error[E10a, E11c]: Eq takes what it is given read-only - ne
     6 | fn (p mut Pt&) Eq(q Pt&) Bool { return p.n == q.n }
       |                ^~
 compilation failed with 1 error
+=== errvalnullcompare.olang
+errvalnullcompare.olang:7:12: error[E10c]: null is tested with 'is', never compared - write 'e is null'
+    7 |     a := e == null
+      |            ^~
+errvalnullcompare.olang:8:12: error[E10c]: null is tested with 'is', never compared - write 'e is not null'
+    8 |     b := e != null
+      |            ^~
+compilation failed with 2 errors
 === extendsstruct.olang
 extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array extends its base
     3 | type P extends struct(x I32) {
@@ -4444,9 +4515,9 @@ reflnodefault.olang:11:12: error[G34]: parameter 'x' of Point has no default - r
       |            ^~~~~~~~~
 compilation failed with 1 error
 === reflnokind.olang
-reflnokind.olang:10:20: error[G32]: E has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference and a function type have one
-   10 | fn main() { k := E.Kind }
-      |                    ^~~~
+reflnokind.olang:13:12: error[G32]: E has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one
+   13 |     k := E.Kind
+      |            ^~~~
 compilation failed with 1 error
 === reflnolength.olang
 reflnolength.olang:9:24: error[G32]: Point has no Length - only an array whose length is known while compiling has one
@@ -4525,6 +4596,17 @@ retire03outside.olang:5:7: error[M19]: Array<I64> has no method 'retire'
     5 |     a.retire()
       |       ^~~~~~
 compilation failed with 1 error
+=== roglobaltext.olang
+roglobaltext.olang:12:7: error[S6]: T cannot be written - only a local, a parameter or a 'mut' global can
+   12 |     w(T)
+      |       ^
+roglobaltext.olang:13:7: error[S6]: U cannot be written - only a local, a parameter or a 'mut' global can
+   13 |     w(U)
+      |       ^
+roglobaltext.olang:14:14: error[S6]: V cannot be written - only a local, a parameter or a 'mut' global can
+   14 |     c.strcpy(V, "ab")
+      |              ^
+compilation failed with 3 errors
 === rv3assigncopy.olang
 rv3assigncopy.olang:13:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    13 |     d = pick(r)
@@ -5211,6 +5293,14 @@ s8bother.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
     9 |         x = onlyOnSmallBuilds()
       |             ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== s8dassignclause.olang
+s8dassignclause.olang:15:18: error[S8d]: Shape is an enum - its payload's 'p' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.p }', assigned nowhere there
+   15 |         return e.p.v + x
+      |                  ^
+s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'q!'
+   22 |         return q.v
+      |                ^
+compilation failed with 2 errors
 === s8dassigned.olang
 s8dassigned.olang:7:16: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
     7 |         t := s.r
@@ -7111,6 +7201,11 @@ compilation failed with 1 error
 x21struct.olang:11:28: error[X21]: P cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference
    11 |     s.printf("%p\n".ToC(), p)
       |                            ^
+compilation failed with 1 error
+=== x21wide.olang
+x21wide.olang:8:34: error[X21]: U100 cannot be a C variable argument - no C type of olang's holds it; convert it, 'I64(x)' or 'U64(x)'
+    8 |     c.printf("%d %d\n".ToC(), a, w)
+      |                                  ^
 compilation failed with 1 error
 === x22readonly.olang
 x22readonly.olang:7:34: error[X22]: C may write through this pointer, and Array<U8>& is read-only - pass a writable one ('mut')
