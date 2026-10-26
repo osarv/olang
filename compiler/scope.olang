@@ -7540,6 +7540,28 @@ fn (s mut Scoper&) gammaHolds(hi Term, lo Term) Bool {
 fn (s mut Scoper&) oblige(hi Term, lo Term, exact Bool) {
     if s.floorOf(hi) != Term.None { hi = s.floorOf(hi) }
     if s.floorOf(lo) != Term.None { lo = s.floorOf(lo) }
+    # one of several terms (O12) is each of them: an obligation names terms the callers can bind, never a set - each
+    # member that is not shown to outlive the other side is one
+    match hi {
+        case Term.Set(id) {
+            for m in range s.setFrom[id], s.setEnd(id) {
+                t := s.setTerms[m]
+                if s.order(t, lo) == Obliged { s.oblige(t, lo, exact) }
+            }
+            return
+        }
+        case _ { }
+    }
+    match lo {
+        case Term.Set(id) {
+            for m in range s.setFrom[id], s.setEnd(id) {
+                t := s.setTerms[m]
+                if s.order(hi, t) == Obliged { s.oblige(hi, t, exact) }
+            }
+            return
+        }
+        case _ { }
+    }
     # one naming a constructor's instance is what the instance holds (C2d)
     why := s.why
     if why == 0 and s.instanceRel(hi, lo) { why = WhyHolds }

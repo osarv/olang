@@ -25626,3 +25626,93 @@ rest, so picking tests rebuilds nothing. With several files each child gets the 
 
 **The parse.** `test` followed by a name reads a dotted path (`p.path()`, whose second part may be a keyword as a
 method's name may), then the description, so `test "x"` is unchanged.
+
+## Generators handing out borrows, and the walk dropped with its loop (D18c, D18b, D18e, D16d, G11, O26, QBB, 2026-10-26)
+
+**The decisions.** QBB, the user, 2026-10-26: "allow handing out borrows" - a generator may yield references
+borrowing its inputs, written as a borrowed result is, `fn words(t String&) Iterator<String&t>`; and, arguing for the
+extension ("if the internal thing is built on a scope that survived the whole walk, that should be fine too"), views
+into storage its walk keeps, `Iterator<T&return>`, read-only. Third, mine from the elision batch: a walk a `for` makes
+and finishes is dropped where the loop's block is left, whatever the generator was given.
+
+**What the caller is given.** A borrowed element cannot ride on `Generator<T ? E>`: that struct's `Next` builds each
+value in its result scope, which is where the caller puts it, and a consumer reading a borrowed element as such a value
+would keep it wherever it liked - `outer.Push(try g.Next())` with `g` in an inner block, the element dying with `g`. So
+the consumer must know, and the type says it: the prelude's `ViewGenerator<T ? E>` (`T` the elements' referent), its
+`next` a `fn() T& ? E, Exhausted` and its `Next() T&g ? E, Exhausted` a result borrowed from the receiver (O13). An
+element then lives, for every consumer, where the generator value it is read through does - G11's container, which no
+rule had to be written for. Two refinements on top:
+- **The walk a for-in makes of a direct call** (D18e's `Body.Walks`) of an `&t` generator: the element is read at the
+  term the generator call bound `t`'s scope variable to (`Scoper.walkElem`, recorded at the hidden iterator's `:=`, used
+  at its Next call). So `for w in words(t) { kept.Push(w) }` keeps the elements as long as `t`'s text: in a function
+  taking `t` and `kept` as parameters, an obligation `V(t) >= V(kept)` its callers discharge. Held anywhere else the
+  element reads at the generator's container, an underestimate (sound for reading, refusing some safe programs - the
+  recorded limit: a generator in an inner block given outer text, its elements kept outside).
+- **A generator held in a local** walked by a for-in in the same block gives its elements at that block: a list declared
+  beside it keeps them (`g := labels(3); for w in g { kept.Push(w) }`), one outside it does not.
+
+**Inside the generator.** Its Next is still a lambda (genLambda), whose `yield` section 8 judges as a return; what
+changes is the slot. `typed.Body.GenElem` names the capture the elements live with, and `resultTerm`/`resultMark` give
+that capture's scope and `Mark.Of(cap)` - so a yield is judged as a borrowed result's return (O14's second case): it
+must outlive that scope (read-only views: no exactness), and a temporary yielded is built there.
+- `Iterator<T&t>`: the capture of parameter `t`. `yield t[i:j]` fits; a local's text, another parameter's (an
+  obligation the lambda cannot carry, so T22a's error, worded to write `Iterator<T&u>`), the frame's own storage do not.
+- `Iterator<T&return>`: the generator's result scope, which no capture had - the closure lives there, but its body
+  could not name it. genRoot declares a hidden local `?&`, `&return`, null, and genLambda captures it (`GenHome`), so the
+  capture's scope is the generator's result scope: `&return` and `f&return(...)` in the body name it (markOf, scoped),
+  where they were D18b's error. A value built there stays until the generator's scope closes - a frame `Vec` of views
+  pushed per value, a `Node&return` per turn - and every capture outlives it (the generator's arguments outlive the
+  generator, held so where it was made), which the pass assumes in that body (`homeVar`, order): yielding a borrow of an
+  input is fine there too.
+- Decided (mine): the elements are read-only and never null (`mut`, `?&` errors); the scope is a reference parameter's
+  or `return` (a by-value parameter's own storage is the walk's copy, O14's error naming `p T&`; a name no parameter
+  has, an error); such a generator is no `any Iterator<T&>&` (T32a already refuses a table slot whose Next says where its
+  references live); an invalid element is one error - its yields are not judged further (`GenBad`).
+
+**Why it is sound.** At run time the lambda's own result scope is never built into for such a generator - its yields
+are built at the capture's scope - so the only claim is the consumer's: an element read at the generator's container,
+or (a direct walk) at the argument's scope. The real home is the capture's scope: for `&t`, the argument's referent's
+scope (`>=` the generator's home, O14a); for `&return`, the generator's home, which by I1 outlives any cell holding the
+generator value (its closure lives there). Both are at least what the consumer assumes.
+
+**The walk dropped with its loop (D18e).** A generator given program-scope storage (constant text, a global array)
+landed there by its obligations (O18c: the result scope must not outlive what it captured, and the program's scope was
+the shortest that says so), so each walk's frame and what its body held stayed until the program ended - 552 MB and
+0.55 s for 4M calls of a function walking a generator over a global array. A walk local (`Body.Walks`) now never lands
+by obligations (`decide`): the generator is built in the for-in's own block, its obligations then checked as any
+call's (its arguments outlive that block), and D18e's emitted walk - now taken for every such walk, the frame in the
+caller - is destroyed as the block is left. The same program: 1.7 MB, 0.02 s. The evaluator follows the plan, and its
+generator records are now reused once their scope closes (`Machine.freeGens`, a free list per Next function through
+`genRec.NextFree`): `interpret` of 400k such calls 634 MB -> 31 MB, the size of the program with no generator. A
+generator held in a local (`g := each(Data)`) is not a walk of this kind and still lands by its obligations (a recorded
+limit: 552 MB for the same 4M calls).
+
+**Found on the way, pre-existing: a closure's captures beyond the first (D16d).** `fnVal` took a closure's home as the
+innermost of its captures' terms where they were ordered and the first where they were not - and returned the closure
+as existing storage at that one term, so only that capture was held to where the closure was put. `fn both(a String&, b
+String&) fn() String { return fn() { return $a $b } }`, called with `b` from an inner block and the result kept
+outside, read `b` after its block closed (`-sanitize`: "use after scope closed"); a generator over two parameters, the
+same. The closure's term is now a set of every capture term not shown to outlive the innermost (UNK, docs/scope-model
+3.6), so a slot it is put into is judged against each: the cases give O10c's and C2d's errors. Nothing in the suite
+relied on it. With it, an obligation can reach `oblige` with a set on one side (a constructor holding such a closure:
+`Generator(next)`), which recorded a relation naming the set itself - `explain` showed `[Term.Set(0) outlives return]` and
+every caller failed C2d; `oblige` now records one relation per member not shown to hold.
+
+Also: `olang explain` writes a borrowing generator's result as written (`Iterator<String&t>   # a generator: a call gives
+a ViewGenerator<String>`); G11's error now reaches an `any`'s trait arguments (`any Iterator<String&t>&` was taken as
+`any Iterator<String&>&`).
+
+**Measured.** bench/gen.olang's rows unchanged (range gen 0.00 s, filter gen 0.12 s, filter iterator 0.20 s, best of
+five, before and after). The scope fuzzer (`make scopefuzz SEED=7000 COUNT=48`: 316 scenarios run, 260 refused - the
+views kept past their walk among them, on purpose) and the differential fuzzer (`make fuzz SEED=900 COUNT=30`, 900
+cases) found nothing. Of the 34 new borrowing scenarios in the first 40 programs, 28 compiled; the 6 refused each keep
+a frame view past its walk.
+
+Tests: tests/generators.olang (elements borrowed from an input kept by a caller and through a parameter, the helpers, a
+held generator, a comprehension; frame views kept as the walk goes on and read after it; a baked global and decided
+asserts over each - the evaluator walking both; a walk given constant text dropped with its loop, its destructor run),
+each built, under `-debug -sanitize` and with arenas churned between turns; checks/cases d18c*.olang (a frame view kept
+past the walk, written through, a borrow of a local, of a turn's block, of the frame; an input's view kept past it; a
+generator held in a local or a field walked twice with its views kept outside; `any Iterator<String&>&` of one,
+`any Iterator<String&t>&`; `mut`, `?&`, an unknown name, a by-value parameter, another parameter), d16dtwoscopes and
+d18twoscopes; the scope fuzzer's generator scenario gains borrowing and frame-view generators.

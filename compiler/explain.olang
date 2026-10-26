@@ -88,6 +88,34 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
         g := c.Ty(c.P.T.Result(sig))
         if text.EndsWith(g) and g.StartsWith("Generator") {
             text = $text[:text.Len() - g.Len()] "Iterator" $g[9:] "   # a generator: a call gives a " $g
+        } else if text.EndsWith(g) and g.StartsWith("ViewGenerator<") {
+            # D18c: its elements borrowed - "&p" or "&return" after the element's type, as it is written
+            el := c.P.GenElem(f)
+            sc := $"return"
+            if el >= 0 {
+                k := el
+                if decl.Recv is not null {
+                    if k == 0 { sc = $c.P.L.Names.Text(decl.Recv!.Name) }
+                    k--
+                }
+                if k >= 0 and k < decl.S.Params.Len() { sc = $c.P.L.Names.Text(decl.S.Params[k].Name) }
+            }
+            args := g[13:]
+            depth I64 = 0
+            at := args.Len() - 1
+            for i in range 1, args.Len() {
+                ch := args[i]
+                if ch == '<' or ch == '(' { depth++ }
+                if (ch == '>' or ch == ')') and depth > 0 {
+                    depth--
+                    continue
+                }
+                if depth == 0 and (ch == '>' or ch == ',' or (ch == ' ' and i + 1 < args.Len() and args[i + 1] == '?')) {
+                    at = i
+                    break
+                }
+            }
+            text = $text[:text.Len() - g.Len()] "Iterator" $args[:at] "&" $sc $args[at:] "   # a generator: a call gives a " $g
         }
     }
     lead := "extern fn " if c.P.FnIsExtern(f) else "fn "

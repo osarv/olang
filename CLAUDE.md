@@ -591,9 +591,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Next call passed, a `.drop` registered there destroying a walk stopped part way - closing the scopes it holds - and a
   wrapper that is the function value's code); eval keeps the suspended frame's words and scopes and restores them.
   **Decided (mine)**: the value yielded is built in each `Next` call's result scope - so `for w in words(t)` reclaims
-  each value per turn - which no local outlives: `&return` is an error in a generator, O26a moves nothing there, a
+  each value per turn - which no local outlives: `&return` is an error in such a generator, O26a moves nothing there, a
   yielded local holding the generator's own storage is O26 worded for yield (write `$x`/`x.Clone()`), and a yielded
-  borrow of a parameter's referent is T22a's (the walk's Next is a function value; worded "yield a copy"). Not allowed:
+  borrow of a parameter's referent is T22a's (the walk's Next is a function value; the error names `Iterator<T&p>`).
+  **Borrowed elements (D18c, QBB, the user's decisions 2026-10-26; built 2026-10-26)**: `fn words(t String&)
+  Iterator<String&t>` yields views of what `t` refers to, `Iterator<T&return>` views of storage its walk keeps where the
+  generator lives (`x T&return` locals, what they hold, a temporary yielded) - read-only, never null, `p` a reference
+  parameter. The call gives the prelude's `ViewGenerator<T ? E>`, whose `Next() T&g` is borrowed from the receiver, so
+  any consumer reads an element where the generator value lives (G11's container); a for-in's own walk of a direct
+  `&t` call reads it where the argument for `t` lives (`Scoper.walkElem`), so `for w in words(t) { kept.Push(w) }`
+  keeps them as long as `t`'s text. Built (mine) on the lambda: `Body.GenElem` names the capture the elements live
+  with and a yield is judged as a result borrowed from it (built there if new); `&return` is a hidden null capture of
+  the generator's result scope (`GenHome`), which every capture is assumed to outlive in that body; such a generator
+  is no `any Iterator<T&>&` (T32a). Limit: a generator held in a local of an inner block reads its `&t` elements there.
+  **The walk dropped with its loop (D18e, mine)**: a for-in's own walk never lands by obligations - it is made in the
+  loop's block whatever it was given (constant text, a global's array) and dropped as that block is left: 552 MB ->
+  1.7 MB over 4M walks of a generator over a global array; the evaluator reuses a closed generator's record
+  (`interpret` 634 -> 31 MB). A generator held in a local still lands by its obligations (a recorded limit). **Found on
+  the way (pre-existing, D16d)**: a closure was held to where it is put only through its innermost capture - a lambda or
+  generator over two parameters' referents, returned, read the second after it was freed; its term is now the set of
+  its captures' (UNK), and an obligation over a set is one per member. Not allowed:
   `yield` in a lambda, deferred code, a join block, or with deferred code pending around it (a dropped walk would never
   run it - relaxable). Cost (2026-10-26): about 1.7 ns a value summing a range, the resume inlined where the walk is made, with the
   frame's fields in memory per step (the frame comes from the arena and its handle is registered for the drop, so

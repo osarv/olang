@@ -1,0 +1,21 @@
+alpha
+beta
+gamma
+delta
+alpha
+beta
+delta
+alpha beta 
+gamma delta
+count 3
+first alpha
+alpha beta gamma delta-0 alpha beta gamma delta-1 alpha
+pt 3
+pt 13
+pt 23
+pt 3
+pt 13
+pt 23
+drops 1
+t 2 drops 2
+sum 31000 drops 1002

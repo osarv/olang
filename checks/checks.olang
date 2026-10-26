@@ -1534,6 +1534,16 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "grep -c 'call [^@]*@exits_2eheld\\.walk(' build/exits.main.ll > out.txt; " $
                     "grep -c 'call [^@]*@exits_2eupto\\.walk(' build/exits.main.ll >> out.txt") == 0 and outOf(dir) == "8\n2\n"
                  "exits' walk forms", dir)
+    # D18c: views borrowed from what a generator was given and kept by its walk, read after churns, alike built, -d -s
+    # and interpreted; D18e: a walk given a global's array is a walk form too, made and dropped in its loop's block
+    try r.expect(sh(dir, "\"$OLANG\" build views.olang > out.txt 2>&1 && ./build/views > b.txt 2>&1") == 0, "views", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize views.olang > out.txt 2>&1 && ./build/views.debug.san > d.txt 2>&1") == 0
+                 "views -d -s", dir)
+    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret views.olang > i.txt 2>&1") == 0, "views -i", dir)
+    try r.expect(sh(dir, "cmp -s views.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "views output", dir)
+    try r.expect(sh(dir, "grep -c 'call [^@]*@views_2espans\\.walk(' build/views.main.ll > out.txt; " $
+                    "grep -c 'call [^@]*@views_2eeach\\.walk(' build/views.main.ll >> out.txt") == 0 and outOf(dir) == "4\n1\n"
+                 "views' walk forms", dir)
     # a failed check leaving a walk in a test closes the generator's scopes once, and the next test runs
     try r.expect(sh(dir, "\"$OLANG\" test exitst.olang > t.txt 2>&1") == 1, "exitst", dir)
     try r.expect(sh(dir, "grep -c '^drop 70$' t.txt | grep -qx 1 && grep -q 'FAIL - a check fails inside the walk' t.txt && " $

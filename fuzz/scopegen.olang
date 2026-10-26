@@ -28,7 +28,8 @@
 # A generator scenario (one in twelve or so) walks generators that build nodes and text in their bodies (D18): by for-ins
 # and comprehensions ending every way - the end, break, continue, a return out of two loops, an error leaving - by a walk
 # inside a generator's body, and through a generator held in a local, the yielded text kept in a list (D18e's walks
-# made and finished in one place beside the ordinary ones).
+# made and finished in one place beside the ordinary ones); and generators handing out views (D18c) - of the text they
+# were given, of text and nodes their walk keeps - kept beside the walk, or past it (which must be refused).
 #
 # One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
 # through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
@@ -1158,12 +1159,21 @@ fn (g mut SG&) genScenario(k I64) String& {
              "        }\n    }\n    return acc\n}\n"
              "fn er" $k "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    ee := \"e\" $n\n    for s in " $gn "(n, n, ee) {\n"
              "        if s.Len() > 6 + Run {\n            error SgErr.E\n        }\n        acc = acc * 31 + s.Hash()\n    }\n"
-             "    return acc\n}\n")
+             "    return acc\n}\n"
+             # D18c: views borrowed from what it was given, and views kept by the walk - a text and a node each turn,
+             # kept in a list of the walk's, handed out as made and all again after
+             "fn bw" $k "(t String&, n I64) Iterator<String&t> {\n    x := Node(n)\n" $tr "    for i in range n {\n"
+             "        a := i % (t.Len() + 1)\n        yield t[a:]\n        x.next = Node(i)\n    }\n}\n"
+             "fn fw" $k "(v I64, n I64) Iterator<String&return> {\n    all mut Vec<String&>&return = Vec<String&>()\n" $tr
+             "    for i in range n {\n        s String&return = $\"f\" $v \"-\" $i\n        all.Push(s)\n        yield s\n"
+             "        junk := $i \"j\"\n    }\n    for s in all {\n        yield s\n    }\n}\n"
+             "fn nw" $k "(v I64, n I64) Iterator<Node&return> {\n    for i in range n {\n        x mut Node&return = Node(v + i)\n"
+             "        x.next = Node(i)\n        yield x\n    }\n}\n")
     body mut String& = ""
     for c in range 2 + g.r(4) {
         v := g.val()
         n := g.r(7)
-        w := g.r(9)
+        w := g.r(14)
         ind String& = "        "
         walk String& = $"for s in " $gn "(" $v ", " $n ", t) {\n"
         if w == 0 { body = $body $ind $walk $ind "    acc = acc * 31 + s.Hash()\n" $ind "}\n" }
@@ -1196,9 +1206,42 @@ fn (g mut SG&) genScenario(k I64) String& {
         }
         if w == 7 { body = $body $ind "acc = acc * 31 + rt" $k "(" $n ", " $(g.r(5)) ")\n" }
         if w == 8 { body = $body $ind "acc = acc * 31 + (try er" $k "(" $n ") catch SgErr default -1)\n" }
+        # D18c: an input's views kept beside it, or where the scenario's list is (refused where t is the turn's)
+        if w == 9 {
+            q := "kb" if g.chance(70) else "kept"
+            body = ($body $ind "for s in bw" $k "(t, " $n ") {\n" $ind "    churn()\n" $ind "    " $q ".Push(s)\n" $ind "}\n")
+        }
+        if w == 10 {
+            q := g.name("g")
+            a := g.name("a")
+            b := g.name("b")
+            src := ("bw" $k "(t, " $(n + 1) ")") if g.chance(50) else ("fw" $k "(" $v ", " $(n + 1) ")")
+            body = ($body $ind $q " := " $src "\n" $ind $a " := try " $q ".Next() catch default \"\"\n" $ind "churn()\n" $ind $b
+                    " := try " $q ".Next() catch default \"\"\n" $ind "churn()\n" $ind "acc = acc * 31 + " $a ".Hash() + " $b
+                    ".Hash()\n")
+        }
+        if w == 11 {
+            # views kept by the walk, kept beside the generator - or past the walk, which is refused
+            q := g.name("g")
+            into := "kb" if g.chance(70) else "kept"
+            if g.chance(50) {
+                body = $body $ind $q " := fw" $k "(" $v ", " $n ")\n" $ind "for s in " $q " {\n" $ind "    " $into ".Push(s)\n" $ind "}\n"
+            } else {
+                body = $body $ind "for s in fw" $k "(" $v ", " $n ") {\n" $ind "    " $into ".Push(s)\n" $ind "}\n"
+            }
+        }
+        if w == 12 {
+            q := g.name("g")
+            body = ($body $ind $q " := nw" $k "(" $v ", " $n ")\n" $ind "for x in " $q " {\n" $ind "    churn()\n" $ind
+                    "    acc = acc * 31 + chain(x)\n" $ind "}\n")
+        }
+        if w == 13 {
+            body = ($body $ind "for x in nw" $k "(" $v ", " $n ") {\n" $ind "    if x.v > " $(g.r(9)) " {\n" $ind "        break\n"
+                    $ind "    }\n" $ind "    acc = acc * 31 + x.v\n" $ind "}\n")
+        }
     }
     return ($head "fn s" $k "() I64 {\n    acc I64 = 0\n    kept := Vec<String&>()\n    for p in range 3 {\n        t := \"in\" $p\n"
-            $body "        churn()\n    }\n    churn()\n    for s in kept { acc = acc * 31 + s.Hash() }\n    return acc\n}\n")
+            "        kb := Vec<String&>()\n" $body "        churn()\n        for s in kb { acc = acc * 31 + s.Hash() }\n    }\n    churn()\n    for s in kept { acc = acc * 31 + s.Hash() }\n    return acc\n}\n")
 }
 
 # a second-name scenario (the fourth any review's B): a helper returns a text local something else also names - a push

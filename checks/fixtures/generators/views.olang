@@ -1,0 +1,129 @@
+# D18c: generators handing out views - borrowed from what they were given (Iterator<T&t>) and kept by their walk
+# (Iterator<T&return>) - walked by for-ins left every way, held in locals, given to the helpers, the views kept and read
+# after churns; D18e: a walk over a generator given program-scope storage is dropped with its loop's block. Built,
+# -d -s and interpreted, the three print alike
+import "std/io"
+
+Data := I64[3, 1, 4, 1, 5, 9, 2, 6]
+Drops mut I64 = 0
+
+type Res struct(id I64) {
+    id
+} destruct {
+    Drops++
+}
+
+type Pt struct(x I64) {
+    x
+}
+
+fn spans(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == ' ' { i++ }
+        j := i
+        for j < t.Len() and t[j] != ' ' { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+fn (t String&) Halves() Iterator<String&t> {
+    yield t[0:t.Len() / 2]
+    yield t[t.Len() / 2:]
+}
+
+fn points(n I64) Iterator<Pt&return> {
+    all mut Vec<Pt&>&return = Vec<Pt&>()
+    r := Res(n)
+    for i in range n {
+        p Pt&return = Pt(i * 10 + r.id)
+        all.Push(p)
+        yield p
+    }
+    for p in all { yield p }
+}
+
+fn labels(t String&, n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $t "-" $i
+        yield s
+        junk := $i "junk"
+    }
+    for w in spans(t) { yield w }
+}
+
+fn each(a Array<I64>&) Iterator<I64> {
+    r := Res(a.Len())
+    for x in a { yield x }
+}
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        v := Vec<String&>()
+        for k in range 3 { v.Push($i "-churn-" $k) }
+        n += v[2].Len()
+    }
+    return n
+}
+
+fn keep(t String&, out mut Vec<String&>&) {
+    for w in spans(t) {
+        churn()
+        out.Push(w)
+    }
+}
+
+fn firstLong(t String&, n I64) String& {
+    for w in spans(t) {
+        if w.Len() >= n { return $w }
+    }
+    return ""
+}
+
+fn sum() I64 {
+    t I64 = 0
+    for x in each(Data) { t += x }
+    return t
+}
+
+fn main() {
+    text := $"alpha beta" " gamma delta"
+    kept := Vec<String&>()
+    keep(text, kept)
+    for w in spans(text) {
+        if w == "gamma" { continue }
+        kept.Push(w)
+        if w == "delta" { break }
+    }
+    for h in text.Halves() { kept.Push(h) }
+    churn()
+    for w in kept { io.Println(w)! }
+    io.Println("count " $spans(text).Count(fn(w) { return w.Len() > 4 }))!
+    io.Println("first " $firstLong(text, 5))!
+    g := labels(text, 2)
+    a := try g.Next() catch default ""
+    b := try g.Next() catch default ""
+    churn()
+    c := try g.Next() catch default ""
+    io.Println($a " " $b " " $c)!
+    seen := Vec<Pt&>()
+    pg := points(3)
+    for p in pg {
+        churn()
+        seen.Push(p)
+    }
+    churn()
+    for p in seen { io.Println("pt " $p.x)! }
+    io.Println("drops " $Drops)!
+    t I64 = 0
+    for p in points(2) {
+        if p.x > 10 { break }
+        t += p.x
+    }
+    io.Println("t " $t " drops " $Drops)!
+    total I64 = 0
+    for i in range 1000 { total += sum() }
+    io.Println("sum " $total " drops " $Drops)!
+}
