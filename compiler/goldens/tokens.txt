@@ -1697,7 +1697,7 @@ d50ecaa48f15486a a742564b30bafcf3 compiler/cabi.olang
 4713a776658f0252 9f55d52d09084c95 compiler/definit.olang
 389d021e31b99c3f cf9a6d467d40e6f7 compiler/diag.olang
 9a0447a267a631b8 f9870b850021004d compiler/doc.olang
-33a83a5cbcfd86dc e10ad2b0c02049b2 compiler/emit.olang
+a047e3fdf5506dc8 1f4bfa72f27f780c compiler/emit.olang
 a1b460340b06f94b 6e299ea9bb564f3d compiler/eval.olang
 2cbe930c633565f6 c21cb73179dd61b0 compiler/explain.olang
 7563c71482b39f4d 1afd110623c4fc71 compiler/fetch.olang
