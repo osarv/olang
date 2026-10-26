@@ -1502,3 +1502,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   a report (functions and lines by share, callers) plus an HTML flame graph; symbols through llvm-symbolizer shipped in
   the release. No perf, no root; nothing in other builds (Go's pprof model). Later: allocation profiling per site (the
   arena knows sizes). In effect: the profiling page only.
+- QBL ANSWERED 2026-10-26 (the user: "Yes queue it"): the built-in sampling profiler `olang profile` as proposed,
+  queued after the current batches (bfix3, walks, the checker batch).
+- QBM ASKED 2026-10-26 (the user: "is this [json keys] a reason to move over to pub or priv as keywords?"): answered -
+  with `pub`, a field could be named exactly as its key (`pub lastSeen I64`), so JSON needs no policy, and lowercase
+  public fields (`p.x`) become possible; against: a keyword on every exported declaration (std/compiler/corpus migrated
+  by a tool), visibility no longer readable at every use (`x.Foo` vs `x.foo`, Go's reason), and snake_case keys would
+  still want names with underscores. Recommended: keep capitalization (M6) - the policy covers the common case in one
+  argument and `JsonKey` the exceptions; revisit if public lowercase fields keep coming up (math, data code). In effect:
+  capitalization.
