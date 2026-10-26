@@ -1553,3 +1553,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   value is built while compiling may be an attribute, no marker; built-in types may not (they name no meaning, and
   attributes are found by type, so two libraries using String would collide); at most one attribute of each type on
   a declaration; `@Name` without parentheses for a constructor with no arguments; the reader decides where it looks.
+- SURVEY2 SECTION 2 (twelve items) ASKED 2026-10-26 with recommendations: 1 caller place YES, 2 `become` later,
+  3 enum bit-sets YES (std), 4 order.ByFields YES (std), 5 top-level assert YES, 6 unreachable as a value YES, 7 `.Case`
+  shorthand NO, 8 guaranteed comptime value later (FPGA), 9 inferred cold paths YES (benchmark first), 10 test clock
+  YES (std), 11 persistent collections later, 12 select later.
+- Item 1 DECIDED 2026-10-26 (the user: "Yes do that"): the caller's place is `Place.Here` - a prelude struct Place
+  (File, Line, Column), `Place.Here` the place where it is written, and in a parameter default the call's place
+  (defaults are built per call, D8a); no keyword. With it the user's three-way rule (recorded as the principle):
+  keywords are syntax (control flow, declarations); facts the compiler supplies are read through a name (a value's
+  supplied methods, a type's namespace: I64.Max, T.Fields, Place.Here); attributes are library data with no compiler
+  meaning. Items 2-12 still ASKED.
