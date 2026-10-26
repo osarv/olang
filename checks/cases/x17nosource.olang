@@ -1,0 +1,5 @@
+# check: fail error[X17]: no C file at
+# X17: a C source file is one beside the importer, never one the C compiler looks for
+import k "olang_no_such_source_here.c"
+
+fn main() { }

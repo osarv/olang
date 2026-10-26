@@ -1,0 +1,63 @@
+# C imports (X17-X22): the C library's headers, and a C file of the corpus's own with its header (tests/cdemo), imported as
+# modules - functions, structs held in place, enums, constants, macros of values and of arguments, a static inline
+# function, variadic calls, pointer arguments - each read back as C computed it. The compile-time evaluator calls no
+# C (K1), so what the C computes is tested at run time, and its constants (data the translation holds) while compiling
+import c "string.h"
+import s "stdio.h"
+import l "stdlib.h"
+import d "cdemo/cdemo.c"
+
+# a global made from the header's constants, baked while compiling (K2): the translation's own data
+Baked I64 = d.CDEMO_BIG + I64(d.CDEMO_MASK)
+
+test "a header's integer, float and text macros are constants" {
+    assert d.CDEMO_VERSION == 4
+    assert d.CDEMO_MASK == 255
+    assert d.CDEMO_RATIO == 0.25
+    assert d.CDEMO_NAME == "cdemo"
+    assert d.CDEMO_BIG == 1099511627776
+    assert Baked == 1099511627776 + 255
+}
+
+test "a header's enum is constants, and its struct a plain struct held in place" {
+    assert d.CDEMO_RED == 0 and d.CDEMO_GREEN == 7 and d.CDEMO_BLUE == 8
+    b := d.cdemo_box()
+    b.hi.x = 3.0
+    b.hi.y = 2.0
+    assert d.cdemo_area(b) == 6.0
+    d.cdemo_grow(b, 1.0)
+    assert d.cdemo_area(b) == 12.0
+}
+
+test "a macro taking arguments is a function of its arguments' types" {
+    assert d.CDEMO_SQ(7) == 49
+    assert d.CDEMO_SQ(1.5) == 2.25
+    assert d.CDEMO_MAX(3, 9) == 9
+    assert d.CDEMO_IN(5, 1, 9)
+    assert not d.CDEMO_IN(15, 1, 9)
+}
+
+test "a static inline function is reached through the C the build compiles" {
+    assert d.cdemo_twice(21) == 42
+    for i in range 10 { assert d.cdemo_twice(I32(i)) == I32(2 * i) }
+}
+
+test "the C library: functions, a C string back, pointer arguments of any array" {
+    b := Array<U8>(8)
+    c.memset(b, 65, 3)
+    assert b[0] == 65 and b[2] == 65 and b[3] == 0
+    ns := I64[5, 3, 9]
+    c.memset(ns, 0, 8)
+    assert ns[0] == 0 and ns[1] == 3
+    assert c.strlen("hello".ToC()) == 5
+    p := l.getenv("PATH".ToC())
+    assert p is not null and c.strlen(p) > 0
+    assert l.abs(-4) == 4
+}
+
+test "a variadic call: each argument promoted as C promotes it" {
+    buf := Array<U8>(64)
+    n := s.snprintf(buf, 64, "%d %s %.2f %ld %c".ToC(), 42, "x".ToC(), F32(2.5), I64(1) << 40, U8(65))
+    assert String(buf[:n]) == "42 x 2.50 1099511627776 A"
+    assert d.cdemo_sum(3, 10, 20, 30) == 60
+}

@@ -1,0 +1,16 @@
+# fast.c imported (X17): its functions, and its header's static inline one, compiled into the program and inlined into
+# the olang loop calling them (X20) - built, and interpreted alike (B3e)
+import f "fast.c"
+import "std/io"
+
+fn work(n I64) I64 {
+    t I64 = 0
+    for i in range n {
+        t += I64(f.fast_add(I32(i), 0)) + f.fast_sq(i) - f.FAST_TWICE(i)
+    }
+    return t
+}
+
+fn main() {
+    io.Println("fast " $work(f.FAST_N) " " $f.fast_total())!
+}

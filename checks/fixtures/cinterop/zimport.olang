@@ -1,0 +1,17 @@
+# zlib through its header (X17), the library named on the import: the program zdemo is, with nothing written by hand
+# or by bindgen - built and interpreted alike (B3e)
+import z "zlib.h" link "z"
+import "std/io"
+
+fn main() {
+    v := z.zlibVersion()
+    if v is not null { io.Println("zlib " $v.StringFromC(32))! }
+    src := String("hello hello hello hello hello hello, zlib!").ToC()
+    dest := Array<U8>(I64(z.compressBound(U64(src.Len()))))
+    dlen := Array<U64>(1, U64(dest.Len()))
+    assert z.compress(dest, dlen, src, U64(src.Len())) == z.Z_OK
+    back := Array<U8>(src.Len())
+    blen := Array<U64>(1, U64(back.Len()))
+    assert z.uncompress(back, blen, dest, dlen[0]) == z.Z_OK
+    io.Println("compressed " $src.Len() " bytes to " $dlen[0] ", back: " $String(back[:I64(blen[0]) - 1]) " " $z.ZLIB_VERSION)!
+}

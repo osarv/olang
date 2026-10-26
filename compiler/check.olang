@@ -9408,9 +9408,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                     case ast.Expr.Member(xsp, _, _) => c.P.R.Member(c.fr().File, xsp.End).Module
                     case _ => -1
                 }
-                if at >= 0 and not c.declaresName(at, n) {
-                    c.err(nsp, msgs.NotInModule($"module " $c.P.L.Mods[at].Identity, c.tok(n)))
-                }
+                if at >= 0 and not c.declaresName(at, n) { c.notInModule(at, n, nsp) }
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
@@ -10651,6 +10649,17 @@ fn (c mut Checker&) declaresName(mi I64, n source.NameId) Bool {
     return false
 }
 
+# a name module at does not declare, said at nsp - a C import's what its translation could not give, with why (X19)
+fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
+    m := c.P.L.Mods[at]
+    why := try m.CSkipped.Get(c.text(n)) catch default ""
+    if why != "" {
+        c.err(nsp, msgs.CNoForm(c.text(n), why))
+        return
+    }
+    c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n)))
+}
+
 fn (c mut Checker&) importPath(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Name(sp, _) { return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Import }
@@ -10914,6 +10923,16 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind != names.What.None {
         c.gap(nsp, "a member reached through an import, of this kind")
+        return c.unknown(sp)
+    }
+    if c.importPath(x) {
+        # a name the imported module does not declare (or does not export: the resolver said so already)
+        at := match x {
+            case ast.Expr.Name(xsp, _) => c.P.R.Use(c.fr().File, xsp.Start).Module
+            case ast.Expr.Member(xsp, _, _) => c.P.R.Member(c.fr().File, xsp.End).Module
+            case _ => -1
+        }
+        if at >= 0 and not c.declaresName(at, n) { c.notInModule(at, n, nsp) }
         return c.unknown(sp)
     }
     # G32, G34: a type's reflected members, a descriptor's

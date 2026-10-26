@@ -1,0 +1,36 @@
+# check: run
+# X17-X22: the C library's own headers imported - functions, constants, a variadic call, a C string back, pointer
+# arguments of any array, a static inline function reached through the build's C, no library named
+import c "string.h"
+import s "stdio.h"
+import l "stdlib.h"
+import e "errno.h"
+import st "sys/stat.h"
+
+type Pair struct() {
+    a I64
+    b I64
+}
+
+fn main() {
+    b := Array<U8>(8)
+    c.memset(b, 65, 3)
+    assert b[0] == 65 and b[2] == 65 and b[3] == 0
+    ns := I64[5, 3, 9]
+    c.memset(ns, 0, 8)
+    assert ns[0] == 0 and ns[1] == 3
+    p := Pair()
+    p.a = 7
+    q := Pair()
+    c.memcpy(q, p, 16)
+    assert q.a == 7
+    assert c.strlen("hello".ToC()) == 5
+    buf := Array<U8>(32)
+    n := s.snprintf(buf, 32, "%d-%s-%.1f".ToC(), 42, "x".ToC(), 2.5)
+    assert n == 8 and String(buf[:8]) == "42-x-2.5"
+    home := l.getenv("PATH".ToC())
+    assert home is not null and c.strlen(home) > 0
+    assert e.EDOM == 33 and s.EOF == -1 and s.BUFSIZ > 0
+    assert st.S_IRWXU == 448
+    assert l.abs(-4) == 4
+}

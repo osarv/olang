@@ -1,0 +1,5 @@
+# check: fail error[X17]: no C header 'olang_no_such_header_here.h' beside this file or where the C compiler looks
+# X17: a header path naming no file beside the importer, and none the C compiler finds
+import h "olang_no_such_header_here.h"
+
+fn main() { }

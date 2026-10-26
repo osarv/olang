@@ -2,8 +2,9 @@
 # across one keeps what it names; and a program with an export fn frees nothing early (condition 3)
 import "std/io"
 
-link "callback.o"
-extern fn c_run(i I64)
+extern link "callback.o" {
+    fn c_run(i I64)
+}
 
 type Holder struct() {
     t String& = ""

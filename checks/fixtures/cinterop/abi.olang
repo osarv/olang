@@ -1,7 +1,6 @@
 # the olang side of the cinterop scenario (checks/checks.olang), linked with abi.c: plain-data structs by value and
 # by reference, every number width, Bool and the 16-bit floats (X2, X11), an extern type (X10), callbacks (X12, X13)
 import "std/io"
-link "abi.o"
 type Ints2 struct(a I32, b I32) { a, b }
 type L2 struct(a I64, b I64) { a, b }
 type L3 struct(a I64, b I64, c I64) { a, b, c }
@@ -23,40 +22,42 @@ type CD struct(c U8, d F64) { c, d }
 type H3 struct() {
     h Array<F16> = Array<F16>(3)
 }
-extern fn id_I2(a Ints2) Ints2
-extern fn id_L2(a L2) L2
-extern fn id_L3(a L3) L3
-extern fn id_F2(a F2) F2
-extern fn id_F3(a F3) F3
-extern fn id_F5(a F5) F5
-extern fn id_D2(a D2) D2
-extern fn id_D3(a D3) D3
-extern fn id_LD(a LD) LD
-extern fn id_DI(a DI) DI
-extern fn id_C3(a C3) C3
-extern fn id_SC(a SC) SC
-extern fn id_FIF(a FIF) FIF
-extern fn id_NF(a NF) NF
-extern fn id_BI(a BI) BI
-extern fn id_CD(a CD) CD
-extern fn id_H3(a H3) H3
-extern fn sum_l3(p mut L3&) I64
-extern fn many(a I64, b I64, c I64, d I64, e I64, s L2) F64
-extern fn many2(a F64, b F64, c F64, d F64, e F64, f F64, g F64, s D2) F64
-extern fn ret3(a I64, b I64, c I64, d I64, e I64, s L2) L3
-extern fn flip(b Bool) Bool
-extern fn neg8(x I8) I8
-extern fn widen8(x I8, y U8, z I16, w U16) I32
-extern fn halfdbl(x F16) F16
-extern fn bfadd(x BF16, y BF16) BF16
+extern link "abi.o" {
+    fn id_I2(a Ints2) Ints2
+    fn id_L2(a L2) L2
+    fn id_L3(a L3) L3
+    fn id_F2(a F2) F2
+    fn id_F3(a F3) F3
+    fn id_F5(a F5) F5
+    fn id_D2(a D2) D2
+    fn id_D3(a D3) D3
+    fn id_LD(a LD) LD
+    fn id_DI(a DI) DI
+    fn id_C3(a C3) C3
+    fn id_SC(a SC) SC
+    fn id_FIF(a FIF) FIF
+    fn id_NF(a NF) NF
+    fn id_BI(a BI) BI
+    fn id_CD(a CD) CD
+    fn id_H3(a H3) H3
+    fn sum_l3(p mut L3&) I64
+    fn many(a I64, b I64, c I64, d I64, e I64, s L2) F64
+    fn many2(a F64, b F64, c F64, d F64, e F64, f F64, g F64, s D2) F64
+    fn ret3(a I64, b I64, c I64, d I64, e I64, s L2) L3
+    fn flip(b Bool) Bool
+    fn neg8(x I8) I8
+    fn widen8(x I8, y U8, z I16, w U16) I32
+    fn halfdbl(x F16) F16
+    fn bfadd(x BF16, y BF16) BF16
 
-# X10: an opaque type, and an out-parameter as an array of one reference
-extern type Db
-extern fn db_open(n I64) Db&
-extern fn db_none() Db?&
-extern fn db_n(d Db?&) I64
-extern fn db_close(d Db&)
-extern fn db_open2(n I64, out Array<Db?&>&) I32
+    # X10: an opaque type, and an out-parameter as an array of one reference
+    type Db
+    fn db_open(n I64) Db&
+    fn db_none() Db?&
+    fn db_n(d Db?&) I64
+    fn db_close(d Db&)
+    fn db_open2(n I64, out Array<Db?&>&) I32
+}
 
 # X13: callbacks, with a context struct and on a thread C makes
 type Ctx struct() {

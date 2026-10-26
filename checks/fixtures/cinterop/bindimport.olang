@@ -1,0 +1,35 @@
+# bind.h imported (X17): what bindgen writes of it, translated where it is imported, with what bindgen cannot give a
+# module to hold - the header's static inline function (X20), its macro taking arguments (X19) - and the library its
+# code is in named on the import (X9). It prints what bindprog prints, and then those
+import b "bind.h" link "bind.o"
+import c "stdio.h"
+import "std/io"
+
+export fn visit(ctx CVoid?&, value I32) I32 { return value * 10 }
+
+fn main() {
+    v := b.bind_add(b.bind_vec(), b.bind_vec())
+    v.x = 1.5
+    w := b.bind_add(v, v)
+    io.Println("add " $w.x " " $w.y)!
+    r := b.bind_rect()
+    r.max.x = 2.0
+    r.max.y = 3.0
+    io.Println("area " $b.bind_area(r))!
+    b.bind_grow(r, 1.0)
+    io.Println("grown " $b.bind_area(r) " " $r.label[0])!
+    io.Println("sum " $b.bind_sum(I32[1, 2, 3, 4], 4) " length " $b.bind_length("abcdef".ToC()))!
+    g := b.bind_greeting()
+    if g is not null { io.Println(g.StringFromC(100))! }
+    out := Array<b.bind_counter?&>(1)
+    if b.bind_open("c".ToC(), out) != 0 { return }
+    k := out[0]
+    for i in range 3 { b.bind_count(k, U8(i + 1)) }
+    io.Println("total " $b.bind_total(k) " each " $b.bind_each(k, visit, null))!
+    b.bind_close(k)
+    io.Println("even " $b.bind_even(b.BIND_SAFE, 4) " " $b.bind_even(b.BIND_SLOW, 4) " flags " $b.BIND_BOTH " big " $b.BIND_BIG)!
+    io.Println("twice " $b.bind_twice(21) " max " $b.BIND_MAX(3, 9) " " $b.BIND_MAX(2.5, 1.5) " name " $b.BIND_NAME)!
+    c.fflush(null)
+    c.printf("printf %d %s %.1f\n".ToC(), b.BIND_VERSION, b.BIND_NAME.ToC(), 0.5)
+    c.fflush(null)
+}
