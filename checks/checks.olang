@@ -1572,8 +1572,8 @@ fn latermodule(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize view.olang > out.txt 2>&1") == 0, "view build", dir)
     try r.expect(sh(dir, "./build/view.debug.san > out.txt 2>&1") == 0 and outOf(dir) == "1.5 2\n", "view", dir)
     try r.expect(sh(dir, "\"$OLANG\" build kept.olang > out.txt 2>&1") != 0, "kept.olang compiled", dir)
-    try r.expect(outOf(dir).Contains("error[C2d]: this instance holds a reference to an argument it would outlive"),
-                 "kept.olang: expected C2d", dir)
+    want := "error[C2d]: this instance holds a reference to an argument it would outlive"
+    try r.expect(outOf(dir).Contains(want), "kept.olang: expected C2d", dir)
 }
 
 # O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -
