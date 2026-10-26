@@ -64,6 +64,7 @@ type Program struct() {
     Exports Vec<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
     Header String& = ""      # and its C header's text
     FuzzCorpus String& = ""  # B19: where the fuzzed test's failing inputs are saved
+    TestWords Vec<String&>   # B7a: the root's tests' targets and descriptions, for a filter naming none
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
@@ -809,7 +810,62 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
+    if out.Status == 3 and filters.Len() > 0 {
+        sayln(c.paint("31", noTestNamed(file, filters, prog.TestWords)))
+        return 1
+    }
     return 0 if out.Status == 0 else 1
+}
+
+# B7a: what a test run says when its words name none of its tests - the words, and the nearest target or description
+fn noTestNamed(file String&, words Array<String&>&, known Vec<String&>&) String {
+    quoted Vec<String&>
+    for w in words { quoted.Push($"'" $w "'") }
+    best := ""
+    bestD I64 = 1 << 30
+    for w in words {
+        for k in known {
+            d := closeness(w, k)
+            if d <= (w.Len() + 2) / 3 and d < bestD {
+                bestD = d
+                best = $k
+            }
+        }
+    }
+    hint := $" - did you mean '" $best "'?" if best != "" else ""
+    return $file ": no test is named by " $quoted.Join(", ") $hint
+}
+
+# how far word is from a target or description: its edit distance from the closest stretch of text of its own length
+# (so a word of a description is near it), at most what it is from the whole
+fn closeness(word String&, text String&) I64 {
+    best := editDistance(word, text)
+    if text.Len() > word.Len() {
+        for i in range text.Len() - word.Len() + 1 {
+            d := editDistance(word, text[i:i + word.Len()])
+            if d < best { best = d }
+        }
+    }
+    return best
+}
+
+fn editDistance(a String&, b String&) I64 {
+    if a.Len() > 60 or b.Len() > 60 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            m := sub if sub < del else del
+            cur[j] = m if m < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
 }
 
 # B19: the fuzz binary run - libFuzzer's own reports on the standard error as it goes - until it finds a failing input

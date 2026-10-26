@@ -96,6 +96,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # B19: a fuzz build's word (the test it fuzzes, "" for none), where its working corpus goes, and what the harness
     # found - how many tests the word named, their names where several did, the fuzzed test's saved inputs' directory
     Fuzz String& = ""
+    TestWords Vec<String&>          # B7a: each test's target and description, for the driver's "did you mean"
     FuzzCache String& = "build/fuzz"
     FuzzPicked I64 = 0
     FuzzErr String& = ""
@@ -6200,6 +6201,8 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     ts Vec<String&>
     for id in tests {
         tg, ds := e.testParts(id)
+        if tg != "" { e.TestWords.Push($tg) }
+        e.TestWords.Push($ds)
         fnp := $"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
         ts.Push($"{ ptr, ptr, ptr, ptr } { " $fnp ", ptr " $e.cstr(e.testName(id)) ", ptr " $e.cstr(tg) ", ptr " $e.cstr(ds) " }")
     }
@@ -6232,6 +6235,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     e.testSource()
     b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  %sel = alloca i32\n  store volatile i32 0, ptr %sel\n")
     b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push($"  store ptr " $e.cstr(e.P.L.Mods[e.P.L.Root].Path) ", ptr @__olang_test_file\n")
@@ -6256,6 +6260,7 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  %tg = load ptr, ptr %tgp\n  %td = load ptr, ptr %tdp\n")
         b.Push("  %tsel = call i1 @olang.harness.selected(ptr %tg, ptr %td, i32 %argc, ptr %argv)\n")
         b.Push("  br i1 %tsel, label %tbody, label %tnext\ntbody:\n")
+        b.Push("  %sl = load volatile i32, ptr %sel\n  %sl2 = add i32 %sl, 1\n  store volatile i32 %sl2, ptr %sel\n")
         b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
         b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
         b.Push("  %tk2 = load volatile i64, ptr %k\n")
@@ -6272,6 +6277,10 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  store volatile i64 %tk4, ptr %k\n  br label %tloop\ntdone:\n")
     }
     b.Push("  store ptr null, ptr @__olang_jmp_target\n")
+    # B7a: words given and no test named by any - the status 3, for the driver to say so (a mistyped word passes nothing)
+    b.Push("  %ns = load volatile i32, ptr %sel\n  %none = icmp eq i32 %ns, 0\n  %words = icmp sgt i32 %argc, 1\n")
+    b.Push("  %unmatched = and i1 %none, %words\n  br i1 %unmatched, label %nomatch, label %counts\nnomatch:\n")
+    b.Push("  ret i32 3\ncounts:\n")
     b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
     b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
