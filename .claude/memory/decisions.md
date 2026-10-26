@@ -1348,3 +1348,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   especially for platform-agnostic code"): libc stays on hosted targets. Recorded future work: a freestanding target
   (no OS: FPGA hosts, and possibly an olang operating system) - the runtime's libc use kept behind one layer so it can
   be swapped; nothing built now.
+- QBD ANSWERED 2026-10-26 (the user: "Do b) yes"): std/linalg gets a Tensor holding every dimension as storage +
+  offset + shape + strides; transpose/permute/slice/expressible reshape are metadata only; kernels take strided 2-D
+  views; the only copies are written (`Contiguous()`, `Clone()`), an inexpressible Reshape an error naming them;
+  layers store no shapes (sizes are their weights' shapes, H/W/heads' sizes read from the data, hyperparameters like
+  kernel size, stride and head count stay the layer's); broadcasting explicit (a scalar and a bias row only). Matrix
+  becomes the 2-D view the kernels use. Queued with the kernel-tuning batch (std only; oann waits for the language).
+- QBG ASKED 2026-10-26 (the user: "record named arguments in the ledger"): named arguments at calls - `f(x, scale =
+  2.0)` or similar. History: considered and rejected 2026-09 (every parameter name of an exported function would become
+  part of its API; distinct types preferred; the `default` argument keyword replaced them - CLAUDE.md "Default parameter
+  values"). To discuss: readability for many-parameter calls (Gemm's transA, alpha, beta, threads; layer constructors)
+  vs API stability, interplay with defaults and `default`, spelling (`name = v` vs `name: v`), whether order may
+  change, and whether constructors get it. In effect: positional + `default`.
