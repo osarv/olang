@@ -175,7 +175,7 @@ c := a * b + a             # one vector multiply and add
 s := c.Sum()
 ```
 
-**Why it fits:** principle 2, for when the auto-vectorizer gives up: kernels in std/linalg and oann could say what
+**Why it fits:** principle 2, for when the auto-vectorizer gives up: kernels in oann could say what
 they mean instead of relying on the optimizer. It serves AI and data work directly.
 
 **Costs:** after the arrays batch there are no constant generic parameters, so the lane count needs a spelling of its

@@ -1,4 +1,4 @@
-# benchlib - what the benchmark drivers (run.olang, rungemm.olang, runfused.olang, ir.olang, repro/opt.olang) share:
+# benchlib - what the benchmark drivers (run.olang, ir.olang, repro/opt.olang) share:
 # the compiler to build with, running a program without a shell in the benchmark directory, the lock BENCH_LOCK names,
 # and saying things. They were shell scripts; they run from the repository root.
 

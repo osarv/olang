@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "landing", "cgreview", "vechandle", "testends"
+Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -421,7 +421,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "typereview" { try typereview(r) }
         case "agree" { try agree(r) }
         case "fuzz" { try fuzz(r) }
-        case "linalg" { try linalg(r) }
+        case "latermodule" { try latermodule(r) }
         case "bench" { try benchmarks(r) }
         case "chunkpool" { try chunkpool(r) }
         case "cinterop" { try cinterop(r) }
@@ -1543,12 +1543,13 @@ fn literalAfter(t String&, from I64) I64, I64 {
     open I64 = from + (try t[from:].FindByte('"') catch default -1)
     return open + 1, cLiteralEnd(t, open)
 }
-# std/linalg: a shape that does not fit fails with ShapeError.MISMATCH (QO4) - escaping main, built and interpreted, or
-# caught
-test "a matrix shape that does not fit is ShapeError.MISMATCH, escaping main or caught" { assert passed("linalg") }
+# O26a across modules: a call to a function of a module found after the caller's is read by its checked body - a
+# view mat.View returns holds the local array it is given, which lives in the result scope (read back after a churn,
+# under -debug -sanitize), and cannot be kept in a list outliving the loop that made it (C2d)
+test "a view from a module found after the caller's holds the caller's array" { assert passed("latermodule") }
 
 # every program in bench/ still compiles (-c: checked and compiled, not linked). They are timed by hand, never run by a
-# test, so a rule tightened in the checker could break one unseen - bench/fused.olang's per-head products did (E31b)
+# test, so a rule tightened in the checker could break one unseen - a per-head product benchmark once did (E31b)
 test "every benchmark program compiles" { assert passed("bench") }
 
 fn benchmarks(r mut report&) ? Failed {
@@ -1565,18 +1566,14 @@ fn benchmarks(r mut report&) ? Failed {
     try r.expect(n >= 10, "bench/ holds no programs", dir)
 }
 
-fn linalg(r mut report&) ? Failed {
-    dir := fresh("linalg")
-    os.Run("cp checks/fixtures/linalg/* " $os.Quote(dir))
-    try r.expect(sh(dir, "\"$OLANG\" build shapes.olang > out.txt 2>&1") == 0, "shapes.olang did not build", dir)
-    for which in String&["add", "matmul", "gemm"] {
-        try r.expect(sh(dir, "./build/shapes " $which " > out.txt 2>&1") == 1, $which " did not fail", dir)
-        out := outOf(dir)
-        try r.expect(out.Contains("unhandled error: linalg.ShapeError.MISMATCH") and not out.Contains("not reached")
-                     $which " printed", dir)
-    }
-    try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret shapes.olang gemm > out.txt 2>&1") == 1, "-i gemm did not fail", dir)
+fn latermodule(r mut report&) ? Failed {
+    dir := fresh("latermodule")
+    os.Run("cp checks/fixtures/latermodule/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize view.olang > out.txt 2>&1") == 0, "view build", dir)
+    try r.expect(sh(dir, "./build/view.debug.san > out.txt 2>&1") == 0 and outOf(dir) == "1.5 2\n", "view", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build kept.olang > out.txt 2>&1") != 0, "kept.olang compiled", dir)
+    want := "error[C2d]: this instance holds a reference to an argument it would outlive"
+    try r.expect(outOf(dir).Contains(want), "kept.olang: expected C2d", dir)
 }
 
 # O8b: the arena's pool is bounded, and gives the least recently given back chunks to the system beyond the bound -

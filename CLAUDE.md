@@ -555,8 +555,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   failing with only `Exhausted` meets `Iterator<T ? Bad>`. `catch E` takes what the instance binds `E` to. Explicit type
   arguments may give the set after `?` (`apply<I64, I64 ? Bad>`); left out, a call infers it and a value takes the empty
   set (mine). std: `Iterator<T ? E>`; its helpers, adapters (`TakeIter<I, T ? E>` ...), an array's
-  `Some/Every/FindIndex/Count/Map/Filter/Fold/Sort`, List/Vec `Sort`, ListIter's overrides and linalg's
-  `Map/Map2/Map3/Mapped` fail with what their callbacks and iterators fail with. Not a stored error: no value holds one
+  `Some/Every/FindIndex/Count/Map/Filter/Fold/Sort`, List/Vec `Sort` and ListIter's overrides
+  fail with what their callbacks and iterators fail with. Not a stored error: no value holds one
   (T20). Representation: `types.Kind.ErrSet` (a canonical, merged entry list) for an argument or binding, the variable
   itself an entry of an error list until substituted. Not for a G10d constructor's own list (mine: no use yet). Found
   on the way: section 8's alias analysis did not look inside `for x in try p` (a try statement), so a helper walking its
@@ -662,9 +662,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
   (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
   `TextError.BAD_BASE`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
-  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.NEGATIVE` (a signed integer's `Sqrt`), linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
-  with nothing to mismatch cannot fail; a float matrix never fails an activation). A `Matrix` built directly takes its
-  data as a slice and an array length do (D14b, E16b); `View` is the checked form. Language guarantees still abort.
+  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.NEGATIVE` (a signed integer's `Sqrt`). Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
@@ -970,9 +968,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
-  `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
-  batched causal products, fused epilogues, convolutions - the base for all numeric work, the user's call: a 2-D
-  Matrix, not a tensor), `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
+  `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
 - **std breadth (docs/survey.md items 7-8, the user: "Yes all of that", 2026-10-24; names mine, the user's naming rule:
   a module's other names drop its prefix - `net.Error`, `regex.SyntaxError`).** `std/sync`: `Mutex<T>` reached only
   in `m.With(fn(v mut T&) { })` - no lock/unlock pair - or `Update(fn(v T) T)` for a number (no primitive references),
@@ -1134,8 +1130,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   supplied only for a type its own module declares (or a built-in one), so `Char` and `type Dist extends F64` inherit
   the method and satisfy nothing - that is what lets a body pick by `match T` over the built-ins, which would have no
   case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by the numbers'
-  methods (`<T Float>`, `<T Number>`, `<T Integer>`, M19d), std/stats (`<T Number>`), linalg's
-  FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 through F32); the Matrix operations stay open (F8 elements).
+  methods (`<T Float>`, `<T Number>`, `<T Integer>`, M19d), std/stats (`<T Number>`).
 - **A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18, the
   user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach is bound to the widest of their
   types unless that fails its constraint; then to the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8,
@@ -1181,7 +1176,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `json.Error`, `csv.Error`, `stats.Error`, `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` and
   `filepath.Error` (was `PathError`); `net`, `base64`, `hex`, `deque`, `heap`, `flags`, `time`, `utf8` already were. A module named for its main
   type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `rand.Rand`, as Go's `list.List`); a module with
-  several error types names the others by subject (`linalg.ShapeError`, `http.HeaderError`, `regex.SyntaxError`). The
+  several error types names the others by subject (`http.HeaderError`, `regex.SyntaxError`). The
   prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `ArgumentError`,
   `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
   its type qualified as source writes it outside the module (`unhandled error: io.Error.FAILED`, B5; see the next entry). `tools/stutter_rename.olang`
@@ -1214,7 +1209,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every module's error named `Error`, a bare name said nothing: wherever the compiler or runtime prints an error's name -
   `unhandled error:` from `main`, a failed test's `FAIL - NAME: T.W`, the error trace, `!`'s FILE:LINE message, built
   or interpreted - it is written as source writes it outside its module, the module's alias (its identity's base name)
-  before it: `io.Error.FAILED`, `linalg.ShapeError.MISMATCH`. **Decided (mine):** the prelude's types stay bare
+  before it: `io.Error.FAILED`, `http.HeaderError.MISSING`. **Decided (mine):** the prelude's types stay bare
   (`ListError.EMPTY`), and so do the root program's own (`Bad.WORD` for a `Bad` in the file being run - from outside it
   would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
   names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
@@ -1246,6 +1241,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   named constants do not adapt like literals (`I16(cpoll.POLLIN)`); a struct by value under interpret is refused; a large
   header costs its check on every build (openssl/ssl.h: 940 KB of declarations, 3 s per build after a 6 s first
   translation; the prelude's math.h and string.h add ~0.05 s to a hello world).
+- **std/linalg is gone (2026-10-26, the user: "No linalg in stdlib ... Tensors are part of oann and they declare
+  everything themselves").** oann owns its tensors and kernels; std has no matrix type. The last linalg (Matrix views,
+  Goto GEMM, batched products, epilogues, convolutions) is in git history, and the kernel-tuning work in progress is on
+  branch `backup/wt-tensor`. Its tests and benchmarks went with it; the checks that tested the compiler through it
+  (O8b's flat products, O26a across modules) were rewritten over a small local matrix.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

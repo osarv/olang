@@ -2,8 +2,7 @@
 # O8b: storage a closed scope gave back is reused by later allocations whatever their order and size, so a computation
 # repeated in a loop settles at the memory one repetition needs. Each pattern here reached tens of megabytes when the
 # pool was one list taken from its head: a scope taking a large chunk and then a smaller one left the large one behind
-# the small one, and a new large one was mapped on every call (std/linalg's Gemm lost a panel per product that way);
-# and a size growing a little each time never fitted the chunk the last time gave back
+# the small one, and a new large one was mapped on every call; and a size growing a little each time never fitted the chunk the last time gave back
 import "std/os"
 
 # the most this process has held resident, in kB

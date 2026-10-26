@@ -25,7 +25,7 @@ PARALLEL ?= $(shell nproc)
 # after another in each, so no more than two of them are ever in memory at once (a lane goes on past a failure)
 TEST_LANE_A = compiler/scope.olang compiler/views.olang compiler/olang.olang compiler/emit.olang
 TEST_LANE_B = compiler/lower.olang compiler/check.olang tests/shared.olang compiler/interp.olang
-TEST_HEAVY = checks/checks.olang $(TEST_LANE_A) $(TEST_LANE_B) std/linalg.olang compiler/load.olang compiler/eval.olang \
+TEST_HEAVY = checks/checks.olang $(TEST_LANE_A) $(TEST_LANE_B) compiler/load.olang compiler/eval.olang \
 	compiler/generic.olang
 TEST_RUNS_HEAVY = $(addprefix test@,$(filter $(OLANG_TESTS),$(TEST_HEAVY)))
 TEST_RUNS_REST = $(addprefix test@,$(filter-out $(TEST_HEAVY),$(OLANG_TESTS)))

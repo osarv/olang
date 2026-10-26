@@ -3693,7 +3693,7 @@ catch default v` (or a field of it) for a writable reference parameter on any co
 it is the element or `v`, a value either way, which the write would be lost in (R9a). A conditional or a match choosing an element, or any other place, is a value too, and the same error (E28).
 
 **A view element** - a struct element, no handle, lent to a callee that writes **nothing of the instance's own
-storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `ws.Gemm(c[g, h], ...)`
+storage** - is lent the same way, as a copy held in a hidden local with nothing written back: `m.Scale(c[g, h], ...)`
 over a batch of matrices, `b[i].Fill(0)`. Nothing the callee does through the copy is lost by not writing it back,
 since it writes none of the copy's own storage. The copy is not the element, though: it names what the element referred
 to when it was read. A callee that replaces the element while the call runs - through the collection reached another
