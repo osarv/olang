@@ -458,3 +458,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   tools/list_vec.olang --vec; compiler builds 52 -> 44 s. Bench: text +1.06%, regex +0.8% (Vec doubling fills before
   copy - fix: grow without the zero fill), dispatch any +1.55%. Left: a Map's Vec value first named by a local in the
   Map's scope then Put is not freed early (131 MB over 1M); oann needs `olang fix`.
+- 2026-10-26 ~10:40 CEST: bulk review 2 (68c693e..ea0a6de, /home/user/review/bulk2): 11 confirmed - F1 evaluator
+  wrong for signed widths 33-63, F2 std/arith wrong at new widths (undefined shifts, MIN/-1), F3 lane op= through v[i]
+  loses writes; F4 slice of an immutable global writable (older), F5 E8a literal shift check never ported (older), F6
+  lane result into a long-lived place in a loop never freed; F7-F11 low. findIdle (D18) and exact collect held. Fixing in
+  wt-bfix2 with the queued small items (Vec growth without zero fill, Map's Vec value early free, two diagnostics).
+  Next after: generator frame elision; the C-imports batch (QBE); kernel tuning + Tensor (QBC/QBD).
