@@ -28,6 +28,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
+| `fuzz.olang` | fuzz targets: `fuzz.Check(fn(data Array<U8>&) { })`, run per input by `olang test -fuzz NAME FILE` (libFuzzer; `-fuzztime`, `-sanitize`), and on every saved input in `testdata/fuzz/SLUG/` by a plain `olang test` - which also takes words naming the tests to run (`olang test FILE Target`, B7a) (B19) |
+| `prop.olang` | property tests: `prop.Check(fn(xs Array<I64>&, p Point) { assert ... }, cases = 100)` - values made by reflection, cases in child processes, a failure shrunk, printed, saved and replayed; driven by the fuzzer's bytes under `-fuzz` (B19a) |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
 
 ## Calling C: a header import, an extern block, or `std/ffi`
@@ -61,7 +63,7 @@ every module's own. `tools/stutter_rename.olang` renames the old names in other 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
   without an import. It holds the built-in types' methods, the protocol traits and errors, and three collections - `vec`
   (`Vec`, the growable array), `map` and `text`'s `StringBuilder`; every other container is a module above (QZ2).
-  `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
+  `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs; `Reversed` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views and `Partition`), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`

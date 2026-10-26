@@ -277,3 +277,185 @@ fn (it mut I&) MaxBy<I Iterator<T ? E>, T, K ? E>(key fn(x T) K ? E) T ? E, Exha
     }
     return best
 }
+
+# ---- more walks: while forms, a step, flattening, a backward walk, partition ----
+
+# the values up to the first keep does not hold for, which ends the walk there (and is not given): "for x in
+# it.TakeWhile(fn(x): return x < 100)". keep is not called again once it has said no
+type TakeWhileIter<I, T ? E> struct(of I, keep fn(x T) Bool ? E) {
+    it I = of
+    pred fn(x T) Bool ? E = keep
+    done Bool = false
+}
+
+fn (t mut TakeWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
+    if t.done { error Exhausted.END }
+    x := try t.it.Next()
+    if not try t.pred(x) {
+        t.done = true
+        error Exhausted.END
+    }
+    return x
+}
+
+fn (it mut I&) TakeWhile<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) TakeWhileIter<I, T ? E> {
+    return TakeWhileIter<I, T ? E>(it, keep)
+}
+
+# the values from the first keep does not hold for on, that one included: the leading run keep holds for is skipped,
+# and keep is not called again after it
+type SkipWhileIter<I, T ? E> struct(of I, keep fn(x T) Bool ? E) {
+    it I = of
+    pred fn(x T) Bool ? E = keep
+    skipping Bool = true
+}
+
+fn (s mut SkipWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
+    for s.skipping {
+        x := try s.it.Next()
+        if not try s.pred(x) {
+            s.skipping = false
+            return x
+        }
+    }
+    return try s.it.Next()
+}
+
+fn (it mut I&) SkipWhile<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) SkipWhileIter<I, T ? E> {
+    return SkipWhileIter<I, T ? E>(it, keep)
+}
+
+# what a StepSize below one fails with
+type StepError error {
+    BAD_STEP
+}
+
+# how far StepBy steps: at least one. A literal is checked while compiling ("it.StepBy(2)", and 0 is a compile-time
+# error, T29d); a step computed while the program runs is made one with StepSize(n), which fails with
+# StepError.BAD_STEP below one - as ChunkSize is for Chunks and Windows
+type StepSize I64(v I64) ? StepError.BAD_STEP {
+    if v < 1 { error StepError.BAD_STEP }
+}
+
+# the first value, then every n-th after it: values 0, n, 2n ... of the walk; "range s, e, step" is the same for numbers
+type StepByIter<I, T ? E> struct(of I, n I64) {
+    it I = of
+    step I64 = n
+    started Bool = false
+}
+
+fn (s mut StepByIter<I, T ? E>&) Next() T ? E, Exhausted {
+    if s.started {
+        for k in range s.step - 1 { try s.it.Next() }
+    }
+    s.started = true
+    return try s.it.Next()
+}
+
+fn (it mut I&) StepBy<I Iterator<T ? E>, T ? E>(n StepSize) StepByIter<I, T ? E> { return StepByIter<I, T ? E>(it, I64(n)) }
+
+# the values of the iterator f gives for each value, one after another: "for w in lines.FlatMap(fn(l String&)
+# ArrayIter<String&> { return l.Split(" ").Iter() })". Each inner walk is made when the one before it has run out
+type FlatMapIter<I, T, J, U ? E> struct(of I, f fn(x T) J ? E) {
+    it I = of
+    make fn(x T) J ? E = f
+    cur Vec<J>          # the inner walk under way: none before the first value, and after each has run out (a Vec,
+                        # since a walk may have no zero value, D13c)
+}
+
+fn (m mut FlatMapIter<I, T, J, U ? E>&) Next() U ? E, Exhausted {
+    for {
+        if m.cur.Len() > 0 {
+            w := m.cur[0]
+            v := try w.Next() catch Exhausted {
+                m.cur.Clear()
+                continue
+            }
+            m.cur[0] = w
+            return v
+        }
+        x := try m.it.Next()
+        m.cur.Push(try m.make(x))
+    }
+}
+
+fn (it mut I&) FlatMap<I Iterator<T ? E>, T, J Iterator<U ? E>, U ? E>(f fn(x T) J ? E) FlatMapIter<I, T, J, U ? E> {
+    return FlatMapIter<I, T, J, U ? E>(it, f)
+}
+
+# the values split by keep: two new Vecs - in the caller's scope - of those keep holds for and of the rest, each in
+# the order they came: "small, big := it.Partition(fn(x): return x < 10)"
+fn (it mut I&) Partition<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>&, Vec<T>& ? E {
+    yes mut Vec<T>&return = Vec<T>()
+    no mut Vec<T>&return = Vec<T>()
+    for x in try it {
+        if try keep(x) {
+            yes.Push(x)
+        } else {
+            no.Push(x)
+        }
+    }
+    return yes, no
+}
+
+# a collection with positions walked from its last element to its first - what Reversed gives a Vec, or any type with
+# At and Len (an array's own Reversed is in array.olang)
+type ReversedIndexIter<T, C Indexable<T>> struct(of C&) {
+    c C&of = of
+    i I64 = of.Len()
+}
+
+fn (it mut ReversedIndexIter<T, C>&) Next() T ? Exhausted {
+    if it.i <= 0 { error Exhausted.END }
+    it.i--
+    return it.c.At(it.i)
+}
+
+# the elements from the last to the first: "for x in v.Reversed()" - the position read at each step, so a walk sees
+# what its body stores at the positions still ahead of it
+fn (c C&) Reversed<C Indexable<T>, T>() ReversedIndexIter<T, C> { return ReversedIndexIter<T, C>(c) }
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
+
+if TestBuild {
+    # what the walks below fail with when a callback does
+    type walkBad error {
+        NO
+    }
+
+    fn walkOdd(x I64) Bool ? walkBad {
+        if x == 4 { error walkBad.NO }
+        return x % 2 == 1
+    }
+
+    # examples (B7a): what olang doc shows under each adapter's type
+    test TakeWhileIter "the leading values a test holds for" {
+        assert I64[1, 2, 5, 3].Iter().TakeWhile(fn(x): return x < 4).ToVec().ToArray() == I64[1, 2]
+    }
+    test TakeWhileIter "fails with what its test fails with" {
+        assert (try I64[1, 3, 4, 5].Iter().TakeWhile(walkOdd).ToVec().Len() catch walkBad default -1) == -1
+        assert (try I64[1, 3, 2, 4].Iter().TakeWhile(walkOdd).ToVec().Len() catch walkBad default -1) == 2
+    }
+    test SkipWhileIter "the values from the first a test does not hold for" {
+        assert I64[1, 2, 5, 3].Iter().SkipWhile(fn(x): return x < 4).ToVec().ToArray() == I64[5, 3]
+        assert I64[1, 2].Iter().SkipWhile(fn(x): return x < 4).ToVec().Len() == 0
+    }
+    test StepByIter "the first value and every n-th after it" {
+        assert I64[0, 1, 2, 3, 4, 5, 6].Iter().StepBy(3).ToVec().ToArray() == I64[0, 3, 6]
+        assert I64[0, 1].Iter().StepBy(1).ToVec().ToArray() == I64[0, 1]
+        n := 0
+        assert (try StepSize(n) catch StepError default StepSize(9)) == StepSize(9)
+    }
+    test FlatMapIter "the values of each value's walk, one walk after another" {
+        a := I64[1, 2, 3]
+        assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[x - 1:].Iter() }).ToVec().ToArray() == I64[1, 2, 3, 2, 3, 3]
+    }
+    test ReversedIndexIter "a Vec from its last element to its first" {
+        v := Vec<I64>()
+        for i in range 4 { v.Push(i) }
+        s := 0
+        for x in v.Reversed() { s = s * 10 + x }
+        assert s == 3210 and Vec<I64>().Reversed().ToVec().Len() == 0
+    }
+}

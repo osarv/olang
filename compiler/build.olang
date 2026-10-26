@@ -63,6 +63,8 @@ type Program struct() {
     Links Vec<String&>      # what its modules' "link" declarations name (X9): "-lNAME", or a file's path
     Exports Vec<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
     Header String& = ""      # and its C header's text
+    FuzzCorpus String& = ""  # B19: where the fuzzed test's failing inputs are saved
+    TestWords Vec<String&>   # B7a: the root's tests' targets and descriptions, for a filter naming none
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
@@ -96,6 +98,8 @@ type Config struct() {
     San Bool = false
     Memory Bool = false # -memory: the early-free report printed after the build (B18)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
+    Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
+    FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
     Update Bool = false
     Tests Bool = false
     Jobs I64 = 0
@@ -147,7 +151,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "")
 }
 
 # what a C import is translated and its C compiled with (X18, X20): the target's triple and C library for another
@@ -176,6 +180,7 @@ fn (c Config&) ModeFlags() Vec<String&> {
     }
     if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
     if c.Library { out.Push("-fPIC") }      # X14: code a shared library holds, wherever it is loaded
+    if c.Fuzz != "" { out.Push("-fsanitize=fuzzer") }   # B19: coverage for libFuzzer, and its main at the link
     if c.Debug {
         out.Push("-O0")
         out.Push("-g")
@@ -798,13 +803,84 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     cmd Vec<String&>
     for w in run { cmd.Push($w) }
     cmd.Push(Shown(bin))
+    if c.Fuzz != "" { return c.fuzzRun(cmd, prog) }
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push($w) }
     out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
+    if out.Status == 3 and filters.Len() > 0 {
+        sayln(c.paint("31", noTestNamed(file, filters, prog.TestWords)))
+        return 1
+    }
     return 0 if out.Status == 0 else 1
+}
+
+# B7a: what a test run says when its words name none of its tests - the words, and the nearest target or description
+fn noTestNamed(file String&, words Array<String&>&, known Vec<String&>&) String {
+    quoted Vec<String&>
+    for w in words { quoted.Push($"'" $w "'") }
+    best := ""
+    bestD I64 = 1 << 30
+    for w in words {
+        for k in known {
+            d := closeness(w, k)
+            if d <= (w.Len() + 2) / 3 and d < bestD {
+                bestD = d
+                best = $k
+            }
+        }
+    }
+    hint := $" - did you mean '" $best "'?" if best != "" else ""
+    return $file ": no test is named by " $quoted.Join(", ") $hint
+}
+
+# how far word is from a target or description: its edit distance from the closest stretch of text of its own length
+# (so a word of a description is near it), at most what it is from the whole
+fn closeness(word String&, text String&) I64 {
+    best := editDistance(word, text)
+    if text.Len() > word.Len() {
+        for i in range text.Len() - word.Len() + 1 {
+            d := editDistance(word, text[i:i + word.Len()])
+            if d < best { best = d }
+        }
+    }
+    return best
+}
+
+fn editDistance(a String&, b String&) I64 {
+    if a.Len() > 60 or b.Len() > 60 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            m := sub if sub < del else del
+            cur[j] = m if m < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
+}
+
+# B19: the fuzz binary run - libFuzzer's own reports on the standard error as it goes - until it finds a failing input
+# (written among the test's saved inputs, which every plain test run then replays), is stopped, or -fuzztime is up: 0
+# where nothing failed
+fn (c Config&) fuzzRun(cmd mut Vec<String&>&, prog Program&) I32 {
+    if c.FuzzTime > 0 { cmd.Push($"-max_total_time=" $c.FuzzTime) }
+    sayln(c.paint("36", $"fuzzing " $c.Fuzz ": failing inputs go to " $prog.FuzzCorpus "/"))
+    out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
+    if out.Status == 0 {
+        sayln(c.paint("32", $"fuzzing " $c.Fuzz ": nothing failed"))
+        return 0
+    }
+    sayln(c.paint("31", $"fuzzing " $c.Fuzz ": an input failed, saved in " $prog.FuzzCorpus "/ - 'olang test' replays it"))
+    return 1
 }
 
 # what a built program runs under here (B12a): nothing for this machine's, an emulator for another architecture's -

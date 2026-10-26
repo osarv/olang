@@ -92,6 +92,14 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Baked Map<I64, eval.Image>
     Arch String& = "x86_64"         # the target's architecture, for the runtime's text (B12)
     San Bool = false                # a -sanitize build: the runtime's text holds the scope sanitizer (B2f)
+    # B19: a fuzz build's word (the test it fuzzes, "" for none), where its working corpus goes, and what the harness
+    # found - how many tests the word named, their names where several did, the fuzzed test's saved inputs' directory
+    Fuzz String& = ""
+    TestWords Vec<String&>          # B7a: each test's target and description, for the driver's "did you mean"
+    FuzzCache String& = "build/fuzz"
+    FuzzPicked I64 = 0
+    FuzzErr String& = ""
+    FuzzCorpus String& = ""
     BF16Opaque Bool = false         # a -debug or -race build: every BF16 widening's bits kept opaque (bf16Bits)
     rtTypes String& = ""            # the runtime's types, as its text defines them
     rtRead Bool = false
@@ -6192,6 +6200,8 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     ts Vec<String&>
     for id in tests {
         tg, ds := e.testParts(id)
+        if tg != "" { e.TestWords.Push($tg) }
+        e.TestWords.Push($ds)
         fnp := $"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
         ts.Push($"{ ptr, ptr, ptr, ptr } { " $fnp ", ptr " $e.cstr(e.testName(id)) ", ptr " $e.cstr(tg) ", ptr " $e.cstr(ds) " }")
     }
@@ -6217,10 +6227,17 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  %e3 = icmp ne ptr %ss, null\n  br i1 %e3, label %yes, label %next\nnext:\n  %i2 = add i32 %i, 1\n")
         b.Push("  %more = icmp slt i32 %i2, %argc\n  br i1 %more, label %loop, label %no\nyes:\n  ret i1 1\nno:\n  ret i1 0\n}\n")
     }
+    if e.Fuzz != "" {
+        e.fuzzHarness(tests, gs, b)
+        return
+    }
+    e.testSource()
     b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  %sel = alloca i32\n  store volatile i32 0, ptr %sel\n")
     b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
+    b.Push($"  store ptr " $e.cstr(e.P.L.Mods[e.P.L.Root].Path) ", ptr @__olang_test_file\n")
     b.Push("  call void @__olang_thread_init()\n")
     e.sanInit(b)
     if gs.Len() > 0 {
@@ -6242,13 +6259,15 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  %tg = load ptr, ptr %tgp\n  %td = load ptr, ptr %tdp\n")
         b.Push("  %tsel = call i1 @olang.harness.selected(ptr %tg, ptr %td, i32 %argc, ptr %argv)\n")
         b.Push("  br i1 %tsel, label %tbody, label %tnext\ntbody:\n")
+        b.Push("  %sl = load volatile i32, ptr %sel\n  %sl2 = add i32 %sl, 1\n  store volatile i32 %sl2, ptr %sel\n")
         b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
         b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
         b.Push("  %tk2 = load volatile i64, ptr %k\n")
         b.Push($"  %tfp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 0\n")
         b.Push($"  %tnp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
         b.Push("  %tf = load ptr, ptr %tfp\n  %tn = load ptr, ptr %tnp\n")
-        b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n  call void %tf()\n")
+        b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n")
+        b.Push("  store ptr %tn, ptr @__olang_test_name\n  call void %tf()\n")
         b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
         b.Push($"  call i32 (ptr, ...) @printf(ptr " $e.cstr("ok - %s\n") ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
         b.Push("  br label %tnext\ntbad:\n  %f = load volatile i32, ptr %fail\n  %ff = add i32 %f, 1\n")
@@ -6257,9 +6276,140 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  store volatile i64 %tk4, ptr %k\n  br label %tloop\ntdone:\n")
     }
     b.Push("  store ptr null, ptr @__olang_jmp_target\n")
+    # B7a: words given and no test named by any - the status 3, for the driver to say so (a mistyped word passes nothing)
+    b.Push("  %ns = load volatile i32, ptr %sel\n  %none = icmp eq i32 %ns, 0\n  %words = icmp sgt i32 %argc, 1\n")
+    b.Push("  %unmatched = and i1 %none, %words\n  br i1 %unmatched, label %nomatch, label %counts\nnomatch:\n")
+    b.Push("  ret i32 3\ncounts:\n")
     b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
     b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
+    e.item("main", e.P.L.Root, b.ToString())
+}
+
+# B19: the globals through which the harness names the running test and its file to std/fuzz, and hands it the input
+# a fuzzer gives (the runtime's)
+fn (e mut Emitter&) testSource() {
+    e.define("__olang_test_name", "@__olang_test_name = external global ptr")
+    e.define("__olang_test_file", "@__olang_test_file = external global ptr")
+    e.define("__olang_fuzz_data", "@__olang_fuzz_data = external global ptr")
+    e.define("__olang_fuzz_size", "@__olang_fuzz_size = external global i64")
+}
+
+# B19: the tests a fuzz build's word names, as the harness's B7a selection reads a word: its target, its target's type,
+# or text of its description
+fn (e mut Emitter&) fuzzSelected(tests Vec<I64>) Vec<I64> {
+    w := e.Fuzz
+    out Vec<I64>
+    for id in tests {
+        tg, ds := e.testParts(id)
+        if tg == w or (tg.StartsWith(w) and tg.Len() > w.Len() and tg[w.Len()] == '.') or ds.Contains(w) { out.Push(id) }
+    }
+    return out
+}
+
+# B19: a test's name as its saved inputs' directory names it, and that directory - as std/fuzz's Slug and Corpus give
+# them, which replay what the harness saves (the checks' testfuzz scenario holds the two to each other). Written here
+# rather than imported, so the compiler's own build reads no std module the seed's compiler may not parse
+fn fuzzSlug(name String&) String {
+    b := StringBuilder()
+    gap := false
+    for c in name {
+        if c.IsLetter() or c.IsDigit() {
+            if gap and b.Len() > 0 { b.PushChar('_') }
+            b.PushChar(c)
+            gap = false
+        } else {
+            gap = true
+        }
+    }
+    if b.Len() == 0 { return "test" }
+    return b.ToString()
+}
+
+fn fuzzCorpus(file String&, name String&) String {
+    slash := try file.FindLast("/") catch default -1
+    if slash < 0 { return $"testdata/fuzz/" $fuzzSlug(name) }
+    return $(file[:1] if slash == 0 else file[:slash]) "/testdata/fuzz/" $fuzzSlug(name)
+}
+
+# each directory a path names, outer first, for mkdir: "a/b/c" gives "a", "a/b", "a/b/c"
+fn dirsOf(path String&) Vec<String&> {
+    out Vec<String&>
+    for i in range 1, path.Len() {
+        if path[i] == '/' { out.Push($path[:i]) }
+    }
+    out.Push($path)
+    return out
+}
+
+# B19: a fuzz build's harness, in place of main - libFuzzer's main calls LLVMFuzzerInitialize once (the program's
+# globals set, the corpus directories made, and its command line given them: the working corpus under the build's
+# directory first, which libFuzzer writes what it finds into, then the test's saved inputs beside its file, and where a
+# failing input goes) and LLVMFuzzerTestOneInput per input: the one test the word names run on it behind a recovery
+# point, a failed check making it say FAIL and abort, which libFuzzer reports and saves the input for. Where the word
+# names no test, or several, FuzzErr says so and no harness is written
+fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBuilder&) {
+    picked := e.fuzzSelected(tests)
+    if picked.Len() != 1 {
+        names Vec<String&>
+        for id in picked { names.Push(e.testName(id)) }
+        e.FuzzErr = $"" if picked.Len() == 0 else names.Join(", ")
+        e.FuzzPicked = picked.Len()
+        return
+    }
+    e.FuzzPicked = 1
+    id := picked[0]
+    name := e.testName(id)
+    file := e.P.L.Mods[e.P.L.Root].Path
+    corpus := fuzzCorpus(file, name)
+    cache := $e.FuzzCache "/" $fuzzSlug(name)
+    e.FuzzCorpus = $corpus
+    e.testSource()
+    e.declare("malloc", "ptr @malloc(i64)")
+    e.declare("mkdir", "i32 @mkdir(ptr, i32)")
+    e.declare("abort", "void @abort() noreturn")
+    fnp := $"@" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
+    tn := e.cstr(name)
+    b.Push("\ndefine i32 @LLVMFuzzerInitialize(ptr %pargc, ptr %pargv) #0 {\nentry:\n")
+    b.Push("  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  %argc = load i32, ptr %pargc\n  %argv = load ptr, ptr %pargv\n")
+    b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
+    b.Push($"  store ptr " $e.cstr(file) ", ptr @__olang_test_file\n  store ptr " $tn ", ptr @__olang_test_name\n")
+    b.Push("  call void @__olang_thread_init()\n")
+    e.sanInit(b)
+    if gs.Len() > 0 {
+        b.Push("  store volatile i64 0, ptr %k\n  br label %gloop\ngloop:\n  %gk = load volatile i64, ptr %k\n")
+        b.Push($"  %gm = icmp slt i64 %gk, " $gs.Len() "\n  br i1 %gm, label %gbody, label %gdone\ngbody:\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %gz = icmp eq i32 %gj, 0\n  br i1 %gz, label %grun, label %gnext\ngrun:\n  %gk2 = load volatile i64, ptr %k\n")
+        b.Push($"  %gp = getelementptr [" $gs.Len() " x ptr], ptr @olang.harness.inits, i64 0, i64 %gk2\n")
+        b.Push("  %gf = load ptr, ptr %gp\n  call void %gf()\n  br label %gnext\ngnext:\n")
+        b.Push("  %gk3 = load volatile i64, ptr %k\n  %gk4 = add i64 %gk3, 1\n  store volatile i64 %gk4, ptr %k\n")
+        b.Push("  br label %gloop\ngdone:\n  store ptr null, ptr @__olang_jmp_target\n")
+    }
+    for d in dirsOf(corpus) { b.Push($"  call i32 @mkdir(ptr " $e.cstr(d) ", i32 493)\n") }
+    for d in dirsOf(cache) { b.Push($"  call i32 @mkdir(ptr " $e.cstr(d) ", i32 493)\n") }
+    b.Push("  %n = add i32 %argc, 3\n  %slots = add i32 %argc, 4\n  %w = sext i32 %slots to i64\n")
+    b.Push("  %bytes = mul i64 %w, 8\n  %mem = call ptr @malloc(i64 %bytes)\n  %a0 = load ptr, ptr %argv\n")
+    b.Push("  store ptr %a0, ptr %mem\n")
+    b.Push($"  %m1 = getelementptr ptr, ptr %mem, i64 1\n  store ptr " $e.cstr(cache) ", ptr %m1\n")
+    b.Push($"  %m2 = getelementptr ptr, ptr %mem, i64 2\n  store ptr " $e.cstr(corpus) ", ptr %m2\n")
+    b.Push($"  %m3 = getelementptr ptr, ptr %mem, i64 3\n  store ptr " $e.cstr($"-artifact_prefix=" $corpus "/") ", ptr %m3\n")
+    b.Push("  br label %pre\npre:\n  br label %copy\ncopy:\n  %i = phi i32 [ 1, %pre ], [ %i2, %body ]\n")
+    b.Push("  %more = icmp slt i32 %i, %argc\n  br i1 %more, label %body, label %end\nbody:\n")
+    b.Push("  %iw = sext i32 %i to i64\n  %src = getelementptr ptr, ptr %argv, i64 %iw\n  %v = load ptr, ptr %src\n")
+    b.Push("  %jw = add i64 %iw, 3\n  %dst = getelementptr ptr, ptr %mem, i64 %jw\n  store ptr %v, ptr %dst\n")
+    b.Push("  %i2 = add i32 %i, 1\n  br label %copy\nend:\n")
+    b.Push("  %nw = sext i32 %n to i64\n  %last = getelementptr ptr, ptr %mem, i64 %nw\n  store ptr null, ptr %last\n")
+    b.Push("  store i32 %n, ptr %pargc\n  store ptr %mem, ptr %pargv\n  ret i32 0\n}\n\n")
+    b.Push("define i32 @LLVMFuzzerTestOneInput(ptr %data, i64 %size) #0 {\nentry:\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  store ptr %data, ptr @__olang_fuzz_data\n  store i64 %size, ptr @__olang_fuzz_size\n")
+    b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
+    b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %j = call i32 @setjmp(ptr %jb)\n")
+    b.Push("  %z = icmp eq i32 %j, 0\n  br i1 %z, label %run, label %bad\nrun:\n")
+    b.Push($"  call void " $fnp "()\n  store ptr null, ptr @__olang_jmp_target\n  ret i32 0\nbad:\n")
+    b.Push($"  call void @__olang_test_failed(ptr " $tn ")\n  call i32 @fflush(ptr null)\n  call void @abort()\n")
+    b.Push("  unreachable\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())
 }
 

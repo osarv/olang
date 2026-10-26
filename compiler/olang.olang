@@ -114,9 +114,9 @@ ModeWhat Array<String&> = String&[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", ""]
-OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2, 11]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS"]
+OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2, 11, 8, 8]
 OptWhat Array<String&> = String&[
     "writes the executable, the object or bindgen's declarations to PATH (B3h, X16)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -130,6 +130,8 @@ OptWhat Array<String&> = String&[
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
     "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
     "reports the places that keep what they let go of until their scope closes, and why (B18)"
+    "fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)"
+    "with -fuzz: stops fuzzing after SECONDS (B19)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -228,6 +230,12 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 9 { cl.Html = $v }
             if o == 10 { c.Library = true }
             if o == 11 { c.Memory = true }
+            if o == 12 { c.Fuzz = $v }
+            if o == 13 {
+                n := try v.ParseInt(10) catch default -1
+                if n < 1 { try usage(d, msgs.FuzzTimeNotNumber(v)) }
+                c.FuzzTime = n
+            }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
@@ -316,6 +324,9 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
+    # B19: one test of one file fuzzed, for as long as -fuzztime says
+    if c.FuzzTime > 0 and c.Fuzz == "" { try usage(d, msgs.FuzzTimeAlone()) }
+    if c.Fuzz != "" and cl.Files.Len() != 1 { try usage(d, msgs.ModeOneFile("fuzzing")) }
     if cl.Mode == Format or cl.Mode == Fix { return cl }
     if cl.Output != "" { try checkOutput(cl.Output, d) }
     if cl.Mode == Bindgen { return cl }
@@ -503,6 +514,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         objs = e.Objects&prog()
     }
     build.Phase("lower+emit")
+    if e.Fuzz != "" {
+        # B19: the one test the word names, or a mistake in the command line
+        if e.FuzzPicked == 0 { d.Error(diag.Where.Nowhere, msgs.FuzzNoTest(e.Fuzz)) }
+        if e.FuzzPicked > 1 { d.Error(diag.Where.Nowhere, msgs.FuzzManyTests(e.Fuzz, e.FuzzErr)) }
+        prog.FuzzCorpus = $e.FuzzCorpus
+    }
+    for w in e.TestWords { prog.TestWords.Push($w) }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
@@ -603,6 +621,10 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
+    if tests {
+        e.Fuzz = $cfg.Fuzz
+        e.FuzzCache = $cfg.Dir "/fuzz"
+    }
     return e
 }
 

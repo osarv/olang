@@ -55,6 +55,10 @@ type Diag enum {
     OptionNotForMode
     OptionNeedsValue
     QuickAlone
+    FuzzTimeNotNumber
+    FuzzTimeAlone
+    FuzzNoTest
+    FuzzManyTests
     NotASource
     ModeFirst
     HelpOneMode
@@ -842,6 +846,18 @@ fn OptionNeedsValue(text1 String&, text2 String&) Msg { return Msg(Diag.OptionNe
 
 # ERR_QUICK_ALONE
 fn QuickAlone(text String&) Msg { return Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
+
+# ERR_FUZZ_TIME_NOT_NUMBER
+fn FuzzTimeNotNumber(text String&) Msg { return Msg(Diag.FuzzTimeNotNumber, "B19", "-fuzztime takes a whole number of seconds, at least 1, and '" $text "' is none") }
+
+# ERR_FUZZ_TIME_ALONE
+fn FuzzTimeAlone() Msg { return Msg(Diag.FuzzTimeAlone, "B19", "-fuzztime says how long -fuzz runs - give -fuzz NAME with it") }
+
+# ERR_FUZZ_NO_TEST
+fn FuzzNoTest(word String&) Msg { return Msg(Diag.FuzzNoTest, "B19", "-fuzz " $word " names no test of this file - give a test's target, its target's type or a word of its description") }
+
+# ERR_FUZZ_MANY_TESTS
+fn FuzzManyTests(word String&, names String&) Msg { return Msg(Diag.FuzzManyTests, "B19", "-fuzz " $word " names several tests (" $names ") - give a word that names one") }
 
 # ERR_NOT_A_SOURCE
 fn NotASource(text String&) Msg { return Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }

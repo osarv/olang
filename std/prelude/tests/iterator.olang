@@ -52,3 +52,98 @@ SumBaked I64 = I64[1, 2, 3].Iter().Skip(1).Sum()
 test "an adapter is evaluated while compiling" {
     assert SumBaked == 5
 }
+
+# ---- the walks of the second survey (1.5): Reversed, Windows, TakeWhile, SkipWhile, StepBy, FlatMap, Partition ----
+
+type Bad error {
+    NO
+}
+
+fn odd(x I64) Bool ? Bad {
+    if x == 4 { error Bad.NO }
+    return x % 2 == 1
+}
+
+# 0 .. n-1, failing with Bad when it reaches 7
+fn upToSeven(n I64) Iterator<I64 ? Bad> {
+    for i in range n {
+        if i == 7 { error Bad.NO }
+        yield i
+    }
+}
+
+test "Reversed walks arrays, text and Vecs backward" {
+    a := I64[1, 2, 3, 4]
+    digits := 0
+    for x in a.Reversed() { digits = digits * 10 + x }
+    assert digits == 4321
+    assert a.Reversed().ToVec().ToArray() == I64[4, 3, 2, 1]
+    assert "olang".Reversed().ToVec().ToArray() == Char['g', 'n', 'a', 'l', 'o']
+    assert upTo(3).Reversed().ToVec().ToArray() == I64[2, 1, 0]
+    assert a[1:3].Reversed().Sum() == 5
+}
+
+test "Windows gives every run of n, overlapping, as views" {
+    a := F64[1.0, 2.0, 3.0, 4.0]
+    smooth := Vec<F64>()
+    for w in a.Windows(2) { smooth.Push(w.Sum() / 2.0) }
+    assert smooth.ToArray() == F64[1.5, 2.5, 3.5]
+    assert a.Windows(4).Len() == 1 and a.Windows(5).Len() == 0 and F64[].Windows(1).Len() == 0
+    assert "abcd".Windows(3)[1] == "bcd"
+    n := 3
+    assert a.Windows(try ChunkSize(n)).Len() == 2
+    assert (try ChunkSize(n - 3) catch ArrayError.BAD_CHUNK default ChunkSize(7)) == ChunkSize(7)
+}
+
+test "an array's TakeWhile and SkipWhile are views, Partition two arrays" {
+    a := I64[2, 4, 5, 6]
+    assert a.TakeWhile(fn(x): return x % 2 == 0) == I64[2, 4]
+    assert a.SkipWhile(fn(x): return x % 2 == 0) == I64[5, 6]
+    assert a.TakeWhile(fn(x): return x > 0) == a and a.SkipWhile(fn(x): return x > 0).Len() == 0
+    evens, rest := a.Partition(fn(x): return x % 2 == 0)
+    assert evens == I64[2, 4, 6] and rest == I64[5]
+    e2, r2 := I64[].Partition(fn(x): return x > 0)
+    assert e2.Len() == 0 and r2.Len() == 0
+    assert (try I64[1, 3, 4].TakeWhile(odd).Len() catch Bad default -1) == -1
+    assert (try I64[1, 2, 4].TakeWhile(odd).Len() catch Bad default -1) == 1
+}
+
+test "FlatMap walks the iterator each value gives" {
+    a := I64[1, 2, 3]
+    assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[:x].Iter() }).ToVec().ToArray() == I64[1, 1, 2, 1, 2, 3]
+    words := String&["a b", "", "c"]
+    n := 0
+    for w in words.Iter().FlatMap(fn(t String&) ArrayIter<String&> { return t.Split(" ").Iter() }) { n++ }
+    assert n == 4
+    assert I64[].Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a.Iter() }).ToVec().Len() == 0
+}
+
+test "Partition splits a walk into two Vecs" {
+    small, big := upTo(6).Iter().Partition(fn(x): return x < 2)
+    assert small.ToArray() == I64[0, 1] and big.ToArray() == I64[2, 3, 4, 5]
+}
+
+test "the walks fail with what their iterator and callbacks fail with" {
+    assert (try upToSeven(10).TakeWhile(fn(x): return x < 3).ToVec()).Len() == 3
+    assert (try upToSeven(10).SkipWhile(fn(x): return x < 3).ToVec() catch Bad default Vec<I64>()).Len() == 0
+    assert (try upToSeven(10).StepBy(3).ToVec() catch Bad default Vec<I64>()).Len() == 0
+    assert (try upToSeven(7).StepBy(3).ToVec()).ToArray() == I64[0, 3, 6]
+    yes, no := try I64[1, 3, 5].Iter().Partition(odd) catch Bad { unreachable }
+    assert yes.ToArray() == I64[1, 3, 5] and no.Len() == 0
+    assert (try I64[1, 4].Iter().SkipWhile(odd).ToVec() catch Bad default Vec<I64>()).Len() == 0
+    flat := try upToSeven(5).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec()
+    assert flat.Len() == 10
+    failed := try upToSeven(9).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec() catch Bad {
+        return
+    }
+    unreachable
+}
+
+# computed while compiling (K2): a walk through the new adapters, baked into the program
+WalkBaked I64 = I64[1, 2, 3, 4, 5, 6].Iter().TakeWhile(fn(x): return x < 6).StepBy(2).Sum()
+WindowsBaked I64 = I64[1, 2, 3, 4].Windows(3).Len() + I64[9, 8, 7].Reversed().Fold(0, fn(acc, x) { return acc * 10 + x })
+
+test "the walks are evaluated while compiling" {
+    assert WalkBaked == 9 and WindowsBaked == 791
+    assert WalkBaked == I64[1, 2, 3, 4, 5, 6].Iter().TakeWhile(fn(x): return x < 6).StepBy(2).Sum()
+}

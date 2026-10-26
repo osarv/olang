@@ -1,0 +1,16 @@
+# B19: a fuzz target with a planted bug, which libFuzzer finds within seconds
+import "std/fuzz"
+
+# a planted bug: an input starting "FUZ" and then "Z" fails the check
+fn parse(data Array<U8>&) I64 {
+    if data.Len() >= 4 and data[0] == 'F' and data[1] == 'U' and data[2] == 'Z' {
+        assert data[3] != 'Z', "planted bug reached"
+    }
+    return data.Len()
+}
+
+test parse "never fails a check" {
+    fuzz.Check(fn(data Array<U8>&) { parse(data) })
+}
+
+test "plain" { assert parse("ab") == 2 }

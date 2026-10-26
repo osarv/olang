@@ -320,6 +320,8 @@
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 |   -memory            reports the places that keep what they let go of until their scope closes, and why (B18)
+|   -fuzz NAME         fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)
+|   -fuzztime SECONDS  with -fuzz: stops fuzzing after SECONDS (B19)
 | stderr:
 | status 0
 === olang help interpret
@@ -427,6 +429,7 @@
 |             | "bindgen"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
+|             | "-fuzz" NAME | "-fuzztime" SECONDS
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -447,6 +450,7 @@
 | | `-html DIR` | doc | B14 |
 | | `-library` | build | §11 X14 |
 | | `-memory` | running a file, build, test | B18 |
+| | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 | 
 | `build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 | `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`

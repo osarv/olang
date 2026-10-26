@@ -25716,3 +25716,67 @@ past the walk, written through, a borrow of a local, of a turn's block, of the f
 generator held in a local or a field walked twice with its views kept outside; `any Iterator<String&>&` of one,
 `any Iterator<String&t>&`; `mut`, `?&`, an unknown name, a by-value parameter, another parameter), d16dtwoscopes and
 d18twoscopes; the scope fuzzer's generator scenario gains borrowing and frame-view generators.
+
+## The missing walks, fuzzing, property tests, profiling (M19d, B19, B19a, B7a, docs/survey2.md 1.5 and 5, 2026-10-26)
+
+Built from the second survey's section 1.5 and its tooling table, as one batch.
+
+**Walks.** The iterator defaults gained `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap` and `Partition`; a type with
+`At` and `Len` gained `Reversed()` (beside the derived `Iter()`, so a Vec walks backward), and arrays and text their
+own `Reversed()`, `Windows(size)`, `TakeWhile`/`SkipWhile` (as views, nothing copied) and `Partition` (two arrays).
+Every one takes a fallible callback and fails with what it and the iterator fail with (`<T ? E>`, G1a) - the union
+inference did all of it with nothing new. `StepBy` takes a `StepSize`, a declared `I64` checked as a `ChunkSize` is
+(T29d: a literal decided while compiling, `StepError.BAD_STEP` below one), so `it.StepBy(0)` is a compile-time error
+and `it.StepBy(2)` needs no `try`. `Windows` takes a `ChunkSize`, its views in an array living where the receiver
+does, Chunks' and Split's shape.
+`FlatMap` was first a generator (four lines); it could not yield a reference element an inner walk held (`for w in
+lines.FlatMap(fn(t String&) ArrayIter<String&> { return t.Split(" ").Iter() })` was O10d's error: the yielded value is
+built per Next in its result scope, and a borrow of what the frame holds is refused there), so it is a struct like the
+others. Its inner walk cannot be a field of type `J`, since `J` may have no zero value (an `IndexIter` holds a
+never-null reference - D13d's error, at the instance); it is held in a `Vec<J>` of at most one, copied out for each
+`Next` and written back. Measured, 50 walks of 10M I64 (best of three): sum 171 ms by `Reversed()` against 185 ms by
+`a[n - 1 - i]`, a Horner fold 847 against 874; on a Vec 168 against 164. The examples (B7a) name the adapter types
+(`test TakeWhileIter "..."`), since B7a's targets are a function, a type or a named type's method, and an Iterator
+default or an array method is neither - recorded, not changed (the checker belongs to another batch). A baked global
+(`WalkBaked`, K2) runs TakeWhile/StepBy/Sum and Windows/Reversed/Fold while compiling.
+
+**Fuzzing (B19).** `olang test -fuzz NAME FILE` builds with `-fsanitize=fuzzer` (in ModeFlags, so every object -
+std's and the runtime's too - carries libFuzzer's coverage; `.fuzz` objects of their own) and emits a harness in
+place of `main`: `LLVMFuzzerInitialize`, which libFuzzer calls before it reads its flags, sets the globals once, makes
+the corpus directories and replaces its command line with the working corpus (`build/fuzz/SLUG`, written to), the
+test's saved inputs (`testdata/fuzz/SLUG` beside the file, read) and `-artifact_prefix` there, then the user's;
+`LLVMFuzzerTestOneInput` stores the input in the runtime, runs the test behind a recovery point and, on a failed
+check, prints FAIL and aborts - libFuzzer's deadly-signal path writes the input. The test is chosen while compiling
+by B7a's word rule; none or several is an error naming the rule (`B19`). The planted bug of checks/fixtures/testfuzz
+(an input starting `FUZZ`) is found in well under a second; with `-sanitize` too. std/fuzz reads the runtime through
+four functions (`__olang_fuzz_input`, `__olang_test_running`, `__olang_test_source`, `__olang_test_detach`): the
+harness now names the running test and the file to them in every test build (two stores - nothing else changes in a
+test run). The slug is std/fuzz's `Slug`, written again in the emitter (`fuzzSlug`): importing std/fuzz into the
+compiler made the seed's compiler, which predates test targets, fail to parse std/fuzz's `test Slug "..."` in the
+bootstrap - the testfuzz scenario holds the two to each other (the harness saves, std/fuzz replays).
+
+**Property tests (B19a).** `prop.Check(f, cases = 100)` reflects over `f`'s function type (`F.Params`; a reference
+parameter given a value of its target through G35's per-instance conditional), makes values from bytes, and calls `f`
+through G37's comprehension of arguments. A failed check is a jump out of the test (the harness's longjmp), so a
+failing case cannot be observed and retried in-process: the cases run in a forked child that drops the test's
+recovery point (a failed check then aborts it), writing each case's seed to a pipe as it starts, so the parent knows
+which one failed; each shrink candidate is a child of its own, its output sent to /dev/null. The encoding decided
+what shrinks: an integer's magnitude is read high byte first with the sign in the width byte (zigzag put the sign in
+the low bit and made lowering a byte flip signs); arrays draw "one more?" before each element rather than a count
+first, so cutting bytes cuts elements; the shrinker cuts runs of 8/4/2/1 bytes, binary-searches each byte down, and
+lowers a byte by one while raising the next to 255 (256 is `1, 0`, which lowering one byte cannot make 255). A
+property `every element below 50` shrinks to `I64[50]` with `Pt(0, 0)` beside it in ~2 s. The smallest case is saved
+(`input-HASH`) and replayed first by later runs, and then run in the test itself so it fails with the property's own
+message. Values a constructor refuses drop the case, so contracts (D17) shape the domain.
+
+**Words naming no test (B7a, the coordinator's decision from a review).** `olang test FILE nosuch` ran nothing and
+passed. The harness now counts the tests it ran and, given words and running none, returns 3; the driver turns that
+into status 1 and `f.olang: no test is named by 'Bax' - did you mean 'Box'?` (an edit distance against stretches of
+each target and description, within a third of the word). With several files each is judged on its own (the child
+processes' statuses carry no more), recorded as such in B3a.
+
+**Profiling.** docs/profiling.md, every command run here: perf at -O3 sees everything inlined into `main` and no
+lines; `-quick` keeps functions apart; `-debug` has lines (and a 7x slower profile); `perf report -g folded` gives the
+stacks a flame-graph renderer takes; callgrind per function, per line under `-debug`. Found on the way: this
+container's `perf` wrapper names no tools for its kernel, the installed 6.8 binary works by its path, and the virtual
+machine exposes no hardware counters (`perf stat` gives task-clock only).

@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
+Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "latermodule", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "generators", "runfile"
                      "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -401,6 +401,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
         case "assertloc" { try assertloc(r) }
+        case "testfuzz" { try testfuzz(r) }
         case "print" { try printing(r) }
         case "s18c" { try s18c(r) }
         case "static" { try static(r) }
@@ -1017,6 +1018,38 @@ fn printing(r mut report&) ? Failed {
     try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.FAILED\n"), "print to a closed output: the error", dir)
 }
 
+# B19, B19a: a test fuzzed by libFuzzer finds the planted bug within seconds and saves its input beside the file, which
+# a plain test run replays and fails on; under -sanitize too; a word naming no test, and -fuzztime alone, are errors. A
+# property's failing case is shrunk to its smallest input, printed, saved and replayed
+test "olang test -fuzz finds a planted bug, and the test replays it" { assert passed("testfuzz") }
+
+fn testfuzz(r mut report&) ? Failed {
+    dir := fresh("testfuzz")
+    os.Run("cp checks/fixtures/testfuzz/* " $os.Quote(dir))
+    saved := "testdata/fuzz/parse_never_fails_a_check"
+    try r.expect(sh(dir, "\"$OLANG\" test parse.olang > out.txt 2>&1") == 0, "the fuzz test passed on the empty input", dir)
+    ran := sh(dir, "\"$OLANG\" test -fuzz parse -fuzztime 120 parse.olang > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("assertion failed: planted bug reached") and
+                 outOf(dir).Contains($"an input failed, saved in " $saved "/"), "the planted bug found", dir)
+    try r.expect(sh(dir, "ls " $saved " | grep -q crash-") == 0, "the failing input saved", dir)
+    ran = sh(dir, "\"$OLANG\" test parse.olang > out.txt 2>&1")
+    replayed := outOf(dir).Contains($"fuzz: replaying " $saved "/crash-") and outOf(dir).Contains("ok - plain")
+    try r.expect(ran == 1 and replayed and outOf(dir).Contains("FAIL - parse: never fails a check"), "the input replayed", dir)
+    os.Run("rm -rf " $os.Quote($dir "/testdata"))
+    ran = sh(dir, "\"$OLANG\" test -sanitize -fuzz never -fuzztime 120 parse.olang > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("assertion failed: planted bug reached"), "-sanitize -fuzz", dir)
+    ran = sh(dir, "\"$OLANG\" test -fuzz nosuch parse.olang > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("error[B19]: -fuzz nosuch names no test of this file"), "-fuzz naming no test", dir)
+    ran = sh(dir, "\"$OLANG\" test -fuzztime 3 parse.olang > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("error[B19]: -fuzztime says how long -fuzz runs"), "-fuzztime alone", dir)
+    ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("prop: a failing case, shrunk to:\n  argument 1: I64[50]\n  argument 2: Pt(0, 0)\n") and
+                 outOf(dir).Contains("assertion failed: an element of 50 or more"), "a property's failing case shrunk", dir)
+    ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
+    replayed = outOf(dir).Contains("prop: replaying testdata/fuzz/every_element_below_50/input-")
+    try r.expect(ran == 1 and replayed, "a property's saved case replayed", dir)
+}
+
 # S18a: a failed assert or unreachable says where it is - and an assert the message written after it - built,
 # interpreted, and inside a test before the FAIL line
 test "a failed check says where it is" { assert passed("assertloc") }
@@ -1065,6 +1098,12 @@ fn assertloc(r mut report&) ? Failed {
     ran = sh(dir, "\"$OLANG\" test targets.olang plain Box.Get > out.txt 2>&1")
     picked = "ok - Box.Get: gives its value\nok - a plain one\n2 passed, 0 failed"
     try r.expect(ran == 0 and outOf(dir).Contains(picked), "a method's tests and a description's text picked", dir)
+    # B7a: words naming no test fail the run, the nearest target or description suggested
+    ran = sh(dir, "\"$OLANG\" test targets.olang Bax > out.txt 2>&1")
+    nearest := outOf(dir).Contains("targets.olang: no test is named by 'Bax' - did you mean 'Box'?")
+    try r.expect(ran == 1 and nearest, "a word naming no test, and the nearest", dir)
+    ran = sh(dir, "\"$OLANG\" test targets.olang nosuch > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)

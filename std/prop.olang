@@ -1,0 +1,421 @@
+# prop - property tests: a function checked on many values made for its parameters (B19a).
+#
+#     test Sorted "keeps every element" {
+#         prop.Check(fn(xs Array<I64>&) { assert xs.Sorted().Len() == xs.Len() })
+#     }
+#
+# Check makes the function's arguments from its parameters' types, through compile-time reflection (G32-G38): numbers,
+# Bool, Char, text, arrays, Vecs, structs built through their constructors - so a value a constructor's contract refuses
+# is never made, the case is dropped - and enums, a case at a time, with its fields. Every value is drawn from a run of
+# bytes (Hypothesis's design): a byte of 0 always gives the least value (0, false, "", the empty array, an enum's first
+# case), and the bytes running out give 0s, so fewer and smaller bytes give smaller values. A failing case is shrunk -
+# its bytes cut and lowered while it still fails - to a smallest failing input, which is printed with "$" for each
+# argument, saved among the test's inputs (std/fuzz) so every later run checks it first, and then run here, so the test
+# fails as the function does: its assert's message, its error.
+#
+# The cases are run in child processes - copies of the test's own, a failed check ending the child, not the test - and
+# their bytes come from a generator seeded by the test's name, so a run is the same every time. Under "olang test
+# -fuzz NAME FILE" the fuzzer's input is the bytes, one case per input, run here.
+
+import "std/fuzz"
+import "std/rand"
+import "std/io"
+import "std/os"
+import unistd "unistd.h"
+import syswait "sys/wait.h"
+import cfcntl "fcntl.h"
+import cstdio "stdio.h"
+
+extern {
+    fn __olang_test_detach()
+}
+
+# a value a constructor refused: its case is dropped
+type skip error {
+    REFUSED
+}
+
+# the most bytes a case draws: past them every byte is 0
+MaxBytes I64 = 8192
+
+# the bytes a case's values are drawn from - given (a saved input, the fuzzer's, a case being shrunk), or drawn from
+# a generator and kept, so the case can be made again
+type source struct(seed U64) {
+    bytes Vec<U8>
+    at I64 = 0
+    rng rand.Rand = rand.Rand(seed)
+    random Bool = seed != 0
+}
+
+fn newSource(given Array<U8>&, seed U64) source {
+    s := source(seed)
+    s.bytes.PushAll(given)
+    return s
+}
+
+# the next byte: a given one, else one drawn (kept), else 0
+fn (s mut source&) byte() U8 {
+    if s.at < s.bytes.Len() {
+        s.at++
+        return s.bytes[s.at - 1]
+    }
+    if not s.random or s.bytes.Len() >= MaxBytes { return 0 }
+    b := U8(s.rng.Next() & 255)
+    s.bytes.Push(b)
+    s.at++
+    return b
+}
+
+# a whole number below n, from 0 - from as many bytes as n needs
+fn (s mut source&) below(n I64) I64 {
+    if n <= 1 { return 0 }
+    v U64 = 0
+    m U64 = 1
+    for m < U64(n) {
+        v = (v << 8) | U64(s.byte())
+        m = m << 8
+    }
+    return I64(v % U64(n))
+}
+
+# whether one more element follows: a byte of at least 64 - so about four on average, and a 0 ending the run
+fn (s mut source&) more() Bool { return s.byte() >= 64 }
+
+# an integer: a first byte whose lowest bit is the sign and whose rest chooses how many bytes follow (1, 2, 4 or 8,
+# fewer likelier), those bytes read as the magnitude, the high byte first - so 0 gives 0, and smaller bytes smaller
+# magnitudes, which is what shrinking lowers
+fn (s mut source&) integer() I64 {
+    w := s.byte()
+    c := w >> 1
+    n := 1 if c < 64 else (2 if c < 96 else (4 if c < 120 else 8))
+    u U64 = 0
+    for i in range n { u = (u << 8) | U64(s.byte()) }
+    return -I64(u) if (w & 1) == 1 else I64(u)
+}
+
+# a float: mostly a small integer over a power of two; now and then one of the values properties forget - an infinity,
+# a NaN, the largest, the smallest normal, minus zero
+fn (s mut source&) float() F64 {
+    w := s.byte()
+    if w >= 248 {
+        return match w {
+            case 248 => F64.Inf
+            case 249 => -F64.Inf
+            case 250 => F64.NaN
+            case 251 => F64.Max
+            case 252 => -F64.Max
+            case 253 => F64.SmallestNormal
+            case 254 => -0.0
+            case _ => F64.Epsilon
+        }
+    }
+    return F64(s.integer()) / F64(1 << I64(s.byte() % 16))
+}
+
+# a character: a letter, digit or printable sign, the plainest first ('a' for 0), now and then any byte
+fn (s mut source&) char() Char {
+    plain := "abcdefghijklmnopqrstuvwxyz0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ.,;:!?-_+*/=<>()[]{}'\"#$%&@\\|~^`\t\n"
+    b := s.byte()
+    if b >= 240 { return Char(s.byte()) }
+    return plain[I64(b) % plain.Len()]
+}
+
+# a value of type T, drawn from s - see the module's comment for each kind
+fn gen<T>(s mut source&) T ? skip {
+    match T {
+        case Bool { return s.byte() % 2 == 1 }
+        case Char { return s.char() }
+        case String {
+            b := StringBuilder()
+            for s.more() { b.PushChar(s.char()) }
+            return b.ToString()
+        }
+        case Vec<E> {
+            v := Vec<E>()
+            for s.more() { v.Push(try gen<E>(s)) }
+            return v
+        }
+        nomatch {
+            if T.Kind == TypeKind.Integer {
+                return T(s.integer())
+            } else if T.Kind == TypeKind.Float {
+                return T(s.float())
+            } else if T.Kind == TypeKind.Reference {
+                x mut T.Target&return = try gen<T.Target>(s)
+                return x
+            } else if T.Kind == TypeKind.Array {
+                v := Vec<T.Element>()
+                for v.Len() < 64 and s.more() { v.Push(try gen<T.Element>(s)) }
+                return v.ToArray()
+            } else if T.Kind == TypeKind.Struct {
+                return try T(field(p, s) for p in T.Params) catch { error skip.REFUSED }
+            } else if T.Kind == TypeKind.Enum {
+                k := s.below(T.Cases.Len())
+                for i, c in T.Cases {
+                    if i == k { return c(try field(f, s) for f in c.Fields) }
+                }
+                unreachable
+            } else {
+                assert false, "prop.Check makes no values of this kind of type: " T.Name
+                unreachable
+            }
+        }
+    }
+}
+
+# a value for a constructor's parameter or a case's field
+fn field<P>(p P, s mut source&) P.Type ? skip { return try gen<P.Type>(s) }
+
+# a value for a function's parameter: a reference parameter given a value it borrows, built where the call is
+fn param<P>(p P, s mut source&) P.Type ? skip { return try gen<P.Type>(s) }
+fn paramRef<P>(p P, s mut source&) P.Type.Target ? skip { return try gen<P.Type.Target>(s) }
+
+# f called once on values drawn from s
+fn run<F>(f F, s mut source&) ? skip, F.Errors {
+    try f(try paramRef(p, s) if p.Type.Kind == TypeKind.Reference else try param(p, s) for p in F.Params)
+}
+
+# the arguments drawn from s, one line each, as "$" writes them
+fn shown<F>(f F, s mut source&) String {
+    b := StringBuilder()
+    for i, p in F.Params {
+        if p.Type.Kind == TypeKind.Reference {
+            v := try paramRef(p, s) catch skip { return b.ToString() }
+            b.Push($"  argument " $(i + 1) ": " $v "\n")
+        } else {
+            v := try param(p, s) catch skip { return b.ToString() }
+            b.Push($"  argument " $(i + 1) ": " $v "\n")
+        }
+    }
+    return b.ToString()
+}
+
+# what a case run in a child did
+type outcome enum {
+    Passed
+    Failed
+    Dropped
+}
+
+# f run on the bytes in a child process, a copy of this one, saying nothing: whether it passed, failed (a failed check,
+# an error) or was dropped (a value refused)
+fn inChild<F>(f F, bytes Array<U8>&) outcome {
+    cstdio.fflush(null)
+    pid := unistd.fork()
+    if pid < 0 { return outcome.Passed }
+    if pid == 0 {
+        __olang_test_detach()
+        quiet := cfcntl.open("/dev/null".ToC(), 1)
+        if quiet >= 0 {
+            unistd.dup2(quiet, 1)
+            unistd.dup2(quiet, 2)
+        }
+        s := newSource(bytes, 0)
+        try run(f, s) catch skip { unistd._exit(3) } catch { unistd._exit(1) }
+        unistd._exit(0)
+    }
+    return waited(pid)
+}
+
+fn waited(pid I32) outcome {
+    st := Array<I32>(1)
+    if syswait.waitpid(pid, st, 0) < 0 { return outcome.Passed }
+    raw := st[0]
+    if (raw & 127) != 0 { return outcome.Failed }
+    code := (raw >> 8) & 255
+    return outcome.Passed if code == 0 else (outcome.Dropped if code == 3 else outcome.Failed)
+}
+
+# the cases run one after another in one child process, each case's seed written to a pipe as it starts: the seed of
+# the case that failed, 0 where none did
+fn search<F>(f F, base U64, cases I64) U64 {
+    fds := Array<I32>(2)
+    if unistd.pipe(fds) != 0 { return 0 }
+    cstdio.fflush(null)
+    pid := unistd.fork()
+    if pid < 0 { return 0 }
+    if pid == 0 {
+        unistd.close(fds[0])
+        __olang_test_detach()
+        quiet := cfcntl.open("/dev/null".ToC(), 1)
+        if quiet >= 0 {
+            unistd.dup2(quiet, 1)
+            unistd.dup2(quiet, 2)
+        }
+        for k in range cases {
+            seed := base + U64(k) + 1
+            note := Array<U8>(8)
+            for j in range 8 { note[j] = U8((seed >> U64(8 * j)) & 255) }
+            unistd.write(fds[1], note, 8)
+            s := newSource(Array<U8>(0), seed)
+            try run(f, s) catch skip { } catch { unistd._exit(1) }
+        }
+        unistd._exit(0)
+    }
+    unistd.close(fds[1])
+    last U64 = 0
+    note := Array<U8>(8)
+    for unistd.read(fds[0], note, 8) == 8 {
+        last = 0
+        for j in range 8 { last = last | (U64(note[j]) << U64(8 * j)) }
+    }
+    unistd.close(fds[0])
+    return last if waited(pid) == outcome.Failed else 0
+}
+
+# the bytes the case of a seed draws, made again here (no function called)
+fn record<F>(f F, seed U64) Array<U8> {
+    s := newSource(Array<U8>(0), seed)
+    for p in F.Params {
+        if p.Type.Kind == TypeKind.Reference {
+            try paramRef(p, s) catch skip { break }
+        } else {
+            try param(p, s) catch skip { break }
+        }
+    }
+    return s.bytes.ToArray()
+}
+
+# whether a is a smaller input than b: shorter, or as long and below it byte by byte
+fn smaller(a Array<U8>&, b Array<U8>&) Bool {
+    if a.Len() != b.Len() { return a.Len() < b.Len() }
+    for i in range a.Len() {
+        if a[i] != b[i] { return a[i] < b[i] }
+    }
+    return false
+}
+
+# a failing input shrunk: runs of bytes cut and bytes lowered while the case still fails, until nothing tried does -
+# at most budget cases run
+fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
+    best := Vec<U8>()
+    best.PushAll(start)
+    tries := 0
+    better := true
+    for better and tries < budget {
+        better = false
+        # runs of 8, 4, 2 and 1 bytes cut out
+        for size in I64[8, 4, 2, 1] {
+            i := 0
+            for i + size <= best.Len() and tries < budget {
+                cand := Array<U8>(best.Len() - size)
+                for j in range i { cand[j] = best[j] }
+                for j in range i + size, best.Len() { cand[j - size] = best[j] }
+                tries++
+                if inChild(f, cand) == outcome.Failed {
+                    best.Clear()
+                    best.PushAll(cand)
+                    better = true
+                } else {
+                    i++
+                }
+            }
+        }
+        # each byte lowered to the least value that still fails, found by halving the range
+        for i in range best.Len() {
+            lo I64 = 0              # what is known to pass, below the least failing value; hi fails
+            hi I64 = I64(best[i])
+            first := true
+            for lo < hi and tries < budget {
+                mid := lo if first else (lo + hi) / 2   # 0 first, the likeliest smallest
+                first = false
+                cand := best.ToArray()
+                cand[i] = U8(mid)
+                tries++
+                if inChild(f, cand) == outcome.Failed {
+                    hi = mid
+                } else {
+                    lo = mid + 1
+                }
+            }
+            if hi < I64(best[i]) {
+                best.SetAt(i, U8(hi))
+                better = true
+            }
+        }
+        # a byte lowered by one and the next raised to 255: a number of several bytes made smaller, which lowering
+        # one byte alone cannot do (256 is 1, 0; 255 is 0, 255)
+        for i in range best.Len() {
+            if tries >= budget or best[i] == 0 or (i + 1 < best.Len() and best[i + 1] == 255) { continue }
+            cand := Array<U8>(best.Len() if i + 1 < best.Len() else best.Len() + 1)
+            for j in range best.Len() { cand[j] = best[j] }
+            cand[i] = cand[i] - 1
+            cand[i + 1] = 255
+            tries++
+            if inChild(f, cand) == outcome.Failed {
+                best.Clear()
+                best.PushAll(cand)
+                better = true
+            }
+        }
+        # trailing zero bytes give what the end of the bytes gives: cut
+        for best.Len() > 0 and best[best.Len() - 1] == 0 { try best.Pop() catch { } }
+    }
+    return best.ToArray()
+}
+
+# f checked on cases values made for its parameters (the module's comment): fails as f does on the smallest failing
+# input found, after printing it - and with nothing where every case passes. Inputs saved for the test run first
+fn Check<F>(f F, cases I64 = 100) ? F.Errors {
+    data := try fuzz.Input() catch fuzz.Error {
+        for path in fuzz.Saved() {
+            saved := try os.ReadFile(path) catch os.Error { continue }
+            try io.PrintErr($"prop: replaying " $path "\n") catch io.Error { }
+            s := newSource(saved, 0)
+            try run(f, s) catch skip { }
+        }
+        base := U64(fuzz.Slug(fuzz.Running()).Hash()) | 1
+        failed := search(f, base, cases)
+        if failed == 0 { return }
+        found := shrink(f, record(f, failed), 2000)
+        shown2 := newSource(found, 0)
+        where := fuzz.Save(found)
+        try io.PrintErr($"prop: a failing case, shrunk to:\n" $shown(f, shown2) $("" if where == "" else $"  saved as " $where "\n")) catch io.Error { }
+        s := newSource(found, 0)
+        try run(f, s) catch skip { unreachable "prop: the smallest failing case was refused here" }
+        unreachable "prop: the case failed in its own process but not here"
+    }
+    s := newSource(data, 0)
+    try run(f, s) catch skip { }
+}
+
+# ---- tests ----
+
+type Percent struct(v I64) [v >= 0 and v <= 100] { v }
+
+type Shape enum {
+    Dot
+    Circle(r F64)
+    Box(w I64, h I64)
+}
+
+test Check "passes a property that holds, of every kind of value it makes" {
+    Check(fn(a I64, b I64) { assert a + b == b + a })
+    Check(fn(xs Array<I64>&, t String&, flag Bool, c Char) { assert xs.Reversed().ToVec().Len() == xs.Len() })
+    Check(fn(p Percent, v Vec<U8>, x F64, s Shape) {
+        assert p.v >= 0 and p.v <= 100
+        assert v.Len() >= 0
+        if s == Shape.Box { assert s.w == s.w }
+    }, cases = 300)
+}
+
+test search "finds a failing case, which shrink makes smallest" {
+    f := fn(xs Array<I64>&) { for x in xs: assert x < 50 }
+    seed := search(f, 7, 100)
+    assert seed != 0
+    small := shrink(f, record(f, seed), 2000)
+    s := newSource(small, 0)
+    assert (try gen<Array<I64>>(s) catch skip default I64[]) == I64[50]
+}
+
+test search "finds nothing where every case passes" {
+    assert search(fn(n I64, t String&) { assert n == n }, 7, 50) == 0
+}
+
+test gen "draws the least values from zero bytes" {
+    s := newSource(U8[0, 0, 0, 0], 0)
+    assert (try gen<I64>(s)) == 0 and not (try gen<Bool>(s)) and (try gen<String>(s)) == ""
+    assert (try gen<Array<I64>>(s)).Len() == 0 and (try gen<Shape>(s)) == Shape.Dot
+    r := newSource(U8[1, 5], 0)
+    assert (try gen<Percent>(r).v catch skip default -1) == -1    # -5, which the contract refuses
+}
