@@ -1,0 +1,5 @@
+# check: fail error[X17]: 'bits/waitstatus.h' cannot be imported: "Never include <bits/waitstatus.h> directly
+# X17: a header clang cannot compile on its own - here one glibc's own #error refuses - says why, in clang's words
+import b "bits/waitstatus.h"
+
+fn main() { }

@@ -1609,11 +1609,11 @@ its set of types is not written down, and a method the trait lacks is what to ad
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-func-decl | extern-type-decl | link-decl | export-func-decl | top-if
+           | extern-decl | export-func-decl | top-if
 ```
 
 `import-decl` is specified in §4; `test-decl` in
-§10.4; `extern-func-decl`, `extern-type-decl`, `link-decl` and `export-func-decl` in §11 (X1, X10, X9, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
+§10.4; `extern-decl` and `export-func-decl` in §11 (X1, X10, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
 other, declared earlier or later in the same file, and to any name reachable through an import
 (§4).
@@ -2207,9 +2207,11 @@ participating in a cycle).
 
 ### 4.2 Imports
 
-**M3.** `import-decl ::= "import" [ IDEN ] STR_LIT [ STMNT_END ]`. `STR_LIT` names the imported module
-in one of the forms of M23. `IDEN`, when present, is the alias other code in this module uses to refer to
-the imported module's exported names (§4.4).
+**M3.** `import-decl ::= "import" [ IDEN ] STR_LIT [ "link" STR_LIT ] [ STMNT_END ]`. `STR_LIT` names the imported
+module in one of the forms of M23. `IDEN`, when present, is the alias other code in this module uses to refer to
+the imported module's exported names (§4.4). A path ending in `.h` or `.c` names a C header or source file instead,
+imported as a module of its declarations (§11 X17); `link` and the library after it (X9) are written only on such an
+import - on an olang module's they are a compile-time error, since an olang module's code is part of the build.
 
 **M23.** An import path names a **file, without its extension**, in one of three forms told apart by shape
 alone:
@@ -2227,7 +2229,7 @@ alone:
   relative imports are its neighbours, so what a program means never depends on the directory it is compiled from.
 
 A path ending in `.olang`, a path naming no file, and a first element `std` naming anything outside the
-standard library are compile-time errors. The first element of a relative path is therefore never `std`
+standard library are compile-time errors (a path ending in `.h` or `.c` is X17's). The first element of a relative path is therefore never `std`
 and never contains a `.`.
 
 **M23a.** A remote repository is **fetched once** and kept in a local cache (in this implementation, a git
@@ -2257,7 +2259,7 @@ compilation does not reach are kept as they are, since several programs in one d
 a line (M23b) remains the way to update one repository alone.
 
 **M4.** When `IDEN` is omitted, the alias is derived from the import path's **last element**: any leading
-path is stripped. `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/chan"`
+path is stripped, and a C file's `.h` or `.c` (X17). `import "shared"` and `import shared "shared"` are equivalent, as are `import "std/chan"`
 and `import chan "std/chan"`. If the derived alias is not a legal identifier
 (L6 — e.g. the file name contains a hyphen or starts with a digit), that is a compile-time error;
 such a file must be imported with an explicit alias instead.
@@ -7019,11 +7021,16 @@ takes its values out (C9b).
 
 ## 11. External Functions
 
-**X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type | "noreturn" ]
-STMNT_END` is a top-level declaration (D1) naming a function defined outside this compilation and
-resolved by the platform's linker at build time. Unlike an ordinary `func-decl` (D7), it declares no
-`error-list` and has no `block` body of any kind — `STMNT_END` ends the declaration directly where an
-ordinary function's body would otherwise begin. One written `noreturn` (`extern fn exit(status I32) noreturn`) is a
+**X1.** `extern-decl ::= "extern" ( extern-entry | [ "link" STR_LIT ] "{" { extern-entry STMNT_END } "}" ) STMNT_END`,
+where `extern-entry ::= extern-func | extern-type` and `extern-func ::= "fn" IDEN "(" extern-param-list [ "," "..." ]
+")" [ extern-ret-type | "noreturn" ]`, is a top-level declaration (D1). An `extern-func` names a function defined
+outside this compilation and resolved by the platform's linker at build time; an `extern-type` names a C type (X10).
+An **extern block** declares several, one a line, and may name the library they are defined in (`extern link
+"golib" { fn Add(a I64, b I64) I64  type Handle }`, X9); `extern fn ...` and `extern type ...` alone are the form for
+one, and `extern { }` with no `link` declares what is linked anyway - the runtime's functions (X6), or a library another
+declaration names. Unlike an ordinary `func-decl` (D7), an `extern-func` declares no `error-list` and has no `block`
+body of any kind — the line ends the declaration directly where an ordinary function's body would otherwise begin. A
+`...` after its parameters makes it **variadic**, taking C's variable arguments (X21). One written `noreturn` (`extern fn exit(status I32) noreturn`) is a
 `noreturn` function (D8e), taken at its word as the rest of the prototype is (X1a): a foreign function that returns
 after declaring `noreturn` is undefined behaviour.
 
@@ -7082,7 +7089,9 @@ A `fn()` parameter (X2) is passed as two pointers: the function value's code, th
 captured, or nothing for a named function - which the code takes as its one argument, as C's own callbacks take a
 context pointer.
 
-**X3a (foreign opaque storage).** A foreign type with no olang spelling — a `pthread_mutex_t`, say — is held as an
+**X3a (foreign opaque storage).** Where a header declares the type, importing it (X17) gives it its exact size and
+alignment (X18's opaque words, `pthread.pthread_mutex_t`), and nothing below is needed. A foreign type no header in
+reach declares is held as an
 array of `N` elements laid out in place - an inline field `lock := Array<I64>(MutexWords)` (C2e), or a local
 `Array<I64>(N)`, fixed storage either way (T7d) - and handed over by X3's marshalling. Three things make that sound,
 and only the first is about `N`:
@@ -7130,7 +7139,7 @@ module. The declared name is also the symbol the linker resolves against; this s
 not define what happens when no such symbol exists at link time (implementation-defined).
 
 **X6 (the runtime's functions).** The language's runtime support (B3c) provides functions a module calls through
-`extern fn` like any other external function, for what a program needs from its process that the C library would
+an extern declaration naming no library (`extern { fn __olang_err() I32 }`, X1, X9) like any other external function, for what a program needs from its process that the C library would
 only hand over as something X2 cannot receive — a pointer, a structure, or the thread's `errno`. Each is named with the
 prefix `__olang_`, takes any text it is given NUL-terminated, and gives text back by copying it into an array its
 caller supplies (X3) and returning a length, so that nothing crosses the boundary by address. A declaration of one
@@ -7183,10 +7192,12 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
 
 A declaration naming one of these with any other prototype is an ordinary external function.
 
-**X9 (linking a library).** `link-decl ::= "link" STR_LIT STMNT_END` is a top-level declaration (D1) naming what the
-program's link reads besides its objects - the library or object file that defines what the module's `extern`
-declarations name. `link` is a word only there: followed by text, at a module's top level; anywhere else it is an
-ordinary name. The text is one of:
+**X9 (linking a library).** `link STR_LIT` names what the program's link reads besides its objects - the library or
+object file defining what a set of C declarations names. It is written in exactly two places: on an extern block
+(X1, `extern link "z" { ... }`), for the functions and types the block declares, and on the import of a C header
+(X17, `import z "zlib.h" link "z"`), for the header's. `link` is a word only there; anywhere else it is an ordinary
+name. No library is named for the C library itself (the runtime links it into every program), so `import c
+"unistd.h"` names none. The text is one of:
 
 - a **library's name** - letters, digits, `_`, `-`, `+` and `.`, the first a letter or a digit - linked as the C
   compiler's `-lNAME` links it (`link "sqlite3"` reads `libsqlite3.so`, or `libsqlite3.a`, from the platform's library
@@ -7200,7 +7211,7 @@ modules name it, in the order the program's modules are loaded and after every o
 objects calling it. `compile` (B2), which links nothing, reads none. Changing one changes the link and so relinks the
 program (B3).
 
-**X10 (extern types).** `extern-type-decl ::= "extern" "type" IDEN STMNT_END` declares a type defined in C whose
+**X10 (extern types).** An `extern-type` (`"type" IDEN`, X1) declares a type defined in C whose
 contents olang never sees - a `sqlite3`, a `FILE`, a `z_stream` held through the pointer the C library gives. Such a
 type is held **only by reference**: `Db&`, or `Db?&` where it may be null (T2c), in any position a reference may stand
 - a local, a parameter, a result, a field, an array's element, a type argument - and also crossing the C boundary
@@ -7288,17 +7299,55 @@ That `p` names a C string at all, and that what it names is still there, is the 
 its prototype is (X1a). Nothing else reads what a `CStr&` names.
 
 **X16 (bindgen).** `olang bindgen HEADER.h` writes a C header's declarations as this section declares them, on the
-standard output or into the file `-output` names (B1); clang reads the header, as a C compiler of the target would,
-and nothing of olang's is built. What it writes is olang source - declarations only, for a module to hold and write its
-own functions over:
-- each function the header itself declares, as an `extern fn` of the C name, its parameters named as the header names
-  them (`a0`, `a1`... where a name is none olang can declare); a variadic function, one static or inline in the header,
-  and one whose types have no form below are not declared, but listed at the end, each with why;
-- each struct a declaration reaches, or the header defines, as a plain-data struct (X11) of its fields where it is one,
-  and else - an incomplete struct, a union, bitfields, a field with no form, a struct some function gives back by
-  pointer - as an `extern type` (X10), named by the typedef naming it where one does, else by its tag;
-- each enumerator of the header's enums, and each macro it defines as an object whose value clang computes as an
-  integer constant, as an immutable global of that value, an `I32` where the value fits one and an `I64` otherwise.
+standard output or into the file `-output` names (B1): the translation X18 makes of the header for an import, but of
+the declarations the header itself makes alone, and for a module to hold and write its own functions over - so its
+functions and types are one extern block, `extern {` naming no library (X1), for the module to write the library
+after `extern` (`extern link "z" {`, X9). Clang reads the header, as a C compiler of the target would, and nothing of
+olang's is built. A function static or inline in the header has no symbol to link outside C and is listed, not
+declared (an import reaches one, X20). Importing the header (X17) is the alternative to writing its declarations down.
+
+**X17 (C imports).** An import whose path ends in `.h` (a header) or `.c` (a source file) imports a **C module**: the
+declarations clang reads in that file, translated while compiling (X18), as an olang module reached through its alias
+like any other (`import z "zlib.h" link "z"`, then `z.compress(...)`, `z.Z_OK`). The path is a file beside the
+importing module - relative to its directory as M23's relative paths are, or absolute - when there is one; a header
+path naming none is a header of the system's, found where the C compiler looks (`import c "unistd.h"`, `import st
+"sys/stat.h"`); a source file must be beside the importer. A path naming no such file is a compile-time error. Every
+name a C module declares is visible to its importers, whatever its first letter (M6 does not apply: the names are C's).
+The library a header's code is in is named after it (X9), and none is for the C library. A C module's identity (M22a)
+is its path for a file beside the importer and `<PATH>` for a system header; a C module imports nothing.
+
+A header's module holds everything its translation unit declares - the header and every header it includes - since C
+has one namespace and its headers declare one another's types; so two C imports translating one header (directly or
+by including it) each declare its types, two distinct types of one name (T16), and a value of one is not a value of
+the other. A program reaches a C library's whole interface through one import of it. A source file's module holds
+what its code declares and every header it includes, and the file's own functions are compiled into the program
+(X20). The translation of a file is the same in every module importing it and is made once per compilation; an
+implementation keeps it between compilations (this one under `OLANG_CACHE/cimport`, keyed by the file, clang, the
+compiler and the flags) and makes it again when a file it read has changed. Translating a C module needs clang.
+
+**X18 (the translation).** A C module translates the declarations of its translation unit, compiled as the target's
+C compiler compiles them, with `_GNU_SOURCE` defined (glibc's whole interface, as most Linux C programs declare it),
+into these:
+- each function, as an extern function (X1) of the C name, linked by that name or, where the C library gives it
+  another (an assembler label), by that; one taking variable arguments is variadic (X21); one declared
+  `__attribute__((noreturn))` is `noreturn`; one static or inline in a header is reached through a function the
+  build compiles from the header (X20);
+- each struct and union a declaration reaches, or the file defines, as a plain-data struct (X11) of its fields where it
+  is one; else, where it is complete and no function gives it back by pointer - a union, bitfields, a field of no form,
+  an unnamed member - as a struct of **opaque words** of its size and alignment (`bytes := Array<I64>(5)`, never read,
+  C's to read and write), which may be held in place and passed by reference but crosses by value nowhere; else as an
+  extern type (X10);
+- each enumerator, and each macro defined as an object whose value clang computes as an integer constant, as an
+  immutable global of that value (`I32` where it fits, else `I64`); a macro whose value is a floating-point literal
+  expression as an `F64` (an `F32` for one `f`-suffixed literal), and one whose value is a text literal as a `String`;
+- each macro taking arguments whose body is an expression, as a function (X19).
+
+A typedef of a number is that number (olang declares no aliases); a typedef naming a struct names it; a parameter of a
+GNU C transparent union (glibc's `struct sockaddr *` arguments) is its first member's type. A name olang cannot declare -
+a keyword (L9), one C reserves for itself (beginning `__`, or `_` and a capital) - and a declaration of no form above
+(an extern variable, a macro of no value, a function whose types have none) are left out, and using one through the
+alias is a compile-time error saying why (`the C import has no olang form of 'stdin': a variable`). A parameter keeps
+the header's name, its leading `_`s dropped (`__format` is `format`), else `a0`, `a1`...
 
 The types are those of C on the target (on x86-64 and AArch64 Linux, `long` is 64 bits): `char` an `I8` held, a `U8`
 pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers is an array of them (`const T *` an
@@ -7306,7 +7355,49 @@ pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers i
 plain struct's `mut S?&` where it is not `const`); to a pointer to a struct, to `char` or to `void`, an array of the
 references (`mut Array<S?&>&`, C's out parameter); a function pointer, a function type (X13). A pointer to `char`,
 `signed char` or `unsigned char` given back, or held in a field, is a `CStr?&`; a pointer to anything else not
-already named - `void *` above all - is a `CVoid?&`, an extern type the output declares where it needs it.
+already named - `void *` above all - is a `CVoid?&` (`mut CVoid?&` where it is not `const`, X22).
+
+**X19 (macros taking arguments).** A macro taking arguments whose body, expanded as the preprocessor would (other
+macros, the arguments put in), is an expression of numbers - literals, the arguments, enumerators, casts to number
+types, the arithmetic, bitwise, comparison, logical and conditional operators, calls of the module's functions of
+numbers - is a generic function of one type variable per argument, its result the type of the expression's leading
+operand (an argument's type, a cast's, `Bool` for a comparison, `I64` or `F64` for a literal): `#define SQ(x) ((x) *
+(x))` is `fn SQ<T0>(a0 T0) T0`. Its operators are olang's, so each use is checked for the types it is given, and a use
+of no meaning (`SQ("a")`) is a compile-time error at it. `&&`, `||` and `!` read their operands as C does, a number
+as true where it is not 0, and a comparison or a logical operator gives `1` or `0` where a number is wanted. A macro
+whose body is no such expression - one using `#` or `##`, taking variable arguments, naming what has no value - is
+left out, with why (X18).
+
+**X20 (C source).** A C module's own C - a source file's functions, and for a header, one function for each function
+static or inline in it, calling it - is compiled by the build beside the program's modules, by the same clang, to the
+same form, under the same optimizer: so a C function and an olang one may each be inlined into the other where the
+optimizer judges it worth doing. Its functions are given the target attributes the program's own carry (B12), whatever
+the C compiler would have chosen. A source file's static functions are its own (C's file scope) and are not
+declared. `interpret` (B3e) compiles that C into a shared library and loads it as it loads a library a link names;
+`compile` (B2) writes the module's own object only.
+
+**X21 (variadic calls).** A variadic extern function (X1) takes, after the arguments for its parameters, any number of
+**variable arguments**, each passed as C's default argument promotions pass it: an integer literal as an `I32` where
+it fits one (an `I64`, else a `U64`), a floating-point literal as an `F64`; a value of an integer type narrower than
+32 bits as an `I32`, of a float type narrower than 64 as an `F64`, of a declared number type (T29) as its base; any
+other number as itself; a reference or an array as a pointer, as X3 passes one. A `Bool` (write `I32(b)`), a struct by
+value (pass a reference), a function and anything else are compile-time errors. Nothing checks what the arguments are
+against what the function reads - a format string's directives, a count - and a mismatch is undefined behaviour, as a
+wrong prototype is (X1a). An olang function is never variadic.
+
+**X22 (pointer arguments).** A parameter of an extern function that C takes as a pointer takes, besides its own type:
+- for `CVoid?&` (C's `void *`, the prelude's extern type standing for any pointer of no type of olang's): an array of
+  any elements, or a reference to one - its storage; a plain-data struct (X11) held in a place, or a reference to one;
+  an extern type's reference; or `null`. `mut CVoid?&` (C's `void *` not `const`) takes only what may be written
+  (T25b), a place lent writably as for a `mut &` parameter (E12c);
+- for an array of `U8` or `I8` (C's `char *`): a `CStr&` (X15), the C string as it is;
+- for a plain-data struct's reference (`S?&`), or an extern type's (X10): a `CVoid?&` - a pointer C gave, which C
+  takes back as it gave it (a linked list C built, walked by copying each node out with `memcpy`, then freed);
+- for a plain-data struct's reference (`S?&`): an array of `S` - C's pointer to its first element - or an array of
+  numbers, C's cast of a buffer to the struct (a socket address of any family given as a `struct sockaddr *`, a
+  `struct timespec *` given as two `I64`s); that the buffer holds what C reads there is the program's word (X1a).
+
+What C does with the pointer is X3's: it is the storage's own address, for the call.
 
 ## 12. Generics
 

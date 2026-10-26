@@ -1,9 +1,9 @@
-# net - TCP and UDP sockets, blocking, over the C library's socket calls through "extern fn" (§11) as io and os are.
+# net - TCP and UDP sockets, blocking, over the C library's socket headers imported (§11 X17) as io and os are.
 # A server listens, accepts each connection and serves it - one task per connection is the shape (spawn's threads are
 # 1:1, P1e); a client dials. IPv4 and IPv6 alike: an IP is either, an Addr is an IP and a port, written as
 # "127.0.0.1:8080" or "[::1]:8080". Every failure is a net.Error naming why. There is no async I/O. A name is resolved by
-# Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo is read through extern types,
-# X10, and a plain-data struct, X11); ParseIP and ParseAddr read only numbers (and "localhost").
+# Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo walked by the pointers C gives,
+# each node copied out into its plain-data struct, X22); ParseIP and ParseAddr read only numbers (and "localhost").
 #
 # A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), or sooner at
 # x.Destroy() (C9b); each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
@@ -11,21 +11,12 @@
 
 import "time"
 
-extern fn socket(domain I32, kind I32, protocol I32) I32
-extern fn bind(fd I32, addr Array<U8>, len U32) I32
-extern fn listen(fd I32, backlog I32) I32
-extern fn accept4(fd I32, addr Array<U8>, len Array<U32>, flags I32) I32
-extern fn connect(fd I32, addr Array<U8>, len U32) I32
-extern fn send(fd I32, buf Array<U8>, len I64, flags I32) I64
-extern fn recv(fd I32, buf Array<U8>, len I64, flags I32) I64
-extern fn sendto(fd I32, buf Array<U8>, len I64, flags I32, addr Array<U8>, alen U32) I64
-extern fn recvfrom(fd I32, buf Array<U8>, len I64, flags I32, addr Array<U8>, alen Array<U32>) I64
-extern fn getsockname(fd I32, addr Array<U8>, len Array<U32>) I32
-extern fn getpeername(fd I32, addr Array<U8>, len Array<U32>) I32
-extern fn setsockopt(fd I32, level I32, name I32, value Array<U8>, len U32) I32
-extern fn shutdown(fd I32, how I32) I32
-extern fn close(fd I32) I32
-extern fn __olang_err() I32
+import sock "sys/socket.h"
+import unistd "unistd.h"
+import netdb "netdb.h"
+import cstring "string.h"
+
+extern { fn __olang_err() I32 }
 
 afInet I32 = 2
 afInet6 I32 = 10
@@ -328,7 +319,7 @@ fn fromSockaddr(sa Array<U8>&) Addr {
 
 # a new socket of the kind for a's family - an IPv6 one taking IPv4 connections too where a is IPv6's "any" address
 fn open(a Addr&, kind I32) I32 ? Error {
-    fd := socket(afInet6 if a.Host.V6 else afInet, kind | sockCloexec, 0)
+    fd := sock.socket(afInet6 if a.Host.V6 else afInet, kind | sockCloexec, 0)
     if fd < 0 { try raise(__olang_err()) }
     return fd
 }
@@ -339,40 +330,19 @@ fn setInt(fd I32, level I32, name I32, v I32) {
     b[1] = U8((v >> 8) & 0xFF)
     b[2] = U8((v >> 16) & 0xFF)
     b[3] = U8((v >> 24) & 0xFF)
-    setsockopt(fd, level, name, b, 4)
+    sock.setsockopt(fd, level, name, b, 4)
 }
 
 # what getsockname or getpeername says of fd
 fn nameOf(fd I32, peer Bool) Addr ? Error {
     sa := Array<U8>(28)
     len := U32[28]
-    rc := getpeername(fd, sa, len) if peer else getsockname(fd, sa, len)
+    rc := sock.getpeername(fd, sa, len) if peer else sock.getsockname(fd, sa, len)
     if rc < 0 { try raise(__olang_err()) }
     return fromSockaddr(sa)
 }
 
 # ---- names ----
-
-extern type aiNode
-extern type cSockaddr
-
-# C's struct addrinfo, as glibc lays it out on x86-64 and AArch64: what getaddrinfo is asked for (hints) and one entry of
-# what it answers
-type aiFields struct() {
-    flags I32 = 0
-    family I32 = 0
-    socktype I32 = 0
-    protocol I32 = 0
-    addrlen U32 = 0
-    addr cSockaddr?& = null
-    canonname cSockaddr?& = null
-    next aiNode?& = null
-}
-
-extern fn getaddrinfo(node Array<U8>, service Array<U8>, hints aiFields&, res mut Array<aiNode?&>&) I32
-extern fn freeaddrinfo(res aiNode&)
-extern fn memcpy(dst mut aiFields&, src aiNode&, n I64) aiNode?&
-extern fn memmove(dst mut Array<U8>&, src cSockaddr&, n I64) cSockaddr?&
 
 # getaddrinfo's answers that say the name has no address: EAI_NONAME, EAI_NODATA, EAI_FAIL, EAI_ADDRFAMILY (glibc's
 # numbers); EAI_AGAIN is the name server not answering
@@ -393,27 +363,27 @@ fn Lookup(host String&) Array<IP> ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error
         ip := try ParseIP(host) catch { numeric = false } default IP()
         if numeric { return IP[ip] }
     }
-    hints := aiFields()
-    hints.socktype = sockStream
-    out := Array<aiNode?&>(1)
-    rc := getaddrinfo(host.ToC(), "0".ToC(), hints, out)
+    hints := netdb.addrinfo()
+    hints.ai_socktype = sockStream
+    out := Array<CVoid?&>(1)
+    rc := netdb.getaddrinfo(host.ToC(), "0".ToC(), hints, out)
     if rc != 0 { try lookupFailed(rc) }
     head := out[0]
     ips := Vec<IP>()
     p := head
     for p is not null {
-        f := aiFields()
-        memcpy(f, p, 48)
+        f := netdb.addrinfo()
+        cstring.memcpy(f, p, 48)
         sa := Array<U8>(28)
-        a := f.addr
-        if a is not null and (f.family == afInet or f.family == afInet6) {
-            memmove(sa, a, I64(f.addrlen.Min(28)))
+        a := f.ai_addr
+        if a is not null and (f.ai_family == afInet or f.ai_family == afInet6) {
+            cstring.memmove(sa, a, U64(f.ai_addrlen.Min(28)))
             ip := fromSockaddr(sa).Host
             if ip not in ips { ips.Push(ip) }
         }
-        p = f.next
+        p = f.ai_next
     }
-    if head is not null { freeaddrinfo(head) }
+    if head is not null { netdb.freeaddrinfo(head) }
     if ips.Len() == 0 { error Error.UNKNOWN_HOST }
     return ips.ToArray()
 }
@@ -436,14 +406,14 @@ fn Resolve(t String&) Addr ? Error.ADDRESS, Error.UNKNOWN_HOST, Error.UNREACHABL
 type Conn struct(fd I32) {
     fd
 } destruct {
-    close(fd)
+    unistd.close(fd)
 }
 
 # a listening socket: Accept gives each connection made to it
 type Listener struct(fd I32) {
     fd
 } destruct {
-    close(fd)
+    unistd.close(fd)
 }
 
 # a socket listening at a, which may name port 0 for one the system chooses (Addr() says which), and the "any"
@@ -454,9 +424,9 @@ fn Listen(a Addr&, backlog I32 = 128) Listener& ? Error {
     setInt(fd, solSocket, soReuseaddr, 1)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
     sa := sockaddr(a)
-    if bind(fd, sa, U32(sa.Len())) < 0 or listen(fd, backlog) < 0 {
+    if sock.bind(fd, sa, U32(sa.Len())) < 0 or sock.listen(fd, backlog) < 0 {
         why := __olang_err()
-        close(fd)
+        unistd.close(fd)
         try raise(why)
     }
     return Listener(fd)
@@ -470,7 +440,7 @@ fn (l mut Listener&) Accept() Conn& ? Error {
     for {
         sa := Array<U8>(28)
         len := U32[28]
-        fd := accept4(l.fd, sa, len, sockCloexec)
+        fd := sock.accept4(l.fd, sa, len, sockCloexec)
         if fd >= 0 { return Conn(fd) }
         if not interrupted() { try raise(__olang_err()) }
     }
@@ -481,9 +451,9 @@ fn (l mut Listener&) Accept() Conn& ? Error {
 fn Dial(a Addr&) Conn& ? Error {
     fd := try open(a, sockStream)
     sa := sockaddr(a)
-    if connect(fd, sa, U32(sa.Len())) < 0 {
+    if sock.connect(fd, sa, U32(sa.Len())) < 0 {
         why := __olang_err()
-        close(fd)
+        unistd.close(fd)
         try raise(why)
     }
     return Conn(fd)
@@ -495,7 +465,7 @@ fn Dial(a Addr&) Conn& ? Error {
 fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
     if buf.Len() == 0 { return buf[:0] }
     for {
-        n := recv(c.fd, buf, buf.Len(), 0)
+        n := sock.recv(c.fd, buf, U64(buf.Len()), 0)
         if n > 0 { return buf[:n] }
         if n == 0 { error Error.CLOSED }
         if not interrupted() { try raise(__olang_err()) }
@@ -508,7 +478,7 @@ fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
 fn (c Conn&) Write(data Array<U8>&) ? Error {
     sent I64 = 0
     for sent < data.Len() {
-        n := send(c.fd, data[sent:], data.Len() - sent, msgNosignal)
+        n := sock.send(c.fd, data[sent:], U64(data.Len() - sent), msgNosignal)
         if n >= 0 {
             sent += n
         } else if not interrupted() {
@@ -518,7 +488,7 @@ fn (c Conn&) Write(data Array<U8>&) ? Error {
 }
 
 # says no more will be written: the other side reads to the end (CLOSED), and may still write back
-fn (c Conn&) CloseWrite() { shutdown(c.fd, shutWr) }
+fn (c Conn&) CloseWrite() { sock.shutdown(c.fd, shutWr) }
 
 # a Read or Write waiting longer than d fails with TIMEOUT from now on; 0 waits for ever (the default)
 fn (c Conn&) SetTimeout(d time.Duration) {
@@ -529,8 +499,8 @@ fn (c Conn&) SetTimeout(d time.Duration) {
         tv[i] = U8((sec >> (8 * i)) & 0xFF)
         tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
     }
-    setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
-    setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
+    sock.setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
+    sock.setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
 }
 
 # this side's address, and the other side's
@@ -543,7 +513,7 @@ fn (c Conn&) Remote() Addr ? Error { return try nameOf(c.fd, true) }
 type UDP struct(fd I32) {
     fd
 } destruct {
-    close(fd)
+    unistd.close(fd)
 }
 
 # a UDP socket bound to a (port 0 for one the system chooses, Local() saying which)
@@ -551,9 +521,9 @@ fn ListenUDP(a Addr&) UDP& ? Error {
     fd := try open(a, sockDgram)
     if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
     sa := sockaddr(a)
-    if bind(fd, sa, U32(sa.Len())) < 0 {
+    if sock.bind(fd, sa, U32(sa.Len())) < 0 {
         why := __olang_err()
-        close(fd)
+        unistd.close(fd)
         try raise(why)
     }
     return UDP(fd)
@@ -562,7 +532,7 @@ fn ListenUDP(a Addr&) UDP& ? Error {
 # data sent to a as one datagram
 fn (u UDP&) SendTo(data Array<U8>&, a Addr&) ? Error {
     sa := sockaddr(a)
-    for sendto(u.fd, data, data.Len(), msgNosignal, sa, U32(sa.Len())) < 0 {
+    for sock.sendto(u.fd, data, U64(data.Len()), msgNosignal, sa, U32(sa.Len())) < 0 {
         if not interrupted() { try raise(__olang_err()) }
     }
 }
@@ -573,7 +543,7 @@ fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&buf, Addr ? Error {
     for {
         sa := Array<U8>(28)
         len := U32[28]
-        n := recvfrom(u.fd, buf, buf.Len(), 0, sa, len)
+        n := sock.recvfrom(u.fd, buf, U64(buf.Len()), 0, sa, len)
         if n >= 0 { return buf[:n], fromSockaddr(sa) }
         if not interrupted() { try raise(__olang_err()) }
     }
@@ -589,7 +559,7 @@ fn (u UDP&) SetTimeout(d time.Duration) {
         tv[i] = U8((sec >> (8 * i)) & 0xFF)
         tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
     }
-    setsockopt(u.fd, solSocket, soRcvtimeo, tv, 16)
+    sock.setsockopt(u.fd, solSocket, soRcvtimeo, tv, 16)
 }
 
 fn (u UDP&) Local() Addr ? Error { return try nameOf(u.fd, false) }

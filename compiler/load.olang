@@ -23,6 +23,9 @@ import "diag"
 import "msgs"
 import "cond"
 import "fetch"
+import "bindgen"
+import "target"
+import "std/sha256"
 
 # where a chain of top-level ifs stands: not decided yet, decided by nothing B9a can tell (pending), or none of its
 # branches chosen; a chosen branch is its index, 0 for the first and the else last
@@ -39,6 +42,8 @@ type Import struct(Sp source.Span, AliasSp source.Span, Alias String&, Spec Stri
     Spec
     Guard
     Target I64 = -1
+    Link String& = ""                  # the library "link" names after the path (X9, X17), "" for none
+    LinkSp source.Span = source.Span(0, 0)
 }
 
 # a module: where it was read from (as named, and really), its identity, its text, tokens and syntax tree, and what
@@ -76,6 +81,10 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     publicBusy Bool = false
     public Vec<I64>                   # M16, M17: the modules reached through its public aliases, itself first
     Embeds Vec<String&>               # E38: the files its embeds read, by path, each once - what its object holds
+    C Bool = false                    # a C header's or source file's translation (X17): every name of it public
+    CUnit String& = ""                # the C the build compiles beside it (X20): its file, "" for none
+    CSymbols Map<String&, String&>    # a function linked by another symbol than its name (X20)
+    CSkipped Map<String&, String&>    # what the translation could not declare, by name: why (X19)
 }
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
@@ -95,6 +104,8 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     stdReal String& = ""
     cwd String& = ""
     embedded Map<String&, Array<U8>&>  # E38: every file an embed read, by path - read once in a compilation
+    Clang String& = ""                 # the clang a C import is translated with (X17), "" for none
+    CFlags Vec<String&>                # what it is translated and compiled with: the target's, and the defines (X18)
 }
 
 # where the standard library is: OLANG_STD, else std beside the compiler (its directory's "../std")
@@ -185,7 +196,7 @@ fn typeNames(text String&, ts scan.Tokens&) Vec<String&>&text {
 }
 
 # the module at path, loaded once, its imports with it: its index, or -1 where it cannot be read
-fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
+fn (l mut Loader&) load(path String&, identity String&, prelude Bool, c Bool = false) I64 {
     r := try os.RealPath(path) catch default ""
     real := $r if r != "" else $path
     for i in range l.Mods.Len() {
@@ -204,7 +215,8 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
             return -1
         }
     }
-    m.File = l.Diags.AddFile(m.Path, m.Src!.Text, m.Identity.StartsWith("std/"))
+    m.C = c
+    m.File = l.Diags.AddFile(m.Path, m.Src!.Text, m.Identity.StartsWith("std/") or c)
     m.Toks = scan.Scan(m.Src!.Text)
     for d in m.Toks!.Diags {
         line := d.Start
@@ -277,14 +289,23 @@ fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
         alias = $DeriveAlias(spec)
         aliasSp = sp
     }
-    m.Imports.Push(Import(sp, aliasSp, $alias, $spec, parent))
+    imp mut Import&m = Import(sp, aliasSp, $alias, $spec, parent)
+    # X9, X17: "link "name"" after the path
+    if toks[j + 1].Kind == token.Tok.Iden and m.Src!.Text[toks[j + 1].Start:toks[j + 1].End] == "link" and
+       toks[j + 2].Kind == token.Tok.StrLit {
+        imp.LinkSp = source.Span(toks[j + 2].Start, toks[j + 2].End)
+        imp.Link = $scan.LiteralText(m.Src!.Text[imp.LinkSp.Start:imp.LinkSp.End])
+    }
+    m.Imports.Push(imp)
 }
 
-# M4: an import's alias when none is written - its path's last element, without ".olang"
+# M4: an import's alias when none is written - its path's last element, without ".olang", or a C file's without ".h"
+# or ".c" (X17)
 fn DeriveAlias(spec String&) String&spec {
     start := (try spec.FindLast("/") catch default -1) + 1
     end := spec.Len()
     if end - start >= 6 and spec.EndsWith(".olang") { end -= 6 }
+    if end - start >= 2 and (spec.EndsWith(".h") or spec.EndsWith(".c")) { end -= 2 }
     return spec[start:end]
 }
 
@@ -483,8 +504,17 @@ fn (l mut Loader&) loadImports(mi I64) {
             l.Diags.Error(l.at(m, imp.AliasSp), msgs.ImportAliasInvalid(imp.Alias))
             continue
         }
-        path, identity := try l.resolve(mi, imp) catch { continue }
-        t := l.load(path, identity, false)
+        t I64 = -1
+        if imp.Spec.EndsWith(".h") or imp.Spec.EndsWith(".c") {
+            t = l.cImport(mi, imp)                      # X17: a C header or source file, translated
+        } else {
+            if imp.Link != "" {
+                l.Diags.Error(l.at(m, imp.LinkSp), msgs.LinkOnOlangImport())
+                continue
+            }
+            path, identity := try l.resolve(mi, imp) catch { continue }
+            t = l.load(path, identity, false)
+        }
         if t < 0 { continue }
         clash := false
         for k2 in range m.Imports.Len() {
@@ -581,6 +611,141 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         error unresolved.IMPORT
     }
     return path, identity
+}
+
+# ---- C imports (X17-X20) ----
+
+# the version of the translation's form: a translation kept under another is made again
+CImportFormat String& = "olang C import 1"
+
+# the module a C header's or source file's import names, translated and loaded: its index, or -1 where it cannot be
+# (reported). A path that names a file beside the importing module's - relative to its directory, as an olang import's
+# is, or absolute - is that file; any other header is one of the system's, found where the C compiler looks
+# ("unistd.h", "sys/stat.h"). A source file is always one beside it. The translation is kept in the cache
+# (OLANG_CACHE/cimport) under a key of what it is made from - the file, clang's own file, the flags - with the files
+# it read, and made again when one of them changed
+fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
+    m := l.Mods[mi]
+    at := l.at(m, imp.Sp)
+    spec := imp.Spec
+    isC := spec.EndsWith(".c")
+    rel := moduleDir(m.Path)
+    local := $Normalize(spec) if spec.StartsWith("/") or rel == "." else $Normalize($rel "/" $spec)
+    if spec.StartsWith("/") { local = $spec }
+    include := ""
+    own := ""
+    identity := ""
+    if os.Exists(local) and not os.IsDir(local) {
+        real := try os.RealPath(local) catch default ""
+        r := $real if real != "" else $local
+        include = $"#include \"" $r "\""
+        if isC { own = $r }
+        identity = $filepath.Base(spec) if spec.StartsWith("/") else $relativeIdentity(m.Identity, spec)
+    } else if isC or spec.StartsWith("/") or spec.StartsWith("./") or spec.StartsWith("../") {
+        l.Diags.Error(at, msgs.CFileNotFound(local))
+        return -1
+    } else {
+        include = $"#include <" $spec ">"
+        identity = $"<" $spec ">"
+    }
+    # a loader made by a tool, given no clang or flags: the build's defaults, so a C import means what it does in a build
+    if l.Clang == "" { l.Clang = target.FindClang() }
+    if l.CFlags.Len() == 0 { l.CFlags.Push("-D_GNU_SOURCE") }
+    # the tag naming its wrapper functions comes from what the import says alone, so the code built of it is the same
+    # whichever compiler or clang made it (the bootstrap's fixed point); the cache key adds both
+    kb := StringBuilder()
+    kb.Push($CImportFormat "\n" $include "\n" $own "\n")
+    for f in l.CFlags { kb.Push($f "\n") }
+    tag := sha256.Hex(kb.ToString())[:12]
+    kb.Push($fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
+    ck := sha256.Hex(kb.ToString())[:32]
+    dir := $fetch.CacheDir() "/cimport"
+    base := $dir "/" $ck
+    text := cachedTranslation(base)
+    if text == "" {
+        tr := bindgen.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
+        if tr.Why != "" {
+            if tr.NotFound {
+                l.Diags.Error(at, msgs.CHeaderNotFound(spec))
+            } else {
+                l.Diags.Error(at, msgs.CImportFailed(spec, tr.Why))
+            }
+            return -1
+        }
+        deps := StringBuilder()
+        for d in tr.Deps {
+            info := try os.Stat(d) catch os.Error { continue }
+            deps.Push($info.Size " " $info.ModTime " " $d "\n")
+        }
+        stamp := sha256.Hex(deps.ToString())[:16]
+        c := "" if tr.C == "" else $"/* " $stamp " */\n" $tr.C
+        if not keepFile(dir, $base ".olang", tr.Text) or not keepFile(dir, $base ".c", c) or not keepFile(dir, $base ".deps", deps.ToString()) {
+            l.Diags.Error(at, msgs.CImportFailed(spec, $"its translation cannot be written into " $dir))
+            return -1
+        }
+        text = tr.Text
+    }
+    i := l.load($base ".olang", identity, false, true)
+    if i < 0 { return -1 }
+    t := l.Mods[i]
+    if os.Exists($base ".c") and (try os.Stat($base ".c") catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)).Size > 0 {
+        t.CUnit = $base ".c"
+    }
+    skipping := false
+    for line in text.Lines() {
+        if line.StartsWith("# symbol ") {
+            ws := line[9:].Split(" ")
+            if ws.Len() == 2 { t.CSymbols.Put($ws[0], $ws[1]) }
+        } else if line == "# not declared:" {
+            skipping = true
+        } else if skipping and line.StartsWith("#   ") {
+            k := try line.Find(": ") catch default -1
+            if k > 4 { t.CSkipped.Put($line[4:k], $line[k + 2:]) }
+        }
+    }
+    return i
+}
+
+# the symbol function name of C module mi links by: its name, or the one the translation says (X20)
+fn (l Loader&) CSymbol(mi I64, name String&) String {
+    if mi < 0 or mi >= l.Mods.Len() or not l.Mods[mi].C { return $name }
+    return try l.Mods[mi].CSymbols.Get(name) catch default $name
+}
+
+# a translation kept at base: its text where every file it was made from is as it was then, else ""
+fn cachedTranslation(base String&) String {
+    deps := try os.ReadFile($base ".deps") catch os.Error { return "" }
+    for line in deps.Lines() {
+        if line == "" { continue }
+        a := try line.FindByte(' ') catch { return "" }
+        b := try line[a + 1:].FindByte(' ') catch { return "" }
+        size := try line[:a].ParseInt() catch { return "" }
+        time := try line[a + 1:a + 1 + b].ParseInt() catch { return "" }
+        info := try os.Stat(line[a + 2 + b:]) catch os.Error { return "" }
+        if info.Size != size or info.ModTime != time { return "" }
+    }
+    return try os.ReadFile($base ".olang") catch os.Error default ""
+}
+
+# text written at path, through a file of this process's own renamed into place: whether it was
+fn keepFile(dir String&, path String&, text String&) Bool {
+    try os.MkDirAll(dir) catch os.Error { return false }
+    tmp := $path "." $target.Pid() ".tmp"
+    try os.WriteFile(tmp, text) catch os.Error { return false }
+    try os.Rename(tmp, path) catch os.Error {
+        try os.Remove(tmp) catch os.Error { }
+        return false
+    }
+    return true
+}
+
+# what a program is, for a translation's key - clang, this compiler: its real path, size and time ("" for none)
+fn fileStamp(clang String&) String {
+    if clang == "" { return "" }
+    real := try os.RealPath(target.WhereIs(clang)) catch default ""
+    if real == "" { return $clang }
+    info := try os.Stat(real) catch os.Error { return $real }
+    return $real " " $info.Size " " $info.ModTime
 }
 
 # ---- E38: embedded files ----
@@ -805,39 +970,53 @@ fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) 
 
 # ---- what later passes ask ----
 
-# X9: what the program's link names besides its objects, from every module's "link" declarations in its chosen
-# branches, each once, in the modules' order - a library's name as "-lNAME", a file's path (one naming a directory, or
-# ending in .a, .o or .so) resolved from its module's directory. A name that is neither is reported
+# X9: what the program's link names besides its objects, from every module's links - an import's (X17) where the
+# import is in a chosen branch, an extern block's in a chosen branch - each once, in the modules' order: a library's
+# name as "-lNAME", a file's path (one naming a directory, or ending in .a, .o or .so) resolved from its module's
+# directory. A name that is neither is reported
 fn (l mut Loader&) Links() Vec<String&> {
     out Vec<String&>
     seen Map<String&, Bool>
-    for mi in range l.Mods.Len() { l.linksIn(mi, l.Mods[mi].Decls, out, seen) }
+    for mi in range l.Mods.Len() {
+        m := l.Mods[mi]
+        for imp in m.Imports {
+            if imp.Link == "" or imp.Target < 0 or not l.Mods[imp.Target].C { continue }
+            l.addLink(mi, imp.LinkSp, out, seen)
+        }
+        l.linksIn(mi, m.Decls, out, seen)
+    }
     return out
 }
 
 fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
     for d in ds {
         match d {
-            case ast.Decl.Link(_, path) {
-                m := l.Mods[mi]
-                text := m.Src!.Text[I64(path.Start) + 1:I64(path.End) - 1]
-                arg := ""
-                if LinkIsFile(text) {
-                    arg = $(text if filepath.IsAbs(text) else filepath.Join(filepath.Dir(m.Real), text))
-                } else if LinkName(text) {
-                    arg = $"-l" $text
-                } else {
-                    l.Diags.Error(diag.Where.Span(m.File, I64(path.Start), I64(path.End)), msgs.LinkName(msgs.Tok(text)))
-                    continue
-                }
-                if seen.Has(arg) { continue }
-                seen.Put($arg, true)
-                out.Push($arg)
+            case ast.Decl.ExternBlock(_, link, _) {
+                if link.End > I32(0) { l.addLink(mi, link, out, seen) }
             }
             case ast.Decl.If(_, ti) { l.linksIf(mi, ti, l.Chosen(mi, ti.Cond!.Span().Start), 0, out, seen) }
             nomatch { }
         }
     }
+}
+
+# one link's text at path's span in module mi, as the link reads it - reported where it names neither a library nor a
+# file
+fn (l mut Loader&) addLink(mi I64, path source.Span, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
+    m := l.Mods[mi]
+    text := m.Src!.Text[I64(path.Start) + 1:I64(path.End) - 1]
+    arg := ""
+    if LinkIsFile(text) {
+        arg = $(text if filepath.IsAbs(text) else filepath.Join(filepath.Dir(m.Real), text))
+    } else if LinkName(text) {
+        arg = $"-l" $text
+    } else {
+        l.Diags.Error(diag.Where.Span(m.File, I64(path.Start), I64(path.End)), msgs.LinkName(msgs.Tok(text)))
+        return
+    }
+    if seen.Has(arg) { return }
+    seen.Put($arg, true)
+    out.Push($arg)
 }
 
 fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {

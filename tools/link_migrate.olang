@@ -1,0 +1,95 @@
+# link_migrate - rewrites the top-level "link" declaration, gone in the C-imports batch (2026-10-26, SPEC.md X9), into
+# an extern block naming the library:
+#
+#     link "z"                          extern link "z" {
+#     extern fn crc32(...) U64              fn crc32(...) U64
+#     extern type Db                        type Db
+#                                       }
+#
+# The module's first run of top-level "extern fn" and "extern type" lines - blank lines and comments between them
+# included - becomes the block of the first library a link named; every other library a link named, and the first
+# where the module declares no extern, is an empty block where its link was. Re-runnable: a module with no top-level
+# "link" line is left alone.
+#
+#     olang build tools/link_migrate.olang && build/tools_link_migrate FILE...    rewrites the files, naming each one changed
+
+import "std/os"
+import "std/io"
+
+fn main() ? io.Error {
+    args := os.Args()
+    for k in range 1, args.Len() {
+        path := args[k]
+        text := try os.ReadFile(path) catch os.Error {
+            try io.PrintErrln("link_migrate: " $path ": cannot be read")
+            continue
+        }
+        out := migrate(text)
+        if out != text {
+            try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("link_migrate: " $path ": cannot be written") }
+            try io.Println(path)
+        }
+    }
+}
+
+# the library a top-level link line names, its quotes kept - "" for any other line
+fn linkOf(line String&) String {
+    if not line.StartsWith("link \"") { return "" }
+    t := line.Trim()
+    close := try t[6:].FindByte('"') catch { return "" }
+    rest := t[7 + close:].Trim()
+    if rest != "" and not rest.StartsWith("#") { return "" }
+    return $t[5:7 + close]
+}
+
+fn isExtern(line String&) Bool { return line.StartsWith("extern fn ") or line.StartsWith("extern type ") }
+
+fn migrate(text String&) String {
+    lines := text.Split("\n")
+    links Vec<String&>
+    for l in lines {
+        n := linkOf(l)
+        if n != "" { links.Push($n) }
+    }
+    if links.Len() == 0 { return $text }
+    # the first run of extern lines: from its first to its last, comments and blank lines between them in it
+    first I64 = -1
+    last I64 = -1
+    for i, l in lines {
+        if isExtern(l) {
+            if first < 0 { first = i }
+            last = i
+        } else if first >= 0 and l.Trim() != "" and not l.StartsWith("#") {
+            break
+        }
+    }
+    b := StringBuilder()
+    placed := false
+    for i, l in lines {
+        n := linkOf(l)
+        if n != "" {
+            if n == links[0] and first >= 0 and not placed { continue }    # the block holds it
+            if n == links[0] and placed { continue }
+            b.Push($"extern link " $n " { }")
+            if n == links[0] { placed = true }
+        } else if i == first {
+            b.Push($"extern link " $links[0] " {\n    " $l[7:])
+            if first == last { b.Push("\n}") }
+            placed = true
+        } else if i > first and i <= last and first >= 0 {
+            b.Push($"    " $l[7:] if isExtern(l) else $"    " $l if l != "" else "")
+            if i == last { b.Push("\n}") }
+        } else {
+            b.Push(l)
+        }
+        if i < lines.Len() - 1 { b.PushChar('\n') }
+    }
+    return b.ToString()
+}
+
+test "a link and its module's externs become one block" {
+    assert migrate("link \"z\"\nextern fn f(a I32) I32\n# x\nextern type Db\n\nfn g() { }\n") == ("extern link \"z\" {\n    fn f(a I32) I32\n    # x\n    type Db\n}\n\nfn g() { }\n")
+    assert migrate("link \"m\"\nlink \"z\"\nfn link(n I64) I64 { return n }\n") == "extern link \"m\" { }\nextern link \"z\" { }\nfn link(n I64) I64 { return n }\n"
+    assert migrate("link \"c.o\"\nextern fn f()\n\nfn g() { }\n") == "extern link \"c.o\" {\n    fn f()\n}\n\nfn g() { }\n"
+    assert migrate("fn main() { }\n") == "fn main() { }\n"
+}

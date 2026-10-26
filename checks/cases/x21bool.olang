@@ -1,0 +1,5 @@
+# check: fail error[X21]: Bool cannot be a C variable argument
+# X21: a Bool is no C variable argument - pass I32(b)
+import s "stdio.h"
+
+fn main() { s.printf("%d\n".ToC(), 1 > 0) }

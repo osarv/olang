@@ -25273,3 +25273,96 @@ written `I64(u)` of a U64 the evaluator computes failed D17g's fit - the count i
 
 **The seed** was written again (`make seed`): std uses `grown()`, which the old seed's compiler does not know, so the
 old seed could no longer build the current source; `make bootstrap` from the new one gives olang.2 == olang.3.
+
+## C headers and C files imported as modules (X17-X22, X9, X3a, QBE, 2026-10-26)
+
+**The decision.** The user asked why, with clang shipped beside the compiler (B12d), C could not be imported as Zig
+imports it. The old reason for refusing a `@cImport` - an embedded C front end out of proportion to a handful of
+declarations - went with the bundled clang, and the shape was settled over several messages (decisions.md, QBE): a
+header is imported as a module, `import z "zlib.h" link "z"`; the library is named where the declarations come from,
+on the import or on an extern block (`extern link "golib" { fn ... type Handle }`), `extern { }` naming none for what
+is linked anyway; libc's headers need no link (the runtime itself calls libc, so every program links it); the
+standalone `link` declaration goes; `import alias "path"` keeps its order; variadic calls with C's promotions;
+expression macros translated, the rest left out with a reason; a `.c` file compiled by the same clang under LTO; a
+header's static inline functions compiled as C.
+
+**How it is built.** A C import is translated by `bindgen.Translate` - the path `olang bindgen` already had (clang's
+AST dump read as JSON, macros' values computed by clang through a probe file), extended to the whole translation unit
+- into olang text written to `OLANG_CACHE/cimport/KEY.olang`, beside the C the build compiles (`KEY.c`) and the files
+the translation read with their sizes and times (`KEY.deps`). The key is a hash of the import's include line, its own
+file, clang's file, the compiler's file and the flags; a translation is made again when one of its deps changed. The
+module is then loaded like any other, from that file, flagged as C (every name visible to its importers, M6 not
+applying). Decisions taken while building it, mine:
+
+1. **One namespace per translation unit.** A header's module holds everything its translation unit declares, every
+   header it includes too, since C headers declare each other's types and a module of the header's own declarations
+   alone could not name the `size_t` or `struct stat` its functions take. The cost: two imports of headers declaring
+   one C struct give two olang types (`<sys/stat.h>`'s `timespec` is not `<time.h>`'s). A program reaches one C
+   library through one import; a `.c` import exposes everything its file includes for the same reason (its functions
+   take its headers' types, which a separate header import would make distinct).
+2. **`-D_GNU_SOURCE`**, as most Linux C programs compile glibc's headers, so `memfd_create`, `pipe2` and the like are
+   declared.
+3. **Records.** A plain record (numbers, fixed arrays of them, plain records) is a plain struct (X11), crossing by
+   value; any other complete record - a union, bitfields, an anonymous member, a field of no form - is a struct of
+   opaque words of its exact size and alignment (clang's `sizeof`/`_Alignof` through the probe), held in place and
+   passed by reference, never read: so `pthread_mutex_t` is now the real size wherever it is laid out, and X3a's
+   reservation of an upper bound is only for a type no header declares (std/chan and std/sync migrated). An
+   incomplete record is an extern type. A parameter of a GNU transparent union - glibc's `__CONST_SOCKADDR_ARG` - is
+   its first member's type, so `bind` and `connect` take `sockaddr` references.
+4. **Macros.** An object-like macro clang computes as an integer is a constant (`I32` where it fits, else `I64`); a
+   float or text literal macro is an `F64`/`String`; a function-like macro whose expansion (by the compiler's own
+   expander over clang's macro definitions) is an expression of numbers is a generic function, one type variable per
+   argument - `#define SQ(x) ((x) * (x))` is `fn SQ<T0>(a0 T0) T0` - checked per use with olang's operators, so `SQ("a")`
+   is an error at the use. Everything left out (a `#`/`##` macro, a variable, a function whose types have no form) is
+   listed at the end of the translation, and naming one through the alias says why (`CNoForm`, X19).
+5. **Names.** A keyword, or a name C reserves (`__x`, `_X`), is left out; `_exit` is not reserved (a `_` and a small
+   letter) and is declared. Parameters keep the header's names with leading `_`s dropped. An assembler label
+   (glibc's `stat` -> `stat64` style renames) is linked by its label.
+6. **C units as IR.** A C module's own C - a `.c` file's functions, and a wrapper `olang_ci_TAG_NAME` for each static
+   inline function a header declares - is compiled by clang to LLVM IR at `-O2 -Xclang -disable-llvm-passes` (so
+   nothing is decided before the link's optimizer sees it), its `target-cpu`/`target-features`/`tune-cpu` replaced by
+   the program's own (B12): first built with clang's own attributes, nothing was inlined across - LLVM refuses to inline
+   between functions of different features - and at `-O0` clang marks everything `noinline`. Checked by the checks
+   scenario: a `.c` function called from olang leaves no call in the binary (objdump). `compile` writes the module's
+   own object only; `interpret` compiles the same C into a shared library (`-shared -fPIC -O2`) and dlopens it.
+7. **The tag.** Wrapper names carry a tag of what the import says (include line, file, flags) and nothing else: with
+   the compiler's own file in it (the first version, from the cache key), the compiler built by itself named its
+   wrappers differently at each stage, which would have broken the bootstrap's fixed point the moment compiler/ called
+   one.
+8. **Variadic calls (X21).** The extra arguments get C's default promotions (a literal an `I32` where it fits, a
+   narrow integer an `I32`, a narrow float an `F64`, a declared number its base, references and arrays pointers);
+   `Bool`, structs by value and functions are errors. The format is not checked - X1a's hole, stated. LLVM's call form
+   `call T (P, ...) @f(...)`; the evaluator's foreign call goes through `ffi_prep_cif_var` (std/runtime/dyncall.ll's
+   `__olang_dyncall_var`) with the fixed count.
+9. **Pointers (X22).** `void *` is the prelude's `extern type CVoid`, as `CVoid?&`, taking any array, a plain struct in
+   place, an extern handle or null, `mut` only what may be written; a `char *` parameter takes a `CStr&`; a struct
+   pointer takes an array of the struct, an array of numbers (C's cast of a buffer: std/net's socket addresses, which it
+   builds as bytes for every family), or a `CVoid?&` C gave (getaddrinfo's list, walked by copying each node out); a
+   pointer to a pointer to a struct or void is an array of references (C's out parameter). `interpret` passes a
+   pointer C returned as a foreign word it never reads.
+
+**The migration.** `link` moved onto extern blocks and C imports (tools/link_migrate.olang, in `olang fix` as
+`link_migrate`); std and compiler/ import the system headers they call - 166 hand-written `extern fn` gone: unistd,
+fcntl, stdlib, stdio, sys/stat, sys/wait, signal, time, sys/mman, sys/socket, netdb, string, pthread, math (the
+prelude's number methods call `cmath`), dlfcn, sys/resource, sys/utsname, poll. Callers adapted where the header's
+types are not the hand prototypes' (`size_t` counts as `U64`, `struct timespec`, `struct pollfd`, `struct utsname` in
+place of word arrays, `struct rlimit`). Left hand-declared, in `extern { }`: the runtime's `__olang_` functions (no
+header declares them) and `signal`, whose `SIG_IGN` is a cast of 1 to a function pointer olang cannot write. The seed
+was regenerated (compiler/ now imports headers, which the old seed's compiler cannot), the translated header modules
+in it as `_unistd_h_.ll` and the like; `make boot` from it gives olang.2 == olang.3.
+
+**Found on the way.** A type mismatch between two types of one name now names their modules (`expected
+timespec of <time.h>, found timespec of <sys/stat.h>`); a missing name reached through an import path is reported at
+its member, not as a cascade; the MIR verifier knew no variadic call and no pointer-like argument to an extern.
+
+**Measured.** Translating `<sqlite3.h>` 0.7 s the first time, nothing after (a cached translation is read in a few ms);
+`<openssl/ssl.h>` - 940 KB of declarations - 6.3 s the first time and 3.0 s per build after, all of it checking the
+module, since a C module is checked whole like any other (left: checking only what is reached). A hello world on a
+warm cache: 0.29 s on the batch's base, 0.34 s now (std/io's and the prelude's headers); on a fresh cache 1.0 s both.
+Cross-built for aarch64 (clang 20, qemu) the cimport tests and the migrated std pass, and clang 19 and 20 translate
+and build the same; `make releasetest` builds a program importing `string.h` and clang's own `stdint.h` from the
+release's bundled resource directory with nothing else on PATH.
+
+**Left.** A C extern variable (`stdin`, `errno`) and a cast macro have no form; a C module's named constants are typed
+(`I32`) and do not adapt as literals do, so `I16(cpoll.POLLIN)` is written; `interpret` refuses a struct by value; a
+large header's check is paid on every build.

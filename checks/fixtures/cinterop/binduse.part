@@ -1,6 +1,6 @@
 
-# what checks/checks.olang appends to what bindgen wrote of bind.h: a program using it
-link "bind.o"
+# what checks/checks.olang appends to what bindgen wrote of bind.h, its extern block given the library: a program
+# using it
 import "std/io"
 
 export fn visit(ctx CVoid?&, value I32) I32 { return value * 10 }

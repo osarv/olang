@@ -1,0 +1,5 @@
+# check: fail error[X17]: 'link' names the library a C header's declarations are in - an olang module needs none
+# X17, M3: "link" is for a C import's library; an olang module's code is part of the build
+import "std/io" link "z"
+
+fn main() { }

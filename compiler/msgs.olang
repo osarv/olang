@@ -259,6 +259,14 @@ type Diag enum {
     ForeignByValue
     LinkName
     InterpLink
+    VarArgType
+    LinkOnOlangImport
+    CHeaderNotFound
+    CFileNotFound
+    CImportFailed
+    CNoForm
+    CPointerReadOnly
+    CPointerTemporary
     MutOnValueType
     MutOnValueParam
     MutOnValueField
@@ -1491,6 +1499,30 @@ fn LinkName(tok String&) Msg { return Msg(Diag.LinkName, "X9", $tok " names no l
 
 # ERR_INTERP_LINK
 fn InterpLink(text String&, why String&) Msg { return Msg(Diag.InterpLink, "B3e", "the library '" $text "' a link names cannot be loaded into interpret: " $why " - build the program instead") }
+
+# ERR_VAR_ARG_TYPE
+fn VarArgType(ty String&) Msg { return Msg(Diag.VarArgType, "X21", $ty " cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference") }
+
+# ERR_LINK_ON_OLANG_IMPORT
+fn LinkOnOlangImport() Msg { return Msg(Diag.LinkOnOlangImport, "X17", "'link' names the library a C header's declarations are in - an olang module needs none") }
+
+# ERR_C_HEADER_NOT_FOUND
+fn CHeaderNotFound(spec String&) Msg { return Msg(Diag.CHeaderNotFound, "X17", "no C header '" $spec "' beside this file or where the C compiler looks") }
+
+# ERR_C_FILE_NOT_FOUND
+fn CFileNotFound(path String&) Msg { return Msg(Diag.CFileNotFound, "X17", "no C file at " $path) }
+
+# ERR_C_IMPORT_FAILED
+fn CImportFailed(spec String&, why String&) Msg { return Msg(Diag.CImportFailed, "X17", "'" $spec "' cannot be imported: " $why) }
+
+# ERR_C_NO_FORM
+fn CNoForm(name String&, why String&) Msg { return Msg(Diag.CNoForm, "X19", "the C import has no olang form of '" $name "': " $why) }
+
+# ERR_C_POINTER_READ_ONLY
+fn CPointerReadOnly(ty String&) Msg { return Msg(Diag.CPointerReadOnly, "X22", "C may write through this pointer, and " $ty " is read-only - pass a writable one ('mut')") }
+
+# ERR_C_POINTER_TEMPORARY
+fn CPointerTemporary(ty String&) Msg { return Msg(Diag.CPointerTemporary, "X22", "C is handed a pointer to a " $ty " that is no place - put it in a local first") }
 
 # ERR_MUT_ON_VALUE_TYPE
 fn MutOnValueType(ty String&) Msg { return Msg(Diag.MutOnValueType, "T25b", "'mut' makes a reference writable, and " $ty " is no reference") }

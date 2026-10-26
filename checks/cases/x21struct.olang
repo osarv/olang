@@ -1,0 +1,12 @@
+# check: fail error[X21]: P cannot be a C variable argument
+# X21: a struct by value is no C variable argument - pass a reference
+import s "stdio.h"
+
+type P struct() {
+    x I64
+}
+
+fn main() {
+    p := P()
+    s.printf("%p\n".ToC(), p)
+}

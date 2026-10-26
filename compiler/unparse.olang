@@ -58,19 +58,46 @@ fn (w mut writer&) decl(d ast.Decl&) {
     match d {
         case ast.Decl.Fn(f) { w.func(f) }
         case ast.Decl.Extern(f) {
-            w.put("extern fn ")
-            w.name(f.Name)
-            w.sig(f.S)
+            w.put("extern ")
+            w.externFn(f)
+        }
+        case ast.Decl.ExternBlock(_, link, ds) {
+            w.put("extern ")
+            if link.End > I32(0) {
+                w.put("link ")
+                w.span(link)
+                w.put(" ")
+            }
+            w.put("{")
+            w.ind++
+            for x in ds {
+                w.nl()
+                match x {
+                    case ast.Decl.Extern(f) { w.externFn(f) }
+                    case ast.Decl.Type(_, t) {
+                        w.put("type ")
+                        w.name(t.Name)
+                    }
+                    nomatch { }
+                }
+            }
+            w.ind--
+            w.nl()
+            w.put("}")
         }
         case ast.Decl.Type(_, t) { w.typeDecl(t) }
         case ast.Decl.Global(_, v) { w.varDecl(v) }
-        case ast.Decl.Import(_, alias, path) {
+        case ast.Decl.Import(_, alias, path, link) {
             w.put("import ")
             if alias != source.NameId(0) {
                 w.name(alias)
                 w.put(" ")
             }
             w.span(path)
+            if link.End > I32(0) {
+                w.put(" link ")
+                w.span(link)
+            }
         }
         case ast.Decl.Errors(_, name, words, members) {
             w.put("type ")
@@ -99,10 +126,6 @@ fn (w mut writer&) decl(d ast.Decl&) {
             w.block(body)
         }
         case ast.Decl.If(_, i) { w.topIf(i) }
-        case ast.Decl.Link(_, path) {
-            w.put("link ")
-            w.span(path)
-        }
     }
 }
 
@@ -154,9 +177,17 @@ fn (w mut writer&) func(f ast.Func&) {
 
 # (params) results ? errors - several results bare (D8c); each result an item of the results' list, the last a
 # function type with no error set of its own parenthesized before the signature's "?" (L18c)
+# an extern's "fn NAME(...)" (X1), with its "..." (X21)
+fn (w mut writer&) externFn(f ast.Func&) {
+    w.put("fn ")
+    w.name(f.Name)
+    w.sig(f.S)
+}
+
 fn (w mut writer&) sig(s ast.Sig&) {
     w.put("(")
     w.params(s.Params)
+    if s.Variadic { w.put(", ..." if s.Params.Len() > 0 else "...") }
     w.put(")")
     w.contract(s)
     if s.NoReturn { w.put(" noreturn") }

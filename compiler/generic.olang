@@ -2114,6 +2114,7 @@ fn (p mut Program&) addFns(mi I64, ds Array<ast.Decl&>&) {
         match d {
             case ast.Decl.Fn(f) { p.addFn(mi, f, false) }
             case ast.Decl.Extern(f) { p.addFn(mi, f, true) }
+            case ast.Decl.ExternBlock(_, _, xs) { p.addFns(mi, xs) }
             case ast.Decl.If(_, ti) { p.addFnsIf(mi, ti, p.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             nomatch { }
         }
@@ -2677,6 +2678,9 @@ fn (p Program&) FnCount() I64 { return p.fns.Len() }
 fn (p Program&) FnModule(f I64) I64 { return p.fns[f].Mi }
 fn (p Program&) FnDecl(f I64) ast.Func&p { return p.fns[f].F }
 fn (p Program&) FnIsExtern(f I64) Bool { return p.fns[f].Extern }
+
+# the symbol an extern links by: its name, or another a C import's translation says (X20)
+fn (p Program&) ExternSymbol(f I64) String { return p.L.CSymbol(p.fns[f].Mi, p.T.Names.Text(p.fns[f].F.Name)) }
 # a declared type's declaration (null for an error type), and its context: its module and its variables by name
 fn (p Program&) TypeDecl(d types.DeclId) ast.TypeDecl?&p { return p.typeDecl(d) }
 fn (p mut Program&) DeclContext(d types.DeclId) Context { return p.declContext(d) }
@@ -3892,7 +3896,7 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
         return none, "only a struct and an enum's case have fields"
     }
     # M6a: a struct's private fields are its module's; an enum case's fields are read by any module that reads the case
-    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r)
+    own := p.T.DeclModule(p.T.DeclOf(r)) == mi or not p.isStructT(r) or p.L.Mods[p.T.DeclModule(p.T.DeclOf(r))].C
     for i in range ns.Len() {
         if own or p.text(ns[i])[0].IsUpper() { out.Push(i) }
     }

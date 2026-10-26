@@ -1,20 +1,21 @@
-# time - clocks. Ordinary olang on top of "extern fn" (§11), as io and os are: the C library's clock_gettime,
-# handed a timespec as the two words it is (X3).
+# time - clocks. Ordinary olang over the C library's time.h imported (§11 X17), as io and os are: clock_gettime, and
+# nanosleep for Sleep.
 #
 # Now() is the clock for measuring - how long something took, when a deadline falls: it counts nanoseconds from an
 # arbitrary start and never jumps, whatever is done to the system's date. Wall() is the date: nanoseconds since
 # 1970-01-01 00:00 UTC, which can jump when the system's clock is set, so it is for saying WHEN, never for HOW LONG.
 # Reading a clock is an effect, so neither is computed while compiling (K1): a global set from one is set at startup.
 
+import ctime "time.h"
+
 # Linux's clock ids
 clockRealtime I32 = 0
 clockMonotonic I32 = 1
-extern fn clock_gettime(clock I32, ts Array<I64>) I32
 
 fn read(clock I32) I64 {
-    ts := Array<I64>(2)
-    clock_gettime(clock, ts)
-    return ts[0] * 1000000000 + ts[1]
+    ts := ctime.timespec()
+    ctime.clock_gettime(clock, ts)
+    return ts.tv_sec * 1000000000 + ts.tv_nsec
 }
 
 # now on the monotonic clock, in nanoseconds from an arbitrary start - only differences between two readings mean
@@ -96,18 +97,19 @@ fn fraction(u U64, unit U64) String {
     return $whole "." $digits.ToString()
 }
 
-extern fn nanosleep(req Array<I64>, rem Array<I64>) I32
 
 # waits d, then returns: the thread sleeps, using no processor time. A negative or zero d returns at once. A signal
 # that interrupts the sleep does not shorten it - the rest is slept. Under "olang interpret", and while compiling
 # where a call is reached, it sleeps as at run time (an effect: a global set from one is set at startup)
 fn Sleep(d Duration) {
     if d <= 0 { return }
-    req := I64[I64(d) / 1000000000, I64(d) % 1000000000]
-    rem := Array<I64>(2)
-    for nanosleep(req, rem) != 0 {
-        req[0] = rem[0]
-        req[1] = rem[1]
+    req := ctime.timespec()
+    req.tv_sec = I64(d) / 1000000000
+    req.tv_nsec = I64(d) % 1000000000
+    rem := ctime.timespec()
+    for ctime.nanosleep(req, rem) != 0 {
+        req.tv_sec = rem.tv_sec
+        req.tv_nsec = rem.tv_nsec
     }
 }
 

@@ -4785,6 +4785,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     env := ""
     inst := ""
     isExtern := false
+    variadic := false
     match c.Target {
         case mir.Callee.Fn(k, fty) {
             fe.E.want(k)
@@ -4796,6 +4797,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
             ty = fty
             target = "@" $fe.E.extern(f, fty)
             isExtern = true
+            variadic = fe.E.P.FnDecl(f).S.Variadic
         }
         case mir.Callee.Value(x) {
             ty = fe.otype(x)
@@ -4814,7 +4816,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
         }
     }
     if isExtern and not target.StartsWith("@llvm.") {
-        fe.cCall(c, target, ty)
+        fe.cCall(c, target, ty, variadic)
         return
     }
     fe.E.signature(ty)
@@ -4935,7 +4937,7 @@ fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
 # an extern's name, declared with C's types (X1-X3)
 fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     t := e.T
-    name := $e.text(e.P.FnDecl(f).Name)
+    name := e.P.ExternSymbol(f)
     # X8: an exact C math function of its exact prototype is LLVM's intrinsic, an instruction where the target has one
     intr := e.mathIntrinsic(name, ty)
     if intr != "" {
@@ -4946,6 +4948,7 @@ fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     b := StringBuilder()
     b.Push($e.cHeader(ty) " @" $name "(")
     b.Push(e.cParamList(ty, name.StartsWith("__olang_")))
+    if e.P.FnDecl(f).S.Variadic { b.Push(", ..." if e.T.Items(e.T.Params(ty)).Len() > 0 else "...") }
     b.Push(")")
     # X8: any other C math function as C's default -fmath-errno declares it (it may write errno), and nobuiltin, so LLVM
     # never rewrites a call of it - the program calls exactly the function the evaluator called
@@ -5075,7 +5078,7 @@ fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime B
 }
 
 # a call of an extern (X1-X3, X11): each argument as C takes it, the result as C gives it, stored on the ok edge
-fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
+fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bool) {
     t := fe.E.T
     res := t.Result(ty)
     args := StringBuilder()
@@ -5113,8 +5116,10 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
         }
         xr := t.Referent(rp) if t.IsRef(rp) else rp
         if t.IsRef(rp) or t.KindOf(t.Repr(xr)) == types.Kind.Array {
+            # X3, X22: a pointer, made from what the argument is - an array's storage, a reference, null
             regs.Int--
-            args.Push(fe.externArg(fe.val(x, p), p))
+            ot := fe.otype(x)
+            args.Push(fe.externArg(fe.val(x, ot), ot))
             continue
         }
         fe.E.P.Layout(p)
@@ -5145,14 +5150,24 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
             }
         }
     }
+    # X21: the variable arguments, each at the type the checker promoted it to
+    for i in range ps.Len(), I64(c.Args.N) {
+        if not first { args.Push(", ") }
+        first = false
+        x := fe.arg(c.Args, i)
+        p := fe.otype(x)
+        args.Push(fe.externArg(fe.val(x, p), p))
+    }
     hdr := fe.E.cHeader(ty)
     rt := hdr
     if rw.Kind == cabi.Pass.Direct and rw.Attr != "" { rt = hdr[rw.Attr.Len() + 1:] }
+    callTy := hdr
+    if variadic { callTy = $hdr " (" $fe.E.cParamList(ty, false) $(", ..." if ps.Len() > 0 else "...") ")" }
     r := ""
     if hdr == "void" {
-        fe.w("call void " $target "(" $args.ToString() ")")
+        fe.w("call " $callTy " " $target "(" $args.ToString() ")")
     } else {
-        r = fe.let("call " $hdr " " $target "(" $args.ToString() ")")
+        r = fe.let("call " $callTy " " $target "(" $args.ToString() ")")
     }
     if res == types.NoreturnT {
         fe.w("unreachable")

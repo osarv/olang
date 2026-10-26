@@ -1580,14 +1580,30 @@ fn (v mut verifier&) calleeType(c Callee) types.TypeId {
     return ty
 }
 
+# whether a value of t crosses to C as a pointer (X3): a reference, an array, null
+fn (v verifier&) pointerLike(t types.TypeId) Bool {
+    k := v.T.KindOf(v.T.Repr(t))
+    return k == types.Kind.Ref or k == types.Kind.Array or k == types.Kind.Null
+}
+
 # a call's or a task's arguments and scopes against its callee's type
 fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     t := v.T
     ps := t.Items(t.Params(ty))
-    if ps.Len() != I64(args.N) {
+    isExtern := match c {
+        case Callee.Extern(_, _) => true
+        case _ => false
+    }
+    # X21: an extern's variable arguments after its parameters
+    if ps.Len() != I64(args.N) and not (isExtern and I64(args.N) > ps.Len()) {
         v.bad("a call of " $args.N " arguments to a function of " $ps.Len() " parameters")
     } else {
-        for i in range ps.Len() { v.want(v.operandType(v.arg(args, i)), ps[i], "argument " $i) }
+        for i in range ps.Len() {
+            at := v.operandType(v.arg(args, i))
+            # X22: a C pointer parameter takes any pointer the checker let through - an array's storage, a reference
+            if isExtern and v.pointerLike(ps[i]) and v.pointerLike(at) { continue }
+            v.want(at, ps[i], "argument " $i)
+        }
     }
     want := PassedCount(t, c, ty)
     if want != I64(scopes.N) { v.bad("a call passing " $scopes.N " scopes for its callee's " $want) }

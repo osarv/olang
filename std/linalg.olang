@@ -50,8 +50,8 @@
 # than a setting: a global the program can change would keep every product from being computed while compiling (K1).
 
 import "std/rand"
+import unistd "unistd.h"
 
-extern fn sysconf(name I32) I64
 
 # a shape that does not fit the operation - two operands of different shapes, a product whose inner dimensions differ
 type ShapeError error {
@@ -439,7 +439,7 @@ fn lesser(a I64, b I64) I64 { return a if a < b else b }
 # the number of cores the machine has online, from the C library (84 is glibc's _SC_NPROCESSORS_ONLN on Linux) - the
 # usual thread count for Gemm and ParallelRows
 fn Cores() I64 {
-    n := sysconf(84)
+    n := unistd.sysconf(84)
     return n if n > 0 else 1
 }
 

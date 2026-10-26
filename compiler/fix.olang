@@ -28,8 +28,8 @@ DrivenArg I64 = 3      # tools_NAME COMPILER FILE...
 ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
     "donefail_migrate", "syntax_migrate", "math_methods", "arrays_migrate", "results_migrate", "equality_migrate"
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
-    "try_migrate", "as_migrate", "errortype_migrate", "list_vec"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0]
+    "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate"]
+ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 

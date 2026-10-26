@@ -1,6 +1,6 @@
 
-# what checks/checks.olang appends to what bindgen wrote of the system's zlib.h, where there is one: a program using it
-link "z"
+# what checks/checks.olang appends to what bindgen wrote of the system's zlib.h, where there is one, its extern block
+# given the library: a program using it
 import "std/io"
 
 fn main() {

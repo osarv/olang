@@ -31,6 +31,10 @@ import "build"
 import "fmt"
 import "doc"
 import typecheck "check"
+import unistd "unistd.h"
+import syswait "sys/wait.h"
+import csignal "signal.h"
+import cpoll "poll.h"
 
 # ---- the analysis ----
 
@@ -55,6 +59,8 @@ fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, over
     f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names&cfg = source.Names()
     l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    l.Clang = $cfg.Clang
+    for x in cfg.CFlags() { l.CFlags.Push($x) }
     for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
     t0 := time.Now()
     l.Load(root)
@@ -693,6 +699,9 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             w.leaf(b, $"test " $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
         }
         case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }
+        case ast.Decl.ExternBlock(_, _, xs) {
+            for x in xs { w.decl(b, x, nm) }
+        }
         case _ { }
     }
 }
@@ -1141,46 +1150,38 @@ fn Log(text String&) {
     try io.PrintErr($"olang: " $text "\n") catch io.Error { }
 }
 
-extern fn fork() I32
-extern fn _exit(status I32) noreturn
-extern fn waitpid(pid I32, status Array<I32>, options I32) I32
-extern fn pipe(fds Array<I32>) I32
-extern fn close(fd I32) I32
-extern fn read(fd I32, buf Array<U8>, count I64) I64
-extern fn dup2(from I32, to I32) I32
-extern fn kill(pid I32, sig I32) I32
-extern fn poll(fds Array<I32>, n U64, timeout I32) I32
-extern fn signal(sig I32, handler I64) I64
+# signal.h's own signal takes a handler function, and SIG_IGN is a cast of 1 to one, which olang cannot write (X19)
+extern { fn signal(sig I32, handler I64) I64 }
 
 # a new process, a copy of this one: 0 in the child, the child's id in the parent, -1 where none can be made
-fn Fork() I32 { return fork() }
+fn Fork() I32 { return unistd.fork() }
 
 # this process ended at once - nothing flushed, no deferred code - as a forked child ends
-fn Exit(status I32) noreturn { _exit(status) }
+fn Exit(status I32) noreturn { unistd._exit(status) }
 
 # a pipe: its reading end and its writing end, -1 and -1 where none can be made
 fn Pipe() I32, I32 {
     fds := Array<I32>(2)
-    if pipe(fds) != 0 { return -1, -1 }
+    if unistd.pipe(fds) != 0 { return -1, -1 }
     return fds[0], fds[1]
 }
 
-fn CloseFd(fd I32) { if fd >= 0: close(fd) }
+fn CloseFd(fd I32) { if fd >= 0: unistd.close(fd) }
 
 # fd made a second name of to: the writing end of a child's own output, say
-fn Dup2(from I32, to I32) { dup2(from, to) }
+fn Dup2(from I32, to I32) { unistd.dup2(from, to) }
 
 # the process pid ended (SIGKILL) and waited for
 fn KillAndReap(pid I32) {
     if pid <= 0 { return }
-    kill(pid, 9)
+    csignal.kill(pid, 9)
     Reap(pid)
 }
 
 # the process pid waited for: the status it ended with (ExitStatus's), -1 where it cannot be
 fn Reap(pid I32) I32 {
     st := Array<I32>(1)
-    if waitpid(pid, st, 0) < 0 { return -1 }
+    if syswait.waitpid(pid, st, 0) < 0 { return -1 }
     return ExitStatus(st[0])
 }
 
@@ -1191,14 +1192,14 @@ fn IgnoreBrokenPipes() { signal(13, 1) }
 # milliseconds (-1 for as long as it takes): a Bool per descriptor
 fn Readable(fds Array<I32>&, timeout I32) Array<Bool> {
     n := fds.Len()
-    raw := Array<I32>(2 * n)
+    raw := Array<cpoll.pollfd>(n)
     for i in range n {
-        raw[2 * i] = fds[i]
-        raw[2 * i + 1] = 1        # POLLIN; the result's revents are this word's high half
+        raw[i].fd = fds[i]
+        raw[i].events = I16(cpoll.POLLIN)
     }
     out := Array<Bool>(n)
-    if poll(raw, U64(n), timeout) <= 0 { return out }
-    for i in range n { out[i] = ((raw[2 * i + 1] >> 16) & 0x19) != 0 }   # POLLIN, POLLERR, POLLHUP
+    if cpoll.poll(raw, U64(n), timeout) <= 0 { return out }
+    for i in range n { out[i] = (raw[i].revents & I16(cpoll.POLLIN | cpoll.POLLERR | cpoll.POLLHUP)) != 0 }
     return out
 }
 
@@ -1212,7 +1213,7 @@ type Reader struct(Fd I32) {
 # what the descriptor has, read once into the buffer (it may block): false at its end or on an error
 fn (r mut Reader&) Fill() Bool {
     chunk := Array<U8>(65536)
-    n := read(r.Fd, chunk, I64(chunk.Len()))
+    n := unistd.read(r.Fd, chunk, U64(chunk.Len()))
     if n <= 0 {
         r.Eof = true
         return false
@@ -1280,7 +1281,7 @@ fn WriteFramed(fd I32, body String&) {
 fn ChildOutput(work fn() String) String, I32 {
     rd, wr := Pipe()
     if rd < 0 { return work(), 0 }
-    pid := fork()
+    pid := unistd.fork()
     if pid < 0 {
         CloseFd(rd)
         CloseFd(wr)
@@ -1290,7 +1291,7 @@ fn ChildOutput(work fn() String) String, I32 {
         CloseFd(rd)
         Dup2(2, 1)
         try io.Write(wr, work()) catch io.Error { }
-        _exit(0)
+        unistd._exit(0)
     }
     CloseFd(wr)
     r := Reader(rd)
@@ -1303,11 +1304,11 @@ fn ChildOutput(work fn() String) String, I32 {
 # work run in a child process - a copy of this one - and waited for: the status it ends with, 128 and its signal where
 # one ends it. Where no process can be made, work runs here
 fn InChild(work fn() I32) I32 {
-    pid := fork()
+    pid := unistd.fork()
     if pid < 0 { return work() }
-    if pid == 0 { _exit(work()) }
+    if pid == 0 { unistd._exit(work()) }
     st := Array<I32>(1)
-    if waitpid(pid, st, 0) < 0 { return 1 }
+    if syswait.waitpid(pid, st, 0) < 0 { return 1 }
     return ExitStatus(st[0])
 }
 

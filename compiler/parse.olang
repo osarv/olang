@@ -122,6 +122,8 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # the tokens the formatter spaces as the grammar places them, by token index: each "(" grouping a function type in a
     # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17)
     TypeGroups Vec<I64>
+    variadicOk Bool = false            # an extern's parameters being read: "..." may end them (X21)
+    sawVariadic Bool = false
 }
 
 # ---- reading tokens ----
@@ -543,9 +545,11 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
             path := p.tk()
             p.advance()
+            # X9, X17: "link" after the path names the library a C header's declarations are in - a word only there
+            link := try p.linkClause()
             sp := p.from(at)
             try p.endStmt()
-            return ast.Decl.Import(sp, alias, source.Span(path.Start, path.End))
+            return ast.Decl.Import(sp, alias, source.Span(path.Start, path.End), link)
         }
         case token.Tok.Type { return try p.typeDecl() }
         case token.Tok.Fn {
@@ -562,12 +566,14 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
                 try p.endStmt()
                 return ast.Decl.Type(tsp, ast.TypeDecl(tname, Array<ast.TypeParam&>(0), false, ast.TypeBody.Foreign))
             }
-            try p.want(token.Tok.Fn)
-            name := try p.name()
-            s := try p.sig(false)
+            # X1, X9: "extern [link "name"] { ... }" - a block of declarations, of the library the link names
+            link := try p.linkClause()
+            if p.sees(token.Tok.LBrace) { return try p.externBlock(at, link) }
+            if link.End > I32(0) { try p.fail(token.Tok.LBrace.Describe()) }
+            f := try p.externFn(at)
             sp := p.from(at)
             try p.endStmt()
-            return ast.Decl.Extern(ast.Func(sp, null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
+            return ast.Decl.Extern(f)
         }
         case token.Tok.Test {
             p.advance()
@@ -579,15 +585,6 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         }
         case token.Tok.If { return try p.topIf() }
         case token.Tok.Iden {
-            # X9: link "name" - a contextual word, as a global's name is never followed by text
-            if p.text(p.tk()) == "link" and p.look(1) == token.Tok.StrLit {
-                p.advance()
-                lpath := p.tk()
-                p.advance()
-                lsp := p.from(at)
-                try p.endStmt()
-                return ast.Decl.Link(lsp, source.Span(lpath.Start, lpath.End))
-            }
             # X12: export fn - a contextual word too
             if p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn {
                 p.advance()
@@ -602,6 +599,52 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         nomatch { try p.fail("a declaration") }
     }
     unreachable
+}
+
+# "link "name"" after an import's path or "extern" (X9): the text's span, quotes included - (0, 0) where none is written
+fn (p mut Parser&) linkClause() source.Span ? Fail {
+    if not (p.sees(token.Tok.Iden) and p.text(p.tk()) == "link" and p.look(1) == token.Tok.StrLit) { return source.Span(0, 0) }
+    p.advance()
+    t := p.tk()
+    p.advance()
+    return source.Span(t.Start, t.End)
+}
+
+# "fn NAME(params) [result | noreturn]" after "extern", or in an extern block (X1): its parameters may end in "..." (X21)
+fn (p mut Parser&) externFn(at I32) ast.Func&p ? Fail {
+    try p.want(token.Tok.Fn)
+    name := try p.name()
+    p.variadicOk = true
+    s := try p.sig(false) catch {
+        p.variadicOk = false
+        error Fail.SYNTAX
+    }
+    p.variadicOk = false
+    return ast.Func(p.from(at), null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false)
+}
+
+# an extern block's "{" ... "}" (X1, X10): one declaration a line - "fn ..." or "type NAME"
+fn (p mut Parser&) externBlock(at I32, link source.Span) ast.Decl&p ? Fail {
+    try p.want(token.Tok.LBrace)
+    from := p.decls.Len()
+    p.skipEnds()
+    for not p.sees(token.Tok.RBrace) {
+        if p.sees(token.Tok.Eof) { try p.fail(token.Tok.RBrace.Describe()) }
+        dat := p.here()
+        if p.accept(token.Tok.Type) {
+            tname := try p.name()
+            p.decls.Push(ast.Decl.Type(p.from(dat), ast.TypeDecl(tname, Array<ast.TypeParam&>(0), false, ast.TypeBody.Foreign)))
+        } else if p.sees(token.Tok.Fn) {
+            p.decls.Push(ast.Decl.Extern(try p.externFn(dat)))
+        } else {
+            try p.fail("'fn' or 'type' - an extern block declares C's functions and types")
+        }
+        try p.endStmt()
+        p.skipEnds()
+    }
+    p.advance()
+    ds := gather(p.decls, from)
+    return ast.Decl.ExternBlock(p.from(at), link, ds)
 }
 
 # an entry of an enum, an error type or a trait: entries on one line are separated by ",", on different lines by the
@@ -922,7 +965,10 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
 fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.Sig&p ? Fail {
     one := value and p.item
     try p.want(token.Tok.LParen)
+    p.sawVariadic = false
     params := try p.params(lambda)
+    variadic := p.sawVariadic
+    p.sawVariadic = false
     k ast.ContractBlock?&p = null
     if named { k = try p.contractHere() }        # D17: a declaration's contract, right after its parameters
     results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
@@ -951,7 +997,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
     }
     errs := try p.errorSet(one)
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, k
-                   commutes)
+                   commutes, variadic)
 }
 
 # ---- contracts (D17) ----
@@ -966,7 +1012,7 @@ fn (p mut Parser&) contractHere() ast.ContractBlock?&p ? Fail {
 # s with a contract k, null for none
 fn (p mut Parser&) withContract(s ast.Sig&p, k ast.ContractBlock?&p) ast.Sig&p {
     if k is null { return s }
-    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes)
+    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, k, s.Commutes, s.Variadic)
 }
 
 fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
@@ -1069,7 +1115,15 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
     p.skip = false
     p.item = true
     defer { p.item = wasItem }
+    ok := p.variadicOk
+    p.variadicOk = false
     for not p.sees(token.Tok.RParen) {
+        # X21: "..." last, in an extern's list - the rest of the arguments C's variable ones
+        if ok and p.ellipsis() {
+            for k in range 3 { p.advance() }
+            p.sawVariadic = true
+            break
+        }
         p.prms.Push(try p.param(lambda))
         if not try p.sep(token.Tok.RParen) { break }
     }
@@ -1077,6 +1131,12 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
     p.brackets--
     try p.want(token.Tok.RParen)
     return gather(p.prms, from)
+}
+
+# whether "..." stands here: three dots, nothing between them
+fn (p Parser&) ellipsis() Bool {
+    if not p.sees(token.Tok.Dot) or p.look(1) != token.Tok.Dot or p.look(2) != token.Tok.Dot { return false }
+    return not p.lookTok(1).Has(token.Space) and not p.lookTok(2).Has(token.Space)
 }
 
 fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {

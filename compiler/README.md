@@ -45,7 +45,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
 | `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
 | `cabi.olang` | the C calling conventions (X11): how a plain-data struct crosses to C by value on x86-64 (System V) and AArch64 (AAPCS64), as clang passes it |
-| `bindgen.olang` | `olang bindgen HEADER.h` (X16): a C header's declarations written as olang's, from the tree clang dumps of it |
+| `bindgen.olang` | a C import translated (X17-X19: the declarations clang reads, macros, the C to compile beside), and `olang bindgen HEADER.h` (X16) writing them down |
 | `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |

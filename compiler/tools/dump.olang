@@ -451,11 +451,13 @@ fn (w mut walker&) decl(d ast.Decl&) {
         case ast.Decl.Global(sp, v) {
             if not w.skipped(sp.Start) { w.vars(v) }
         }
-        case ast.Decl.Import(sp, _, _) {
+        case ast.Decl.Import(sp, _, _, _) {
             if not w.skipped(sp.Start) { w.line("IMPORT", sp) }
         }
-        case ast.Decl.Link(sp, _) {
-            if not w.skipped(sp.Start) { w.line("LINK", sp) }
+        case ast.Decl.ExternBlock(sp, _, ds) {
+            if w.skipped(sp.Start) { return }
+            w.line("EXTERNS", sp)
+            for x in ds { w.decl(x) }
         }
         case ast.Decl.Errors(sp, _, _, _) {
             if not w.skipped(sp.Start) { w.line("ERRORS", sp) }

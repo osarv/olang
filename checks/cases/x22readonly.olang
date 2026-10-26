@@ -1,0 +1,9 @@
+# check: fail error[X22]: C may write through this pointer
+# X22: a "mut CVoid?&" parameter (C's "void *") takes only what may be written
+import c "string.h"
+
+G Array<U8> = Array<U8>(8)
+
+fn fill(a Array<U8>&) { c.memset(a, 0, 8) }
+
+fn main() { fill(G) }

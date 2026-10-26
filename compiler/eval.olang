@@ -106,7 +106,8 @@ WhyNotModelled String& = "it uses a value compile-time evaluation does not model
 WhyPayload String& = "it reads the payload of a case the value does not hold"
 WhyLong String& = "it makes an array longer than the evaluator holds"
 WhyFfiFind String& = "it calls an external function -i cannot find in this process"
-WhyFfiPass String& = "it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers"
+WhyFfiPass String& = "it calls an external function with a parameter or result interpret cannot pass - only numbers, Bools, arrays and structs of numbers, and pointers C gave"
+WhyForeign String& = "it reads through a pointer C gave, which only C may read"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
 
@@ -378,6 +379,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     codeOf Map<mir.FnKey, I64>
     codeAllocs Vec<I64>         # by codeKeys' index: its code allocation, 0 until asked
     externs Map<I64, String&>
+    variadic Map<I64, I64>          # a variadic extern's named parameters (X21)
     externCode Map<I64, I64>     # an extern's code allocation
     dtors Map<types.TypeId, mir.FnKey>
     # T32: each run-time trait value's table by its index - its instance's type and its words' functions - and the
@@ -764,7 +766,10 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
 }
 
 # an extern (X1), by generic.Program's function index, as the linker names it
-fn (m mut Machine&) DefineExtern(f I64, name String&) { m.externs.Put(f, $name) }
+fn (m mut Machine&) DefineExtern(f I64, name String&, fixed I64 = -1) {
+    m.externs.Put(f, $name)
+    if fixed >= 0 { m.variadic.Put(f, fixed) }
+}
 
 # the destructor of a type (C7): a function of one parameter, a reference to the instance, run when its scope closes
 fn (m mut Machine&) DefineDestructor(t types.TypeId, k mir.FnKey) { m.dtors.Put(t, k) }
@@ -1179,6 +1184,10 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
     if m.halted { return -1 }
     if p.Id == 0 {
         m.refuse(WhyNull)
+        return -1
+    }
+    if p.Id == ForeignId {
+        m.refuse(WhyForeign)
         return -1
     }
     slot := p.Id & slotMask
@@ -4001,7 +4010,11 @@ fn (m mut Machine&) genOver(fi I64, callee I64, c mir.Callee, ret I64, retArg I6
     m.jump(fi, call.Err)
 }
 
-# an extern called now (X1, X8, B3e): its arguments marshalled for the dynamic call, its result stored at dst
+# an extern called now (X1, X8, B3e): its arguments marshalled for the dynamic call, its result stored at dst. Each
+# argument is passed by what it is: a number or a Bool as one word; an array of numbers - or of plain structs of
+# numbers, as their bytes - by a pointer to a copy of its elements, written back after the call; a reference to such a
+# struct likewise; a pointer C gave (an extern type's reference, X10, X22) as itself; null as a null pointer. A
+# variable argument (X21) is passed as its own type says, the call prepared as C's variadic one
 fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, dst Ptr, hasDst Bool) Bool {
     f := m.fnOfFrame(fi)
     name := try m.externs.Get(e) catch {
@@ -4017,63 +4030,99 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
     if m.When == Mode.Run and m.waitsForTask(name) { return false }
-    # the dynamic call passes numbers, Bools and arrays of numbers; a struct or an extern type's reference (X10, X11)
-    # it cannot, so a call passing one is refused rather than guessed at
-    if not m.ffiScalar(res, true) {
+    foreignRes := m.foreignRef(res)
+    if not m.ffiScalar(res, true) and not foreignRes {
         m.refuse(WhyFfiPass)
         return false
     }
-    for p in ps {
-        if m.ffiScalar(p, false) or ((m.shape(p) == vPair or m.shape(p) == vFixed) and m.ffiScalar(m.elemOf(p), false)) { continue }
-        m.refuse(WhyFfiPass)
-        return false
-    }
-    kinds := Array<U8>(ps.Len())
-    nulls := Array<Bool>(ps.Len())
+    n := I64(args.N)
+    kinds := Array<U8>(n)
+    datas := Array<Ptr>(n)
+    sizes := Array<I64>(n)          # an argument passed by its bytes: how many; -1 for one passed as a word
+    words1 := Array<U64>(n)         # a word argument's word
     nwords I64 = 0
-    for i in range ps.Len() {
-        if m.shape(ps[i]) == vPair or m.shape(ps[i]) == vFixed {
-            ax := f.Ops[I64(args.At) + i]
-            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
+    for i in range n {
+        x := f.Ops[I64(args.At) + i]
+        pt := ps[i] if i < ps.Len() else m.opType(fi, x)
+        sizes[i] = -1
+        if m.ffiScalar(pt, false) {
+            kinds[i] = ffi.Code(m.ffiKind(pt))
+            v := U64(m.scalar(fi, x))
+            if m.shape(pt) == vInt { v = U64(m.intValue(I64(v), pt)) }
+            words1[i] = v
+            nwords++
+            continue
+        }
+        ot := m.opType(fi, x)
+        sh := m.shape(ot)
+        if sh == vPair or sh == vFixed {
+            data, k := m.arrayView(m.addr(fi, x, 1), ot)
+            el := m.elemOf(ot)
             if data.Id == 0 {
                 # a null array reference: the null pointer the built program passes (X3), as a word
-                nulls[i] = true
-                nwords++
                 kinds[i] = ffi.Code(ffi.Kind.U64)
+                nwords++
                 continue
             }
-            nwords += 1 + ffi.WordsFor(n * m.size(m.elemOf(ps[i])))
-            kinds[i] = ffi.ArrayOf(m.ffiKind(m.elemOf(ps[i])))
-        } else {
-            nwords++
-            kinds[i] = ffi.Code(m.ffiKind(ps[i]))
+            if m.ffiScalar(el, false) {
+                kinds[i] = ffi.ArrayOf(m.ffiKind(el))
+            } else if m.numbersOnly(el) {
+                kinds[i] = ffi.ArrayOf(ffi.Kind.U8)
+            } else {
+                m.refuse(WhyFfiPass)
+                return false
+            }
+            datas[i] = data
+            sizes[i] = k * m.size(el)
+            nwords += 1 + ffi.WordsFor(sizes[i])
+            continue
         }
+        if sh == vPtr {
+            q := m.rdPtrOrBits(m.addr(fi, x, 1))
+            kinds[i] = ffi.Code(ffi.Kind.U64)
+            if q.Id == 0 and q.Off == 0 {
+                words1[i] = 0
+                nwords++
+                continue
+            }
+            if q.Id == ForeignId {
+                words1[i] = U64(q.Off)
+                nwords++
+                continue
+            }
+            rt := t.Referent(t.Repr(ot))
+            if q.Id != 0 and m.numbersOnly(rt) {
+                kinds[i] = ffi.ArrayOf(ffi.Kind.U8)
+                datas[i] = q
+                sizes[i] = m.size(rt)
+                nwords += 1 + ffi.WordsFor(sizes[i])
+                continue
+            }
+        }
+        m.refuse(WhyFfiPass)
+        return false
     }
     if m.halted { return false }
     words := Array<U64>(nwords)
     w I64 = 0
-    for i in range ps.Len() {
-        x := f.Ops[I64(args.At) + i]
-        if kinds[i] >= 0x80 {
-            data, n := m.arrayView(m.addr(fi, x, 1), m.opType(fi, x))
-            bytes := n * m.size(m.elemOf(ps[i]))
-            words[w] = U64(n)
+    for i in range n {
+        if sizes[i] >= 0 {
+            data := datas[i]
+            bytes := sizes[i]
+            words[w] = U64(bytes) if kinds[i] == ffi.ArrayOf(ffi.Kind.U8) else U64(bytes / m.kindWidth(kinds[i]))
             for b in range bytes {
                 v := U64(m.rd(Ptr(data.Id, data.Off + b), 1))
                 words[w + 1 + b / 8] = words[w + 1 + b / 8] | (v << (U64(b % 8) * 8))
             }
             w += 1 + ffi.WordsFor(bytes)
-        } else if nulls[i] {
-            words[w] = 0
-            w++
         } else {
-            words[w] = U64(m.scalar(fi, x))
-            if m.shape(ps[i]) == vInt { words[w] = U64(m.intValue(I64(words[w]), ps[i])) }
+            words[w] = words1[i]
             w++
         }
     }
-    rk := U8(0) if res == types.VoidT else ffi.Code(m.ffiKind(res))
-    out := try ffi.Call(name, kinds, words, rk) catch ffi.Error.NOT_FOUND {
+    rk := U8(0) if res == types.VoidT or res == types.NoreturnT else ffi.Code(ffi.Kind.U64) if foreignRes else ffi.Code(m.ffiKind(res))
+    fixed := try m.variadic.Get(e) catch default -1
+    out := try ffi.Call(name, kinds, words, rk, fixed) catch ffi.Error.NOT_FOUND {
         m.refuse(WhyFfiFind)
         return false
     } catch {
@@ -4081,13 +4130,12 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         return false
     }
     m.lastErr = __olang_err()    # what the call left in errno, before the evaluator's own work can change it (X6)
-    # what the function wrote into an array is copied back into its storage
+    # what the function wrote into an array or a struct is copied back into its storage
     w = 0
-    for i in range ps.Len() {
-        if kinds[i] >= 0x80 {
-            ax := f.Ops[I64(args.At) + i]
-            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
-            bytes := n * m.size(m.elemOf(ps[i]))
+    for i in range n {
+        if sizes[i] >= 0 {
+            data := datas[i]
+            bytes := sizes[i]
             if m.al[data.Id & slotMask].ReadOnly == false {
                 for b in range bytes {
                     m.wr(Ptr(data.Id, data.Off + b), 1, I64((words[w + 1 + b / 8] >> (U64(b % 8) * 8)) & 0xFF))
@@ -4098,24 +4146,65 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
             w++
         }
     }
-    if hasDst and res != types.VoidT { m.wr(dst, m.width(res), I64(out)) }
+    if hasDst and foreignRes {
+        m.wrPtr(dst, NullPtr if out == 0 else Ptr(ForeignId, I64(out)))
+    } else if hasDst and res != types.VoidT and res != types.NoreturnT {
+        m.wr(dst, m.width(res), I64(out))
+    }
     return not m.halted
+}
+
+# a pointer C gave: its address, with no storage of the machine's behind it - read through, it stops evaluation
+ForeignId I64 = slotMask
+
+# whether ty is a reference only C can give - to an extern type (X10): held, compared and passed back, never read
+fn (m mut Machine&) foreignRef(ty types.TypeId) Bool {
+    t := m.T
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Ref { return false }
+    x := t.Repr(t.Referent(r))
+    return t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Foreign
+}
+
+# whether a value of ty is numbers alone, as bytes C may read and write: a number, a Bool, or a struct or fixed array of
+# them
+fn (m mut Machine&) numbersOnly(ty types.TypeId) Bool {
+    if m.ffiScalar(ty, false) { return true }
+    sh := m.shape(ty)
+    if sh == vFixed { return m.numbersOnly(m.elemOf(ty)) }
+    if sh != vAgg { return false }
+    for p in m.T.Items(m.partList(ty)) {
+        if not m.numbersOnly(p) { return false }
+    }
+    return true
+}
+
+# the bytes one element of an array kind takes
+fn (m mut Machine&) kindWidth(k U8) I64 {
+    return match k & 0x7F {
+        case 1, 5 => 1
+        case 2, 6, 9, 10 => 2
+        case 3, 7, 11 => 4
+        nomatch => 8
+    }
 }
 
 # ---- the runtime's own functions (X6, B3f) ----
 
 # the runtime's functions live in the program built, and are this process's own here: -i calls them itself, over the
 # interpreted program's command line (Args) - each array argument copied in and out as an extern's is
-extern fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_err() I32
-extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
-extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
-extern fn __olang_mkdtemp(template Array<U8>) I32
-extern fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
-extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
-extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+extern {
+    fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_err() I32
+    fn __olang_stat(path Array<U8>, out Array<I64>) I32
+    fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+    fn __olang_mkdtemp(template Array<U8>) I32
+    fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
+    fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+    fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+}
 
 fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
     f := m.fnOfFrame(fi)

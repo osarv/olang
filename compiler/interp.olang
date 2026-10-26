@@ -26,12 +26,9 @@ import "views"
 import "lower"
 import "scope"
 import "eval"
+import dlfcn "dlfcn.h"
 
 # ---- the libraries a program links (X9), for interpret ----
-
-extern type dlHandle
-extern fn dlopen(path Array<U8>, flags I32) dlHandle?&
-extern fn dlerror() CStr?&
 
 # loads what a link names - "-lNAME" its shared library, else the file - into this process with its symbols global
 # (RTLD_NOW | RTLD_GLOBAL), so the externs interpret calls find it as the linked program would: "" when it is loaded,
@@ -39,8 +36,8 @@ extern fn dlerror() CStr?&
 fn LoadLibrary(link String&) String {
     path := $("lib" $link[2:] ".so") if link.StartsWith("-l") else $link
     if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
-    if dlopen(path.ToC(), 258) is not null { return "" }
-    e := dlerror()
+    if dlfcn.dlopen(path.ToC(), 258) is not null { return "" }
+    e := dlfcn.dlerror()
     return e.StringFromC(400) if e is not null else "dlopen failed"
 }
 
@@ -784,7 +781,8 @@ fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
         case mir.Callee.Extern(e, _) {
             if not x.externs.Has(e) {
                 x.externs.Put(e, true)
-                x.M.DefineExtern(e, x.P.T.Names.Text(x.P.FnDecl(e).Name))
+                fd := x.P.FnDecl(e)
+                x.M.DefineExtern(e, x.P.ExternSymbol(e), fd.S.Params.Len() if fd.S.Variadic else -1)
             }
         }
         case mir.Callee.Value(_), mir.Callee.Dispatch(_, _, _) { }
