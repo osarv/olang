@@ -1489,7 +1489,7 @@ de1ba308ee01c692 0920f7f0d746f430 checks/fixtures/embed/leaks.olang
 78178d02de755613 7e1ba02a26bd95f3 checks/fixtures/frameenv/envcheck.olang
 e54ca58242997e4a 0407a82a9886ca4c checks/fixtures/frameenv/frameescapes.olang
 18ba22597cce9843 86197eac35f95f20 checks/fixtures/frameenv/frameonly.olang
-8b98c9f7e325857c 93fab866fe55dbc8 checks/fixtures/generators/exits.olang
+71ad69a561d91afc f0db583b9873f1ee checks/fixtures/generators/exits.olang
 00bf4d97fbad47e3 29b1d8e90734707b checks/fixtures/generators/exitst.olang
 e41a875a31aff136 932168878ba16596 checks/fixtures/generators/reentry.olang
 2e5252d5d51b15f5 0b889d6216be977e checks/fixtures/generators/reentryt.olang
@@ -1734,7 +1734,7 @@ a8340f11ffab3b8e 6ad8450d6559a0f0 fuzz/repro/scopectornested.olang
 81912b49e7a97b81 3fac9133505c06d1 fuzz/repro/scopepayloadcopy.olang
 1108f0db76d54b21 57efd31c8d1606e4 fuzz/repro/trygenericindex.olang
 a50a05dbfa9f2c6a fd4ecaaf9906e12f fuzz/repro/trystmtarg.olang
-f706d93123015008 22a7428e329041ee fuzz/scopegen.olang
+5ebd9cb78541e25d fd28175f30c672ea fuzz/scopegen.olang
 303993320c25d55e 3afe5df069864b28 std/arith.olang
 112cb47010851a96 702cd33d2ac052b8 std/base64.olang
 bdfb3f217b7eadd9 d7949c4ecec653c5 std/cancel.olang
