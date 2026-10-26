@@ -1393,3 +1393,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   remembers failures; everywhere else a catch decides at once. Recommended: no Result in std now - such code declares a
   two-case generic enum in one line (`type Fetched<T> enum { Ok(v T)  Failed(e ParseError) }`), and std adds one only if
   many programs write the same; std APIs never return one (errors are errors). In effect: not built.
+- QBI CLOSED 2026-10-26 (the user: "forget about result. It's closed"): no Result in std or the language; code that
+  needs a value-or-error in one slot declares its own two-case enum.
