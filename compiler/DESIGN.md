@@ -1404,7 +1404,8 @@ Notes on the schedule:
 - **`io`, `filepath`, `os`:** `io.Writer` (buffered), `io.Lines`, the whole of `filepath`; `os.Args`, `Env`, `Exit`,
   `IsTerminal`, `Exec` (no shell, output captured in memory files), file reading and writing, `Stat` with nanosecond
   times, and the directory and path calls (`MkDirAll`, `Rename`, `ReadLink`, `RealPath`, `ReadDir`, ...).
-- **Collections and text:** `List` (indexing, `Pop`, `Sort`, `RunFrom`), `Map` (`Update`, `Keys`), `StringBuilder`,
+- **Collections and text:** `Vec` (indexing, `Pop`, `Sort`, `View`; the compiler's lists are Vecs since QZ2 - `List`,
+  which never moves what it stores, is `std/list` and the compiler uses none), `Map` (`Update`, `Keys`), `StringBuilder`,
   `Find`, `Split`, `Trim`, `PadStart`, `ParseInt`/`ParseUint` in any base (base 0 reads an olang literal, as L10 needs),
   exact `ParseFloat` and `ShortestDecimal`, and `x.Bits()` with the `FromBits` methods for float constants in IR.
 - **Other modules and features:** the prelude's number methods (X8's libm, which the evaluator calls), `std/time`, `std/chan`; recursive

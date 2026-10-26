@@ -25070,3 +25070,76 @@ inlines them already). **Elsewhere**, idle loop scopes cut instructions (callgri
 0.57M; three rose from LLVM taking other unrolling decisions with the closes gone - mandelbrot +18% (its escape loop
 no longer unrolled by five; time level, 0.63 s against 0.67 s), sha256 +2.3%, k-nucleotide +0.7% (times within
 noise). Test: tests/generators.olang, walks holding no scope and walks holding one, stopped part way, a thousand times.
+
+## The prelude's collections: List to std/list, the helpers and StringBuilder onto Vec (QZ2, M19d, 2026-10-26)
+
+**The decision** (the user, 2026-10-17, QZ2, after asking why List, Map and Vec were in the prelude when Array is the
+one built in): the prelude holds the built-in types' methods, the protocol traits and errors, and three collections -
+`Vec` (the growable array), `Map` and `StringBuilder`; `String` and `Array` are built in. `List` and every other
+container go to std (`std/list`, `std/pair` before it, set, deque, heap). The iterator helpers and StringBuilder move
+onto Vec. It waited on Vec being an ordinary value - a type argument, a field, in tasks and lambdas - which memory round
+1 made it (a handle, 2026-10-17); checked before starting: `Vec<Vec<I64>>`, `Map<I64, Vec<I64>>`, a struct's Vec field, a
+Vec handed to two tasks and one captured by a lambda all work, refused and accepted exactly where a List is.
+
+**What moved.** `std/prelude/list.olang` is `std/list.olang` (`import "std/list"`, `list.List<T>`), its tests
+(`std/prelude/tests/list.olang`) merged into it under `if TestBuild`. The std naming rule renamed its other names:
+`ListError` is `list.Error`, `ListIter` is `list.Iter`. A prelude method may not build a List any more, so the ones
+that did changed: an iterator's `Map` and `Filter` build a `Vec`, `ToList()` is `ToVec()` (an array's and an
+iterator's), and `list.Of(a)` / `list.From(it)` make a List of an array or of an iterator's values (`set.Of`'s
+spelling); `ListIter`'s own `Map`/`Filter` overrides build a Vec too, as an override must match the default (M19e).
+`StringBuilder` holds a `Vec<Char>`; the float printer's digit pieces are a `Vec<U64>`. `std/json` imports std/list to
+encode and decode a `list.List` as it does a Vec.
+
+**What became Vec.** `tools/list_vec.olang --vec` rewrote every file but the ones where a List is the point: the
+compiler entirely (34 files - it uses no List now), std but json and std/list, the corpus, tools, fuzz, bench's driver,
+and the checks - 2,302 of the 2,484 `List<` written in `.olang` files at e5106da, in 314 of 349 files; strings holding
+programs or expected renderings (`"List<I64>[1, 2]"` is `"Vec<I64>[1, 2]"` now) by hand, the differential fuzzer's and
+the scope fuzzer's generated programs included (the fuzzer's walk of a List's runs became a walk of a Vec's view).
+**Kept on List** (the tool's default mode, which qualifies and imports): the benchmarks that measure a List (bench/sum
+and bench/vec's List rows, bench/repro/list_sum), and the checks about a List's own behaviour - listloop (S9f's run walk),
+o17handlewalk (RunFrom), rv7o2forparam (a ListIter), derivedhelpercount (an over-rejection through ListIter's field, with
+a Vec twin added, derivedhelpercountvec, refused by O17 instead), strheld/lambdaany (a Str calling ListIter's Some) - and
+vec.olang's test of a Vec held in a List.
+
+**Decided (mine).**
+1. `std/list` vacates nothing. `vacate` (O8d's "the prelude says what it lets go of") stays the prelude's, since std's
+   rule is that no module has a privilege the language does not give, and std's other containers (deque, heap) never
+   had it. So a List's removals let nothing go early; a position past its end may still hold what was there, and what
+   its removals take out is reclaimed with the list's scope. Granting std/list the prelude's trust - an unchecked claim
+   early freeing relies on - was the other way, and the one to take if a long-lived List's removals turn out to matter.
+2. The spellings: `list.Of(a)` and `list.From(it)` (Set's `set.Of`), `list.Error`, `list.Iter` (Rust's `vec::Iter`
+   beside a method `Iter()`), `a.ToVec()` / `it.ToVec()`.
+3. `tools/list_vec.olang` keeps a List by default - qualified, imported - and is the last text tool of `olang fix`: that
+   changes nothing a program computes or prints. `--vec` moves code onto Vec (what this repository was migrated with);
+   either way what the text cannot settle is listed as `by hand:` (a `ToList()` in the default mode, whose receiver may
+   be an array or an iterator; `ListIter` and `RunFrom` with `--vec`; a name `list` beside the new import, M20; `List<`
+   in a string).
+4. Which uses stay List: only where its properties are what is tested or measured. Nothing in the compiler, std or
+   tools needs a List's stable element addresses or its no-copy growth.
+
+**Found on the way, pre-existing, fixed.** A `Vec` of `any` values (`Vec<any Shape&>`) or of possibly-null references
+(`Vec<Node?&>`) could not grow: Vec's growth and removals move elements with the prelude's `p.vacate()`, and the method
+call path read it as a call through the element - an `any`'s table (T32b, "has no method 'vacate'") or a reference that
+may be null (T2c). `vacate` takes the place itself and reads nothing through it, so neither applies now
+(check.methodCall). A List's growth never vacated, which is why nothing had met it; the compiler's own source holds
+`Vec<typed.Expr?&>`, so the seed was regenerated with the fix before those lists became Vecs (they were a List for one
+commit). And `$` of a `Vec<Char>` aborted with "unreachable reached": an array of Char renders as text, so Vec's Str
+found no `[` to put the type before - it writes each element as a character literal now, as List's Str did.
+
+**Recorded limit.** A Str whose receiver holds a `Vec<String&>` and that calls an iterator helper with a callback over
+it (`it.tags.Iter().Some(f)`) is refused (E11c, O12: the callback, a body not known there, is handed elements living
+where the receiver does). The same helper written by hand over a List is refused too; ListIter's own `Some` override let
+the one shape through. A `for` loop over the Vec compiles, and a Vec of numbers is not affected.
+
+**Measured.** Instruction counts (callgrind, `-target x86-64-v3`, bench programs at small sizes, outputs identical): every
+row within 0.01% but those whose code moved from List to Vec - `dispatch: any Shape&` +1.55% (`List<any Shape&>` became
+`Vec<any Shape&>`), regex +0.80% and text +1.06% (StringBuilder: a Vec's new buffer is filled before the elements are
+copied in, so a doubling sets twice the bytes a List's new chunk did - memset 3.5M -> 5.6M in text), `dispatch: enum`
++0.08%. The rows that measure a List kept it and did not move. Building the compiler from nothing (no objects, -O3 + LTO,
+twice interleaved): 52.1 s -> 43.6 s wall, 181.5 s -> 150.9 s of CPU, peak 1.72 GB -> 1.67 GB - the Vec code the
+compiler's 1,500 lists instantiate is smaller than the List code (the seed went 5.8 MB -> 5.5 MB). Bootstrap fixed point
+reached (stage 2 == stage 3). **QF**: `checks/fixtures/earlyfree/mapvec.olang`, a Map whose Vec values are replaced and
+removed a million times, runs under 8 MB built (1.9 MB peak) and agrees interpreted; a Map of Vecs grew to 131 MB (and of
+Lists 198 MB) when each new Vec was first named by a local declared in the Map's scope (`v mut Vec<I64>&m = ...`) - early
+freeing finds no place made for it then - while a Vec made by a function and handed to `Put` is freed when replaced:
+recorded with the fixture.

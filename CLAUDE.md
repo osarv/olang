@@ -932,6 +932,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `$` of a `Vec<Char>` aborted (an array of Char renders as text, so Vec's Str found no `[`). Recorded limit: a
   callback handed elements holding references from a Str's receiver (`it.tags.Iter().Some(f)` over a `Vec<String&>`)
   is refused as building where the receiver lives (E11c); ListIter's own Some had let it through; a `for` loop compiles.
+  QF: a Map whose Vec values are replaced and removed stays flat (checks' earlyfree `mapvec`, under 8 MB for a million
+  replacements) where each Vec is made by a call handed to `Put`; one first named by a local in the Map's scope (`v mut
+  Vec<I64>&m = ...`) is kept until that scope closes (131 MB) - a recorded limit of early freeing.
 - **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,
   `Clone()` a Vec of its own; it is a type argument, field, global, capture or task argument like any value. Growth
