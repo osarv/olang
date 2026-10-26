@@ -1426,3 +1426,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   referent does, O14's `T&p`), checked by section 8 as any borrowed result; a reference to something the generator
   builds stays refused (it would live as long as the walk). Queued after generator frame elision merges (same code).
   Answered too: a function's result may already name an argument's scope (`fn first(l List<T>&) T&l`, `Trim() String&t`).
+- QBB extended, ASKED 2026-10-26 (the user: "if the internal thing is built on a scope that survived the whole walk,
+  that should be fine too no?"): yes, sound - a generator may also yield references into storage its own frame holds
+  (built before or during the walk), living where the generator lives; spelled `Iterator<T&return>` (the result scope
+  is where the generator lands); a consumer cannot keep one past the walk (section 8). Costs stated: what the frame
+  builds accumulates until the walk ends (no per-turn reclaim), and storage the generator reuses (a line buffer) makes
+  an earlier view read different data later - memory-safe, as a Vec view after growth. Recommended: allow, yielded
+  views read-only. In effect: borrows of inputs only (QBB as decided).
