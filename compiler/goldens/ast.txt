@@ -1428,7 +1428,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 be8ad4d232250c0f 27a643a2486a0b88 checks/cases/zeroeffect.olang
 be1f342e8f9179a1 b897660d40972e4d checks/cases/zerofails.olang
 cac538143f451671 cda792d8be3df98a checks/cases/zeroshared.olang
-eb1716f65c57f190 e9ff8afcd9c5e3f1 checks/checks.olang
+11b14c083e0d5cd4 6f83cfd6aaf382fe checks/checks.olang
 065c0b56cd69d56d 75eaa027a77b1e8a checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -1495,6 +1495,8 @@ de1ba308ee01c692 89d859cff07d7b99 checks/fixtures/embed/leaks.olang
 78178d02de755613 0f306444977c5cec checks/fixtures/frameenv/envcheck.olang
 e54ca58242997e4a 5f538a8513ff5f8f checks/fixtures/frameenv/frameescapes.olang
 18ba22597cce9843 1736cc7fb7b23c39 checks/fixtures/frameenv/frameonly.olang
+71ad69a561d91afc c0bf7f70720280ba checks/fixtures/generators/exits.olang
+00bf4d97fbad47e3 6a4abbb4762ff62a checks/fixtures/generators/exitst.olang
 e41a875a31aff136 a84ab8af1ed79355 checks/fixtures/generators/reentry.olang
 2e5252d5d51b15f5 3b9a8ff125be10cd checks/fixtures/generators/reentryt.olang
 6595753abd3c7b63 16ae222dee2c999c checks/fixtures/generators/walks.olang
@@ -1649,12 +1651,12 @@ c1c94c0916b6a08a e643c976349620ce compiler/ast.olang
 9fb0dcb9630871ef 0cf0c6064655241c compiler/bindgen.olang
 9d6e50d142371b14 0764739a592a5650 compiler/build.olang
 d50ecaa48f15486a 2c5bacc565f6d60b compiler/cabi.olang
-c80bcb2a99217db4 1eb4e23fba8e379e compiler/check.olang
+4e976dc056794d13 78811e2d54658238 compiler/check.olang
 f4a40c018a037bcb 62e01bf96ca63187 compiler/cond.olang
 4713a776658f0252 30ef0fca2b7f3e1a compiler/definit.olang
 389d021e31b99c3f 3ec30da5c486682a compiler/diag.olang
 fa28e21495997446 5f57033aa639daf8 compiler/doc.olang
-c5d67317cfe29c4f afe1ec1f6bb9e81d compiler/emit.olang
+4702196381ffe6c8 a9df1fc2dbb1b799 compiler/emit.olang
 fe8ce0ee664f747f 566e6505b5499eec compiler/eval.olang
 eb3a4f879fe35b4b cd828c4bc2d07bea compiler/explain.olang
 7563c71482b39f4d c5744730614b924c compiler/fetch.olang
@@ -1664,10 +1666,10 @@ cfa80a457e40365c 3250cf80292d79c5 compiler/fmt.olang
 1c9bfed4a3e2aa4c 5b31c5e78532ff53 compiler/generic.olang
 03d5ff1550c17976 86e1c2dee6df9819 compiler/interp.olang
 44e96f23fcbb39d0 e9f613d37b3af4c5 compiler/load.olang
-6a54ae1216f69869 656985f07ffb6e65 compiler/lower.olang
+4adbd89ea2a9828c c9aee291b5a9c8b7 compiler/lower.olang
 27a0e7093f16f7bc 9c6829f04031407c compiler/lsp.olang
 1bb1f9a0522a85d5 27762324e7d60b67 compiler/mcp.olang
-3cfb35656553f5c5 6ede85391bb95744 compiler/mir.olang
+f44a922153ab58e7 b8a2f71bf419cff5 compiler/mir.olang
 93eacf2c6bf8325b 6067c2f3fad12e6a compiler/msgs.olang
 ef4617b3f94dde30 788187eff7fea512 compiler/names.olang
 1ec02ca30088a212 e4da073433322728 compiler/olang.olang
@@ -1717,7 +1719,7 @@ e5fce6f615d82a42 168c4f6ed1e9d071 compiler/tools/layoutgold.olang
 2776b3eca009e6ec 8218c615dc5bd96c compiler/tools/seed.olang
 035463adc6e23aef 23b05a06ae7cd291 compiler/tools/tokdiff.olang
 3fd972ce8b4f9b6d 896ecb48581ae83a compiler/tools/toolkit.olang
-94bcc670e7347719 06a2a87fbe3b1078 compiler/typed.olang
+4897c2c619b2f1d6 25f46b0d0130f83b compiler/typed.olang
 f1a66a4afdfb3f7c c3614a057a4fd317 compiler/types.olang
 d10c8a9ac2ea2dad 709240ef9c6bebc5 compiler/unparse.olang
 4a6a15448dad8cb3 457469d339d70a06 compiler/views.olang
@@ -1741,7 +1743,7 @@ a8340f11ffab3b8e 98d4dbbf4208d4df fuzz/repro/scopectornested.olang
 81912b49e7a97b81 328f95713566caa8 fuzz/repro/scopepayloadcopy.olang
 1108f0db76d54b21 225829a0ca4718da fuzz/repro/trygenericindex.olang
 a50a05dbfa9f2c6a c5e5e13bc2e016f7 fuzz/repro/trystmtarg.olang
-f706d93123015008 988dccd41a1adf07 fuzz/scopegen.olang
+5ebd9cb78541e25d 5dadf6773b40a575 fuzz/scopegen.olang
 303993320c25d55e 60322a29c98ab515 std/arith.olang
 112cb47010851a96 a1841656dcb52195 std/base64.olang
 bdfb3f217b7eadd9 a38cd9a94b379f5a std/cancel.olang
@@ -1798,7 +1800,7 @@ a622b0cd3c768c92 c7705ce7f8e28fe9 tests/embed.olang
 a9c4902a289a5b26 ce5dbf1b5c949395 tests/errsetparams.olang
 904a904f00d90f84 bf4ba3037136900d tests/errsets.olang
 b2cb5719add015b7 c022219e07f118a4 tests/genenums.olang
-1bd1069e03226b3e 277577d799c64670 tests/generators.olang
+57f2ba25a8583a2f 0b6845ef3e4c4f48 tests/generators.olang
 c3154015ef1cc50e e1777a72e9172179 tests/geom/measure.olang
 92220429c12f8095 e4e590d0650bd89b tests/geom/rect.olang
 e3212b4e8e50fcbe 7f381d66e8003dbe tests/intsweep.olang
