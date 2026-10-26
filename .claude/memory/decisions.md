@@ -1409,3 +1409,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   something) LLVM cannot remove (the arena is opaque to it), so decided (mine): the same flow analysis skips writing
   the zero where every path assigns before any read - the batch builds it in lowering; a global assigned by a top-level
   `if` gets that value as its initializer, never a zero first.
+- QBJ ASKED 2026-10-26 (the user: "Isn't [always initializing arrays] a big problem for really large arrays?", then
+  "do you want to replace Array<T>(n, v) with Array<T>(n, fn(I32) T)?"): answered - big fresh arrays already cost
+  nothing (mmap'd chunks come zeroed, the runtime skips its clear); only recycled chunks are memset. Withdrew the new
+  constructor form: a computed fill is already a comprehension, `F32[f(i) for i in range n]`, each element written once
+  into storage reserved from the count; `Array<T>(n, v)` stays for a constant fill. Recommended for the definite-init
+  batch: (1) make sure a comprehension over a range or a known-length array allocates without clearing (check, fix if
+  not) and that SPEC's "not yet implemented" fixed length for such comprehensions is built; (2) skip the clear where the
+  next code is a counted loop writing every element before any read. ASKED.
