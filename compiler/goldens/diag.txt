@@ -812,16 +812,19 @@ d15forwardself.olang:4:1: error[B5a]: A's initializer reads A, which is not set 
       | ^
 compilation failed with 1 error
 === d15null.olang
-d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'
-    8 |     x := null
+d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'
+    9 |     x := null
       |          ^~~~
-d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
-    9 |     y := nothing()
+d15null.olang:10:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
+   10 |     y := nothing()
       |          ^~~~~~~~~
-d15null.olang:10:31: error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'
-   10 |     z := 18446744073709551615 * 2
+d15null.olang:11:50: error[E4a]: this literal expression has no value - no integer type holds it, from I128's least to U128's greatest
+   11 |     z := 340282366920938463463374607431768211455 * 2
+      |                                                  ^
+d15null.olang:12:31: error[T6a, E4a]: this literal expression's value needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'
+   12 |     w := 18446744073709551615 * 2
       |                               ^
-compilation failed with 3 errors
+compilation failed with 4 errors
 === d16arity.olang
 d16arity.olang:5:16: error[D16a]: fn(x I32) I32 takes 1 parameter, and this lambda 2
     5 |     n := apply(fn(a, b) { return a })
