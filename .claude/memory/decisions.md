@@ -1421,3 +1421,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   computed fill); in the definite-init batch: a comprehension over a range or known-length array allocates without a
   clear and gets its fixed length (SPEC's "not yet implemented"), and `Array<T>(n)` skips its clear where the next code
   is a counted loop writing every element before any read.
+- QBB DECIDED 2026-10-26 (the user: "allow handing out borrows"): a generator may yield references borrowing its
+  inputs, written as a borrowed result is - `fn words(t String&) Iterator<String&t>` (the element lives where `t`'s
+  referent does, O14's `T&p`), checked by section 8 as any borrowed result; a reference to something the generator
+  builds stays refused (it would live as long as the walk). Queued after generator frame elision merges (same code).
+  Answered too: a function's result may already name an argument's scope (`fn first(l List<T>&) T&l`, `Trim() String&t`).
