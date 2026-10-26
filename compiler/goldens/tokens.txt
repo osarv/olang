@@ -1647,7 +1647,7 @@ a45f809fbddde19b 4d1e30263e770f90 compiler/check.olang
 f4a40c018a037bcb 35509c7b6940050d compiler/cond.olang
 389d021e31b99c3f cf9a6d467d40e6f7 compiler/diag.olang
 fa28e21495997446 99142c92a618eb2c compiler/doc.olang
-095afcfda18468bb 97898db75276a143 compiler/emit.olang
+6b1c66f53cc883d9 8e3aed1edc77bf67 compiler/emit.olang
 fe8ce0ee664f747f 66106925d7f16d14 compiler/eval.olang
 eb3a4f879fe35b4b 90cc70bd0069373c compiler/explain.olang
 7563c71482b39f4d 1afd110623c4fc71 compiler/fetch.olang
