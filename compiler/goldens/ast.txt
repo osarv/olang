@@ -215,7 +215,7 @@ fabbc1e59e0a468b 7f03ed2d0df92254 checks/cases/d13crunlength.olang
 b8727cddfddabbfa 98fdc6659bb30751 checks/cases/d15forward.olang
 2b4695427be24fd6 e8f34cf16f0a59e3 checks/cases/d15forwardcycle.olang
 c786b224fabe6c05 2c8ecbc1db82826a checks/cases/d15forwardself.olang
-9ee37f8af7aeaaa3 c1a8effa0d294af9 checks/cases/d15null.olang
+f531f38d67d54760 586eb1bfd6cd0517 checks/cases/d15null.olang
 b8f91aec30b35473 909ef04b96c86f7a checks/cases/d16arity.olang
 b9344f2515e84e5b f0cf6883a4d7ad0a checks/cases/d16blambdaorder.olang
 36f3c8682b4baa96 cdd3505db7732627 checks/cases/d16cborrow.olang
