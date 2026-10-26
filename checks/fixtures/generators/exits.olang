@@ -1,6 +1,7 @@
-# D18e: walks made and finished by a for-in, left every way a block can be left - its end, break, continue, return
-# from inside loops, an error leaving the function - with the generator's own scopes holding a destructor, so each walk
-# shows its scopes closed exactly once, where it ended; and walks that escape (a local, a field, a result) beside them
+# D18e: walks made and finished by a for-in or a comprehension, left every way a block can be left - its end, break,
+# continue, return from inside loops, an error leaving the function - with the generator's own scopes holding a
+# destructor, so each walk shows its scopes closed exactly once, where it ended; and walks that escape (a local, a
+# field, a result) beside them
 import "std/io"
 
 type Res struct(id I64) {
@@ -90,4 +91,6 @@ fn main() ? {
         for x in upto(p) { s += x }
     }
     try io.Println("sum " $s)
+    c := I64[x * 2 for x in held(80, 4) if x != 1]
+    try io.Println("comprehension " $c)
 }

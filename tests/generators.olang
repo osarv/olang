@@ -285,3 +285,32 @@ test "D18b: walks holding no scope and walks holding one, stopped part way, side
     assert t == 2000
     assert Dropped == d + 2000
 }
+
+# D18e: a walk left by a return from inside two loops and by an error leaving its function closes its scopes once; in
+# a test build the drop stays registered, so a failed check closes them too (checks/fixtures/generators/exitst.olang),
+# and a build outside tests destroys the walk itself on each of these exits (exits.olang)
+fn firstOver(n I64, k I64) I64 {
+    for p in range 3 {
+        for x in guarded(n) {
+            if x + p > k { return x + 10 * p }
+        }
+    }
+    return -1
+}
+
+fn guardedFails(n I64) I64 ? Bad {
+    t I64 = 0
+    for x in guarded(n) {
+        if x == 2 { error Bad.NEG }
+        t += x
+    }
+    return t
+}
+
+test "D18e: a walk left by a return out of two loops, or by an error, closes its scopes once" {
+    d := Dropped
+    assert firstOver(Ten, 10) == 29
+    assert Dropped == d + 30
+    assert (try guardedFails(Ten) catch Bad default -1) == -1
+    assert Dropped == d + 33
+}

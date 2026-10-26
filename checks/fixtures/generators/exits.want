@@ -20,3 +20,5 @@ result 31
 drop 60
 field 34
 sum 166167000
+drop 80
+comprehension I64[0, 4, 6]
