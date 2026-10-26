@@ -665,8 +665,8 @@ it.
   omitted `hi` the base's length when that is known), or `hi` written `lo + k` (or `k + lo`) with `lo` the same name,
   or the same chain of field reads, written twice and `k` evaluable at compile time - `raw[off:off + 784]` has length
   784;
-- *(not yet implemented)* a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at
-  compile time;
+- a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at compile
+  time (its count: `(end - start + step - 1) / step` with a positive step, 0 when `end` is not above `start`);
 - a conditional (E28) or `match` value (S12b) all of whose values have one known length;
 - a conversion (`String(x)`, a declared array type, T29a) of an array of known length;
 - a read of **fixed storage** (T7d): a local, a global, an inline field, an element of an array of inline arrays;
@@ -2144,7 +2144,9 @@ but a whole assignment's target is a read: a borrow (E12c), a capture (D16c, rea
 element store into it, a compound assignment. Deferred code (S19) is read where it is registered and assigns nothing; a
 `spawn` target (P1g) assigns nothing. Wherever every path assigns before any read - whatever the type - **no zero value
 is made**: nothing is written for the declaration and nothing is asked of a constructor (D13c), so a zero value that
-would allocate costs nothing.
+would allocate costs nothing. Two keep their zero, which allocates nothing: an array value of a length known only at run
+time (its zero is the empty array, and an assignment may write into the storage it holds, T11b) and a value that owns
+what it holds (an assignment lets the old value go, §8.8).
 
 **D13e (a global's value given below it).** A global declared with no value may be given its value by an assignment at
 its module's top level, inside a top-level `if` (B9) and below the declaration - `top-set ::= IDEN "=" expr STMNT_END`,
@@ -2184,6 +2186,14 @@ the array would then run past.
 **D14c.** Storage the system declines to provide - the allocator returning nothing - aborts the program with the
 message `out of memory`, as a task the system declines to start does (P1c). It is never an error a program
 handles: no `try` reaches it.
+
+**D14d (an array the next loop fills).** `Array<T>(n)` with no fill, declared as a local (`a := Array<T>(n)`, `a
+Array<T> = Array<T>(n)`), is not cleared when the statement after its declaration is `for i in range n` or `for i in
+range 0, n` - `n` the same name or the same integer literal - whose body has `a[i] = e` among its own statements (not
+inside a nested block) and mentions `a` nowhere else, nor holds a `break`, `continue` or `return`: the loop writes every
+element before anything can read one. Any other shape - another bound, a conditional store, a second mention, a loop that
+may stop early - keeps the clear (T8), as does an element type that is an array or owns what it holds. A program cannot
+tell the two apart.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is the type of `expr`, which may be any
 expression whose type is settled where it is written - a literal, a variable, field or element read, a call, a
@@ -3570,13 +3580,16 @@ must. It is no list: a line break before its `for`, or anywhere in its clause, s
 from 0 for the two-name form) and are visible in the element expression and the condition only. What may follow `in`
 is what a `for ... in` takes: an array, a range, an iterator or an iterable.
 
-Its type is `Array<T>` for the written element type `T`, a value. Like `Array<T>(n)` (T7) it is a temporary,
+Its type is `Array<T>` for the written element type `T`, a value - of known length (T7c) with no `if` and a source
+whose length is known while compiling. Like `Array<T>(n)` (T7) it is a temporary,
 built in the scope of whatever it lands in. The element expression and the condition are evaluated once per value,
 the condition first, in the order the values are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
-length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. A
-comprehension that keeps nothing is an empty array with storage of its own.
+length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. Storage
+is never cleared: each element is written once, as it is computed, and nothing reads an element not yet written. With
+no `if` and a known length, the storage allocated is the array itself, exactly its length. A comprehension that keeps
+nothing is an empty array with storage of its own.
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 

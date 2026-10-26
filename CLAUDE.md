@@ -1246,6 +1246,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   named constants do not adapt like literals (`I16(cpoll.POLLIN)`); a struct by value under interpret is refused; a large
   header costs its check on every build (openssl/ssl.h: 940 KB of declarations, 3 s per build after a 6 s first
   translation; the prelude's math.h and string.h add ~0.05 s to a hello world).
+- **Definite initialisation; arrays written once with no clear (D13d, D13e, D14d, E27, T7c, 2026-10-26, the user's
+  QBA and QBJ; details mine).** Zero values stay (D13c). A local or constructor field declared with no value whose type
+  has no zero value (a never-null reference, a constructor with an effect) must be assigned on every path before any
+  read - judged structurally as D10a judges leaving (compiler/definit.olang): an `if` without `else` meets its failing
+  condition, a loop never assigns (it may run no times), a try's clauses run from where it began, a capture is read where
+  the lambda is made, deferred code where it is registered, a field at the constructor's end, a spawn target and a
+  compound or element store assign nothing. The error names the read and, in a note, the path (no else, a loop, a branch,
+  an arm, a clause, the declaration); for a constructor whose zero only the evaluator can refuse it stays D13c's error
+  with a note at the read. Wherever every path assigns first, nothing at all is written for the declaration (a run-time
+  array value and an owner keep their zero, which allocates nothing) - a Vec local assigned in branches makes no zero
+  Vec. **Globals (D13e):** a global declared with no value is assigned by `NAME = expr` inside a top-level `if` below it
+  (`Backend String` / `if TargetOs == "linux" { Backend = "epoll" } else { Backend = "kqueue" }`); the chosen branch's
+  value is its initializer (B5a order, K2 baked), nothing written first; twice in one build, a missing branch for a type
+  with no zero value (judged as written, nested ifs too), a condition reading the global, any other top-level assignment
+  - each a compile error. **Arrays:** a comprehension never clears its storage; with no `if` over a range or an array
+  of known length it allocates exactly its length and writes each element once, a known count giving a fixed length
+  (T7c, no longer "not yet implemented"); `Array<T>(n)` declared and filled by the very next `for i in range n` (or
+  `range 0, n`, same `n`) storing `a[i]` once at the body's top level, mentioning `a` nowhere else, with no
+  break/continue/return, is not cleared (D14d) - every other shape keeps the clear. MIR: `Assign(L, Use(None))` marks a
+  local set with nothing written. Measured: 1,000 `Array<F32>(262144)` filled by a loop on recycled memory 0.073 ->
+  0.049 s; the same as a comprehension 0.90 -> 0.25 s; bench instruction counts unchanged elsewhere. Found on the way: the
+  pre-scan did not take an `if` after a line ending in a bare `&` for a statement start, so a top-level `if` after `X
+  Node&` (or `X Node?&`) was never decided (pre-existing).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

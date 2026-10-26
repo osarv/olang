@@ -45,7 +45,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -408,6 +408,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
         case "widealign" { try widealign(r) }
+        case "definit" { try definit(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1170,6 +1171,34 @@ fn widealign(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build widealign.olang > out.txt 2>&1 && ./build/widealign") == 0, "widealign", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug widealign.olang > out.txt 2>&1 && ./build/widealign.debug") == 0, "widealign -debug", dir)
     try r.expect(irHas(dir, "build/widealign.main.ll", "call ptr @__olang_scope_alloc(_zeroed)?_min\\(ptr [^,]*, i64 [^,]*, i64 16\\)"), "no 16-aligned array", dir)
+}
+
+# D13d, D13e, E27, D14d: what every path assigns before a read gets no zero first, and arrays filled once are made with no
+# clear - a local Vec given its value after its declaration makes no zero Vec, a comprehension over a range and an
+# Array<T>(n) the next loop fills allocate with no clear (the loop that may stop early keeps it), and a global given its
+# value by a top-level if has that value as its initializer
+test "what is assigned before it is read gets no zero first" { assert passed("definit") }
+
+# the calls the IR of one function of ll makes, written as NAME( - a pattern grepped in that function's body alone
+fn bodyHas(dir String&, ll String&, name String&, re String&) Bool {
+    return sh(dir, "awk '/^define .*@[^(]*" $name "\\(/,/^}/' " $ll " | grep -qE " $os.Quote(re)) == 0
+}
+
+fn definit(r mut report&) ? Failed {
+    dir := fresh("definit")
+    os.Run("cp checks/fixtures/definit/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build definit.olang > out.txt 2>&1 && ./build/definit > out.txt 2>&1") == 0, "definit", dir)
+    try r.expect(outOf(dir) == "1 F32[0, 1, 4, 9] F32[0, 0.5, 1, 1.5] F32[1, 1, 1, 0, 0] 7\n", "definit output", dir)
+    ll String& = "build/definit.main.ll"
+    try r.expect(not bodyHas(dir, ll, "assigned", "Vec[^ ]*ctor|scope_alloc"), "a zero Vec made before its first value", dir)
+    for f in String&["squares", "filled"] {
+        try r.expect(not bodyHas(dir, ll, f, "scope_alloc_zeroed|llvm\\.memset"), $f ": an array filled once is cleared", dir)
+        try r.expect(bodyHas(dir, ll, f, "call ptr @__olang_scope_alloc\\("), $f ": no plain allocation", dir)
+    }
+    try r.expect(bodyHas(dir, ll, "stopped", "scope_alloc_zeroed"), "a loop that may stop early lost its clear", dir)
+    try r.expect(irHas(dir, ll, $gsym("definit", "Root") " = constant <\\{ ptr \\}> <\\{ ptr @"), "Root is not baked", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret definit.olang > out.txt 2>&1") == 0, "definit interpreted", dir)
+    try r.expect(outOf(dir) == "1 F32[0, 1, 4, 9] F32[0, 0.5, 1, 1.5] F32[1, 1, 1, 0, 0] 7\n", "definit interpreted output", dir)
 }
 
 # T36: every numeric primitive has alias tags of its own - a BF16 or F16 element stored through a struct carries one, as

@@ -33,6 +33,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `types.olang`, `generic.olang` | interned types and layouts; instances, unification, constraints |
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
 | `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
+| `definit.olang` | D13d: whether a local or field with no value is read before every path assigns it, judged structurally as D10a judges leaving |
 | `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress) |
 | `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |

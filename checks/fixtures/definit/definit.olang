@@ -1,0 +1,51 @@
+# D13d, D13e, E27, D14d: what is assigned on every path before a read gets no zero first, and arrays filled once are made
+# with no clear - checks/checks.olang's "definit" scenario greps this program's IR for it
+import "std/io"
+
+type Node struct(v I64) { v }
+
+fn mk(n I64) Vec<I64> {
+    v := Vec<I64>()
+    v.Push(n)
+    return v
+}
+
+# no zero Vec is made for 'v': the call's result is its first value (D13d)
+fn assigned(n I64) I64 {
+    v Vec<I64>
+    v = mk(n)
+    return v.Len()
+}
+
+# a comprehension over a range: exact storage, no clear, each element written once (E27)
+fn squares(n I64) Array<F32> { return F32[F32(i * i) for i in range n] }
+
+# Array<T>(n) filled by the loop after it: no clear (D14d)
+fn filled(n I64) Array<F32> {
+    a := Array<F32>(n)
+    for i in range n {
+        a[i] = F32(i) * 0.5
+    }
+    return a
+}
+
+# a loop that may stop early keeps the clear (D14d: when in doubt, clear)
+fn stopped(n I64) Array<F32> {
+    a := Array<F32>(n)
+    for i in range n {
+        if i == 3 { break }
+        a[i] = 1.0
+    }
+    return a
+}
+
+# a global with no zero value given its value by a top-level if: that value is its initializer (D13e, K2)
+Root Node&
+if TargetOs == "linux" { Root = Node(7) } else { Root = Node(8) }
+
+fn main() ? {
+    s := squares(4)
+    f := filled(4)
+    t := stopped(5)
+    try io.Println($assigned(3) " " $s " " $f " " $t " " $Root.v)
+}
