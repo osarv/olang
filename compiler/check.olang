@@ -6074,6 +6074,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             if d is not null { return d }
             v := c.fit(x, r, sp)
             if p is not null and c.isNamed(have) and c.isOver(have) {
+                # a declared type's place lent as its base names its storage (T29a): written only where the place may
+                # be (S6, T25b, T25c) - a String global as an Array<Char> as much as any
+                if (c.P.T.PermOf(want) & types.Writable) != 0 {
+                    c.mustWrite(p, sp, false)
+                    c.roDeepNeed(x)
+                }
                 return typed.Expr.Borrow(sp, want, p)
             }
             return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
