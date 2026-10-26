@@ -19,7 +19,6 @@
 
 import "std/pair"
 import "std/os"
-import "std/list"
 import "source"
 import "token"
 import "scan"
@@ -9723,7 +9722,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if ps.Len() > 0 { c.unify(ps[0], typeOf(recv), b, false, true) }
         k = 1
     }
-    vals list.List<typed.Expr?&>
+    vals Vec<typed.Expr?&>
     lambdas Vec<I64>
     k0w := k
     if pre.Len() == 0 and args.Len() == 1 and ps.Len() - k > 1 and callLike(args[0]) { pre = c.spread(args[0]) }
@@ -13602,7 +13601,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     }
     fr.joins[fr.joins.Len() - 1] = fr.joins[fr.joins.Len() - 1] + 1
     # the targets' places first, left to right (P1g)
-    places mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
+    places mut Vec<typed.Place?&>&c = Vec<typed.Place?&>()
     for t in targets { places.Push(c.discardOr(t)) }
     tried := false
     inner := call
@@ -14049,7 +14048,7 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
     }
     # S4c: the targets' places, then every value held, then the stores
     held Vec<I64>
-    places mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
+    places mut Vec<typed.Place?&>&c = Vec<typed.Place?&>()
     for i in range n { places.Push(c.discardOr(m.Targets[i])) }
     # S4d: a borrow in any value of any target's storage takes its old value
     s4d := c.s4d.Len()
@@ -14469,7 +14468,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     # each element read by At into a local, the outermost first, the next read out of it
     temps Array<I64> = Array<I64>(nl, -1)
-    bases mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
+    bases mut Vec<typed.Place?&>&c = Vec<typed.Place?&>()
     for k in range nl { bases.Push(null) }
     for kk in range nl {
         l := nl - 1 - kk
@@ -15984,7 +15983,7 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
 fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&, cm ast.Compr?&, ce types.TypeId) typed.Expr?&c {
     # the first argument that is no literal gives the range its type; literals alone count in I64 (S9b)
     t types.TypeId = types.UnknownT
-    vs list.List<typed.Expr?&>          # each argument's value, null for a literal - typed once t is known
+    vs Vec<typed.Expr?&>          # each argument's value, null for a literal - typed once t is known
     for a in rargs {
         fa := c.fold(a)
         if fa.Ok and fa.IsFloat {
