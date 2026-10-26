@@ -160,7 +160,10 @@ completion and check-in.
 overrun say 95 percent. This is the new rule for every week until I change it. Use as much as you need, don't run
 things in parallel that slow either part down and stop at 95 percent always."): no pacing gaps; use what the work
 needs; run in parallel only what does not slow the other (disjoint files, no queueing on the one verify slot, memory);
-stop code work at ~0.95 weekly, every week. Supersedes the per-week 90% rules above.
+stop code work at ~0.95 weekly, every week. Supersedes the per-week 90% rules above. The user then: "And with slow down I mean
+use more tokens than necessary" - parallel work is fine as long as it does not cost extra tokens: no merge-conflict
+rework, no duplicated work, no agents polling or idling while they wait on a shared verify slot, no batch that must be
+redone after another lands.
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
