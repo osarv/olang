@@ -61,7 +61,7 @@ every module's own. `tools/stutter_rename.olang` renames the old names in other 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
   without an import. It holds the built-in types' methods, the protocol traits and errors, and three collections - `vec`
   (`Vec`, the growable array), `map` and `text`'s `StringBuilder`; every other container is a module above (QZ2).
-  `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
+  `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`, `StepBy`, `FlatMap`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`, and `Partition` into two Vecs; `Reversed` for a Vec or any type with `At` and `Len`; an array's `Reversed`, `Windows`, `TakeWhile`/`SkipWhile` views and `Partition`), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`

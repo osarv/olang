@@ -1489,7 +1489,15 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter` - the last two building a new `Vec` -
 and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
 (G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
-`Chain`) fail as the iterators they wrap do.
+`Chain`) fail as the iterators they wrap do. So do the walks of the same shape, each failing also with what its callback
+fails with: `TakeWhile(keep)`, the values up to the first `keep` does not hold for (which ends the walk and is not
+given); `SkipWhile(keep)`, the values from that first one on; `StepBy(n)`, the first value and every `n`-th after it,
+`n` a `StepSize` - a declared `I64` whose constructor fails with `StepError.BAD_STEP` below one, a literal checked while
+compiling (T29d) as a `ChunkSize` is; `FlatMap(f)`, the values of the iterator `f` gives for each value, one walk after
+another, each made when the one before it has run out; and `Partition(keep)`, two new `Vec`s as two results (D8c) -
+the values `keep` holds for and the rest, each in order. A type with `At` and `Len` has, beside `Iter()`, the default
+`Reversed()`, a `ReversedIndexIter<T, C>` over positions `Len() - 1` down to `0`, read at each step (so `for x in
+v.Reversed()` walks a `Vec` backward).
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
@@ -1568,7 +1576,8 @@ from its receiver, a parameter sharing another's scope, T22), or that carries a 
 an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
 in the table (T35): it is reached as T32c says. A default whose result holds its receiver by value - an adapter that
-keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`), a `List` of it, which
+keeps a copy of the iterator it is made from (`Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `TakeWhile`, `SkipWhile`,
+`StepBy`, `FlatMap`), a `List` of it, which
 holds its elements behind its reference to its state, or a function value giving it (`fn() G`) - has no copy to keep of an
 `any`, whose instance is of a type not known there: calling one through an `any` is a compile-time error at the call,
 naming the instance's own type as where to call it. A default the table holds is instantiated for `T` only where some call
@@ -2644,7 +2653,13 @@ Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, count
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
 array with each of those occurrences of `old` replaced by `new` (an empty `old` puts `new` before every element and
 after the last); `Repeat(n)`, `n` copies of its elements one after another (none for `n` at most `0`); and
-`Reverse()`, which reverses them in place; and `Chunks(size)`, the array cut into consecutive pieces of `size`
+`Reverse()`, which reverses them in place; `Reversed()`, a `ReversedIter<T>` walking the elements from the last to
+the first, building nothing; `Windows(size)`, every run of `size` consecutive elements, overlapping - `Len() - size +
+1` of them, none for an array shorter than `size` - each a read-only slice of the array's own storage, held in an
+array that lives where the receiver does, `size` a `ChunkSize` as for `Chunks`; `TakeWhile(keep)` and
+`SkipWhile(keep)`, read-only slices of the leading elements `keep` holds for and of the rest from the first it does not
+hold for (`keep` not called past it); `Partition(keep)`, two new arrays as two results, of the elements `keep` holds for
+and of the rest, each in order - these three failing with what `keep` fails with; and `Chunks(size)`, the array cut into consecutive pieces of `size`
 elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
 the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
 receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor

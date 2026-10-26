@@ -496,6 +496,76 @@ fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
     return pieces
 }
 
+# a position in an array walked from its last element to its first - what an array's Reversed gives
+type ReversedIter<T> struct(of Array<T>&) {
+    arr Array<T>&of = of
+    i I64 = of.Len()
+}
+
+fn (it mut ReversedIter<T>&) Next() T ? Exhausted {
+    if it.i <= 0 { error Exhausted.END }
+    it.i--
+    return it.arr[it.i]
+}
+
+# the elements from the last to the first: "for x in a.Reversed() { ... }" - a walk, building nothing, as fast as the
+# counted loop down the positions (a String's too: "for c in t.Reversed()" walks its bytes backward)
+fn (a Array<T>&) Reversed() ReversedIter<T> { return ReversedIter<T>(a) }
+
+# every run of size consecutive elements, overlapping, from the first: a.Len() - size + 1 of them (none where the array
+# is shorter than size), each a read-only view of the array's own storage (a slice, E16a), nothing copied - "for w in
+# a.Windows(3) { smooth.Push(w.Sum() / 3.0) }". The views are held in an array that lives where the array does, as
+# Chunks' and Split's, allocated once at its exact length
+fn (a Array<T>&) Windows(size ChunkSize) Array<Array<T>&>&a {
+    n := I64(size)
+    count := a.Len() - n + 1 if a.Len() >= n else 0
+    views mut Array<Array<T>&>&a = Array<Array<T>&>(count, a)   # each view written below
+    for k in range count { views[k] = a[k:k + n] }
+    return views
+}
+
+# the leading elements keep holds for: a read-only view of them, up to the first it does not hold for (the whole array
+# where it holds for all) - nothing copied, keep not called past that first
+fn (a Array<T>&) TakeWhile<? E>(keep fn(x T) Bool ? E) Array<T>&a ? E {
+    for i in range a.Len() {
+        if not try keep(a[i]) { return a[:i] }
+    }
+    return a[:]
+}
+
+# the elements from the first keep does not hold for on: a read-only view (empty where keep holds for all)
+fn (a Array<T>&) SkipWhile<? E>(keep fn(x T) Bool ? E) Array<T>&a ? E {
+    for i in range a.Len() {
+        if not try keep(a[i]) { return a[i:] }
+    }
+    return a[a.Len():]
+}
+
+# the elements split by keep: two new arrays, of those keep holds for and of the rest, each in the array's order
+fn (a Array<T>&) Partition<? E>(keep fn(x T) Bool ? E) Array<T>, Array<T> ? E {
+    if a.Len() == 0 { return Array<T>(0), Array<T>(0) }   # no element, so no zero value of T is needed (D13c)
+    marks := Array<Bool>(a.Len())
+    n I64 = 0
+    for i, x in a {
+        marks[i] = try keep(x)
+        if marks[i] { n++ }
+    }
+    yes := Array<T>(n, a[0])                    # filled with an element, as Filter's
+    no := Array<T>(a.Len() - n, a[0])
+    j I64 = 0
+    k I64 = 0
+    for i, x in a {
+        if marks[i] {
+            yes[j] = x
+            j++
+        } else {
+            no[k] = x
+            k++
+        }
+    }
+    return yes, no
+}
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 
@@ -507,6 +577,18 @@ if TestBuild {
     }
     arraySortedBaked := arraySorted()                     # computed while compiling (K2): calls through lambdas
     arraySumBaked I64 = arraySorted().Fold(0, fn(acc, x) { return acc + x })
+
+    # examples (B7a): what olang doc shows under the type
+    test ReversedIter "an array from its last element to its first" {
+        s := 0
+        for x in I64[1, 2, 3].Reversed() { s = s * 10 + x }
+        assert s == 321 and I64[].Reversed().ToVec().Len() == 0
+    }
+    test ReversedIter "text from its last byte to its first" {
+        b := StringBuilder()
+        for c in "abc".Reversed() { b.PushChar(c) }
+        assert b.ToString() == "cba"
+    }
 
     test "the array methods take what to do as a lambda" {
         a := I32[5, 3, 8, 1, 9, 2]
