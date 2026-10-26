@@ -17,7 +17,6 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39) |
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error` |
-| `linalg.olang` | `Matrix<T>`, GEMM, activations, convolutions by patches |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`) and the IEEE CRC-32 |
@@ -50,8 +49,8 @@ A name never repeats its module's: `io.Error`, not `io.Error`; `os.Error`, `json
 
 - a module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `heap.Heap`, `rand.Rand`,
   `list.List`, as Go's);
-- a module with several error types names the others by subject (`linalg.ShapeError`, `linalg.ActivationError`,
-  `http.HeaderError`), and the one for the module as a whole is still `Error`.
+- a module with several error types names the others by subject (`http.HeaderError`,
+  `regex.SyntaxError`), and the one for the module as a whole is still `Error`.
 
 The prelude is the exception to the rule, since its names are bare everywhere (`VecError`, `MapError`, `TextError`,
 `ArrayError`, `NumberError`, `CaseError`, `ArgumentError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with

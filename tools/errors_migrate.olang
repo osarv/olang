@@ -5,7 +5,7 @@
 #   - a "try" that only turned checks on - "nothing here fails as written - write 'checked' to check it" (E15a), or one
 #     before a type that has only the checked form of an operation (E31a) - becomes "checked";
 #   - a call that can now fail - a std function that used to stop the program on a caller's mistake (Format with a bad
-#     base, List.Insert out of range, chan.Send on a closed channel, a linalg shape) - is written "try CALL" - in a
+#     base, List.Insert out of range, chan.Send on a closed channel) - is written "try CALL" - in a
 #     test block too, where an error it lets through fails the test (S16), as the old stop did - and a function then
 #     declares what it lets through (R9: "?" is added, or the error type after its list).
 #

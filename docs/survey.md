@@ -141,7 +141,7 @@ PRINCIPLES.md's five judging questions.
 | Generational references | `h.Get()` checked against a generation | Vale | a check per dereference conflicts with principle 2; a pool with checked handles can be a std library | - | conflicts as language; later as a std `Pool<T>` |
 | Big integers and decimals | `BigInt`, `Decimal` | Python, Java, C#, Julia | library | medium | later (std) |
 | SoA layout | `#soa [N]Particle`, a column per field | Jai, Odin, Zig `MultiArrayList` | fits data work; can be a library once reflection exists | medium | later |
-| Built-in small vector and matrix types, swizzles | `v.xyz`, `matrix[4,4]f32` | Odin, HLSL/GLSL, Mojo `SIMD` | lane-wise array operators decided; `std/linalg` | - | covered or decided |
+| Built-in small vector and matrix types, swizzles | `v.xyz`, `matrix[4,4]f32` | Odin, HLSL/GLSL, Mojo `SIMD` | lane-wise array operators decided; matrices are oann's | - | covered or decided |
 | Units of measure | `F64<m/s>` | F# | declined by the user 2026-10-18 and 2026-10-24 | - | settled |
 
 ### Control flow and expressions
@@ -279,7 +279,7 @@ PRINCIPLES.md's five judging questions.
 | Compression | gzip/zlib/zstd | none | later (or through C interop) |
 | Crypto | sha256, hmac, OS random bytes, TLS | none (rand is xoshiro, not cryptographic) | sha256 + OS random small; TLS through C interop |
 | Logging | levels, structured | none | small, later |
-| Math and numerics | math functions, stats, linear algebra, complex, F16/BF16/F8 | strong: methods on numbers, `std/stats`, `std/linalg` (fast GEMM), complex, F8 | done; a selling point |
+| Math and numerics | math functions, stats, linear algebra, complex, F16/BF16/F8 | strong: methods on numbers, `std/stats`, complex, F8 (matrices and GEMM are oann's) | done; a selling point |
 | Data frames | pandas, polars, DataFrames.jl | none | later, after reflection (columns from a struct's fields) |
 
 ## 4. Announcement readiness beyond language features

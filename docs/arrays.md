@@ -304,6 +304,8 @@ in std or the prelude is affected. The compiler finds anything else (checks fixt
 
 ### 5.1 std/linalg
 
+(std/linalg was removed from std on 2026-10-26 - oann owns its tensors and kernels; this section is kept as written.)
+
 `Matrix<T>` already has run-time dimensions (`Rows`, `Cols`, `Stride` fields over a `mut Array<T>&`); the
 `Matrix<T, R, C>`/`Dynamic` design of G20 was never merged into the library. So linalg loses nothing to QP2 but its
 six inline tile fields, which become `v := Array<A>(384)` and the like - the same layout, element type and alignment,

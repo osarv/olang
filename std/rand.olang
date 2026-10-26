@@ -3,7 +3,7 @@
 # strong, and reproducible: one seed gives one sequence on every machine, so a simulation's draws, a network's
 # initialization and a dataset's shuffling can be repeated exactly. Not for anything secret.
 #
-# One generator is shared by whatever draws from it - std/linalg's random fills take the caller's, so one seed
+# One generator is shared by whatever draws from it - a caller hands its own to whatever fills from it, so one seed
 # decides a whole run. A generator is an ordinary value: two copies continue the same sequence independently.
 
 

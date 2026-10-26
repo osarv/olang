@@ -25366,3 +25366,28 @@ release's bundled resource directory with nothing else on PATH.
 **Left.** A C extern variable (`stdin`, `errno`) and a cast macro have no form; a C module's named constants are typed
 (`I32`) and do not adapt as literals do, so `I16(cpoll.POLLIN)` is written; `interpret` refuses a struct by value; a
 large header's check is paid on every build.
+
+## std/linalg removed (2026-10-26)
+
+The user: "No linalg in stdlib ... Tensors are part of oann and they declare everything themselves." So std has no
+matrix type: oann owns its tensors and kernels, declaring them in its own modules, and std/linalg.olang (Matrix views,
+Goto GEMM with per-target tiles, batched causal products, fused epilogues, convolutions by patches, GemmWorkspace) is
+deleted with its tests. The last version is in git history; the kernel-tuning work in progress is on branch
+`backup/wt-tensor`.
+
+Went with it: the `linalg` checks scenario (ShapeError.MISMATCH escaping main, built and interpreted - linalg's own
+behaviour), the benchmarks `gemm`, `fused`, `mlp`, their drivers `rungemm`/`runfused` and C sides `c/gemm.c`/`c/mlp.c`,
+the reproducers `captured_value` (a capturing lambda through `Map` - fixed long ago, a function value crossing a call
+as two words) and `linalg_global_constant` (K2's constant globals - fixed long ago), and bench/README.md's GEMM,
+batched-product and small-product sections; the BF16-narrowing measurements, a compiler finding, stay there in a
+section of their own.
+
+Kept, rewritten without linalg, because they tested the compiler through it: `checks/cases/gemmflat` (O8b - a loop of
+products packing a large B panel and then a smaller A panel keeps its memory flat; now a small local `Mat` struct and a
+naive packed product, with a second loop over panels kept between calls), and the O26a pair `o26alatermodule` /
+`o26alatermodulekept` (a call to a module found after the caller's is read by its checked body; a view holding the
+caller's array lives in the result scope, and cannot be kept past the loop that made it, C2d). That pair needs a second
+module, which a case cannot have, so it became the `latermodule` scenario over `checks/fixtures/latermodule` - a
+`mat.olang` with linalg's shape (a `Data` field that is a conditional: a slice of the data given, else a new array, and
+a `View` returning a struct holding the slice). Comments naming linalg (chunkpool, the TBAA fixture, the runtime's
+pool, std/rand, the migration tools) were reworded.

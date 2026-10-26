@@ -1,9 +1,8 @@
 # check: run
-# O8b: a loop of matrix products keeps its memory flat. A plain Gemm packs B into a panel of its own and then A into a
+# O8b: a loop of matrix products keeps its memory flat. Each product packs B into a panel of its own and then A into a
 # smaller one, gives both back at its return, and the pool hands the same panels to the next product (it used to map a
-# new B panel each time, the A panel lying on top of the old one - 400KB a product here, 120MB over the first loop); a
-# GemmWorkspace keeps its panels from one product to the next itself, so the second loop allocates nothing at all
-import "std/linalg"
+# new B panel each time, the A panel lying on top of the old one - 400KB a product here, 120MB over the loop); a
+# product given panels kept from one call to the next allocates nothing at all
 import "std/os"
 
 # the most this process has held resident, in kB
@@ -16,16 +15,44 @@ fn peakKb() I64 {
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
 }
 
+# a rows x cols matrix of F32, row-major
+type Mat struct(Rows I64, Cols I64) {
+    Rows
+    Cols
+    Data mut Array<F32>& = Array<F32>(Rows * Cols)
+}
+
+# c += a b through the panels given: B packed by columns into pb, then A by rows into pa
+fn productInto(c mut Mat&, a Mat&, b Mat&, pb mut Array<F32>&, pa mut Array<F32>&) {
+    for j in range b.Cols { for k in range b.Rows { pb[j * b.Rows + k] = b.Data[k * b.Cols + j] } }
+    for i in range a.Rows { for k in range a.Cols { pa[i * a.Cols + k] = a.Data[i * a.Cols + k] } }
+    for i in range a.Rows {
+        for j in range b.Cols {
+            s F32 = 0
+            for k in range a.Cols { s += pa[i * a.Cols + k] * pb[j * b.Rows + k] }
+            c.Data[i * c.Cols + j] += s
+        }
+    }
+}
+
+# c += a b with panels of its own, a large one for B and then a smaller one for A, gone at the return
+fn product(c mut Mat&, a Mat&, b Mat&) {
+    pb := Array<F32>(b.Rows * b.Cols)
+    pa := Array<F32>(a.Rows * a.Cols)
+    productInto(c, a, b, pb, pa)
+}
+
 fn main() ? {
-    a := linalg.Matrix<F32>(64, 128)
-    b := linalg.Matrix<F32>(128, 784)
-    c := linalg.Matrix<F32>(64, 784)
-    a.Fill(1.0)
-    b.Fill(0.5)
-    for i in range 300 { try linalg.Gemm(c, a, false, b, false) }
-    ws := linalg.GemmWorkspace<F32>()
-    for i in range 300 { try ws.Gemm(c, a, false, b, false, 1.0, 1.0) }
-    assert c.Get(0, 0) == 64.0 + 300.0 * 64.0 and c.Get(63, 783) == c.Get(0, 0)
+    a := Mat(64, 128)
+    b := Mat(128, 784)
+    c := Mat(64, 784)
+    for i in range a.Data.Len() { a.Data[i] = 1.0 }
+    for i in range b.Data.Len() { b.Data[i] = 0.5 }
+    for i in range 300 { product(c, a, b) }
+    pb := Array<F32>(b.Rows * b.Cols)
+    pa := Array<F32>(a.Rows * a.Cols)
+    for i in range 300 { productInto(c, a, b, pb, pa) }
+    assert c.Data[0] == 600.0 * 64.0 and c.Data[63 * 784 + 783] == c.Data[0]
     kb := peakKb()
     assert kb > 0 and kb < 30000
 }

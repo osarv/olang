@@ -1,7 +1,7 @@
 # stutter_rename - std names no longer repeat their module's name (the user's naming rule, 2026-10-24): the error type
 # of io, once named for the module, is io.Error, and so are those of os, json, csv, stats, rand, http, chan, ffi and
 # filepath. A module named for its main type keeps that type's name (chan.Chan, json.Json, set.Set); several error types
-# in one module are named by subject (linalg.ShapeError); the prelude's names are bare everywhere, so it never declares
+# in one module are named by subject (http.HeaderError); the prelude's names are bare everywhere, so it never declares
 # a plain Error.
 #
 # Every qualified use (the old name after a ".", in code, comments, strings and Markdown alike) is renamed; inside the

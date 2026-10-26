@@ -13,15 +13,12 @@ build/bench_run -r 9 nbody text      # 9 repetitions, only some rows
 BENCH_LOCK=/home/user/verify.lock build/bench_run   # hold a lock while checking and timing, on a shared machine
 build/olang build bench/ir.olang && build/bench_ir spectral   # whole-program optimized IR and disassembly of both versions, in bench/build/lto/
 build/olang build bench/repro/opt.olang && build/bench_repro_opt NAME   # the same for one reproducer in repro/
-build/olang build bench/rungemm.olang && build/bench_rungemm    # std/linalg against C and OpenBLAS (below)
-build/olang build bench/runfused.olang && build/bench_runfused  # the batched, fused and implicit products (below)
 ```
 
-`run.olang`, `ir.olang`, `rungemm.olang`, `runfused.olang` and `repro/opt.olang` are the drivers; `benchlib.olang` is what
+`run.olang`, `ir.olang` and `repro/opt.olang` are the drivers; `benchlib.olang` is what
 they share (the compiler to build with, running a program in this directory without a shell, the `BENCH_LOCK` flock).
 `OLANG=PATH` names another compiler to build with (default: `build/olang`). Each driver runs from the repository root and
-keeps its files under `bench/build/`. (`rungemm` and `runfused` carry a `run` in their names because `gemm.olang` and
-`fused.olang` are the programs they run.)
+keeps its files under `bench/build/`.
 
 Nothing here is part of `make verify` or `make test` - the makefile names the directories it tests, and `bench/` is
 not one of them.
@@ -259,263 +256,25 @@ edited by hand, or the C side changed to do what olang does - and re-timed (sing
 10. (Fixed: `Find`, `FindByte` and `FindIndex` fail with the default error on a miss.) `String.Find` answered "not
    found" with `-1` - a sentinel value, against "errors are errors".
 
-## std/linalg against C and OpenBLAS (`bench/rungemm.olang`)
+## BF16 narrowing (from oann, 2026-10-09)
 
-`bench/rungemm.olang` times `std/linalg`'s products against the same algorithm written in C (`c/gemm.c`: the blocking,
-tiles, packing and write-back of `Gemm`, so the difference is the language's), a naive C loop and OpenBLAS 0.3
-(`-lopenblas`, AVX-512 with FMA, its own threads), plus a training step of a 784-128-10 perceptron at batch 64
-(`mlp.olang` against `c/mlp.c`, the same data and the same losses). Each time is the best of several runs inside
-the program; "native" is olang's own IR linked again with `-march=native`. Load average 1.8-4.5 (run 2; run 1, at
-6-7, agreed single-threaded within ~10% and showed no thread scaling at all).
-
-Square C = A B, GFLOPS:
-
-| type | n | olang 1T | olang 4T | olang native 1T | C naive | C blocked | OpenBLAS 1T | OpenBLAS 4T |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| f32 | 64 | 11.72 | 11.72 | 23.58 | 13.02 | 11.97 | 109.14 | 82.79 |
-| f32 | 128 | 7.73 | 15.16 | 11.23 | 7.78 | 13.83 | 94.32 | 120.10 |
-| f32 | 256 | 15.70 | 25.09 | 19.16 | 14.54 | 14.10 | 107.55 | 281.83 |
-| f32 | 512 | 16.59 | 31.79 | 19.58 | 12.17 | 14.54 | 67.92 | 235.89 |
-| f32 | 1024 | 13.99 | 53.06 | 18.71 | 10.30 | 13.99 | 105.55 | 215.36 |
-| f32 | 2048 | 15.41 | 39.95 | 17.70 | 3.76 | 14.29 | 99.26 | 196.48 |
-| f64 | 64 | 5.56 | 5.56 | 12.34 | 6.73 | 7.00 | 65.60 | 62.92 |
-| f64 | 128 | 7.42 | 7.85 | 5.97 | 4.79 | 6.74 | 46.16 | 65.47 |
-| f64 | 256 | 7.64 | 13.65 | 11.70 | 6.73 | 6.95 | 52.00 | 146.94 |
-| f64 | 512 | 7.89 | 16.95 | 11.48 | 5.01 | 5.54 | 31.20 | 127.38 |
-| f64 | 1024 | 7.58 | 27.94 | 10.51 | 4.55 | 6.67 | 46.76 | 132.54 |
-| f64 | 2048 | 7.49 | 17.13 | 10.59 | 1.65 | 6.80 | 54.33 | 157.48 |
-
-Matrix-vector products at batch 1 through `Gemv`, W n x m - `mv` is y = W x (rows of W dotted with x: a dense layer),
-`mvt` is y = W^T u (rows of W added in, scaled: the same layer's input gradient) - ns a product:
-
-| type | form | n x m | olang | olang native | C loop | OpenBLAS |
-|---|---|---:|---:|---:|---:|---:|
-| f32 | mv | 64 x 64 | 1020.2 | 1168.9 | 3050.9 | 373.9 |
-| f32 | mv | 256 x 128 | 7161.5 | 7960.7 | 30820.0 | 2467.7 |
-| f32 | mv | 1024 x 1024 | 237266.9 | 245247.4 | 1308877.8 | 105329.6 |
-| f32 | mvt | 64 x 64 | 547.1 | 378.7 | 566.6 | 266.4 |
-| f32 | mvt | 256 x 128 | 4776.6 | 3031.0 | 5335.6 | 2202.7 |
-| f32 | mvt | 1024 x 1024 | 177583.3 | 122218.4 | 210464.3 | 110223.9 |
-| f64 | mv | 64 x 64 | 1140.6 | 1131.4 | 3025.8 | 532.4 |
-| f64 | mv | 256 x 128 | 8526.0 | 8607.3 | 31164.5 | 4138.6 |
-| f64 | mv | 1024 x 1024 | 382639.1 | 398845.1 | 1441366.6 | 285589.5 |
-| f64 | mvt | 64 x 64 | 1130.9 | 786.9 | 1193.3 | 487.4 |
-| f64 | mvt | 256 x 128 | 9523.3 | 5928.1 | 11020.9 | 4017.3 |
-| f64 | mvt | 1024 x 1024 | 438094.7 | 350830.6 | 517999.2 | 281905.9 |
-
-Training step, 784-128-10, batch 64, F32, us a step (forward, softmax cross-entropy, backward, SGD):
-
-| olang 1T | olang 4T | olang native 1T | C naive | OpenBLAS 1T | OpenBLAS 4T |
-|---:|---:|---:|---:|---:|---:|
-| 2374 | 3681 | 2231 | 13356 | 757 | 5640 |
-
-(run 1, under load: olang 2333, C naive 9645, OpenBLAS 1T 374.)
-
-**What the numbers say.**
-1. **The language costs nothing here**: single-threaded, olang's `Gemm` is level with or ahead of the same algorithm in
-   C (F32 14-17 GFLOPS against 14-15, F64 7.5-8 against 5.5-7), 1.1-4x the naive loop (the naive loop falls off once
-   B leaves the cache, 3.8 GFLOPS at 2048), and 70-75% of the default target's peak (SSE2: 4 F32 lanes x (mul + add) x
-   2.8 GHz = 22.4 GFLOPS) - the micro-kernel's 48 accumulators stay in registers and its loads are the packed panels'.
-2. **The gap to OpenBLAS (5-7x single-threaded) is the instruction set, not the code**: olang builds for baseline
-   x86-64 - SSE2, 4 F32 lanes, no FMA - and never contracts `a*b + c` into an FMA (`x.Fma(a, b)` is a correctly rounded
-   call, and at the baseline target a library call); OpenBLAS runs AVX-512 FMA, 16 lanes and two operations per
-   instruction. The native relink buys little (F32 18-19) because the tile, 4 x 12, is sized for 4-wide vectors and
-   still has no FMA; a native build would want its own tile sizes (8-wide or 16-wide vectors, 6 x 16 or 12 x 32) and
-   contraction, which is a compiler direction rather than a library one.
-3. **Threads scale when cores are free**: F32 1024 goes 14 -> 53 GFLOPS on four tasks (3.8x), F64 1024 7.6 -> 27.9.
-   Under the first run's load average of 6-7 the same products did not scale at all (a pure-compute four-task probe
-   took 1.6x one task's time). The perceptron's products (64 x 784 x 128) are just past the threading threshold and
-   lose with four tasks on this shared machine - as OpenBLAS's do.
-4. **Batch-1 matrix-vector products**: olang's dot form (rows of W against x, eight partial sums in lanes) is 3-5x the
-   plain C loop, which clang keeps scalar since it may not reorder the sum; the axpy form (`mvt`) vectorizes in both
-   and is level with C. OpenBLAS is 1.5-3x ahead, again by its instruction set.
-5. **The training step**: olang 2.4 ms against OpenBLAS's 0.4-0.8 ms and the naive C step's 9.6-13 ms; about 26M of its
-   flops are in the two large products, which at olang's 15 GFLOPS account for ~1.7 ms - so the step follows the
-   GEMM, and the gap to OpenBLAS is point 2's.
-6. **Element-wise math**: the floats' Exp and Tanh call the C library per element, so a Map over them does not
-   vectorize. `linalg.FastExp`/`FastTanh`/`FastSigmoid` are olang arithmetic and bit operations that do: counted
-   with callgrind on a Map over 4096 elements, F32 FastExp 14 instructions an element (C library expf 39), FastTanh
-   17 (tanhf 129), FastSigmoid 16; F64 34, 40 and 37 (exp 67, tanh 129). The same FastExp written in C runs at the
-   same speed as olang's. glibc's vector math library (libmvec) would vectorize `expf` too (`_ZGVbN4v_expf`, about 15
-   instructions an element; `_ZGVdN8v_expf` with AVX2), but only for calls that may not set errno - which X8
-   deliberately does not declare, so that the program calls exactly the function the compile-time evaluator called -
-   and libmvec's results are within 4 ulp, not the scalar function's, so it would break X8's agreement between the
-   evaluator and the run time; clang 18 maps no `tanhf` at all.
-
-### Built for this machine (B12, 2026-10-09)
-
-Since B12 olang builds for the machine it runs on - here `cascadelake`: AVX-512 with FMA - and `std/linalg` picks its
-tile by the target (12 x 32 / 12 x 16 for F32 / F64 on AVX-512, 6 x 16 / 6 x 8 on AVX, 4 x 12 / 4 x 6 on SSE) and fuses
-its products' multiply-adds where `TargetHasFma`. Square C = A B single-threaded, GFLOPS (best of several runs inside
-the program, load 3-9, so differences under ~15% are noise):
-
-| type | n | before (baseline x86-64) | native | `-a x86-64` | `-a x86-64-v3` | OpenBLAS 1T |
-|---|---:|---:|---:|---:|---:|---:|
-| f32 | 256 | 15.4 | 56.6 | 16.5 | 47.9 | 106.2 |
-| f32 | 512 | 16.6 | 65.0 | 13.4 | 51.7 | 107.8 |
-| f32 | 1024 | 15.6 | 73.4 | 16.3 | 44.6 | 91.2 |
-| f32 | 2048 | 12.8 | 77.8 | 16.1 | 47.3 | 104.1 |
-| f64 | 256 | 7.8 | 25.5 | 8.0 | 21.7 | 47.7 |
-| f64 | 512 | 8.0 | 30.2 | 8.0 | 22.4 | 48.2 |
-| f64 | 1024 | 7.7 | 31.3 | 8.2 | 24.2 | 48.3 |
-| f64 | 2048 | 7.5 | 32.6 | 7.8 | 19.6 | 48.6 |
-
-The gap to OpenBLAS went from 5-7x to 1.3-1.9x. Its hand-written kernels reach ~90% of the machine's peak; olang's
-reach about half, the same algorithm with no assembly. The 784-128-10 training step (`mlp.olang`, batch 64): 2.3-2.9 ms
-before, 0.8-1.1 ms native, 1.3-1.4 ms at `x86-64-v3`, 2.3-2.7 ms at `-a x86-64`, OpenBLAS 0.4-0.5 ms, naive C 9-10 ms.
-oann's MNIST perceptron (its `bench/train.olang`, batch 128, an epoch's forward, backward and AdamW step) with its
-products through `linalg.GemmWorkspace`: **0.55 s an epoch native**, 0.68 s at `x86-64-v3`, 2.1 s at `-a x86-64`
-(2.6-2.9 s before B12; the C trainer over OpenBLAS was recorded at 0.79 s), same losses and accuracy.
-
-**The vector width, and a hazard it brings.** The code generator is told to use the target's widest vectors (512 bits
-here; LLVM's own tuning for Intel's AVX-512 parts prefers 256) so that `TargetVectorBits` is the width loops actually
-get. 512 against 256 with the tile chosen to match (interleaved pairs): GEMM F32 57-71 against 41-46 GFLOPS (512 to
-1024), F64 25-32 against 15-23, the training step 0.86-1.02 against 1.19-1.38 ms; over `bench_run`, matmul 0.87 s
-against 1.15 s, the Array and List sums 0.10-0.12 against 0.14-0.16, parallel 0.90 against 1.01, the rest within the
-noise (fannkuch is ~20% slower native at either width, as C's `-march=native` is). The hazard: **a hand-tiled kernel
-whose rows are not whole vectors of `TargetVectorBits`** - oann's own copy of std/linalg's earlier 4 x 12 F32 kernel -
-is vectorized by LLVM's SLP pass across rows, sixteen accumulators at a time, with gathers and permutes: 5.1-5.4 s an
-epoch native, 1.8 s with 256-bit vectors, 2.1 s at baseline. Tile by `TargetVectorBits`, as std/linalg does, or call
-it.
-
-### Batched causal products, the epilogue and implicit convolutions (2026-10-09)
-
-oann's three asks of std/linalg (its DESIGN.md, section 13), built as `GemmBatch` (with `Batch`, `Heads`, `Stacked` and
-`Triangular`), `GemmAct` (with `Activation`, `Activate` and `ActivationBackward`) and `GemmPatches` (with `Patches` and
-`Im2col`), measured by `bench/runfused.olang`: every variant run once, then every one again, and so on, each figure the median
-- F32, one thread unless said, ms. "master" is the same computation with master edf8238's std/linalg - a copy of it
-compiled as a module of its own beside the new one, so both ran in the same process, interleaved (not committed). The
-machine was shared (load average 5-6), so each row gives the range over two or three runs; a run that caught a spike
-in the load (every figure in it up to twice the others) is left out.
-
-Causal attention, a batch of 16 sequences of T positions, 128 columns in 4 heads of 32 (oann's transformer); forward is
-`S = Q K^T` and `Y = P V`, backward `dP = dO V^T`, `dQ = dS K`, `dK = dS^T Q` and `dV = P^T dO`:
-
-| T | | a Gemm per head, master | a Gemm per head | `GemmBatch` | `GemmBatch`, causal |
-|---:|---|---:|---:|---:|---:|
-| 64 | forward | 1.9-2.0 | 1.9-2.1 | 0.88-0.94 | 0.80-0.83 |
-| 64 | backward | 5.1-5.7 | 5.0-5.1 | 2.1-2.3 | 1.7-1.9 |
-| 256 | forward | 15.3-15.4 | 13.7-14.3 | 12.9-13.7 | 10.2-10.4 |
-| 256 | backward | 32.7-35.2 | 29.4-33.0 | 37.2-43.9 | 24.4-27.6 |
-| 64, 4 threads | forward | 1.9-2.2 | 1.8-1.9 | 0.77-1.05 | 0.74-1.00 |
-| 64, 4 threads | backward | 4.9-5.1 | 4.7-5.0 | 2.3-2.6 | 2.0-2.1 |
-| 256, 4 threads | forward | 89-98 | 80-88 | 11.8-12.3 | 9.3-9.9 |
-| 256, 4 threads | backward | 168-204 | 111-165 | 30-47 | 27-40 |
-
-- **At T 64 one call per product is 2.2-2.9x a Gemm per head, and the triangle adds 10-20%**: a 64 x 64 x 32 product
-  is small enough that a call's own work (choosing a path, the workspace, packing B) was most of it. At T 256 the
-  triangle is what pays, 1.3-1.5x, the products being large enough to amortize a call.
-- **The non-causal batched backward at T 256 is slower than a Gemm per head**, and that is locality, not the kernel:
-  a head's 256 KB of P stays in L2 across the three products a Gemm per head runs on it back to back, where one call
-  per product streams all 16 MB of P from L3 or memory three times. The causal form reads half of it, and wins.
-- **Threads**: a Gemm per head splits each small product four ways and joins every block of it - 10-20x slower than one
-  thread at T 256; `GemmBatch` gives each task a run of whole products.
-- What it took: a product one or two tiles wide reads its left operand in place, by rows, instead of packing it (the
-  weights P of `Y = P V` - packing them cost about what the product did); a transposed one is packed panel by panel,
-  steps above the diagonal written as zeros without reading and steps below copied whole (P^T in `dK`, `dV`: its
-  packing went from 13 to 5 instructions an element). Exchanging those two products (C^T = Q^T P, P then packed by
-  rows) was tried and measured no faster: P is memory-bound to read either way.
-
-A dense layer and its activation, `y = act(x w^T + b)`, `pre` keeping `x w^T + b` for the backward:
-
-| shape | act | master: Gemm, AddRow, a Map | Gemm, AddRow, Activate | `GemmAct` with pre | `GemmAct` |
-|---|---|---:|---:|---:|---:|
-| 1024 x 128 -> 512 | GELU | 3.4-3.6 | 3.0-3.6 | 3.0-6.7 | 2.9-3.2 |
-| 1024 x 512 -> 128 | none (bias) | 1.8-1.9 | 1.7-1.8 | 1.7-1.8 | 1.6 |
-| 128 x 784 -> 128 | ReLU | 0.40-0.43 | 0.36 | 0.36 | 0.33-0.36 |
-
-**The epilogue is level with the separate passes**, not faster, at these sizes: the result is 2 MB, so the passes
-`AddRow` and `Activate` make run on data in L2 or L3, and GELU's own arithmetic (a FastTanh an element, ~4 cycles) is
-what they cost. Applied as each tile was stored, in the accumulation type, it was slower (2.7 against 2.3 ms with GELU,
-4.2 with `pre`): it held C and pre tile by tile and did the activation 384 elements at a time. It now runs on each
-block of C's rows once they are summed, a row at a time, while they are in L2 - so `GemmAct` reads C from memory once,
-and `pre` costs nothing extra; for a C larger than the caches (8192 x 512) it measured 21-22 ms against 21-23 for the
-three calls. Its value is the one call, and one pass over C.
-
-A 3 x 3 convolution of a batch of 128 images, padding 1, with bias and ReLU:
-
-| layer | master: oann's im2col, Gemm, AddRow, ReLU | `Im2col` + `GemmAct` | `GemmPatches` |
-|---|---:|---:|---:|
-| 1 -> 16 channels, 28 x 28 | 5.8-6.8 | 3.7-3.9 | 3.4-3.6 |
-| 16 -> 32 channels, 14 x 14 | 12.7-13.2 | 9.0-9.5 | 7.8-8.1 |
-
-and the products alone, the patches already made:
-
-| layer | product | master | now |
-|---|---|---:|---:|
-| 1 -> 16 | forward, y = cols w^T (100352 x 16 x 9) | 2.2-2.6 | 1.5-1.9 |
-| 1 -> 16 | dW = dY^T cols (16 x 9 x 100352) | 5.2-6.2 | 2.9-3.1 |
-| 16 -> 32 | forward (25088 x 32 x 144) | 6.6-7.1 | 4.0-4.1 |
-| 16 -> 32 | dW (32 x 144 x 25088) | 9.4-10.0 | 7.4-8.5 |
-
-- **Thin products**: a result 16 wide used half of the 12 x 32 tile; it now gets a tile one vector wide (12 x 16), and
-  the 16 x 9 weight gradient - whose 9 columns used 9 of 32 - is computed as its transpose with that tile (9 rows of 12,
-  16 columns of 16): 1.4x and 1.9x. Neither changes any element's sum.
-- **`GemmPatches`** packs the patch matrix's panels straight from the images: a panel's 12 output positions gathered
-  together one patch input at a time, each window's first pixel computed once per panel and the next position found by
-  a step, not by dividing. It saves making and re-reading the patches (3.6 MB for the first layer) and the separate bias
-  and ReLU passes: 1.7x the master path on the first layer, 1.6x on the second, and 1.05-1.15x `Im2col` + `GemmAct`.
-- `Im2col` itself (the patches made, for the backward's col2im and for testing) is 1.5x oann's on one channel (1.5-1.6
-  against 2.3-2.4 ms) and level on 16: the windows' inputs walked in order with an offset kept as they go, rather than
-  as loops three elements long that LLVM tests for overlapping arrays every time round.
-- **Not built: the weights' gradient straight from the images** (the patch matrix as the right operand). It was built
-  and measured slower than `Im2col` plus `Gemm` (26 against 15-20 ms on the second layer), and the backward needs the
-  patches workspace for col2im anyway; `dW = dY^T cols` through `Gemm` gets the thin and exchanged tiles.
-
-Plain `Gemm` through the reworked core, against master's, interleaved (GFLOPS, square, one thread, `bench/gemm.olang`):
-F32 n 128 72 -> 79, 256 91-97 -> 93-98, 512 72-83 -> 90-94, 1024 74-78 -> 74-76; F64 n 512 34-36 -> 40-41 and level
-elsewhere.
-
-### From oann: BF16 narrowing, a lambda through a larger caller, small products (2026-10-09)
-
-oann's `repro/bf16narrow`, `repro/capturedvalue` and DESIGN.md section 13, fixed in the compiler and std/linalg (CLAUDE.md,
-"oann's four"). Each the previous compiler's binary against the new one's, built side by side and run interleaved; the
-machine was shared at load 7-10, so each row gives the range over its runs (medians of 9, or minimums of 11 for the
-products, which the load disturbs least).
+oann's `repro/bf16narrow`, fixed in the compiler. The previous compiler's binary against the new one's, built side by
+side and run interleaved; the machine was shared at load 7-10, so each row gives the range over its runs (medians of
+9). (The GEMM, batched-product and training-step measurements against C and OpenBLAS that stood here went with
+std/linalg, removed 2026-10-26; they are in git history.)
 
 | what | before | after |
 |---|---:|---:|
 | `BF16(x)` from F32, ns an element (4M) | 10.3-20.2 | 0.65-1.0 |
 | `b * b + b` in BF16, ns an element | 22.6-30.4 | 0.54-1.43 |
 | narrowing by bits, `U16(h).BF16FromBits()`, ns an element | 1.27-2.29 | 0.67-1.64 |
-| std/linalg BF16 product 1024 x 512 x 128, ms (F32: 1.9-2.4) | 4.86-7.49 | 1.58-1.69 |
-| std/linalg BF16 product 1024 x 128 x 128, ms (F32: 0.40-0.60) | 1.90-2.33 | 0.34-0.38 |
-| a capturing lambda through `Map` from a dispatch, ns an element | 19.4-32.2 | 1.40-2.67 |
-| the same lambda declaring its values instead (unchanged) | 1.37-3.35 | 1.48-2.31 |
 
-- **BF16**: `fptrunc float to bfloat` was a call of `__truncsfbf2` (LLVM 18 has no other lowering on x86 once B12c
-  takes AVX512-BF16 away); the code generator now narrows in integers on the F32's bits, inline, and every loop above
-  vectorizes. Identical bits on all 2^32 F32 patterns. A BF16 compare widens both sides first too: left as an `fcmp
-  bfloat`, instruction selection rounded a promoted value back through `__truncsfbf2`, the one call left in the
-  exhaustive test's loop - which, every F32 narrowed and every BF16 through `+ - * /` against ten others, took 43.8 s
-  with the previous compiler and 8.5 s now. `bench/repro/bf16_narrow.olang`.
-- **The lambda**: `Map$F32` was inlined where its function value was a constant pair (a capture-free lambda) and not
-  where it was built around an environment, so the capturing lambda was called indirectly per element. A function
-  value is now passed as two words, its code a constant argument either way. `bench/repro/captured_value.olang`.
-
-**Small products.** std/linalg computed a product of at most 64^3 multiply-adds directly (each row of C updated in
-memory from rows of B) where B is not transposed. Both paths were measured over 60-odd shapes on AVX-512, AVX2
-(`-a x86-64-v3`) and SSE (`-a x86-64`), from a copy of std/linalg with the bound a mutable global, both in one process,
-minimum of 11 interleaved runs of each (us). A sample, AVX-512 F32 (m x k x n):
-
-| shape | direct | packed | | shape | direct | packed |
-|---|---:|---:|---|---|---:|---:|
-| 8 x 8 x 8 | 0.26 | 0.54 | | 5 x 64 x 16 | 1.57 | 1.46 |
-| 10 x 10 x 10 | 0.60 | 0.64 | | 5 x 64 x 64 | 1.53 | 3.91 |
-| 11 x 11 x 11 | 0.79 | 0.67 | | 8 x 64 x 32 | 2.53 | 1.92 |
-| 16 x 16 x 16 | 0.96 | 0.74 | | 8 x 64 x 128 | 3.76 | 6.31 |
-| 32 x 32 x 32 | 6.48 | 1.71 | | 11 x 64 x 64 | 3.34 | 3.97 |
-| 64 x 32 x 64 | 10.51 | 4.96 | | 12 x 64 x 64 | 3.68 | 2.97 |
-| 64 x 64 x 64 | 22.05 | 8.75 | | 8 x 512 x 64 | 19.88 | 29.76 |
-| 64 x 8 x 5 | 3.88 | 1.30 | | 5 x 1024 x 64 | 24.46 | 59.49 |
-
-The direct loop wins below about a thousand multiply-adds (the packed path has ~0.5 us of its own) and for a result of
-a few rows each several vectors wide (where a tile would be mostly padding); a row one or two vectors long loses, its
-loop's tests costing more than its work. AVX2 and SSE move the edges a little (SSE's packed kernel is the weakest, and
-loses at 14^3 and 16^3 by 0.1-0.4 us) but not the shape of it. Now: direct when m n k <= 1024, or m < 12, n at least
-four vectors and k n <= 65536 (`computedDirectly`). Through the real `Gemm`, before -> after (us, minimum of 11, both
-in one process): 64 x 32 x 64 10.3-10.5 -> 4.75-4.8 (attention's), 64^3 19.7 -> 8.2-8.4, 32^3 5.45 -> 1.66, 64 x 8 x 5
-2.9-3.1 -> 1.0, F64 64 x 32 x 64 14.5-15.0 -> 11.0; 8^3 and 8 x 64 x 64 unchanged.
+`fptrunc float to bfloat` was a call of `__truncsfbf2` (LLVM 18 has no other lowering on x86 once B12c takes
+AVX512-BF16 away); the code generator now narrows in integers on the F32's bits, inline, and every loop above
+vectorizes. Identical bits on all 2^32 F32 patterns. A BF16 compare widens both sides first too: left as an `fcmp
+bfloat`, instruction selection rounded a promoted value back through `__truncsfbf2`, the one call left in the
+exhaustive test's loop - which, every F32 narrowed and every BF16 through `+ - * /` against ten others, took 43.8 s
+with the previous compiler and 8.5 s now. `bench/repro/bf16_narrow.olang`.
 
 ## Vec as a handle (`vec.olang`, round 1 of docs/memory.md, 2026-10-17)
 

@@ -348,7 +348,7 @@ done:
 ; The pool is a set of size classes, so any chunk big enough is found, not only the one on top. It used to be one
 ; list taken from its head: a closing scope gives its chunks back newest first, so a scope that took a large chunk and
 ; then a smaller one left the large one under the small one - the next call found the small one at the head, mapped
-; another large one, and the old one was never taken again (std/linalg's Gemm lost a B panel per product that way). A
+; another large one, and the old one was never taken again (a matrix product lost a B panel per call that way). A
 ; class holds chunks of one size, four classes per power of two from 4KB up (4096, 5120, 6144, 7168, 8192, 10240, ...),
 ; and a new chunk is made at its class's size, so every chunk of a class holds whatever the class is asked for. A
 ; request takes the newest chunk of the smallest non-empty class that holds it, up to two powers of two above its own
