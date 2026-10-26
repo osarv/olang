@@ -1440,3 +1440,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `Iterator<T&return>`; yielded views read-only; borrows of inputs `Iterator<T&t>`; plain yields per turn as today. No
   new scope rule: section 8 judges the yield as a borrowed result. Recorded as decided from the user's reasoning; queued
   with QBB after generator elision.
+- QBG proposal 2026-10-26 (the user: "functions that have default for all other parameters should have an option to be
+  called by naming the parameters we set, which must be all without default values" - reading taken: parameters
+  without defaults are passed positionally; the trailing defaulted ones may be set by name): proposed `f(a, b, alpha =
+  2.0, threads = 4)` - named only for parameters with a default, after the positional ones, any order, each once; only
+  defaulted parameters' names become API; replaces the `default` argument-slot keyword (one way to skip); constructors
+  and methods too; calls through a function value positional only (names are no part of a function type). ASKED.
