@@ -1285,3 +1285,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   constant and expression macros translate, untyped text ones cannot; `link` stays (a header does not say its library),
   `extern fn` stays as the low-level form few programs write; whole .c files compile as full C, only the boundary is
   restricted. Still ASKED.
+- QBC extended 2026-10-26 (the user: "do the kernels for all relevant floating-point shapes"): the kernel-tuning batch
+  covers F16, BF16, F8 (both), F32, F64 and the shape families (large, thin, small, transposed, batched/causal,
+  patches). Answered: the compiler binary does not grow - kernels are std source compiled only into programs calling
+  them, per element type used; the batch measures program size and compile time.
+- QBE follow-up 2026-10-26 (the user: link on the import line; "is there ever any reason not to have it there?";
+  keeping extern means keeping link?; `import "path" as alias` instead of `import alias "path"`?). Proposed: the
+  library goes where the declarations come from - `import "zlib.h" as z link "z"` and `extern "z" fn f(...)` (no name =
+  libc or already linked); the standalone `link` declaration goes; `import "path" as alias` replaces `import alias
+  "path"` (reads aloud, `as` already a keyword), migrated by a tool. ASKED.
