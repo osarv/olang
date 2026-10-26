@@ -1033,9 +1033,8 @@ fn testfuzz(r mut report&) ? Failed {
                  outOf(dir).Contains($"an input failed, saved in " $saved "/"), "the planted bug found", dir)
     try r.expect(sh(dir, "ls " $saved " | grep -q crash-") == 0, "the failing input saved", dir)
     ran = sh(dir, "\"$OLANG\" test parse.olang > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains($"fuzz: replaying " $saved "/crash-") and
-                 outOf(dir).Contains("FAIL - parse: never fails a check") and outOf(dir).Contains("ok - plain"),
-                 "the saved input replayed", dir)
+    replayed := outOf(dir).Contains($"fuzz: replaying " $saved "/crash-") and outOf(dir).Contains("ok - plain")
+    try r.expect(ran == 1 and replayed and outOf(dir).Contains("FAIL - parse: never fails a check"), "the input replayed", dir)
     os.Run("rm -rf " $os.Quote($dir "/testdata"))
     ran = sh(dir, "\"$OLANG\" test -sanitize -fuzz never -fuzztime 120 parse.olang > out.txt 2>&1")
     try r.expect(ran == 1 and outOf(dir).Contains("assertion failed: planted bug reached"), "-sanitize -fuzz", dir)
@@ -1047,8 +1046,8 @@ fn testfuzz(r mut report&) ? Failed {
     try r.expect(ran == 1 and outOf(dir).Contains("prop: a failing case, shrunk to:\n  argument 1: I64[50]\n  argument 2: Pt(0, 0)\n") and
                  outOf(dir).Contains("assertion failed: an element of 50 or more"), "a property's failing case shrunk", dir)
     ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains("prop: replaying testdata/fuzz/every_element_below_50/input-"),
-                 "a property's saved case replayed", dir)
+    replayed = outOf(dir).Contains("prop: replaying testdata/fuzz/every_element_below_50/input-")
+    try r.expect(ran == 1 and replayed, "a property's saved case replayed", dir)
 }
 
 # S18a: a failed assert or unreachable says where it is - and an assert the message written after it - built,
@@ -1101,8 +1100,8 @@ fn assertloc(r mut report&) ? Failed {
     try r.expect(ran == 0 and outOf(dir).Contains(picked), "a method's tests and a description's text picked", dir)
     # B7a: words naming no test fail the run, the nearest target or description suggested
     ran = sh(dir, "\"$OLANG\" test targets.olang Bax > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains("targets.olang: no test is named by 'Bax' - did you mean 'Box'?"),
-                 "a word naming no test, and the nearest", dir)
+    nearest := outOf(dir).Contains("targets.olang: no test is named by 'Bax' - did you mean 'Box'?")
+    try r.expect(ran == 1 and nearest, "a word naming no test, and the nearest", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang nosuch > out.txt 2>&1")
     try r.expect(ran == 1 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
