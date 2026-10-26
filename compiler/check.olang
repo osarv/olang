@@ -6636,6 +6636,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
             c.err(opSp, msgs.NotExtendedOp(c.ty(ta), msgs.Tok(op.Text()), "'" $operatorName(op) "'"))
             return c.unknown(sp)
         }
+        if not c.shiftInRange(ta, y, bSp) { return c.unknown(sp) }
         return c.checkedPrim(sp, ta, binaryOp(op), x, y)
     }
     m := ta
@@ -7522,7 +7523,9 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Exp
 fn (c mut Checker&) sliceOf(sp source.Span, b typed.Place&c, lo ast.Expr?&, hi ast.Expr?&, check typed.Check) typed.Expr&c {
     base typed.Place&c = b
     t := base.Type()
-    perm := types.Writable
+    # E16a: a slice carries its base's permission - of a value array, the place's own (an immutable global's is
+    # read-only, S6, T25c; so is one reached through a read-only reference), of a reference, the reference's
+    perm := types.Writable if c.slicedWritable(b) else types.ReadOnly
     for k in range 4 {
         if not c.isRef(t) { break }
         c.nullRead(base)
@@ -7568,6 +7571,21 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Place&c, lo ast.Expr?&, hi a
     # clause's value instead, whose length is the running program's)
     rt := t if c.isNamed(t) else c.P.T.Array(c.P.T.Elem(at), c.sliceLength(at, lo, hi) if check == typed.Check.Abort else types.TypeId(0))
     return typed.Expr.Slice(sp, c.P.T.Ref(rt, perm), typed.Slice(base, l!, h!, check))
+}
+
+# whether the array a value place holds may be written through a slice of it (E16a): not an immutable global's, nor
+# one reached through a read-only reference, nor a lambda's copy of a captured value (D16c) - what mustWrite refuses a
+# store into. A read-only copy's (T25c) is judged where the slice is used, as a store into it is
+fn (c mut Checker&) slicedWritable(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, id) => not (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty))
+        case typed.Place.Global(_, _, mi, n) => c.P.GlobalDecl(mi, n) is null or writtenMut(c.P.GlobalDecl(mi, n)!.Ty)
+        case typed.Place.Deref(_, _, ref) => not c.isRef(typeOf(ref)) or (c.P.T.PermOf(typeOf(ref)) & types.Writable) != 0
+        case typed.Place.Field(_, _, base, _) => c.slicedWritable(base)
+        case typed.Place.Elem(_, _, e) => c.slicedWritable(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.slicedWritable(pl.Base)
+        case _ => true
+    }
 }
 
 # T7c, E16a: a slice's length where it is known while compiling - both bounds constants (an absent lo 0, an absent hi
@@ -13813,7 +13831,7 @@ fn (c mut Checker&) step(sp source.Span, y ast.Expr&, inc Bool) {
     c.notCapture(p, y.Span())
     t := p.Type()
     if not c.isNumber(t) or (c.isNamed(t) and not c.P.Extends(t)) {
-        if t != types.UnknownT and not c.stepMethod(sp, p, t, inc) { c.gap(sp, "'++' on a type of this kind (E31 Inc)") }
+        if t != types.UnknownT and not c.stepMethod(sp, p, t, inc) { c.err(c.opAfter(y.Span(), 2), msgs.StepNotNumber(c.ty(t))) }
         return
     }
     old := c.read(sp, typed.Place.Target(sp, t))
@@ -14282,8 +14300,12 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         nomatch { }
     }
     osp := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
-    if c.writeBack(sp, op, p, value, osp) { return }
-    c.notCapture(p, c.writeAt(target))
+    # a lane store into an array a reference read out of x[i] names writes where the reference points, not into the
+    # element: nothing to write back (E31b), as for "x[i].r[j] += v"
+    throughRef := op != token.Tok.Assign and c.isRef(p.Type()) and c.laneArray(p.Type()) and laneTok(compoundOp(op))
+    if not throughRef and c.writeBack(sp, op, p, value, osp) { return }
+    # (through a reference the store is T25c's, laneTarget's: a read-only one is refused there)
+    if not throughRef { c.notCapture(p, c.writeAt(target)) }
     t := p.Type()
     if op == token.Tok.Assign {
         c.storeInto(sp, p, value, osp, target)
@@ -14329,6 +14351,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         v = c.value(c.expr(value, t), value.Span())
     }
     vt := typeOf(v)
+    if (bop == token.Tok.Shl or bop == token.Tok.Shr) and not c.shiftInRange(t, v!, value.Span()) { return }
     if bop != token.Tok.Shl and bop != token.Tok.Shr and vt != t and vt != types.UnknownT {
         # T6b: a number flows toward its base - a declared one into its base and on (sc U64 += a Code over U16)
         if c.isNumber(vt) and c.P.Flows(vt, t) {
@@ -14443,12 +14466,32 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     # then the value
     x typed.Expr?&c = null
+    laneK I64 = -1
+    lanePre := laneVals()
     if op == token.Tok.Assign {
         x = c.exprTo(value!, pt)
         if pt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, pt, x!)) }
+    } else if value is not null and c.laneArray(pt) and laneTok(compoundOp(op)) {
+        # E39 through x[i] (an inline array of the element): the operand's lanes evaluated and held, then the element
+        # read, the loop storing into it, and it written back - none of the program's code between the read and the
+        # write-back, so lanes calling an operator method are refused
+        e := c.laneElemOf(pt)
+        laneK = c.laneLeaf(c.laneArg(value, e))
+        ve := c.laneNodes[laneK].Elem
+        meth := ""
+        if not c.builtinElem(e) or not c.builtinElem(ve) {
+            meth = "'" $operatorName(compoundOp(op)) "'"
+        } else {
+            meth = c.laneMethodCalled(laneK)
+        }
+        if meth != "" {
+            c.err(osp, msgs.WriteThroughAtOperator(c.ty(e if not c.builtinElem(e) else ve), meth))
+            return true
+        }
+        c.laneHoldLeaves(laneK, lanePre)
     } else {
         if not c.isNumber(pt) or (c.isNamed(pt) and not c.P.Extends(pt)) {
-            if pt != types.UnknownT { c.gap(sp, "a compound assignment to what is no number (E31)") }
+            if pt != types.UnknownT { c.writeBackNoNumber(sp, op, pt, value, osp) }
             return true
         }
         if value is null {
@@ -14456,11 +14499,13 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         } else {
             x = c.value(c.expr(value, pt), vsp)
             if typeOf(x) != pt and c.isNumber(typeOf(x)) and c.P.Flows(typeOf(x), pt) { x = c.convert(vsp, x!, pt) }
+            bop := compoundOp(op)
+            if (bop == token.Tok.Shl or bop == token.Tok.Shr) and not c.shiftInRange(pt, x!, vsp) { return true }
         }
     }
     # a local's own value is read where it is stored - nothing between can change it, and held in a local of its own
     # it would live in the statement's block where the local lives in its own (O25a)
-    direct := op == token.Tok.Assign and localRead(x!)
+    direct := laneK >= 0 or op == token.Tok.Assign and localRead(x!)
     hv I64 = -1
     if not direct {
         hv = c.local(source.NameId(0), vsp, typeOf(x), typed.LocalKind.Held, typed.Mark.None)
@@ -14493,6 +14538,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         for i in range setHeld.Len() { sa[i] = c.readLocal(sp, setHeld[i]) }
         sa[setHeld.Len()] = v!
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, setM, c.read(sp, p2), Array<ast.Expr&>(0), sa)))
+    } else if laneK >= 0 {
+        c.laneStore(sp, osp, compoundOp(op), pt, c.laneTarget(sp, p2), laneK, lanePre)
     } else {
         if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
         c.emit(typed.Stmt.Assign(sp, p2, v!))
@@ -14505,6 +14552,74 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]!), Array<ast.Expr&>(0), sargs)))
     }
     return true
+}
+
+# E8a: a shift of a value of type ta by an amount known while compiling - a literal, or a literal-only expression
+# folded to one - is in [0, ta's width), else an error where it is written, at any width (T4a)
+fn (c mut Checker&) shiftInRange(ta types.TypeId, amount typed.Expr&, sp source.Span) Bool {
+    u := c.under(ta)
+    if not c.P.T.IsInt(u) { return true }
+    match amount {
+        case typed.Expr.Lit(_, at, bits) {
+            au := c.under(at)
+            if not c.P.T.IsInt(au) { return true }
+            ab := c.P.T.Bits(au)
+            # the amount's value: its bits read as its own type reads them (a wider literal's, its value)
+            v := bits
+            if ab > 64 { ab = 64 }
+            if ab < 64 {
+                v = bits & ((I64(1) << ab) - 1)
+                if not c.P.T.IsUnsigned(au) and ((v >> (ab - 1)) & 1) == 1 { v = v | ~((I64(1) << ab) - 1) }
+            }
+            w := c.P.T.Bits(u)
+            big := c.P.T.IsUnsigned(au) and ab == 64 and v < 0
+            if big or v < 0 or v >= w {
+                c.err(sp, msgs.ShiftOutOfRange(c.ty(ta), v, w))
+                return false
+            }
+        }
+        nomatch { }
+    }
+    return true
+}
+
+# whether a lane's elements of type t are computed by the built-in operations alone: a Bool, a number that is no
+# declared type, or one extending its base (T29f)
+fn (c mut Checker&) builtinElem(t types.TypeId) Bool {
+    return t == types.UnknownT or t == types.BoolT or (c.isNumber(t) and (not c.isNamed(t) or c.P.Extends(t)))
+}
+
+# a compound store (or a step, value null) through x[i] on what is no number: the operator method it would call runs
+# between the read and the write-back (E31b), and a type with none has no such operator
+fn (c mut Checker&) writeBackNoNumber(sp source.Span, op token.Tok, pt types.TypeId, value ast.Expr?&, osp source.Span) {
+    inc := op == token.Tok.PlusEq
+    name := ""
+    if value is null {
+        if c.isNamed(pt) {
+            name = "Inc" if inc else "Dec"
+            if c.roleMethod(pt, name, 0) < 0 {
+                name = "Plus" if inc else "Minus"
+                if c.roleMethod(pt, name, 1) < 0 { name = "" }
+            }
+        }
+        if name == "" {
+            c.err(osp, msgs.StepNotNumber(c.ty(pt)))
+            return
+        }
+    } else {
+        bop := compoundOp(op)
+        if c.isNamed(pt) and c.roleMethod(pt, operatorName(bop), 1) >= 0 {
+            name = operatorName(bop)
+        } else {
+            # no operator method: what the same assignment says elsewhere
+            v := c.expr(value, types.UnknownT)
+            if typeOf(v) != types.UnknownT and c.operatorCall(sp, sp, bop, c.read(sp, typed.Place.Target(sp, pt)), v) is null {
+                c.gap(sp, "a compound assignment to what has no operator method (E31)")
+            }
+            return
+        }
+    }
+    c.err(osp, msgs.WriteThroughAtOperator(c.ty(pt), "'" $name "'"))
 }
 
 # whether x reads a local's own value (not through a reference it holds)
@@ -15496,33 +15611,26 @@ type laneVals struct() {
 # every array has, each but the first checked against it once (LaneLen, a guaranteed check)
 fn (c mut Checker&) laneSetup(sp source.Span, k I64) laneVals {
     lv := laneVals()
+    c.laneHoldLeaves(k, lv)
+    c.laneLength(sp, k, lv)
+    return lv
+}
+
+# each leaf of node k not held in lv yet evaluated and held, in the order written: an array borrowed (E12c), a local
+# read where it is, anything else in a hidden local of its own, a literal not at all
+fn (c mut Checker&) laneHoldLeaves(k I64, lv mut laneVals&) {
     order Vec<I64>
     c.laneLeaves(k, order)
-    fixed := c.laneNodes[k].Len
-    n typed.Expr?&c = c.lit(sp, c.i64(), fixed) if fixed >= 0 else null
-    checks := false
     for leaf in order {
+        if lv.held.Has(leaf) { continue }
         ln := c.laneNodes[leaf]
         if ln.Kind == LaneArr {
-            h := c.borrowedSource(ln.Sp, ln.X!)
-            lv.held.Put(leaf, h)
-            if ln.Len >= 0 { continue }
-            l := c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
-            if n is null {
-                n = l
-            } else {
-                from := c.exprs.Len()
-                c.exprs.Push(n)
-                c.exprs.Push(l)
-                n = typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))
-                checks = true
-            }
+            lv.held.Put(leaf, c.borrowedSource(ln.Sp, ln.X!))
             continue
         }
         match ln.X! {
             case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
             nomatch {
-                # a local read where it is; anything else held in a hidden local of its own
                 lp := readPlace(ln.X!)
                 at I64 = -1
                 if lp is not null {
@@ -15539,11 +15647,36 @@ fn (c mut Checker&) laneSetup(sp source.Span, k I64) laneVals {
             }
         }
     }
+}
+
+# the length node k's lanes have, from its leaves held in lv: known while compiling, or held in a hidden local (lv.N) -
+# every array's but the first's checked against the first's (LaneLen)
+fn (c mut Checker&) laneLength(sp source.Span, k I64, lv mut laneVals&) {
+    order Vec<I64>
+    c.laneLeaves(k, order)
+    fixed := c.laneNodes[k].Len
+    n typed.Expr?&c = c.lit(sp, c.i64(), fixed) if fixed >= 0 else null
+    checks := false
+    for leaf in order {
+        ln := c.laneNodes[leaf]
+        if ln.Kind != LaneArr or ln.Len >= 0 { continue }
+        h := try lv.held.Get(leaf) catch default -1
+        if h < 0 { continue }
+        l := c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
+        if n is null {
+            n = l
+        } else {
+            from := c.exprs.Len()
+            c.exprs.Push(n)
+            c.exprs.Push(l)
+            n = typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))
+            checks = true
+        }
+    }
     if n is not null and (fixed < 0 or checks) {
         lv.N = c.hidden(sp, c.i64())
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(lv.N)), n))
     }
-    return lv
 }
 
 # the leaves under node k, left to right as written
@@ -15564,11 +15697,11 @@ fn (c mut Checker&) laneCount(sp source.Span, k I64, lv laneVals&) typed.Expr&c 
     return c.readLocal(sp, lv.N)
 }
 
-# a loop over the lanes: a counter i from 0, the loop leaving where it reaches n - its counter, block, outer block, undo
+# a loop over the lanes: a counter i from start (0, or 1 where lane 0 is built before it), the loop leaving where it reaches n - its counter, block, outer block, undo
 # mark and statements' start, for laneLoopClose
-fn (c mut Checker&) laneLoopOpen(sp source.Span, n typed.Expr&c) I64, I64, I64, I64, I64 {
+fn (c mut Checker&) laneLoopOpen(sp source.Span, n typed.Expr&c, start I64 = 0) I64, I64, I64, I64, I64 {
     i := c.hidden(sp, c.i64())
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), c.lit(sp, c.i64(), 0)))
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), c.lit(sp, c.i64(), start)))
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, i), n), id))
@@ -15723,7 +15856,7 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     # Min, Max
     chk := c.failOp(types.TypeId[c.preludeWord("std/prelude/array", "ArrayError", "EMPTY")], nsp)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.VoidT, typed.PrimOp.NonEmpty, chk, c.one(cnt))))
-    # the first lane, built again with nothing said - building it in the loop says what is wrong with it
+    # the first lane, built with nothing said - the loop's, built for the lanes after it, says what is wrong with it
     z := c.hidden(sp, c.i64())   # lane 0 through a local: a constant index into a fixed array of none is an error
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(z)), c.lit(sp, c.i64(), 0)))
     g := c.P.L.Diags.Hold()
@@ -15732,7 +15865,8 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     c.P.L.Diags.Drop(g)
     m := c.hidden(sp, e)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(m)), c.fit(first, e, sp)))
-    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.laneCount(sp, k, lv))
+    # the rest of the lanes from 1: lane 0 is built once, as every other is (each lane the operation written, E39)
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.laneCount(sp, k, lv), 1)
     v := c.hidden(sp, e)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(v)), c.fit(c.laneElem(sp, k, lv, c.readLocal(sp, i)), e, sp)))
     less := c.opValues(sp, nsp, token.Tok.Lt, c.readLocal(sp, v), c.readLocal(sp, m), sp, sp) if name == "Min" else
@@ -15750,16 +15884,31 @@ fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I
     return typed.Expr.Seq(sp, e, typed.Seq(gather(c.stmts, from), c.readLocal(sp, m)))
 }
 
-# "x op= v" on an array (E39): in place, lane by lane - x's place evaluated once and borrowed writably, v's lanes
-# evaluated before the loop, every lane of x stored with its own value op v's
+# "x op= v" on an array (E39): in place, lane by lane - x's place evaluated once and borrowed writably (T25c: only a
+# writable place or reference), v's lanes evaluated before the loop, every lane of x stored with its own value op v's
 fn (c mut Checker&) laneAssign(sp source.Span, osp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&) {
     t := p.Type()
-    rt := c.P.T.Ref(c.deref(t), types.Writable)
+    h := c.laneTarget(sp, p)
+    v := c.laneArg(value, c.laneElemOf(t))
+    lv := laneVals()
+    c.laneStore(sp, osp, op, t, h, c.laneLeaf(v), lv)
+}
+
+# the array x op= v stores into, borrowed writably into a hidden local - its place read once
+fn (c mut Checker&) laneTarget(sp source.Span, p typed.Place&c) I64 {
+    rt := c.P.T.Ref(c.deref(p.Type()), types.Writable)
     h := c.hidden(sp, rt)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.fit(c.read(sp, p), rt, sp)))
+    return h
+}
+
+# the loop of x op= v (E39): x the array of type t borrowed in local h, v node vk, the leaves lv holds already kept as
+# they are (a store through x[i], E31b, evaluates v's before reading the element). Each lane is computed and stored
+# before the next is read (F10: an operand overlapping x reads the lanes already stored, as the loop written by hand
+# does). An element type that is or holds a reference is refused, as laneOut refuses it
+fn (c mut Checker&) laneStore(sp source.Span, osp source.Span, op token.Tok, t types.TypeId, h I64, vk I64, lv mut laneVals&) {
+    rt := c.localType(h)
     tk := c.laneLeaf(c.readLocal(sp, h))
-    v := c.laneArg(value, c.laneElemOf(t))
-    vk := c.laneLeaf(v)
     e := c.laneElemOf(t)
     ks := I64[tk, vk]
     ok := c.laneAdd(laneNode(LaneBin, op, sp, osp, tk, vk, -1, null, c.laneBinType(op, e, c.laneNodes[vk].Elem), c.laneLen(ks, osp), types.UnknownT))
@@ -15767,12 +15916,34 @@ fn (c mut Checker&) laneAssign(sp source.Span, osp source.Span, op token.Tok, p 
         c.laneSay(sp, ok)
         return
     }
-    lv := c.laneSetup(sp, ok)
+    if c.isRef(e) or c.P.T.HoldsRefs(e) {
+        c.err(osp, msgs.LaneReferences())
+        return
+    }
+    c.laneHoldLeaves(ok, lv)
+    c.laneLength(sp, ok, lv)
     i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.laneCount(sp, ok, lv))
     x := c.laneElem(sp, ok, lv, c.readLocal(sp, i))
     base typed.Place&c = typed.Place.Deref(sp, c.deref(rt), c.readLocal(sp, h))
     c.emit(typed.Stmt.Assign(sp, typed.Place.Elem(sp, e, typed.Elem(base, c.readLocal(sp, i), typed.Check.None)), c.fit(x, e, osp)))
     c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+}
+
+# the operator method node k's lanes call, by its element types - "" where every operation is a built-in one on numbers
+# or Bools (E31b: none of the program's code runs between a read through x[i] and its write-back)
+fn (c mut Checker&) laneMethodCalled(k I64) String {
+    n := c.laneNodes[k]
+    if n.Kind == LaneArr or n.Kind == LaneScalar { return "" }
+    for sub in I64[n.A, n.B, n.C] {
+        if sub < 0 { continue }
+        m := c.laneMethodCalled(sub)
+        if m != "" { return m }
+        te := c.laneNodes[sub].Elem
+        if te != types.BoolT and (not c.isNumber(te) or (c.isNamed(te) and not c.P.Extends(te))) {
+            return "'" $operatorName(n.Op) "'" if n.Kind == LaneBin else "operator method"
+        }
+    }
+    return ""
 }
 
 # the body run for each value: the loop's statements, or a comprehension's element yielded where its filter holds

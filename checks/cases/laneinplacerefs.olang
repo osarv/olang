@@ -1,0 +1,11 @@
+# check: fail error[E39]: lane operators give elements that may not be or hold references
+# E39: an element type that is or holds a reference is refused in place ("x += y") as in "z := x + y" (the second bulk
+# review's F11)
+type P struct(s String&) { s }
+fn (a P) Plus(b P) P { return P($a.s $b.s) }
+
+fn main() ? {
+    x := Array<P>(2, P("a"))
+    y := Array<P>(2, P("b"))
+    x += y
+}

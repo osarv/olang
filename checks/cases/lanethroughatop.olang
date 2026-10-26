@@ -1,0 +1,18 @@
+# check: fail error[E31b]: x[i] gives a copy of the element, and this store would run M's 'Plus' between reading it and writing it back
+# E31b, E39: a compound store through x[i] reads the element, stores, and writes it back with nothing of the program's
+# run between - an operator method, on the element or lane by lane on its array, would run there: refused, naming the
+# written-out form (it was dropped unseen, the second bulk review's F3)
+type M struct(v I64) { v }
+fn (a M) Plus(b M) M { return M(a.v + b.v) }
+
+type P struct() {
+    m M = M(1)
+    ms := Array<M>(2, M(1))
+}
+
+fn main() ? {
+    v := Vec<P>()
+    v.Push(P())
+    v[0].m += M(5)
+    v[0].ms += M(2)
+}

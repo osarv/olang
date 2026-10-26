@@ -1208,9 +1208,18 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
             m.refuse(WhyReadOnly)
             return -1
         }
-        if m.When == Mode.Compile and m.al[slot].Owner >= 0 and m.al[slot].Owner != m.initGlobal {
-            m.refuse(WhyWritesGlobal)
-            return -1
+        if m.al[slot].Owner >= 0 and m.al[slot].Owner != m.initGlobal {
+            if m.When == Mode.Compile {
+                m.refuse(WhyWritesGlobal)
+                return -1
+            }
+            # an immutable global's own storage is written by its initializer alone (S6) - the built program holds it
+            # as constant data (K2b), so under interpret writing it stops, as a write to constant data does
+            g := m.globals[m.al[slot].Owner]
+            if not g.Mutable and (g.Store & slotMask) == slot {
+                m.refuse(WhyReadOnly)
+                return -1
+            }
         }
     }
     return m.al[slot].Base + p.Off
@@ -1702,7 +1711,7 @@ fn (m mut Machine&) localAt(fi I64, l I64, n I64, write Bool) I64 {
     if m.halted or slot >= m.nAl { return m.at(Ptr(id, 0), n, write) }
     a := m.al[slot]
     if a.Kind == aFree or a.Gen != id >> slotBits or n > a.Size { return m.at(Ptr(id, 0), n, write) }
-    if write and (a.ReadOnly or (m.When == Mode.Compile and a.Owner >= 0 and a.Owner != m.initGlobal)) {
+    if write and (a.ReadOnly or (a.Owner >= 0 and a.Owner != m.initGlobal and (m.When == Mode.Compile or not m.globals[a.Owner].Mutable))) {
         return m.at(Ptr(id, 0), n, write)
     }
     return a.Base
