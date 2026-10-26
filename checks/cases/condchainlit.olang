@@ -1,0 +1,20 @@
+# check: run
+# B9c, K1a: a top-level condition holding a comparison chain with literals is decided (its stand-in operands were
+# counted as expressions that did not check, so it was refused with nothing said and never decided - the second bulk
+# review's P2); so is one building a constructor's defaults
+fn level() I64 { return 2 }
+L := level()
+if 0 < L < 3 {
+    Msg := "in range"
+} else {
+    Msg := "out"
+}
+type P struct(a I64 = 4) { a }
+if P().a == 4 {
+    Got := "default"
+} else {
+    Got := "other"
+}
+fn main() ? {
+    assert Msg == "in range" and Got == "default"
+}

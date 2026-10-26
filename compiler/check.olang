@@ -4814,6 +4814,11 @@ fn (c mut Checker&) unknown(sp source.Span) typed.Expr&c {
     return typed.Expr.Lit(sp, types.UnknownT, 0)
 }
 
+# a slot's stand-in until what it holds is written into it: no expression of the program's, so not counted as one that
+# did not check (K1a's counter - a top-level condition with a comparison chain of literals was refused with nothing said,
+# and never decided)
+fn (c mut Checker&) hole(sp source.Span) typed.Expr&c { return typed.Expr.Lit(sp, types.UnknownT, 0) }
+
 fn (c mut Checker&) lit(sp source.Span, t types.TypeId, bits I64) typed.Expr&c { return typed.Expr.Lit(sp, t, bits) }
 
 fn (c mut Checker&) read(sp source.Span, p typed.Place&c) typed.Expr&c {
@@ -5894,7 +5899,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
                 nomatch { }
             }
         }
-        args := Array<typed.Expr&>(ps.Len(), c.unknown(sp))     # each written below
+        args := Array<typed.Expr&>(ps.Len(), c.hole(sp))     # each written below
         was := c.ctorCalled
         c.ctorCalled = t
         for k in range ps.Len() {
@@ -7729,7 +7734,7 @@ fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr&c {
     for i in range n {
         lit[i] = c.litLike(ch.Xs[i])
         if lit[i] {
-            c.exprs.Push(c.unknown(sp))
+            c.exprs.Push(c.hole(sp))
         } else {
             c.exprs.Push(c.value(c.expr(ch.Xs[i], types.UnknownT), ch.Xs[i].Span()))
         }
@@ -12090,7 +12095,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
     # T7a, T7d: arrays held by value as elements are laid out at the one known length the items give them - each item
     # typed once, then fitted to that
     if c.runArrayValue(elem) and items.Len() > 0 {
-        ys := Array<typed.Expr&>(items.Len(), c.unknown(sp))
+        ys := Array<typed.Expr&>(items.Len(), c.hole(sp))
         first := types.UnknownT
         ok := true
         for i in range items.Len() {
@@ -14548,7 +14553,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         if l + 1 < nl { base = c.replaceTemp(base, temps[l + 1]) }
         bases[l] = base
         hs := held[l]
-        reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len(), c.unknown(sp))
+        reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len(), c.hole(sp))
         for i in range hs.Len() { reads[i] = c.readLocal(sp, hs[i]) }
         am := c.roleMethod(c.atRecs[recs[l]].Of, "At", hs.Len())
         el := c.invoke(sp, sp, am, c.read(sp, base), Array<ast.Expr&>(0), reads)
@@ -14561,7 +14566,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     c.notCapture(p2, sp)
     v := x if direct else c.readLocal(sp, hv)
     if setM >= 0 {
-        sa mut Array<typed.Expr&>&c = Array<typed.Expr&>(setHeld.Len() + 1, c.unknown(sp))
+        sa mut Array<typed.Expr&>&c = Array<typed.Expr&>(setHeld.Len() + 1, c.hole(sp))
         for i in range setHeld.Len() { sa[i] = c.readLocal(sp, setHeld[i]) }
         sa[setHeld.Len()] = v!
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, setM, c.read(sp, p2), Array<ast.Expr&>(0), sa)))
@@ -14573,7 +14578,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     for l in range nl {
         hs := held[l]
-        sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len() + 1, c.unknown(sp))
+        sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len() + 1, c.hole(sp))
         for i in range hs.Len() { sargs[i] = c.readLocal(sp, hs[i]) }
         sargs[hs.Len()] = c.readLocal(sp, temps[l])
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]!), Array<ast.Expr&>(0), sargs)))
