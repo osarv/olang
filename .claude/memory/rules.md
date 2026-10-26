@@ -156,6 +156,12 @@ Same rule as last week: code work (agents, merges, reviews) stops at ~0.90 weekl
 starts above ~0.85; running agents finish and merge. The reset is Sat 2026-10-31 ~06:00 CEST. Check the week at every
 completion and check-in.
 
+**Standing rule from 2026-10-26, every week until the user changes it** (the user: "You dont need to place, just dont
+overrun say 95 percent. This is the new rule for every week until I change it. Use as much as you need, don't run
+things in parallel that slow either part down and stop at 95 percent always."): no pacing gaps; use what the work
+needs; run in parallel only what does not slow the other (disjoint files, no queueing on the one verify slot, memory);
+stop code work at ~0.95 weekly, every week. Supersedes the per-week 90% rules above.
+
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
 out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the
