@@ -130,7 +130,7 @@ OptWhat Array<String&> = String&[
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
     "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
     "reports the places that keep what they let go of until their scope closes, and why (B18)"
-    "fuzzes the one test NAME names (its target, its target's type or a word of its description) with libFuzzer, saving failing inputs beside the file (B19)"
+    "fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)"
     "with -fuzz: stops fuzzing after SECONDS (B19)"
 ]
 
