@@ -1259,14 +1259,14 @@ fn (e mut Emitter&) dbgSubTy() I64 {
 fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     t := e.T
     r := t.Repr(ty)
-    if r >= types.BoolT and r <= types.TypeId(14) {
+    if r >= types.BoolT and r <= types.TypeId(14) or t.KindOf(r) == types.Kind.Int {
         if e.dbgBasics.Has(I64(r)) { return try e.dbgBasics.Get(I64(r)) catch default -1 }
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
         enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
         # a byte as a character, as C's unsigned char, so that text's elements print as text
         if t.Bits(r) == 8 and t.IsUnsigned(r) { enc = "DW_ATE_unsigned_char" }
-        bits := 8 if r == types.BoolT else t.Bits(r)
+        bits := 8 if r == types.BoolT else (t.Bits(r) + 7) / 8 * 8     # T4a: an odd width the bytes its store writes
         e.dbgShared(n, $"!DIBasicType(name: \"" $t.Canon(r) "\", size: " $bits ", encoding: " $enc ")")
         return n
     }
@@ -2896,6 +2896,7 @@ fn (fe mut fnEm&) index(v String&, ty types.TypeId) String {
     t := fe.E.T
     r := t.Repr(ty)
     if t.Bits(r) == 64 { return $v }
+    if t.Bits(r) > 64 { return fe.let("trunc " $fe.ty(r) " " $v " to i64") }
     op := "zext" if t.IsUnsigned(r) else "sext"
     return fe.let($op " " $fe.ty(r) " " $v " to i64")
 }
@@ -2984,6 +2985,8 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
     if t.IsInt(r) {
         w := t.Bits(r)
         if w == 64 { return $bits }
+        # T4a: a constant of a type wider than 64 bits holds its value extended from 64 - by sign for a signed type
+        if w > 64 { return $U64(bits) if t.IsUnsigned(r) else $bits }
         v := bits & ((I64(1) << w) - 1)
         if v >= (I64(1) << (w - 1)) { v = v - (I64(1) << w) }
         return $v
@@ -3402,6 +3405,7 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
     k := fe.pieceOps.Len()
     vs := Array<String&>(k, "")
     ns := Array<String&>(k, "")
+    fns := Array<String&>(k, "")
     total := "0"
     for i in range k {
         x := fe.pieceOps[i]
@@ -3421,15 +3425,15 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
                 vs[i] = $fe.let("select i1 " $v ", ptr " $fe.E.cstr("true") ", ptr " $fe.E.cstr("false"))
                 ns[i] = $fe.let("select i1 " $v ", i64 4, i64 5")
             }
-            case mir.WriteKind.Uint {
-                vs[i] = $fe.zext64(v, xt)
-                fe.E.runtime("__olang_fmt_u64")
-                ns[i] = $fe.let("call i64 @__olang_fmt_u64(ptr null, i64 " $vs[i] ")")
-            }
             case _ {
-                vs[i] = $fe.index(v, xt)
-                fe.E.runtime("__olang_fmt_i64")
-                ns[i] = $fe.let("call i64 @__olang_fmt_i64(ptr null, i64 " $vs[i] ")")
+                # an integer: at 64 bits, or at 128 for a type wider than 64 (T4a)
+                un := fe.pieceKinds[i] == mir.WriteKind.Uint
+                w := "i128" if fe.E.T.Bits(fe.E.T.Repr(xt)) > 64 else "i64"
+                vs[i] = fe.extend(v, xt, w, un)
+                f := $("__olang_fmt_u" if un else "__olang_fmt_i") $w[1:]
+                fe.E.runtime(f)
+                fns[i] = $f
+                ns[i] = $fe.let("call i64 @" $f "(ptr null, " $w " " $vs[i] ")")
             }
         }
         total = $ns[i] if i == 0 else fe.let("add i64 " $total ", " $ns[i])
@@ -3440,8 +3444,9 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
     for i in range k {
         match fe.pieceKinds[i] {
             case mir.WriteKind.Char { fe.store("i8", vs[i], at) }
-            case mir.WriteKind.Uint { fe.let("call i64 @__olang_fmt_u64(ptr " $at ", i64 " $vs[i] ")") }
-            case mir.WriteKind.Int { fe.let("call i64 @__olang_fmt_i64(ptr " $at ", i64 " $vs[i] ")") }
+            case mir.WriteKind.Uint, mir.WriteKind.Int {
+                fe.let("call i64 @" $fns[i] "(ptr " $at ", " $("i128" if fns[i].EndsWith("128") else "i64") " " $vs[i] ")")
+            }
             case _ {
                 fe.E.textCopy()
                 fe.w("call void @olang_textcopy(ptr " $at ", ptr " $vs[i] ", i64 " $ns[i] ")")
@@ -3506,11 +3511,12 @@ fn (fe mut fnEm&) write(b String&, how mir.WriteKind, x mir.Operand) {
             fe.E.runtime("__olang_sb_room")
             fe.E.runtime("__olang_sb_add")
             un := how == mir.WriteKind.Uint
-            wide := fe.index(v, xt) if not un else fe.zext64(v, xt)
-            fn64 := "__olang_fmt_u64" if un else "__olang_fmt_i64"
+            w := "i128" if t.Bits(t.Repr(xt)) > 64 else "i64"
+            wide := fe.extend(v, xt, w, un)
+            fn64 := $("__olang_fmt_u" if un else "__olang_fmt_i") $w[1:]
             fe.E.runtime(fn64)
-            p := fe.let("call ptr @__olang_sb_room(ptr " $b ", i64 24)")
-            k := fe.let("call i64 @" $fn64 "(ptr " $p ", i64 " $wide ")")
+            p := fe.let("call ptr @__olang_sb_room(ptr " $b ", i64 " $("48" if w == "i128" else "24") ")")
+            k := fe.let("call i64 @" $fn64 "(ptr " $p ", " $w " " $wide ")")
             fe.w("call void @__olang_sb_add(ptr " $b ", i64 " $k ")")
         }
         case mir.WriteKind.Float {
@@ -3537,6 +3543,14 @@ fn (fe mut fnEm&) write(b String&, how mir.WriteKind, x mir.Operand) {
             fe.w("call void @__olang_sb_put(ptr " $b ", ptr " $s ", i64 " $n ")")
         }
     }
+}
+
+# an integer's value as an LLVM integer of type w ("i64", "i128"), sign- or zero-extended from its own width
+fn (fe mut fnEm&) extend(v String&, ty types.TypeId, w String&, unsigned Bool) String {
+    t := fe.E.T
+    r := t.Repr(ty)
+    if $fe.ty(r) == w { return $v }
+    return fe.let($("zext " if unsigned else "sext ") $fe.ty(r) " " $v " to " $w)
 }
 
 fn (fe mut fnEm&) zext64(v String&, ty types.TypeId) String {
@@ -3897,6 +3911,15 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.ByteSwap {
             if t.Bits(r) == 8 { return x }
+            if t.Bits(r) % 16 != 0 {
+                # T4a: an odd number of bytes - swapped one byte wider, the extra byte (low after the swap) shifted out
+                wt := "i" $(t.Bits(r) + 8)
+                intr := "llvm.bswap." $wt
+                fe.E.declare(intr, $wt " @" $intr "(" $wt ")")
+                z := fe.let("zext " $lt " " $x " to " $wt)
+                sw := fe.let("call " $wt " @" $intr "(" $wt " " $z ")")
+                return fe.let("trunc " $wt " " $fe.let("lshr " $wt " " $sw ", 8") " to " $lt)
+            }
             intr := "llvm.bswap." $lt
             fe.E.declare(intr, $lt " @" $intr "(" $lt ")")
             return fe.let("call " $lt " @" $intr "(" $lt " " $x ")")
@@ -3905,6 +3928,15 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             # a funnel shift of x with itself, its count taken modulo the width - the count's low bits, which a
             # truncation keeps
             n := fe.width(fe.val(fe.arg(args, 1), mir.I64T), mir.I64T, r)
+            w := t.Bits(r)
+            if (w & (w - 1)) != 0 {
+                # T4a: a width no power of two - the count taken modulo it here, as the funnel shift would read a
+                # negative count's pattern modulo the width otherwise
+                c64 := fe.let("srem i64 " $fe.val(fe.arg(args, 1), mir.I64T) ", " $w)
+                neg := fe.let("icmp slt i64 " $c64 ", 0")
+                up := fe.let("add i64 " $c64 ", " $w)
+                n = fe.width(fe.let("select i1 " $neg ", i64 " $up ", i64 " $c64), mir.I64T, r)
+            }
             intr := "llvm.fsh" $("l" if op == typed.PrimOp.RotateLeft else "r") "." $lt
             fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", " $lt ")")
             return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $x ", " $lt " " $n ")")
@@ -4034,6 +4066,37 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
     return fe.let("icmp " $c " " $lt " " $x ", " $y)
 }
 
+# T4a: an integer wider than 64 bits rounded once to a BF16: its magnitude cut to 63 bits, the bits cut off kept as one
+# sticky bit, so the runtime's one rounding of it is the true value's, then scaled back by a power of two - exact in an
+# F32 (a BF16's eight bits, an exponent of at most 2^65), and at most an overflow to infinity, which is the true answer
+fn (fe mut fnEm&) wideToBF16(v String&, f types.TypeId) String {
+    t := fe.E.T
+    fl := fe.ty(f)
+    x := $v
+    if fl != "i128" { x = fe.let($("zext " if t.IsUnsigned(f) else "sext ") $fl " " $v " to i128") }
+    neg := "false"
+    mag := x
+    if not t.IsUnsigned(f) {
+        neg = fe.let("icmp slt i128 " $x ", 0")
+        nx := fe.let("sub i128 0, " $x)
+        mag = fe.let("select i1 " $neg ", i128 " $nx ", i128 " $x)
+    }
+    fe.E.declare("llvm.ctlz.i128", "i128 @llvm.ctlz.i128(i128, i1)")
+    one := fe.let("or i128 " $mag ", 1")
+    lz := fe.let("call i128 @llvm.ctlz.i128(i128 " $one ", i1 true)")
+    over := fe.let("sub i128 65, " $lz)                        # the bits beyond 63
+    pos := fe.let("icmp sgt i128 " $over ", 0")
+    s := fe.let("select i1 " $pos ", i128 " $over ", i128 0")
+    low := fe.let("sub i128 " $fe.let("shl i128 1, " $s) ", 1")
+    sticky := fe.let("icmp ne i128 " $fe.let("and i128 " $mag ", " $low) ", 0")
+    m := fe.let("or i64 " $fe.let("trunc i128 " $fe.let("lshr i128 " $mag ", " $s) " to i64") ", " $fe.let("zext i1 " $sticky " to i64"))
+    fe.E.runtime("__olang_int_bf16")
+    b := fe.let("call bfloat @__olang_int_bf16(i64 " $m ", i1 " $neg ")")
+    e := fe.let("shl i32 " $fe.let("add i32 " $fe.let("trunc i128 " $s " to i32") ", 127") ", 23")
+    scale := fe.let("bitcast i32 " $e " to float")
+    return fe.narrowBF16(fe.let("fmul float " $fe.widenBF16(b, "float") ", " $scale))
+}
+
 # a value of type from as a to (T4, T6b, E26, T7c): widened, narrowed, between integers and floats, or the same bits
 fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String {
     t := fe.E.T
@@ -4047,6 +4110,7 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
         if a > b { return fe.let("trunc " $fl " " $v " to " $gl) }
         return fe.let($("zext " if t.IsUnsigned(f) or f == types.BoolT else "sext ") $fl " " $v " to " $gl)
     }
+    if fi and gl == "bfloat" and t.Bits(f) > 64 { return fe.wideToBF16(v, f) }
     if fi and gl == "bfloat" {
         # T4: an integer rounded once to a BF16, by the runtime's own conversion - LLVM 18 rounds twice at -O0
         x := $v
@@ -4186,15 +4250,14 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
         case typed.PrimOp.Div {
             if un { return "false" }
             y := fe.val(fe.arg(args, 1), t0)
-            min := $(I64(1) << (bits - 1)) if bits < 64 else "-9223372036854775808"
-            m := fe.let("icmp eq " $lt " " $x ", " $("-" if bits < 64 else "") $min)
+            # the most negative value: 1 shifted to the sign bit, at any width (T4a)
+            m := fe.let("icmp eq " $lt " " $x ", " $fe.let("shl " $lt " 1, " $(bits - 1)))
             n := fe.let("icmp eq " $lt " " $y ", -1")
             return fe.let("and i1 " $m ", " $n)
         }
         case typed.PrimOp.Neg {
             if un { return fe.let("icmp ne " $lt " " $x ", 0") }
-            min := $(I64(1) << (bits - 1)) if bits < 64 else "9223372036854775808"
-            return fe.let("icmp eq " $lt " " $x ", -" $min)
+            return fe.let("icmp eq " $lt " " $x ", " $fe.let("shl " $lt " 1, " $(bits - 1)))
         }
         case typed.PrimOp.Convert {
             if t.IsFloat(r) {
@@ -4207,9 +4270,10 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
                     lo = fe.let("fcmp ogt double " $d ", -1.0")
                     hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb))
                 } else {
-                    if gb == 64 {
-                        # -2^63: 2^63's bits with the sign bit set (a hex constant takes no "-")
-                        lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + (I64(63) << 52)) | (I64(1) << 63)))
+                    if gb > 53 {
+                        # -2^(gb-1): its power of two's bits with the sign bit set (a hex constant takes no "-"); an
+                        # F64 is either it or no whole number of this many bits, so the test is >= (T4a: up to 128)
+                        lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + ((gb - 1) << 52)) | (I64(1) << 63)))
                     } else {
                         lo = fe.let("fcmp ogt double " $d ", " $fe.E.constText(types.TypeId(14), I64((F64(0) - F64(I64(1) << (gb - 1)) - 1.0).Bits())))
                     }

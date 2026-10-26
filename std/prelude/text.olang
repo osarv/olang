@@ -398,6 +398,34 @@ fn (n U16) Format(base Radix = 10) String { return formatDigits(n, false, base) 
 fn (n U32) Format(base Radix = 10) String { return formatDigits(n, false, base) }
 fn (n U64) Format(base Radix = 10) String { return formatDigits(n, false, base) }
 
+# every other integer width's (T4a), as the eight's: one of at most 64 bits through I64 or U64, a wider one digit by
+# digit in its own type
+fn (n T) Format<T Integer>(base Radix = 10) String {
+    if T.Size <= 8 {
+        if T.Min < 0 { return formatSigned(I64(n), base) }
+        return formatDigits(U64(n), false, base)
+    }
+    letters String& = "0123456789abcdefghijklmnopqrstuvwxyz"
+    room := Array<Char>(130)
+    at I64 = 130
+    b := T(I64(base) if I64(base) != 0 else 10)
+    v := n
+    for {
+        at -= 1
+        d := I64(v % b)
+        room[at] = letters[d if d >= 0 else -d]
+        v = v / b
+        if v == 0 { break }
+    }
+    if n < 0 {
+        at -= 1
+        room[at] = '-'
+    }
+    out := String(Array<Char>(130 - at))
+    for i in range out.Len() { out[i] = room[at + i] }
+    return out
+}
+
 # a signed integer's digits: its magnitude, which for I64's most negative is one more than I64 holds - U64 holds it
 fn formatSigned(n I64, base Radix) String {
     if n < 0 { return formatDigits(U64(0) - U64(n), true, base) }
@@ -456,6 +484,54 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
     if t.Len() == 0 { error ParseError.EMPTY }
     digits := t[1:] if t[0] == '+' else t[:]
     return try readDigits(digits, base, ~U64(0))
+}
+
+# the integer the text writes as a T - any integer type, of any width (T4a): "255".ParseAs<U8>() is 255 and
+# "-5".ParseAs<I24>() is -5 - read as ParseInt reads a signed type's and ParseUint an unsigned one's, failing with
+# OVERFLOW outside T's range (and INVALID for a '-' before an unsigned one's). A type wider than 64 bits takes digits up
+# to its own range: "340282366920938463463374607431768211455".ParseAs<U128>() is U128's largest. Base 0's prefixed
+# literal is read as a program reads one (L10a), its 64 bits then fitting T
+fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
+    if t.Len() == 0 { error ParseError.EMPTY }
+    neg := t[0] == '-'
+    digits := t[1:] if neg or t[0] == '+' else t[:]
+    if T.Size <= 8 or base == 0 and isPrefixed(digits) {
+        if T.Min < 0 {
+            v := try t.ParseInt(base)
+            if T.Size <= 8 and (v < I64(T.Min) or v > I64(T.Max)) { error ParseError.OVERFLOW }
+            return T(v)
+        }
+        if neg { error ParseError.INVALID }
+        u := try t.ParseUint(base)
+        if T.Size <= 8 and u > U64(T.Max) { error ParseError.OVERFLOW }
+        return T(u)
+    }
+    # wider than 64 bits: each digit added in T itself - toward T's least for a negative number, so it fits
+    if neg and T.Min == 0 { error ParseError.INVALID }
+    if digits.Len() == 0 { error ParseError.INVALID }
+    b I64 = 10 if base == 0 else base
+    tb := T(b)
+    lim := T.Min if neg else T.Max
+    cutoff := lim / tb
+    cutlim := lim % tb
+    v T = 0
+    for i, c in digits {
+        if c == '_' and base == 0 {
+            if i == 0 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            continue
+        }
+        d := digitWorth(c)
+        if d >= b { error ParseError.INVALID }
+        td := T(d)
+        if neg {
+            if v < cutoff or (v == cutoff and -td < cutlim) { error ParseError.OVERFLOW }
+            v = v * tb - td
+        } else {
+            if v > cutoff or (v == cutoff and td > cutlim) { error ParseError.OVERFLOW }
+            v = v * tb + td
+        }
+    }
+    return v
 }
 
 # whether "digits" begins with a "0x" or "0b" prefix, in either case

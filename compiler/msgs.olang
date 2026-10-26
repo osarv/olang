@@ -733,6 +733,8 @@ type Diag enum {
     LaneReferences
     LaneCompare
     LaneMaskBool
+    ByteSwapWidth
+    AtomicWidth
 }
 
 # one function each, under the id it is known by
@@ -742,6 +744,10 @@ fn LaneLengths(a I64, b I64) Msg { return Msg(Diag.LaneLengths, "E39", "these ar
 fn LaneReferences() Msg { return Msg(Diag.LaneReferences, "E39", "lane operators give elements that may not be or hold references - build the array with a loop") }
 fn LaneCompare(op String&, how String&) Msg { return Msg(Diag.LaneCompare, "E39", $op " does not compare arrays - lane by lane it is '" $how "', an Array<Bool>") }
 fn LaneMaskBool(what String&, ty String&) Msg { return Msg(Diag.LaneMaskBool, "E39", $what " takes lanes of Bool, found " $ty) }
+
+# integers of any width (T4a)
+fn ByteSwapWidth(ty String&, bits I64) Msg { return Msg(Diag.ByteSwapWidth, "E37, T4a", $ty " has no 'ByteSwap': its " $bits " bits are no whole number of bytes") }
+fn AtomicWidth(ty String&) Msg { return Msg(Diag.AtomicWidth, "P9, T4a", "the atomic operations take integers of 8, 16, 32 or 64 bits, and " $ty " is none - hold the value as one of those") }
 
 # compile-time reflection (G32-G38)
 fn ReflNoMember(ty String&, name String&) Msg { return Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align") }
@@ -1443,10 +1449,10 @@ fn ErrVarNotType(tok String&, name String&) Msg { return Msg(Diag.ErrVarNotType,
 fn ErrSetArgUnwanted(name String&) Msg { return Msg(Diag.ErrSetArgUnwanted, "G1a", $name " has no error-set parameter, so its arguments end in no '?'") }
 
 # ERR_EXTERN_TYPE
-fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
+fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
 
 # ERR_EXTERN_RESULT
-fn ExternResult(ty String&) Msg { return Msg(Diag.ExternResult, "X2", $ty " cannot come back from C - an extern's result is one number, Bool, extern type's reference or plain-data struct") }
+fn ExternResult(ty String&) Msg { return Msg(Diag.ExternResult, "X2", $ty " cannot come back from C - an extern's result is one number of the twelve primitives, Bool, extern type's reference or plain-data struct") }
 
 # ERR_FOREIGN_BUILT
 fn ForeignBuilt(ty String&) Msg { return Msg(Diag.ForeignBuilt, "X10", $ty " is an extern type: only C makes one - declare the C function that does, as 'extern fn open() " $ty "&'") }
@@ -1957,7 +1963,7 @@ fn OperandNotNumber(tok String&, ty String&) Msg { return Msg(Diag.OperandNotNum
 fn TupleNotAValue() Msg { return Msg(Diag.TupleNotAValue, "D8c", "several results are not one value - destructure them ('a, b := f()'), or pass them as all of a call's arguments") }
 
 # ERR_LITERAL_EXPR_NO_VALUE
-fn LiteralExprNoValue() Msg { return Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value - it overflows every type") }
+fn LiteralExprNoValue() Msg { return Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'") }
 
 # ERR_LITERAL_DOES_NOT_MEET
 fn LiteralDoesNotMeet(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.LiteralDoesNotMeet, "E6d", "this literal does not fit " $ty1 ", and " $ty2 " does not flow into " $ty3 " - convert one") }

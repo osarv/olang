@@ -1,0 +1,241 @@
+# integers of every width (T4a): I1 to I128 and U1 to U128, each an ordinary integer type - wrapping at its width
+# (E6c), checked by std/arith and Narrow, widened by T6b's lattice, its limits through its name (E36), rendered,
+# hashed, formatted and parsed. What the evaluator bakes and decides agrees with the run time at every width: each
+# computation below is a function run three ways - baked into a global (K2), decided by an assert while compiling
+# (S18c) and run by the program on a value only the run time knows
+
+import "std/arith"
+
+# the widths the cases are about: one bit, an odd width, one not a byte multiple, one bit short of 64, one past it, 128
+fn i1Case(n I64) String {
+    a I1 = -1
+    b := a + I1(n) # -1 + 1 wraps to 0 when n is odd, else stays -1
+    return $a " " $b " " $I1.Min " " $I1.Max " " $(a * a) " " $U1.Max
+}
+
+fn u7Case(n I64) String {
+    a U7 = 100
+    b := a + U7(n) # 100 + 50 = 150, wrapping to 22
+    c := a * 3     # 300 wraps to 44
+    return $b " " $c " " $(~a) " " $(a >> 2) " " $U7.Max " " $(U7(0) - 1) " " $(a / U7(n)) " " $(a % U7(n))
+}
+
+fn i24Case(n I64) String {
+    a I24 = 8000000
+    b := a * I24(n) # 16000000 wraps to -777216 for n = 2
+    c := -I24.Min   # the most negative negated is itself
+    return $b " " $c " " $I24.Max " " $(a >> 20) " " $(I24(-5) >> 1) " " $(I24(-7) / 2) " " $(I24(-7) % 2)
+}
+
+fn u63Case(n I64) String {
+    a U63 = 1
+    b := a << U63(n) # 2^62 for n = 62
+    c := b * 2       # 2^63 wraps to 0 at 63 bits
+    return $b " " $c " " $U63.Max " " $(U63.Max + 1) " " $(b >> 61)
+}
+
+fn i65Case(n I64) String {
+    a I65 = -5
+    b := a * I65(n) # -15 for n = 3
+    big := I65.Max  # 2^64 - 1
+    return $b " " $big " " $(big + 1) " " $I65.Min " " $(I65.Min / 3) " " $(big >> 63) " " $(I65(n) << 63)
+}
+
+fn u128Case(n I64) String {
+    k U128 = 18446744073709551615 # 2^64 - 1
+    m := k * k                    # 2^128 - 2^65 + 1
+    p := U128(1) << U128(n)       # 2^100 for n = 100
+    return $(m >> 64) " " $(m / k) " " $(m % 1000000007) " " $p " " $U128.Max " " $(U128.Max / 7) " " $(p * p)
+}
+
+fn i128Case(n I64) String {
+    a := I128(n) * 1000000000000000000 * 1000000000000000000 # 10^36 times n
+    return ($a " " $(a / 7) " " $(a % 7) " " $(-a >> 70) " " $I128.Min " " $I128.Max " " $(I128.Min - 1) " "
+        $(I128(-7) / 2))
+}
+
+# conversions between widths, to and from floats, each rounding once (T4, E26)
+fn convCase(n I64) String {
+    w := U128(1) << U128(n) | 1 # 2^100 + 1
+    f := I12(-3)
+    return ($I24(w) " " $U7(I128(n)) " " $F64(w) " " $F32(w) " " $BF16(I128.Max) " " $F16(f) " " $I128(1.5e30) " "
+        $U100(F32(n)))
+}
+
+# the methods every integer has: E37's bit operations, Format, Hash, Pow, Abs, Min, Max, ParseAs
+fn methodCase(n I64) String {
+    r := U24(0xABCDEF)
+    q := U128(0x0102030405060708) << U128(n - 100)
+    s := I24(-5)
+    return ($r.ByteSwap().Format(16) " " $r.RotateLeft(4).Format(16) " " $r.RotateRight(-4).Format(16) " "
+        $r.PopCount() " " $r.LeadingZeros() " " $q.ByteSwap().Format(16) " " $q.TrailingZeros() " " $s.Abs() " "
+        $s.Min(I24(3)) " " $U12(4000).Pow(2) " " $I128.Min.Format(16) " " $s.Format(2))
+}
+
+fn parseCase(n I64) String {
+    a := try "-170141183460469231731687303715884105728".ParseAs<I128>() catch default I128(n)
+    b := try "340282366920938463463374607431768211455".ParseAs<U128>() catch default U128(n)
+    c := try "340282366920938463463374607431768211456".ParseAs<U128>() catch default U128(n)
+    d := try "127".ParseAs<U7>() catch default U7(0)
+    e := try "128".ParseAs<U7>() catch default U7(1)
+    f := try "-3".ParseAs<I2>() catch default I2(0)
+    g := try "0x_FF".ParseAs<U9>(0) catch default U9(2)
+    return $a " " $b " " $c " " $d " " $e " " $f " " $g
+}
+
+# std/arith at the new widths: an overflow is an error, a result that fits is the result
+fn arithCase(n I64) String {
+    a := try arith.Add(U7(100), U7(n)) catch default U7(0)
+    b := try arith.Add(U7(100), U7(n + 1)) catch default U7(0)
+    c := try arith.Mul(I128(1) << I128(n), I128(4)) catch default I128(0)
+    d := try arith.Mul(I128(1) << 126, I128(n - 60)) catch default I128(-1)
+    e := try arith.Sub(U100(3), U100(n - 22)) catch default U100(7)
+    f := try I64(n * 5).Narrow<U7>() catch default U7(9)
+    g := try I64(n).Narrow<U7>() catch default U7(9)
+    return $a " " $b " " $c " " $d " " $e " " $f " " $g
+}
+
+# T6b: a narrower integer widens into a wider one implicitly, as the eight always did - U7 into I8, I24 into I65
+fn widen(a I8, b I65) I65 { return b + a }
+
+fn flowCase(n I64) String {
+    u U7 = 127
+    s I24 = -8388608
+    return $widen(u, s) " " $widen(I8(n), I65.Max - 1) " " $(U7(n) + U9(500))
+}
+
+# hashing agrees with == at every width, a Map keyed by the wide types holding what was put
+fn hashCase(n I64) Bool {
+    m := Map<U128, I64>()
+    for i in range n { m.Put(U128(i) << 100, i) }
+    k := Map<I24, I64>()
+    for i in range n { k.Put(I24(-i), i * 2) }
+    return (try m.Get(U128(3) << 100) catch default -1) == 3 and (try k.Get(I24(-4)) catch default -1) == 8 and
+        U128(5).Hash() == U128(5).Hash() and I24(-1).Hash() == I24(-1).Hash() and m.Len() == n
+}
+
+I1Baked := i1Case(1)
+U7Baked := u7Case(50)
+I24Baked := i24Case(2)
+U63Baked := u63Case(62)
+I65Baked := i65Case(3)
+U128Baked := u128Case(100)
+I128Baked := i128Case(5)
+ConvBaked := convCase(100)
+MethodBaked := methodCase(100)
+ParseBaked := parseCase(9)
+ArithBaked := arithCase(27)
+FlowBaked := flowCase(4)
+HashBaked := hashCase(6)
+
+# what each computation gives
+WantI1 := "-1 0 -1 0 -1 1"
+WantU7 := "22 44 27 25 127 127 2 0"
+WantI24 := "-777216 -8388608 8388607 7 -3 -3 -1"
+WantU63 := "4611686018427387904 0 9223372036854775807 0 2"
+WantI65 := ("-15 18446744073709551615 -18446744073709551616 -18446744073709551616 -6148914691236517205 "
+    "1 -9223372036854775808")
+WantU128 := ("18446744073709551614 18446744073709551615 114944269 1267650600228229401496703205376 "
+    "340282366920938463463374607431768211455 48611766702991209066196372490252601636 0")
+WantI128 := ("5000000000000000000000000000000000000 714285714285714285714285714285714285 5 "
+    "-4235164736271502 -170141183460469231731687303715884105728 "
+    "170141183460469231731687303715884105727 170141183460469231731687303715884105727 -3")
+WantConv := "1 100 1.2676506002282294e+30 1.2676506e+30 1.7e+38 -3 1499999999999999889089448902656 100"
+WantMethod := ("efcdab bcdefa bcdefa 17 0 8070605040302010000000000000000 3 5 -5 1024 "
+    "-80000000000000000000000000000000 -101")
+WantParse := "-170141183460469231731687303715884105728 340282366920938463463374607431768211455 9 127 1 0 2"
+WantArith := "127 0 536870912 -1 7 9 27"
+WantFlow := "-8388481 -18446744073709551614 504"
+
+# the inputs again, read at run time
+One mut I64 = 1
+Fifty mut I64 = 50
+Two mut I64 = 2
+SixtyTwo mut I64 = 62
+Three mut I64 = 3
+Hundred mut I64 = 100
+Five mut I64 = 5
+Nine mut I64 = 9
+TwentySeven mut I64 = 27
+Four mut I64 = 4
+Six mut I64 = 6
+
+test "T4a: one bit, seven bits and 24 bits wrap at their widths - baked, decided while compiling and run" {
+    assert I1Baked == WantI1
+    assert i1Case(One) == WantI1
+    assert i1Case(1) == WantI1 # S18c: decided while compiling
+    assert U7Baked == WantU7
+    assert u7Case(Fifty) == WantU7
+    assert u7Case(50) == WantU7 # S18c: decided while compiling
+    assert I24Baked == WantI24
+    assert i24Case(Two) == WantI24
+    assert i24Case(2) == WantI24 # S18c: decided while compiling
+}
+
+test "T4a: 63, 65 and 128 bits, past a word and to its double" {
+    assert U63Baked == WantU63
+    assert u63Case(SixtyTwo) == WantU63
+    assert u63Case(62) == WantU63 # S18c: decided while compiling
+    assert I65Baked == WantI65
+    assert i65Case(Three) == WantI65
+    assert i65Case(3) == WantI65 # S18c: decided while compiling
+    assert U128Baked == WantU128
+    assert u128Case(Hundred) == WantU128
+    assert u128Case(100) == WantU128 # S18c: decided while compiling
+    assert I128Baked == WantI128
+    assert i128Case(Five) == WantI128
+    assert i128Case(5) == WantI128 # S18c: decided while compiling
+}
+
+test "T4a: conversions between widths and to and from floats round once" {
+    assert ConvBaked == WantConv
+    assert convCase(Hundred) == WantConv
+    assert convCase(100) == WantConv # S18c: decided while compiling
+}
+
+test "T4a: bit operations, Format, Abs, Min, Pow and ParseAs at the new widths" {
+    assert MethodBaked == WantMethod
+    assert methodCase(Hundred) == WantMethod
+    assert methodCase(100) == WantMethod # S18c: decided while compiling
+    assert ParseBaked == WantParse
+    assert parseCase(Nine) == WantParse
+    assert parseCase(9) == WantParse # S18c: decided while compiling
+}
+
+test "T4a: std/arith and Narrow fail where a new width cannot hold the result" {
+    assert ArithBaked == WantArith
+    assert arithCase(TwentySeven) == WantArith
+    assert arithCase(27) == WantArith # S18c: decided while compiling
+}
+
+test "T4a: narrower widths flow into wider ones, and hashing agrees with ==" {
+    assert FlowBaked == WantFlow
+    assert flowCase(Four) == WantFlow
+    assert flowCase(4) == WantFlow # S18c: decided while compiling
+    assert HashBaked and hashCase(Six)
+    assert hashCase(6) # S18c: decided while compiling
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 1000 {
+        x := Array<I64>(64, i)
+        t += x[3]
+    }
+    return t
+}
+
+fn wides(n I64) Array<U100> {
+    a := Array<U100>(n)
+    for i in range n { a[i] = U100(i) << 90 }
+    return a
+}
+
+test "T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding" {
+    w := wides(Four)
+    assert churn() > 0
+    assert $w == "U100[0, 1237940039285380274899124224, 2475880078570760549798248448, 3713820117856140824697372672]"
+    assert $(w + w) == ("U100[0, 2475880078570760549798248448, 4951760157141521099596496896, "
+        "7427640235712281649394745344]")
+    assert w.Sum() == U100(6) << 90
+}

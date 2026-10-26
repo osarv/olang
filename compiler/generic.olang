@@ -93,6 +93,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     vars List<varRow>
     errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
     genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
+    membersOf Map<types.TypeId, Array<types.TypeId>&> # a closed trait's members (T31a), once asked for
+    memberSets Map<types.TypeId, Map<types.TypeId, Bool>&>
     typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
@@ -1327,6 +1329,9 @@ fn (p mut Program&) wrap(v I64, t types.TypeId) I64 {
     return x
 }
 
+# T4a: whether a number type is wider than the 64 bits a fold computes in - then the evaluator computes it
+fn (p mut Program&) wide(t types.TypeId) Bool { return t != types.UnknownT and p.T.Bits(p.numberOf(t)) > 64 }
+
 # the number type a type is, past a declared type over one (T29: Char's U8)
 fn (p mut Program&) numberOf(t types.TypeId) types.TypeId {
     p.reprReady(t)
@@ -1445,6 +1450,7 @@ fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
     p.folding.Put(key, false)
     if f.St != Folded or v.Ty is null { return f }
     t := p.Resolve(gc, v.Ty)
+    if p.wide(t) { return unfolded() }
     return folded(Folded, p.wrap(f.V, t), t)
 }
 
@@ -1481,7 +1487,7 @@ fn (p mut Program&) evalConversion(c Context&, f ast.Expr&, args Array<ast.Expr&
         case ast.Expr.Name(sp, n) {
             if p.R.Use(p.file(c.Mi), sp.Start).Kind != names.What.Builtin { return unfolded() }
             t := p.T.Prim(p.text(n))
-            if not p.T.IsInt(t) { return unfolded() }
+            if not p.T.IsInt(t) or p.wide(t) { return unfolded() }
             x := p.eval(c, args[0])
             if x.St != Folded { return x }
             return folded(Folded, p.wrap(x.V, t), t)
@@ -1546,7 +1552,7 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
     if fa.St == Unfolded or fb.St == Unfolded { return unfolded() }
     if fa.St == Pending or fb.St == Pending { return folded(Pending, 0, types.UnknownT) }
     t := p.meet(fa, fb)
-    if t == types.TypeId(-1) { return unfolded() }
+    if t == types.TypeId(-1) or p.wide(t) { return unfolded() }
     x, y := fa.V, fb.V
     unsigned := t != types.UnknownT and p.T.IsUnsigned(p.numberOf(t))
     if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Lt or op == token.Tok.Le or op == token.Tok.Gt or
@@ -2220,7 +2226,7 @@ fn (p mut Program&) typeKey(t types.TypeId) I64 {
         case types.Kind.Named => keyDecl(p.T.DeclOf(x))
         case types.Kind.Array => ArrayKey
         case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
-             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => keyPrim(x)
+             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int => keyPrim(x)
         case _ => -1
     }
 }
@@ -3128,10 +3134,18 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
 
 # the types a closed trait lists (T31a), a closed trait among them taken in with its own - in order, each once; none for
 # an open trait
-fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId> {
+fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId>&p {
+    if tr in p.membersOf { return try p.membersOf.Get(tr) catch default Array<types.TypeId>(0) }
     out List<types.TypeId>
     p.members(tr, out, 0)
-    return out.ToArray()
+    xs := out.ToArray()
+    set Map<types.TypeId, Bool>
+    for x in xs { set.Put(x, true) }
+    if p.T.Closed(tr) {
+        p.membersOf.Put(tr, xs)
+        p.memberSets.Put(tr, set)
+    }
+    return xs
 }
 
 fn (p mut Program&) members(tr types.TypeId, out mut List<types.TypeId>&, depth I64) {
@@ -3186,7 +3200,12 @@ fn (p mut Program&) IsClosedTrait(t types.TypeId) Bool {
 # whether t is one of the types a closed trait lists (T31a): the very type - a type declared over one, or extending
 # it, is another type
 fn (p mut Program&) Member(t types.TypeId, tr types.TypeId) Bool {
-    for m in p.Members(tr) {
+    ms := p.Members(tr)
+    if tr in p.memberSets {
+        set := try p.memberSets.Get(tr) catch default Map<types.TypeId, Bool>()
+        if p.T.Plain(t) in set { return true }
+    }
+    for m in ms {
         if p.T.Same(t, m) { return true }
     }
     return false
@@ -3292,6 +3311,8 @@ fn (p mut Program&) hasHash(t types.TypeId, depth I64) Bool {
         return p.ownMethod(t, hn) or not p.declaresEq(t)
     }
     if p.declaresEq(t) or p.ownMethod(t, p.L.Names.Intern("hash")) { return false }
+    # T4a: an integer of any other width - plain data, hashed by the compiler as the eight are by the prelude
+    if k == types.Kind.Int { return true }
     match k {
         case types.Kind.Array { return p.hasHash(p.T.Elem(t), depth + 1) }
         case types.Kind.Tuple, types.Kind.Record { return p.hashesAll(p.T.Parts(t), depth) }

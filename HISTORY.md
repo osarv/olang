@@ -24899,3 +24899,66 @@ level with both, saxpy and select level with C and faster than the hand loops (w
 type, C64, in place, for-in over a lane expression, baked and decided while compiling, empty totals, NaN, read back
 after an arena churn); checks cases lanelengths, lanecompare, lanesomebool, laneselectbool, lanereferences,
 lanemaxtry; the assertloc fixture's "lane lengths differ" line, built and interpreted; std/stats migrated.
+
+## Integers of every width (T4a, 2026-10-26)
+
+**What:** docs/ideas.md section 5's integers, decided by the user 2026-10-18 ("Names are fine width is fine"): `I1` to
+`I128` and `U1` to `U128`. Every integer rule holds at every width - E6c's wrapping, the T6b lattice (`U7` flows into
+`I8`, `I24` into `I65`), literals adapting where they fit, E36's limits (`I24.Max`, `U128.Max`), `std/arith` and
+`Narrow`, `$`, `Hash`, `Format`, E37's bit operations, lanes (E39), the `Integer` trait - at compile time (K1, K2,
+S18c) and under `interpret` exactly as at run time. Fixed point was not part of it.
+
+**How it is built.** The eight existing integer types keep their kinds and their fixed ids (3 to 10): changing them
+would have touched every place that names `TypeId(6)` for `I64`. Every other width is a new kind, `types.Kind.Int` (its
+width and signedness), and the type table interns all 248 of them when it is made, so a name finds its type with no
+mutable table (`Prim`, `IntType`, `IntWidth`). `IsInt`, `IsUnsigned`, `IsNumber` and `Bits` answer for both, which is
+what made most of the checker, lowering and emit work unchanged: the lattice, literal fitting, conversions and the
+scalar paths already asked those. LLVM does the rest - `iN` arithmetic wraps at N, its legalizer masks and extends, and
+a division past 64 bits is libgcc's `__divti3`, which clang links (checked: `smul.with.overflow.i128` expands inline,
+so no `__muloti4` is needed). The evaluator holds values as I64 words, and the compiler's own source cannot use `I128`
+(the seed that builds it does not know one), so integers past 64 bits are a shape of their own there, `vWide`: two
+words, computed by a small two-word arithmetic written in olang (add, multiply through 32-bit halves, long division,
+shifts, comparisons), every operation or check meeting one going to `primWide`/`overflowsWide`; narrower odd widths
+reuse the word path with masks by bits instead of bytes. `$` of a wide value has two runtime functions,
+`__olang_fmt_u128`/`__olang_fmt_i128` (the 64-bit one twice, 19 digits at a time).
+
+**Decisions (mine):**
+1. A value is held in the next of 1, 2, 4, 8 and 16 bytes, aligned to that - LLVM's layout of `iN` and C's of `_BitInt`
+   - so `U12` is two bytes, `I24` four, `I65` sixteen. Packing tighter belongs to declared layouts.
+2. A literal still holds at most 64 bits (L10). A decimal one above `I64`'s maximum adapts to a signed type wider than 64
+   bits as its `U64` value (built as that literal converted, since a MIR constant extends 64 bits by its type's sign); a
+   wider value is computed, `U128(1) << 100`. E4a's exact computation had been specified as 128 signed bits but the port
+   computes within 64 (magnitudes as `U64`) - a difference no type could show until now; the rule now says 64, and
+   `x I128 = 1 << 100` is an error naming the converted form (it compiled to a 64-bit shift by 100, undefined).
+3. `Integer` lists every width. A closed trait lists its types, so the prelude lists them - through sixteen closed
+   traits of sixteen widths each, taken in (`signed1to16` ...), since one line of 256 names cannot be written and the
+   seed's parser takes no line break in a `for` list. Messages name a run of widths by its ends: "met by I1 to I128, U1
+   to U128". The port's parser now does take the line break there (QY's listing rule had missed trait lists).
+4. What the machine does not have stays with the widths it has: atomic operations take 8, 16, 32 or 64 bits (an atomic
+   is one instruction on a word); `ByteSwap` a width of whole bytes (an odd byte count swapped one byte wider, the
+   extra byte shifted out); and only the twelve primitives cross the C boundary (X2: C has no type for the others; a
+   C `_BitInt` ABI could come later).
+5. `Hash` for the new widths is the compiler's (E10b): the eight's mix, a value past 64 bits its low word mixed with its
+   high word's hash. `Format` is a prelude default over `Integer` for the other widths; `ParseInt`/`ParseUint` stay
+   `I64`/`U64`, and `t.ParseAs<T>(base)` reads any width (a type past 64 bits digit by digit in itself). `Sqrt`,
+   `PadStart` and `PadEnd` are not given to the new widths yet.
+6. A rotation's count is taken modulo a width that is no power of two in the code too (it had been the count's low
+   bits, right only for a power of two), and an integer past 64 bits rounds once to a `BF16` (its magnitude cut to 63
+   bits with a sticky bit, the runtime's one rounding, then an exact power-of-two scale) - as the evaluator does it.
+7. A type a program declares may not be named like one of the widths: the cinterop fixture's `I2` struct became
+   `Ints2`.
+
+**Found on the way, fixed:** the literal range check for an unsigned 63-bit type compared against `1 << 63`, the most
+negative `I64`, so no literal fitted `U63`; float-to-integer range tests used `-2^(w-1) - 1` for widths of 54 to 63
+bits, where that is not an `F64` and excluded the type's least value; emit's overflow test for a division or negation
+built the most negative value as `1 << (bits - 1)` in the compiler, undefined past 64 bits (now an `shl` instruction);
+the typed constant fold (T7c, G29) computed in 64 bits whatever the type - it leaves a type past 64 bits to the
+evaluator now.
+
+**Measured:** callgrind over the bench programs at `-target x86-64-v3` against 68c693e: every program's own functions
+the same count; four differ by 14 instructions at start-up, outside `main` (the loader).
+
+**Tests:** tests/intwidths.olang - I1, U7, I24, U63, I65, U128 and I128, conversions, methods, ParseAs, std/arith, the
+lattice and hashing, each computation baked into a global, decided by an assert while compiling, and run on values
+only the run time knows; an array of `U100` read back after an arena churn. checks cases t4abyteswap, t4aatomic,
+t4aextern, t4awideliteral, t4arange, t4anomember.

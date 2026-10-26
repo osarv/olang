@@ -516,13 +516,26 @@ legal but useless, and exists only because the grammar constructing a named type
 | Name | Description |
 |---|---|
 | `Bool` | boolean, `true` or `false` |
-| `I8`, `I16`, `I32`, `I64` | 8-, 16-, 32- and 64-bit signed (two's complement) integers |
-| `U8`, `U16`, `U32`, `U64` | 8-, 16-, 32- and 64-bit unsigned integers |
+| `I1` to `I128` | signed (two's complement) integers of that many bits: `I8`, `I16`, `I32`, `I64` and every width between 1 and 128 (T4a) |
+| `U1` to `U128` | unsigned integers of that many bits, `U8`, `U16`, `U32`, `U64` among them |
 | `F16` | 16-bit IEEE 754 floating point (binary16) |
 | `BF16` | 16-bit "brain" floating point: `F32`'s exponent range with 8 bits of precision |
 | `F32`, `F64` | 32- and 64-bit IEEE 754 floating point |
 
 A primitive's name is the language's own: declaring a type of that name is a compile-time error, as for `Array` (T7).
+
+**T4a (integers of any width).** `I` or `U` followed by a width from 1 to 128, written with no leading zero, names the
+signed or unsigned integer type of that many bits - `I1`, `U7`, `I24`, `U63`, `I65`, `U128`; `I0`, `I129` and `I08`
+name nothing. The eight of 8, 16, 32 and 64 bits are ordinary members of the family, and every integer rule holds at
+every width: arithmetic wraps modulo 2^w (E6c), `I1`'s values are -1 and 0, the T6b lattice widens one width into
+another (`U7` into `I8`, `I24` into `I65`), a literal adapts where its value fits (T6), `T.Max` and `T.Min` (E36),
+`std/arith` and `x.Narrow<T>()` (E26b), `$` (E11a), the supplied `Hash` (E10b), `Format`, `ParseAs` and E37's bit
+operations, and the `Integer` trait (T35c). A value is held in the bytes its width needs, rounded up to 1, 2, 4, 8 or
+16 (as LLVM lays `iN` out and C a `_BitInt`): a `U12` takes two bytes, an `I24` four, an `I65` sixteen, aligned to its
+size; packing bits closer is a declared layout's work, not a type's. The compiler computes every width exactly, at
+compile time (K1) as at run time - a division of more than 64 bits through the C library's 128-bit routines, which every
+program links. Three operations stay with the widths the machine has: an atomic operation (P9) takes 8, 16, 32 or 64
+bits; `ByteSwap` (E37) a width of whole bytes; and only the eight cross the C boundary (X2), C having no other.
 
 **T5.** The `I` and `U` types are the integer types, the `I` ones signed and the `U` ones unsigned; `F16`, `BF16`,
 `F32` and `F64` are the float types; together they are the numeric types. `Bool` is not numeric. An unsigned type's
@@ -530,7 +543,9 @@ arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right 
 as unsigned. `F16` and `BF16` round every result to their own precision, as the hardware does; where the target has
 no instructions for them the arithmetic is carried out in `F32` and rounded back, with the same result. A float's bit
 pattern is read and written as an unsigned integer of its width (E33). A literal cannot be written above `I64`'s
-maximum; a larger `U64` is computed (`U64(0) - 1`).
+maximum; a larger `U64` is computed (`U64(0) - 1`). A literal holds at most 64 bits: one above `I64`'s maximum adapts to a
+signed or unsigned type wider than 64 bits (T4a) as its `U64` value, and a wider value - `U128(1) << 100` - is computed
+from a converted operand, a literal-only expression needing more than 64 bits being an error (E4a).
 
 **T6.** There is no implicit conversion between any two distinct types except the two T6b states - a number
 widening within its family, and a declared type flowing into its base - and the adaptation of a literal. A
@@ -1448,8 +1463,8 @@ The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhaus
 second name for the same walk, as a `List`'s copy is the same list.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
-`type Float trait for F16, BF16, F32, F64 { }`; `type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }`; and
-`type Number trait for Integer, Float { }`, all twelve. `Bool` satisfies none of them, and no type a program declares
+`type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
+`U128` (T4a) - listed as closed traits of sixteen widths each, taken in; and `type Number trait for Integer, Float { }`. `Bool` satisfies none of them, and no type a program declares
 satisfies one - `Char`, `type Meters extends I32` and `type Dist extends F64` are types of their own - so code
 constrained by a numeric trait may pick its behaviour with `match T` over the built-in types alone, with no `nomatch`.
 Generic numeric code says which numbers it takes - `fn mean<T Float>(a Array<T>&) T`, or a default on the numbers
@@ -2366,8 +2381,8 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
 U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.OVERFLOW` where
-the true power does not fit (E15a); and `Sqrt()`, the integer
-square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
+the true power does not fit (E15a); and each of the eight of 8 to 64 bits (T4a: no other width yet) `Sqrt()`, the
+integer square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
 
@@ -2536,11 +2551,17 @@ with a `_` between two digits as L10b allows it; a hexadecimal or binary literal
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
 E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
 number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; the base is a `Radix`, below, refused
-where it is made, so a literal base cannot fail. Text has `PadStart(width, fill = ' ')` and
+where it is made, so a literal base cannot fail. `t.ParseAs<T>(base Radix = 10) T ? ParseError` reads an integer of
+any type `T` of the `Integer` trait (T4a): as `ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one,
+failing with `OVERFLOW` outside `T`'s range (`"128".ParseAs<U7>()`) and `INVALID` for a `-` before an unsigned one's
+digits; a type wider than 64 bits takes digits up to its own range (`"340282366920938463463374607431768211455".ParseAs<U128>()`),
+and base `0`'s prefixed literal is read as a program reads one (L10a), its 64 bits then fitting `T`. Text has
+`PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type but `U8` has the same two, padding its decimal rendering,
 with `PadStart`'s `'0'`s going after a `-` sign as a number is written (`(-7).PadStart(4, '0')` is `"-007"`); `U8` has
-none, since a `Char` would inherit them (T29f) and pad its number rather than the character. Every integer type, `U8`
+none, since a `Char` would inherit them (T29f) and pad its number rather than the character - and an integer of another
+width (T4a) none yet. Every integer type of every width, `U8`
 included, has `n.Format(base Radix = 10) String`: new text writing `n` in `base`, `2` to `36`, the digits past `9` being the
 lowercase letters, with a `-` before a negative number's digits and nothing else - no prefix, no padding, no `_`
 (`(255).Format(16)` is `"ff"`, `(-255).Format(16)` is `"-ff"`, `I64`'s most negative is written whole). It is what
@@ -2800,9 +2821,10 @@ rounding once as `F64` arithmetic does, the result rounded once more to the targ
 operands as their types say, two literals of differing types meeting as T6 ranks them: `7 / 2` is `3` and
 `(1 + 2) * 0.5` is `1.5`. A shift is exact too - `x << n` is `x` times 2^n and `x >> n` the floor of `x` over 2^n,
 the amount bounded by no width - so `x I64 = 1 << 40` is 1099511627776 and `x I32 = 1 << 31` is an error, the value
-2147483648 not fitting (E8a's width check is for a shift nothing adapts). The exact computation is carried out in 128
-signed bits; a value past them - a nonzero literal shifted by 127 or more, say - has no value, and is an error like
-any other that does not fit, as is a negative amount (E8a). So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
+2147483648 not fitting (E8a's width check is for a shift nothing adapts). The exact computation holds what a literal
+holds - a magnitude below 2^64, of either sign; a value past it - `1 << 100`, or `18446744073709551615 + 1` - has no
+value even where its target is wider (T4a), and is an error naming the fix, a converted operand (`U128(1) << 100`), as
+is a negative amount (E8a). So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
 `g < 1.0 / 3.0` with `g` an `F32` compares two `F32`s as `g < 0.333` would, and `b U8 = 200 + 100` and
 `x I32 = 2147483647 + 1` are compile-time errors: the value does not fit. It is likewise an error where the value
 has none - a float computation whose finite operands give an infinity (`1e308 * 10.0`) - and an integer `/` or `%` by
@@ -2982,10 +3004,11 @@ built-in type declares none; its `==` is the language's.
 
 **E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
 `Hash() I64` itself - or `hash`, private to its module (M6b) - and must when it declares `Eq` or `eq`. Otherwise the
-compiler supplies one for a **struct, enum or array value** whose type declares neither (in either spelling) and every
-part of which has a hash: the parts' hashes
+compiler supplies one for every other integer width (T4a) - the eight's mix of the value, a width past 64 bits its low
+word mixed with its high word's hash - and for a **struct, enum or array value** whose type declares neither (in
+either spelling) and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type, `String`, and - agreeing with their `Eq` - `List`, `Map`
+prelude's `HashElements`). The prelude declares `Hash` for `Bool`, the eight integer types of 8 to 64 bits, `String`, and - agreeing with their `Eq` - `List`, `Map`
 (its entries' hashes summed, so the order they were put in does not count) and `Vec`; a float has none,
 so neither does a value holding one. A **reference** has a hash exactly where `==` compares what it names: one to an
 array whose elements have one (its elements' hashes, as an array value's), or one whose type declares `Eq` and `Hash`;
@@ -3818,7 +3841,7 @@ the limits the type has.
 | `x.PopCount()` | how many of `x`'s bits are one, as an `I64` |
 | `x.RotateLeft(n)` | `x`'s bits rotated `n` places toward the top, the bits leaving the top coming in at the bottom |
 | `x.RotateRight(n)` | the same toward the bottom |
-| `x.ByteSwap()` | `x`'s bytes in the reverse order; an 8-bit value is itself |
+| `x.ByteSwap()` | `x`'s bytes in the reverse order; an 8-bit value is itself; only a width of whole bytes has it (T4a) |
 
 Each reads `x` as the bit pattern of its width - a signed type's sign bit is a bit like any other - and gives a value of
 `x`'s own type but for the three counts. A zero's leading and trailing zeros are its width. A rotation's `n` is of any
@@ -4796,7 +4819,8 @@ default per task (P4a).
 Nothing about memory changes: every task is still joined before the block is left, and its stand-ins and parts (P2)
 are folded on every way out, a failed join's included.
 
-**P9.** Every integer type has five **atomic methods**, called on a place `t` of that type:
+**P9.** Every integer type of 8, 16, 32 or 64 bits has five **atomic methods** - another width (T4a) has none, an
+atomic operation being one instruction on a word the machine has - called on a place `t` of that type:
 
 ```
 t.AtomicLoad()                       -> T      reads t
@@ -6974,8 +6998,9 @@ be got wrong, but does not close it.
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C boundary (its **vocabulary**) is:
 
-- an `extern-value-type`, as a parameter or the result: a numeric primitive type (T4/T5) or a type declared over one
-  (T29, a `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), or a plain-data struct
+- an `extern-value-type`, as a parameter or the result: a numeric primitive type of the twelve C has types for - the
+  floats and the integers of 8, 16, 32 and 64 bits, never another width (T4a) - or a type declared over one (T29, a
+  `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), or a plain-data struct
   held by value (X11);
 - as a parameter only: a reference to a plain-data struct (`p Point&`, `p mut Point&`, `p Point?&`, X11), or an array
   (T7, held by value or by reference, of any length) whose element is an `extern-value-type`.

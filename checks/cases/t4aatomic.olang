@@ -1,0 +1,7 @@
+# check: fail the atomic operations take integers of 8, 16, 32 or 64 bits
+# T4a/P9: an atomic operation is one machine instruction on a word of a size the machine has
+Count mut U24 = 0
+
+fn main() {
+    Count.AtomicAdd(1)
+}

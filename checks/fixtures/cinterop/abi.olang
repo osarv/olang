@@ -2,7 +2,7 @@
 # by reference, every number width, Bool and the 16-bit floats (X2, X11), an extern type (X10), callbacks (X12, X13)
 import "std/io"
 link "abi.o"
-type I2 struct(a I32, b I32) { a, b }
+type Ints2 struct(a I32, b I32) { a, b }
 type L2 struct(a I64, b I64) { a, b }
 type L3 struct(a I64, b I64, c I64) { a, b, c }
 type F2 struct(x F32, y F32) { x, y }
@@ -23,7 +23,7 @@ type CD struct(c U8, d F64) { c, d }
 type H3 struct() {
     h Array<F16> = Array<F16>(3)
 }
-extern fn id_I2(a I2) I2
+extern fn id_I2(a Ints2) Ints2
 extern fn id_L2(a L2) L2
 extern fn id_L3(a L3) L3
 extern fn id_F2(a F2) F2
@@ -78,7 +78,7 @@ export fn add(i I32, ctx mut Ctx&) {
 export fn half(x F64) F64 { return x / 2 }
 
 fn main() ? {
-    try io.Println($id_I2(I2(1, 2)))
+    try io.Println($id_I2(Ints2(1, 2)))
     try io.Println($id_L2(L2(1, 2)))
     try io.Println($id_L3(L3(1, 2, 3)))
     try io.Println($id_F2(F2(1, 2)))

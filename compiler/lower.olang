@@ -3025,6 +3025,12 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     }
     if ln.scalar(ty) {
         x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        if t.IsInt(r) and t.Bits(r) > 64 {
+            # T4a: an integer wider than a word - its low word mixed with its high one's hash
+            hi := ln.prim(typed.PrimOp.Shr, ty, mir.Operand[x, ln.constI64(64)], sp)
+            lo := ln.asI64(x, ty, sp)
+            return ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[lo, ln.mix(ln.asI64(hi, ty, sp), sp)], sp), sp)
+        }
         return ln.mix(ln.asI64(x, ty, sp), sp)
     }
     if t.IsRef(r) {

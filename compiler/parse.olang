@@ -871,7 +871,8 @@ fn (p mut Parser&) typeList(kw token.Tok) Array<ast.TypeRef&>&p ? Fail {
     l mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
     for {
         l.Push(try p.typeExpr())
-        if not p.accept(token.Tok.Comma) { break }
+        # QY: on one line separated by ",", on different lines by the line break, the trait's "{" closing the list
+        if not (try p.sep(token.Tok.LBrace)) { break }
     }
     return l.ToArray()
 }

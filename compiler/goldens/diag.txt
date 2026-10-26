@@ -818,7 +818,7 @@ d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and nu
 d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
     9 |     y := nothing()
       |          ^~~~~~~~~
-d15null.olang:10:31: error[E4a]: this literal expression has no value - it overflows every type
+d15null.olang:10:31: error[E4a]: this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'
    10 |     z := 18446744073709551615 * 2
       |                               ^
 compilation failed with 3 errors
@@ -1899,7 +1899,7 @@ extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array exte
       |        ^~~~~~~
 compilation failed with 1 error
 === externfnshape.olang
-externfnshape.olang:3:43: error[X2]: fn(x I32) cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+externfnshape.olang:3:43: error[X2]: fn(x I32) cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
     3 | extern fn __olang_run_on_stack(bytes I64, f fn(x I32))
       |                                           ^
 compilation failed with 1 error
@@ -1996,7 +1996,7 @@ g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 
 g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 3 errors
 === g12explicitbound.olang
-g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
     5 |     b := sum<Bool>(true)
       |          ^~~~~~~~~
 compilation failed with 1 error
@@ -2898,12 +2898,12 @@ nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - 
       |            ^~~~~
 compilation failed with 1 error
 === numtraitbool.olang
-numtraitbool.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+numtraitbool.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
     5 |     r := nbTwice(true)
       |          ^~~~~~~
 compilation failed with 1 error
 === numtraitchar.olang
-numtraitchar.olang:5:10: error[G19, T31a]: Char does not satisfy the constraint Integer on T: Integer is closed, met by I8, I16, I32, I64, U8, U16, U32, U64 alone
+numtraitchar.olang:5:10: error[G19, T31a]: Char does not satisfy the constraint Integer on T: Integer is closed, met by I1 to I128, U1 to U128 alone
     5 |     c := ncNext('a')
       |          ^~~~~~
 compilation failed with 1 error
@@ -6039,7 +6039,7 @@ t32anyconvert.olang:12:40: error[T32a]: an 'any aShape&' is never made an 'any a
       |                                        ^
 compilation failed with 1 error
 === t32anydefaultunmet.olang
-t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I1 to I128, U1 to U128, F16, BF16, F32, F64 alone
    17 |     it mut any Iterator<String>& = w
       |                                    ^
 t32anydefaultunmet.olang:18:20: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
@@ -6163,6 +6163,36 @@ compilation failed with 1 error
 t34caseunknown.olang:11:14: error: unknown type 'aBx'
    11 |         case aBx b { return 1 }
       |              ^~~
+compilation failed with 1 error
+=== t4aatomic.olang
+t4aatomic.olang:6:11: error[P9, T4a]: the atomic operations take integers of 8, 16, 32 or 64 bits, and U24 is none - hold the value as one of those
+    6 |     Count.AtomicAdd(1)
+      |           ^~~~~~~~~
+compilation failed with 1 error
+=== t4abyteswap.olang
+t4abyteswap.olang:4:17: error[E37, T4a]: U12 has no 'ByteSwap': its 12 bits are no whole number of bytes
+    4 |     x := U12(5).ByteSwap()
+      |                 ^~~~~~~~
+compilation failed with 1 error
+=== t4aextern.olang
+t4aextern.olang:3:15: error[X2]: U24 cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+    3 | extern fn abs(n U24) I32
+      |               ^
+compilation failed with 1 error
+=== t4anomember.olang
+t4anomember.olang:6:10: error[G19, T31a]: F64 does not satisfy the constraint Integer on T: Integer is closed, met by I1 to I128, U1 to U128 alone
+    6 |     y := half(1.5)
+      |          ^~~~
+compilation failed with 1 error
+=== t4arange.olang
+t4arange.olang:4:12: error[T6]: '128' does not fit U7
+    4 |     x U7 = 128
+      |            ^~~
+compilation failed with 1 error
+=== t4awideliteral.olang
+t4awideliteral.olang:4:16: error[E4a]: this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'
+    4 |     x I128 = 1 << 100
+      |                ^~
 compilation failed with 1 error
 === t4primname.olang
 t4primname.olang:4:6: error[D3a]: 'I32' is a built-in type's name - choose another
@@ -6606,7 +6636,7 @@ x10typearg.olang:6:15: error[X10]: Db is an extern type, held only by reference 
       |               ^~
 compilation failed with 1 error
 === x11notplain.olang
-x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
     8 | extern fn take(s Named) I32
       |                ^
 compilation failed with 1 error
@@ -6636,7 +6666,7 @@ x13lambda.olang:9:21: error[X13]: a C function is given a function by the name o
       |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === x2result.olang
-x2result.olang:3:21: error[X2]: Array<I64> cannot come back from C - an extern's result is one number, Bool, extern type's reference or plain-data struct
+x2result.olang:3:21: error[X2]: Array<I64> cannot come back from C - an extern's result is one number of the twelve primitives, Bool, extern type's reference or plain-data struct
     3 | extern fn numbers() Array<I64>
       |                     ^~~~~~~~~~
 compilation failed with 1 error

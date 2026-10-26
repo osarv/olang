@@ -1,0 +1,5 @@
+# check: fail '128' does not fit U7
+# T4a/T6: a literal adapts to a type of any width only where its value fits
+fn main() {
+    x U7 = 128
+}

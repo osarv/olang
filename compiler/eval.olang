@@ -298,6 +298,7 @@ vOrd I64 = 9       # an enum carrying none, an error code: an I32
 vAgg I64 = 10      # a struct, a tuple, a record
 vFixed I64 = 11    # an array of a length the type says (T7c)
 vNone I64 = 12     # no layout
+vWide I64 = 13     # an integer wider than 64 bits (T4a): two words, the low one first, held masked to its width
 
 # a function decoded once, when it is defined (M8): the tables its statements index held as arrays, read in place where
 # a list's element would be copied out, its blocks' statements in one array (block b's from Start[b] to Start[b + 1]),
@@ -925,6 +926,7 @@ fn (m mut Machine&) shapeOf(ty types.TypeId) I64 {
         case types.Kind.Bool => vBool
         case types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64 => vInt
         case types.Kind.U8, types.Kind.U16, types.Kind.U32, types.Kind.U64 => vUint
+        case types.Kind.Int => vWide if t.A(r) > 64 else vInt if t.B(r) == 1 else vUint
         case types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => vFloat
         case types.Kind.Null => vPtr
         case types.Kind.DefaultErr => vOrd
@@ -997,7 +999,7 @@ fn (m mut Machine&) widthOf(ty types.TypeId) I64 {
     if sh == vBool { return 1 }
     if sh == vOrd { return 4 }
     if sh == vPtr { return 8 }
-    return m.T.Bits(m.T.Repr(ty)) / 8
+    return types.IntBytes(m.T.Bits(m.T.Repr(ty))) if m.T.IsInt(m.T.Repr(ty)) else m.T.Bits(m.T.Repr(ty)) / 8
 }
 
 # a fixed array's length, from its type
@@ -1885,8 +1887,11 @@ fn (m mut Machine&) put(fi I64, dst Ptr, dt types.TypeId, x mir.Operand) {
             n := m.size(dt)
             if bits == 0 or m.shape(ty) == vAgg or m.shape(ty) == vFixed {
                 m.zero(dst, n)
+            } else if m.shape(ty) == vWide {
+                lo, hi := m.wideConst(ty, bits)
+                m.wrWide(dst, ty, lo, hi)
             } else {
-                m.wr(dst, m.width(ty), bits)
+                m.wr(dst, m.width(ty), m.canonBits(ty, bits))
             }
         }
         case mir.Operand.Data(ty, c, file, sp) { m.putData(fi, dst, ty, c, file, sp) }
@@ -1912,32 +1917,53 @@ fn (m mut Machine&) addr(fi I64, x mir.Operand, k I64) Ptr {
 fn (m mut Machine&) scalar(fi I64, x mir.Operand) I64 {
     match x {
         case mir.Operand.None { return 0 }
-        case mir.Operand.Const(ty, bits) { return bits & m.mask(m.width(ty)) }
+        case mir.Operand.Const(ty, bits) { return m.canonBits(ty, bits) }
         case mir.Operand.Copy(p) {
             # a local itself, the commonest operand: no projection to follow, no scratch
             if p.Path.N == 0 {
                 match p.B {
                     case mir.Base.Local(l) {
-                        return m.rd(m.localPtr(fi, l), m.width(m.cf[m.fs[fi].Fn].Locals[I64(l)].Ty))
+                        return m.rd(m.localPtr(fi, l), m.word(m.cf[m.fs[fi].Fn].Locals[I64(l)].Ty))
                     }
                     case _ { }
                 }
             }
             ptr, ty := m.place(fi, p)
-            return m.rd(ptr, m.width(ty))
+            return m.rd(ptr, m.word(ty))
         }
-        case _ { return m.rd(m.addr(fi, x, 1), m.width(m.opType(fi, x))) }
+        case _ { return m.rd(m.addr(fi, x, 1), m.word(m.opType(fi, x))) }
     }
 }
 
 fn (m mut Machine&) mask(n I64) I64 { return -1 if n >= 8 else (1 << (8 * n)) - 1 }
 
+# the bytes a scalar read of a value of ty takes: its width, a wide integer's low word alone (T4a)
+fn (m mut Machine&) word(ty types.TypeId) I64 { return 8 if m.shape(ty) == vWide else m.width(ty) }
+
+# T4a: an integer type's width in bits - any of 1 to 128 - and eight bits a byte for any other scalar
+fn (m mut Machine&) ibits(ty types.TypeId) I64 {
+    r := m.T.Repr(ty)
+    return m.T.Bits(r) if m.T.IsInt(r) else 8 * m.width(ty)
+}
+
+# the mask of the low b bits of a word (b at least 64: all of them)
+fn bmask(b I64) I64 { return -1 if b >= 64 else (I64(1) << b) - 1 }
+
+# a constant's bits as a value of ty holds them: an integer's masked to its width, so every integer is held the same
+# way whatever wrote it (a wide one's low word, its high word the constant's extension, wideConst)
+fn (m mut Machine&) canonBits(ty types.TypeId, bits I64) I64 {
+    sh := m.shape(ty)
+    if sh == vInt or sh == vUint { return bits & bmask(m.ibits(ty)) }
+    if sh == vWide { return bits }
+    return bits & m.mask(m.width(ty))
+}
+
 # an integer's value from its bits: sign-extended for a signed type, as stored for an unsigned one
 fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
-    w := m.width(ty)
-    if w >= 8 { return bits }
-    v := bits & m.mask(w)
-    if m.shape(ty) == vInt and ((v >> (8 * w - 1)) & 1) == 1 { return v | ~m.mask(w) }
+    b := m.ibits(ty)
+    if b >= 64 { return bits }
+    v := bits & bmask(b)
+    if m.shape(ty) == vInt and ((v >> (b - 1)) & 1) == 1 { return v | ~bmask(b) }
     return v
 }
 
@@ -2079,9 +2105,16 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
                 m.wrPtr(dst, m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1)))
                 return
             }
+            if m.wideOp(fi, ty, args) {
+                m.primWide(fi, dst, op, ty, args)
+                return
+            }
             m.wr(dst, m.width(ty), m.prim(fi, op, ty, args))
         }
-        case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
+        case mir.Rvalue.Overflows(op, ty, args) {
+            yes := m.overflowsWide(fi, op, ty, args) if m.wideOp(fi, ty, args) else m.overflows(fi, op, ty, args)
+            m.wr(dst, 1, 1 if yes else 0)
+        }
         case mir.Rvalue.Tag(q) {
             src, st := m.place(fi, q)
             m.wr(dst, 8, m.tagOf(src, st))
@@ -2554,7 +2587,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             if op == typed.PrimOp.RotateLeft or op == typed.PrimOp.RotateRight { n = m.scalar(fi, m.arg(fi, args, 1)) }
             a := m.scalar(fi, x)
             if m.halted { return 0 }
-            return bitOp(op, U64(a & m.mask(m.width(at))), 8 * m.width(at), n)
+            return bitOp(op, U64(a & bmask(m.ibits(at))), m.ibits(at), n)
         }
         nomatch { }
     }
@@ -2605,8 +2638,8 @@ fn bitOp(op typed.PrimOp, a U64, w I64, n I64) I64 {
         for i in range w / 8 { r = r | (((a >> U64(8 * i)) & 0xFF) << U64(w - 8 - 8 * i)) }
         return I64(r)
     }
-    k := U64(n & (w - 1))
-    if op == typed.PrimOp.RotateRight { k = (U64(w) - k) & U64(w - 1) }
+    k := U64(((n % w) + w) % w)
+    if op == typed.PrimOp.RotateRight { k = (U64(w) - k) % U64(w) }
     if k == 0 { return I64(a) }
     return I64(((a << k) | (a >> (U64(w) - k))) & mask)
 }
@@ -2653,20 +2686,21 @@ fn (m mut Machine&) lenOf(fi I64, x mir.Operand, at types.TypeId) I64 {
 
 fn (m mut Machine&) unary(op typed.PrimOp, a I64, at types.TypeId, sh I64) I64 {
     w := m.width(at)
+    k := bmask(m.ibits(at))
     return match op {
         case typed.PrimOp.Not => a ^ 1
-        case typed.PrimOp.BitNot => ~a & m.mask(w)
-        nomatch => (a ^ (1 << (8 * w - 1))) & m.mask(w) if sh == vFloat else (0 - a) & m.mask(w)
+        case typed.PrimOp.BitNot => ~a & k
+        nomatch => (a ^ (1 << (8 * w - 1))) & m.mask(w) if sh == vFloat else (0 - a) & k
     }
 }
 
 fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt types.TypeId) I64 {
-    w := m.width(at)
+    w := m.ibits(at)
     signed := m.shape(at) == vInt
     x := m.intValue(a, at)
     y := m.intValue(b, at)
-    ux, uy := U64(a & m.mask(w)), U64(b & m.mask(w))
-    min := m.minOf(w)
+    ux, uy := U64(a & bmask(w)), U64(b & bmask(w))
+    min := minBits(w)
     r I64 = 0
     match op {
         case typed.PrimOp.Add { r = x + y }
@@ -2689,8 +2723,8 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
         }
         case typed.PrimOp.Shl, typed.PrimOp.Shr {
             n := m.intValue(b, bt)
-            if m.shape(bt) == vUint and m.width(bt) == 8 and b < 0 { n = 64 }
-            if n < 0 or n >= 8 * w {
+            if m.shape(bt) == vUint and m.ibits(bt) == 64 and b < 0 { n = 64 }
+            if n < 0 or n >= w {
                 m.refuse(WhyShift)
                 return 0
             }
@@ -2713,7 +2747,7 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
         case typed.PrimOp.Ge { return 1 if (x >= y if signed else ux >= uy) else 0 }
         nomatch { return m.notModelled() }
     }
-    return r & m.mask(w)
+    return r & bmask(w)
 }
 
 # a float of the type's width, as an F64 holding its value exactly
@@ -2790,12 +2824,12 @@ fn (m mut Machine&) convert(bits I64, from types.TypeId, to types.TypeId) I64 {
     if ts != vInt and ts != vUint and ts != vFloat and ts != vBool {
         return bits    # a value to a type of its representation (T29)
     }
-    tw := m.width(to)
+    tw := m.ibits(to)
     if fs == vInt or fs == vUint or fs == vBool {
         v := m.intValue(bits, from)
-        unsigned := fs == vUint and m.width(from) == 8 and v < 0
+        unsigned := fs == vUint and m.ibits(from) == 64 and v < 0
         if ts == vFloat { return m.intToFloat(v, unsigned, to) }
-        return v & m.mask(tw)
+        return v & bmask(tw)
     }
     if fs != vFloat { return m.notModelled() }
     x := m.toF64(bits, from)
@@ -2805,8 +2839,8 @@ fn (m mut Machine&) convert(bits I64, from types.TypeId, to types.TypeId) I64 {
         m.refuse(WhyConvert)
         return 0
     }
-    if ts == vUint and tw == 8 { return I64(U64(x)) }
-    return I64(x) & m.mask(tw)
+    if ts == vUint and tw == 64 { return I64(U64(x)) }
+    return I64(x) & bmask(tw)
 }
 
 fn (m mut Machine&) intToFloat(v I64, unsigned Bool, to types.TypeId) I64 {
@@ -2881,59 +2915,521 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
     x := m.arg(fi, args, 0)
     at := m.opType(fi, x)
     a := m.scalar(fi, x)
-    w := m.width(ty)
+    w := m.ibits(ty)
     signed := m.shape(ty) == vInt
     if op == typed.PrimOp.Convert {
         if m.shape(at) == vFloat { return not floatFits(m.toF64(a, at), w, signed) }
         v := m.intValue(a, at)
-        big := m.shape(at) == vUint and m.width(at) == 8 and v < 0
-        return not m.fits(v, big, w, signed)
+        big := m.shape(at) == vUint and m.ibits(at) == 64 and v < 0
+        return not fitsBits(v, big, w, signed)
     }
     x0 := m.intValue(a, ty)
     if op == typed.PrimOp.Neg {
-        return x0 == m.minOf(w) if signed else x0 != 0
+        return x0 == minBits(w) if signed else x0 != 0
     }
     b := m.intValue(m.scalar(fi, m.arg(fi, args, 1)), ty)
     if not signed {
-        ua, ub := U64(a & m.mask(w)), U64(b & m.mask(w))
+        ua, ub := U64(a & bmask(w)), U64(b & bmask(w))
         return match op {
-            case typed.PrimOp.Add => ((ua + ub) & U64(m.mask(w))) < ua or (w == 8 and ua + ub < ua)
+            case typed.PrimOp.Add => ((ua + ub) & U64(bmask(w))) < ua or (w == 64 and ua + ub < ua)
             case typed.PrimOp.Sub => ua < ub
-            case typed.PrimOp.Mul => ua != 0 and ((ua * ub) / ua != ub or (w < 8 and ua * ub > U64(m.mask(w))))
+            case typed.PrimOp.Mul => ua != 0 and ((ua * ub) / ua != ub or (w < 64 and ua * ub > U64(bmask(w))))
             nomatch => false
         }
     }
-    if w < 8 {
+    if op == typed.PrimOp.Div { return x0 == minBits(w) and b == -1 }
+    if w < 64 {
+        # operands of at most 63 bits: a sum or a difference fits an I64, a product may not
+        if op == typed.PrimOp.Mul and overflows64(op, x0, b, true) { return true }
         r := match op {
             case typed.PrimOp.Add => x0 + b
             case typed.PrimOp.Sub => x0 - b
             case typed.PrimOp.Mul => x0 * b
             nomatch => 0
         }
-        if op == typed.PrimOp.Div { return x0 == m.minOf(w) and b == -1 }
-        return r < m.minOf(w) or r > -(m.minOf(w) + 1)
+        return r < minBits(w) or r > -(minBits(w) + 1)
     }
-    if op == typed.PrimOp.Div { return x0 == m.minOf(8) and b == -1 }
     return overflows64(op, x0, b, true)
 }
 
-# whether a float's value, truncated toward zero, fits an integer of w bytes and a signedness (E26) - a NaN never
+# whether a float's value, truncated toward zero, fits an integer of w bits and a signedness (E26) - a NaN never
 fn floatFits(v F64, w I64, signed Bool) Bool {
     lim := 1.0
-    for i in range 8 * w - 1 { lim = lim * 2.0 }
+    for i in range w - 1 { lim = lim * 2.0 }
     if v != v { return false }
     if not signed { return v > -1.0 and v < 2.0 * lim }
-    # the least is -lim itself; for 8 bytes -lim - 1 is not an F64 apart from -lim, so the test is >= there
-    return (v >= -lim if w >= 8 else v > -lim - 1.0) and v < lim
+    # the least is -lim itself; from 54 bits -lim - 1 is not an F64 apart from -lim, so the test is >= there
+    return (v >= -lim if w > 53 else v > -lim - 1.0) and v < lim
 }
 
-fn (m mut Machine&) minOf(w I64) I64 { return -9223372036854775807 - 1 if w >= 8 else -(I64(1) << (8 * w - 1)) }
+# the least value of a signed integer of w bits, at most 64
+fn minBits(w I64) I64 { return -9223372036854775807 - 1 if w >= 64 else -(I64(1) << (w - 1)) }
 
-# whether an integer (big: a U64 above I64's maximum) fits w bytes of a signedness
-fn (m mut Machine&) fits(v I64, big Bool, w I64, signed Bool) Bool {
-    if big { return not signed and w == 8 }
-    if signed { return w == 8 or (v >= m.minOf(w) and v <= -(m.minOf(w) + 1)) }
-    return v >= 0 and (w == 8 or v <= m.mask(w))
+# whether an integer (big: a U64 above I64's maximum) fits w bits of a signedness
+fn fitsBits(v I64, big Bool, w I64, signed Bool) Bool {
+    if big { return w > 64 or not signed and w == 64 }
+    if signed { return w >= 64 or (v >= minBits(w) and v <= -(minBits(w) + 1)) }
+    return v >= 0 and (w >= 63 or v <= bmask(w))
+}
+
+# ---- integers wider than 64 bits (T4a) ----
+#
+# A value is two words, its low one first (lo, hi), held masked to its width (vWide); computed with as its value
+# extended to 128 bits by its signedness, then masked again where it is stored - so every width from 65 to 128 wraps
+# as the target's iN does (E6c), and what the specification leaves undefined is refused as for a narrow one (K1).
+
+# a wide integer's value at p, extended from its width by its signedness
+fn (m mut Machine&) rdWide(p Ptr, ty types.TypeId) I64, I64 {
+    lo := m.rd(p, 8)
+    hi := m.rd(Ptr(p.Id, p.Off + 8), 8)
+    return extend128(lo, hi, m.ibits(ty), m.shape(ty) != vUint and not m.T.IsUnsigned(m.T.Repr(ty)))
+}
+
+# a value written at p as a wide integer of ty holds it: masked to its width
+fn (m mut Machine&) wrWide(p Ptr, ty types.TypeId, lo I64, hi I64) {
+    b := m.ibits(ty)
+    m.wr(p, 8, lo)
+    m.wr(Ptr(p.Id, p.Off + 8), 8, hi & bmask(b - 64))
+}
+
+# a constant's value as a wide integer: its 64 bits extended by its type's signedness (MIR's Const)
+fn (m mut Machine&) wideConst(ty types.TypeId, bits I64) I64, I64 {
+    return bits, 0 if m.T.IsUnsigned(m.T.Repr(ty)) else bits >> 63
+}
+
+# an integer operand's value extended to 128 bits by its signedness, whatever its width
+fn (m mut Machine&) wideOf(fi I64, x mir.Operand) I64, I64 {
+    ty := m.opType(fi, x)
+    if m.shape(ty) == vWide {
+        match x {
+            case mir.Operand.Const(ct, bits) { return m.wideConst(ct, bits) }
+            case _ { return m.rdWide(m.addr(fi, x, 1), ty) }
+        }
+    }
+    v := m.intValue(m.scalar(fi, x), ty)
+    if m.shape(ty) == vBool { return v & 1, 0 }
+    return v, 0 if m.shape(ty) == vUint else v >> 63
+}
+
+# the low b bits of a 128-bit value (b of 1 to 128), sign-extended above them for a signed type, zero-extended else
+fn extend128(lo I64, hi I64, b I64, signed Bool) I64, I64 {
+    if b >= 128 { return lo, hi }
+    if b > 64 {
+        k := b - 64
+        h := hi & bmask(k)
+        if signed and ((h >> (k - 1)) & 1) == 1 { h = h | ~bmask(k) }
+        return lo, h
+    }
+    l := lo & bmask(b)
+    if signed and ((l >> (b - 1)) & 1) == 1 { l = l | ~bmask(b) }
+    return l, 0 if not signed else l >> 63
+}
+
+fn ult64(a I64, b I64) Bool { return U64(a) < U64(b) }
+
+fn add128(alo I64, ahi I64, blo I64, bhi I64) I64, I64 {
+    lo := alo + blo
+    return lo, ahi + bhi + (1 if ult64(lo, alo) else 0)
+}
+
+fn sub128(alo I64, ahi I64, blo I64, bhi I64) I64, I64 {
+    return alo - blo, ahi - bhi - (1 if ult64(alo, blo) else 0)
+}
+
+fn neg128(lo I64, hi I64) I64, I64 { return sub128(0, 0, lo, hi) }
+
+# the 128-bit product of two 64-bit words read unsigned
+fn mul64(a I64, b I64) I64, I64 {
+    a0, a1 := a & 0xFFFFFFFF, I64(U64(a) >> 32)
+    b0, b1 := b & 0xFFFFFFFF, I64(U64(b) >> 32)
+    p00, p01, p10, p11 := a0 * b0, a0 * b1, a1 * b0, a1 * b1
+    mid := I64(U64(p00) >> 32) + (p01 & 0xFFFFFFFF) + (p10 & 0xFFFFFFFF)
+    lo := (p00 & 0xFFFFFFFF) | (mid << 32)
+    hi := p11 + I64(U64(p01) >> 32) + I64(U64(p10) >> 32) + I64(U64(mid) >> 32)
+    return lo, hi
+}
+
+fn mul128(alo I64, ahi I64, blo I64, bhi I64) I64, I64 {
+    lo, hi := mul64(alo, blo)
+    return lo, hi + alo * bhi + ahi * blo
+}
+
+fn shl128(lo I64, hi I64, n I64) I64, I64 {
+    if n == 0 { return lo, hi }
+    if n >= 64 { return 0, lo << (n - 64) }
+    return lo << n, (hi << n) | I64(U64(lo) >> U64(64 - n))
+}
+
+# a right shift by n (0 to 127): arithmetic (signed) or logical
+fn shr128(lo I64, hi I64, n I64, signed Bool) I64, I64 {
+    if n == 0 { return lo, hi }
+    if n >= 64 {
+        if signed { return hi >> (n - 64), hi >> 63 }
+        return I64(U64(hi) >> U64(n - 64)), 0
+    }
+    l := I64(U64(lo) >> U64(n)) | (hi << (64 - n))
+    if signed { return l, hi >> n }
+    return l, I64(U64(hi) >> U64(n))
+}
+
+# -1, 0 or 1: a below, equal to or above b, read signed or unsigned
+fn cmp128(alo I64, ahi I64, blo I64, bhi I64, signed Bool) I64 {
+    if ahi != bhi {
+        if signed { return -1 if ahi < bhi else 1 }
+        return -1 if ult64(ahi, bhi) else 1
+    }
+    if alo == blo { return 0 }
+    return -1 if ult64(alo, blo) else 1
+}
+
+# a divided by b, both read unsigned (b not zero): the quotient and the remainder, by long division
+fn udivmod128(alo I64, ahi I64, blo I64, bhi I64) I64, I64, I64, I64 {
+    if ahi == 0 and bhi == 0 { return I64(U64(alo) / U64(blo)), 0, I64(U64(alo) % U64(blo)), 0 }
+    qlo, qhi, rlo, rhi := I64(0), I64(0), I64(0), I64(0)
+    for i in range 128 {
+        k := 127 - i
+        rlo, rhi = shl128(rlo, rhi, 1)
+        blo2, _ := shr128(alo, ahi, k, false)
+        rlo = rlo | (blo2 & 1)
+        if cmp128(rlo, rhi, blo, bhi, false) >= 0 {
+            rlo, rhi = sub128(rlo, rhi, blo, bhi)
+            if k >= 64 { qhi = qhi | (I64(1) << (k - 64)) } else { qlo = qlo | (I64(1) << k) }
+        }
+    }
+    return qlo, qhi, rlo, rhi
+}
+
+# a signed division truncating toward zero, its remainder of a's sign (E6)
+fn sdivmod128(alo I64, ahi I64, blo I64, bhi I64) I64, I64, I64, I64 {
+    na, nb := ahi < 0, bhi < 0
+    ma, mah := alo, ahi
+    if na { ma, mah = neg128(alo, ahi) }
+    mb, mbh := blo, bhi
+    if nb { mb, mbh = neg128(blo, bhi) }
+    qlo, qhi, rlo, rhi := udivmod128(ma, mah, mb, mbh)
+    if na != nb { qlo, qhi = neg128(qlo, qhi) }
+    if na { rlo, rhi = neg128(rlo, rhi) }
+    return qlo, qhi, rlo, rhi
+}
+
+# the least value of a signed integer of b bits (1 to 128), extended to 128
+fn wideMin(b I64) I64, I64 {
+    if b <= 64 { return minBits(b), -1 }
+    lo, hi := shl128(1, 0, b - 1)
+    return neg128(lo, hi)
+}
+
+# the greatest value of an integer of b bits (up to 128) and a signedness
+fn wideMax(b I64, signed Bool) I64, I64 {
+    k := b - 1 if signed else b
+    if k >= 128 { return -1, -1 }
+    lo, hi := shl128(1, 0, k)
+    return sub128(lo, hi, 1, 0)
+}
+
+# whether a value (read signed or not) lies within an integer type of b bits and a signedness
+fn fits128(lo I64, hi I64, srcSigned Bool, b I64, signed Bool) Bool {
+    if srcSigned and hi < 0 {
+        if not signed { return false }
+        mlo, mhi := wideMin(b)
+        return cmp128(lo, hi, mlo, mhi, true) >= 0
+    }
+    xlo, xhi := wideMax(b, signed)
+    return cmp128(lo, hi, xlo, xhi, false) <= 0
+}
+
+# the count of leading zero bits of a value of b bits (masked to them)
+fn lz128(lo I64, hi I64, b I64) I64 {
+    n I64 = 0
+    for i in range b {
+        k := b - 1 - i
+        bit := (hi >> (k - 64)) & 1 if k >= 64 else (lo >> k) & 1
+        if bit == 1 { return n }
+        n++
+    }
+    return n
+}
+
+# a wide value as decimal text: "-" before a negative one's magnitude
+fn wideText(lo I64, hi I64, signed Bool) String {
+    neg := signed and hi < 0
+    l, h := lo, hi
+    if neg { l, h = neg128(lo, hi) }
+    parts := List<I64>()
+    for h != 0 {
+        qlo, qhi, rlo, _ := udivmod128(l, h, 1000000000000000000, 0)
+        parts.Push(rlo)
+        l, h = qlo, qhi
+    }
+    b := StringBuilder()
+    if neg { b.PushChar('-') }
+    b.Push($U64(l))
+    for i in range parts.Len() {
+        d := $U64(parts[parts.Len() - 1 - i])
+        for k in range 18 - d.Len() { b.PushChar('0') }
+        b.Push(d)
+    }
+    return b.ToString()
+}
+
+# whether an operation reads or makes an integer wider than 64 bits, so primWide computes it
+fn (m mut Machine&) wideOp(fi I64, ty types.TypeId, args mir.Range) Bool {
+    if m.shape(ty) == vWide { return true }
+    for i in range args.N {
+        if m.shape(m.opType(fi, m.arg(fi, args, i))) == vWide { return true }
+    }
+    return false
+}
+
+# a prim reading or making a wide integer, its result written at dst (K1: undefined behaviour refused)
+fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, args mir.Range) {
+    x := m.arg(fi, args, 0)
+    at := m.opType(fi, x)
+    sat := m.shape(at)
+    rb := m.ibits(ty)
+    rsigned := not m.T.IsUnsigned(m.T.Repr(ty))
+    if op == typed.PrimOp.Convert {
+        if m.shape(ty) == vFloat {
+            lo, hi := m.wideOf(fi, x)
+            if m.halted { return }
+            m.wr(dst, m.width(ty), m.wideToFloat(lo, hi, sat != vUint and not m.T.IsUnsigned(m.T.Repr(at)), ty))
+            return
+        }
+        if sat == vFloat {
+            v := m.toF64(m.scalar(fi, x), at)
+            if not floatFits(v, rb, rsigned) {
+                m.refuse(WhyConvert)
+                return
+            }
+            lo, hi := floatToWide(v)
+            m.putInt(dst, ty, lo, hi)
+            return
+        }
+        lo, hi := m.wideOf(fi, x)
+        if m.halted { return }
+        m.putInt(dst, ty, lo, hi)
+        return
+    }
+    signed := sat != vUint and not m.T.IsUnsigned(m.T.Repr(at))
+    ab := m.ibits(at)
+    alo, ahi := m.wideOf(fi, x)
+    if m.halted { return }
+    match op {
+        case typed.PrimOp.Neg {
+            lo, hi := neg128(alo, ahi)
+            m.putInt(dst, ty, lo, hi)
+            return
+        }
+        case typed.PrimOp.BitNot {
+            m.putInt(dst, ty, ~alo, ~ahi)
+            return
+        }
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount {
+            n I64 = 0
+            lo, hi := extend128(alo, ahi, ab, false)
+            if op == typed.PrimOp.LeadingZeros {
+                n = lz128(lo, hi, ab)
+            } else {
+                for i in range ab {
+                    bit := (hi >> (i - 64)) & 1 if i >= 64 else (lo >> i) & 1
+                    if op == typed.PrimOp.PopCount {
+                        if bit == 1 { n++ }
+                    } else if bit == 1 {
+                        break
+                    } else {
+                        n++
+                    }
+                }
+            }
+            m.wr(dst, 8, n)
+            return
+        }
+        case typed.PrimOp.ByteSwap {
+            rlo, rhi := I64(0), I64(0)
+            for i in range ab / 8 {
+                blo, _ := shr128(alo, ahi, 8 * i, false)
+                plo, phi := shl128(blo & 0xFF, 0, ab - 8 - 8 * i)
+                rlo, rhi = rlo | plo, rhi | phi
+            }
+            m.putInt(dst, ty, rlo, rhi)
+            return
+        }
+        case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
+            n := m.intValue(m.scalar(fi, m.arg(fi, args, 1)), m.opType(fi, m.arg(fi, args, 1)))
+            k := ((n % ab) + ab) % ab
+            if op == typed.PrimOp.RotateRight { k = (ab - k) % ab }
+            lo, hi := extend128(alo, ahi, ab, false)
+            if k == 0 {
+                m.putInt(dst, ty, lo, hi)
+                return
+            }
+            l1, h1 := shl128(lo, hi, k)
+            l2, h2 := shr128(lo, hi, ab - k, false)
+            m.putInt(dst, ty, l1 | l2, h1 | h2)
+            return
+        }
+        nomatch { }
+    }
+    y := m.arg(fi, args, 1)
+    bt := m.opType(fi, y)
+    blo, bhi := m.wideOf(fi, y)
+    if m.halted { return }
+    lo, hi := I64(0), I64(0)
+    match op {
+        case typed.PrimOp.Add { lo, hi = add128(alo, ahi, blo, bhi) }
+        case typed.PrimOp.Sub { lo, hi = sub128(alo, ahi, blo, bhi) }
+        case typed.PrimOp.Mul { lo, hi = mul128(alo, ahi, blo, bhi) }
+        case typed.PrimOp.Div, typed.PrimOp.Rem {
+            if blo == 0 and bhi == 0 {
+                m.refuse(WhyDivZero)
+                return
+            }
+            if signed {
+                mlo, mhi := wideMin(ab)
+                if blo == -1 and bhi == -1 and alo == mlo and ahi == mhi {
+                    m.refuse(WhyDivMin)
+                    return
+                }
+                q, qh, r, rh := sdivmod128(alo, ahi, blo, bhi)
+                lo, hi = q, qh
+                if op == typed.PrimOp.Rem { lo, hi = r, rh }
+            } else {
+                q, qh, r, rh := udivmod128(alo, ahi, blo, bhi)
+                lo, hi = q, qh
+                if op == typed.PrimOp.Rem { lo, hi = r, rh }
+            }
+        }
+        case typed.PrimOp.Shl, typed.PrimOp.Shr {
+            # the count: any integer, which must lie within the width
+            if bhi != 0 or not ult64(blo, ab) {
+                m.refuse(WhyShift)
+                return
+            }
+            if op == typed.PrimOp.Shl {
+                lo, hi = shl128(alo, ahi, blo)
+            } else {
+                lo, hi = shr128(alo, ahi, blo, signed)
+            }
+        }
+        case typed.PrimOp.BitAnd { lo, hi = alo & blo, ahi & bhi }
+        case typed.PrimOp.BitOr { lo, hi = alo | blo, ahi | bhi }
+        case typed.PrimOp.BitXor { lo, hi = alo ^ blo, ahi ^ bhi }
+        case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
+            c := cmp128(alo, ahi, blo, bhi, signed)
+            yes := match op {
+                case typed.PrimOp.Eq => c == 0
+                case typed.PrimOp.Ne => c != 0
+                case typed.PrimOp.Lt => c < 0
+                case typed.PrimOp.Le => c <= 0
+                case typed.PrimOp.Gt => c > 0
+                nomatch => c >= 0
+            }
+            m.wr(dst, 1, 1 if yes else 0)
+            return
+        }
+        nomatch {
+            m.notModelled()
+            return
+        }
+    }
+    m.putInt(dst, ty, lo, hi)
+}
+
+# whether op's true result over args does not fit ty (E15a's OVERFLOW), where a wide integer is among them
+fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
+    x := m.arg(fi, args, 0)
+    at := m.opType(fi, x)
+    b := m.ibits(ty)
+    signed := not m.T.IsUnsigned(m.T.Repr(ty))
+    if op == typed.PrimOp.Convert {
+        if m.shape(at) == vFloat { return not floatFits(m.toF64(m.scalar(fi, x), at), b, signed) }
+        lo, hi := m.wideOf(fi, x)
+        return not fits128(lo, hi, m.shape(at) != vUint and not m.T.IsUnsigned(m.T.Repr(at)), b, signed)
+    }
+    alo, ahi := m.wideOf(fi, x)
+    if op == typed.PrimOp.Neg {
+        if not signed { return alo != 0 or ahi != 0 }
+        mlo, mhi := wideMin(b)
+        return alo == mlo and ahi == mhi
+    }
+    blo, bhi := m.wideOf(fi, m.arg(fi, args, 1))
+    if op == typed.PrimOp.Div {
+        mlo, mhi := wideMin(b)
+        return signed and alo == mlo and ahi == mhi and blo == -1 and bhi == -1
+    }
+    if op == typed.PrimOp.Mul {
+        # the magnitudes' product: past 128 bits where dividing it back does not give the other, else checked against
+        # the type's limit for the product's sign
+        neg := signed and (ahi < 0) != (bhi < 0)
+        ma, mah := alo, ahi
+        if signed and ahi < 0 { ma, mah = neg128(alo, ahi) }
+        mb, mbh := blo, bhi
+        if signed and bhi < 0 { mb, mbh = neg128(blo, bhi) }
+        if (ma == 0 and mah == 0) or (mb == 0 and mbh == 0) { return false }
+        plo, phi := mul128(ma, mah, mb, mbh)
+        qlo, qhi, _, _ := udivmod128(plo, phi, ma, mah)
+        if qlo != mb or qhi != mbh { return true }
+        xlo, xhi := wideMax(b, signed)
+        if neg { xlo, xhi = add128(xlo, xhi, 1, 0) }
+        return cmp128(plo, phi, xlo, xhi, false) > 0
+    }
+    # + and -: operands of at most 127 bits give an exact 128-bit result, checked against the type's range; at 128 bits,
+    # the signs say it (or the carry, unsigned)
+    lo, hi := sub128(alo, ahi, blo, bhi)
+    if op == typed.PrimOp.Add { lo, hi = add128(alo, ahi, blo, bhi) }
+    if b < 128 { return not fits128(lo, hi, true, b, signed) }
+    if not signed {
+        if op == typed.PrimOp.Add { return cmp128(lo, hi, alo, ahi, false) < 0 }
+        return cmp128(alo, ahi, blo, bhi, false) < 0
+    }
+    if op == typed.PrimOp.Add { return (ahi < 0) == (bhi < 0) and (hi < 0) != (ahi < 0) }
+    return (ahi < 0) != (bhi < 0) and (hi < 0) != (ahi < 0)
+}
+
+# an integer result of ty written at dst: wide as two words, narrow as its width's bytes
+fn (m mut Machine&) putInt(dst Ptr, ty types.TypeId, lo I64, hi I64) {
+    if m.shape(ty) == vWide {
+        m.wrWide(dst, ty, lo, hi)
+    } else {
+        m.wr(dst, m.width(ty), lo & bmask(m.ibits(ty)))
+    }
+}
+
+# a float's value, truncated toward zero, as a 128-bit integer (it fits: floatFits said so)
+fn floatToWide(v F64) I64, I64 {
+    if v > -9223372036854775808.0 and v < 9223372036854775808.0 {
+        n := I64(v)
+        return n, n >> 63
+    }
+    # at least 2^63 in magnitude: a whole number, its 53 bits shifted up
+    neg := v < 0.0
+    a := -v if neg else v
+    bits := I64(a.Bits())
+    e := ((bits >> 52) & 0x7FF) - 1075
+    mant := (bits & ((I64(1) << 52) - 1)) | (I64(1) << 52)
+    lo, hi := shl128(mant, 0, e)
+    if neg { return neg128(lo, hi) }
+    return lo, hi
+}
+
+# a wide integer converted to a float type, rounded once (T4, E26): a magnitude of more than 63 bits is cut to 63, the
+# bits cut off kept as one sticky bit - so the one rounding to the type (24 bits at most past F64's 53) is the true
+# value's - and scaled back exactly
+fn (m mut Machine&) wideToFloat(lo I64, hi I64, signed Bool, to types.TypeId) I64 {
+    neg := signed and hi < 0
+    l, h := lo, hi
+    if neg { l, h = neg128(lo, hi) }
+    s I64 = 0
+    if h != 0 {
+        s = 128 - lz128(l, h, 128) - 63
+        cl, ch := extend128(l, h, s, false)
+        l, h = shr128(l, h, s, false)
+        if cl != 0 or ch != 0 { l = l | 1 }
+    }
+    x := m.toF64(m.intToFloat(l, true, to), to)
+    for i in range s { x = x * 2.0 }
+    if neg { x = -x }
+    return m.fromF64(x, to)
 }
 
 # ---- statements ----
@@ -3098,8 +3594,16 @@ fn (m mut Machine&) write(fi I64, b mir.ScopeRef, how mir.WriteKind, x mir.Opera
             m.appendByte(bs, 39)
         }
         case mir.WriteKind.Bool { m.appendText(bs, "true" if m.scalar(fi, x) != 0 else "false") }
-        case mir.WriteKind.Int { m.appendText(bs, $m.intValue(m.scalar(fi, x), xt)) }
-        case mir.WriteKind.Uint { m.appendText(bs, $U64(m.scalar(fi, x))) }
+        case mir.WriteKind.Int, mir.WriteKind.Uint {
+            if m.shape(xt) == vWide {
+                lo, hi := m.wideOf(fi, x)
+                m.appendText(bs, wideText(lo, hi, how == mir.WriteKind.Int))
+            } else if how == mir.WriteKind.Int {
+                m.appendText(bs, $m.intValue(m.scalar(fi, x), xt))
+            } else {
+                m.appendText(bs, $U64(m.scalar(fi, x)))
+            }
+        }
         case mir.WriteKind.Float { m.appendText(bs, m.floatText(m.scalar(fi, x), xt)) }
     }
 }
@@ -3760,9 +4264,17 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if glob and not m.operandReady(fi, x) { return }
             v := m.scalar(fi, x)
             to := otherwise
-            mk := m.mask(m.width(m.opType(fi, x)))
+            xt := m.opType(fi, x)
+            mk := bmask(m.ibits(xt)) if m.shape(xt) == vInt or m.shape(xt) == vUint else m.mask(m.width(xt))
+            # a wide integer's case: its constant extended as a Const is, both words alike (T4a)
+            whi := 0
+            if m.shape(xt) == vWide { _, whi = m.wideOf(fi, x) }
             for i in range cases.N {
-                if (m.cf[k].Cases[I64(cases.At) + i].Value & mk) == v {
+                cv := m.cf[k].Cases[I64(cases.At) + i].Value
+                if m.shape(xt) == vWide {
+                    clo, chi := m.wideConst(xt, cv)
+                    if clo == v and chi == whi { to = m.cf[k].Cases[I64(cases.At) + i].To }
+                } else if (cv & mk) == v {
                     to = m.cf[k].Cases[I64(cases.At) + i].To
                 }
             }

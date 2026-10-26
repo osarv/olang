@@ -22,6 +22,7 @@ import "msgs"
 import "cond"
 import "fetch"
 import "load"
+import tys "types"
 
 # what a name is
 type What enum {
@@ -71,7 +72,8 @@ type local struct(Name source.NameId, Sp source.Span, Kind What) {
 # T4, T7: the names every module sees as a type
 fn BuiltinTypeName(t String&) Bool {
     return t == "Bool" or t == "Array" or t == "I8" or t == "I16" or t == "I32" or t == "I64" or t == "U8" or
-           t == "U16" or t == "U32" or t == "U64" or t == "F16" or t == "BF16" or t == "F32" or t == "F64"
+           t == "U16" or t == "U32" or t == "U64" or t == "F16" or t == "BF16" or t == "F32" or t == "F64" or
+           tys.IsIntName(t)
 }
 
 type Resolver struct(L mut load.Loader&) {

@@ -1,0 +1,7 @@
+# check: fail is closed, met by I1 to I128, U1 to U128 alone
+# T4a/T31a: Integer is every integer type of every width, and a float is none of them
+fn half<T Integer>(x T) T { return x / 2 }
+
+fn main() {
+    y := half(1.5)
+}

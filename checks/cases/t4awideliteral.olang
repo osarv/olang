@@ -1,0 +1,5 @@
+# check: fail this literal expression has no value - it needs more than 64 bits
+# T4a/E4a: a literal-only expression is computed exactly in 64 bits; a wider value is made from a converted operand
+fn main() {
+    x I128 = 1 << 100
+}

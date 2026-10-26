@@ -76,6 +76,9 @@ type Kind enum {
     # (ErrWords) and error-set variables (Var) - in the canonical order (R1a), so one set is one type. Only ever an
     # instance's argument or a variable's binding; never a value's type
     ErrSet
+    # an integer type of a width not among the eight above (T4a): A its width in bits, 1 to 128, B 1 for a signed type
+    # and 0 for an unsigned one. Interned with the table, I1 to I128 and U1 to U128, so a name always finds it (Prim)
+    Int
 }
 
 # a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
@@ -187,6 +190,7 @@ type Table struct(Names mut source.Names&) {
     nameKeys Map<Array<I64>&, I64>
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
+    ints List<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
@@ -200,8 +204,51 @@ fn NewTable(names mut source.Names&) Table {
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
     }
+    # T4a: every integer width, the eight above at their own ids - so I24 and U7 are found by name without the table
+    # changing, and a width's type is one type wherever it is written
+    t.ints.Push(UnknownT)
+    for u in range 2 {
+        for bits in range 1, 129 {
+            fixed := TypeId(I32(primIndex(bits, u == 1)))
+            t.ints.Push(fixed if fixed != UnknownT else t.intern(data(Kind.Int, bits, 1 - u, 0), 1))
+        }
+    }
     return t
 }
+
+# the id of one of the eight fixed integer types of a width, else Unknown
+fn primIndex(bits I64, unsigned Bool) I64 {
+    k := match bits {
+        case 8 => 0
+        case 16 => 1
+        case 32 => 2
+        case 64 => 3
+        case _ => -1
+    }
+    if k < 0 { return 0 }
+    return 3 + k + (4 if unsigned else 0)
+}
+
+# T4a: the width an integer type's name gives - "I24" 24 signed, "U7" 7 unsigned - or 0 where it names none: a width of
+# 1 to 128 written with no leading zero
+fn IntWidth(name String&) I64, Bool {
+    if name.Len() < 2 or name.Len() > 4 or (name[0] != 'I' and name[0] != 'U') or name[1] == '0' { return 0, false }
+    n I64 = 0
+    for i in range 1, name.Len() {
+        if not name[i].IsDigit() { return 0, false }
+        n = n * 10 + I64(name[i]) - I64('0')
+    }
+    if n < 1 or n > 128 { return 0, false }
+    return n, name[0] == 'U'
+}
+
+fn IsIntName(name String&) Bool {
+    bits, _ := IntWidth(name)
+    return bits > 0
+}
+
+# the integer type of a width (1 to 128), signed or not (T4a)
+fn (t Table&) IntType(bits I64, unsigned Bool) TypeId { return t.ints[bits + (128 if unsigned else 0)] }
 
 UnknownT TypeId = TypeId(0)
 VoidT TypeId = TypeId(1)
@@ -224,6 +271,8 @@ fn (t Table&) Prim(name String&) TypeId {
     for i in range 1, 15 {
         if primNames[i] == name { return TypeId(I32(i)) }
     }
+    bits, unsigned := IntWidth(name)
+    if bits > 0 { return t.IntType(bits, unsigned) }
     return UnknownT
 }
 
@@ -493,13 +542,22 @@ fn (t mut Table&) OrNull(id TypeId) TypeId {
 }
 # whether a reference names an array - never null: its zero value is the empty array (T2c)
 fn (t Table&) ArrayRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Repr(t.Referent(id))) == Kind.Array }
-fn (t Table&) IsNumber(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(14) }
-fn (t Table&) IsInt(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(10) }
-fn (t Table&) IsUnsigned(id TypeId) Bool { return id >= TypeId(7) and id <= TypeId(10) }
+fn (t Table&) IsNumber(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(14) or t.KindOf(id) == Kind.Int }
+fn (t Table&) IsInt(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(10) or t.KindOf(id) == Kind.Int }
+fn (t Table&) IsUnsigned(id TypeId) Bool {
+    return id >= TypeId(7) and id <= TypeId(10) or t.KindOf(id) == Kind.Int and t.B(id) == 0
+}
 fn (t Table&) IsFloat(id TypeId) Bool { return id >= TypeId(11) and id <= TypeId(14) }
 
 # a number type's width in bits (Bool 1)
-fn (t Table&) Bits(id TypeId) I64 { return primBits[I64(id)] if id <= TypeId(14) else 0 }
+fn (t Table&) Bits(id TypeId) I64 {
+    if id <= TypeId(14) { return primBits[I64(id)] }
+    return t.A(id) if t.KindOf(id) == Kind.Int else 0
+}
+
+# T4a: the bytes an integer of b bits is held in - the next of 1, 2, 4, 8 and 16 bytes, as LLVM lays iN out and C lays
+# out a _BitInt
+fn IntBytes(b I64) I64 { return 1 if b <= 8 else 2 if b <= 16 else 4 if b <= 32 else 8 if b <= 64 else 16 }
 
 # whether a type is closed - holds no variable, pattern or stand-in - and so is one the program can hold
 fn (t Table&) Closed(id TypeId) Bool {
@@ -876,6 +934,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
             size = primBits[I64(id)] / 8 if id != BoolT else 1
             align = size
         }
+        case Kind.Int { size, align = IntBytes(d.A), IntBytes(d.A) }
         case Kind.DefaultErr { size, align = 4, 4 }
         case Kind.Func { size, align = 16, 8 }   # T21: the pair (code, environment)
         case Kind.Ref {
@@ -987,6 +1046,7 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
     return match d.K {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64 => $primLlvm[I64(id)]
+        case Kind.Int => "i" $d.A
         case Kind.DefaultErr => "i32"
         case Kind.Noreturn => "void"
         case Kind.Func => "{ ptr, ptr }"
@@ -1121,6 +1181,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
              Kind.BF16, Kind.F32, Kind.F64 {
             b.Push("void" if id == VoidT else primNames[I64(id)])
         }
+        case Kind.Int { b.Push($("I" if d.B == 1 else "U") $d.A) }
         case Kind.Named {
             dl := t.DeclOf(id)
             b.Push(t.Modules[t.DeclModule(dl)])

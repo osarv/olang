@@ -193,7 +193,10 @@ arithmetic wraps at the width (E6c), `checked` checks it, the T6b lattice widens
 unsigned into a strictly wider signed), literals adapt, `$`, `Hash`, `Format`, the `Integer` trait. Storage is whole
 bytes (a `U12` takes two); packing bits is the declared-layout work's. Cost on a CPU: one mask or sign-extension where a
 result's width matters, a library call for 128-bit division; on an FPGA odd widths are the cheap ones. Fixed point
-(`Q4.12`-style, saturating) is decided separately, with the FPGA work. Built in the port after self-hosting.
+(`Q4.12`-style, saturating) is decided separately, with the FPGA work. **Integers built 2026-10-26 (T4a, SPEC 2.2)**: storage
+the next of 1, 2, 4, 8 or 16 bytes, as LLVM and C's `_BitInt` lay them out; literals stay 64-bit; `Integer` lists every
+width; atomics, `ByteSwap` of odd bit counts and the C boundary stay with the widths the machine has; `ParseAs<T>` reads
+any width. Fixed point not built.
 
 **What:** integer types of any bit width, and fixed-point numbers with saturating arithmetic.
 

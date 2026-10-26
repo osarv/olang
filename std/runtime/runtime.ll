@@ -1166,6 +1166,67 @@ count:
   ret i64 %k1
 }
 
+; T4a: an integer of more than 64 bits in decimal, as @__olang_fmt_u64 writes one: what fits in 64 bits is that
+; one's, else the digits above the last 19 first (at most twice down: 2^128 is below 10^39) and then those 19, the
+; leading zeros written - the null destination measuring alone, as there
+define i64 @__olang_fmt_u128(ptr %buf, i128 %v) {
+entry:
+  %small = icmp ult i128 %v, 18446744073709551616
+  br i1 %small, label %one, label %split
+one:
+  %v64 = trunc i128 %v to i64
+  %n = call i64 @__olang_fmt_u64(ptr %buf, i64 %v64)
+  ret i64 %n
+split:
+  %q = udiv i128 %v, 10000000000000000000
+  %r = urem i128 %v, 10000000000000000000
+  %r64 = trunc i128 %r to i64
+  %k = call i64 @__olang_fmt_u128(ptr %buf, i128 %q)
+  %len = add i64 %k, 19
+  %measure = icmp eq ptr %buf, null
+  br i1 %measure, label %done, label %low
+low:
+  %end = getelementptr i8, ptr %buf, i64 %len
+  br label %digit
+digit:
+  %i = phi i64 [ 0, %low ], [ %i1, %digit ]
+  %m = phi i64 [ %r64, %low ], [ %m1, %digit ]
+  %m1 = udiv i64 %m, 10
+  %d = urem i64 %m, 10
+  %c = add i64 %d, 48
+  %c8 = trunc i64 %c to i8
+  %i1 = add i64 %i, 1
+  %back = sub i64 0, %i1
+  %at = getelementptr i8, ptr %end, i64 %back
+  store i8 %c8, ptr %at
+  %more = icmp ult i64 %i1, 19
+  br i1 %more, label %digit, label %done
+done:
+  ret i64 %len
+}
+
+define i64 @__olang_fmt_i128(ptr %buf, i128 %v) {
+entry:
+  %neg = icmp slt i128 %v, 0
+  br i1 %neg, label %minus, label %plain
+plain:
+  %n = call i64 @__olang_fmt_u128(ptr %buf, i128 %v)
+  ret i64 %n
+minus:
+  %mag = sub i128 0, %v
+  %measure = icmp eq ptr %buf, null
+  br i1 %measure, label %count, label %sign
+sign:
+  store i8 45, ptr %buf
+  br label %count
+count:
+  %after = getelementptr i8, ptr %buf, i64 1
+  %rest = select i1 %measure, ptr null, ptr %after
+  %k = call i64 @__olang_fmt_u128(ptr %rest, i128 %mag)
+  %k1 = add i64 %k, 1
+  ret i64 %k1
+}
+
 ; T4: an integer - negative when %neg, of magnitude %m - as a BF16, rounded ONCE to its 8 significant bits, ties
 ; to even. LLVM's own "sitofp ... to bfloat" goes through a float at -O0, rounding twice, and so came out one
 ; step off where -O3 and the evaluator did not: the magnitude is cut to its top 8 bits here, in integers

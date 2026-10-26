@@ -1,0 +1,5 @@
+# check: fail cannot cross the C boundary
+# T4a/X2: C has no type for an integer of 24 bits, so none crosses the boundary
+extern fn abs(n U24) I32
+
+fn main() { }

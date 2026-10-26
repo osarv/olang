@@ -240,6 +240,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Int32 and the rest are gone. One table (`PrimInfo`) answers every question about a primitive. F8 (`F8E4M3`,
   `F8E5M2`, saturating, IEEE equality - the user's calls) and complex `C16 C32 C64` (the user's names) are prelude
   structs.
+- **Integers of every width, `I1`-`I128` and `U1`-`U128` (T4a, docs/ideas.md #5, the user's decision 2026-10-18; built
+  2026-10-26).** The eight are ordinary members: wrapping at the width, the T6b lattice, literals adapting, `T.Max`/`Min`,
+  `std/arith` and `Narrow`, `$`, a supplied `Hash`, `Format`, the new `t.ParseAs<T>()`, E37's bit operations and the
+  `Integer` trait all hold at every width, computed exactly at compile time and under `interpret` (the evaluator's
+  two-word arithmetic). Storage is the next of 1, 2, 4, 8, 16 bytes (LLVM's `iN`, C's `_BitInt`). Decided (mine):
+  a literal holds 64 bits (a wider value is computed, `U128(1) << 100`; E4a's exact computation is within 64 bits, an
+  error past it); atomics take the 8/16/32/64-bit widths, `ByteSwap` whole bytes, and only the eight cross the C
+  boundary (X2); `Integer` lists every width through closed traits of sixteen; no `Sqrt`/`PadStart` for the new widths
+  yet. A declared type may not be named `I2` (it is one now): the cinterop fixture's struct was renamed.
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal
   adapts to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a); a
   literal another operand cannot hold meets it at its own type (E6d).

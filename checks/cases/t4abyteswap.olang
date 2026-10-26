@@ -1,0 +1,5 @@
+# check: fail its 12 bits are no whole number of bytes
+# T4a/E37: ByteSwap reverses bytes, so it is supplied only for a width that is a whole number of them
+fn main() {
+    x := U12(5).ByteSwap()
+}

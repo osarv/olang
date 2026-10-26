@@ -816,7 +816,7 @@ fn (c mut Checker&) externParam(t types.TypeId) Bool {
 # (X10), a plain-data struct by value (X11)
 fn (c mut Checker&) externValue(t types.TypeId) Bool {
     u := c.under(t)
-    if c.P.T.IsNumber(u) or u == types.BoolT { return true }
+    if c.cNumber(u) or u == types.BoolT { return true }
     if c.foreignRef(t) { return true }
     return c.plainStruct(t, 0)
 }
@@ -839,9 +839,12 @@ fn (c mut Checker&) plainStruct(t types.TypeId, depth I64) Bool {
     return true
 }
 
+# X2: a number C has a type of its own for - one of the twelve primitives, not an integer of another width (T4a)
+fn (c mut Checker&) cNumber(u types.TypeId) Bool { return c.P.T.IsNumber(u) and u <= types.TypeId(14) }
+
 fn (c mut Checker&) plainField(t types.TypeId, depth I64) Bool {
     u := c.under(t)
-    if c.P.T.IsNumber(u) or u == types.BoolT or c.foreignRef(t) { return true }
+    if c.cNumber(u) or u == types.BoolT or c.foreignRef(t) { return true }
     if c.P.T.KindOf(u) == types.Kind.Array {
         return c.P.T.KindOf(c.P.T.Length(u)) == types.Kind.Const and c.plainField(c.P.T.Elem(u), depth + 1)
     }
@@ -4326,7 +4329,7 @@ fn (c mut Checker&) ty(t types.TypeId) String {
 
 fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
     if c.P.T.IsNumber(t) {
-        b.Push(primName(t))
+        b.Push(primName(t) if t <= types.TypeId(14) else c.P.T.Canon(t))
         return
     }
     match c.P.T.KindOf(t) {
@@ -5089,6 +5092,11 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
         }
         return c.unknown(sp)
     }
+    if v.Big and not c.P.T.IsUnsigned(target) {
+        # T4a: a literal above I64's maximum in a signed type wider than 64 bits - a constant holds a wide signed type's
+        # value sign-extended from 64 bits (MIR's Const), so it is the U64 literal widened
+        return c.prim(sp, want, typed.PrimOp.Convert, c.lit(sp, c.P.T.Prim("U64"), v.I), null)
+    }
     return c.lit(sp, want, v.I)
 }
 
@@ -5141,13 +5149,13 @@ fn floatBits(t types.TypeId, f F64) I64 {
 fn intFits(tt types.Table&, v litv, t types.TypeId) Bool {
     bits := tt.Bits(t)
     if tt.IsUnsigned(t) {
-        if v.Big { return bits == 64 }
-        if v.Hex { return bits == 64 or (v.I >= 0 and v.I < (I64(1) << bits)) }
+        if v.Big { return bits >= 64 }
+        if v.Hex { return bits >= 64 or (v.I >= 0 and (bits == 63 or v.I < (I64(1) << bits))) }
         if v.I < 0 { return false }
-        return bits == 64 or v.I < (I64(1) << bits)
+        return bits >= 63 or v.I < (I64(1) << bits)
     }
-    if v.Big { return false }
-    if bits == 64 { return true }
+    if v.Big { return bits > 64 }
+    if bits >= 64 { return true }
     lim := I64(1) << (bits - 1)
     return v.I >= -lim and v.I < lim
 }
@@ -6329,8 +6337,9 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         c.err(b.Span(), msgs.ShiftUnadapted())
         return c.unknown(sp)
     }
-    # E4a: integer literals whose exact sum, difference or product no type holds
-    if (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star) and la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat {
+    # E4a: integer literals whose exact sum, difference, product or shift no literal holds - beyond 64 bits (T4a: a type
+    # wider than that is reached by converting one operand, U128(1) << 100)
+    if (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star or shift) and la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat {
         if not c.fold(ast.Expr.Binary(sp, op, a, b)).Ok {
             c.err(opSp, msgs.LiteralExprNoValue())
             return c.unknown(sp)
@@ -8402,11 +8411,7 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
     }
     if u.Closed {
         if not c.membersWritten(u.Trait) { return false }
-        listing := StringBuilder()
-        for m in c.P.Members(u.Trait) {
-            if listing.Len() > 0 { listing.Push(", ") }
-            listing.Push(c.ty(m))
-        }
+        listing := c.memberListing(u.Trait)
         c.err(sp, msgs.ConstraintClosed(c.ty(x), tn, v, tn, listing.ToString()))
         return false
     }
@@ -10482,6 +10487,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             c.dropArgs(args)
             return c.unknown(sp)
         }
+        if bop == typed.PrimOp.ByteSwap and c.P.T.Bits(u) % 8 != 0 {
+            c.err(nsp, msgs.ByteSwapWidth(c.ty(rt), c.P.T.Bits(u)))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
         rot := bop == typed.PrimOp.RotateLeft or bop == typed.PrimOp.RotateRight
         want I64 = 1 if rot else 0
         if args.Len() != want {
@@ -10561,6 +10571,10 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         if not c.P.T.IsInt(u) {
             c.err(nsp, msgs.AtomicNotInteger(c.ty(rt)))
+            return c.unknown(sp)
+        }
+        if u > types.TypeId(14) {
+            c.err(nsp, msgs.AtomicWidth(c.ty(rt)))
             return c.unknown(sp)
         }
         p := readPlace(rx)
@@ -10744,6 +10758,17 @@ fn (c mut Checker&) limit(sp source.Span, nsp source.Span, t types.TypeId, n sou
         have := "Max, Min, Inf, NaN, Epsilon and SmallestNormal" if fl else "Max and Min"
         c.err(nsp, msgs.NoLimit(c.ty(t), name, " - its limits are " $have))
         return c.unknown(sp)
+    }
+    if not fl and c.P.T.Bits(u) > 64 {
+        # T4a: a limit of a type wider than 64 bits is no 64-bit constant (MIR's Const extends 64 bits by sign): the
+        # least signed one is 1 shifted to the top bit, the greatest its complement, an unsigned one's all ones
+        if c.P.T.IsUnsigned(u) {
+            if k == 1 { return c.lit(sp, t, 0) }
+            return c.prim(sp, t, typed.PrimOp.BitNot, c.lit(sp, t, 0), null)
+        }
+        least := c.prim(sp, t, typed.PrimOp.Shl, c.lit(sp, t, 1), c.lit(sp, c.i64(), c.P.T.Bits(u) - 1))
+        if k == 1 { return least }
+        return c.prim(sp, t, typed.PrimOp.BitNot, least, null)
     }
     return c.lit(sp, t, limitBits(c.P.T, u, k))
 }
@@ -18204,6 +18229,30 @@ fn (c mut Checker&) membersWritten(tr types.TypeId) Bool {
     return true
 }
 
+# the types a closed trait lists, as a message names them: a run of integer widths one after another written as its
+# first and last ("I1 to I128", T4a)
+fn (c mut Checker&) memberListing(tr types.TypeId) StringBuilder {
+    b := StringBuilder()
+    ms := c.P.Members(tr)
+    i I64 = 0
+    for i < ms.Len() {
+        if b.Len() > 0 { b.Push(", ") }
+        b.Push(c.ty(ms[i]))
+        j := i
+        for j + 1 < ms.Len() and c.P.T.IsInt(ms[j]) and c.P.T.IsInt(ms[j + 1]) and
+            c.P.T.IsUnsigned(ms[j]) == c.P.T.IsUnsigned(ms[j + 1]) and c.P.T.Bits(ms[j + 1]) == c.P.T.Bits(ms[j]) + 1 {
+            j++
+        }
+        if j > i + 1 {
+            b.Push(" to ")
+            b.Push(c.ty(ms[j]))
+            i = j
+        }
+        i++
+    }
+    return b
+}
+
 # whether a type satisfies a trait for an "any" (T32a), what it lacks said where it does not
 fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Bool {
     u := c.P.Missing(t, r)
@@ -18211,11 +18260,7 @@ fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Boo
     tn := c.ty(r)
     if u.Closed {
         if not c.membersWritten(u.Trait) { return false }
-        listing := StringBuilder()
-        for m in c.P.Members(u.Trait) {
-            if listing.Len() > 0 { listing.Push(", ") }
-            listing.Push(c.ty(m))
-        }
+        listing := c.memberListing(u.Trait)
         c.err(sp, msgs.AnyNotMember(c.ty(t), tn, listing.ToString()))
     } else if u.Named {
         rec := c.err(sp, msgs.AnyUnmetMethod(c.ty(t), tn, c.tok(u.Method)))
