@@ -25151,7 +25151,6 @@ programs migrated to Vec, to `std/list`'s in the four kept on List (bench/sum, b
 the List tests' private `listKV` dropped, a row now naming a type already listed dropped - then laid out again by
 `make layoutgold` (14,581 rows, 79 fewer).
 
-
 ## Bulk review 2, fixed (K1, T4a, E39, E31b, E16a, E8a, O8a, O8d, L10a, M19d, K1a, B11, 2026-10-26)
 
 A read-only review of 68c693e..ea0a6de (lanes, small3, prel; /home/user/review/bulk2) reproduced eleven findings and
