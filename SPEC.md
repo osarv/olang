@@ -983,7 +983,7 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
 the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
 `trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
-**error type**: a closed, ordered set of named words, `type IoError error { FULL  DENIED }` - shaped like an enum
+**error type**: a closed, ordered set of named words, `type IoError error { FULL, DENIED }` - shaped like an enum
 body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
 B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
 qualified by its own type (`IoError.FULL`) and is public by its own first letter (M6a). An error type takes no type
@@ -1255,7 +1255,7 @@ pointer identity rather than structural content, unless its type declares `Eq` -
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
   aggregate and the other a pointer to one, and converting between them is an assignability rule
   (§5.3 E12), not an identity one, or
-- both are **anonymous** enums (`x enum { A  B }`, written where a type is) with the same cases in the same order,
+- both are **anonymous** enums (`x enum { A, B }`, written where a type is) with the same cases in the same order,
   each case's payload of the same types, position by position (a payload's field names do not matter), or both are
   several results of the same types (D8c).
 

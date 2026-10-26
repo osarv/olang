@@ -348,7 +348,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
   carrying a `South`.
 - **Enum raw values (T17e, the user's decision 2026-10-24).** `type Op enum String { Plus = "+" }`, `type Status enum
-  U8 { Ok  Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
+  U8 { Ok, Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
   case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
   are literals (an integer literal-only expression, a character literal; mine: no names, so the table needs nothing
   resolved), fit the type and are distinct. `op.Value()` is supplied (a case-by-case test, the constant itself where
@@ -711,7 +711,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
 - **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
-  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL  DENIED }` (the
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL, DENIED }` (the
   listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { TIMEOUT }`
   is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
   type then the last member of its own set; one grammar `type Name error [Member, ...] [{ WORDS }]`. A set is written
