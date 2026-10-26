@@ -1,0 +1,313 @@
+import "std/io"
+import "std/arith"
+
+# a pseudo-random 128-bit value from a seed (splitmix-like over U128)
+fn rnd(s mut Array<U128>&) U128 {
+    s[0] = s[0] * U128(6364136223846793005) + U128(1442695040888963407)
+    z := s[0] ^ (s[0] >> 61)
+    return z * (z >> 33 | U128(1))
+}
+
+fn bat2<T Integer>(z T, k I64) String {
+    st := Array<U128>(1)
+    st[0] = U128(k) * U128(0x9E3779B97F4A7C15)
+    b := StringBuilder()
+    w := T.Max.PopCount() + (1 if T.Min < z else 0)
+    for r in range 12 {
+        x := T(rnd(st))
+        y := T(rnd(st))
+        if r == 0 { x = T.Max }
+        if r == 1 { y = T.Min }
+        b.Push($x " " $y " | ")
+        b.Push($F64(x) " " $F32(x) " " $BF16(x) " " $F16(y) " | ")
+        for s in I64[0, 1, w / 2, w - 1] {
+            if s >= w { continue }
+            b.Push($(x << s) " " $(x >> s) " ")
+        }
+        b.Push("| " $x.Format(16) " " $y.Format(7) " " $x.Hash() " ")
+        if T.Max > 0 { b.Push($x.Pow(3) " " $(try arith.Pow(x, 2) catch default z) " ") }
+        b.Push($(try arith.Add(x, y) catch default z) " " $(try arith.Sub(x, y) catch default z) " ")
+        b.Push($(try ($x).ParseAs<T>() catch default z) " " $(try x.Narrow<I16>() catch default I16(-7)) " " $(try x.Narrow<U70>() catch default U70(7)) " ")
+        b.Push($I24(x) " " $U9(x) " " $I100(x) " " $(x < y) " " $(x == x) " " $x.LeadingZeros() " " $x.TrailingZeros() " " $x.PopCount())
+        b.Push(" " $x.PadStart(3, '0') " " $(x.Min(y)) " " $(x.Max(y)) " " $(try F64(y).Narrow<T>() catch default z) " " $(try F32(x).Narrow<T>() catch default z) " " $(try BF16(x).Narrow<T>() catch default z))
+        if T.Min <= z {
+            b.Push(" " $(try x.Sqrt() catch default z))
+        }
+        b.Push("\n")
+    }
+    return b.ToString()
+}
+K mut I64 = 1
+
+BI1 := bat2(I1(0), 1)
+BU1 := bat2(U1(0), 1)
+BI2 := bat2(I2(0), 1)
+BU2 := bat2(U2(0), 1)
+BI3 := bat2(I3(0), 1)
+BU3 := bat2(U3(0), 1)
+BI5 := bat2(I5(0), 1)
+BU5 := bat2(U5(0), 1)
+BI7 := bat2(I7(0), 1)
+BU7 := bat2(U7(0), 1)
+BI8 := bat2(I8(0), 1)
+BU8 := bat2(U8(0), 1)
+BI9 := bat2(I9(0), 1)
+BU9 := bat2(U9(0), 1)
+BI12 := bat2(I12(0), 1)
+BU12 := bat2(U12(0), 1)
+BI15 := bat2(I15(0), 1)
+BU15 := bat2(U15(0), 1)
+BI16 := bat2(I16(0), 1)
+BU16 := bat2(U16(0), 1)
+BI17 := bat2(I17(0), 1)
+BU17 := bat2(U17(0), 1)
+BI24 := bat2(I24(0), 1)
+BU24 := bat2(U24(0), 1)
+BI31 := bat2(I31(0), 1)
+BU31 := bat2(U31(0), 1)
+BI32 := bat2(I32(0), 1)
+BU32 := bat2(U32(0), 1)
+BI33 := bat2(I33(0), 1)
+BU33 := bat2(U33(0), 1)
+BI40 := bat2(I40(0), 1)
+BU40 := bat2(U40(0), 1)
+BI48 := bat2(I48(0), 1)
+BU48 := bat2(U48(0), 1)
+BI53 := bat2(I53(0), 1)
+BU53 := bat2(U53(0), 1)
+BI54 := bat2(I54(0), 1)
+BU54 := bat2(U54(0), 1)
+BI63 := bat2(I63(0), 1)
+BU63 := bat2(U63(0), 1)
+BI64 := bat2(I64(0), 1)
+BU64 := bat2(U64(0), 1)
+BI65 := bat2(I65(0), 1)
+BU65 := bat2(U65(0), 1)
+BI70 := bat2(I70(0), 1)
+BU70 := bat2(U70(0), 1)
+BI96 := bat2(I96(0), 1)
+BU96 := bat2(U96(0), 1)
+BI100 := bat2(I100(0), 1)
+BU100 := bat2(U100(0), 1)
+BI127 := bat2(I127(0), 1)
+BU127 := bat2(U127(0), 1)
+BI128 := bat2(I128(0), 1)
+BU128 := bat2(U128(0), 1)
+fn main() {
+    rI1 := bat2(I1(0), K)
+    if rI1 != BI1 { io.Println("MISMATCH I1")! }
+    io.Println("== I1")!
+    io.Println(rI1)!
+    rU1 := bat2(U1(0), K)
+    if rU1 != BU1 { io.Println("MISMATCH U1")! }
+    io.Println("== U1")!
+    io.Println(rU1)!
+    rI2 := bat2(I2(0), K)
+    if rI2 != BI2 { io.Println("MISMATCH I2")! }
+    io.Println("== I2")!
+    io.Println(rI2)!
+    rU2 := bat2(U2(0), K)
+    if rU2 != BU2 { io.Println("MISMATCH U2")! }
+    io.Println("== U2")!
+    io.Println(rU2)!
+    rI3 := bat2(I3(0), K)
+    if rI3 != BI3 { io.Println("MISMATCH I3")! }
+    io.Println("== I3")!
+    io.Println(rI3)!
+    rU3 := bat2(U3(0), K)
+    if rU3 != BU3 { io.Println("MISMATCH U3")! }
+    io.Println("== U3")!
+    io.Println(rU3)!
+    rI5 := bat2(I5(0), K)
+    if rI5 != BI5 { io.Println("MISMATCH I5")! }
+    io.Println("== I5")!
+    io.Println(rI5)!
+    rU5 := bat2(U5(0), K)
+    if rU5 != BU5 { io.Println("MISMATCH U5")! }
+    io.Println("== U5")!
+    io.Println(rU5)!
+    rI7 := bat2(I7(0), K)
+    if rI7 != BI7 { io.Println("MISMATCH I7")! }
+    io.Println("== I7")!
+    io.Println(rI7)!
+    rU7 := bat2(U7(0), K)
+    if rU7 != BU7 { io.Println("MISMATCH U7")! }
+    io.Println("== U7")!
+    io.Println(rU7)!
+    rI8 := bat2(I8(0), K)
+    if rI8 != BI8 { io.Println("MISMATCH I8")! }
+    io.Println("== I8")!
+    io.Println(rI8)!
+    rU8 := bat2(U8(0), K)
+    if rU8 != BU8 { io.Println("MISMATCH U8")! }
+    io.Println("== U8")!
+    io.Println(rU8)!
+    rI9 := bat2(I9(0), K)
+    if rI9 != BI9 { io.Println("MISMATCH I9")! }
+    io.Println("== I9")!
+    io.Println(rI9)!
+    rU9 := bat2(U9(0), K)
+    if rU9 != BU9 { io.Println("MISMATCH U9")! }
+    io.Println("== U9")!
+    io.Println(rU9)!
+    rI12 := bat2(I12(0), K)
+    if rI12 != BI12 { io.Println("MISMATCH I12")! }
+    io.Println("== I12")!
+    io.Println(rI12)!
+    rU12 := bat2(U12(0), K)
+    if rU12 != BU12 { io.Println("MISMATCH U12")! }
+    io.Println("== U12")!
+    io.Println(rU12)!
+    rI15 := bat2(I15(0), K)
+    if rI15 != BI15 { io.Println("MISMATCH I15")! }
+    io.Println("== I15")!
+    io.Println(rI15)!
+    rU15 := bat2(U15(0), K)
+    if rU15 != BU15 { io.Println("MISMATCH U15")! }
+    io.Println("== U15")!
+    io.Println(rU15)!
+    rI16 := bat2(I16(0), K)
+    if rI16 != BI16 { io.Println("MISMATCH I16")! }
+    io.Println("== I16")!
+    io.Println(rI16)!
+    rU16 := bat2(U16(0), K)
+    if rU16 != BU16 { io.Println("MISMATCH U16")! }
+    io.Println("== U16")!
+    io.Println(rU16)!
+    rI17 := bat2(I17(0), K)
+    if rI17 != BI17 { io.Println("MISMATCH I17")! }
+    io.Println("== I17")!
+    io.Println(rI17)!
+    rU17 := bat2(U17(0), K)
+    if rU17 != BU17 { io.Println("MISMATCH U17")! }
+    io.Println("== U17")!
+    io.Println(rU17)!
+    rI24 := bat2(I24(0), K)
+    if rI24 != BI24 { io.Println("MISMATCH I24")! }
+    io.Println("== I24")!
+    io.Println(rI24)!
+    rU24 := bat2(U24(0), K)
+    if rU24 != BU24 { io.Println("MISMATCH U24")! }
+    io.Println("== U24")!
+    io.Println(rU24)!
+    rI31 := bat2(I31(0), K)
+    if rI31 != BI31 { io.Println("MISMATCH I31")! }
+    io.Println("== I31")!
+    io.Println(rI31)!
+    rU31 := bat2(U31(0), K)
+    if rU31 != BU31 { io.Println("MISMATCH U31")! }
+    io.Println("== U31")!
+    io.Println(rU31)!
+    rI32 := bat2(I32(0), K)
+    if rI32 != BI32 { io.Println("MISMATCH I32")! }
+    io.Println("== I32")!
+    io.Println(rI32)!
+    rU32 := bat2(U32(0), K)
+    if rU32 != BU32 { io.Println("MISMATCH U32")! }
+    io.Println("== U32")!
+    io.Println(rU32)!
+    rI33 := bat2(I33(0), K)
+    if rI33 != BI33 { io.Println("MISMATCH I33")! }
+    io.Println("== I33")!
+    io.Println(rI33)!
+    rU33 := bat2(U33(0), K)
+    if rU33 != BU33 { io.Println("MISMATCH U33")! }
+    io.Println("== U33")!
+    io.Println(rU33)!
+    rI40 := bat2(I40(0), K)
+    if rI40 != BI40 { io.Println("MISMATCH I40")! }
+    io.Println("== I40")!
+    io.Println(rI40)!
+    rU40 := bat2(U40(0), K)
+    if rU40 != BU40 { io.Println("MISMATCH U40")! }
+    io.Println("== U40")!
+    io.Println(rU40)!
+    rI48 := bat2(I48(0), K)
+    if rI48 != BI48 { io.Println("MISMATCH I48")! }
+    io.Println("== I48")!
+    io.Println(rI48)!
+    rU48 := bat2(U48(0), K)
+    if rU48 != BU48 { io.Println("MISMATCH U48")! }
+    io.Println("== U48")!
+    io.Println(rU48)!
+    rI53 := bat2(I53(0), K)
+    if rI53 != BI53 { io.Println("MISMATCH I53")! }
+    io.Println("== I53")!
+    io.Println(rI53)!
+    rU53 := bat2(U53(0), K)
+    if rU53 != BU53 { io.Println("MISMATCH U53")! }
+    io.Println("== U53")!
+    io.Println(rU53)!
+    rI54 := bat2(I54(0), K)
+    if rI54 != BI54 { io.Println("MISMATCH I54")! }
+    io.Println("== I54")!
+    io.Println(rI54)!
+    rU54 := bat2(U54(0), K)
+    if rU54 != BU54 { io.Println("MISMATCH U54")! }
+    io.Println("== U54")!
+    io.Println(rU54)!
+    rI63 := bat2(I63(0), K)
+    if rI63 != BI63 { io.Println("MISMATCH I63")! }
+    io.Println("== I63")!
+    io.Println(rI63)!
+    rU63 := bat2(U63(0), K)
+    if rU63 != BU63 { io.Println("MISMATCH U63")! }
+    io.Println("== U63")!
+    io.Println(rU63)!
+    rI64 := bat2(I64(0), K)
+    if rI64 != BI64 { io.Println("MISMATCH I64")! }
+    io.Println("== I64")!
+    io.Println(rI64)!
+    rU64 := bat2(U64(0), K)
+    if rU64 != BU64 { io.Println("MISMATCH U64")! }
+    io.Println("== U64")!
+    io.Println(rU64)!
+    rI65 := bat2(I65(0), K)
+    if rI65 != BI65 { io.Println("MISMATCH I65")! }
+    io.Println("== I65")!
+    io.Println(rI65)!
+    rU65 := bat2(U65(0), K)
+    if rU65 != BU65 { io.Println("MISMATCH U65")! }
+    io.Println("== U65")!
+    io.Println(rU65)!
+    rI70 := bat2(I70(0), K)
+    if rI70 != BI70 { io.Println("MISMATCH I70")! }
+    io.Println("== I70")!
+    io.Println(rI70)!
+    rU70 := bat2(U70(0), K)
+    if rU70 != BU70 { io.Println("MISMATCH U70")! }
+    io.Println("== U70")!
+    io.Println(rU70)!
+    rI96 := bat2(I96(0), K)
+    if rI96 != BI96 { io.Println("MISMATCH I96")! }
+    io.Println("== I96")!
+    io.Println(rI96)!
+    rU96 := bat2(U96(0), K)
+    if rU96 != BU96 { io.Println("MISMATCH U96")! }
+    io.Println("== U96")!
+    io.Println(rU96)!
+    rI100 := bat2(I100(0), K)
+    if rI100 != BI100 { io.Println("MISMATCH I100")! }
+    io.Println("== I100")!
+    io.Println(rI100)!
+    rU100 := bat2(U100(0), K)
+    if rU100 != BU100 { io.Println("MISMATCH U100")! }
+    io.Println("== U100")!
+    io.Println(rU100)!
+    rI127 := bat2(I127(0), K)
+    if rI127 != BI127 { io.Println("MISMATCH I127")! }
+    io.Println("== I127")!
+    io.Println(rI127)!
+    rU127 := bat2(U127(0), K)
+    if rU127 != BU127 { io.Println("MISMATCH U127")! }
+    io.Println("== U127")!
+    io.Println(rU127)!
+    rI128 := bat2(I128(0), K)
+    if rI128 != BI128 { io.Println("MISMATCH I128")! }
+    io.Println("== I128")!
+    io.Println(rI128)!
+    rU128 := bat2(U128(0), K)
+    if rU128 != BU128 { io.Println("MISMATCH U128")! }
+    io.Println("== U128")!
+    io.Println(rU128)!
+}

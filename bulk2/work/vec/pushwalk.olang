@@ -1,0 +1,11 @@
+import "std/io"
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    t I64 = 0
+    for x in v {
+        if x < 40 { v.Push(x + 1) }
+        t += x
+    }
+    io.Println($t " " $v.Len())!
+}

@@ -1,0 +1,15 @@
+import "std/io"
+fn a(x U32) U32 { return try U32(F32(x)) catch default 7 }
+fn b(x I32) I32 { return try I32(F32(x)) catch default 7 }
+fn c(x I31) I31 { return try I31(F32(x)) catch default 7 }
+fn d(x F32) U32 { return try U32(x) catch default 7 }
+fn e(x F64) I32 { return try I32(x) catch default 7 }
+fn g<T Integer>(x T) T { return try T(F32(x)) catch default T(0) }
+K mut U32 = 4294967295
+L mut I32 = 2147483647
+M mut I31 = 1073741823
+Q mut F32 = 4294967296.0
+R mut F64 = 2147483648.0
+fn main() {
+    io.Println($a(K) " " $b(L) " " $c(M) " " $d(Q) " " $e(R) " " $g(K) " " $g(L))!
+}

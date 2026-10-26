@@ -1,0 +1,5 @@
+import "std/io"
+fn main() {
+    c Char = 'a'
+    io.Println(c.PadStart(3))!
+}

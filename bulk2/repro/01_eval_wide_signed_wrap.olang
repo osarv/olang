@@ -21,3 +21,6 @@ OrderBaked := order(1)
 fn main() {
     io.Println($WrapsBaked " " $wraps(K) " " $OrderBaked " " $order(K))!
 }
+
+# S18c: decided while compiling - a true assert reported false (uncomment to see the compile-time error)
+# test "wraps" { assert wraps(1) }

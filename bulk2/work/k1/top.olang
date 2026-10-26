@@ -1,0 +1,15 @@
+import "std/io"
+fn count(n I64) Array<I64> {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i }
+    return a
+}
+A := count(5)
+if A.Any(fn(x I64) Bool { return x > 3 }) and (A + A).Sum() == 20 and (try A.Max() catch default -1) == 4 {
+    fn h() I64 { return 1 }
+} else {
+    fn h() I64 { return 2 }
+}
+fn main() {
+    io.Println($h())!
+}

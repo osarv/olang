@@ -1,0 +1,8 @@
+import "std/io"
+type Small extends U8
+type W extends I24
+fn main() {
+    c Small = 5
+    w W = 7
+    io.Println($c.PadStart(3) " " $c.Sqrt() " " $w.PadStart(4) " " $(try w.Sqrt() catch default W(0)))!
+}

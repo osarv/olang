@@ -1,0 +1,12 @@
+import "std/io"
+fn big<T Integer>(x T) String {
+    if T.Max > 255 {
+        y T = 300
+        return "big " $(x + y)
+    }
+    if T.Min < 0 { return "signed small " $x }
+    return "unsigned small " $x
+}
+fn main() {
+    io.Println($big(U8(1)) " / " $big(U7(1)) " / " $big(I16(1)) " / " $big(I8(1)) " / " $big(U9(1)) " / " $big(I1(0)) " / " $big(I128(1)) " / " $big(U128(1)) " / " $big(I64(2)))!
+}

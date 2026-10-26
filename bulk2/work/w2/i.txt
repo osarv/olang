@@ -1,0 +1,1 @@
+olang interpret: /home/user/wt/bulk2/std/arith.olang:62: it divides the most negative value by -1, which overflows
