@@ -250,6 +250,7 @@ type genRec struct() {
     At I64 = -1
     WsN I64 = 0
     HeldN I64 = 0
+    NextFree I64 = -1    # once its scope has closed: the next free record of its function's (Machine.freeGens)
 }
 
 # S18d: what a place in an error's trace did
@@ -414,6 +415,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     nWs I64 = 0
     closing Vec<I64>
     gens Vec<genRec>    # D18: every generator made, by the index its environment holds
+    freeGens Map<I64, I64>        # ... those whose scope has closed, by their Next's function: the first, the rest by NextFree
     genWords Vec<I64>   # their suspended frames' words (genRec.At)
     # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together: the frame
     # each is registered in, the scope it is registered at, and its entry block - run, under interpret, for the blocks a
@@ -2415,8 +2417,20 @@ fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, 
         }
         m.wr(Ptr(env.Id, total + 8 * i), 8, held)
     }
-    m.gens.Push(genRec())
-    ri := m.gens.Len() - 1
+    # one whose scope has closed is no one's: its record and its words are made again here (D18b - a walk a for-in
+    # makes ends with the loop's block, and nothing else grows per walk)
+    ri I64 = -1
+    ri = try m.freeGens.Get(gi) catch default -1
+    if ri >= 0 {
+        nf := m.gens[ri].NextFree
+        if nf >= 0 { m.freeGens.Put(gi, nf) } else { m.freeGens.Remove(gi) }
+        at := m.gens[ri].At
+        m.gens[ri] = genRec()
+        m.gens[ri].At = at
+    } else {
+        m.gens.Push(genRec())
+        ri = m.gens.Len() - 1
+    }
     m.gens[ri].Fn = gi
     m.wr(Ptr(env.Id, total + 8 * I64(args.N)), 8, ri)
     m.addReg(sc, gGen, ri, NullPtr)
@@ -2511,6 +2525,12 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
 # first, its frame's storage last, as its end would have closed them
 fn (m mut Machine&) closeGen(ri I64) {
     rec := m.gens[ri]
+    # its scope closing, nothing can resume it: its record is free for the next generator of its function - but not
+    # one running, whose frame is still on the stack (a stop unwinding through its walk)
+    if rec.State != 2 {
+        m.gens[ri].NextFree = try m.freeGens.Get(rec.Fn) catch default -1
+        m.freeGens.Put(rec.Fn, ri)
+    }
     if rec.State != 1 { return }
     m.gens[ri].State = 3
     for i in range rec.HeldN {
