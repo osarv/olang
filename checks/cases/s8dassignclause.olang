@@ -1,0 +1,27 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'p' is read where a test narrows a local or a parameter to the case
+# also: error[T2c]: 'q' is a N?&, which may be null
+# S8d, S8e: a local assigned in a catch clause inside a declaration's value (or any other expression) is assigned in
+# the block, so the narrowing ends - it held, and a payload was read as another case's (a reference read from a number)
+type N struct(v I64) { v }
+type Shape enum {
+    Circle(r I64)
+    Holder(p N&)
+}
+type E error { BAD }
+fn g() I64 ? E { error E.BAD }
+fn f(e Shape) I64 {
+    if e == Shape.Holder {
+        x := try g() catch { e = Shape.Circle(12345) } default 0
+        return e.p.v + x
+    }
+    return 0
+}
+fn h(q N?&) I64 {
+    if q is not null {
+        sink(I64[try g() catch { q = null } default 0])
+        return q.v
+    }
+    return 0
+}
+fn sink(a Array<I64>&) { }
+fn main() { sink(I64[f(Shape.Holder(N(1))), h(N(2))]) }

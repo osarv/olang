@@ -16547,10 +16547,10 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
 
 # D14d: whether "name := Array<T>(n)" (or typed so) is followed, as the next statement of its block, by a counted loop
 # "for i in range n" (or "range 0, n", the same n - a name or a literal) whose body writes name[i] as a whole at its top
-# level, mentions name nowhere else and holds no break, continue or return - so every element is written before
-# anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a mention is
-# always the name written, so anything more is a mention more, and the clear is kept. An element type that owns or is
-# an array is excluded (a store into one reads what it replaces)
+# level, mentions name nowhere else, never assigns i and holds no break, continue or return - so every element is
+# written before anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a
+# mention is always the name written, so anything more is a mention more, and the clear is kept. An element type that
+# owns or is an array is excluded (a store into one reads what it replaces)
 fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
     fr := c.fr()
     if fr.restAt >= fr.rest.Len() { return false }
@@ -16583,7 +16583,8 @@ fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
                     nomatch { }
                 }
             }
-            if writes != 1 { return false }
+            # the counter written nowhere in the body: the store's index is then each element in turn
+            if writes != 1 or assignsName(f.Body, Array<source.NameId>(1, f.Name)) { return false }
             from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
             text := c.src(source.Span(from, to))
             return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
@@ -19655,7 +19656,9 @@ fn casePayload(td ast.TypeDecl?&, k I64) Array<ast.Param&>&td {
 }
 
 # S8d: whether statements assign name n anywhere - "n = ...", "n op= ...", "n++", a target list naming it - in their
-# blocks, branches, loops, clauses and matches (a lambda's capture is a copy, and cannot)
+# blocks, branches, loops, clauses and matches, and in the clauses and match values inside any expression of theirs (a
+# lambda's capture is a copy, and cannot). One walk over every kind, written without a catch-all so a new kind must say
+# what it holds; read by S8d's and S8e's narrowing and D14d's counted fill
 fn assignsName(body Array<ast.Stmt&>&, n Array<source.NameId>&) Bool {
     if body.Len() == 0 { return false }
     for st in body {
@@ -19667,66 +19670,107 @@ fn assignsName(body Array<ast.Stmt&>&, n Array<source.NameId>&) Bool {
 fn stmtAssigns(st ast.Stmt?&, n Array<source.NameId>&) Bool {
     if st is null { return false }
     match st {
-        case ast.Stmt.ExprS(_, x) { return exprAssigns(x, n) }
-        case ast.Stmt.Assign(_, _, t, v) { return hitsPath(t, n) or exprAssigns(v, n) }
+        case ast.Stmt.ExprS(_, x), ast.Stmt.Yield(_, x) { return exprAssigns(x, n) }
+        case ast.Stmt.Var(_, v) { return exprsAssign(v.Values, n) }
+        case ast.Stmt.Assign(_, _, t, v) { return hitsPath(t, n) or exprAssigns(t, n) or exprAssigns(v, n) }
         case ast.Stmt.Multi(_, m) {
             for t in m.Targets {
-                if hitsPath(t, n) { return true }
+                if hitsPath(t, n) or exprAssigns(t, n) { return true }
             }
-            return false
+            return exprsAssign(m.Values, n)
         }
         case ast.Stmt.TryStore(_, inner, cl) { return stmtAssigns(inner, n) or clausesAssign(cl, n) }
         case ast.Stmt.If(_, i) { return ifAssigns(i, n) }
         case ast.Stmt.Forever(_, b), ast.Stmt.Block(_, b) { return assignsName(b, n) }
-        case ast.Stmt.While(_, _, b) { return assignsName(b, n) }
-        case ast.Stmt.DoFor(_, b, _) { return assignsName(b, n) }
-        case ast.Stmt.For3(_, f) { return stmtAssigns(f.Post, n) or assignsName(f.Body, n) }
-        case ast.Stmt.ForIn(_, f) { return assignsName(f.Body, n) or clausesAssign(f.Clauses, n) }
+        case ast.Stmt.While(_, w, b), ast.Stmt.DoFor(_, b, w) { return exprAssigns(w, n) or assignsName(b, n) }
+        case ast.Stmt.For3(_, f) {
+            return stmtAssigns(f.Init, n) or exprAssigns(f.Cond, n) or stmtAssigns(f.Post, n) or assignsName(f.Body, n)
+        }
+        case ast.Stmt.ForIn(_, f) {
+            return exprAssigns(f.Source, n) or assignsName(f.Body, n) or clausesAssign(f.Clauses, n)
+        }
         case ast.Stmt.MatchS(_, m) { return matchAssigns(m, n) }
+        case ast.Stmt.Return(_, xs) { return exprsAssign(xs, n) }
+        case ast.Stmt.Jump(_, _, msg) { return exprAssigns(msg, n) }
+        case ast.Stmt.Assert(_, c, msg) { return exprAssigns(c, n) or exprAssigns(msg, n) }
+        case ast.Stmt.Raise(_, _) { return false }
         case ast.Stmt.Join(_, j) { return assignsName(j.Body, n) or clausesAssign(j.Clauses, n) }
         case ast.Stmt.Defer(_, inner, _) { return stmtAssigns(inner, n) }
-        case ast.Stmt.Spawn(_, targets, _) {
+        case ast.Stmt.Spawn(_, targets, call) {
             for t in targets {
-                if hitsPath(t, n) { return true }
+                if hitsPath(t, n) or exprAssigns(t, n) { return true }
             }
-            return false
+            return exprAssigns(call, n)
         }
-        case _ { return false }
     }
 }
 
 fn ifAssigns(i ast.If&, n Array<source.NameId>&) Bool {
+    if exprAssigns(i.Cond, n) { return true }
     if i.Then is not null and assignsName(i.Then!.Body, n) { return true }
     return stmtAssigns(i.Else, n)
 }
 
 fn matchAssigns(m ast.Match&, n Array<source.NameId>&) Bool {
+    if exprAssigns(m.Subject, n) { return true }
     for cs in m.Cases {
-        if assignsName(cs.Body, n) { return true }
+        if caseAssigns(cs, n) { return true }
     }
-    return m.NoMatch is not null and assignsName(m.NoMatch!.Body, n)
+    return m.NoMatch is not null and caseAssigns(m.NoMatch!, n)
+}
+
+fn caseAssigns(cs ast.Case&, n Array<source.NameId>&) Bool {
+    return exprAssigns(cs.Guard, n) or assignsName(cs.Body, n) or exprAssigns(cs.Value, n)
 }
 
 fn clausesAssign(cl Array<ast.Catch&>&, n Array<source.NameId>&) Bool {
     if cl.Len() == 0 { return false }
     for k in cl {
-        if assignsName(k.Body, n) { return true }
+        if assignsName(k.Body, n) or exprsAssign(k.Defaults, n) { return true }
     }
     return false
 }
 
-# whether an expression's statements - a try's clauses, a match value's blocks - assign n, or it increments n
+fn exprsAssign(xs Array<ast.Expr&>&, n Array<source.NameId>&) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprAssigns(x, n) { return true }
+    }
+    return false
+}
+
+# whether an expression's statements - a try's clauses, a match value's blocks, at any depth in it - assign n, or it
+# increments n
 fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
     if x is null { return false }
     match x {
+        case ast.Expr.Name(_, _), ast.Expr.Lit(_, _), ast.Expr.Default(_) { return false }
+        case ast.Expr.Lambda(_, _) { return false }
         case ast.Expr.Unary(_, op, y), ast.Expr.Postfix(_, op, y) {
             if (op == token.Tok.Inc or op == token.Tok.Dec) and hitsPath(y, n) { return true }
             return exprAssigns(y, n)
         }
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Member(_, y, _), ast.Expr.Generic(_, y, _) {
+            return exprAssigns(y, n)
+        }
+        case ast.Expr.IsType(_, y, _, _), ast.Expr.As(_, y, _) { return exprAssigns(y, n) }
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+            return exprAssigns(a, n) or exprAssigns(b, n)
+        }
+        case ast.Expr.Chain(_, ch) { return exprsAssign(ch.Xs, n) }
+        case ast.Expr.Cond(_, a, c, b) { return exprAssigns(a, n) or exprAssigns(c, n) or exprAssigns(b, n) }
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args), ast.Expr.Index(_, f, args) {
+            return exprAssigns(f, n) or exprsAssign(args, n)
+        }
+        case ast.Expr.Slice(_, y, lo, hi) { return exprAssigns(y, n) or exprAssigns(lo, n) or exprAssigns(hi, n) }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            return exprsAssign(items, n)
+        }
+        case ast.Expr.Compr(_, cm) {
+            return exprAssigns(cm.Value, n) or exprAssigns(cm.Source, n) or exprAssigns(cm.Filter, n)
+        }
         case ast.Expr.Try(_, y, cl) { return exprAssigns(y, n) or clausesAssign(cl, n) }
         case ast.Expr.MatchE(_, m) { return matchAssigns(m, n) }
-        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y) { return exprAssigns(y, n) }
-        case _ { return false }
     }
 }
 
