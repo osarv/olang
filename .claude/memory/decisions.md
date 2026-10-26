@@ -1489,3 +1489,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `_` discards; parameters are not checked (function types and trait methods need names they may not read).
   Being built: wt-walks (std walks + fuzz + property tests + profiling page) now; the checker items (2, 3) after
   bulk review 3's fixes merge (same files).
+- QBK follow-up 2026-10-26 (the user): 1 case narrowing as wide as null narrowing YES ("Do narrowing") - into the
+  checker batch after bfix3 (with no-effect calls, unused imports/locals, did-you-mean). 4 json key naming YES ("add
+  it, but then we can't mix lower and upper case names right?") - answered: one policy converts every field, so an
+  object mixing styles (`userId` beside `created_at`) needs a per-field exception; PROPOSED (rec): a type may declare
+  an ordinary method `JsonKey(field String&) String` that std/json calls while compiling for each field (reflection),
+  overriding the policy where it returns a name - no attributes. ASKED. Explained property tests (a rule over typed
+  values, shrunk; shares the fuzzer's byte source) and the profiler/perf.
