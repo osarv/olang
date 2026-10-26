@@ -25143,3 +25143,10 @@ removed a million times, runs under 8 MB built (1.9 MB peak) and agrees interpre
 Lists 198 MB) when each new Vec was first named by a local declared in the Map's scope (`v mut Vec<I64>&m = ...`) - early
 freeing finds no place made for it then - while a Vec made by a function and handed to `Put` is freed when replaced:
 recorded with the fixture.
+
+**Goldens.** tokens, ast, diag, modgraph, run and drv recaptured from the port as usual. The layout golden keeps the set
+of types stage 0 held, which named `std/prelude/list` types no program can resolve now; its rows were moved to where
+the programs hold them - a List, its state and `ListError` to Vec's (`ListIter<T>` to `IndexIter<T, Vec<T>>`) in the
+programs migrated to Vec, to `std/list`'s in the four kept on List (bench/sum, bench/vec, o17handlewalk, rv7o2forparam),
+the List tests' private `listKV` dropped, a row now naming a type already listed dropped - then laid out again by
+`make layoutgold` (14,581 rows, 79 fewer).
