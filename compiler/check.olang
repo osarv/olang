@@ -20023,8 +20023,9 @@ fn pathOf(x ast.Expr&) Array<source.NameId>&x {
 # S3, once an attempt has checked every body: a call statement whose value is dropped and that does nothing else is an
 # error. What a call does is read off the bodies it reaches - a least fixed point over them, a body unchecked doing
 # something: a body does something where it stores into a global or through a reference, calls an extern (but C's math
-# functions, X8), a function value, an "any"'s method or a body that does, makes a value with a destructor, spawns or
-# joins, asserts, ends the program or would on a failed check, or renders a value its type's Str may render
+# functions, X8), a function value, an "any"'s method or a body that does, makes storage (a text, an array, a
+# temporary given a place - memory the program uses) or a value with a destructor, spawns or joins, asserts, or ends
+# the program or would on a failed check
 fn (c mut Checker&) settleIdle() {
     if c.idle.Len() == 0 { return }
     at Map<I64, I64>
@@ -20096,7 +20097,8 @@ fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Fn(_, _, _) { return false }
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return c.effP(p, calls, false) }
-        case typed.Expr.Promote(_, _, pr) { return c.destructs(typeOf(pr.X)) or c.effX(pr.X, calls) }
+        # storage made - a temporary given a place, a text, an array, a comprehension's - is memory the program uses
+        case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Collect(_, _, _) { return true }
         case typed.Expr.Call(_, t, cl) {
             if c.destructs(t) { return true }
             match cl.Target {
@@ -20114,13 +20116,12 @@ fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
             return false
         }
         case typed.Expr.Make(_, _, m) {
-            if m.Checked == typed.Check.Abort or c.effX(m.Length, calls) { return true }
+            if I64(m.Site) >= 0 or m.Checked == typed.Check.Abort or c.effX(m.Length, calls) { return true }
             for y in m.Items {
                 if c.effX(y, calls) { return true }
             }
             return false
         }
-        case typed.Expr.Collect(_, _, cl) { return cl.Checked == typed.Check.Abort or c.effX(cl.Reserve, calls) or c.effB(cl.Loop, calls) }
         case typed.Expr.Prim(_, _, op, ck, args) {
             if ck == typed.Check.Abort or effectOp(op) { return true }
             for y in args {
@@ -20146,17 +20147,6 @@ fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
                 if c.effB(cl.Code, calls) { return true }
                 for d in cl.Defaults {
                     if c.effX(d, calls) { return true }
-                }
-            }
-            return false
-        }
-        case typed.Expr.Text(_, _, tx) {
-            for pc in tx.Pieces {
-                match pc {
-                    case typed.Piece.Render(y) {
-                        if not c.plainRender(typeOf(y)) or c.effX(y, calls) { return true }
-                    }
-                    case typed.Piece.Lit(_) { }
                 }
             }
             return false
@@ -20215,12 +20205,6 @@ fn (c mut Checker&) effS(st typed.Stmt&, calls mut Vec<I64>&) Bool {
         case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { return c.effB(b, calls) }
         case typed.Stmt.Exit(_, _, _), typed.Stmt.Assert(_, _, _), typed.Stmt.Join(_, _), typed.Stmt.Spawn(_, _) { return true }
     }
-}
-
-# S3: whether "$x" of a value of type t renders it with nothing a program wrote - a number, a Bool, text, an error
-fn (c mut Checker&) plainRender(t types.TypeId) Bool {
-    d := c.deref(t)
-    return c.P.T.IsNumber(d) or d == types.BoolT or d == c.textType() or c.P.T.IsErrVal(d)
 }
 
 # S3: the operations that change what they are given

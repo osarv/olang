@@ -10,7 +10,7 @@ G mut Node& = Node(1)
 fn churn() I64 {
     s I64 = 0
     for j in range 50 {
-        t := Node(j)
+        t Node& = Node(j)
         s = s + t.v
     }
     return s

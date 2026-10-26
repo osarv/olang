@@ -24,7 +24,7 @@ fn deep(b Node&, k I64) I64 {
 fn churn() I64 {
     s I64 = 0
     for k in range 200 {
-        x := Node(k)
+        x Node& = Node(k)
         s += x.v
     }
     return s

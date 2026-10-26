@@ -4189,9 +4189,9 @@ A call standing as a statement that gives a value and **does nothing else** is a
 `x.Len()`, `a.Abs()`, `n.Pow(2)` alone compute a value and throw it away. A call does something where what it reaches -
 its arguments, and the bodies of the functions it calls, all the way down - stores into a global or through a
 reference, calls an `extern fn` (but the C math library's functions, X8), a function value or an `any`'s method, makes
-a value whose type has a destructor, spawns or joins, asserts, ends the program or would on a failed check (`!`,
-`unreachable`, a slice's bounds, an array's length), or renders a value other than a number, a `Bool`, text or an
-error (its type's `Str` may do anything). Anything else it does - building its result, reading - is no effect. A call
+storage (a text, an array, a temporary given a place - memory the program uses) or a value whose type has a
+destructor, spawns or joins, asserts, or ends the program or would on a failed check (`!`, `unreachable`, a slice's
+bounds, an array's length). What is left - reading, computing, writing its own locals - is no effect. A call
 that may fail is never such an error: a `try` or `!` statement may be written for the failure alone. Nor is one in a
 generic's body, where what a call does differs between instances. A call giving nothing (`fn f() { }`) is no such
 error either; it is called for what it does.
