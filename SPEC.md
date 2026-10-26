@@ -1015,8 +1015,9 @@ as a catch clause's items. An error value is made by a word written, by `null`, 
 took (R11b), and it is used in these ways and no others:
 
 - `==` and `!=` with a word (`e == ParseError.EMPTY`), with an error type or a named set (`e == ParseError`: true
-  where it holds a word of that type, or of what the set stands for), with `null` (`e == null`: whether it holds no
-  error; `e is null` says the same, E10c), and with another error value (the same word). Each side names something the
+  where it holds a word of that type, or of what the set stands for), and with another error value (the same word);
+  whether it holds no error is `e is null` (`e is not null` its negation), the one null test (E10c) - `e == null` is
+  E10c's error, naming it. Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e
