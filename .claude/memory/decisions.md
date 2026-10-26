@@ -1496,3 +1496,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   an ordinary method `JsonKey(field String&) String` that std/json calls while compiling for each field (reflection),
   overriding the policy where it returns a name - no attributes. ASKED. Explained property tests (a rule over typed
   values, shrunk; shares the fuzzer's byte source) and the profiler/perf.
+- QBL ASKED 2026-10-26 (the user: "We could ship with a built in profiler?"): proposed (rec yes) `olang profile FILE
+  [args]` - builds with frame pointers and line tables, runs the program with a sampling profiler in the runtime
+  (SIGPROF ~1000 Hz per thread, the handler writing stacks into a preallocated buffer, async-signal-safe), and writes
+  a report (functions and lines by share, callers) plus an HTML flame graph; symbols through llvm-symbolizer shipped in
+  the release. No perf, no root; nothing in other builds (Go's pprof model). Later: allocation profiling per site (the
+  arena knows sizes). In effect: the profiling page only.
