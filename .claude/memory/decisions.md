@@ -1313,3 +1313,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   its library; naming it in the source keeps builds flag-free ("a module's interface is its source"). libc needs none.
   So: `import z "zlib.h" link "z"`, `extern "golib" { fn ... }`, `extern fn` for libc; the standalone `link` goes.
   C imports DECIDED as laid out (variadic calls, expression macros, .c files compiled by the bundled clang under LTO).
+- CORRECTION 2026-10-26 (the user: "No, we didn't agree here"): the entry above recorded QBE as decided too early.
+  QBE is still ASKED: how a header-less extern names its library (on the block, a standalone `link`, or not in source)
+  and the C-import details. Only "extern blocks are fine" and "keep `import alias "path"`" are the user's answers.
