@@ -502,3 +502,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   arguments for defaulted parameters (written order, hidden locals where names reorder), B7a tests naming targets
   (examples in doc/hover, `olang test FILE WORD` filters at run time, ok/FAIL - Target: desc). Next: QBB (generator
   borrows of inputs, frame views, the walk drop), then bulk review 3.
+- 2026-10-26 CET: qbb merged (0fa2d92, verified; fast-forward): generators yield borrows of inputs
+  (`Iterator<String&t>`, a call gives a prelude ViewGenerator<T>) and read-only frame views (`Iterator<T&return>`);
+  a for-in's walk is dropped at its loop block (552 MB -> 1.7 MB over 4M walks; interpret 634 -> 31 MB). Fixed on the
+  way: a D16d closure UAF (held only through its innermost capture), `oblige` on set terms, G11 on any's arguments.
+  Left: a held generator's &t elements read at the generator; a generator held in a local still lands by obligations
+  (552 MB with program-scope arguments); explain of a method on a prelude type. Next: bulk review 3 (since C imports).
