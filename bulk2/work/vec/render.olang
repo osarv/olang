@@ -1,0 +1,23 @@
+import "std/io"
+type Letter extends Char
+type Name extends Array<Char>
+fn main() {
+    a := Vec<Char>()
+    for c in "a'\n\\\"z" { a.Push(c) }
+    a.Push(Char(200))
+    a.Push(Char(0))
+    b := Vec<Letter>()
+    b.Push(Letter('q'))
+    c := Vec<String&>()
+    c.Push("x[y]")
+    d := Vec<Vec<Char>>()
+    d.Push(a)
+    e := Vec<U8>()
+    e.Push(7)
+    f := Vec<Name&>()
+    f.Push(Name("hi"))
+    io.Println($a)!
+    io.Println($b " " $c " " $e)!
+    io.Println($d)!
+    io.Println($f)!
+}
