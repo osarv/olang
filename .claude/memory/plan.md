@@ -476,3 +476,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   docs, CLAUDE.md/SPEC. Keep the checks' compiler points (rewrite cases without linalg where they test the compiler).
   The kernel work (backup/wt-tensor a005f9f, NOTES.md) goes to oann's port. Also after C imports: generator frame
   elision.
+- 2026-10-26 CEST: cimport merged (3207c42, verify passed but two goldens recaptured after): X17-X22 C header imports
+  (`import z "zlib.h" link "z"`, translation cached in OLANG_CACHE/cimport), `extern link "lib" { }` / `extern { }`,
+  standalone link removed (tools/link_migrate.olang in olang fix), `.c` imports compiled and LTO-inlined both ways,
+  static inline wrappers, variadic calls, void* as CVoid?&; 166 hand externs gone from std/compiler; seed regenerated.
+  Left: C extern variables (stdin, errno), cast macros, C constants typed I32 not adapting (I16(cpoll.POLLIN)),
+  interpret refusing struct by value, a big header's whole module checked every build (openssl 3 s), full make cross.
