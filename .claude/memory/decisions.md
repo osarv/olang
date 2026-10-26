@@ -1476,3 +1476,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   top-level assert, unreachable as a value, `.Case` shorthand, guaranteed comptime value, inferred cold paths, test
   clock, persistent collections, select); tooling 4 (fuzzing in the test runner, reflection-driven property tests, test
   filter by name, a profiling page). In effect: none built.
+- QBK ANSWERED 2026-10-26 (the user, by number): 1 asked what "narrow" means - explained (after a test proves a case,
+  the variable reads as that case; null narrowing works through and/or, assert, loops, case narrowing only as a whole
+  if-condition); still ASKED. 2 YES: a call statement whose callee has no effect is an error (S3 extended). 3 YES,
+  and "extend this to unused variables too. Also add 'did you mean' errors for invalid names": unused imports and
+  unused locals are errors, every unknown name gets a nearest suggestion. 4 asked how json key naming works -
+  explained (`json.Decode<User>(body, keys = json.Keys.Camel)`, Exact/Camel/Snake/Kebab computed while compiling);
+  still ASKED. 5 YES: Reversed, Windows, TakeWhile, SkipWhile, FlatMap, StepBy, Partition (explained each). Tooling:
+  "do all the tooling too, explain each one" - read as the four tooling items of question 6 (fuzzing in the test
+  runner, reflection-driven property tests, test filter by name - already built, a profiling page), stated to the
+  user; the rest of survey2's tooling table not taken. Details mine: unused locals include for-in and match names,
+  `_` discards; parameters are not checked (function types and trait methods need names they may not read).
+  Being built: wt-walks (std walks + fuzz + property tests + profiling page) now; the checker items (2, 3) after
+  bulk review 3's fixes merge (same files).
