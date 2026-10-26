@@ -10415,8 +10415,11 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         return c.invoke(sp, nsp, m0, rx, args, Array<typed.Expr&>(0), ex)
     }
     name := c.text(n)
+    # the prelude's vacate takes the place itself, whatever it holds - an any, or a reference that may be null - reading
+    # nothing through it
+    vacates := name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude
     # T32b: a call through an "any" goes through its table
-    if c.P.T.KindOf(c.deref(rt)) == types.Kind.Any { return c.anyCall(sp, x, rx, n, nsp, args) }
+    if c.P.T.KindOf(c.deref(rt)) == types.Kind.Any and not vacates { return c.anyCall(sp, x, rx, n, nsp, args) }
     m := c.P.MethodOf(c.deref(rt), n)
     if m < 0 {
         ds := c.P.DefaultMethods(c.deref(rt), n)
@@ -10429,9 +10432,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         if ds.Len() == 1 { m = ds[0] }
     }
     # T2c: what the compiler supplies, and a function value in a field, are reached through the receiver - not through
-    # one that may be null (a method fits its receiver as an argument, which says so there). The prelude's vacate takes
-    # the place itself, reading nothing through it, so a place that may hold null is vacated as any other
-    vacates := m < 0 and name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude
+    # one that may be null (a method fits its receiver as an argument, which says so there)
     if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) and not vacates {
         c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
         rt = c.P.T.NonNull(rt)
@@ -18754,7 +18755,7 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
-                       "fn main() ? {\n    l := List<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
+                       "fn main() ? {\n    l := Vec<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
                        "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
                        "    a := I64[x * 2 for x in range 4 if x > 1]\n    b := I64[x for x in l]\n"
                        "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n"))
@@ -18833,8 +18834,8 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(x I64, y I64) { x\n    y }\n"
-                       "fn main() ? {\n    l := List<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
-                       "    n := List<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
+                       "fn main() ? {\n    l := Vec<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
+                       "    n := Vec<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
                        "    assert l[0].x + l[0].y + n[0] > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()

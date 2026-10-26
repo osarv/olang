@@ -1,5 +1,5 @@
-# check: fail error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written
-# T25c: a clone of a List of Lists shares the inner lists, writable - so Clone needs a writable list in that
+# check: fail error[T25c]: 'Clone' keeps what its parameter 'v' reaches where it can be written
+# T25c: a clone of a Vec of Vecs shares the inner lists, writable - so Clone needs a writable list in that
 # instantiation (with I64 elements it takes a read-only one)
 fn f(ro Vec<Vec<I64>>&, ok Vec<I64>&) I64 {
     a := ok.Clone()

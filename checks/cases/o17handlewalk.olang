@@ -3,6 +3,7 @@
 # List it holds - for-in, an index, RunFrom - or calls a handle's method handing a read-only view back: each walk lends
 # the List as its reference, so nothing is kept or stored in b's own storage, and the lend is a plain one
 import "std/io"
+import "std/list"
 type Node struct() {
     next mut Node?& = null
     v I64 = 0
@@ -18,7 +19,7 @@ fn (h Hd&) view() Array<mut Node?&>&h {
     return s.first[0:1]
 }
 type Box struct() {
-    items Vec<mut Node&> = Vec<mut Node&>()
+    items list.List<mut Node&> = list.List<mut Node&>()
     hd Hd = Hd()
     n I64 = 0
 }

@@ -353,7 +353,7 @@ fn builderRendered() String {
 builderRenderedBaked := builderRendered()
 
 test "$ renders a StringBuilder as its text" {
-    assert builderRendered() == "one 2|List<StringBuilder>[one 2]|"
+    assert builderRendered() == "one 2|Vec<StringBuilder>[one 2]|"
     assert builderRenderedBaked == builderRendered()
 }
 

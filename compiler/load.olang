@@ -964,7 +964,7 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
     g := l.Graph()
     assert g.Contains("module main\n  Pub lib/pub\n  util lib/util\n"), g
     assert g.Contains("module lib/util\n  helper lib/helper\n") and g.Contains("module lib/helper\n  util lib/util\n")
-    assert g.Contains("module lib/pub\n  stats std/stats\n") and g.Contains("module std/prelude/list\n")
+    assert g.Contains("module lib/pub\n  stats std/stats\n") and g.Contains("module std/prelude/vec\n")
     # the oracle knew the imported type's name through its alias
     assert l.Mods[root].Oracle is not null
 }

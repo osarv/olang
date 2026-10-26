@@ -1,9 +1,10 @@
 # E11c/D16c: a Str making a capturing lambda for Some - the receiver's scope is a real one, which the closure's escape
 # reads
 import "std/io"
+import "std/list"
 type Item struct(id I64) {
     id
-    tags Vec<String&> = Vec<String&>()
+    tags list.List<String&> = list.List<String&>()
 }
 fn (it Item&) Str() String {
     hit := it.tags.Iter().Some(fn(t String&) Bool { return t == $it.id })

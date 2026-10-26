@@ -4,6 +4,6 @@
 I64[9, -1, -2, 16]
 I64[6, 1]
 30 11 5
-n=5 none 40 -1 List<I64>[0, 1, 4] 0 3 2 -1 -2
+n=5 none 40 -1 Vec<I64>[0, 1, 4] 0 3 2 -1 -2
 unhandled error: E.NEG
 (build with -debug to see where it came from)

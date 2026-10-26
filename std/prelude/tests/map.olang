@@ -416,7 +416,7 @@ mapRenderedBaked := mapRendered()
 
 test "$ renders a Map's entries, not its buckets" {
     r := mapRendered()
-    assert r == ("Map<String&, I64>{} Map<String&, I64>{\"a\\\"b\": 1} Map<Char, List<Char>>{'x': List<Char>['\\n']} "
+    assert r == ("Map<String&, I64>{} Map<String&, I64>{\"a\\\"b\": 1} Map<Char, Vec<Char>>{'x': Vec<Char>['\\n']} "
         "Map<I64, Map<I64, Bool>>{7: Map<I64, Bool>{}}")
     assert mapRenderedBaked == r                        # the evaluator renders as the run time does
     m := Map<I64, String&>()

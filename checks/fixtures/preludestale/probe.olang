@@ -1,5 +1,5 @@
 # B3: an object built against the prelude is stale once a prelude file changes - the root's object holds the
-# instantiations of the prelude's generics it uses (B3d), here List<I32>'s Probe
+# instantiations of the prelude's generics it uses (B3d), here Vec<I32>'s Probe
 
 import "std/io"
 

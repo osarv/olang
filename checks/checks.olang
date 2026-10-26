@@ -1227,10 +1227,10 @@ fn listloop(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/listloop/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build loop.olang > out.txt 2>&1 && ./build/loop") == 0, "listloop", dir)
     # the root's objects - the instances among them: stage 0's main, the port's main and inst - by either spelling of
-    # List<I16>'s method (stage 0's List.I16.M.I16, the port's List<I16>.M<I16> escaped)
+    # List<I16>'s method (stage 0's List.I16.M.I16, the port's List<I16>.M<I16> escaped), std/list's since QZ2
     ll String& = "build/loop.*ll"
-    try r.expect(irHas(dir, ll, "call .*@std_?(2f)?prelude_?(2f)?list.*List([$.]|_3c)I16([$.]|_3e_2e)RunFrom"), "no call of RunFrom", dir)
-    try r.expect(not irHas(dir, ll, "call .*@std_?(2f)?prelude_?(2f)?list.*List([$.]|_3c)I16([$.]|_3e_2e)At([$.]|_3c)"), "a call of At", dir)
+    try r.expect(irHas(dir, ll, "call .*@std_?(2f)?list.*List([$.]|_3c)I16([$.]|_3e_2e)RunFrom"), "no call of RunFrom", dir)
+    try r.expect(not irHas(dir, ll, "call .*@std_?(2f)?list.*List([$.]|_3c)I16([$.]|_3e_2e)At([$.]|_3c)"), "a call of At", dir)
 }
 
 # B3: every module sees the prelude, so a prelude file edited since an object was built makes that object stale -
@@ -1241,12 +1241,12 @@ test "editing the prelude rebuilds what uses it" { assert passed("preludestale")
 fn preludestale(r mut report&) ? Failed {
     dir := fresh("preludestale")
     os.Run("cp checks/fixtures/preludestale/* " $os.Quote(dir) " && cp -r std " $os.Quote($dir "/std"))
-    probe String& = "fn (l List<T>&) Probe() I64 { return l.Len() + 1 }"
-    try r.expect(sh(dir, "echo " $os.Quote(probe) " >> std/prelude/list.olang") == 0, "adding Probe", dir)
+    probe String& = "fn (v Vec<T>&) Probe() I64 { return v.Len() + 1 }"
+    try r.expect(sh(dir, "echo " $os.Quote(probe) " >> std/prelude/vec.olang") == 0, "adding Probe", dir)
     try r.expect(sh(dir, "OLANG_STD=std \"$OLANG\" build probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0
                  "first build", dir)
     try r.expect(sh(dir, "grep -qx 3 got.txt") == 0, "first build output", dir)
-    try r.expect(sh(dir, "sed -i 's/return l.Len() + 1 }/return l.Len() + 2 }/' std/prelude/list.olang") == 0
+    try r.expect(sh(dir, "sed -i 's/return v.Len() + 1 }/return v.Len() + 2 }/' std/prelude/vec.olang") == 0
                  "editing Probe", dir)
     try r.expect(sh(dir, "OLANG_STD=std \"$OLANG\" build probe.olang > out.txt 2>&1 && ./build/probe > got.txt") == 0
                  "second build", dir)
@@ -1869,9 +1869,10 @@ fn scopesan(r mut report&) ? Failed {
     try driven(r, dir, "read crash", 134, $mem "crashed\n")
     try driven(r, dir, "foreign crash", 139, "crashed\n")
     # no use reported that is not one: arena-churning tests pass under it
-    tests String& = " " $os.Quote($root() "/std/prelude/tests/list.olang") " " $os.Quote($root() "/std/prelude/tests/map.olang")
+    tests String& = (" " $os.Quote($root() "/std/list.olang") " " $os.Quote($root() "/std/prelude/tests/map.olang") " "
+        $os.Quote($root() "/std/prelude/tests/vec.olang"))
     try r.expect(sh(dir, "\"$OLANG\" test -debug -sanitize" $tests " > out.txt 2>&1") == 0, "the tests under -d -s", dir)
-    try r.expect(sh(dir, "grep -c ' 0 failed' out.txt | grep -qx 2") == 0, "the tests under -d -s did not all pass", dir)
+    try r.expect(sh(dir, "grep -c ' 0 failed' out.txt | grep -qx 3") == 0, "the tests under -d -s did not all pass", dir)
     # zero cost outside -s: nothing of it in a plain build's IR, all of it in a -s build's
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build plainly", dir)
     # (the runtime's comments name its parts; the code is every line that is not one)

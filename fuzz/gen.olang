@@ -199,7 +199,7 @@ fn (g Gen&) tn(t I32) String& {
     if t < 300 { return "E" $g.ci "_" $(t - 200) }
     if t < 400 { return "Array<" $Prims[t - 300] ">" }
     if t < 500 { return "fn(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
-    if t < 600 { return "List<" $Prims[t - 500] ">" }
+    if t < 600 { return "Vec<" $Prims[t - 500] ">" }
     if isMap(t) { return "Map<" $g.tn(mapK(t)) ", " $Prims[mapV(t)] ">" }
     if isGen(t) { return "G" $g.ci "<" $Prims[(t - 6000) / 16] ">" }
     # a length is never written in a type (T7): fixed storage is inferred where it is made
@@ -1262,7 +1262,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         t := g.primT()
         x := g.reserve()
         g.declare(x, I32(500 + t), -1, true)
-        return $ind "x" $x " List<" $Prims[t] "> = List<" $Prims[t] ">()\n"
+        return $ind "x" $x " Vec<" $Prims[t] "> = Vec<" $Prims[t] ">()\n"
     }
     if k == 23 {
         l := g.pick(0, 19)
@@ -1500,11 +1500,11 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if l < 0 or p == 0 {
         t := g.primT()
         a := g.pick(t, 9)
-        init String& = "List<" $Prims[t] ">()"
-        if a >= 0 and g.chance(40) { init = $g.use(a) ".ToList()" }
+        init String& = "Vec<" $Prims[t] ">()"
+        if a >= 0 and g.chance(40) { init = $g.use(a) ".ToVec()" }
         x := g.reserve()
         g.declare(x, I32(500 + t), -1, true)
-        return $ind "x" $x " List<" $Prims[t] "> = " $init "\n"
+        return $ind "x" $x " Vec<" $Prims[t] "> = " $init "\n"
     }
     t := g.vt[l]
     et I32 = t - 500
@@ -1529,7 +1529,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if p == 7 { return $ind $x ".Reverse()\n" }
     if p == 8 and g.chance(30) { return $ind $x ".Clear()\n" }
     if p == 9 and et != TBool { return $ind $x ".Sort(" $g.comparator(et) ")\n" }
-    if p == 10 { return $ind "try " $x ".Insert(" $g.plainIdx() ", " $g.fit(et, 2) ") catch ListError { }\n" }
+    if p == 10 { return $ind "try " $x ".Insert(" $g.plainIdx() ", " $g.fit(et, 2) ") catch VecError { }\n" }
     if p == 11 { return $ind "if " $x ".Len() > 0 { " $x "[" $g.plainIdx() " % " $x ".Len()] = " $g.fit(et, 2) " }\n" }
     if p == 12 and d > 0 { return g.runWalk(l, d, ind) }
     if p == 13 {
@@ -1600,7 +1600,8 @@ fn (g mut Gen&) plainIdx() String& {
     return $g.r(8)
 }
 
-# a walk over list l's runs, S9f's own lowering written out: each run an array borrowed from the list
+# a walk over Vec l's elements through its view - an array borrowed from it, good while nothing grows it (the walked
+# Vec is changed by nothing in the body)
 fn (g mut Gen&) runWalk(l I64, d I64, ind String&) String& {
     x := g.use(l)
     et I32 = g.vt[l] - 500
@@ -1621,11 +1622,9 @@ fn (g mut Gen&) runWalk(l I64, d I64, ind String&) String& {
     g.nv = save
     b := StringBuilder()
     b.Push($ind "x" $at " I64 = 0\n")
-    b.Push($ind "for {\n")
-    b.Push($in2 "x" $run " := try " $x ".RunFrom(x" $at ") catch Exhausted { break }\n")
-    b.Push($in2 "for x" $v " in x" $run " {\n" $body $in2 "}\n")
-    b.Push($in2 "x" $at " += x" $run ".Len()\n")
-    b.Push($ind "}\n")
+    b.Push($ind "x" $run " := " $x ".View()\n")
+    b.Push($ind "for x" $v " in x" $run " {\n" $body $ind "}\n")
+    b.Push($ind "x" $at " += x" $run ".Len()\n")
     return b.ToString()
 }
 
@@ -2390,7 +2389,7 @@ fn (g mut Gen&) newPiece(d I64) String& {
         m := g.pick(0, 17)
         if m >= 0 {
             f String& = "Keys" if g.chance(50) else "Values"
-            return "$(" $g.use(m) "." $f "().ToList().ToArray())"
+            return "$(" $g.use(m) "." $f "().ToVec().ToArray())"
         }
     }
     a := g.pick(0, 5)
@@ -2449,7 +2448,7 @@ fn (g mut Gen&) digest() String& {
             if isList(t) {
                 b.Push(" \" \" $(" $x ".ToArray())")
             } else if isMap(t) {
-                b.Push(" \" \" $(" $x ".Keys().ToList().ToArray()) $(" $x ".Values().ToList().ToArray())")
+                b.Push(" \" \" $(" $x ".Keys().ToVec().ToArray()) $(" $x ".Values().ToVec().ToArray())")
             } else {
                 b.Push(" \" \" $(" $x ")")
             }

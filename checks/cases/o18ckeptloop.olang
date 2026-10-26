@@ -39,6 +39,6 @@ fn main() ? {
         assert w.Len() == 3
     }
     churn()
-    assert $toks == "List<Token>[Token(2, \"n1\"), Token(2, \"n5\")]"
-    assert $names == "List<String&>[\"abc\", \"n3\", \"abc\", \"n7\"]"
+    assert $toks == "Vec<Token>[Token(2, \"n1\"), Token(2, \"n5\")]"
+    assert $names == "Vec<String&>[\"abc\", \"n3\", \"abc\", \"n7\"]"
 }

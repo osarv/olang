@@ -157,7 +157,7 @@ test "T33: == is the same instance; an any renders its instance" {
     assert $v == "4"
     xs := Vec<any Named&>()
     xs.Push(Lev.Low)
-    assert $xs == "List<any Named&>[Lev.Low]"
+    assert $xs == "Vec<any Named&>[Lev.Low]"
 }
 
 # T34: a closed trait's any matched by type, and "as"
@@ -619,7 +619,7 @@ fn anyGeneric(n I64) String {
 BakedAnyGeneric String = anyGeneric(2)
 
 test "T32: a type variable in an any's trait, substituted and inferred; Map to a reference through an any" {
-    want := "2 10 List<I64>[20, 30] List<String&>[\"m10\", \"m20\"]"
+    want := "2 10 Vec<I64>[20, 30] Vec<String&>[\"m10\", \"m20\"]"
     assert BakedAnyGeneric == want
     churn()
     assert anyGeneric(Live - 1) == want
@@ -683,7 +683,7 @@ fn retShared(i I64) String {
 BakedRetShared String = retShared(1)
 
 test "O26a: a returned local a kept borrow names is copied at its return" {
-    want := "abc1 Qbc1 abc2 Qtem1 List<String&>[\"item1\", \"item2\"]"
+    want := "abc1 Qbc1 abc2 Qtem1 Vec<String&>[\"item1\", \"item2\"]"
     assert BakedRetShared == want
     assert retShared(Live - 2) == want
 }
@@ -834,7 +834,7 @@ fn secondNames(i I64) String {
 BakedSecondNames String = secondNames(1)
 
 test "O26a, T7b: a returned array local something else names is copied at its return" {
-    want := "List<String&>[\"abc1\"] Qbc1 List<String&>[\"hnd1\"] Qnd1 elm1 Qlm1 chn1 Qhn1 dtr1"
+    want := "Vec<String&>[\"abc1\"] Qbc1 Vec<String&>[\"hnd1\"] Qnd1 elm1 Qlm1 chn1 Qhn1 dtr1"
     assert secondNames(1) == want
     assert BakedSecondNames == want
     assert secondNames(Live - 2) == want
@@ -952,7 +952,7 @@ fn sharedKeep(i I64) String {
 BakedSharedKeep String = sharedKeep(1)
 
 test "O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied" {
-    want := "List<String&>[\"abc1\", \"def1\", \"gh\", \"jkl1\"] Qbc1 Ref1 Shi1 Tkl1"
+    want := "Vec<String&>[\"abc1\", \"def1\", \"gh\", \"jkl1\"] Qbc1 Ref1 Shi1 Tkl1"
     assert sharedKeep(1) == want
     assert BakedSharedKeep == want
     assert sharedKeep(Live - 2) == want
@@ -1016,7 +1016,7 @@ fn conversions(i I64) String {
 BakedConversions String = conversions(0)
 
 test "T29a: a conversion of a place to a type over String names its storage" {
-    want := ("List<CvLab&>[\"abc0\", \"abc1\", \"abc2\"] cv abc0, cv abc1, cv abc2 else1 match2 dflt3 tup4 4 Qlobal global Wbc "
+    want := ("Vec<CvLab&>[\"abc0\", \"abc1\", \"abc2\"] cv abc0, cv abc1, cv abc2 else1 match2 dflt3 tup4 4 Qlobal global Wbc "
              "aXc")
     assert BakedConversions == want
     assert conversions(Live - 3) == want
@@ -1071,5 +1071,5 @@ fn scopedLocals(i I64) String {
 }
 
 test "E25, O25a: a local a scoped call declares lives where the argument puts it" {
-    assert scopedLocals(Live - 2) == "List<String&>[\"mk1\", \"mk2\"] Qk1 Rk2"
+    assert scopedLocals(Live - 2) == "Vec<String&>[\"mk1\", \"mk2\"] Qk1 Rk2"
 }

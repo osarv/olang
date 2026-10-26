@@ -53,6 +53,6 @@ fn main() ? {
     e := Map<I64, Vec<I64>>()
     u := $e
     churn()
-    assert t == "Map<Char, List<Char>>{'a': List<Char>['x']}"
-    assert u == "Map<I64, List<I64>>{}"
+    assert t == "Map<Char, Vec<Char>>{'a': Vec<Char>['x']}"
+    assert u == "Map<I64, Vec<I64>>{}"
 }

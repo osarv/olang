@@ -62,7 +62,7 @@ DtorPrelude := (
     "    Made = Made + 1\n"
     "} destruct {\n"
     "    Dropped = Dropped + 1\n"
-    "    keep mut List<Tracker&>& = List<Tracker&>()\n"
+    "    keep mut Vec<Tracker&>& = Vec<Tracker&>()\n"
     "    kk := k\n"
     "    join { spawn fn() { for j in range 3 { keep.Push(Tracker()) } } }\n"
     "    t Tracker& = Tracker()\n"
@@ -110,17 +110,17 @@ Prelude := (
     "    Z\n"
     "}\n"
     "type Cell struct() {\n"
-    "    S List<mut Node&>\n"
+    "    S Vec<mut Node&>\n"
     "    t I64 = 0\n"
     "}\n"
     "type Bag struct() {\n"
-    "    nodes List<mut Node&>\n"
-    "    boxes List<Box>\n"
-    "    cells List<Cell>\n"
-    "    grid List<List<Cell>>\n"
-    "    anys List<any Ag&>\n"
-    "    cls List<mut any Cl&>\n"
-    "    szs List<any Sz&>\n"
+    "    nodes Vec<mut Node&>\n"
+    "    boxes Vec<Box>\n"
+    "    cells Vec<Cell>\n"
+    "    grid Vec<Vec<Cell>>\n"
+    "    anys Vec<any Ag&>\n"
+    "    cls Vec<mut any Cl&>\n"
+    "    szs Vec<any Sz&>\n"
     "}\n"
     "# run-time trait values (T32): an open trait met by nodes, boxes, a number and the enum, a mut one, a closed one\n"
     "type Ag trait {\n    Val() I64\n}\n"
@@ -133,19 +133,19 @@ Prelude := (
     "fn (l Lab&) Val() I64 { return l.Len() * 7 + I64(U8(l[0])) }\n"
     "type Ns extends Array<mut Node&>\n"
     "fn (a Ns&) Val() I64 {\n    t I64 = 0\n    for n in a { t = t * 3 + chain(n) }\n    return t\n}\n"
-    "fn sumSz(l List<any Sz&>&) I64 {\n    t I64 = 0\n    for x in l { t = t * 7 + ($x).Len() }\n    return t\n}\n"
+    "fn sumSz(l Vec<any Sz&>&) I64 {\n    t I64 = 0\n    for x in l { t = t * 7 + ($x).Len() }\n    return t\n}\n"
     "fn (c Cnt) Val() I64 { return I64(c) * 3 }\n"
     "fn (n Node&) Val() I64 { return chain(n) }\n"
     "fn (n mut Node&) Grow(v I64) { n.next = Node(v) }\n"
     "fn (b Box&) Val() I64 { return chain(b.head) * 5 }\n"
     "fn (b mut Box&) Grow(v I64) { b.head.next = Node(v) }\n"
     "fn (e E) Val() I64 { return sumE(e) + 1 }\n"
-    "fn sumAg(l List<any Ag&>&) I64 {\n"
+    "fn sumAg(l Vec<any Ag&>&) I64 {\n"
     "    t I64 = 0\n"
     "    for x in l { t = t * 7 + x.Val() }\n"
     "    return t\n"
     "}\n"
-    "fn sumCl(l List<mut any Cl&>&) I64 {\n"
+    "fn sumCl(l Vec<mut any Cl&>&) I64 {\n"
     "    t I64 = 0\n"
     "    for x in l {\n"
     "        match x {\n"
@@ -157,7 +157,7 @@ Prelude := (
     "}\n"
     "fn growAny(g mut any Gr&, v I64) { g.Grow(v) }\n"
     "fn anyOf(v I64) any Ag& { return Node(v) if v % 2 == 0 else Cnt(v) }\n"
-    "fn sumCells(l List<Cell>&) I64 {\n"
+    "fn sumCells(l Vec<Cell>&) I64 {\n"
     "    t I64 = 0\n"
     "    for c in l { t = t * 7 + sumList(c.S) }\n"
     "    return t\n"
@@ -188,7 +188,7 @@ Prelude := (
     "    }\n"
     "    return t\n"
     "}\n"
-    "fn sumList(l List<mut Node&>&) I64 {\n"
+    "fn sumList(l Vec<mut Node&>&) I64 {\n"
     "    t I64 = 0\n"
     "    for n in l { t = t * 7 + chain(n) }\n"
     "    return t\n"
@@ -206,7 +206,7 @@ Prelude := (
     "    }\n"
     "    return t\n"
     "}\n"
-    "fn sumBoxes(l List<Box>&) I64 {\n"
+    "fn sumBoxes(l Vec<Box>&) I64 {\n"
     "    t I64 = 0\n"
     "    for b in l { t = t * 7 + chain(b.head) }\n"
     "    return t\n"
@@ -223,7 +223,7 @@ Prelude := (
     "# for scope arguments (E25): a call's result built where \"&t\" or \"&return\" says, never where it stands\n"
     "fn mkText(v I64) String { return \"t\" $v \"-\" $(v * 3) }\n"
     "fn putRet(p mut Node&, v I64) String {\n    p.next = mkNode&return(v)\n    return \"r\" $v\n}\n"
-    "fn stashLab(l mut List<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText&return(v)))\n    return \"r\" $v\n}\n"
+    "fn stashLab(l mut Vec<any Ag&>&, v I64) String {\n    l.Push(Lab(mkText&return(v)))\n    return \"r\" $v\n}\n"
     "# for text scenarios (the fourth any review's A): arrays of plain data a scope argument puts elsewhere, returned on\n"
     "fn mkNums(v I64) Array<I64> { return I64[v, v * 2, v * 3] }\n"
     "fn retAt(p String&, v I64) String { return mkText&p(v) }\n"
@@ -239,10 +239,10 @@ Prelude := (
     "type TK struct(s String&) { s }\n"
     "fn (k mut TK&) Set(t String&) { k.s = t }\n"
     "# the fifth review's: parameters sharing a scope, which a callee may store one into the other with no obligation\n"
-    "type TH struct(l mut List<String&>&) { l }\n"
+    "type TH struct(l mut Vec<String&>&) { l }\n"
     "fn (h mut TH&) Add(x String&h) I64 {\n    h.l.Push(x)\n    return 1\n}\n"
     "fn (x String&) AddTo(h mut TH&x) I64 {\n    h.l.Push(x)\n    return 3\n}\n"
-    "fn tieTo(l mut List<String&>&, x String&l) I64 {\n    l.Push(x)\n    return 2\n}\n"
+    "fn tieTo(l mut Vec<String&>&, x String&l) I64 {\n    l.Push(x)\n    return 2\n}\n"
     "# conversions of a place to a type over String (T29a), returned\n"
     "fn retConv(v I64) Lab {\n    s := \"cv\" $v\n    return Lab(s)\n}\n"
     "fn retConvCond(v I64) Lab {\n    s := \"cc\" $v\n    u := \"cu\" $v\n    return Lab(s) if Run > 0 else Lab(u)\n}\n"
@@ -274,13 +274,13 @@ Prelude := (
     "        }\n"
     "    }\n"
     "}\n"
-    "fn mkList(v I64) List<mut Node&> {\n"
-    "    l := List<mut Node&>()\n"
+    "fn mkList(v I64) Vec<mut Node&> {\n"
+    "    l := Vec<mut Node&>()\n"
     "    for i in range 3 { l.Push(Node(v + i)) }\n"
     "    return l\n"
     "}\n"
-    "fn mkList2(v I64) List<mut Node&> { return mkList(v) }\n"
-    "fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
+    "fn mkList2(v I64) Vec<mut Node&> { return mkList(v) }\n"
+    "fn pushNode(l mut Vec<mut Node&>&, v I64) { l.Push(Node(v)) }\n"
     "fn idBox(b mut Box&) Box { return b }\n"
     "fn addVia(b Box&, v I64) { b.head.next = Node(v) }\n"
     "fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }\n"
@@ -345,10 +345,10 @@ Targets I64 = 12
 Decls := String&[
     "x := Node(1)"
     "w := W(Box())"
-    "l := List<mut Node&>()\n    l.Push(Node(1))"
+    "l := Vec<mut Node&>()\n    l.Push(Node(1))"
     "m := Map<I64, mut Node&>()"
     "a := Array<mut Node&>(4, Node(1))\n    a[0] = Node(1)"
-    "bag := Bag()\n    bag.boxes.Push(Box())\n    bag.cells.Push(Cell())\n    bag.grid.Push(List<Cell>())\n    bag.grid[0].Push(Cell())"
+    "bag := Bag()\n    bag.boxes.Push(Box())\n    bag.cells.Push(Cell())\n    bag.grid.Push(Vec<Cell>())\n    bag.grid[0].Push(Cell())"
     "e := E.A(Box())"
     "l := mkList2(1)"
     "t := Two()\n    t.items[0] = Node(1)\n    t.items[1] = Node(1)"
@@ -558,7 +558,7 @@ fn (g mut SG&) dtorOp(a String&, ind String&) String& {
     }
     if k == 2 {    # a list of resources
         l := g.name("rl")
-        return ($ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $l " := List<" $rt "&>()\n" $ind "    " $l ".Push("
+        return ($ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $l " := Vec<" $rt "&>()\n" $ind "    " $l ".Push("
                 $rt "(" $y ", " $v "))\n" $ind "    " $l ".Push(" $rt "(" $y ", " $g.val() "))\n" $ind "}\n")
     }
     return $ind "{\n" $ind "    " $y " := Node(" $v ")\n" $ind "    " $r " " $rt "& = " $rt "(" $y ", " $v ")\n" $ind "    churn()\n" $ind "}\n"
@@ -610,7 +610,7 @@ fn (g mut SG&) boxOp(b String&, ind String&, d I64) String& {
         if m == 4 {    # the callee keeps the copy in a lambda it returns, read after a churn (O17: refused)
             ks := g.name("ks")
             kk := g.name("k")
-            return ($ind "{\n" $ind "    " $ks " := List<fn() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
+            return ($ind "{\n" $ind "    " $ks " := Vec<fn() I64>()\n" $ind "    for " $i " in range 3 { " $ks ".Push(keepBox(idBox("
                     $b "))) }\n" $ind "    churn()\n" $ind "    for " $kk " in " $ks " { if " $kk "() == -7 { abort } }\n" $ind "}\n")
         }
         if m == 5 { return $ind "for " $i " in range 3 { useBox(idBox(" $b ")) }\n" }    # a lambda only called in the callee
@@ -1001,7 +1001,7 @@ fn (g mut SG&) strOp(ind String&) String& {
         if k == 6 { return $ind "if r.l.Len() > 0 { acc += r.l[0].v }\n" }
         if k == 7 {    # what Str builds in its own blocks
             tl := g.name("tl")
-            return ($ind $q " := Node(" $v ")\n" $ind $q ".next = Node(r.n.v)\n" $ind $tl " := List<I64>()\n" $ind $tl ".Push(chain("
+            return ($ind $q " := Node(" $v ")\n" $ind $q ".next = Node(r.n.v)\n" $ind $tl " := Vec<I64>()\n" $ind $tl ".Push(chain("
                     $q "))\n" $ind "acc += " $tl "[0]\n")
         }
         if k == 8 { return $ind $q " := $r.n.v \"x\" $chain(r.n)\n" $ind "acc += " $q ".Len()\n" }
@@ -1075,9 +1075,9 @@ fn (g mut SG&) strScenario(k I64) String& {
     t := "R" $k
     body := g.strBody("    ", 2)
     rd := String&["$r", "\"<\" $r \">\"", "$r $r", "$r.n.v $r"][g.r(4)]
-    return ("type " $t " struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
+    return ("type " $t " struct(n mut Node&, l Vec<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
             "    a\n}\n" "fn (r " $t "&) Str() String {\n    acc I64 = 0\n" $body "    return \"r\" $acc \":\" $chain(r.n)\n}\n"
-            "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := List<mut Node&>()\n    l.Push(Node(3))\n"
+            "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := Vec<mut Node&>()\n    l.Push(Node(3))\n"
             "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4, Node(5))\n    a[0] = Node(5)\n"
             "    r := " $t "(x, l, m, a)\n    h I64 = 0\n    for i in range 3 {\n        s := " $rd "\n"
             "        h = h * 31 + s.Hash()\n        churn()\n    }\n    churn()\n"
@@ -1148,12 +1148,12 @@ fn (g mut SG&) secondScenario(k I64) String& {
     head mut String& = ""
     probe mut String& = ""
     if kind == 0 or kind == 1 {
-        par String& = "lst mut List<String&>&" if kind == 0 else "lst List<String&>"
+        par String& = "lst mut Vec<String&>&" if kind == 0 else "lst Vec<String&>"
         head = "fn " $f "(" $par ", i I64) String {\n" $sbody "    l := lst\n    l.Push(s)\n    return s\n}\n"
-        probe = "    lst := List<String&>()\n    x := " $f "(lst, i)\n    x[0] = 'Q'\n    return $lst \" \" $x\n"
+        probe = "    lst := Vec<String&>()\n    x := " $f "(lst, i)\n    x[0] = 'Q'\n    return $lst \" \" $x\n"
     } else if kind == 2 {
-        head = "fn " $f "(ks mut List<mut TK&>&, i I64) String {\n" $sbody "    ks[0].Set(s)\n    return s\n}\n"
-        probe = ("    ks := List<mut TK&>()\n    ks.Push(TK(\"k\"))\n    x := " $f "(ks, i)\n    x[0] = 'Q'\n"
+        head = "fn " $f "(ks mut Vec<mut TK&>&, i I64) String {\n" $sbody "    ks[0].Set(s)\n    return s\n}\n"
+        probe = ("    ks := Vec<mut TK&>()\n    ks.Push(TK(\"k\"))\n    x := " $f "(ks, i)\n    x[0] = 'Q'\n"
                  "    return $ks[0].s \" \" $x\n")
     } else if kind == 3 or kind == 5 {
         n := 2 + g.r(9)
@@ -1173,11 +1173,11 @@ fn (g mut SG&) secondScenario(k I64) String& {
         # a callee one of whose parameters - its receiver too - shares the borrow's scope (the fifth review's 2)
         use String& = String&["    h.Add(s)\n", "    h.Add(s[0:2])\n", "    s.AddTo(h)\n"][kind - 7]
         head = "fn " $f "(h mut TH&, i I64) String {\n" $sbody $use "    return s\n}\n"
-        probe = ("    keep := List<String&>()\n    h := TH(keep)\n    x := " $f "(h, i)\n    x[0] = 'Q'\n"
+        probe = ("    keep := Vec<String&>()\n    h := TH(keep)\n    x := " $f "(h, i)\n    x[0] = 'Q'\n"
                  "    return $keep \" \" $x\n")
     } else if kind == 10 {
-        head = "fn " $f "(keep mut List<String&>&, i I64) String {\n" $sbody "    tieTo(keep, s)\n    return s\n}\n"
-        probe = "    keep := List<String&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
+        head = "fn " $f "(keep mut Vec<String&>&, i I64) String {\n" $sbody "    tieTo(keep, s)\n    return s\n}\n"
+        probe = "    keep := Vec<String&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
     } else if kind == 11 {
         # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
         ret String& = String&["p if i > 0 else q", "match i { case 0 => p case _ => q }", "try textNo&p(i) catch default q"][g.r(3)]
@@ -1189,8 +1189,8 @@ fn (g mut SG&) secondScenario(k I64) String& {
         head = "fn " $f "(i I64) Lab {\n" $sbody "    return Lab(s)\n}\n"
         probe = "    s := \"ghi\" $i\n    y := Lab(s)\n    y[0] = 'Q'\n    x := " $f "(i)\n    x[0] = 'R'\n    return $s \" \" $y \" \" $x\n"
     } else if kind == 4 {
-        head = "fn " $f "(fs mut List<fn() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
-        probe = "    fs := List<fn() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
+        head = "fn " $f "(fs mut Vec<fn() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
+        probe = "    fs := Vec<fn() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"
     } else {
         # a destructor of the helper's block writes what it holds as the scopes close - after the result was computed;
         # no global (a destructor is never run while compiling): the caller checks its own value instead
@@ -1356,7 +1356,7 @@ fn freeHolder(k I64) String& {
             "    kt String& = \"\"\n"
             "    n mut Node& = Node(0)\n"
             "    keep Node?& = null\n"
-            "    l List<mut Node&>\n"
+            "    l Vec<mut Node&>\n"
             "    m Map<String&, mut Node&>\n"
             "    v Vec<I64>\n"
             "    keepR Res?& = null\n"

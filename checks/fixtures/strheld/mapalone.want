@@ -1,5 +1,5 @@
 Map<String&, Char>{"q\"": '\'', "a, false)": 'x'}
-Map<K, List<I64>>{K(1, "one"): List<I64>[3]}
+Map<K, Vec<I64>>{K(1, "one"): Vec<I64>[3]}
 Map<I64, S>{4: S<5>}
 Map<E, Array<I64>&>{E.B("t"): I64[1, 2]}
 Map<I64, Map<I64, String&>>{2: Map<I64, String&>{1: "x"}}

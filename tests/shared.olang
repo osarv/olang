@@ -15709,7 +15709,7 @@ fn strOnceTrace(k I64) String {
     return $one "|" $three "|" $listed "|" $two "|" $arr "|" $some "|" $mapped "|" $c.n
 }
 StrOnceBaked := strOnceTrace(0)
-StrOnceWant String& = ("a1|x2-y3-z4|List<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|strOnceTick[e10, e11]|"
+StrOnceWant String& = ("a1|x2-y3-z4|Vec<strOnceTick>[p5, q6, r7]|strOnceTwo(m8, n9)|strOnceTick[e10, e11]|"
                        "strOnceMaybe.Some(s12, 7)|Map<I64, strOnceTick>{1: v13}|13")
 
 # ...and a Str changing the value being rendered part way through changes nothing already read: an enum is read whole
@@ -15777,7 +15777,7 @@ test "E11c: a Str writing a global is called once per rendering - keys and value
     l := Vec<strOnceKey>()
     l.Push(strOnceKey(5))
     l.Push(strOnceKey(6))
-    assert $l == "List<strOnceKey>[k5, k6]" and StrOnceCalls == calls + 6
+    assert $l == "Vec<strOnceKey>[k5, k6]" and StrOnceCalls == calls + 6
     assert StrOnceOrder.EndsWith("123456")
 }
 
@@ -15838,7 +15838,7 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
     m.Put(1, I64[4, 5].ToVec())
     t := $m
     churnArena()
-    assert s == "37/1/30" and t == "Map<I64, List<I64>>{1: List<I64>[4, 5]}"
+    assert s == "37/1/30" and t == "Map<I64, Vec<I64>>{1: Vec<I64>[4, 5]}"
 }
 
 # S16/E11c: a test failing inside a Str closes the scope "$" opened for the Str's result and the Str's own block, their

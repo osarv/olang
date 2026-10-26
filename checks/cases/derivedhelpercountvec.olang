@@ -1,0 +1,13 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O17, the over-rejection derivedhelpercount pins for a List, met through a Vec: Indexable's IndexIter holds the Vec in an
+# "&p" field, and the iterator helper's callback - a body not known there - may store through an element something can
+# be stored through; refused at the program's use even where the callback only reads
+import "std/io"
+type Bag struct() {
+    items Vec<I64>& = Vec<I64>()
+}
+fn main() ? {
+    bags := Vec<Bag&>()
+    bags.Push(Bag())
+    try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+}
