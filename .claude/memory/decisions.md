@@ -1363,3 +1363,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBH ASKED 2026-10-26 (the user: "Are we really to do linalg when oann will need tensors?"): recommended - kernel
   tuning now (no API to get wrong, every user gains), Tensor (QBD) built when oann is ported, so its first user shapes
   it instead of a guessed API being redone. In effect: the tensor agent told to do the kernels only and hold Tensor.
+- QBH/QBD shape DECIDED 2026-10-26 (the user: "1) yes"): Tensor is the type programs use (every dimension, strided);
+  Matrix stays as the strided 2-D view the kernels take - a tensor hands out Matrix views without copying (a batch's
+  last two dimensions, leading dimensions folded into rows); Gemm/GemmBatch/GemmAct/GemmPatches keep taking Matrix;
+  layer-level operations take and return Tensors and call the Matrix kernels inside. Built when oann is ported (QBH as
+  recommended - the user did not object); kernel tuning now.
