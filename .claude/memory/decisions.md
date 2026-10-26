@@ -1316,3 +1316,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - CORRECTION 2026-10-26 (the user: "No, we didn't agree here"): the entry above recorded QBE as decided too early.
   QBE is still ASKED: how a header-less extern names its library (on the block, a standalone `link`, or not in source)
   and the C-import details. Only "extern blocks are fine" and "keep `import alias "path"`" are the user's answers.
+- QBE linking, laid out 2026-10-26 (the user: `extern link "golib" { }` fine, but then a bare `extern { }` too? or link
+  only on imports and on its own, externs never naming it; "any third option that reads well?"; libc should need an
+  explicit link and import): options (A) link on imports, on extern blocks and standalone - two spellings for one case;
+  (B) link on imports and standalone, `extern { }` never names one; (C) `link` is the block: `link "golib" { fn ... }`,
+  `link "golib"` alone when declarations come from elsewhere, `import z "zlib.h" link "z"`, and the `extern` keyword
+  goes. Recommended (C). libc explicit (`import c "unistd.h" link "c"`): agreed, recommended - no library is implicit
+  in source, though the runtime links libc anyway. ASKED.
