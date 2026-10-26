@@ -28,6 +28,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
+| `fuzz.olang` | fuzz targets: `fuzz.Check(fn(data Array<U8>&) { })`, run per input by `olang test -fuzz NAME FILE` (libFuzzer; `-fuzztime`, `-sanitize`), and on every saved input in `testdata/fuzz/SLUG/` by a plain `olang test` - which also takes words naming the tests to run (`olang test FILE Target`, B7a) (B19) |
+| `prop.olang` | property tests: `prop.Check(fn(xs Array<I64>&, p Point) { assert ... }, cases = 100)` - values made by reflection, cases in child processes, a failure shrunk, printed, saved and replayed; driven by the fuzzer's bytes under `-fuzz` (B19a) |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
 
 ## Calling C: a header import, an extern block, or `std/ffi`

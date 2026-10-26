@@ -6567,6 +6567,7 @@ mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" 
             | "bindgen"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
+            | "-fuzz" NAME | "-fuzztime" SECONDS
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -6587,6 +6588,7 @@ beginning with `-` that is no option is an error:
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test | B18 |
+| `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 
 `build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
@@ -6710,7 +6712,10 @@ released before the next begins: a list needs the memory of its largest file, no
 result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
 such, so what ran before it is never lost. After the files, words that name no file and end in no `.olang` pick the
 tests to run in each: a test runs when it names a target (B7a) a word is, or whose type a word is (`Map` runs `Map`'s
-tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs.
+tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs. Words that name
+none of a file's tests fail that file's run, its line naming the words and, where one is near (an edit distance of
+about a third of the word), the nearest target or description: `f.olang: no test is named by 'Bax' - did you mean
+'Box'?`. Each file listed is judged so on its own.
 
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
@@ -7165,6 +7170,34 @@ starts from: a parameter's referent's, named by its type (`the Server's scope`),
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
 values have destructors keeps what it lets go of (condition 4), and is counted as freeing at once where a `Destroy()`
 takes its values out (C9b).
+
+**B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
+names a test, by its target, its target's type or text of its description; naming none, or several, is an error at
+the build - built with libFuzzer (clang's `-fsanitize=fuzzer`, every object of the build compiled for its coverage) and
+run once per input libFuzzer makes, until a check fails (an `assert`, `unreachable`, a `!`, an error leaving the test,
+and with `-sanitize` a reference read after its scope closed, B2f), until it is stopped, or for `-fuzztime SECONDS`
+(given without `-fuzz` an error). A run's input is handed to the test through std/fuzz: `fuzz.Check(f)` calls `f(data
+Array<U8>&)` on it, and `fuzz.Input()` gives it, failing with `fuzz.Error.NONE` where no fuzzer runs. The program's
+globals are set once, before the first input; each input runs the test as a test run does, its scopes closed when it
+returns. The input of a failed run is written to `testdata/fuzz/SLUG/` in the directory of the file - SLUG the test's
+name as its run reports it (`Twice: doubles`), each run of characters that are no letter or digit made one `_` and none
+at either end (`Twice_doubles`) - and the inputs it found worth keeping to `fuzz/SLUG/` under the build's directory,
+where the next fuzzing run starts from them and from what `testdata` holds. The mode's status is 1 where an input
+failed, else 0.
+
+**B19a (replaying, property tests).** Every `test` run of a file hands `fuzz.Check(f)` no input: it calls `f` on the
+empty input, then on each file under `testdata/fuzz/SLUG/` for the running test, in name order, writing `fuzz:
+replaying PATH` to the standard error before each - so an input a fuzzer found fails the test it found it in from then
+on. std/prop's `prop.Check(f, cases = 100)` checks a property over generated values: `f` is called on values made for
+its parameters' types through compile-time reflection (G32-G38) - numbers, `Bool`, `Char`, `String`, arrays, `Vec`s,
+structs built through their constructors (a value the constructor refuses, its contract included, drops the case) and
+enums, a case and its fields - each drawn from a run of bytes, fewer and smaller bytes giving smaller values and a byte
+of 0 the least. Each case runs in a child process, a copy of the test's, so a failed check ends the case and not the
+test; the bytes come from a generator seeded by the test's name, so a run is the same every time. A failing case's
+bytes are shrunk - runs cut, bytes lowered - while it still fails; the smallest is written to the standard error, one
+`argument N: VALUE` line per parameter as `$` writes it, saved under `testdata/fuzz/SLUG/` (replayed first by every
+later run, as B19a's inputs are), and then run in the test itself, so the test fails as `f` does. Under `-fuzz` the
+fuzzer's input is the bytes of one case, run in the test's own process.
 
 ## 11. External Functions
 

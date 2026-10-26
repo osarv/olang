@@ -92,7 +92,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help doc lsp mcp`; options `-output -debug -race -sanitize -target -define -update
-  -check -quick -html`,
+  -check -quick -html -library -memory -fuzz -fuzztime`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
   link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
@@ -401,8 +401,31 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   are errors. Reported `ok - Twice: doubles` / `FAIL - Twice: ...`; `olang doc` lists them under the target as
   examples with their bodies (collapsible in HTML), a hover shows the first and `+N more tests`. `olang test FILE
   WORD...` runs the tests a word names - a target, its type (`Map` runs `Map.Get`'s), or text of a description (decided,
-  mine: a word that names no file and ends in no `.olang`, matched by the test binary's harness, so nothing rebuilds).
+  mine: a word that names no file and ends in no `.olang`, matched by the test binary's harness, so nothing rebuilds). Words
+  naming none of a file's tests fail its run, the nearest target or description suggested (`did you mean 'Box'?`) -
+  the coordinator's decision 2026-10-26, from a review; mine: each listed file judged on its own, nearness an edit
+  distance of about a third of the word against a stretch of the text, the harness's status 3 read by the driver.
   std: examples on `String.Trim`, `Map.Get`, `Vec.Push`.
+- **Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).** `olang test -fuzz NAME FILE
+  [-fuzztime SECONDS]` builds the file's tests with libFuzzer (`-fsanitize=fuzzer`, objects apart as `.fuzz`) and runs
+  the one test NAME names (B7a's words; none or several an error) per input: the harness is `LLVMFuzzerInitialize`
+  (globals once, the corpus directories made, libFuzzer's command line given them) and `LLVMFuzzerTestOneInput` (the
+  test behind a recovery point, a failed check printing FAIL and aborting). `std/fuzz`: `fuzz.Check(fn(data
+  Array<U8>&) { })` takes the fuzzer's input, or in a plain run the empty input and every file in `testdata/fuzz/SLUG/`
+  beside the test's file (Go's layout; failing inputs land there, libFuzzer's working corpus under `build/fuzz/`). It
+  composes with `-sanitize`. `std/prop`: `prop.Check(fn(xs Array<I64>&, p Pt) { assert ... }, cases = 100)` makes
+  each parameter's value by reflection (numbers, Bool, Char, String, arrays, Vec, structs through their constructors -
+  a refused one drops the case - and enums) from bytes (Hypothesis's design: 0 the least value), runs the cases in a
+  forked child seeded by the test's name, shrinks a failure's bytes (cuts, a binary search per byte, a borrow between
+  bytes), prints `argument N: $value`, saves it beside the file and runs it in the test, which fails as the property
+  does; under `-fuzz` the fuzzer's bytes are one case. Decided (mine): two modules, `fuzz` (bytes) and `prop` (values,
+  the survey's spelling); the harness names the running test and its file to std through runtime globals
+  (`__olang_test_name`, `__olang_test_file`, `__olang_fuzz_input`, `__olang_test_detach`); a property's failure is
+  found in a child rather than recovered in-process, since a failed check is a jump out of the test; runs are
+  deterministic (no clock seed); a shrunk failure is saved even outside `-fuzz` (Hypothesis's database). Measured: a
+  planted 4-byte prefix bug found in under a second (`checks` scenario `testfuzz`, ~10 s with the build); a property
+  over `Array<I64>` shrinks to `I64[50]` in ~2 s. Profiling is written up in docs/profiling.md (perf, a flame graph,
+  callgrind - which build keeps what).
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
   every argument by position, in any order, each once (`connect(h, retries = 5)`); naming a required parameter, a name
   given twice or also by position, an unknown name (the nearest defaulted one suggested) and a name through a function
@@ -1038,6 +1061,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/sha256` (1.1x a plain C SHA-256), `std/crc32`, `std/flags` (handles per flag, `--help` text, `flags.Error`),
   `std/regex` (RE2's syntax, linear time: a lazy forward DFA finds a match's end, a reversed one its start, the Pike
   VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
+- **The second survey's walks (M19d, docs/survey2.md 1.5, 2026-10-26).** Iterator defaults beside Take/Skip:
+  `TakeWhile`, `SkipWhile` (keep not called again once it has said no), `StepBy(n)` (a `StepSize`, checked as a
+  `ChunkSize` is - `StepError.BAD_STEP`), `FlatMap(f)` (f gives any iterator; the inner walk held in a `Vec` of one,
+  since a walk may have no zero value, D13c) and `Partition` (two Vecs as two results); `Reversed()` on any `At`+`Len`
+  type (a Vec) and on arrays and text (`ReversedIter`, measured level with the index loop: 50 x 10M sum 171 ms against
+  185, Horner 847 against 874); an array's `Windows(size)` (read-only views, Chunks' shape), `TakeWhile`/`SkipWhile`
+  (views) and `Partition` (two arrays). Each fails with what its iterator and callbacks fail with (`<T ? E>`), is
+  evaluated while compiling (a baked global in std/prelude/tests/iterator.olang) and has B7a examples on its iterator
+  type. Decided (mine): the struct adapters copy their iterator as the others do; FlatMap a struct, not a generator (a
+  generator cannot yield references its inner walks hold); an array method or an Iterator default cannot be a B7a
+  target (only a named type's method can), so the examples name the adapter types.
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
