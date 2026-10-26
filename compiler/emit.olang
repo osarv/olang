@@ -2150,9 +2150,10 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     b.Push(fe.dbgMeta.ToString())
     b.PushChar('\n')
     if fe.gen {
-        nx := e.genNext(k, f, symbol, passed, fe.promTy)
+        nx := e.genNext(k, f, symbol, passed, fe.promTy, false)
+        wn := e.genNext(k, f, symbol, passed, fe.promTy, true)
         dr := e.genDrop(symbol, fe.promTy)
-        e.fnItem(k, f.Ty, symbol, passed, env, $nx $foldSlots(b.ToString(), f.Locals.Len()) $dr)
+        e.fnItem(k, f.Ty, symbol, passed, env, $nx $wn $foldSlots(b.ToString(), f.Locals.Len()) $dr)
         return true
     }
     e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
@@ -2163,15 +2164,34 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
 
 # a generator's Next as its function value's code calls it: the walk, a coroutine (the value's environment its handle),
 # resumed with the scopes this call passes (its result scope among them) in the promise, its result read back from
-# there - or, its walk over, Exhausted at once
-fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, promTy String&) String {
+# there - or, its walk over, Exhausted at once. Its ".wnext" form (walk) is the code of a walk a for-in makes and
+# finishes (D18e): nothing else holds that generator, so no Next is asked inside its own walk and none after its end -
+# the loop stops at the first Exhausted or error - and neither the re-entry flag nor the end is tested; only the
+# for-in's request to destroy it (the flag 2) is
+fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, promTy String&, walk Bool) String {
     t := e.T
     e.coroDecls()
     rt := t.RetLlvm(f.Ty)
     via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
     b := StringBuilder()
-    b.Push(e.header(k, f.Ty, symbol, passed, true, "internal"))
+    b.Push(e.header(k, f.Ty, $symbol ".wnext" if walk else symbol, passed, true, "internal"))
     b.Push("entry:\n  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
+    if walk {
+        b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %running = load i32, ptr %pr\n")
+        b.Push("  %stop = icmp eq i32 %running, 2\n  br i1 %stop, label %drop, label %run\n")
+        b.Push("drop:\n  call void @llvm.coro.destroy(ptr %env)\n  br label %over\nrun:\n")
+        if via { b.Push("  %po = getelementptr " $promTy ", ptr %p, i32 0, i32 2\n  store ptr %out, ptr %po\n") }
+        for i in range passed {
+            b.Push("  %pv" $i " = getelementptr " $promTy ", ptr %p, i32 0, i32 " $(3 + i) "\n  store ptr %v" $i ", ptr %pv" $i "\n")
+        }
+        b.Push("  call void @llvm.coro.resume(ptr %env)\n  %r = load " $rt ", ptr %p\n  ret " $rt " %r\nover:\n")
+        if rt == "i32" {
+            b.Push("  ret i32 " $f.GenEnd "\n}\n\n")
+        } else {
+            b.Push("  %x = insertvalue " $rt " zeroinitializer, i32 " $f.GenEnd ", 0\n  ret " $rt " %x\n}\n\n")
+        }
+        return b.ToString()
+    }
     # S20: asked while its walk runs - a Next called from inside it - a guaranteed check fails: resuming a coroutine
     # that is not suspended is undefined. One compare a Next, on the flag the promise holds for genDrop already. The
     # flag 2 is a for-in's request to destroy the walk it finishes (D18e, walkEnd): made through this code, so the
@@ -4635,6 +4655,8 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             fe.w("call void @__olang_scope_register_dtor(ptr " $home ", ptr " $env ", ptr @" $gs ".drop)")
         }
     }
+    # D18e: a walk form's generator is asked for its values by its walk's own Next (genNext)
+    if fe.walkForm and fe.E.isGen(code) and sym == fe.E.sym(code) { sym = $sym ".wnext" }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
     return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $env ", 1")
 }
