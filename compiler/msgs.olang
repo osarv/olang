@@ -799,7 +799,7 @@ fn AtomicWidth(ty String&) Msg { return Msg(Diag.AtomicWidth, "P9, T4a", "the at
 
 # compile-time reflection (G32-G38)
 fn ReflNoMember(ty String&, name String&) Msg { return Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align") }
-fn ReflNoKind(ty String&) Msg { return Msg(Diag.ReflNoKind, "G32", $ty " has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference and a function type have one") }
+fn ReflNoKind(ty String&) Msg { return Msg(Diag.ReflNoKind, "G32", $ty " has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference, a function type and an error value have one") }
 fn ReflNoLength(ty String&) Msg { return Msg(Diag.ReflNoLength, "G32", $ty " has no Length - only an array whose length is known while compiling has one") }
 fn ReflNoLayout(ty String&, name String&) Msg { return Msg(Diag.ReflNoLayout, "G32", $ty " has no " $name " - it is not laid out (a trait, an error type, an extern type)") }
 fn ReflNotList(name String&, ty String&, why String&) Msg { return Msg(Diag.ReflNotList, "G33", $ty " has no " $name " - " $why) }

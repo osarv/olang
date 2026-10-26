@@ -7966,9 +7966,10 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
 
 - `T.Name` - the type as source writes it, its module's alias left out (`Point`, `Tree<I64>`, `Array<String&>`), a
   `String`.
-- `T.Kind` - a `TypeKind` (the prelude's enum: `Struct Enum Integer Float Bool Array Reference Function`); a declared
-  type has its base's kind, `String` an `Array`, `Char` an `Integer`. Coarse on purpose: the exact type is `match T`'s
-  (G13). An error type, a trait and an extern type have none, an error.
+- `T.Kind` - a `TypeKind` (the prelude's enum: `Struct Enum Integer Float Bool Array Reference Function Error`); a
+  declared type has its base's kind, `String` an `Array`, `Char` an `Integer`, an error value's type (T20: an error type
+  or a named set as a value's type) `Error`. Coarse on purpose: the exact type is `match T`'s (G13). A trait and an
+  extern type have none, an error.
 - `T.Base` - the type a declared type is over (T29, `Meters.Base` is `F64`), else `T` itself.
 - `T.Element` - an array's element type (an error for another type); `T.Target` - a reference's referent (`Node&`'s
   `Node`).
@@ -7976,7 +7977,8 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
 - `T.Size`, `T.Align` - the size and alignment in bytes as the type is laid out (C's `sizeof` and `_Alignof` of the C
   layout, §10), `I64`s; a type that is not laid out (a trait, an error type, an extern type) has none.
 - `T.Fields`, `T.Cases`, `T.Params`, `T.Results` - lists (G33) of descriptors (G34): a struct's fields; an enum's cases
-  (a struct's being its one case, named as the struct, so one walk covers both); a constructor's parameters, or a
+  (a struct's being its one case, named as the struct, so one walk covers both), an error value's words (each a case
+  of no fields, in its set's order, R1a); a constructor's parameters, or a
   function type's; a function type's results. A struct, an enum and a function type have the lists that apply to
   them; asking another is an error naming what it has (`T.Fields` on an enum names `T.Cases`).
 - `T.Errors` - a function type's error set, written only where an error set is (R1b): `fn call<F>(f F) I64 ? F.Errors`.
@@ -8005,7 +8007,8 @@ constant there. Each has its members, and asking another is an error listing the
   is a value of the field's type's owner (or a reference to one), else an error; one value, else an error. A case's
   field is read only where `v` is known to hold that case - narrowed by a test (S8d), the walk's `if v == c` with `c` a
   case descriptor included - as `as` reads it.
-- A case: `c.Name`, `c.Fields` (a list, G33). `v == c` tests the case (E32): with `v` of the case's own type, the case;
+- A case: `c.Name`, `c.Fields` (a list, G33) - an error value's word named as `$` writes it (`io.Error.FULL`, B5), its
+  fields none, `c()` its value. `v == c` tests the case (E32): with `v` of the case's own type, the case;
   with `v` the struct a struct's one case describes, `true`; with `v` of another type, an error. After such a test `v` is
   narrowed to that case (S8d) and `f.Of(v)` reads its fields. `c(args)` builds the case, as the case's name would
   (`Shape.Circle(2.0)`) - a struct's one case being its constructor - so generic code makes any case it walks to:

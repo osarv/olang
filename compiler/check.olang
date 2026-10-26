@@ -9965,6 +9965,16 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                     ds := c.P.DescOf(dt)
                     r := c.P.ReflUnder(ds.Of)
                     if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
+                    # T20: an error value's word, a case of no fields - its value
+                    if c.P.T.KindOf(r) == types.Kind.ErrVal {
+                        codes := c.P.ErrValCodes(r)
+                        if args.Len() > 0 or ds.Case >= codes.Len() {
+                            c.err(sp, msgs.ArgCount(0, "s", args.Len()))
+                            c.dropArgs(args)
+                            return c.unknown(sp)
+                        }
+                        return c.lit(sp, r, codes[ds.Case])
+                    }
                     return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
                 }
             }
@@ -12288,6 +12298,11 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
     }
     if ds.K == generic.DescCase {
         if c.isStruct(r) { return $c.text(c.P.T.DeclName(c.P.T.DeclOf(r))) }
+        # T20: an error value's word as "$" writes it, "io.Error.FULL"
+        if c.P.T.KindOf(r) == types.Kind.ErrVal {
+            codes := c.P.ErrValCodes(r)
+            return c.P.ErrValWordText(r, codes[ds.Case]) if ds.Case < codes.Len() else ""
+        }
         cn := c.P.T.CaseNames(r)
         return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
     }
@@ -14129,7 +14144,11 @@ fn (c mut Checker&) errItemPath(x ast.Expr&) Bool {
     if kind != names.What.Type and kind != names.What.Import { return false }
     if c.P.ErrorType(c.fr().Ctx, p) != types.UnknownT { return true }
     if p.Parts.Len() < 2 { return false }
-    return c.P.ErrorType(c.fr().Ctx, ast.Path(p.Sp, p.Parts[:p.Parts.Len() - 1])) != types.UnknownT
+    et := c.P.ErrorType(c.fr().Ctx, ast.Path(p.Sp, p.Parts[:p.Parts.Len() - 1]))
+    if et == types.UnknownT { return false }
+    # a word of it - another name after an error type is a reflected member (G32: "os.Error.Kind") or no name at all,
+    # said where it is read
+    return c.wordIndex(c.P.T.DeclOf(et), p.Parts[p.Parts.Len() - 1]) >= 0
 }
 
 fn (c mut Checker&) errWordPath(x ast.Expr&) Bool {
@@ -19508,9 +19527,15 @@ fn (c mut Checker&) caseCompare(sp source.Span, op token.Tok, xa ast.Expr&, pat 
     if xt == types.UnknownT { return c.unknown(sp) }
     et := c.deref(xt)
     cd := c.caseDesc(pat)
-    if cd.K == generic.DescCase and not c.P.T.Same(cd.Of, et) {
+    if cd.K == generic.DescCase and not c.P.T.Same(cd.Of, et) and not c.P.T.Same(c.P.ReflUnder(cd.Of), et) {
         c.err(pat.Span(), msgs.ReflCaseOther(c.ty(cd.Of), c.ty(et)))
         return c.unknown(sp)
+    }
+    if cd.K == generic.DescCase and c.P.T.KindOf(et) == types.Kind.ErrVal {
+        # T20: an error value's word - its code compared
+        codes := c.P.ErrValCodes(et)
+        if cd.Case >= codes.Len() { return c.unknown(sp) }
+        return c.opValues(sp, sp, op, x, c.lit(pat.Span(), et, codes[cd.Case]), sp, pat.Span())
     }
     if cd.K == generic.DescCase and c.isStruct(et) {
         # G34: a struct's one case - every value holds it

@@ -3810,6 +3810,8 @@ fn (p mut Program&) DescOf(t types.TypeId) Desc {
 
 # what a type is past the declared types it is over (T29): what its kind, element and fields are read from
 fn (p mut Program&) ReflUnder(t types.TypeId) types.TypeId {
+    # T20: an error type or a named set written by name is reflected as the value of it (its words its cases)
+    if p.T.KindOf(t) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(t)) == types.DeclKind.Error { return p.ErrValOfType(t) }
     r := t
     for k in range 64 {
         if p.T.KindOf(r) != types.Kind.Named or not p.Body(r) or p.T.DeclKindOf(p.T.DeclOf(r)) != types.DeclKind.Over { break }
@@ -3838,8 +3840,40 @@ fn (p mut Program&) ReflKind(t types.TypeId) I64 {
         case types.Kind.Ref => 6
         case types.Kind.Func => 7
         case types.Kind.Named => 0 if p.isStructT(r) else (1 if p.isEnumT(r) else -1)
+        case types.Kind.ErrVal => 8
         case _ => -1
     }
+}
+
+# T20, G33: an error value's words, its "cases" - in the canonical order of its set's entries (R1a), each entry's words
+# in their declared order (an ErrWords entry's own): the code a value of each holds, ((entry + 1) << 16) | word (R6)
+fn (p mut Program&) ErrValCodes(t types.TypeId) Array<I64> {
+    out Vec<I64>
+    if p.T.KindOf(t) != types.Kind.ErrVal { return out.ToArray() }
+    es := p.T.Items(p.T.ErrValItems(t))
+    for j in range es.Len() {
+        d := p.T.DeclOf(p.T.ErrOf(es[j]))
+        ws := p.ErrorWords(d)
+        for w in range ws.Len() {
+            if w < 64 and (p.T.ErrMask(es[j]) & (U64(1) << w)) == 0 { continue }
+            out.Push(((j + 1) << 16) | w)
+        }
+    }
+    return out.ToArray()
+}
+
+# T20, G34: the word an error value of t holding code is, as "$" writes it (B5): "io.Error.FULL", the prelude's and the
+# root program's own bare
+fn (p mut Program&) ErrValWordText(t types.TypeId, code I64) String {
+    es := p.T.Items(p.T.ErrValItems(t))
+    j := (code >> 16) - 1
+    if j < 0 or j >= es.Len() { return "" }
+    d := p.T.DeclOf(p.T.ErrOf(es[j]))
+    ws := p.ErrorWords(d)
+    w := code & 0xFFFF
+    if w >= ws.Len() { return "" }
+    dm := p.T.DeclModule(d)
+    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.text(p.T.DeclName(d)) "." $p.text(ws[w])
 }
 
 # what a declared type's name is (G32), as its own module writes it: its name and arguments, no module before them
@@ -3898,6 +3932,21 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
             }
         }
         case types.Kind.Const { b.Push($p.T.ConstValue(t)) }
+        case types.Kind.ErrVal {
+            # T20: its error type, or the named set it was written as; a set with no name its entries in braces
+            nd := p.T.ErrValName(t)
+            es := p.T.Items(p.T.ErrValItems(t))
+            if nd >= types.DeclId(0) {
+                b.Push(p.text(p.T.DeclName(nd)))
+            } else {
+                if es.Len() != 1 { b.PushChar('{') }
+                for i in range es.Len() {
+                    if i > 0 { b.Push(", ") }
+                    b.Push(p.text(p.T.DeclName(p.T.DeclOf(p.T.ErrOf(es[i])))))
+                }
+                if es.Len() != 1 { b.PushChar('}') }
+            }
+        }
         nomatch { b.Push(p.T.Canon(t)) }
     }
 }
@@ -3983,6 +4032,11 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
     }
     r := p.ReflUnder(t)
     if list == ListCases {
+        # T20: an error value's words, each a case of no fields (ErrValCodes)
+        if p.T.KindOf(r) == types.Kind.ErrVal {
+            for i in range p.ErrValCodes(r).Len() { out.Push(i) }
+            return out.ToArray(), ""
+        }
         if p.isEnumT(r) {
             for i in range p.T.CaseNames(r).Len() { out.Push(i) }
             return out.ToArray(), ""
@@ -3992,7 +4046,9 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
     }
     # fields: a struct's (its one case's), or an enum case's
     ns := Array<source.NameId>(0)
-    if p.isStructT(r) {
+    if p.T.KindOf(r) == types.Kind.ErrVal and cs >= 0 {
+        return none, ""
+    } else if p.isStructT(r) {
         ns = p.FieldNames(r)
     } else if p.isEnumT(r) and cs >= 0 {
         ns = p.CaseFieldNames(r, cs)
