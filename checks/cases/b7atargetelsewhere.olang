@@ -1,3 +1,4 @@
 # check: fail error[B7a]: 'String.Trim' is declared in another file
 # B7a: a test is an example of its own file's code - a method of the prelude is the prelude's
 test String.Trim "trims" { assert " a ".Trim() == "a" }
+fn main() { }

@@ -3,3 +3,4 @@
 fn twice(n I64) I64 { return n * 2 }
 test twice "doubles" { assert twice(2) == 4 }
 test twice "doubles" { assert twice(3) == 6 }
+fn main() { }

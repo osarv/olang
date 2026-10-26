@@ -3,3 +3,4 @@
 type Box struct(v I64) { v }
 fn (b Box&) Get() I64 { return b.v }
 test Box.Put "gives" { assert Box(1).Get() == 1 }
+fn main() { }

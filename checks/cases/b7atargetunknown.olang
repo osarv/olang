@@ -2,3 +2,4 @@
 # B7a: a test's target names something of its own file
 fn twice(n I64) I64 { return n * 2 }
 test twise "doubles" { assert twice(2) == 4 }
+fn main() { }

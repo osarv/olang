@@ -462,7 +462,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
         case ast.Decl.Errors(sp, _, _, _) {
             if not w.skipped(sp.Start) { w.line("ERRORS", sp) }
         }
-        case ast.Decl.Test(sp, _, body) {
+        case ast.Decl.Test(sp, _, body, _) {
             if w.skipped(sp.Start) { return }
             w.line("TEST", sp)
             w.stmts(body)

@@ -256,6 +256,26 @@ b6matchfield.olang:12:38: note: this is the value that does not fit - each value
    12 |         b.last = match i { case 1 => x case _ => "z" }
       |                                      ^
 compilation failed with 1 error
+=== b7atargetelsewhere.olang
+b7atargetelsewhere.olang:3:6: error[B7a]: 'String.Trim' is declared in another file - a test is an example of its own file's code, written beside it
+    3 | test String.Trim "trims" { assert " a ".Trim() == "a" }
+      |      ^~~~~~~~~~~
+compilation failed with 1 error
+=== b7atargetmethod.olang
+b7atargetmethod.olang:5:6: error[B7a]: a test names a function, a type or Type.Method of its file, and 'Box.Put' is none - did you mean 'Box.Get'?
+    5 | test Box.Put "gives" { assert Box(1).Get() == 1 }
+      |      ^~~~~~~
+compilation failed with 1 error
+=== b7atargettwice.olang
+b7atargettwice.olang:5:6: error[B7a]: this file has a test of 'twice' described so already - tell them apart by their descriptions
+    5 | test twice "doubles" { assert twice(3) == 6 }
+      |      ^~~~~
+compilation failed with 1 error
+=== b7atargetunknown.olang
+b7atargetunknown.olang:4:6: error[B7a]: a test names a function, a type or Type.Method of its file, and 'twise' is none - did you mean 'twice'?
+    4 | test twise "doubles" { assert twice(2) == 4 }
+      |      ^~~~~
+compilation failed with 1 error
 === b9aminover.olang
 b9aminover.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it divides the most negative value by -1, which overflows (b9aminover.olang:4)
     4 | if (-9223372036854775807 - 1) / -1 == 0 {
@@ -1339,6 +1359,41 @@ e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or p
     6 |     n := pick()()
       |                ^
 compilation failed with 1 error
+=== e14bafter.olang
+e14bafter.olang:4:41: error[E14b]: an argument by position comes before every argument by name
+    4 | fn main() { x := connect("h", port = 2, 5) }
+      |                                         ^
+compilation failed with 1 error
+=== e14bnothere.olang
+e14bnothere.olang:3:22: error[E14b]: an argument by name gives a function's, a method's or a constructor's defaulted parameter, in a call
+    3 | fn main() { x := I32(v = 3) }
+      |                      ^~~~~
+compilation failed with 1 error
+=== e14bpositional.olang
+e14bpositional.olang:4:34: error[E14b]: parameter 'port' is given by position already
+    4 | fn main() { x := connect("h", 3, port = 2) }
+      |                                  ^~~~
+compilation failed with 1 error
+=== e14brequired.olang
+e14brequired.olang:4:26: error[E14b]: parameter 'host' declares no default, so it is given by position, not by name
+    4 | fn main() { x := connect(host = "h") }
+      |                          ^~~~
+compilation failed with 1 error
+=== e14btwice.olang
+e14btwice.olang:4:41: error[E14b]: parameter 'port' is named twice
+    4 | fn main() { x := connect("h", port = 1, port = 2) }
+      |                                         ^~~~
+compilation failed with 1 error
+=== e14bunknown.olang
+e14bunknown.olang:4:31: error[E14b]: 'timout' names no parameter of 'connect' - did you mean 'timeout'?
+    4 | fn main() { x := connect("h", timout = 3) }
+      |                               ^~~~~~
+compilation failed with 1 error
+=== e14bvalue.olang
+e14bvalue.olang:6:17: error[E14b]: a call through a function value takes its arguments by position - a function type names no parameters
+    6 |     x := f("h", port = 2)
+      |                 ^~~~~~~~
+compilation failed with 1 error
 === e15atryonlychecks.olang
 e15atryonlychecks.olang:3:37: error[R8]: nothing here can fail - write it without 'try'
     3 | fn add(a I32, b I32) I32 ? { return try a + b }
@@ -1364,6 +1419,11 @@ compilation failed with 1 error
 e16getnotry.olang:5:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
     5 |     x := a.Get(1)
       |            ^~~
+compilation failed with 1 error
+=== e16slicenumber.olang
+e16slicenumber.olang:4:19: error[E16]: I64 cannot be indexed
+    4 | fn main() { x := $Live[:1] }
+      |                   ^~~~~~~~
 compilation failed with 1 error
 === e23lenclash.olang
 e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
@@ -3947,18 +4007,8 @@ qwnointro.olang:4:11: error: expected a name, found '<'
     4 | fn pick(a <T>, b T) T { return a }
       |           ^
 compilation failed with 1 error
-=== r11bcaptured.olang
-r11bcaptured.olang:6:50: error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
-    6 |     try f() catch e { k := fn() String { return $e } }
-      |                                                  ^
-compilation failed with 1 error
-=== r11bcapturedcmp.olang
-r11bcapturedcmp.olang:10:47: error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
-   10 |         n := xs.Count(fn(x I64) Bool { return e == P.A })
-      |                                               ^
-compilation failed with 1 error
 === r11bcaseform.olang
-r11bcaseform.olang:8:18: error[R11b]: a case of a caught error names an error word, an error type or a named set
+r11bcaseform.olang:8:18: error[R11b]: a case of an error value names an error word, an error type, a named set or null
     8 |             case 3 { }
       |                  ^
 compilation failed with 1 error
@@ -3967,15 +4017,15 @@ r11bcasenever.olang:9:13: error[R11b]: this case is never reached: the cases bef
     9 |             case P.A { }
       |             ^~~~~~~~~~~~
 compilation failed with 1 error
-=== r11bcomparecaught.olang
-r11bcomparecaught.olang:7:30: error[R11b]: two caught errors are never compared - compare each with an error word or an error type
-    7 |         try f() catch d { if d == e { } }
-      |                              ^~~~~~
+=== r11bcaughtassigned.olang
+r11bcaughtassigned.olang:6:23: error[R11b]: 'e' names the error this clause took and is never assigned - hold a value that changes in a local of its own ('x := e')
+    6 |     try f() catch e { e = P.B }
+      |                       ^
 compilation failed with 1 error
 === r11bcomparewhat.olang
-r11bcomparewhat.olang:6:31: error[R11b]: 'e' is compared with an error word, an error type or a named set - 'e == T.WORD', 'e == T'
+r11bcomparewhat.olang:6:28: error[T20]: 'e' is compared with an error word, an error type, a named set or another error value - 'e == T.WORD', 'e == T'
     6 |     try f() catch e { if e == 3 { } }
-      |                               ^
+      |                            ^~
 compilation failed with 1 error
 === r11blonetypo.olang
 r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
@@ -3983,7 +4033,7 @@ r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names th
       |                   ^~~~
 compilation failed with 1 error
 === r11bmatchblock.olang
-r11bmatchblock.olang:8:9: error[R11b]: a match on a caught error giving a value gives it with '=> v' in every case
+r11bmatchblock.olang:8:9: error[R11b]: a match on an error value giving a value gives it with '=> v' in every case
     8 |         case P.B { return }
       |         ^~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
@@ -3997,16 +4047,6 @@ r11bnever.olang:7:33: error[R11b]: 'e' is never Q here - it is P
     7 |     try f() catch P e { if e == Q { } } catch Q { }
       |                                 ^
 compilation failed with 1 error
-=== r11bnotavalue.olang
-r11bnotavalue.olang:6:28: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
-    6 |     try f() catch e { y := e }
-      |                            ^
-compilation failed with 1 error
-=== r11bpassed.olang
-r11bpassed.olang:7:25: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
-    7 |     try f() catch e { g(e) }
-      |                         ^
-compilation failed with 1 error
 === r11btask.olang
 r11btask.olang:7:31: error[R11b]: a spawned call's clause runs on the task's thread and names no error - leave 'e' off, or catch it where the join fails
     7 |         spawn try f() catch P e { }
@@ -4016,7 +4056,10 @@ compilation failed with 1 error
 r11btry.olang:6:32: error[R11b]: 'e' is an error already caught, not a call - raise it again with 'error e'
     6 |     try f() catch e { x := try e }
       |                                ^
-compilation failed with 1 error
+r11btry.olang:6:19: error[R11b]: 'e' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
+    6 |     try f() catch e { x := try e }
+      |                   ^
+compilation failed with 2 errors
 === r11bunused.olang
 r11bunused.olang:6:21: error[R11b]: 'e' names the error this clause took, and nothing uses it - leave the name off
     6 |     try f() catch P e { }
@@ -4114,7 +4157,7 @@ r3bareerror.olang:4:22: error: expected a name, found '}'
       |                      ^
 compilation failed with 1 error
 === r3raisenotcaught.olang
-r3raisenotcaught.olang:6:11: error[R3]: 'error' raises a word, 'error T.WORD', or the error a clause took - 'x' is neither
+r3raisenotcaught.olang:6:11: error[R3]: 'error' raises a word, 'error T.WORD', or an error value - 'x' is neither
     6 |     error x
       |           ^
 compilation failed with 1 error
@@ -5666,20 +5709,36 @@ t19worddeclaredtwice.olang:3:22: error[T19]: error word 'Y' is already declared
     3 | type C error { Y, Z, Y }
       |                      ^
 compilation failed with 1 error
-=== t20errorparam.olang
-t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
-   12 | type Holder struct(e E) { e }
-      |                      ^
-t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
-   13 | fn final(e E) Bool { return e != E.A }
+=== t20comparednoterror.olang
+t20comparednoterror.olang:6:8: error[T20]: 'n' is I64, not an error value - only an error value is 'P.A'
+    6 |     if n == P.A { }
+      |        ^
+compilation failed with 1 error
+=== t20errorresult.olang
+t20errorresult.olang:4:16: error[T20]: E is an error type: an error is raised, never returned - write '? E' after the parameters
+    4 | fn pick(n I64) E { return E.A }
+      |                ^
+compilation failed with 1 error
+=== t20errvaluenoop.olang
+t20errvaluenoop.olang:6:12: error[T20]: '+' on P: an error value is no number - it is compared with '==' and '!=', and rendered with '$'
+    6 |     x := e + 1
       |            ^
-t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == E.A { } }')
-   13 | fn final(e E) Bool { return e != E.A }
-      |                                  ^~~
-t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
-   15 |     x E
+compilation failed with 1 error
+=== t20matchnoterror.olang
+t20matchnoterror.olang:6:11: error[T20]: the cases name errors, and 'n' is I64, not an error value
+    6 |     match n {
+      |           ^
+compilation failed with 1 error
+=== t20nevernull.olang
+t20nevernull.olang:8:18: error[T20]: 'e' holds an error here, never null - a caught error, a word written or a value a test says is not null
+    8 |             case null { }
+      |                  ^~~~
+compilation failed with 1 error
+=== t20valuenotheld.olang
+t20valuenotheld.olang:9:7: error[T20]: expected P, found PQ, which can be Q - test it first ('if e == T'), or hold it in a set that has it
+    9 |     g(v)
       |       ^
-compilation failed with 4 errors
+compilation failed with 1 error
 === t22afallible.olang
 t22afallible.olang:10:16: error[E12]: expected fn(n I32) I32, found fn(n I32) I32 ? E
    10 |     k := apply(bad, 5)
