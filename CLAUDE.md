@@ -869,7 +869,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a call is evaluable when what it does is, and the places that need a value ask for one). The evaluator
   (`compiler/eval.olang`) interprets the checked program with the run time's semantics and refuses only what it must
   (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function
-  is evaluable is a property of the function (K1a). It must handle everything it can (the user's rule).
+  is evaluable is a property of the function (K1a); a body that did not check - a global's initializer, a default - is
+  no value to anything reading it, so one mistake is one error (2026-10-26). It must handle everything it can (the user's rule).
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
   can decide is checked while compiling (S18c); a condition the build decides (B9c, S8b); fixed locals (S8c).
 - **Tests the evaluator runs** sit beside run-time tests for every language change (the checklist above).

@@ -144,6 +144,8 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         chosen, ok, why, at := chain(x, c, t.First, ti)
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
+        # one reading what did not check - a global whose initializer had an error - waits on that error, said already
+        if not ok and why == "" and c.CondReadUnknown { continue }
         if not ok {
             # B9c: a condition that does not check here - what it uses exists only in the branches being decided - or
             # whose evaluation stops is an error at it, decided now as stage 0 decides it: its if takes no branch

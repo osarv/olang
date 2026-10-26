@@ -25005,3 +25005,17 @@ literal's width" - which stays for a negative amount and for a float literal shi
 the largest integer literal is U128's ...", E4a "no integer type holds it, from I128's least to U128's greatest", and
 the new T6a one. Tests: tests/intwidths.olang's `litCase` (baked, decided while compiling, run), checks cases
 t4awideliteral, t4awiderange, t4awideint, inttoolarge, inttoowideu64.
+
+**A global whose initializer failed is no value (K1a).** `X := String(1)` then `assert X.Len() > 0` gave a second
+error, S18c's "this assertion is false", after the E12 the initializer had. Nothing evaluated the global: a global
+whose initializer does not check has no type, the checker's stand-in for it (an unknown-typed literal 0) fits
+anything, and the assert's condition, built from it, was a constant the evaluator then read - `X.Len()` 0, `X == "a"`
+false, `Y[0] == 'a'` false for a typed `Y String = String(2)` (its zero-filled storage read). A condition body
+(`ExprBodyIn` - asserts, top-level and local conditions, contract and value decisions) is now refused when its check
+made any stand-in (`unknowns`, counted by `unknown()` and by a read of a global whose type is unknown), as one
+whose check reported an error already was; a top-level condition refused so waits on the error already said rather
+than adding B9c's "does not check". And the evaluator reads a global, while compiling, only once its initializer has
+run (`WhyNoGlobal`) - a typed global whose initializer had an error is never lowered (K1a), and its zero storage had
+been readable through a place. The same pattern looked for elsewhere: a default that does not check and a typed
+constant `N I64 = I64("b")` (and `M := N + 1` from it) already gave one error each - pinned by
+checks/cases/k1faultydefault beside k1faultyglobal.

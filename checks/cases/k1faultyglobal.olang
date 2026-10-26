@@ -1,0 +1,18 @@
+# check: fail error[E12]: expected Array<Char>, found I64
+# never: S18c
+# never: B9c
+# K1a: a global whose initializer had an error is no value to any later evaluation - neither the assert nor the
+# top-level condition reading it is decided by its stand-in, so the one mistake is one error
+X := String(1)
+Y String = String(2)
+if X.Len() > 0 {
+    fn h() I64 { return 1 }
+} else {
+    fn h() I64 { return 2 }
+}
+fn main() {
+    assert X.Len() > 0
+    assert X == "a"
+    assert Y[0] == 'a'
+    assert Y.Len() > 0
+}

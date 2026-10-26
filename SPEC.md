@@ -7887,6 +7887,11 @@ call would take. A context that needs such a call evaluated reports that operati
 written. What aborts the program (`unreachable`, `assert`, a guaranteed check) is not such an operation: it
 stops an evaluation only where it is reached (K1).
 
+A body that did not check - a function's, a global's initializer, a default - is never evaluated, and neither is
+anything reading it: an assert (S18c), a condition (B9c, S8b) or a global (K2) that reads a global whose initializer
+had an error, or a default that had one, decides nothing, so the error already said is the only one - never a second,
+computed from what stands in for the value that does not exist.
+
 **K2.** An **immutable global** whose initializer can be evaluated at compile time is: its value is
 part of the program as data, and nothing runs at startup to set it. Where the initializer cannot be, the
 global is set at startup (B5a) exactly as before - evaluation is attempted, never required, here - so

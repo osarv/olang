@@ -77,6 +77,7 @@ WhyWritesGlobal String& = "it writes a global or what one holds, which the runni
 WhyWritesGlobalVar String& = "it writes a global, which the running program would then not see written"
 WhyCycle String& = "these globals are defined in terms of each other"
 WhyNoValue String& = "its initializer does not produce a value"
+WhyNoGlobal String& = "it reads a global whose initializer has not run - one with an error never does"
 WhyDestructor String& = "it builds a value whose destructor runs when its scope closes"
 WhyExtern String& = "it calls an external function"
 WhyEnds String& = "it ends the test or the process"
@@ -1780,6 +1781,12 @@ fn (m mut Machine&) place(fi I64, p mir.Place) Ptr, types.TypeId {
         case mir.Base.Global(module, name, gt) {
             g := try m.globalOf.Get(gkey(module, name)) catch {
                 m.refuse(WhyNoBody)
+                return NullPtr, gt
+            }
+            # K1: while compiling a global is read only once its initializer has run - one whose initializer had an
+            # error, and so never runs (K1a), is no value, never its zero-filled storage
+            if m.When == Mode.Compile and g != m.initGlobal and m.globals[g].State != 2 {
+                m.refuse(WhyNoGlobal)
                 return NullPtr, gt
             }
             ptr = Ptr(m.globals[g].Store, 0)

@@ -269,6 +269,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # G30: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
     # binds is read as its value (a condition's is not: one parse of a local if serves every instance, S8b)
     constsRead Bool = false
+    unknowns I64 = 0           # the stand-ins made for what did not check: a body holding one is never evaluated (K1a)
+    CondReadUnknown Bool = false   # the last condition body refused for reading what did not check, said already
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
     # S8c: by (body, local), a plain scalar local declared with its own value - its initializer and type; and every local
     # a body writes (stores, increments, targets, atomics). A condition or assert asked for reading such a local reads
@@ -2056,6 +2058,7 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     read := c.lastFixed.ToArray()
     mark := d.Count()
     gaps := c.Gaps.Len()
+    unk := c.unknowns
     sp := x.Span()
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
     c.state[id] = 1
@@ -2081,7 +2084,10 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     if ns.Len() > 0 { c.drain() }
     c.lastFixed.Clear()
     for l in read { c.lastFixed.Push(l) }
-    if d.Count() > mark or c.Gaps.Len() > gaps {
+    # K1a: one reading what did not check - a global whose initializer had an error, a default that did not check - is
+    # no value to decide by, its stand-in being no value of the program's (one error, not a second false assert)
+    c.CondReadUnknown = d.Count() == mark and c.Gaps.Len() == gaps and c.unknowns > unk
+    if d.Count() > mark or c.Gaps.Len() > gaps or c.unknowns > unk {
         d.Forget(mark)
         c.Gaps.Truncate(gaps)
         c.Bodies[id].Root = null
@@ -4803,7 +4809,10 @@ fn isData(x typed.Expr&) Bool {
     }
 }
 
-fn (c mut Checker&) unknown(sp source.Span) typed.Expr&c { return typed.Expr.Lit(sp, types.UnknownT, 0) }
+fn (c mut Checker&) unknown(sp source.Span) typed.Expr&c {
+    c.unknowns++
+    return typed.Expr.Lit(sp, types.UnknownT, 0)
+}
 
 fn (c mut Checker&) lit(sp source.Span, t types.TypeId, bits I64) typed.Expr&c { return typed.Expr.Lit(sp, t, bits) }
 
@@ -6075,6 +6084,7 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr?&c {
     }
     if ref.Kind == names.What.Global {
         t := c.globalType(ref.Module, n)
+        if t == types.UnknownT { c.unknowns++ }   # K1a: its initializer did not check
         return c.read(sp, typed.Place.Global(sp, t, ref.Module, n))
     }
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
