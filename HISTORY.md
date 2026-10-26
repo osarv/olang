@@ -25415,6 +25415,12 @@ drop registered (fewer instructions than before: 72M -> 60M on that shape). Maki
 would take a branch on an opaque value, not taken. A generator given a reference lands where that reference lives
 (D18b): given text from a block around the loop it is walked in, or constant text, its walk is not one of these.
 
+**Found by the verify, fixed.** A build cut into parts (B3l, by symbol) put a generator function's `.walk` form in another
+part than its plain form, and the walk form names its generator's code only by `.coro` and `.wnext`: a local item (a
+lambda) is copied into a part only where something there names it, and those names were no item, so the part named an
+undefined `@olang_lambda_N.coro` (tests/shared.olang's test build). A coroutine's `.coro`, `.wnext` and `.drop` now
+name the item of its Next (`itemNamed`), for copying and renaming alike - a rename keeps the suffix.
+
 **Found, pre-existing, not fixed (a decision for D18b).** A generator given something in the program scope - constant
 text, `gn(n, "r")` - lands there, so each walk's frame stays until the program ends (148 bytes a walk: 591 MB over 4M
 calls of a function walking one, the compiler before this batch the same) and the destructors of what its body holds

@@ -311,7 +311,7 @@ fn (e mut Emitter&) instGroups() {
             rs := e.refs(i)
             for r in range 0, rs.Len(), 3 {
                 if rs[r] != 0 { continue }
-                j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+                j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
                 if j < 0 { continue }
                 h := e.itemHome[j]
                 if h == HomeInst {
@@ -628,7 +628,7 @@ fn (e mut Emitter&) mergeSame() {
         rs := e.refs(i)
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0 { continue }
-            j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
             if j < 0 or reach.Has(j) or (e.itemHome[j] != HomeShared and e.itemHome[j] != HomeLocal) { continue }
             reach.Put(j, true)
             work.Push(j)
@@ -839,7 +839,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
                 continue
             }
-            j := try e.itemAt.Get(name) catch default -1
+            j := e.itemNamed(name)
             if merging and j >= 0 { j = try e.merged.Get(j) catch default j }
             if j < 0 or have.Has(j) or declared.Has(j) { continue }
             h := e.itemHome[j]
@@ -893,10 +893,12 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 continue
             }
             if rs[r] != 0 { continue }
-            j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            name := text[rs[r + 1]:rs[r + 2]]
+            j := e.itemNamed(name)
             if j < 0 or not rename.Has(j) { continue }
             out.Push(text[at:rs[r + 1]])
             out.Push(try rename.Get(j) catch default "")
+            out.Push(name[e.itemSym[j].Len():])     # what follows the item's own symbol (itemNamed: ".coro" ...)
             at = rs[r + 2]
         }
         out.Push(text[at:])
@@ -1597,6 +1599,18 @@ fn (e mut Emitter&) refs(i I64) Array<I64>&e {
 }
 
 fn (e mut Emitter&) has(symbol String&) Bool { return e.itemAt.Has(symbol) }
+
+# the item a symbol named in a text is, -1 for none: a generator's coroutine, its walk's Next and its drop (".coro",
+# ".wnext", ".drop") are written in the item of its Next, so naming one of them names that item - a walk form (D18e)
+# names only its ".coro" and ".wnext", and a local item is copied into an object only when something there names it
+fn (e Emitter&) itemNamed(name String&) I64 {
+    j := try e.itemAt.Get(name) catch default -1
+    if j >= 0 { return j }
+    for suf in String&[".coro", ".wnext", ".drop"] {
+        if name.EndsWith(suf) { return try e.itemAt.Get(name[:name.Len() - suf.Len()]) catch default -1 }
+    }
+    return -1
+}
 
 fn (e mut Emitter&) define(symbol String&, text String&) { e.item(symbol, HomeShared, $text "\n") }
 
