@@ -34,7 +34,6 @@ import "lower"
 import "eval"
 import "cabi"
 import olrt "runtime"
-import "std/fuzz"
 
 # the emission of a program: P the checked program, Lw its lowering, D for where things are (FILE:LINE)
 type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Diagnostics&, T mut types.Table&) {
@@ -6308,6 +6307,31 @@ fn (e mut Emitter&) fuzzSelected(tests Vec<I64>) Vec<I64> {
     return out
 }
 
+# B19: a test's name as its saved inputs' directory names it, and that directory - as std/fuzz's Slug and Corpus give
+# them, which replay what the harness saves (the checks' testfuzz scenario holds the two to each other). Written here
+# rather than imported, so the compiler's own build reads no std module the seed's compiler may not parse
+fn fuzzSlug(name String&) String {
+    b := StringBuilder()
+    gap := false
+    for c in name {
+        if c.IsLetter() or c.IsDigit() {
+            if gap and b.Len() > 0 { b.PushChar('_') }
+            b.PushChar(c)
+            gap = false
+        } else {
+            gap = true
+        }
+    }
+    if b.Len() == 0 { return "test" }
+    return b.ToString()
+}
+
+fn fuzzCorpus(file String&, name String&) String {
+    slash := try file.FindLast("/") catch default -1
+    if slash < 0 { return $"testdata/fuzz/" $fuzzSlug(name) }
+    return $(file[:1] if slash == 0 else file[:slash]) "/testdata/fuzz/" $fuzzSlug(name)
+}
+
 # each directory a path names, outer first, for mkdir: "a/b/c" gives "a", "a/b", "a/b/c"
 fn dirsOf(path String&) Vec<String&> {
     out Vec<String&>
@@ -6337,8 +6361,8 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
     id := picked[0]
     name := e.testName(id)
     file := e.P.L.Mods[e.P.L.Root].Path
-    corpus := fuzz.Corpus(file, name)
-    cache := $e.FuzzCache "/" $fuzz.Slug(name)
+    corpus := fuzzCorpus(file, name)
+    cache := $e.FuzzCache "/" $fuzzSlug(name)
     e.FuzzCorpus = $corpus
     e.testSource()
     e.declare("malloc", "ptr @malloc(i64)")

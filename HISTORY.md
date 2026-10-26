@@ -25751,8 +25751,9 @@ by B7a's word rule; none or several is an error naming the rule (`B19`). The pla
 (an input starting `FUZZ`) is found in well under a second; with `-sanitize` too. std/fuzz reads the runtime through
 four functions (`__olang_fuzz_input`, `__olang_test_running`, `__olang_test_source`, `__olang_test_detach`): the
 harness now names the running test and the file to them in every test build (two stores - nothing else changes in a
-test run). The slug is std/fuzz's `Slug`, which the emitter imports, so the harness and the replay agree by
-construction.
+test run). The slug is std/fuzz's `Slug`, written again in the emitter (`fuzzSlug`): importing std/fuzz into the
+compiler made the seed's compiler, which predates test targets, fail to parse std/fuzz's `test Slug "..."` in the
+bootstrap - the testfuzz scenario holds the two to each other (the harness saves, std/fuzz replays).
 
 **Property tests (B19a).** `prop.Check(f, cases = 100)` reflects over `f`'s function type (`F.Params`; a reference
 parameter given a value of its target through G35's per-instance conditional), makes values from bytes, and calls `f`
