@@ -1294,3 +1294,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   library goes where the declarations come from - `import "zlib.h" as z link "z"` and `extern "z" fn f(...)` (no name =
   libc or already linked); the standalone `link` declaration goes; `import "path" as alias` replaces `import alias
   "path"` (reads aloud, `as` already a keyword), migrated by a tool. ASKED.
+- QBD follow-up 2026-10-26 (the user: "since we might need to restructure and copy, does that mean we lose
+  efficiency? ... Matrix with metadata where the data never is reordered? ... I think b) is the best"): answered -
+  (b) as a strided tensor (storage, offset, shape, strides): transpose, permute, slice and any reshape strides can
+  express are metadata only; a kernel takes a 2-D view with strides (Gemm already reads transposed operands in place);
+  the only copy is one written (`t.Contiguous()`/`Clone()`), a Reshape strides cannot express being an error naming
+  it. Proposed as decided unless the user objects.
+- QBE follow-up 2026-10-26 (the user: link with import or extern - yes; standalone `link "golib" "go"` naming an ABI
+  for a third language?; keep `import alias "path"` since a name comes before its definition): answered - every other
+  language crosses through the C ABI (Go c-shared + cgo's header, Rust extern "C" + cbindgen, Zig export), Go/Rust have
+  no stable ABI of their own and Go's needs its runtime, so no ABI names; such libraries ship headers, so `import golib
+  "golib.h" link "golib"` covers them; for the rare header-less case, an extern block names the library once:
+  `extern "golib" { fn Add(a I64, b I64) I64 ... }`, a single `extern "z" fn` allowed too; the standalone `link`
+  goes. Import alias form KEPT as `import alias "path"` (the user's reasoning). ASKED: extern blocks.
