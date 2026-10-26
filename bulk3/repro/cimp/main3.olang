@@ -1,0 +1,9 @@
+import "std/io"
+T := "hello"
+G := I64[1, 2]
+fn w(b mut Array<Char>&) { b[0] = 'z' }
+fn wi(b mut Array<I64>&) { b[0] = 9 }
+fn main() {
+    w(T)
+    io.Println(T)!
+}

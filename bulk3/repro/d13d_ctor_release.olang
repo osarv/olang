@@ -1,0 +1,29 @@
+import "std/io"
+
+# D13d: a constructor field with no value, assigned on every path - so no zero is written - whose type holds a sole
+# place: the field's first assignment is a let-go of what it "held"
+type Node struct(v I64, pad Array<I64>& = Array<I64>(100)) { v, pad }
+type Holder struct(n Node?&) { n }
+type Prog struct(c Bool) {
+    h Holder
+    if c { h = Holder(Node(1)) } else { h = Holder(Node(2)) }
+}
+
+fn junk(k I64) I64 {
+    a, b, c, d I64 = k * 7919 + 4096, k * 104729 + 8192, k * 15485863, k * 32452843
+    e, f, g, h I64 = a ^ b, b ^ c, c ^ d, d ^ a
+    return a + b + c + d + e + f + g + h
+}
+
+fn main() {
+    s I64 = 0
+    for k in range 1000 {
+        s += junk(k)
+        p := Prog(k % 2 == 0)
+        for i in range 100 {
+            p.h = Holder(Node(i))
+            s += p.h.n!.v
+        }
+    }
+    io.Println($s)!
+}

@@ -1,0 +1,36 @@
+import "std/io"
+
+fn labels(n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $"label " $i
+        yield s
+    }
+}
+
+fn words(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == 0x20 { i++ }
+        j := i
+        for j < t.Len() and t[j] != 0x20 { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 200 {
+        v := Vec<String&>()
+        for k in range 3 { v.Push($i "-churn-churn-churn-" $k) }
+        n += v[2].Len()
+    }
+    return n
+}
+
+fn main() {
+    kept := Vec<String&>()
+    v := labels(2).ToVec()
+    churn()
+    for w in v { io.Println(w)! }
+}

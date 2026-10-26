@@ -1,0 +1,10 @@
+import "std/io"
+import c "pt.c"
+
+fn main() {
+    t := "hello"
+    c.fillbuf(t, 3)
+    io.Println(t)!
+    u := "hello"
+    io.Println(u)!
+}
