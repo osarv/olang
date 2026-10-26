@@ -35,6 +35,7 @@
 #     fuzz free START COUNT [JOBS [SCENARIOS]]    seeds START.., the places the -memory reports free at once counted
 #     fuzz freeshow SEED [SCENARIOS]              prints an early-free program
 #
+# FUZZ_WIDTHS=odd runs either with the signed integers at I9, I17 and I33 (gen.olang).
 # Everything a check runs is under "nice -n 19". The compiler is $OLANG, else build/olang (make bootstrap) - relative to the working directory when it is relative.
 import "std/io"
 import "std/os"

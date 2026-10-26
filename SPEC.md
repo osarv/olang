@@ -2484,7 +2484,10 @@ sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
 (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`, `Vec<Char>['a']` (each `Char`
 a character literal, an array of them rendering as text). A `Vec` is the growable array; `std/list`'s `List` is for
 what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
-collections say what they stop using with two operations only the prelude has: `a.retire()`, where they stop using an
+collections say what they stop using, and how a buffer grows, with three operations only the prelude has:
+`a.grown(n)`, a new array of `n` elements whose first `a.Len()` are `a`'s, moved out of it as `vacate` moves them, and
+whose rest is never filled - the prelude's claim that it writes each of those before reading it, as a `Vec`'s room past
+its count is, so a doubling writes each byte once; `a.retire()`, where they stop using an
 array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - and `p.vacate()`,
 which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d): a removal (`Pop`,
 `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`, a `Map`'s `Remove`, `Take` and `Clear`) vacates
@@ -2570,7 +2573,9 @@ where it is made, so a literal base cannot fail. `t.ParseAs<T>(base Radix = 10) 
 any type `T` of the `Integer` trait (T4a): as `ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one,
 failing with `OVERFLOW` outside `T`'s range (`"128".ParseAs<U7>()`) and `INVALID` for a `-` before an unsigned one's
 digits; a type wider than 64 bits takes digits up to its own range (`"340282366920938463463374607431768211455".ParseAs<U128>()`),
-and base `0`'s prefixed literal is read as a program reads one (L10a), its 64 bits then fitting `T`. Text has
+and base `0`'s prefixed literal is read as a program reads one (L10a): a pattern of at most 64 bits as `ParseInt` or
+`ParseUint` reads it, then fitting `T`, and a wider one - up to 128 bits - worth its bits read unsigned, fitting `T`
+where that value does (`"0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0)` is 2^65 - 1; a `-` before it negates that value). Text has
 `PadStart(width, fill = ' ')` and
 `PadEnd(width, fill = ' ')`: new text `width` characters wide, `fill` repeated before or after it - the text whole,
 never cut, when it is that wide already. Every integer type of every width (T4a) has the same two, padding its decimal
@@ -2951,7 +2956,8 @@ the result is the shifted operand's own type.
 **undefined behaviour** — the two operands need not share a type (E5), and it is the left one's width that
 bounds the right one. Nothing is checked at run time. Where the amount is a literal or a literal-only expression
 (E4a) the check is made at compile time and an out-of-range one is a compile-time error, which costs nothing to
-apply. The one exception is a shift that is itself part of a literal-only expression something adapts (E4a): it is
+apply - at every width (T4a: `u << 7` on a `U7`, `x >> 128` on an `I128`), in a compound assignment (`x <<= 9`) and
+lane by lane (E39) alike. The one exception is a shift that is itself part of a literal-only expression something adapts (E4a): it is
 computed exactly while compiling, so only its result must fit (`x I64 = 1 << 40`); a negative amount is still an error,
 and with nothing adapting it the shift is its literal's own type's and the amount is judged against that width.
 
@@ -3340,8 +3346,11 @@ scope `base`'s storage belongs to: slicing a
 local yields a reference in that local's block, slicing an array reference yields one in its referent's scope. The result has
 length `hi - lo` - known while compiling where T7c says (constant bounds, or `lo` and `lo + k`), which is how a
 length known only at run time is made a known one, its bounds checked once (E16b) - and writing through it writes
-`base`. Slicing a local borrows its storage as a reference to it does (E12c): a constructor's field kept a slice of is
-stored where the instance lands (C2d).
+`base`. So it carries `base`'s permission (T25b): a slice of an array reference is writable where the reference is,
+and a slice of an array held by value is writable where a store into that place is allowed (S6) - a slice of an
+immutable global's array (`G[0:2]`, `G.a[:]`), or of an array reached through a read-only reference, is read-only, and
+lending it writably or storing through it is an error (T25c, T25b). Slicing a local borrows its storage as a reference
+to it does (E12c): a constructor's field kept a slice of is stored where the instance lands (C2d).
 
 Slicing a value with no storage of its own - an inline array of a call's result held by value (`mk(n).a[0:2]`), of a
 constructor's instance, a literal, a new array (`Array<T>(n)[0:2]`), a payload read with `as` from an enum held by value
@@ -3665,7 +3674,10 @@ goes where the reference points). Under `try` (R21) they are the plain `At` and 
 (E31). A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
 compile-time error naming `SetAt`. The element is read and written after the value is computed (S4), so a value that
 shrinks the collection leaves the held index out of range when the access runs - the program's out-of-range index
-(E16e), unchecked.
+(E16e), unchecked. A compound store whose operator is a method - `x[i].f += v` on a declared type with its own `Plus`,
+`x[i].f++` through its `Inc` or `Plus`, an array of such elements in place lane by lane (E39) - would run that method
+between the read and the write-back, and is a compile-time error naming the written-out form (`t := x[i]`, the store
+into `t`, then `x[i] = t`).
 
 **A call that could write the copy is an error**: a method with a writable receiver called on `x[i]` (or on a field or
 an element of it), `x[i].M()`, or `x[i]` passed for a writable reference parameter, `g(x[i])` - where the element is not a **handle** (O17b) - the callee runs between the read and the write-back and may reach the collection another way,
@@ -3944,6 +3956,16 @@ Each takes lane operators as its receiver and arguments with the same fusion: `a
 
 `x op= v` with `x` an array and `op` a lane operator writes `x`'s elements in place, lane by lane - `y += a * k` is an
 axpy with no storage made; the lengths are checked as above. `y = a + b` builds the result and then assigns it (T11b).
+`x`'s place is evaluated once and must be writable (S6, T25b, T25c: through a read-only reference the store is an
+error), and an element type that is or holds a reference is an error here as everywhere above. Each lane is computed
+and stored before the next is read, as the loop written by hand would: an operand overlapping `x` reads, in a later
+lane, what an earlier lane stored (`s := a[1:5]; s += a[0:4]` is a running sum; a lane reading only its own element,
+`x += x`, is unaffected). Building the whole result first - which reads every old value - is `x = x + v`. Through
+`x[i]` on a type with `At` (E31b) the store is a read-modify-write: an inline array of the element (`v[i].arr += k`)
+is read into the copy, stored into lane by lane and written back with `SetAt`, the operand's lanes evaluated before
+the element is read; one whose lanes call an operator method is an error, the method running between the read and the
+write-back; an array a reference read out of `x[i]` names (`v[i].xs += k`, `w[i] += k`) is written where the
+reference points, nothing written back, as `v[i].xs[j] += k` is.
 
 ```
 d := (a * b).Sum()                      # a dot product: one loop, no array
@@ -5461,7 +5483,9 @@ early changes no value a program can read, runs no destructor (O15), and is not 
 memory use is the only way to see it.
 
 **O8a (allocation alignment).** Storage a scope hands out for an array's elements is aligned by its own size: 8 bytes
-below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above. This is enough for the vector types a machine's
+below 32, 32 bytes from 32 up to 64, and 64 bytes at 64 and above - and at least as its element type is, where that is
+more than 8 (an integer of 65 to 128 bits, T4a, and what holds one, are aligned 16: an `Array<I128>` of one element is
+16-aligned). This is enough for the vector types a machine's
 SIMD unit loads, and for a cache line, so an array large enough to be worth vectorising is always aligned
 for it without anything being written at the declaration. Storage for any other value - a struct or an enum an
 instance of which is made in a scope, a lambda's captures, a value too large for a frame - is aligned as its type is

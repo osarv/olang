@@ -48,8 +48,8 @@ fn (s mut vecState<T>&) room(need I64) {
     r I64 = 8 if s.data.Len() < 4 else s.data.Len() * 2
     if r < need { r = need }
     if r < s.want { r = s.want }
-    old := s.data[:s.n]
-    s.data = old.grown(r)
+    old := s.data
+    s.data = old[:s.n].grown(r)
     old.retire()
 }
 

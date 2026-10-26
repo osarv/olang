@@ -220,7 +220,11 @@ Each of these only keeps memory; none is ever an error.
 10. **A value of a place stored inside another value of it** keeps, unless it is reached through the very reference the
    container is, in one statement: one key names every instance (F2).
 11. **A value whose building may register a destructor in its region** - a constructor's instance no reference takes
-   (O16), a callee's built result - keeps its place: only a `Destroy()` ends such an instance early (F4).
+   (O16), a callee's built result - keeps its place: only a `Destroy()` ends such an instance early (F4). A lane
+   operation's result and a comprehension are walked statement by statement - the locals they declare, their stores,
+   tests, loops and yields - a statement of any other kind counting as one that may register, so `h.arr = h.arr * 2`
+   in a loop frees the old array at once (the second bulk review's F6; it kept every one); the sequence's value is
+   built in the region, its statements where they stand.
 12. **An `extern` call** lets go of anything where an export fn may, and **a program with an export fn** frees nothing
    early: C may call one from a thread of its own (F6).
 

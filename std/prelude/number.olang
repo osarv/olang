@@ -509,7 +509,7 @@ type NumberError error {
 # -1 - std/arith's Pow fails where it overflows. The product starts from the first factor taken, so no 1 is ever held
 fn (x T) Pow<T Integer>(n U32) T {
     if n == 0 {
-        if T.Max < 1 { return -1 } else { return 1 }
+        if T.Max < 1 { return T.Min } else { return 1 }     # I1's 1 wrapped is its least value, -1
     }
     r T = x
     started := false

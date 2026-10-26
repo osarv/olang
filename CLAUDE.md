@@ -251,6 +251,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   boundary (X2); `Integer` lists every width, sixteen to a line; `Sqrt`, `PadStart` and `PadEnd`
   are `Integer` defaults for the other widths (U8 gets the pads too; a Char reaches none), `T.Min`/`T.Max` deciding
   conditions per instance (G35). A declared type may not be named `I2` (it is one now): the cinterop fixture's struct was renamed.
+  The second bulk review (2026-10-26, HISTORY.md "Bulk review 2, fixed"): the evaluator computes I33-I63 at their own
+  widths (its I64 fast path took them for I64s), std/arith and `Pow` read the width from `T.Max`/`T.Min` (no case list),
+  a literal shift amount is checked against the width (E8a), an array of 128-bit elements is 16-aligned (O8a), and
+  `ParseAs` reads a prefixed literal of up to 128 bits (L10a); `tests/intsweep.olang` holds every width class to the
+  run time.
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal
   adapts to a typed target (T6); an expression of literals only adapts as one literal, computed exactly (E4a); a
   literal another operand cannot hold meets it at its own type (E6d).
@@ -302,7 +307,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
-  `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
+  `a[lo:hi]` is a borrow tagged with the base's scope and permission (an immutable global's array slices read-only,
+  2026-10-26); `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
 - **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
   work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
@@ -310,8 +316,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`ArrayError.EMPTY` on an empty array, NaN propagating), `LanesEqual`/`LanesLess` (`Array<Bool>`), `mask.Select(a,
   b)`, `mask.Some()`/`Every()` take one with no array made. Lengths: a compile-time error where known, else one check per
   operation aborting with "lane lengths differ" (no checked form, mine). Fixed operands give a fixed result; run-time
-  ones a new array where it lands, made with no fill. `x op= v` is in place. Not for text, a non-extending declared
-  array type, or elements holding references; `a < b` on arrays is an error naming `LanesLess`. Built as a checker
+  ones a new array where it lands, made with no fill. `x op= v` is in place: each lane computed and stored before the
+  next is read, so an operand overlapping `x` reads what earlier lanes stored, as the hand loop does (mine, 2026-10-26:
+  what the fused loop guarantees, no run-time overlap check); through `x[i]` (E31b) an inline array is read, stored
+  into and written back, the operand's lanes evaluated first, and lanes calling an operator method there are an error.
+  Not for text, a non-extending declared
+  array type, or elements holding references (in place too); `a < b` on arrays is an error naming `LanesLess`. Built as a checker
   elaboration (`laneNode`s materialized by whoever reads them), not prelude methods, so a user's own map-shaped
   functions do not fuse (mine). std/stats' Sum/Min/Max went to it. Measured level with the hand loop and C at -O3.
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
@@ -363,7 +373,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
   left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
   clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
-  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle. No user-declared
+  reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle,
+  and so is a compound store there through an operator method, which would run between the read and the write-back
+  (2026-10-26: it was dropped unseen). No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
   (`ll[0][0]`), is lent as its reference where its call landed (O17b/O18c); a field of a try-default (R9a) and a
   conditional or match choosing a place (E28) are values, never lent writably or assigned. Any value with no storage
@@ -938,8 +950,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,
   `Clone()` a Vec of its own; it is a type argument, field, global, capture or task argument like any value. Growth
-  doubles (8 first), fills the new buffer with the element being stored (so no zero value is needed), and retires the
-  old buffer, which stays where the Vec lives until that scope closes - so a view taken before a growth reads the old
+  doubles (8 first), the new buffer made by the prelude-only `a.grown(n)` - the elements moved in, the room past them
+  never filled, so no zero value is needed and a doubling writes each byte once (2026-10-26; it was filled with the
+  element being stored first) - and retires the old buffer, which stays where the Vec lives until that scope closes - so a view taken before a growth reads the old
   elements, never freed memory. `View()` is the one way to have the elements as an array (`ViewMut()` writable - so `v.ViewMut().Chunks(n)` is how tasks split a Vec, with no Vec `Chunks` of its own). `for x in v` walks by `At`
   and `Len` (S9d), seeing what the body pushes; `RunFrom` and `VecIter` went (`v.Iter()` is `Indexable`'s). `a.retire()`
   (prelude-only, no method elsewhere) is nothing at run time but under `-sanitize`, where an array made in a module
@@ -1043,6 +1056,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `build/olang`, `OLANG ?= build/olang`. The generated seed (`seed/`, LLVM IR the olang compiler writes of itself for baseline
   x86-64, `make seed`) rebuilds the compiler from nothing in one run, `make bootstrap`, with clang alone (the user,
   2026-10-18; built 2026-10-22, compiler/DESIGN.md section 5). The refactor was modest: no splitting files for size (the user).
+  A construct the checker does not check yet stops a build, as one lowering or emission does not handle does ("it does
+  not check ... yet", 2026-10-26: a checker gap used to be left out of the program silently - a lost write).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
   demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,

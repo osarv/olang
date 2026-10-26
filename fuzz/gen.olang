@@ -24,12 +24,18 @@
 # the numbers' methods (M19d; the floats' through libm while compiling, X8); n.Format(base) read back by ParseInt/ParseUint, and x.Fixed(n).
 # A case's result may be a struct, an enum, an array or a G<i> value, so such globals are baked (K2b) too.
 
+import "std/os"
+
 # the primitive types by code: 0-7 the integers, 8-11 the floats, 12 Bool, 13 String. A case's own struct types are
 # 100 + k, its enum types 200 + k, Array<T> of a primitive T is 300 + T, the case's k-th function type (a lambda's)
 # 400 + k, List<T> of a primitive T 500 + T, Map<K, V> 1000 + 16K + V (K an integer or Bool), fixed storage of N elements
 # 2000 + 16T + N (N 15: an array taken by value, its instance's length), Array<T>& 3000 + T and mut Array<T>& 3100 + T, mut S& of the case's struct k
 # 4000 + k and S& 4100 + k
-Prims := String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
+# FUZZ_WIDTHS=odd: the signed integers I9, I17 and I33 in place of I8, I16 and I32 (T4a) - widths no case of the
+# evaluator's or std's names - and no atomics, which take the eight widths only
+OddWidths := (try os.Env("FUZZ_WIDTHS") catch default "") == "odd"
+Prims := String&["I9", "I17", "I33", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"] if OddWidths else
+    String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
 Widths := I32[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
 TBool I32 = 12
 TStr I32 = 13
@@ -2609,7 +2615,7 @@ fn (g mut Gen&) genCase(ci I64) I32 {
 # renders as expect[i] where has[i]
 fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, has Array<Bool>&) String& {
     g := Gen(seed)
-    g.atomics = atomics
+    g.atomics = atomics and not OddWidths
     b := StringBuilder()
     b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\nimport \"std/arith\"\n")
     prints := StringBuilder()
