@@ -1343,3 +1343,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   on macOS/OpenBSD). Recommended: keep libc on hosted targets now; keep the runtime's libc use behind one layer so a
   libc-free Linux target (static binaries, freestanding later) can be added; musl for static binaries meanwhile. In
   effect: libc.
+- QBF ANSWERED 2026-10-26 (the user: "using libc is fine. We are going to need an operating system free way for FPGAs
+  eventually tho. Maybe even an operating system in the future ... Using libc where it excels is a good idea,
+  especially for platform-agnostic code"): libc stays on hosted targets. Recorded future work: a freestanding target
+  (no OS: FPGA hosts, and possibly an olang operating system) - the runtime's libc use kept behind one layer so it can
+  be swapped; nothing built now.

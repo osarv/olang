@@ -193,6 +193,9 @@ MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oan
 (direction.md).
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
+- **A freestanding target** (the user, 2026-10-26: "we are going to need an operating system free way for FPGAs eventually
+  ... Maybe even an operating system in the future"): no libc, no OS - the runtime's libc use stays behind one layer so it
+  can be swapped for a freestanding one; libc stays on hosted targets ("using libc where it excels").
 - **FPGA support, for spiking neural networks** (the user, 2026-10-09: "I want FPGA support for spiking neural network
   implementations"; after self-hosting, as a second backend of the olang compiler). Route: high-level synthesis of a
   compiler-checked subset - fixed-width integers and minifloats, fixed-size arrays, bounded loops/comprehensions,
