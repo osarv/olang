@@ -1,0 +1,17 @@
+# check: fail error[S3]: 'x.Abs()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+# also: error[S3]: 'a.Len()' gives a value and does nothing else
+# also: error[S3]: 'twice(x)' gives a value and does nothing else
+# also: error[S3]: 'deep(3)' gives a value and does nothing else
+# S3: a call statement whose value is dropped and that does nothing else - read off the bodies it reaches, recursion
+# included
+fn twice(v I64) I64 { return v * 2 }
+fn deep(n I64) I64 { return 0 if n == 0 else twice(deep(n - 1)) }
+fn main() {
+    x := -3
+    x.Abs()
+    a := I64[1, 2, 3]
+    a.Len()
+    twice(x)
+    deep(3)
+    assert x.Abs() + a.Len() == 6
+}

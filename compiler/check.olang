@@ -276,6 +276,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     ValueAsks Vec<ValueAsk>
     unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
     heldWalks Vec<heldCand>     # D18e: the locals walked by a for-in or a comprehension, judged once the attempt has checked
+    idle Vec<idleCall>          # S3: the call statements whose value is dropped, judged once the attempt has checked
     # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
     # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
     # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
@@ -404,6 +405,16 @@ type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, 
     Field
 }
 
+# S3: a call standing as a statement whose value is dropped, judged once every body is checked (settleIdle): its body,
+# where it is and as it is written, the call checked
+type idleCall struct(Body I64, File I64, Sp source.Span, Text String&, X typed.Expr&) {
+    Body
+    File
+    Sp
+    Text
+    X
+}
+
 # D18e: a local a for-in or a comprehension walks, judged once its body is checked (settleHeldWalks): its body, the
 # local and the walk's hidden iterator declared from a read of it
 type heldCand struct(Body I64, G I64, It I64) {
@@ -493,6 +504,7 @@ fn (c mut Checker&) CheckProgram() {
         c.attempt()
         c.settleUnset()
         c.settleHeldWalks()
+        c.settleIdle()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
@@ -582,6 +594,7 @@ fn (c mut Checker&) reset() {
     c.ValueAsks = Vec<ValueAsk>()
     c.unsets = Vec<unsetCand>()
     c.heldWalks = Vec<heldCand>()
+    c.idle = Vec<idleCall>()
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
     c.ContractAsks = Vec<ContractAsk>()
@@ -14760,6 +14773,12 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
                 }
                 nomatch { }
             }
+            # S3: a call giving a value it drops is judged once every body is checked - one doing nothing else is an
+            # error. Not in a generic's body, where what a call does differs between instances
+            t := typeOf(e)
+            if t != types.VoidT and t != types.NoreturnT and t != types.UnknownT and not c.inGeneric() {
+                c.idle.Push(idleCall(c.fr().Body, c.fr().File, x.Span(), c.src(x.Span()), e))
+            }
             c.emit(typed.Stmt.Eval(sp, e))
             return
         }
@@ -19996,6 +20015,220 @@ fn pathOf(x ast.Expr&) Array<source.NameId>&x {
             return out
         }
         case _ { return Array<source.NameId>(0) }
+    }
+}
+
+# ---- calls that do nothing (S3) ----
+
+# S3, once an attempt has checked every body: a call statement whose value is dropped and that does nothing else is an
+# error. What a call does is read off the bodies it reaches - a least fixed point over them, a body unchecked doing
+# something: a body does something where it stores into a global or through a reference, calls an extern (but C's math
+# functions, X8), a function value, an "any"'s method or a body that does, makes a value with a destructor, spawns or
+# joins, asserts, ends the program or would on a failed check, or renders a value its type's Str may render
+fn (c mut Checker&) settleIdle() {
+    if c.idle.Len() == 0 { return }
+    at Map<I64, I64>
+    seen Vec<I64>
+    does Vec<Bool>
+    edges Vec<pair.Pair<I64, I64>>
+    direct Vec<Bool>
+    from Vec<I64>
+    reach Vec<I64>
+    for cand in c.idle {
+        from.Push(reach.Len())
+        calls Vec<I64>
+        direct.Push(c.effX(cand.X, calls))
+        for b in calls {
+            reach.Push(b)
+            if not at.Has(b) {
+                at.Put(b, seen.Len())
+                seen.Push(b)
+                does.Push(false)
+            }
+        }
+    }
+    from.Push(reach.Len())
+    for k := 0, k < seen.Len(), k++ {
+        b := seen[k]
+        if b < 0 or b >= c.Bodies.Len() or c.Bodies[b].Root is null {
+            does[k] = true
+            continue
+        }
+        calls Vec<I64>
+        if c.effB(c.Bodies[b].Root, calls) {
+            does[k] = true
+            continue
+        }
+        for cb in calls {
+            edges.Push(pair.Pair(k, cb))
+            if not at.Has(cb) {
+                at.Put(cb, seen.Len())
+                seen.Push(cb)
+                does.Push(false)
+            }
+        }
+    }
+    changed := true
+    for changed {
+        changed = false
+        for e in edges {
+            if does[e.First] { continue }
+            if does[try at.Get(e.Second) catch default 0] {
+                does[e.First] = true
+                changed = true
+            }
+        }
+    }
+    for i, cand in c.idle {
+        if direct[i] or cand.Body < 0 or cand.Body >= c.Bodies.Len() { continue }
+        idle := true
+        for j in range from[i], from[i + 1] {
+            if does[try at.Get(reach[j]) catch default 0] { idle = false }
+        }
+        if not idle { continue }
+        c.P.L.Diags.Error(diag.Where.Span(cand.File, I64(cand.Sp.Start), I64(cand.Sp.End)), msgs.CallDoesNothing(cand.Text))
+    }
+}
+
+# S3: whether an expression may do something beyond giving its value, the bodies it calls added to calls
+fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
+    if x is null { return false }
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Fn(_, _, _) { return false }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return c.effP(p, calls, false) }
+        case typed.Expr.Promote(_, _, pr) { return c.destructs(typeOf(pr.X)) or c.effX(pr.X, calls) }
+        case typed.Expr.Call(_, t, cl) {
+            if c.destructs(t) { return true }
+            match cl.Target {
+                case typed.Callee.Body(id) { calls.Push(I64(id)) }
+                case typed.Callee.Extern(f) {
+                    fd := c.P.FnDecl(f)
+                    if not typed.MathExtern(c.text(fd.Name), fd.S.Params.Len()) { return true }
+                }
+                case typed.Callee.Value(_), typed.Callee.Dispatch(_, _, _) { return true }
+                case typed.Callee.Helper(_, _) { }
+            }
+            for a in cl.Args {
+                if c.effX(a, calls) { return true }
+            }
+            return false
+        }
+        case typed.Expr.Make(_, _, m) {
+            if m.Checked == typed.Check.Abort or c.effX(m.Length, calls) { return true }
+            for y in m.Items {
+                if c.effX(y, calls) { return true }
+            }
+            return false
+        }
+        case typed.Expr.Collect(_, _, cl) { return cl.Checked == typed.Check.Abort or c.effX(cl.Reserve, calls) or c.effB(cl.Loop, calls) }
+        case typed.Expr.Prim(_, _, op, ck, args) {
+            if ck == typed.Check.Abort or effectOp(op) { return true }
+            for y in args {
+                if c.effX(y, calls) { return true }
+            }
+            return false
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            return sl.Checked == typed.Check.Abort or c.effP(sl.Base, calls, false) or c.effX(sl.Lo, calls) or c.effX(sl.Hi, calls)
+        }
+        case typed.Expr.Cond(_, _, cd) { return c.effX(cd.C, calls) or c.effX(cd.A, calls) or c.effX(cd.B, calls) }
+        case typed.Expr.Seq(_, _, q) { return c.effSs(q.Stmts, calls) or c.effX(q.X, calls) }
+        case typed.Expr.Match(_, _, m) {
+            if c.effSs(m.Held, calls) { return true }
+            for a in m.Arms {
+                if c.effArm(a, calls) { return true }
+            }
+            return m.NoMatch is not null and c.effArm(m.NoMatch!, calls)
+        }
+        case typed.Expr.Try(_, _, tr) {
+            if tr.Ends or c.effX(tr.X, calls) { return true }
+            for cl in tr.Clauses {
+                if c.effB(cl.Code, calls) { return true }
+                for d in cl.Defaults {
+                    if c.effX(d, calls) { return true }
+                }
+            }
+            return false
+        }
+        case typed.Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                match pc {
+                    case typed.Piece.Render(y) {
+                        if not c.plainRender(typeOf(y)) or c.effX(y, calls) { return true }
+                    }
+                    case typed.Piece.Lit(_) { }
+                }
+            }
+            return false
+        }
+        case typed.Expr.Away(_, _, y) { return c.effX(y, calls) }
+    }
+}
+
+fn (c mut Checker&) effArm(a typed.Arm&, calls mut Vec<I64>&) Bool {
+    for alt in a.Alts {
+        if c.effX(alt.Test, calls) { return true }
+        for bd in alt.Binds {
+            if c.effX(bd.From, calls) { return true }
+        }
+    }
+    return c.effX(a.Guard, calls) or c.effB(a.Code, calls) or c.effX(a.Value, calls)
+}
+
+# S3: whether reading (or, store, writing) a place may do something: a store into a global or through a reference
+fn (c mut Checker&) effP(p typed.Place&, calls mut Vec<I64>&, store Bool) Bool {
+    match p {
+        case typed.Place.Local(_, _, _), typed.Place.Target(_, _) { return false }
+        case typed.Place.Global(_, _, _, _) { return store }
+        case typed.Place.Deref(_, _, r) { return store or c.effX(r, calls) }
+        case typed.Place.Field(_, _, base, _) { return c.effP(base, calls, store) }
+        case typed.Place.Elem(_, _, e) {
+            if e.Checked == typed.Check.Abort or (store and c.isRef(e.Base.Type())) { return true }
+            return c.effP(e.Base, calls, store) or c.effX(e.Index, calls)
+        }
+        case typed.Place.Payload(_, _, pl) { return pl.Checked == typed.Check.Abort or c.effP(pl.Base, calls, store) }
+        case typed.Place.Temp(_, _, v, _) { return c.effX(v, calls) }
+    }
+}
+
+fn (c mut Checker&) effB(b typed.Block?&, calls mut Vec<I64>&) Bool {
+    if b is null { return false }
+    return c.effSs(b.Stmts, calls)
+}
+
+fn (c mut Checker&) effSs(ss Array<typed.Stmt&>&, calls mut Vec<I64>&) Bool {
+    for st in ss {
+        if c.effS(st, calls) { return true }
+    }
+    return false
+}
+
+fn (c mut Checker&) effS(st typed.Stmt&, calls mut Vec<I64>&) Bool {
+    match st {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { return c.effX(x, calls) }
+        case typed.Stmt.Assign(_, t, v) { return c.effP(t, calls, true) or c.effX(v, calls) }
+        case typed.Stmt.If(_, i) { return c.effX(i.Test, calls) or c.effB(i.Then, calls) or c.effB(i.Else, calls) }
+        case typed.Stmt.Loop(_, body, post) { return c.effB(body, calls) or c.effB(post, calls) }
+        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { return c.effX(v, calls) }
+        case typed.Stmt.Reraise(_, code, _) { return c.effX(code, calls) }
+        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { return false }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { return c.effB(b, calls) }
+        case typed.Stmt.Exit(_, _, _), typed.Stmt.Assert(_, _, _), typed.Stmt.Join(_, _), typed.Stmt.Spawn(_, _) { return true }
+    }
+}
+
+# S3: whether "$x" of a value of type t renders it with nothing a program wrote - a number, a Bool, text, an error
+fn (c mut Checker&) plainRender(t types.TypeId) Bool {
+    d := c.deref(t)
+    return c.P.T.IsNumber(d) or d == types.BoolT or d == c.textType() or c.P.T.IsErrVal(d)
+}
+
+# S3: the operations that change what they are given
+fn effectOp(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap => true
+        case typed.PrimOp.Retire, typed.PrimOp.Destroy => true
+        case _ => false
     }
 }
 

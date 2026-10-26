@@ -1,0 +1,37 @@
+# check: run
+# S3: a call statement that does something besides its value is no error - it writes a global or through a reference,
+# calls a function value, may fail, or is in a generic's body
+import "std/io"
+type E error { BAD }
+Count mut I64 = 0
+fn bump() I64 {
+    Count++
+    return Count
+}
+type Box struct(v I64) { v }
+fn (b mut Box&) Set(v I64) I64 {
+    b.v = v
+    return v
+}
+fn check(n I64) I64 ? E {
+    if n < 0 { error E.BAD }
+    return n
+}
+fn call(f fn() I64) I64 { return f() }
+fn first<T>(xs Array<T>&) I64 {
+    xs.Len()
+    return 0
+}
+fn main() ? {
+    bump()
+    b := Box(1)
+    b.Set(5)
+    call(fn(): return 3)
+    try check(2)
+    check(3)!
+    n := first(I64[1])
+    v := Vec<I64>()
+    v.Push(1)
+    try io.Println("" $Count " " $b.v " " $v.Len())
+    assert Count == 1 and b.v == 5 and n == 0
+}
