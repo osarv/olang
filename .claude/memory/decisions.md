@@ -1323,3 +1323,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `link "golib"` alone when declarations come from elsewhere, `import z "zlib.h" link "z"`, and the `extern` keyword
   goes. Recommended (C). libc explicit (`import c "unistd.h" link "c"`): agreed, recommended - no library is implicit
   in source, though the runtime links libc anyway. ASKED.
+- QBE linking, 2026-10-26 (the user: why is libc always linked? extern is still needed for handle types, so dropping
+  it makes no sense; if a library is declared from one place, `extern link "golib" { ... }` as the only form is good):
+  answered - every program links olang's runtime, which itself calls libc (allocation, threads, write, signals, clocks,
+  dlopen), so libc is linked whatever the source says (a freestanding target would be the exception) - hence
+  `import c "unistd.h"` alone; (C) withdrawn, extern stays (functions and `extern type` handles). Proposed final form:
+  `import z "zlib.h" link "z"`; `extern link "golib" { fn ... type Handle }` for a header-less library, its
+  declarations in one binding module that others import; `extern { ... }` without link for what is already linked
+  (the runtime's own functions); the standalone `link` declaration removed. ASKED (confirm).
