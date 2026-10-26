@@ -258,7 +258,8 @@ fn (l mut Loader&) region(m mut Module&, from I64, end I64, parent I64) {
             i++
             continue
         }
-        atStart := start
+        # a bare "&" ending a declaration's type ends no statement of its own (L18a): the line after it starts one
+        atStart := start or (i > from and toks[i - 1].Kind == token.Tok.Amp and (toks[i].Flags & token.LineBreak) != U8(0))
         start = false
         if k == token.Tok.If and atStart {
             i = l.topIf(m, i, end, parent)

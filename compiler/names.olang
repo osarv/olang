@@ -543,6 +543,11 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 if v.Ty is not null { r.typeRef(v.Ty) }
                 for x in v.Values { r.expr(x) }
             }
+            case ast.Decl.Set(_, target, value) {
+                r.startItem(mi)
+                r.expr(target)
+                r.expr(value)
+            }
             case ast.Decl.Test(_, _, body) {
                 r.startItem(mi)
                 r.block(body)

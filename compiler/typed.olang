@@ -142,6 +142,9 @@ type Local struct(Name source.NameId, Sp source.Span, Ty types.TypeId, In BlockI
     In         # the block it is declared in; a parameter's is 0
     Kind
     Marked     # where its declared type says it lives; a parameter's agrees with the body's type (ParamMark)
+    # D13d: declared with no value and assigned on every path before any read - its Let's value is never seen, and
+    # lowering writes nothing for it (check.settleUnset decides it once the body is checked)
+    Unset Bool = false
 }
 
 type BlockKind enum {

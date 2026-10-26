@@ -591,6 +591,16 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
                 xf := try p.function()
                 return ast.Decl.Fn(ast.Func(p.from(at), xf.Recv, xf.Name, xf.S, xf.Body, xf.TypeParams, xf.Bodied, true))
             }
+            if p.look(1) == token.Tok.Assign {
+                # D13e: a global's value given below its declaration - its place (a top-level if's branch) the checker's
+                nt := p.tk()
+                n := try p.name()
+                p.advance()
+                value := try p.expr()
+                ssp := p.from(at)
+                try p.endStmt()
+                return ast.Decl.Set(ssp, ast.Expr.Name(source.Span(nt.Start, nt.End), n), value)
+            }
             v := try p.declNames(false)
             sp := p.from(at)
             try p.endStmt()

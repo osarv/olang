@@ -409,6 +409,13 @@ type Diag enum {
     NoteInLibrary
     NoteZeroByReference
     NoteZeroReferenceHasOne
+    NoteUnassignedDecl
+    NoteUnassignedNoElse
+    NoteUnassignedBranch
+    NoteUnassignedLoop
+    NoteUnassignedArm
+    NoteUnassignedClause
+    NoteReadUnassigned
     NoteOtherSignature
     NotePrivateSpelling
     NoteProtocolSpelling
@@ -647,6 +654,15 @@ type Diag enum {
     LiteralCtorFails
     ZeroValueShared
     NoZeroValue
+    ReadUnassigned
+    FieldUnassigned
+    TopSetPlace
+    TopSetTarget
+    TopSetHasValue
+    TopSetTwice
+    TopSetMissing
+    TopSetNoElse
+    TopSetCondReads
     DefaultNotComputable
     AssertFalse
     AssertFalseMessage
@@ -1921,6 +1937,27 @@ fn StrStoresInReceiver() Msg { return Msg(Diag.StrStoresInReceiver, "E11c, O12",
 # ERR_STR_RECEIVER_WRITABLE
 fn StrReceiverWritable() Msg { return Msg(Diag.StrReceiverWritable, "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") }
 
+# NOTE_UNASSIGNED_DECL
+fn NoteUnassignedDecl() Msg { return Msg(Diag.NoteUnassignedDecl, "", "declared here with no value") }
+
+# NOTE_UNASSIGNED_NO_ELSE
+fn NoteUnassignedNoElse() Msg { return Msg(Diag.NoteUnassignedNoElse, "", "when this condition is false nothing assigns it - this 'if' has no 'else'") }
+
+# NOTE_UNASSIGNED_BRANCH
+fn NoteUnassignedBranch() Msg { return Msg(Diag.NoteUnassignedBranch, "", "this branch does not assign it") }
+
+# NOTE_UNASSIGNED_LOOP
+fn NoteUnassignedLoop() Msg { return Msg(Diag.NoteUnassignedLoop, "", "this loop may run no times - assigning in its body does not count") }
+
+# NOTE_UNASSIGNED_ARM
+fn NoteUnassignedArm() Msg { return Msg(Diag.NoteUnassignedArm, "", "this arm does not assign it") }
+
+# NOTE_UNASSIGNED_CLAUSE
+fn NoteUnassignedClause() Msg { return Msg(Diag.NoteUnassignedClause, "", "this clause runs when the try fails, which may be before the assignment") }
+
+# NOTE_READ_UNASSIGNED
+fn NoteReadUnassigned() Msg { return Msg(Diag.NoteReadUnassigned, "", "read here before it is assigned on every path") }
+
 # NOTE_HERE
 fn NoteHere() Msg { return Msg(Diag.NoteHere, "", "here") }
 
@@ -2653,6 +2690,33 @@ fn ZeroValueShared(ty String&) Msg { return Msg(Diag.ZeroValueShared, "D13c", $t
 
 # ERR_NO_ZERO_VALUE
 fn NoZeroValue(ty String&, text String&) Msg { return Msg(Diag.NoZeroValue, "D13c", $ty " has no zero value, so this needs one - its constructor does not run on zeros while compiling: " $text) }
+
+# ERR_READ_UNASSIGNED
+fn ReadUnassigned(name String&, ty String&, fix String&) Msg { return Msg(Diag.ReadUnassigned, "D13d", "'" $name "' is read here before it is assigned on every path, and " $ty " has no zero value - assign it on each path before this read, or give it a value" $fix) }
+
+# ERR_FIELD_UNASSIGNED
+fn FieldUnassigned(name String&, ty String&, fix String&) Msg { return Msg(Diag.FieldUnassigned, "D13d", "the field '" $name "' is not assigned on every path through the constructor, and " $ty " has no zero value - assign it on each path, or give it a value" $fix) }
+
+# ERR_TOP_SET_PLACE
+fn TopSetPlace() Msg { return Msg(Diag.TopSetPlace, "D13e", "an assignment at the top level is a global's initializer, written only inside a top-level 'if' - give the value in the global's declaration") }
+
+# ERR_TOP_SET_TARGET
+fn TopSetTarget(name String&) Msg { return Msg(Diag.TopSetTarget, "D13e", "'" $name "' is no global of this module declared above with no value - only such a global is assigned at the top level") }
+
+# ERR_TOP_SET_HAS_VALUE
+fn TopSetHasValue(name String&) Msg { return Msg(Diag.TopSetHasValue, "D13e", "'" $name "' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment") }
+
+# ERR_TOP_SET_TWICE
+fn TopSetTwice(name String&) Msg { return Msg(Diag.TopSetTwice, "D13e", "'" $name "' is assigned twice at the top level in this build - each build gives a global one value") }
+
+# ERR_TOP_SET_MISSING
+fn TopSetMissing(name String&, ty String&) Msg { return Msg(Diag.TopSetMissing, "D13e", "this branch does not assign '" $name "', and " $ty " has no zero value - assign it in every branch of the 'if', or give it a value") }
+
+# ERR_TOP_SET_NO_ELSE
+fn TopSetNoElse(name String&, ty String&) Msg { return Msg(Diag.TopSetNoElse, "D13e", "this 'if' assigns '" $name "' and has no 'else', and " $ty " has no zero value - add an 'else' assigning it, or give it a value") }
+
+# ERR_TOP_SET_COND_READS
+fn TopSetCondReads(name String&) Msg { return Msg(Diag.TopSetCondReads, "D13e", "this condition reads '" $name "', which its 'if' assigns - a condition cannot decide the value it reads") }
 
 # ERR_DEFAULT_NOT_COMPUTABLE
 fn DefaultNotComputable(text String&) Msg { return Msg(Diag.DefaultNotComputable, "D8a", "a default is computed while compiling, and this one cannot be: " $text) }
