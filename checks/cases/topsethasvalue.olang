@@ -1,0 +1,5 @@
+# check: fail error[D13e]: 'X' has a value in its declaration
+# D13e: a global with a value in its declaration is never assigned again at the top level
+X I64 = 1
+if TargetOs == "linux" { X = 5 } else { X = 6 }
+fn main() { }

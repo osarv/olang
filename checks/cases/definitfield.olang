@@ -1,0 +1,10 @@
+# check: fail error[D13d]: the field 'n' is not assigned on every path through the constructor, and N& has no zero value
+# D13d: a constructor's field is read when the instance is assembled, at the body's end, so every path through the body
+# must assign it
+type N struct(v I64) { v }
+type W struct(c Bool) {
+    c
+    n N&
+    if c { n = N(1) }
+}
+fn main() { w := W(true) }

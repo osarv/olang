@@ -41,6 +41,17 @@
 | ok - a static inline function is reached through the C the build compiles
 | ok - the C library: functions, a C string back, pointer arguments of any array
 | ok - a variadic call: each argument promoted as C promotes it
+=== test tests/definit.olang
+| status 0
+| ok - a never-null reference assigned in both branches (D13d)
+| ok - a match and a try assign on every path (D13d)
+| ok - an effectful constructor assigned first runs once (D13c, D13d)
+| ok - a zero value is read where nothing assigned it (D13d)
+| ok - a constructor's field assigned in its branches (D13d)
+| ok - a global given its value by a top-level if (D13e)
+| ok - comprehensions write each element once (E27, T7c)
+| ok - Array<T>(n) filled by the loop after it (D14d)
+| ok - definitely assigned references read back after the arena churns (D13d, O2)
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time

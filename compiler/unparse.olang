@@ -126,6 +126,11 @@ fn (w mut writer&) decl(d ast.Decl&) {
             w.block(body)
         }
         case ast.Decl.If(_, i) { w.topIf(i) }
+        case ast.Decl.Set(_, target, value) {
+            w.expr(target)
+            w.put(" = ")
+            w.expr(value)
+        }
     }
 }
 

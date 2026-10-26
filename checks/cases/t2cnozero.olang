@@ -1,8 +1,8 @@
 # check: fail error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
-# T2c, D13c: a declaration with no value takes its type's zero value, and a reference never null has none
+# T2c, D13c: a declaration with no value takes its type's zero value, and a reference never null has none - a global
+# given no value, here or by a top-level if below it (D13e), is an error (a local assigned before it is read is not, D13d)
 type N struct(v I64) { v }
+G N&
 fn main() {
-    n N&
-    n = N(1)
-    assert n.v == 1
+    assert G.v == 1
 }

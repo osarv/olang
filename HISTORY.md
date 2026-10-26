@@ -25391,3 +25391,58 @@ module, which a case cannot have, so it became the `latermodule` scenario over `
 `mat.olang` with linalg's shape (a `Data` field that is a conditional: a slice of the data given, else a new array, and
 a `View` returning a struct holding the slice). Comments naming linalg (chunkpool, the TBAA fixture, the runtime's
 pool, std/rand, the migration tools) were reworded.
+## Definite initialisation, and arrays written once (D13d, D13e, D14d, E27, T7c, 2026-10-26)
+
+**Why.** The user's QBA asked whether zero values or definite initialisation should decide what a declaration with no
+value holds; QBJ (2026-10-26) answered both: zero values stay (D13c, so every type that has one keeps reading it), and
+definite initialisation is added for the types that have none - a never-null reference, a type whose constructor has an
+effect - for locals and globals alike, plus the cost side: where every path assigns before any read, no zero is written
+at all, which matters exactly when the zero allocates (a Vec, a constructor call) or clears memory (an array).
+
+**Locals.** `compiler/definit.olang` walks a checked body once per candidate local with a two-flag state (on a live
+path, assigned) and a cause for the first path that leaves it unassigned. It is structural, as D10a's leaving analysis
+is, and every open detail was decided to keep it so (mine): a loop's body never assigns - it may run no times - and is
+read with the state before the loop, a loop with no break leaving the path after it; deferred code is read where it is
+registered (it may run on the earliest way out) and assigns nothing; a lambda reads its captures where it is made; a
+`try` meets its operand's state with each clause run from where the try began; a spawn target assigns nothing (the task
+may not have run); a compound assignment, a field or element store and a borrow are reads; a build-decided `if` (S8b)
+counts only the taken branch; a constructor's field is read once more at the body's end, where the instance is
+assembled. The checker records a candidate for each declaration with no value, makes its zero inside a held diagnostic
+group, and settles them once bodies are checked (`settleUnset`): no path reads it unassigned - the zero is dropped and,
+for every type but a run-time-length array value (an assignment may write into the storage its zero holds, T11b) and an
+owner (an assignment lets the old value go), the local is marked `Unset` so lowering writes nothing; read unassigned with
+a zero value - the zero stands; read unassigned with none - D13d's error at the read and a note naming the path. A
+constructor whose zero only the evaluator can refuse (an effect, D13c) is decided later; there the D13c error stands, with
+a note at the read. Measured in the IR: a Vec local assigned in both branches made three Vec constructor calls before,
+two now.
+
+**Globals (D13e).** A top-level `NAME = expr` is parsed as a declaration (`ast.Decl.Set`) inside a top-level if's
+branches. Checking a global with no value looks for the assignment in the chosen branches of the ifs below it and uses
+it as the initializer, so it is ordered by what it reads (B5a), baked where the evaluator can (K2 - a `Node&` global
+assigned this way is written as a constant pointing at its baked referent) and never preceded by a zero. The errors, all
+D13e: an assignment outside every top-level if; one naming no global of the module declared above with no value; one
+for a global that has a value; two in one build; a missing branch (or a missing `else`) for a type with no zero value,
+judged by the branches as written - decided or not, nested ifs by every branch - since a build on another target must
+compile too; a condition reading the global it assigns.
+
+**Arrays.** A comprehension no longer clears its storage: the buffer, every growth and the final array are allocated
+with no fill and each element is written once. With no `if` over a range or an array of known length the reserved
+storage is the result itself; when the count is known while compiling it is a fixed array (the T7c item that was "not
+yet implemented"), built in a hidden local marked `Unset`. `Array<T>(n)` skips its clear for exactly one shape (D14d,
+"when in doubt, clear"): a local declared by it and followed, as the next statement, by `for i in range n` or `range 0,
+n` with the same `n` (a name or an integer literal), whose body stores `a[i]` once at its top level and mentions `a`
+nowhere else, with no break, continue or return. The copies a widening or an array copy makes no longer zero-fill the
+storage they then copy into in full. MIR got one convention: `Assign(L, Use(None))` sets a local with nothing written,
+so the verifier's definite-init check accepts element stores into a local made with no clear, and the emitter and the
+evaluator write nothing for it.
+
+**Measured** (wall clock, medians of 5-7 interleaved runs on the shared machine): 1,000 calls each making an
+`Array<F32>(262144)` on recycled memory, filling it by a loop and reading every 16th element, 0.073 -> 0.049 s; the same
+array as a comprehension, summed, 0.90 -> 0.25 s (it was three cleared allocations and two copies; now one plain
+allocation). Bench instruction counts (callgrind, small sizes) otherwise unchanged.
+
+**Found on the way, fixed.** The loader's pre-scan (`region`) took a line beginning `if` for a statement start only
+after a line that could end one; a line ending in a bare `&` - `Root Node&`, `X Node?&` - did not count, so the top-level
+`if` below such a global was never decided and later items were reported unknown. An `&` ending its line now ends the
+statement there (as L18 says). **Found, not fixed:** a baked global still has its startup function emitted (never
+called) - code size and compile time only.

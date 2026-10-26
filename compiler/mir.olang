@@ -184,7 +184,10 @@ NoPlace Place = Place(Base.None, Empty)
 # ---- operands and values ----
 
 type Operand enum {
-    None                                   # no value: a return of none, an assert's absent message
+    None                                   # no value: a return of none, an assert's absent message; stored whole
+                                           # into a local (Assign(L, Use(None))), the local is set and nothing is
+                                           # written - its storage left as it is, every path writing it before a read
+                                           # (D13d, D14d)
     Copy(p Place)                          # the place's value, copied
     Const(ty types.TypeId, bits I64)       # a number, Bool or Char as its bits, null all zero bits; an aggregate's
                                            # zero bits (D13c's all-zero zero value)
@@ -1198,6 +1201,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
         case Stmt.Assign(_, p, rv) {
             pt := v.placeType(p)
             rt := v.rvalueType(rv)
+            if rv == Rvalue.Use(Operand.None) { rt = types.UnknownT }   # declared, nothing written (D13d)
             if pt != types.UnknownT and rt != types.UnknownT { v.want(rt, pt, "the value stored") }
             # a store into an own slot takes an owner: one moved (Take), made (New in a region) or carried
             if t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0 and t.IsRef(rt) and (t.PermOf(rt) & types.Owning) == 0 {

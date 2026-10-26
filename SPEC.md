@@ -665,8 +665,8 @@ it.
   omitted `hi` the base's length when that is known), or `hi` written `lo + k` (or `k + lo`) with `lo` the same name,
   or the same chain of field reads, written twice and `k` evaluable at compile time - `raw[off:off + 784]` has length
   784;
-- *(not yet implemented)* a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at
-  compile time;
+- a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at compile
+  time (its count: `(end - start + step - 1) / step` with a positive step, 0 when `end` is not above `start`);
 - a conditional (E28) or `match` value (S12b) all of whose values have one known length;
 - a conversion (`String(x)`, a declared array type, T29a) of an array of known length;
 - a read of **fixed storage** (T7d): a local, a global, an inline field, an element of an array of inline arrays;
@@ -2094,7 +2094,7 @@ immutability that does not exist. Before a type variable written bare (`x mut T 
 to a reference", as on a parameter or a field, and states nothing where an instantiation binds `T` to a value type.
 
 **D12.** In the first form (explicit type), `= expr` is **optional for every declared type**: a
-declaration with no initializer is D13's zero value. When present, `expr`'s type must fit the declared type
+declaration with no initializer is D13's zero value, or, for a type with none, definitely initialised (D13d). When present, `expr`'s type must fit the declared type
 (assignability, defined per-context in §5 and §8).
 
 **D12b.** `IDEN "," IDEN { "," IDEN } [ "mut" ] type-expr [ "=" expr { "," expr } ] STMNT_END` declares several
@@ -2106,8 +2106,8 @@ also be puns (`x, y`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
 `0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`; a `T&` has **no zero value**, so a
-declaration of one with no initializer, an `Array<T&>(n)` with no fill, and a struct field of one with no default or
-parameter to give it are compile-time errors naming `T?&` - an empty array (0 elements, T7c) for `Array<T>`,
+declaration of one with no initializer that is not definitely initialised (D13d), an `Array<T&>(n)` with no fill, and a
+struct field of one with no default or parameter to give it are compile-time errors naming `T?&` - an empty array (0 elements, T7c) for `Array<T>`,
 and the first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
 first case by representation, not by any declared meaning. A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
@@ -2130,6 +2130,43 @@ fills each new buffer with the element being pushed (as `std/list`'s `List` fill
 array's `Map` and `Filter` fill with an element,
 so a type with no zero value is an element of them as any other.
 
+**D13d (definite initialisation).** A local declared with no value - a constructor's field among them (C2a) - whose
+type has a zero value holds it: a read before any assignment reads the zero. One whose type has none - a reference never
+null (T2c), a type whose constructor gives none (D13c) - must be **definitely initialised**: every path from its
+declaration assigns it whole (`x = e`) before any read of it, and a constructor's field before the constructor's end,
+where its instance is assembled from it. A read on a path that has not assigned it is a compile-time error naming that
+path. Paths are judged structurally, as D10a judges them: an `if`'s two branches meet, one with no `else` meeting its
+condition failing, one the build decides (S8b) only the branch taken; a `match` meets each arm and what no arm takes
+(S13a); a `try` meets what its operand gives with each of its clauses, each run from where the `try` began; a loop's body
+never counts as assigning - a loop may run no times - and is read with what held before the loop; `return`, `error`,
+`break`, `continue`, `unreachable` and a call of a `noreturn` function (D8e) leave the path. Every mention of the local
+but a whole assignment's target is a read: a borrow (E12c), a capture (D16c, read where the lambda is made), a field or
+element store into it, a compound assignment. Deferred code (S19) is read where it is registered and assigns nothing; a
+`spawn` target (P1g) assigns nothing. Wherever every path assigns before any read - whatever the type - **no zero value
+is made**: nothing is written for the declaration and nothing is asked of a constructor (D13c), so a zero value that
+would allocate costs nothing. Two keep their zero, which allocates nothing: an array value of a length known only at run
+time (its zero is the empty array, and an assignment may write into the storage it holds, T11b) and a value that owns
+what it holds (an assignment lets the old value go, §8.8).
+
+**D13e (a global's value given below it).** A global declared with no value may be given its value by an assignment at
+its module's top level, inside a top-level `if` (B9) and below the declaration - `top-set ::= IDEN "=" expr STMNT_END`,
+a declaration of a `top-if`'s branch:
+
+```
+Backend String
+if TargetOs == "linux" { Backend = "epoll" } else { Backend = "kqueue" }
+```
+
+The build decides those `if`s while compiling, so the assignment its branches take is the global's **initializer** -
+ordered by what it reads (B5a), baked where the evaluator can (K2) - and nothing is written before it. Each build gives a
+global at most one: two such assignments in the branches one build takes are a compile-time error. A global whose type
+has no zero value is assigned in **every** branch of each `if` assigning it, a missing `else` being a branch that does
+not - judged by the branches as written, decided or not, nested `if`s by every one of their branches - else a
+compile-time error at the branch; a global with a zero value takes it in a build whose branches assign it nowhere. A
+condition of an `if` may not read the global the `if` assigns. Any other top-level assignment - outside every top-level
+`if`, of a name that is no global of the module declared above it with no value, of a global given a value in its
+declaration - is a compile-time error.
+
 **D14.** Storage for an array is set aside by building one: `Array<T>(n)` or `Array<T>(n, v)` (T8, E13a),
 written anywhere an expression may be. Like any value with no storage of its own it is built in the scope of
 whatever it lands in (§8 E12c): a local's block, a reference's tagged scope, the instance a constructor
@@ -2149,6 +2186,14 @@ the array would then run past.
 **D14c.** Storage the system declines to provide - the allocator returning nothing - aborts the program with the
 message `out of memory`, as a task the system declines to start does (P1c). It is never an error a program
 handles: no `try` reaches it.
+
+**D14d (an array the next loop fills).** `Array<T>(n)` with no fill, declared as a local (`a := Array<T>(n)`, `a
+Array<T> = Array<T>(n)`), is not cleared when the statement after its declaration is `for i in range n` or `for i in
+range 0, n` - `n` the same name or the same integer literal - whose body has `a[i] = e` among its own statements (not
+inside a nested block) and mentions `a` nowhere else, nor holds a `break`, `continue` or `return`: the loop writes every
+element before anything can read one. Any other shape - another bound, a conditional store, a second mention, a loop that
+may stop early - keeps the clear (T8), as does an element type that is an array or owns what it holds. A program cannot
+tell the two apart.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is the type of `expr`, which may be any
 expression whose type is settled where it is written - a literal, a variable, field or element read, a call, a
@@ -3535,13 +3580,16 @@ must. It is no list: a line break before its `for`, or anywhere in its clause, s
 from 0 for the two-name form) and are visible in the element expression and the condition only. What may follow `in`
 is what a `for ... in` takes: an array, a range, an iterator or an iterable.
 
-Its type is `Array<T>` for the written element type `T`, a value. Like `Array<T>(n)` (T7) it is a temporary,
+Its type is `Array<T>` for the written element type `T`, a value - of known length (T7c) with no `if` and a source
+whose length is known while compiling. Like `Array<T>(n)` (T7) it is a temporary,
 built in the scope of whatever it lands in. The element expression and the condition are evaluated once per value,
 the condition first, in the order the values are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
-length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. A
-comprehension that keeps nothing is an empty array with storage of its own.
+length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. Storage
+is never cleared: each element is written once, as it is computed, and nothing reads an element not yet written. With
+no `if` and a known length, the storage allocated is the array itself, exactly its length. A comprehension that keeps
+nothing is an empty array with storage of its own.
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
@@ -6740,11 +6788,12 @@ file, or any other listed file, from running.
 ### 10.5 Conditional compilation and build constants
 
 **B9.** An `if` statement written at the **top level** of a module — `top-if ::= "if" expr "{" { top-decl
-| top-if } "}" [ "else" ( top-if | "{" { top-decl | top-if } "}" ) ]` — is **conditional compilation**:
+| top-if | top-set } "}" [ "else" ( top-if | "{" { top-decl | top-if | top-set } "}" ) ]` — is **conditional compilation**:
 exactly one of its branches (the first whose condition is true, or the `else`, or none) is part of the
 module, and the declarations in the others do not exist. Nothing runs at the top level, so a top-level
 `if` has no other meaning. A branch may hold any top-level declaration — types, functions, globals,
-`extern` declarations, imports and `test` blocks — and further top-level `if`s. A branch that is not
+`extern` declarations, imports and `test` blocks — further top-level `if`s, and the assignments giving a global
+declared above its value (D13e). A branch that is not
 taken is not parsed or checked in any way beyond matching its braces: it may use names, types and syntax
 that exist only where it would be taken. An `if` inside a function or test body is an ordinary `if` (S8):
 S8a and S8b say when its condition is dead code and when the build decides it.

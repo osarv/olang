@@ -1,0 +1,11 @@
+# check: fail error[D13d]: 'w' is read here before it is assigned on every path
+# D13d: deferred code is judged where it is registered - it may run on any way out, the earliest included - so what it
+# reads must be assigned before the defer
+type N struct(v I64) { v }
+fn a() I64 {
+    w N&
+    defer { assert w.v > 0 }
+    w = N(1)
+    return w.v
+}
+fn main() { a() }

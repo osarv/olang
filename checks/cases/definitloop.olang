@@ -1,0 +1,10 @@
+# check: fail error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+# D13d: a loop may run no times, so an assignment in its body is not on every path past it - the read after the loop
+# is an error, with a note at the loop
+type N struct(v I64) { v }
+fn a() I64 {
+    x N&
+    for i in range 3 { x = N(i) }
+    return x.v
+}
+fn main() { a() }

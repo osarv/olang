@@ -1,0 +1,398 @@
+# definit - definite initialisation (D13d), judged over a checked body's typed core (typed.olang).
+#
+# A local declared with no value is definitely initialised where every path from its declaration assigns it before
+# any read of it. The analysis is structural, as D10a's is: an if's two branches meet, an if with no else meets its
+# condition failing, a match meets each arm and what no arm takes, a try meets its operand with each clause run from
+# where the try began, and a loop's body never counts as assigning - it may run no times. A return, an error, a break,
+# a continue, an exit and a call of a noreturn function leave the path. Any mention of the local but a whole
+# assignment to it is a read: a borrow, a capture, a field or element store into it, a compound assignment. Deferred
+# code is read where it is registered, never where it runs, and assigns nothing. A spawn target is no assignment. A
+# constructor's field is read once more at the body's end, where its instance is assembled from it.
+#
+# The checker asks once each body is checked (check.settleUnset): a local so initialised needs no zero value - one
+# whose type has none is no error, and lowering writes nothing for its declaration (D13c); else the first read on a
+# path that has not assigned it, and the construct that path went through.
+
+import "source"
+import "types"
+import "typed"
+
+# why a path that has not assigned the local reaches a read
+type Cause enum {
+    Decl       # straight from its declaration
+    NoElse     # an if with no else, its condition false
+    Branch     # one branch of an if that does not assign it, the other does
+    Loop       # a loop's body assigns it, but a loop may run no times
+    Arm        # a match arm that does not assign it, or a value no arm takes
+    Clause     # a catch clause, run when its try's operand fails before the assignment
+}
+
+# a program point's state: On where a path reaches it with the local declared; Set where every such path assigned it;
+# else why one did not, and where
+type State struct(On Bool, Set Bool, Why Cause, At source.Span) {
+    On
+    Set
+    Why
+    At
+}
+
+fn dead() State { return State(false, false, Cause.Decl, source.Span(0, 0)) }
+
+fn meet(a State, b State) State {
+    if not a.On { return b }
+    if not b.On { return a }
+    if a.Set and b.Set { return a }
+    if not a.Set { return a }
+    return b
+}
+
+# a branch's out-state that has not assigned it where the other side did - its path through this construct the reason,
+# unless it was already one inside the branch
+fn retag(out State, from State, other State, why Cause, at source.Span) State {
+    if not out.On or out.Set { return out }
+    if other.On and not other.Set { return out }
+    if out.Why == from.Why and out.At == from.At { return State(true, false, why, at) }
+    return out
+}
+
+# the walk of one body for one local
+type Walker struct(B typed.Body&, L typed.LocalId) {
+    B
+    L
+    Found Bool = false
+    ReadAt source.Span = source.Span(0, 0)
+    Why Cause = Cause.Decl
+    WhyAt source.Span = source.Span(0, 0)
+    targets Vec<Bool>
+}
+
+# the judgment for local l of body b: whether a path reads it before assigning it (a constructor's field read again at
+# the body's end, where its instance is assembled); where; and why that path has not assigned it, and where
+fn Judge(b typed.Body&, l typed.LocalId, field Bool) Bool, source.Span, Cause, source.Span {
+    w := Walker(b, l)
+    s := w.Run()
+    if field and s.On and not s.Set { w.read(s, b.Sp) }
+    return w.Found, w.ReadAt, w.Why, w.WhyAt
+}
+
+# the first read on a path that has not assigned the local: Found, where (ReadAt) and why
+fn (w mut Walker&) read(s State, sp source.Span) {
+    if w.Found or not s.On or s.Set { return }
+    w.Found = true
+    w.ReadAt = sp
+    w.Why = s.Why
+    w.WhyAt = s.At
+}
+
+# the whole body walked: the state at its end
+fn (w mut Walker&) Run() State {
+    s := w.block(w.B.Root, dead())
+    return s
+}
+
+fn (w mut Walker&) blockSp(b typed.Block&) source.Span {
+    i := I64(b.Id)
+    return w.B.Blocks[i].Sp if i >= 0 and i < w.B.Blocks.Len() else source.Span(0, 0)
+}
+
+fn (w mut Walker&) block(b typed.Block?&, s State) State {
+    if b is null { return s }
+    return w.stmts(b.Stmts, s)
+}
+
+fn (w mut Walker&) stmts(ss Array<typed.Stmt&>&, s State) State {
+    cur := s
+    if ss.Len() == 0 { return cur }
+    for st in ss { cur = w.stmt(st, cur) }
+    return cur
+}
+
+fn (w mut Walker&) isL(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, id) => id == w.L
+        case _ => false
+    }
+}
+
+fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
+    match st {
+        case typed.Stmt.Let(sp, l, init) {
+            s1 := w.expr(init, s)
+            if l == w.L { return State(true, false, Cause.Decl, sp) }
+            return s1
+        }
+        case typed.Stmt.Assign(_, target, value) {
+            direct := w.isL(target)
+            s1 := s if direct else w.place(target, s)
+            w.targets.Push(direct)
+            s2 := w.expr(value, s1)
+            try w.targets.Pop() catch { }
+            if direct and s2.On { return State(true, true, s2.Why, s2.At) }
+            return s2
+        }
+        case typed.Stmt.Eval(_, x) { return w.expr(x, s) }
+        case typed.Stmt.If(sp, i) {
+            s1 := w.expr(i.Test, s)
+            # a branch the build decided (S8b): "if true", the one taken
+            k := litBool(i.Test)
+            if k == 1 { return w.block(i.Then, s1) }
+            if k == 0 { return w.block(i.Else, s1) }
+            a := w.block(i.Then, s1)
+            if i.Else is null {
+                return meet(a, retag(s1, s1, a, Cause.NoElse, sp))
+            }
+            b := w.block(i.Else, s1)
+            return meet(retag(a, s1, b, Cause.Branch, w.blockSp(i.Then)), retag(b, s1, a, Cause.Branch, w.blockSp(i.Else!)))
+        }
+        case typed.Stmt.Loop(sp, body, post) {
+            # a loop's body never counts as assigning: it may run no times (and a continue reaches its post clause from
+            # anywhere in it)
+            a := w.block(body, s)
+            w.block(post, s)
+            if not breaks(body, body.Id) { return dead() }
+            if a.On and a.Set { return retag(s, s, a, Cause.Loop, sp) }
+            return s
+        }
+        case typed.Stmt.Jump(_, _, _) { return dead() }
+        case typed.Stmt.Return(_, value) {
+            w.expr(value, s)
+            return dead()
+        }
+        case typed.Stmt.Raise(_, _, _) { return dead() }
+        case typed.Stmt.Reraise(_, code, _) {
+            w.expr(code, s)
+            return dead()
+        }
+        case typed.Stmt.Exit(_, _, msg) {
+            w.expr(msg, s)
+            return dead()
+        }
+        case typed.Stmt.Assert(_, c, msg) {
+            s1 := w.expr(c, s)
+            w.expr(msg, s1)
+            return s1
+        }
+        case typed.Stmt.Block(_, b) { return w.block(b, s) }
+        case typed.Stmt.Defer(_, b) {
+            # read where it is registered - it runs later, when the local is assigned at least as much - assigning
+            # nothing that counts
+            w.block(b, s)
+            return s
+        }
+        case typed.Stmt.Join(_, j) {
+            a := w.block(j.Code, s)
+            if not j.Tried { return a }
+            return w.clauses(j.Clauses, s, a)
+        }
+        case typed.Stmt.Spawn(_, sw) {
+            cur := s
+            for t in sw.Targets {
+                if t is not null and not w.isL(t) { cur = w.place(t, cur) }
+            }
+            cur = w.expr(sw.Task, cur)
+            for tc in sw.Clauses { w.expr(tc.Handler, cur) }
+            return cur
+        }
+        case typed.Stmt.Yield(_, x) { return w.expr(x, s) }
+        case typed.Stmt.Suspend(_, x) { return w.expr(x, s) }
+    }
+}
+
+# a try's clauses: each run from where the try began, meeting what its operand gave
+fn (w mut Walker&) clauses(cs Array<typed.Clause&>&, from State, out State) State {
+    r := out
+    if cs.Len() == 0 { return r }
+    for cl in cs {
+        c := w.block(cl.Code, from)
+        for d in cl.Defaults { c = w.expr(d, c) }
+        r = meet(r, retag(c, from, r, Cause.Clause, cl.Sp))
+    }
+    return r
+}
+
+fn (w mut Walker&) exprs(xs Array<typed.Expr&>&, s State) State {
+    cur := s
+    if xs.Len() == 0 { return cur }
+    for x in xs { cur = w.expr(x, cur) }
+    return cur
+}
+
+fn (w mut Walker&) expr(x typed.Expr?&, s State) State {
+    if x is null { return s }
+    r := w.expr1(x, s)
+    if x.Type() == types.NoreturnT { return dead() }
+    return r
+}
+
+fn (w mut Walker&) expr1(x typed.Expr&, s State) State {
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { return s }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return w.place(p, s) }
+        case typed.Expr.Promote(_, _, pr) { return w.expr(pr.X, s) }
+        case typed.Expr.Call(_, _, c) {
+            cur := s
+            match c.Target {
+                case typed.Callee.Value(f) { cur = w.expr(f, cur) }
+                case _ { }
+            }
+            return w.exprs(c.Args, cur)
+        }
+        case typed.Expr.Make(_, _, m) { return w.expr(m.Length, w.exprs(m.Items, s)) }
+        case typed.Expr.Collect(_, _, c) {
+            s1 := w.expr(c.Reserve, s)
+            w.block(c.Loop, s1)
+            return s1
+        }
+        case typed.Expr.Prim(_, _, _, _, args) { return w.exprs(args, s) }
+        case typed.Expr.Slice(_, _, sl) { return w.expr(sl.Hi, w.expr(sl.Lo, w.place(sl.Base, s))) }
+        case typed.Expr.Cond(_, _, c) {
+            s1 := w.expr(c.C, s)
+            a := w.expr(c.A, s1)
+            b := w.expr(c.B, s1)
+            return meet(a, b)
+        }
+        case typed.Expr.Seq(_, _, q) { return w.expr(q.X, w.stmts(q.Stmts, s)) }
+        case typed.Expr.Match(_, _, m) {
+            s1 := w.stmts(m.Held, s)
+            r := dead()
+            for a in m.Arms { r = w.arm(a, s1, r) }
+            if m.NoMatch is not null { r = w.arm(m.NoMatch!, s1, r) }
+            return r
+        }
+        case typed.Expr.Try(_, _, t) {
+            a := w.expr(t.X, s)
+            return w.clauses(t.Clauses, s, a)
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) {
+                    cur := s
+                    for k in caps { cur = w.expr(k.Outer, cur) }
+                    return cur
+                }
+                case typed.FnVal.Adapter(_, recv, _) { return w.expr(recv, s) }
+                case _ { return s }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            cur := s
+            for p in t.Pieces {
+                match p {
+                    case typed.Piece.Render(y) { cur = w.expr(y, cur) }
+                    case _ { }
+                }
+            }
+            return cur
+        }
+        case typed.Expr.Away(_, _, y) { return w.expr(y, s) }
+    }
+}
+
+# a match arm: its tests and bindings read where the match holds its subject, its guard, then its code and value
+fn (w mut Walker&) arm(a typed.Arm&, from State, out State) State {
+    cur := from
+    for alt in a.Alts {
+        cur = w.expr(alt.Test, cur)
+        for bd in alt.Binds { cur = w.expr(bd.From, cur) }
+    }
+    cur = w.expr(a.Guard, cur)
+    cur = w.block(a.Code, cur)
+    cur = w.expr(a.Value, cur)
+    return meet(out, retag(cur, from, out, Cause.Arm, a.Sp))
+}
+
+fn (w mut Walker&) place(p typed.Place&, s State) State {
+    match p {
+        case typed.Place.Local(sp, _, id) {
+            if id == w.L { w.read(s, sp) }
+            return s
+        }
+        case typed.Place.Global(_, _, _, _) { return s }
+        case typed.Place.Deref(_, _, r) { return w.expr(r, s) }
+        case typed.Place.Field(_, _, base, _) { return w.place(base, s) }
+        case typed.Place.Elem(_, _, e) { return w.expr(e.Index, w.place(e.Base, s)) }
+        case typed.Place.Payload(_, _, pl) { return w.place(pl.Base, s) }
+        case typed.Place.Temp(_, _, v, _) { return w.expr(v, s) }
+        case typed.Place.Target(sp, _) {
+            # a compound assignment's old value: a read of its target
+            if w.targets.Len() > 0 and w.targets[w.targets.Len() - 1] { w.read(s, sp) }
+            return s
+        }
+    }
+}
+
+# a Bool literal's value: 1, 0, or -1 for an expression that is none
+fn litBool(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Lit(_, ty, bits) => (1 if bits != 0 else 0) if ty == types.BoolT else -1
+        case _ => -1
+    }
+}
+
+# whether a loop's body holds a break of that loop - anywhere in it, the statements its expressions carry included
+fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
+    if b is null { return false }
+    return stmtsBreak(b.Stmts, loop)
+}
+
+fn stmtsBreak(ss Array<typed.Stmt&>&, loop typed.BlockId) Bool {
+    if ss.Len() == 0 { return false }
+    for s in ss {
+        if stmtBreaks(s, loop) { return true }
+    }
+    return false
+}
+
+fn stmtBreaks(s typed.Stmt&, loop typed.BlockId) Bool {
+    return match s {
+        case typed.Stmt.Jump(_, kind, l) => kind == typed.JumpKind.Break and l == loop
+        case typed.Stmt.If(_, i) => exprBreaks(i.Test, loop) or breaks(i.Then, loop) or breaks(i.Else, loop)
+        case typed.Stmt.Block(_, inner) => breaks(inner, loop)
+        case typed.Stmt.Loop(_, body, post) => breaks(body, loop) or breaks(post, loop)
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Assign(_, _, x), typed.Stmt.Yield(_, x) => exprBreaks(x, loop)
+        case typed.Stmt.Join(_, j) => breaks(j.Code, loop) or clausesBreak(j.Clauses, loop)
+        case _ => false
+    }
+}
+
+fn exprsBreak(xs Array<typed.Expr&>&, loop typed.BlockId) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprBreaks(x, loop) { return true }
+    }
+    return false
+}
+
+fn exprBreaks(x typed.Expr?&, loop typed.BlockId) Bool {
+    if x is null { return false }
+    return match x {
+        case typed.Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
+        case typed.Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
+        case typed.Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
+                                          (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
+        case typed.Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
+        case typed.Expr.Call(_, _, k) => exprsBreak(k.Args, loop)
+        case typed.Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
+        case typed.Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
+        case typed.Expr.Away(_, _, y) => exprBreaks(y, loop)
+        case _ => false
+    }
+}
+
+fn clausesBreak(cs Array<typed.Clause&>&, loop typed.BlockId) Bool {
+    if cs.Len() == 0 { return false }
+    for k in cs {
+        if breaks(k.Code, loop) or exprsBreak(k.Defaults, loop) { return true }
+    }
+    return false
+}
+
+fn armsBreak(arms Array<typed.Arm&>&, loop typed.BlockId) Bool {
+    if arms.Len() == 0 { return false }
+    for a in arms {
+        if armBreaks(a, loop) { return true }
+    }
+    return false
+}
+
+fn armBreaks(a typed.Arm&, loop typed.BlockId) Bool { return breaks(a.Code, loop) or exprBreaks(a.Value, loop) }

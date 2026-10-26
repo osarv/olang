@@ -142,6 +142,9 @@ type Local struct(Name source.NameId, Sp source.Span, Ty types.TypeId, In BlockI
     In         # the block it is declared in; a parameter's is 0
     Kind
     Marked     # where its declared type says it lives; a parameter's agrees with the body's type (ParamMark)
+    # D13d: declared with no value and assigned on every path before any read - its Let's value is never seen, and
+    # lowering writes nothing for it (check.settleUnset decides it once the body is checked)
+    Unset Bool = false
 }
 
 type BlockKind enum {
@@ -310,13 +313,16 @@ type MakeKind enum {
                # type an Array<T, n> where n is a compile-time constant (QP1), else a run-time Array<T>
 }
 
-type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Site SiteId, Checked Check) {
+type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Site SiteId, Checked Check, NoClear Bool = false) {
     Kind
     Tag
     Items
     Length     # null but for Fill
     Site       # -1 where nothing is allocated: a tuple, a case by value, a fixed array held in place (T7c)
     Checked    # Fill's length (D14b): Abort; None for every other kind and a length known in range
+    # D14d: a Fill with no fill that the counted loop right after it writes every element of before anything reads it -
+    # made with no clear
+    NoClear
 }
 
 type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exact Bool = false) {

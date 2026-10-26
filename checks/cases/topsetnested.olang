@@ -1,0 +1,10 @@
+# check: fail error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value
+# D13e: every branch of a nested top-level if counts - the inner if leaves Root unassigned on another architecture
+type Node struct(v I64) { v }
+Root Node&
+if TargetOs == "linux" {
+    if TargetArch == "x86_64" { Root = Node(1) }
+} else {
+    Root = Node(2)
+}
+fn main() { }

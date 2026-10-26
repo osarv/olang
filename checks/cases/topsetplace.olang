@@ -1,0 +1,5 @@
+# check: fail error[D13e]: an assignment at the top level is a global's initializer, written only inside a top-level 'if'
+# D13e: nothing runs at the top level - an assignment there is only a global's initializer chosen by the build
+X I64
+X = 5
+fn main() { }

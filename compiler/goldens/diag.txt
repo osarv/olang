@@ -1177,6 +1177,57 @@ d9mutvaluerecv.olang:4:7: error[D9]: a by-value parameter is the callee's own co
     4 | fn (p mut P) Twice() I32 { return p.x * 2 }
       |       ^~~
 compilation failed with 1 error
+=== definitcapture.olang
+definitcapture.olang:6:28: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+    6 |     f := fn() I64 { return x.v }
+      |                            ^
+definitcapture.olang:5:5: note: declared here with no value
+    5 |     x N&
+      |     ^
+compilation failed with 1 error
+=== definitclause.olang
+definitclause.olang:13:14: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+   13 |         y := x.v
+      |              ^
+definitclause.olang:11:5: note: declared here with no value
+   11 |     x N&
+      |     ^
+compilation failed with 1 error
+=== definitdefer.olang
+definitdefer.olang:7:20: error[D13d]: 'w' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+    7 |     defer { assert w.v > 0 }
+      |                    ^
+definitdefer.olang:6:5: note: declared here with no value
+    6 |     w N&
+      |     ^
+compilation failed with 1 error
+=== definiteffect.olang
+definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one - its constructor does not run on zeros while compiling: it reads a mutable global, whose value is the running program's
+   11 |     e Eff
+      |     ^
+definiteffect.olang:13:12: note: read here before it is assigned on every path - assign it on each path before this read
+   13 |     return e.v
+      |            ^
+definiteffect.olang:8:12: note: here
+    8 |     Made = Made + 1
+      |            ^~~~
+compilation failed with 1 error
+=== definitfield.olang
+definitfield.olang:7:5: error[D13d]: the field 'n' is not assigned on every path through the constructor, and N& has no zero value - assign it on each path, or give it a value, or write 'N?&'
+    7 |     n N&
+      |     ^
+definitfield.olang:8:5: note: when this condition is false nothing assigns it - this 'if' has no 'else'
+    8 |     if c { n = N(1) }
+      |     ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== definitloop.olang
+definitloop.olang:8:12: error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value - assign it on each path before this read, or give it a value, or write 'N?&'
+    8 |     return x.v
+      |            ^
+definitloop.olang:7:5: note: this loop may run no times - assigning in its body does not count
+    7 |     for i in range 3 { x = N(i) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === derivedcopybuild.olang
 derivedcopybuild.olang:15:10: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    15 |     grow(x)
@@ -6030,12 +6081,9 @@ t2cnevernull.olang:4:11: note: the type is written here - write '?&' for '&' whe
       |           ^
 compilation failed with 1 error
 === t2cnozero.olang
-t2cnozero.olang:5:5: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
-    5 |     n N&
-      |     ^
-t2cnozero.olang:5:8: note: the type is written here - write '?&' for '&' where it may be null
-    5 |     n N&
-      |        ^
+t2cnozero.olang:5:1: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+    5 | G N&
+      | ^
 compilation failed with 1 error
 === t2cnulltoarray.olang
 t2cnulltoarray.olang:4:17: error[T2c]: an array is never null - its zero value is the empty array: write '""', or no value, for an empty String
@@ -6465,6 +6513,49 @@ toprecover.olang:6:7: error: expected ')', found ':='
     6 |     y := 2
       |       ^~
 compilation failed with 1 error
+=== topsetcondreads.olang
+topsetcondreads.olang:4:4: error[D13e]: this condition reads 'X', which its 'if' assigns - a condition cannot decide the value it reads
+    4 | if X == 0 { X = 5 } else { X = 6 }
+      |    ^~~~~~
+compilation failed with 1 error
+=== topsethasvalue.olang
+topsethasvalue.olang:4:26: error[D13e]: 'X' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment
+    4 | if TargetOs == "linux" { X = 5 } else { X = 6 }
+      |                          ^
+topsethasvalue.olang:4:41: error[D13e]: 'X' has a value in its declaration - a global is given its value once: declare it with no value, or drop this assignment
+    4 | if TargetOs == "linux" { X = 5 } else { X = 6 }
+      |                                         ^
+compilation failed with 2 errors
+=== topsetmissing.olang
+topsetmissing.olang:5:48: error[D13e]: this branch does not assign 'Root', and Node& has no zero value - assign it in every branch of the 'if', or give it a value
+    5 | if TargetOs == "linux" { Root = Node(1) } else { }
+      |                                                ^
+compilation failed with 1 error
+=== topsetnested.olang
+topsetnested.olang:6:8: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value - add an 'else' assigning it, or give it a value
+    6 |     if TargetArch == "x86_64" { Root = Node(1) }
+      |        ^~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== topsetnoelse.olang
+topsetnoelse.olang:6:4: error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value - add an 'else' assigning it, or give it a value
+    6 | if TargetOs == "linux" { Root = Node(7) }
+      |    ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== topsetplace.olang
+topsetplace.olang:4:1: error[D13e]: an assignment at the top level is a global's initializer, written only inside a top-level 'if' - give the value in the global's declaration
+    4 | X = 5
+      | ^~~~~
+compilation failed with 1 error
+=== topsettarget.olang
+topsettarget.olang:4:26: error[D13e]: 'Y' is no global of this module declared above with no value - only such a global is assigned at the top level
+    4 | if TargetOs == "linux" { Y = 5 } else { X = 6 }
+      |                          ^
+compilation failed with 1 error
+=== topsettwice.olang
+topsettwice.olang:5:26: error[D13e]: 'X' is assigned twice at the top level in this build - each build gives a global one value
+    5 | if TargetOs == "linux" { X = 6 } else { X = 2 }
+      |                          ^~~~~
+compilation failed with 1 error
 === traitnottype.olang
 traitnottype.olang:6:8: error[T30, T32]: S& is a trait - a constraint on a type variable; a value of any type meeting it is an 'any S&'
     6 | fn f(s S&) I32 { return s.Area() }
@@ -6853,14 +6944,20 @@ compilation failed with 1 error
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
     9 |     c Counted
       |     ^
+zeroeffect.olang:10:12: note: read here before it is assigned on every path - assign it on each path before this read
+   10 |     assert c.n == 0
+      |            ^
 zeroeffect.olang:6:5: note: here
     6 |     Made++
       |     ^~~~~~
 compilation failed with 1 error
 === zerofails.olang
-zerofails.olang:10:5: error[D13c]: NonZero has no zero value, so this needs one - its constructor does not run on zeros while compiling: it fails with an error no clause handles
-   10 |     n NonZero
+zerofails.olang:11:5: error[D13c]: NonZero has no zero value, so this needs one - its constructor does not run on zeros while compiling: it fails with an error no clause handles
+   11 |     n NonZero
       |     ^
+zerofails.olang:12:16: note: read here before it is assigned on every path - assign it on each path before this read
+   12 |     assert I32(n) != 0
+      |                ^
 compilation failed with 1 error
 === zeroshared.olang
 zeroshared.olang:7:13: error[D13c]: Bag's zero value holds references, which a fill would share - give a fill, or build the elements

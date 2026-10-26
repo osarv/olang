@@ -337,6 +337,7 @@ fn DecideValues(c mut typecheck.Checker&) I64 {
     said Map<pair.Pair<I64, I64>, Bool>
     n I64 = 0
     for a in c.ValueAsks {
+        if a.Gone { continue }   # D13d: a local every path assigns before reading needs none
         key := pair.Pair(a.File, I64(a.Sp.Start))
         if said.Has(key) { continue }
         k := mir.FnKey.Body(typed.BodyId(I32(a.Body)))
@@ -366,6 +367,7 @@ fn DecideValues(c mut typecheck.Checker&) I64 {
         if moved { use, fix = zeroUseArg(d, a.Use, c.Ty(a.Ty)) }
         rec := d.Error(use, msgs.NoZeroValue(c.Ty(a.Ty), why))
         if moved { d.Note(rec, at, msgs.NoteInLibrary()) }
+        if a.Read != diag.Where.Nowhere { d.Note(rec, a.Read, msgs.NoteReadUnassigned()) }
         noteWhy(d, rec, a.File, a.Sp, file, sp)
         if fix != "" {
             d.Note(rec, use, msgs.NoteZeroByReference(fix))

@@ -1,0 +1,6 @@
+# check: fail error[D13e]: 'X' is assigned twice at the top level in this build
+# D13e: each build gives a global one value - two top-level ifs both taken would assign it twice
+X I64
+if TargetOs == "linux" { X = 5 } else { X = 1 }
+if TargetOs == "linux" { X = 6 } else { X = 2 }
+fn main() { }

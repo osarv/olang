@@ -1,0 +1,5 @@
+# check: fail error[D13e]: 'Y' is no global of this module declared above with no value
+# D13e: only a global of this module, declared above with no value, is assigned at the top level
+X I64
+if TargetOs == "linux" { Y = 5 } else { X = 6 }
+fn main() { }

@@ -1,0 +1,10 @@
+# check: fail error[D13d]: 'x' is read here before it is assigned on every path, and N& has no zero value
+# D13d: a lambda reads what it captures when it is made, so capturing a local before every path assigns it is a read
+type N struct(v I64) { v }
+fn a() I64 {
+    x N&
+    f := fn() I64 { return x.v }
+    x = N(1)
+    return f()
+}
+fn main() { a() }

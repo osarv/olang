@@ -32,6 +32,7 @@ import "names"
 import "types"
 import "generic"
 import "typed"
+import "definit"
 
 # ---- the checker ----
 
@@ -255,6 +256,19 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
+    unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
+    # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
+    # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
+    # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
+    comprState I64 = 0
+    comprId I64 = -1
+    comprOuter I64 = -1
+    comprMark I64 = -1
+    comprFrom I64 = -1
+    comprOut I64 = -1
+    comprIdx I64 = -1
+    comprKnown I64 = -1
+    noClear Bool = false        # D14d: the Array<T>(n) being checked is filled by the loop after it - made with no clear
     # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
     # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
     # requirements the evaluator decides, each a body of its own; the conversions likewise (D17g)
@@ -350,6 +364,22 @@ type ValueAsk struct(Kind ValueKind, File I64, Sp source.Span, Ty types.TypeId, 
     Ty
     Body
     Use        # the program's use of the library's code it is in, where it is in the library (B11); else where it is
+    Gone Bool = false                 # D13d: a zero value for a local every path assigns before reading - none asked
+    Read diag.Where = diag.Where.Nowhere   # D13d: where that local is read on a path not assigning it, else Nowhere
+}
+
+# D13d: a local declared with no value, judged once its body is checked (settleUnset): its body and local, the group
+# holding what making its zero value said (said only where it is read unassigned - none where it never is), whether the
+# zero value had an error (a type with none), its zero value's ask (-1 for none), where it is declared and its type
+type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, Sp source.Span, Ty types.TypeId, Field Bool) {
+    Body
+    Local
+    Group
+    NoZero
+    ValueAt
+    Sp
+    Ty
+    Field
 }
 
 type ValueKind enum {
@@ -431,6 +461,7 @@ fn (c mut Checker&) CheckProgram() {
         c.Attempts++
         mark := c.P.L.Diags.Count()
         c.attempt()
+        c.settleUnset()
         # R1a's least fixed point: a set read before it was final that came out larger means checking again, every
         # inferred set starting at what this attempt found - the reads, and what rests on them, say otherwise this time
         grew := false
@@ -518,6 +549,7 @@ fn (c mut Checker&) reset() {
     c.EmbedAsks = Vec<EmbedAsk>()
     c.AssertAsks = Vec<AssertAsk>()
     c.ValueAsks = Vec<ValueAsk>()
+    c.unsets = Vec<unsetCand>()
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
     c.ContractAsks = Vec<ContractAsk>()
@@ -527,6 +559,62 @@ fn (c mut Checker&) reset() {
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
     c.lastFixed = Vec<I64>()
+}
+
+# D13d, once an attempt has checked every body: each local declared with no value. Assigned on every path before any
+# read, it needs no zero value - none is made, none said, none asked - and lowering writes nothing for it (Local.Unset;
+# a value array and an owner keep theirs, whose stores read what they replace); else its zero value stands, and a type
+# with none is an error at the first read on a path that has not assigned it, naming that path
+fn (c mut Checker&) settleUnset() {
+    if c.unsets.Len() == 0 { return }
+    d := c.P.L.Diags
+    for u in c.unsets {
+        if u.Body < 0 or u.Body >= c.Bodies.Len() or c.Bodies[u.Body].Root is null {
+            d.Choose(u.Group)
+            continue
+        }
+        b := c.Bodies[u.Body]
+        found, readAt, why, whyAt := definit.Judge(b, typed.LocalId(I32(u.Local)), u.Field)
+        if not found {
+            d.Drop(u.Group)
+            if u.ValueAt >= 0 { c.ValueAsks[u.ValueAt].Gone = true }
+            if c.unsetLowers(u.Ty) { b.Locals[u.Local].Unset = true }
+            continue
+        }
+        if not u.NoZero {
+            d.Choose(u.Group)
+            if u.ValueAt >= 0 { c.ValueAsks[u.ValueAt].Read = diag.Where.Span(b.File, I64(readAt.Start), I64(readAt.End)) }
+            continue
+        }
+        d.Drop(u.Group)
+        name := c.text(b.Locals[u.Local].Name)
+        fix := ""
+        if c.isRef(u.Ty) and not c.P.T.IsNullable(u.Ty) and not c.P.T.ArrayRef(u.Ty) { fix = ", or write '" $c.ty(c.P.T.OrNull(u.Ty)) "'" }
+        rec I64 = -1
+        if u.Field {
+            rec = d.Error(diag.Where.Span(b.File, I64(u.Sp.Start), I64(u.Sp.End)), msgs.FieldUnassigned(name, c.ty(u.Ty), fix))
+        } else {
+            rec = d.Error(diag.Where.Span(b.File, I64(readAt.Start), I64(readAt.End)), msgs.ReadUnassigned(name, c.ty(u.Ty), fix))
+        }
+        if why == definit.Cause.Decl and u.Field { continue }
+        note := match why {
+            case definit.Cause.Decl => msgs.NoteUnassignedDecl()
+            case definit.Cause.NoElse => msgs.NoteUnassignedNoElse()
+            case definit.Cause.Branch => msgs.NoteUnassignedBranch()
+            case definit.Cause.Loop => msgs.NoteUnassignedLoop()
+            case definit.Cause.Arm => msgs.NoteUnassignedArm()
+            case definit.Cause.Clause => msgs.NoteUnassignedClause()
+        }
+        d.Note(rec, diag.Where.Span(b.File, I64(whyAt.Start), I64(whyAt.End)), note)
+    }
+}
+
+# D13d: whether lowering may leave a local definitely assigned unwritten until then - not a run-time array value nor an
+# owner, whose first store reads what it replaces (T11b's storage reuse, O8d's release)
+fn (c mut Checker&) unsetLowers(t types.TypeId) Bool {
+    r := c.P.T.Repr(t)
+    if c.P.T.KindOf(r) == types.Kind.Array and c.P.T.Length(r) == types.TypeId(0) { return false }
+    return not c.owning(t)
 }
 
 # S8c: whether a local an asked condition or assert read as fixed is written by its body after all - the condition is
@@ -672,6 +760,7 @@ fn (c mut Checker&) attempt() {
         if c.RootOnly and mi != c.P.L.Root { continue }
         ds := c.P.L.Mods[mi].Decls
         if ds.Len() > 0 { c.decls(mi, ds) }
+        if ds.Len() > 0 { c.topSets(mi) }
     }
     c.drain()
     c.failForms()
@@ -3116,8 +3205,21 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     } else if v.Values.Len() == 1 and v.Names.Len() > 1 {
         c.gap(sp, "several globals given one value (D8c)")
     } else {
-        x = c.zero(sp, want)
-        c.askValue(ValueKind.Zero, sp, want, null)
+        # D13e: a value given below, in a top-level if's branch this build takes - its initializer, no zero first
+        set := c.topSetOf(mi, n, sp)
+        if set is not null {
+            x = c.exprTo(set, want)
+            if writtenMut(v.Ty) and not c.isRef(want) { c.roStore(x, set.Span(), RoGlobal) }
+        } else {
+            # its zero value - none said where top-level ifs assign it, whose branches say what is missing (D13e)
+            dg := c.P.L.Diags
+            g := dg.Hold()
+            zmark := dg.Count()
+            x = c.zero(sp, want)
+            dg.EndHold()
+            if dg.Count() > zmark and c.topSetAnywhere(mi, n) { dg.Drop(g) } else { dg.Choose(g) }
+            c.askValue(ValueKind.Zero, sp, want, null)
+        }
     }
     c.globalTypes.Put(key, want)
     if x is not null {
@@ -3127,6 +3229,307 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
 }
+
+# ---- a global's value given below it (D13e) ----
+
+# the value a top-level assignment in the branches this build takes gives global n of module mi, declared at sp - the
+# first, where (wrongly, said by topSets) there are several; null for none
+fn (c mut Checker&) topSetOf(mi I64, n source.NameId, sp source.Span) ast.Expr?&c {
+    return c.topSetIn(mi, c.P.L.Mods[mi].Decls, n, sp, false)
+}
+
+fn (c mut Checker&) topSetIn(mi I64, ds Array<ast.Decl&>&, n source.NameId, sp source.Span, inIf Bool) ast.Expr?&c {
+    if ds.Len() == 0 { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.Set(ssp, t, v) {
+                if inIf and ssp.Start > sp.Start and setName(t) == n { return v }
+            }
+            case ast.Decl.If(_, ti) {
+                x := c.topSetChain(mi, ti, n, sp, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0)
+                if x is not null { return x }
+            }
+            nomatch { }
+        }
+    }
+    return null
+}
+
+fn (c mut Checker&) topSetChain(mi I64, ti ast.TopIf&, n source.NameId, sp source.Span, chosen I64, index I64) ast.Expr?&c {
+    if chosen == index and ti.Then is not null { return c.topSetIn(mi, ti.Then!.Decls, n, sp, true) }
+    if ti.ElseIf is not null { return c.topSetChain(mi, ti.ElseIf!, n, sp, chosen, index + 1) }
+    if ti.Else is not null and chosen == index + 1 { return c.topSetIn(mi, ti.Else!.Decls, n, sp, true) }
+    return null
+}
+
+# whether any top-level if of module mi assigns global n in any branch, decided or not
+fn (c mut Checker&) topSetAnywhere(mi I64, n source.NameId) Bool { return setsName(c.P.L.Mods[mi].Decls, n) }
+
+fn setsName(ds Array<ast.Decl&>&, n source.NameId) Bool {
+    if ds.Len() == 0 { return false }
+    for d in ds {
+        match d {
+            case ast.Decl.Set(_, t, _) { if setName(t) == n: return true }
+            case ast.Decl.If(_, ti) { if chainSets(ti, n): return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+fn chainSets(ti ast.TopIf&, n source.NameId) Bool {
+    if ti.Then is not null and setsName(ti.Then!.Decls, n) { return true }
+    if ti.ElseIf is not null and chainSets(ti.ElseIf!, n) { return true }
+    return ti.Else is not null and setsName(ti.Else!.Decls, n)
+}
+
+# whether every path through a branch's declarations assigns global n: an assignment of it, or an if every branch of
+# which does (a missing else a branch that does not)
+fn assignsAll(ds Array<ast.Decl&>&, n source.NameId) Bool {
+    if ds.Len() == 0 { return false }
+    for d in ds {
+        match d {
+            case ast.Decl.Set(_, t, _) { if setName(t) == n: return true }
+            case ast.Decl.If(_, ti) { if chainAssignsAll(ti, n): return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+fn chainAssignsAll(ti ast.TopIf&, n source.NameId) Bool {
+    if ti.Then is null or not assignsAll(ti.Then!.Decls, n) { return false }
+    if ti.ElseIf is not null { return chainAssignsAll(ti.ElseIf!, n) }
+    return ti.Else is not null and assignsAll(ti.Else!.Decls, n)
+}
+
+# the global a top-level assignment names - 0 where its target is no name
+fn setName(t ast.Expr&) source.NameId {
+    return match t {
+        case ast.Expr.Name(_, n) => n
+        case _ => source.NameId(0)
+    }
+}
+
+# D13e, for module mi once its globals are checked: every top-level assignment inside a top-level if, of a global of the
+# module declared above it with no value; at most one in the branches this build takes; every branch of an if
+# assigning a global with no zero value assigning it; and no condition reading the global its if assigns
+fn (c mut Checker&) topSets(mi I64) {
+    taken Map<source.NameId, Bool>
+    c.topSetDecls(mi, c.P.L.Mods[mi].Decls, false, true, taken)
+}
+
+fn (c mut Checker&) topSetDecls(mi I64, ds Array<ast.Decl&>&, inIf Bool, live Bool, taken mut Map<source.NameId, Bool>&) {
+    if ds.Len() == 0 { return }
+    file := c.P.L.Mods[mi].File
+    d := c.P.L.Diags
+    for x in ds {
+        match x {
+            case ast.Decl.Set(sp, t, _) {
+                at := diag.Where.Span(file, I64(sp.Start), I64(sp.End))
+                if not inIf {
+                    d.Error(at, msgs.TopSetPlace())
+                    continue
+                }
+                n := setName(t)
+                g := c.P.GlobalDecl(mi, n) if n != source.NameId(0) else null
+                tsp := t.Span()
+                if g is null {
+                    d.Error(diag.Where.Span(file, I64(tsp.Start), I64(tsp.End)), msgs.TopSetTarget(c.src2(file, tsp)))
+                    continue
+                }
+                k I64 = -1
+                for i in range g.Names.Len() {
+                    if g.Names[i] == n { k = i }
+                }
+                if k < 0 or g.NameSps[k].Start > sp.Start {
+                    d.Error(diag.Where.Span(file, I64(tsp.Start), I64(tsp.End)), msgs.TopSetTarget(c.src2(file, tsp)))
+                    continue
+                }
+                if k < g.Values.Len() {
+                    d.Error(diag.Where.Span(file, I64(tsp.Start), I64(tsp.End)), msgs.TopSetHasValue(c.text(n)))
+                    continue
+                }
+                if live {
+                    if taken.Has(n) { d.Error(at, msgs.TopSetTwice(c.text(n))) }
+                    taken.Put(n, true)
+                }
+            }
+            case ast.Decl.If(_, ti) {
+                c.topSetIf(mi, ti, ti, inIf, live, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0, taken)
+            }
+            nomatch { }
+        }
+    }
+}
+
+# an if's chain: each branch's assignments, those of the branch this build takes counted as taken; then, at the chain's
+# head, each global it assigns read by none of its conditions and - its type having no zero value - assigned by every
+# branch
+fn (c mut Checker&) topSetIf(mi I64, head ast.TopIf&, ti ast.TopIf&, inIf Bool, live Bool, chosen I64, index I64
+                             taken mut Map<source.NameId, Bool>&) {
+    if ti.Then is not null { c.topSetDecls(mi, ti.Then!.Decls, true, live and chosen == index, taken) }
+    if ti.ElseIf is not null {
+        c.topSetIf(mi, head, ti.ElseIf!, inIf, live, chosen, index + 1, taken)
+    } else if ti.Else is not null {
+        c.topSetDecls(mi, ti.Else!.Decls, true, live and chosen == index + 1, taken)
+    }
+    if head != ti { return }
+    set Vec<source.NameId>
+    chainNames(head, set)
+    if set.Len() == 0 { return }
+    file := c.P.L.Mods[mi].File
+    d := c.P.L.Diags
+    for n in set {
+        # a condition reading the value its own if gives (D13e)
+        k := head
+        for {
+            if k.Cond is not null and c.condReads(file, k.Cond!.Span(), c.text(n)) {
+                csp := k.Cond!.Span()
+                d.Error(diag.Where.Span(file, I64(csp.Start), I64(csp.End)), msgs.TopSetCondReads(c.text(n)))
+            }
+            if k.ElseIf is null { break }
+            k = k.ElseIf!
+        }
+        g := c.P.GlobalDecl(mi, n)
+        if g is null { continue }
+        t := try c.globalTypes.Get(pair.Pair(mi, I64(n))) catch default types.UnknownT
+        if t == types.UnknownT or c.hasZero(mi, t) { continue }
+        c.branchesAssign(file, head, n, t)
+    }
+}
+
+# every global some branch of an if's chain assigns, directly or in an if inside it
+fn chainNames(ti ast.TopIf&, out mut Vec<source.NameId>&) {
+    if ti.Then is not null { declNames(ti.Then!.Decls, out) }
+    if ti.ElseIf is not null { chainNames(ti.ElseIf!, out) }
+    if ti.Else is not null { declNames(ti.Else!.Decls, out) }
+}
+
+fn declNames(ds Array<ast.Decl&>&, out mut Vec<source.NameId>&) {
+    if ds.Len() == 0 { return }
+    for d in ds {
+        match d {
+            case ast.Decl.Set(_, t, _) {
+                n := setName(t)
+                if n != source.NameId(0) and not hasName(out, n) { out.Push(n) }
+            }
+            case ast.Decl.If(_, ti) { chainNames(ti, out) }
+            nomatch { }
+        }
+    }
+}
+
+# D13e: each branch of an if's chain not assigning n said - one holding an if that assigns it on some branch is that
+# if's to say; a missing else said at the chain's last condition
+fn (c mut Checker&) branchesAssign(file I64, ti ast.TopIf&, n source.NameId, t types.TypeId) {
+    d := c.P.L.Diags
+    if ti.Then is not null and not assignsAll(ti.Then!.Decls, n) and not nestedSets(ti.Then!.Decls, n) {
+        sp := ti.Then!.Sp
+        d.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + 1), msgs.TopSetMissing(c.text(n), c.ty(t)))
+    }
+    if ti.Then is not null { c.nestedBranches(file, ti.Then!.Decls, n, t) }
+    if ti.ElseIf is not null {
+        c.branchesAssign(file, ti.ElseIf!, n, t)
+        return
+    }
+    if ti.Else is null {
+        csp := ti.Cond!.Span()
+        d.Error(diag.Where.Span(file, I64(csp.Start), I64(csp.End)), msgs.TopSetNoElse(c.text(n), c.ty(t)))
+        return
+    }
+    if not assignsAll(ti.Else!.Decls, n) and not nestedSets(ti.Else!.Decls, n) {
+        sp := ti.Else!.Sp
+        d.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + 1), msgs.TopSetMissing(c.text(n), c.ty(t)))
+    }
+    c.nestedBranches(file, ti.Else!.Decls, n, t)
+}
+
+# the ifs inside a branch assigning n where no assignment of the branch's own covers every path: each judged as its own
+fn (c mut Checker&) nestedBranches(file I64, ds Array<ast.Decl&>&, n source.NameId, t types.TypeId) {
+    if ds.Len() == 0 or directSet(ds, n) { return }
+    for d in ds {
+        match d {
+            case ast.Decl.If(_, ti) {
+                if chainSets(ti, n) and not chainAssignsAll(ti, n) { c.branchesAssign(file, ti, n, t) }
+            }
+            nomatch { }
+        }
+    }
+}
+
+fn hasName(xs Vec<source.NameId>&, n source.NameId) Bool {
+    for x in xs {
+        if x == n { return true }
+    }
+    return false
+}
+
+fn directSet(ds Array<ast.Decl&>&, n source.NameId) Bool {
+    for d in ds {
+        match d {
+            case ast.Decl.Set(_, t, _) { if setName(t) == n: return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+# whether an if inside a branch assigns n on some branch - then what is missing is said there
+fn nestedSets(ds Array<ast.Decl&>&, n source.NameId) Bool {
+    if ds.Len() == 0 { return false }
+    for d in ds {
+        match d {
+            case ast.Decl.If(_, ti) { if chainSets(ti, n): return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+# whether a condition's text names a global - the name as a whole word, not a member after a dot nor in a literal
+fn (c mut Checker&) condReads(file I64, sp source.Span, name String&) Bool {
+    text := c.P.L.Diags.TextOf(file)
+    t := text[I64(sp.Start):I64(sp.End)]
+    i I64 = 0
+    quoted := false
+    for i < t.Len() {
+        ch := t[i]
+        if ch == '"' { quoted = not quoted }
+        if not quoted and i + name.Len() <= t.Len() and t[i:i + name.Len()] == name {
+            before := i == 0 or not (t[i - 1].IsLetter() or t[i - 1].IsDigit() or t[i - 1] == '_' or t[i - 1] == '.')
+            j := i + name.Len()
+            after := j >= t.Len() or not (t[j].IsLetter() or t[j].IsDigit() or t[j] == '_')
+            if before and after { return true }
+        }
+        i++
+    }
+    return false
+}
+
+# whether a type has a zero value (D13c): its zero made with what it says held back and forgotten - a constructor with
+# an effect (decided by evaluation, after) counting as one
+fn (c mut Checker&) hasZero(mi I64, t types.TypeId) Bool {
+    dg := c.P.L.Diags
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    g := dg.Hold()
+    mark := dg.Count()
+    gaps := c.Gaps.Len()
+    was := c.asking
+    c.asking = true
+    c.zero(source.Span(0, 0), t)
+    c.asking = was
+    dg.EndHold()
+    ok := dg.Count() == mark
+    dg.Forget(mark)
+    dg.Drop(g)
+    c.Gaps.Truncate(gaps)
+    c.pop()
+    return ok
+}
+
+# a span of a file's text, as a message quotes it
+fn (c mut Checker&) src2(file I64, sp source.Span) String { return $c.P.L.Diags.TextOf(file)[I64(sp.Start):I64(sp.End)] }
 
 # a body's outermost block, its parameters already in it: its statements
 fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block&c {
@@ -9481,8 +9884,10 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b)
     lchk := typed.Check.Abort
+    nc := c.noClear and args.Len() == 1 and not c.owning(elem) and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
+    c.noClear = false
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
-                                              c.site(typed.SiteKind.Make, sp), lchk))
+                                              c.site(typed.SiteKind.Make, sp), lchk, nc))
 }
 
 # the name a span begins with - a written type's first word - else the span
@@ -14091,6 +14496,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         t := declared
         x typed.Expr?&c = null
+        pend := unsetCand(-1, -1, -1, false, -1, nsp, types.UnknownT, false)
         # T7d: a field's storage is its type's (C2e: held in the instance where its declaration gives it a length); a
         # local's fixed where its initializer's length is known and nothing assigns it as a whole afterwards
         keep := not c.fr().stored.Has(v.Names[i])
@@ -14113,7 +14519,11 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         } else if i < v.Values.Len() {
             wasNull := c.nullDecl
             if v.Ty is not null and not v.Infer { c.nullDecl = c.typeWrittenAt(v.Ty!) }
+            # D14d: Array<T>(n) whose every element the counted loop after it writes before any read - no clear
+            filled := not v.Field and v.Names.Len() == 1 and c.filledNext(v.Names[i], v.Values[i])
+            c.noClear = filled
             x = c.exprTo(v.Values[i], want)
+            c.noClear = false
             c.nullDecl = wasNull
             if v.Ty is null or v.Infer {
                 t = c.inferred(v.Values[i], x!, keep)
@@ -14125,11 +14535,21 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 if c.P.T.KindOf(c.deref(t)) == types.Kind.Array and not c.P.T.Same(t, typeOf(x)) { x = c.fit(x!, t, v.Values[i].Span()) }
             }
         } else {
+            # D13c, D13d: its zero value, held back - said only if a path reads it before assigning it (settleUnset)
             wasNull := c.nullDecl
             c.nullDecl = c.typeWrittenAt(v.Ty!)
+            dg := c.P.L.Diags
+            g := dg.Hold()
+            zmark := dg.Count()
             x = c.zero(nsp, t)
+            dg.EndHold()
+            noZero := dg.Count() > zmark
+            if noZero { x = c.lit(nsp, t, 0) }   # never lowered: an error is said unless every path assigns first
             c.nullDecl = wasNull
+            ask := c.ValueAsks.Len()
             c.askValue(ValueKind.Zero, nsp, t, null)
+            if c.ValueAsks.Len() == ask { ask = -1 }
+            pend = unsetCand(c.fr().Body, -1, g, noZero, ask, nsp, t, v.Field)
         }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Place.Deref(nsp, t, x!)) }
         # T7a: a field holding a run-time array by value - held by reference instead
@@ -14146,6 +14566,10 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
+        # D14d: a fixed array so filled is not written before the loop (its value is never seen)
+        if i < v.Values.Len() and not v.Field and v.Names.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(t)) == types.Kind.Array and
+           c.P.T.Length(c.P.T.Repr(t)) != types.TypeId(0) and c.noClearMade(x) { c.cur().Locals[id].Unset = true }
+        if pend.Group >= 0 { c.unsets.Push(unsetCand(pend.Body, id, pend.Group, pend.NoZero, pend.ValueAt, pend.Sp, pend.Ty, pend.Field)) }
         if v.Ty is not null and not v.Infer { c.fr().typeAt.Put(id, c.typeWrittenAt(v.Ty!)) }
         if inferred { c.roLet(id, x!) }
         # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
@@ -15236,9 +15660,14 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
         n := c.hidden(sp, c.i64())
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, coll), null)))
+        # T7c: a fixed array's length is the comprehension's count, known while compiling
+        if cm is not null and c.P.T.Length(at) != types.TypeId(0) and c.P.T.KindOf(c.P.T.Length(at)) == types.Kind.Const {
+            c.comprKnown = c.P.T.ConstValue(c.P.T.Length(at))
+        }
         c.counted(sp, f, k, n, coll, at, -1, -1, cm, ce)
         return c.readLocal(sp, n)
     }
+    if cm is not null { c.comprOpen(sp) }
     dt := c.deref(st)
     if c.P.T.KindOf(dt) == types.Kind.Any {
         # T32b: an "any" of an iterator trait walked through its table's Next
@@ -15506,16 +15935,179 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
     f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, Array<ast.Stmt&>(0), Array<ast.Catch&>(0))
     from := c.stmts.Len()
     fails := c.fr().LoopFails
-    id, outer, mark := c.open(typed.BlockKind.Collect, sp)
-    c.walk(sp, f, cm, et)
-    b := c.close(id, outer, mark, from)
+    # the walk opens the comprehension's block where its source's setup ends (comprOpen), or fills a fixed array
+    wState, wId, wOuter, wMark, wFrom := c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom
+    wOut, wIdx, wKnown := c.comprOut, c.comprIdx, c.comprKnown
+    c.comprState, c.comprOut, c.comprIdx, c.comprKnown = 1, -1, -1, -1
+    reserve := c.walk(sp, f, cm, et)
+    if c.comprState == 1 { c.comprOpen(sp) }
+    state, id, outer, mark, cfrom, out := c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom, c.comprOut
+    c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom = wState, wId, wOuter, wMark, wFrom
+    c.comprOut, c.comprIdx, c.comprKnown = wOut, wIdx, wKnown
     # E27, S9e: a comprehension whose own calls can fail is written under try - said at its "for"
     if c.fr().LoopFails > fails and c.fr().Tries == 0 {
         fa := try c.src(sp).Find(" for ") catch default -1
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
     }
     c.fr().LoopFails = fails
-    return typed.Expr.Collect(sp, at, typed.Collect(null, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None))
+    if state == 3 {
+        # T7c: no if, a count known while compiling - a fixed array, each element written once in place
+        r := c.readLocal(sp, out)
+        return typed.Expr.Seq(sp, typeOf(r), typed.Seq(gather(c.stmts, from), r))
+    }
+    b := c.close(id, outer, mark, cfrom)
+    # its storage reserved from the count its source knows before the loop, made once at it where every value is kept
+    # (no if); none known, grown (E27)
+    exact := reserve is not null and cm.Filter is null
+    r := typed.Expr.Collect(sp, at, typed.Collect(reserve, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, exact))
+    if cfrom == from { return r }
+    return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+}
+
+# D14d: whether "name := Array<T>(n)" (or typed so) is followed, as the next statement of its block, by a counted loop
+# "for i in range n" (or "range 0, n", the same n - a name or a literal) whose body writes name[i] as a whole at its top
+# level, mentions name nowhere else and holds no break, continue or return - so every element is written before
+# anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a mention is
+# always the name written, so anything more is a mention more, and the clear is kept. An element type that owns or is
+# an array is excluded (a store into one reads what it replaces)
+fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
+    fr := c.fr()
+    if fr.restAt >= fr.rest.Len() { return false }
+    n := match value {
+        case ast.Expr.Call(_, f, args) => args[0] if args.Len() == 1 and isArrayCtor(c, f) else null
+        case _ => null
+    }
+    if n is null or not plainLen(n) { return false }
+    match fr.rest[fr.restAt] {
+        case ast.Stmt.ForIn(_, f) {
+            if f.Key != source.NameId(0) or f.Tried or f.Clauses.Len() > 0 or f.Body.Len() == 0 { return false }
+            match f.Source {
+                case ast.Expr.Range(_, rargs) {
+                    if rargs.Len() == 1 {
+                        if not c.sameLen(rargs[0], n) { return false }
+                    } else if rargs.Len() == 2 {
+                        if not (c.isZeroLit(rargs[0]) and c.sameLen(rargs[1], n)) { return false }
+                    } else {
+                        return false
+                    }
+                }
+                nomatch { return false }
+            }
+            writes := 0
+            for st in f.Body {
+                match st {
+                    case ast.Stmt.Assign(_, op, target, _) {
+                        if op == token.Tok.Assign and c.indexOf(target, name, f.Name) { writes++ }
+                    }
+                    nomatch { }
+                }
+            }
+            if writes != 1 { return false }
+            from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
+            text := c.src(source.Span(from, to))
+            return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
+                   wordCount(text, "continue") == 0 and wordCount(text, "return") == 0
+        }
+        nomatch { return false }
+    }
+}
+
+# whether an expression is "Array<T>" naming the built-in array (a call of it then makes one)
+fn isArrayCtor(c mut Checker&, f ast.Expr&) Bool {
+    match f {
+        case ast.Expr.Generic(_, g, targs) {
+            if targs.Len() != 1 { return false }
+            match g {
+                case ast.Expr.Name(_, gn) { return c.text(gn) == "Array" }
+                nomatch { return false }
+            }
+        }
+        nomatch { return false }
+    }
+}
+
+# a length a later range can be told to be the same as: a name or an integer literal
+fn plainLen(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Name(_, _) => true
+        case ast.Expr.Lit(_, k) => k == token.Tok.IntLit
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) sameLen(a ast.Expr&, b ast.Expr&) Bool {
+    if not plainLen(a) or not plainLen(b) { return false }
+    match a {
+        case ast.Expr.Name(_, n) {
+            match b {
+                case ast.Expr.Name(_, m) { return n == m }
+                nomatch { return false }
+            }
+        }
+        nomatch { }
+    }
+    return c.src(a.Span()) == c.src(b.Span())
+}
+
+fn (c mut Checker&) isZeroLit(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(sp, k) => k == token.Tok.IntLit and c.src(sp) == "0"
+        case _ => false
+    }
+}
+
+# whether a target is "name[i]"
+fn (c mut Checker&) indexOf(target ast.Expr&, name source.NameId, i source.NameId) Bool {
+    match target {
+        case ast.Expr.Index(_, x, items) {
+            if items.Len() != 1 { return false }
+            xn := match x {
+                case ast.Expr.Name(_, m) => m
+                case _ => source.NameId(0)
+            }
+            ixn := match items[0] {
+                case ast.Expr.Name(_, m) => m
+                case _ => source.NameId(0)
+            }
+            return xn == name and ixn == i
+        }
+        nomatch { return false }
+    }
+}
+
+# how often a word stands whole in a text - not part of a longer name
+fn wordCount(t String&, w String&) I64 {
+    n I64 = 0
+    i I64 = 0
+    for i + w.Len() <= t.Len() {
+        if t[i:i + w.Len()] == w {
+            before := i == 0 or not (t[i - 1].IsLetter() or t[i - 1].IsDigit() or t[i - 1] == '_')
+            j := i + w.Len()
+            after := j >= t.Len() or not (t[j].IsLetter() or t[j].IsDigit() or t[j] == '_')
+            if before and after { n++ }
+        }
+        i++
+    }
+    return n
+}
+
+# whether a declaration's value is an Array<T>(n) made with no clear (D14d)
+fn (c mut Checker&) noClearMade(x typed.Expr?&) Bool {
+    if x is null { return false }
+    return match x {
+        case typed.Expr.Make(_, _, m) => m.NoClear
+        case _ => false
+    }
+}
+
+# E27: the comprehension being walked opens its block here, where its source's setup ends - the walk's own
+# statements from now on its loop's
+fn (c mut Checker&) comprOpen(sp source.Span) {
+    if c.comprState != 1 { return }
+    c.comprFrom = c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Collect, sp)
+    c.comprId, c.comprOuter, c.comprMark = id, outer, mark
+    c.comprState = 2
 }
 
 # ---- lanes (E39) ----
@@ -16124,7 +16716,15 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
         return
     }
     sp := cm.Value.Span()
+    out, idx := c.comprOut, c.comprIdx
     v := c.exprTo(cm.Value, ce)
+    if cm.Filter is null and out >= 0 {
+        # T7c: the fixed array's element at the counter
+        ot := c.localType(out)
+        dst typed.Place&c = typed.Place.Elem(sp, ce, typed.Elem(typed.Place.Local(sp, ot, typed.LocalId(I32(out))), c.readLocal(sp, idx), typed.Check.None))
+        c.emit(typed.Stmt.Assign(sp, dst, c.fit(v, ce, sp)))
+        return
+    }
     if cm.Filter is null {
         c.emit(typed.Stmt.Yield(sp, v))
         return
@@ -16397,6 +16997,21 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), cnt))
     k := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, t, 0)))
+    # T7c: a comprehension's count where every bound is known while compiling
+    if cm is not null {
+        known := Array<I64>(rargs.Len(), 0)
+        all := true
+        for i in range rargs.Len() {
+            kv := c.knownInt(rargs[i])
+            if kv < types.TypeId(0) { all = false } else { known[i] = c.P.T.ConstValue(kv) }
+        }
+        if all {
+            lo0 := known[0] if rargs.Len() > 1 else 0
+            hi0 := known[1] if rargs.Len() > 1 else known[0]
+            st0 := known[2] if rargs.Len() > 2 else 1
+            if st0 > 0 { c.comprKnown = (hi0 - lo0 + st0 - 1) / st0 if hi0 > lo0 else 0 }
+        }
+    }
     c.counted(sp, f, k, n, -1, types.UnknownT, lo, st, cm, ce)
     return c.readLocal(sp, n)
 }
@@ -16404,6 +17019,19 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
 # the counted loop of a for-in: k from 0 below n, the element - coll's at k, or lo + k * st - and the position (the
 # key) declared each turn
 fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64, at types.TypeId, lo I64, st I64, cm ast.Compr?&, ce types.TypeId) {
+    if cm is not null and c.comprState == 1 {
+        if cm.Filter is null and c.comprKnown >= 0 and ce != types.UnknownT {
+            # E27, T7c: a fixed array of the known count, declared with no value and written element by element
+            ft := c.P.T.Array(ce, c.P.T.Const(c.i64(), c.comprKnown))
+            out := c.hidden(sp, ft)
+            c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(out)), c.lit(sp, ft, 0)))
+            c.cur().Locals[out].Unset = true   # D13d: every element written before it is read
+            c.comprOut, c.comprIdx, c.comprState = out, k, 3
+        } else {
+            c.comprOpen(sp)
+        }
+    }
+    c.comprKnown = -1
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
