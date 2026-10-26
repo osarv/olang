@@ -1460,3 +1460,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   too); target + description unique in a file; several examples of one target each need a description (the caption);
   `olang test FILE Target` runs one target's tests and examples. Doc tests in comments not built (comments stay prose).
   Queued as a small batch after wt-definit (check/parse) - with named arguments.
+- DOC EXAMPLES REVISED 2026-10-26 (the user: "why not have all tests as examples? Do we really need tests to be
+  possible without being examples?"): no `example` keyword - every `test Target "desc" { }` is an example of its target,
+  shown in its docs: `olang doc`/HTML list them by description (bodies expandable), hover shows the first in file order
+  and the count. A test with no target (`test "desc" { }`) stays for what is about no one declaration (language
+  features, whole programs, integration). Same-file and uniqueness rules as before. Recorded as the form unless the
+  user objects.
