@@ -6666,7 +6666,9 @@ prevent the others from being checked and run, and the exit status is nonzero wh
 failed a test. The files are built and run one at a time, in the order listed, and what one file's build holds is
 released before the next begins: a list needs the memory of its largest file, not of the whole list. Each test's
 result is written out as the test ends, and a file whose tests' process is ended by a signal - a crash - is reported as
-such, so what ran before it is never lost.
+such, so what ran before it is never lost. After the files, words that name no file and end in no `.olang` pick the
+tests to run in each: a test runs when it names a target (B7a) a word is, or whose type a word is (`Map` runs `Map`'s
+tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs.
 
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
@@ -6819,10 +6821,18 @@ decision.
 
 ### 10.4 Test blocks
 
-**B7.** `test-decl ::= "test" STR_LIT block`, valid as a top-level declaration in any module.
+**B7.** `test-decl ::= "test" [ IDEN [ "." IDEN ] ] STR_LIT block`, valid as a top-level declaration in any module.
 `STR_LIT` is the test's description. A `test` block has no error union of its own and raises nothing with
 `error` (R3); a `try` in it need not catch everything it covers, and an error that leaves its body fails the test
 (S16).
+
+**B7a (a test's target).** A test may name what it is an example of, before its description: `test Twice "doubles"
+{ }` - a function, a type, or `Type.Method`, of its own file (private ones included; for a method, the method's
+declaration is in the file, its type anywhere). A target naming nothing of the file, or something another file
+declares, is a compile-time error, and so are two tests of one target with one description. Its run reports it by its
+target, `ok - Twice: doubles`, `FAIL - Twice: doubles`; `doc` lists it under the target as an example, its body as the
+file writes it (B14), and a hover on the target shows the first of them (B15). A target changes nothing about how the
+test runs.
 
 **B8.** A `test` block is only ever executed under `test` (§10.1 B3a), and only for the file it is
 directly declared in. Each test in a run prints its own description together with pass/fail, and
@@ -7066,15 +7076,17 @@ builds it, once.
 **B14.** `doc FILE [NAME]` prints the documentation of the module `FILE` (L4b): the module's own, then each of its
 exported top-level items - a function, a type, an error type, a global - in the order the file declares them, each with
 its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented; a type's fields, cases,
-words and methods each with their own. A type has one constructor; the other ways to make a value are ordinary functions of the type's module, and a listing groups them under the type as its *builders* - after its fields, before its methods, under a `builders` line, and no longer among the module's plain functions: an exported top-level function with one result (a function with several is none) that is the type, a reference to it, or an instance of it, where the type is a struct, an enum or a type declared over another and is declared by the function's own module (the errors it may fail with do not matter). A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
+words and methods each with their own, and each item's examples - the tests of its file naming it (B7a), by
+description, their bodies beneath - after its doc comment. A type has one constructor; the other ways to make a value are ordinary functions of the type's module, and a listing groups them under the type as its *builders* - after its fields, before its methods, under a `builders` line, and no longer among the module's plain functions: an exported top-level function with one result (a function with several is none) that is the type, a reference to it, or an instance of it, where the type is a struct, an enum or a type declared over another and is declared by the function's own module (the errors it may fail with do not matter). A type is listed with its builders only when the type is itself listed. `explain FILE Type` lists them too, one line each, and the language server's hover on a type shows them. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
 item alone. The program `FILE` is the root of is checked first; one with errors reports them instead. `doc -html DIR
 [FILE...]` writes the documentation of each `FILE` - of every module of the standard library when none is named - as
-static HTML into the directory `DIR`, one page per module and an index; a module that does not check is left out, its
+static HTML into the directory `DIR`, one page per module and an index, each example a section that opens to its body; a module that does not check is left out, its
 errors reported, and the status is then 1.
 
 **B15.** `lsp` serves the Language Server Protocol on the standard input and output (JSON-RPC 2.0 with
 `Content-Length` framing), for the files an editor has open, their text as the editor holds it: diagnostics as the
-compiler reports them (B11), a hover giving the item's signature and doc comment (B11b, L4b), the definition of a name,
+compiler reports them (B11), a hover giving the item's signature and doc comment (B11b, L4b) and the first test naming it (B7a) with how many
+more there are, the definition of a name,
 a document's symbols, completion of a module's members and of fields and methods after `.`, and formatting (B13). Each
 open file is checked as the root of its program, again after every edit and in every open file importing it. A file
 that does not parse has its diagnostics and answers nothing else; no request ends the server but `shutdown` and

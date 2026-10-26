@@ -119,8 +119,15 @@ fn (w mut writer&) decl(d ast.Decl&) {
                 w.put("}")
             }
         }
-        case ast.Decl.Test(_, name, body) {
+        case ast.Decl.Test(_, name, body, target) {
             w.put("test ")
+            if target is not null {
+                for i, n in target.Parts {
+                    if i > 0 { w.put(".") }
+                    w.name(n)
+                }
+                w.put(" ")
+            }
             w.span(name)
             w.put(" ")
             w.block(body)

@@ -341,7 +341,8 @@ type Decl enum {
     Import(sp source.Span, alias source.NameId, path source.Span, link source.Span)
     # type Name error [Member, ...] [{ WORDS }] (T19, T19a): an error type's own words, and the members of a named set
     Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&)
-    Test(sp source.Span, name source.Span, body Array<Stmt&>&)
+    # test [Target] "description" { } (B14): Target a function, a type or Type.Method of the file, null for none
+    Test(sp source.Span, name source.Span, body Array<Stmt&>&, target Path?&)
     If(sp source.Span, i TopIf&)
     # NAME = value in a top-level if's branch (D13e): the value of a global declared above with none - target a Name
     Set(sp source.Span, target Expr&, value Expr&)
@@ -482,4 +483,71 @@ fn (p Pattern&) Span() source.Span {
         case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _) => sp
         case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _) => sp
     }
+}
+
+# ---- tests (B7, B7a) ----
+
+# the test declared at sp among ds - inside the branches of top-level ifs too - null for none
+fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?&ds {
+    for d in ds {
+        match d {
+            case Decl.Test(dsp, _, _, _) {
+                if dsp == sp { return d }
+            }
+            case Decl.If(_, ti) {
+                found := findTestIf(ti, sp)
+                if found is not null { return found }
+            }
+            case _ { }
+        }
+    }
+    return null
+}
+
+fn findTestIf(ti TopIf?&, sp source.Span) Decl?&ti {
+    if ti is null { return null }
+    if ti.Then is not null {
+        f := FindTest(ti.Then!.Decls, sp)
+        if f is not null { return f }
+    }
+    if ti.Else is not null {
+        f := FindTest(ti.Else!.Decls, sp)
+        if f is not null { return f }
+    }
+    return findTestIf(ti.ElseIf, sp)
+}
+
+# what a test is an example of, as written ("Map.Get"), "" for none (B7a)
+fn TestTarget(d Decl&, names source.Names&) String {
+    match d {
+        case Decl.Test(_, _, _, target) {
+            if target is null { return "" }
+            b := StringBuilder()
+            for i, n in target.Parts {
+                if i > 0 { b.PushChar('.') }
+                b.Push(names.Text(n))
+            }
+            return b.ToString()
+        }
+        case _ { return "" }
+    }
+}
+
+# a test's description, between its quotes (B7)
+fn TestDesc(d Decl&, text String&) String {
+    match d {
+        case Decl.Test(_, name, _, _) {
+            s := text[name.Start:name.End]
+            if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
+            return $s
+        }
+        case _ { return "test" }
+    }
+}
+
+# a test as its run reports it: "Target: description", or the description alone
+fn TestLabel(d Decl&, text String&, names source.Names&) String {
+    t := TestTarget(d, names)
+    if t.Len() == 0 { return TestDesc(d, text) }
+    return $t ": " $TestDesc(d, text)
 }

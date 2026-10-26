@@ -336,3 +336,19 @@ fn (it mut MapValueIter<K, V>&) Next() V ? Exhausted {
     it.slot = s.next
     return s.entry.Value
 }
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
+
+if TestBuild {
+    # examples (B7a): what olang doc shows under the method
+    test Map.Get "gives the value put for a key" {
+        m := Map<String&, I64>()
+        m.Put("one", 1)
+        assert (try m.Get("one") catch default 0) == 1
+    }
+    test Map.Get "fails on a key never put" {
+        m := Map<String&, I64>()
+        assert (try m.Get("none") catch MapError default -1) == -1
+    }
+}

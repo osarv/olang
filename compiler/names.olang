@@ -548,7 +548,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 r.expr(target)
                 r.expr(value)
             }
-            case ast.Decl.Test(_, _, body) {
+            case ast.Decl.Test(_, _, body, _) {
                 r.startItem(mi)
                 r.block(body)
             }

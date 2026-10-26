@@ -1,0 +1,11 @@
+# B7a: tests naming what they are examples of - a failure's report names the target, and words after the file pick the
+# tests to run: a target, its type, or text of a description
+Live mut I64 = 0
+fn twice(n I64) I64 { return n * 2 }
+type Box struct(v I64) { v }
+fn (b Box&) Get() I64 { return b.v }
+test twice "doubles" { assert twice(2 + Live) == 4 }
+test twice "fails on purpose" { assert twice(2 + Live) == 5 }
+test Box "holds a value" { assert Box(3 + Live).v == 3 }
+test Box.Get "gives its value" { assert Box(4 + Live).Get() == 4 }
+test "a plain one" { assert Live == 0 }

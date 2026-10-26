@@ -577,11 +577,14 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         }
         case token.Tok.Test {
             p.advance()
+            # B14: a test may name what it is an example of - a function, a type, Type.Method
+            target ast.Path?& = null
+            if p.sees(token.Tok.Iden) { target = try p.path() }
             if not p.sees(token.Tok.StrLit) { try p.fail(token.Tok.StrLit.Describe()) }
             nt := p.tk()
             p.advance()
             body := try p.block()
-            return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body)
+            return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body, target)
         }
         case token.Tok.If { return try p.topIf() }
         case token.Tok.Iden {

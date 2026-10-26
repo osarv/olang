@@ -1181,6 +1181,13 @@ fn (b StringBuilder&) Str() String { return b.ToString() }
 # prelude is part of every program
 
 if TestBuild {
+    # examples (B7a): what olang doc shows under the method
+    test String.Trim "takes the spaces off both ends, keeping the inner ones" { assert "  a b  ".Trim() == "a b" }
+    test String.Trim "borrows the text it trims, copying nothing" {
+        t String& = " x "
+        assert t.Trim() == "x" and t == " x "
+    }
+
     test "Eq compares contents, and == goes through it; same asks for one instance" {
         a String& = "hello"
         bytes := Array<U8>(5, 'x')

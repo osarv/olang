@@ -6191,11 +6191,32 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
     }
     ts Vec<String&>
     for id in tests {
-        ts.Push($"{ ptr, ptr } { ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) ", ptr " $e.cstr(e.testName(id)) " }")
+        tg, ds := e.testParts(id)
+        fnp := $"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id))))
+        ts.Push($"{ ptr, ptr, ptr, ptr } { " $fnp ", ptr " $e.cstr(e.testName(id)) ", ptr " $e.cstr(tg) ", ptr " $e.cstr(ds) " }")
     }
     b := StringBuilder()
     if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" $gs.Len() " x ptr] [" $gs.Join(", ") "]\n") }
-    if ts.Len() > 0 { b.Push($"@olang.harness.tests = private constant [" $ts.Len() " x { ptr, ptr }] [" $ts.Join(", ") "]\n") }
+    if ts.Len() > 0 {
+        b.Push($"@olang.harness.tests = private constant [" $ts.Len() " x { ptr, ptr, ptr, ptr }] [" $ts.Join(", ") "]\n")
+        e.declare("strcmp", "i32 @strcmp(ptr, ptr)")
+        e.declare("strncmp", "i32 @strncmp(ptr, ptr, i64)")
+        e.declare("strlen", "i64 @strlen(ptr)")
+        e.declare("strstr", "ptr @strstr(ptr, ptr)")
+        # B7a: a test runs where the command line gives no word, or a word its target is, its target's type is, or its
+        # description holds
+        b.Push("\ndefine private i1 @olang.harness.selected(ptr %tg, ptr %td, i32 %argc, ptr %argv) {\nentry:\n")
+        b.Push("  %few = icmp sle i32 %argc, 1\n  br i1 %few, label %yes, label %loop\nloop:\n")
+        b.Push("  %i = phi i32 [ 1, %entry ], [ %i2, %next ]\n  %i64 = sext i32 %i to i64\n")
+        b.Push("  %ip = getelementptr ptr, ptr %argv, i64 %i64\n  %f = load ptr, ptr %ip\n")
+        b.Push("  %c1 = call i32 @strcmp(ptr %tg, ptr %f)\n  %e1 = icmp eq i32 %c1, 0\n  br i1 %e1, label %yes, label %t2\nt2:\n")
+        b.Push("  %fl = call i64 @strlen(ptr %f)\n  %c2 = call i32 @strncmp(ptr %tg, ptr %f, i64 %fl)\n")
+        b.Push("  %e2 = icmp eq i32 %c2, 0\n  br i1 %e2, label %t2b, label %t3\nt2b:\n")
+        b.Push("  %dp = getelementptr i8, ptr %tg, i64 %fl\n  %dc = load i8, ptr %dp\n  %dot = icmp eq i8 %dc, 46\n")
+        b.Push("  br i1 %dot, label %yes, label %t3\nt3:\n  %ss = call ptr @strstr(ptr %td, ptr %f)\n")
+        b.Push("  %e3 = icmp ne ptr %ss, null\n  br i1 %e3, label %yes, label %next\nnext:\n  %i2 = add i32 %i, 1\n")
+        b.Push("  %more = icmp slt i32 %i2, %argc\n  br i1 %more, label %loop, label %no\nyes:\n  ret i1 1\nno:\n  ret i1 0\n}\n")
+    }
     b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
     b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
@@ -6213,9 +6234,14 @@ fn (e mut Emitter&) harness(tests Vec<I64>) {
         b.Push("  br label %gloop\ngdone:\n")
     }
     if ts.Len() > 0 {
-        tt := $"[" $ts.Len() " x { ptr, ptr }]"
+        tt := $"[" $ts.Len() " x { ptr, ptr, ptr, ptr }]"
         b.Push("  store volatile i64 0, ptr %k\n  br label %tloop\ntloop:\n  %tk = load volatile i64, ptr %k\n")
-        b.Push($"  %tm = icmp slt i64 %tk, " $ts.Len() "\n  br i1 %tm, label %tbody, label %tdone\ntbody:\n")
+        b.Push($"  %tm = icmp slt i64 %tk, " $ts.Len() "\n  br i1 %tm, label %tpick, label %tdone\ntpick:\n")
+        b.Push($"  %tgp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk, i32 2\n")
+        b.Push($"  %tdp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk, i32 3\n")
+        b.Push("  %tg = load ptr, ptr %tgp\n  %td = load ptr, ptr %tdp\n")
+        b.Push("  %tsel = call i1 @olang.harness.selected(ptr %tg, ptr %td, i32 %argc, ptr %argv)\n")
+        b.Push("  br i1 %tsel, label %tbody, label %tnext\ntbody:\n")
         b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
         b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
         b.Push("  %tk2 = load volatile i64, ptr %k\n")
@@ -6261,42 +6287,17 @@ fn (e mut Emitter&) testSym(id I64) String {
 
 fn (e mut Emitter&) testName(id I64) String {
     m := e.P.L.Mods[e.P.L.Root]
-    sp := e.Lw.Bodies[id].Sp
-    name := e.findTest(m.Decls, sp)
-    if name.End == I32(0) { return "test" }
-    s := m.Src!.TextOf(name)
-    if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
-    return $s
+    d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
+    if d is null { return "test" }
+    return ast.TestLabel(d, m.Src!.Text, e.P.L.Names)
 }
 
-fn (e mut Emitter&) findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds.Len() == 0 { return source.Span(0, 0) }
-    for d in ds {
-        match d {
-            case ast.Decl.Test(dsp, name, _) {
-                if dsp == sp { return name }
-            }
-            case ast.Decl.If(_, ti) {
-                found := e.findTestIf(ti, sp)
-                if found.End > I32(0) { return found }
-            }
-            case _ { }
-        }
-    }
-    return source.Span(0, 0)
-}
-
-fn (e mut Emitter&) findTestIf(ti ast.TopIf?&, sp source.Span) source.Span {
-    if ti is null { return source.Span(0, 0) }
-    if ti.Then is not null {
-        f := e.findTest(ti.Then!.Decls, sp)
-        if f.End > I32(0) { return f }
-    }
-    if ti.Else is not null {
-        f := e.findTest(ti.Else!.Decls, sp)
-        if f.End > I32(0) { return f }
-    }
-    return e.findTestIf(ti.ElseIf, sp)
+# B7a: a test's target and description, apart, for the harness's selection by the words its command line gives
+fn (e mut Emitter&) testParts(id I64) String, String {
+    m := e.P.L.Mods[e.P.L.Root]
+    d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
+    if d is null { return "", "test" }
+    return ast.TestTarget(d, e.P.L.Names), ast.TestDesc(d, m.Src!.Text)
 }
 
 # ---- tasks (P1, P2, P4) ----

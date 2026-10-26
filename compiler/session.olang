@@ -236,12 +236,14 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
         case Target.Item(mi, name) {
             line := try explain.Item(c!, a.Sc!, a.X!, mi, name) catch explain.Missing { error Nothing.HERE }
             at := declOf(c!, mi, name)
-            return Found(hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else ""), $a.L.Mods[mi].Real, at)
+            text := $hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else "") $exampleText(c!, mi, name)
+            return Found(text, $a.L.Mods[mi].Real, at)
         }
         case Target.Method(f) {
             mi := c!.P.FnModule(f)
             at := I64(c!.P.FnDecl(f).Sp.Start)
-            return Found(hover(explain.FnText(c!, a.Sc!, f), doc.Above(a.TextOf(mi), at)), $a.L.Mods[mi].Real, at)
+            ex := exampleText(c!, mi, $doc.ReceiverName(c!, f) "." $c!.P.L.Names.Text(c!.P.FnDecl(f).Name))
+            return Found($hover(explain.FnText(c!, a.Sc!, f), doc.Above(a.TextOf(mi), at)) $ex, $a.L.Mods[mi].Real, at)
         }
         case Target.Field(t, index) {
             fd := try a.field(t, index)
@@ -269,6 +271,17 @@ fn (a Analysis&) moduleOfFile(file I64) I64 {
         if a.L.Mods[i].File == file { return i }
     }
     return -1
+}
+
+# B7a: what a hover adds of the tests naming target in module mi - the first, its body as olang code, then how many
+# more there are; nothing where there are none
+fn exampleText(c mut typecheck.Checker&, mi I64, target String&) String {
+    xs := doc.ExamplesOf(c, mi, target)
+    if xs.Len() == 0 { return "" }
+    b := StringBuilder()
+    b.Push($"\n\nExample: " $xs[0].Desc "\n```olang\n" $xs[0].Body "\n```")
+    if xs.Len() > 1 { b.Push($"\n\n+" $(xs.Len() - 1) " more test" $("" if xs.Len() == 2 else "s")) }
+    return b.ToString()
 }
 
 # a hover: the signature as olang code, then the doc comment
@@ -695,7 +708,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             }
             b.Push("]}")
         }
-        case ast.Decl.Test(sp, nsp, _) {
+        case ast.Decl.Test(sp, nsp, _, _) {
             w.leaf(b, $"test " $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
         }
         case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }

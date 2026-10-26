@@ -1,0 +1,4 @@
+# check: fail error[B7a]: a test names a function, a type or Type.Method of its file, and 'twise' is none - did you mean 'twice'?
+# B7a: a test's target names something of its own file
+fn twice(n I64) I64 { return n * 2 }
+test twise "doubles" { assert twice(2) == 4 }

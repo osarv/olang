@@ -1,0 +1,5 @@
+# check: fail error[B7a]: a test names a function, a type or Type.Method of its file, and 'Box.Put' is none - did you mean 'Box.Get'?
+# B7a: a method target names a method of the file's, by its type and its name
+type Box struct(v I64) { v }
+fn (b Box&) Get() I64 { return b.v }
+test Box.Put "gives" { assert Box(1).Get() == 1 }

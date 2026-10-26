@@ -395,6 +395,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   migrates, re-runnable (oann).
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot. A default is built per
   call in its declaration's context.
+- **Tests name their targets (B7a, B3a, B14, B15, 2026-10-26).** `test Twice "doubles" { }`, `test Box "..."`,
+  `test Map.Get "..."`: a function, a type or `Type.Method` of the test's own file (the method's declaration there; it
+  may be private); an unknown target (the nearest suggested), another file's, and one target with one description twice
+  are errors. Reported `ok - Twice: doubles` / `FAIL - Twice: ...`; `olang doc` lists them under the target as
+  examples with their bodies (collapsible in HTML), a hover shows the first and `+N more tests`. `olang test FILE
+  WORD...` runs the tests a word names - a target, its type (`Map` runs `Map.Get`'s), or text of a description (decided,
+  mine: a word that names no file and ends in no `.olang`, matched by the test binary's harness, so nothing rebuilds).
+  std: examples on `String.Trim`, `Map.Get`, `Vec.Push`.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
   every argument by position, in any order, each once (`connect(h, retries = 5)`); naming a required parameter, a name
   given twice or also by position, an unknown name (the nearest defaulted one suggested) and a name through a function

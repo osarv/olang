@@ -279,3 +279,16 @@ fn vecCharLiteral(c Char) String {
     if c == '\'' { return "'\\''" }
     return "'" $c "'"
 }
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
+
+if TestBuild {
+    # examples (B7a): what olang doc shows under the method
+    test Vec.Push "adds at the end" {
+        v := Vec<I64>()
+        v.Push(1)
+        v.Push(2)
+        assert v.Len() == 2 and v[1] == 2
+    }
+}

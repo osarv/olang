@@ -25597,3 +25597,32 @@ parameter, for functions, methods and constructors (`explain.withDefaults`).
 **Found on the way, fixed.** A slice of a number (`$Live[:1]`, `(x * 2)[:1]`) gave no error, and the build then
 stopped at a lowering gap ("it does not lower an unknown type"). It is E16's "cannot be indexed" now, with a check
 case.
+
+## Tests name their targets (B7a, B3a, B14, B15, 2026-10-26)
+
+Asked as one batch with stored errors and named arguments: a test may say what it is an example of, so the tests a file
+already has become its documentation. `test Twice "doubles" { }`, `test Box "holds a value"`, `test Map.Get "fails on a
+key never put"`. The target is a function, a type or `Type.Method` of the file itself, private ones included. For a
+method, the method's declaration must be in the file and its type may be anywhere, so the prelude's `String.Trim` takes
+its examples in text.olang beside it.
+
+**Rules.** An unknown target is an error, with the nearest function, type or method of the file suggested. A target
+another file declares (the prelude's, an import's) is an error too: an example is written beside what it shows. Two
+tests with one target and one description are an error. Tests without a target keep their old freedom.
+
+**Where they show.** A run reports a test as `ok - Twice: doubles`, and a failure as `FAIL - Twice: doubles`.
+`olang doc` lists each item's examples after its doc comment, each with its description and its body as written, with
+the body's common indentation taken off. In `-html` each example is a `<details>` that opens to the body. A hover
+(LSP) shows the first example and `+N more tests`. The shared pieces live in ast.olang (`FindTest`, `TestTarget`,
+`TestDesc`, `TestLabel`), used by emit, interp, doc and session alike.
+
+**Picking tests (decided, mine).** `olang test FILE WORD...`: after the files, a word that names no existing path and
+does not end in `.olang` picks tests. A test runs when its target is the word, or when its target is a method of the
+word's type (`Map` runs `Map.Get`'s), or when its description holds the word. The last is the plain-description
+filter, a substring match as `cargo test` does. With no words every test runs. Several words run the union. The words
+reach the test binary as its arguments, and its harness (`@olang.harness.selected`: strcmp/strncmp/strstr) skips the
+rest, so picking tests rebuilds nothing. With several files each child gets the words. A program's own tests that read
+`os.Args` see the words; nothing in the corpus does.
+
+**The parse.** `test` followed by a name reads a dotted path (`p.path()`, whose second part may be a keyword as a
+method's name may), then the description, so `test "x"` is unchanged.

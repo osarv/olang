@@ -873,3 +873,33 @@ test "a file that does not parse gets its diagnostics, and requests on it answer
     assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
     assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout
 }
+
+ExamplesSrc String& = """
+    fn Twice(n I64) I64 { return n * 2 }
+    test Twice "doubles" { assert Twice(2) == 4 }
+    test Twice "doubles a negative" { assert Twice(-3) == -6 }
+    fn main() { x := Twice(1) }
+    """
+
+test "a hover on a function shows the first test naming it and how many more there are (B7a, B15)" {
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
+    path := $dir "/e.olang"
+    try os.WriteFile(path, ExamplesSrc) catch os.Error { unreachable "no file" }
+    uri := UriOf(path)
+    td := $"{\"uri\":\"" $uri "\"}"
+    t := StringBuilder()
+    session.JsonStr(t, ExamplesSrc)
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":3,\"character\":18}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    assert out.Status == 0, out.Stderr
+    assert out.Stdout.Contains("Example: doubles") and out.Stdout.Contains("assert Twice(2) == 4"), out.Stdout
+    assert out.Stdout.Contains("+1 more test") and not out.Stdout.Contains("doubles a negative"), out.Stdout
+}

@@ -163,6 +163,7 @@ fn modeNumber(word String&) I64 {
 type CommandLine struct() {
     Mode I64 = 0
     Files Vec<String&>
+    Filters Vec<String&>   # B7a: test's words naming the tests to run - a target, its type, or text of a description
     Word String& = ""
     HasWord Bool = false
     Args Vec<String&>
@@ -256,6 +257,11 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
         if cl.Mode == Run and not endsWithOlang(a) {
             if modeNumber(a) > 0 { try usage(d, msgs.ModeFirst(a)) }
             try usage(d, msgs.NotASource(a))
+        }
+        # B7a: after test's files, a word naming no file and no .olang file is a filter
+        if cl.Mode == Test and cl.Files.Len() > 0 and not endsWithOlang(a) and not os.Exists(a) {
+            cl.Filters.Push($a)
+            continue
         }
         cl.Files.Push($a)
         if cl.Mode == Run or cl.Mode == Interp {
@@ -410,9 +416,9 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         for a in cl.Args { pargs.Push($a) }
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
     }
-    if files.Len() == 1 { return build.TestFile(fe, c, files[0], d) }
+    if files.Len() == 1 { return build.TestFile(fe, c, files[0], d, cl.Filters.ToArray()) }
     exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
-    return build.TestFiles(c, exe, cl.Passed.ToArray(), files)
+    return build.TestFiles(c, exe, cl.Passed.ToArray(), files, cl.Filters.ToArray())
 }
 
 # text written to the standard output; 0, or 1 where it could not be

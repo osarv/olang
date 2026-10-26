@@ -305,6 +305,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     reflTouched Bool = false    # G35: the condition being folded read a reflected member
     spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
+    testKeys StringBuilder      # B7a: the root's tests of a target, each target and description between zero bytes
     namedBad Bool = false       # E14b: arguments by name that do not give the parameters, said (the call is unknown)
     argOrder Vec<I64>           # E14b: for the next callBody, the written position of each parameter's argument, -1 for none
     typeCaseBinds Vec<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
@@ -1323,8 +1324,11 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                     c.globalBody(mi, n)
                 }
             }
-            case ast.Decl.Test(sp, _, body) {
-                if mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
+            case ast.Decl.Test(sp, nsp, body, target) {
+                if mi == c.P.L.Root {
+                    c.testTarget(mi, nsp, target)
+                    c.testBody(mi, sp, body, tests)
+                }
                 tests++
             }
             case ast.Decl.Type(tsp, td) {
@@ -2098,6 +2102,93 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
     r := c.callBody(sp, nsp, isig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, argVals.ToArray())
     c.ctorCalled = was
     return r
+}
+
+# B7a: what a test names - a function, a type or Type.Method declared in its own file, the method's declaration the one
+# in the file - checked, and a target and description given one test only
+fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
+    if target is null { return }
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    defer { c.pop() }
+    parts := target.Parts
+    text := StringBuilder()
+    for i, n in parts {
+        if i > 0 { text.PushChar('.') }
+        text.Push(c.text(n))
+    }
+    t := text.ToString()
+    key := $"\x00" $t "\n" $c.src(nsp) "\x00"
+    if c.testKeys.ToString().Contains(key) {
+        c.err(target.Sp, msgs.TestTargetTwice(msgs.Tok(t)))
+        return
+    }
+    c.testKeys.Push(key)
+    tab := c.P.R.Tables[mi]
+    if parts.Len() == 1 {
+        for e in tab.Entries {
+            if e.Name != parts[0] { continue }
+            if e.Kind == names.What.Func or e.Kind == names.What.Type { return }
+        }
+        # a name some other module declares - the prelude's, an import's
+        for m in range c.P.L.Mods.Len() {
+            if m == mi { continue }
+            for e in c.P.R.Tables[m].Entries {
+                if e.Name == parts[0] and (e.Kind == names.What.Func or e.Kind == names.What.Type) {
+                    c.err(target.Sp, msgs.TestTargetElsewhere(t))
+                    return
+                }
+            }
+        }
+    } else if parts.Len() == 2 {
+        c.P.AllFns()
+        elsewhere := false
+        for f in range c.P.FnCount() {
+            decl := c.P.FnDecl(f)
+            if decl.Recv is null or decl.Name != parts[1] { continue }
+            ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+            if ps.Len() == 0 { continue }
+            rt := c.deref(ps[0])
+            if not c.isNamed(rt) or c.P.T.DeclName(c.P.T.DeclOf(rt)) != parts[0] { continue }
+            if c.P.FnModule(f) == mi { return }
+            elsewhere = true
+        }
+        for e in tab.Entries {
+            if e.Name == parts[0] and e.Kind == names.What.Import { elsewhere = true }
+        }
+        if elsewhere {
+            c.err(target.Sp, msgs.TestTargetElsewhere(t))
+            return
+        }
+    }
+    # the nearest of the file's functions, types and methods
+    best := ""
+    bestD := 2 if t.Len() <= 4 else 3
+    for e in tab.Entries {
+        if e.Kind != names.What.Func and e.Kind != names.What.Type { continue }
+        d := nameDistance(t, c.text(e.Name))
+        if d < bestD {
+            bestD = d
+            best = $c.text(e.Name)
+        }
+    }
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        decl := c.P.FnDecl(f)
+        if decl.Recv is null or c.P.FnModule(f) != mi { continue }
+        ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+        if ps.Len() == 0 or not c.isNamed(c.deref(ps[0])) { continue }
+        m := $c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name)
+        d := nameDistance(t, m)
+        if d < bestD {
+            bestD = d
+            best = m
+        }
+    }
+    if best.Len() > 0 {
+        c.err(target.Sp, msgs.TestTargetUnknownMeant(t, best))
+    } else {
+        c.err(target.Sp, msgs.TestTargetUnknown(t))
+    }
 }
 
 fn (c mut Checker&) testBody(mi I64, sp source.Span, body Array<ast.Stmt&>&, index I64) {

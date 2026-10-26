@@ -377,6 +377,10 @@ type Diag enum {
     PositionalAfterNamed
     NamedArgThroughValue
     NamedArgNotHere
+    TestTargetUnknown
+    TestTargetUnknownMeant
+    TestTargetElsewhere
+    TestTargetTwice
     AtomicNotPlace
     AtomicNotWritable
     VacateNotPlace
@@ -1898,6 +1902,18 @@ fn NamedArgThroughValue() Msg { return Msg(Diag.NamedArgThroughValue, "E14b", "a
 
 # ERR_NAMED_ARG_NOT_HERE
 fn NamedArgNotHere() Msg { return Msg(Diag.NamedArgNotHere, "E14b", "an argument by name gives a function's, a method's or a constructor's defaulted parameter, in a call") }
+
+# ERR_TEST_TARGET_UNKNOWN
+fn TestTargetUnknown(text String&) Msg { return Msg(Diag.TestTargetUnknown, "B7a", "a test names a function, a type or Type.Method of its file, and '" $text "' is none") }
+
+# ERR_TEST_TARGET_UNKNOWN_MEANT
+fn TestTargetUnknownMeant(text String&, best String&) Msg { return Msg(Diag.TestTargetUnknownMeant, "B7a", "a test names a function, a type or Type.Method of its file, and '" $text "' is none - did you mean '" $best "'?") }
+
+# ERR_TEST_TARGET_ELSEWHERE
+fn TestTargetElsewhere(text String&) Msg { return Msg(Diag.TestTargetElsewhere, "B7a", "'" $text "' is declared in another file - a test is an example of its own file's code, written beside it") }
+
+# ERR_TEST_TARGET_TWICE
+fn TestTargetTwice(text String&) Msg { return Msg(Diag.TestTargetTwice, "B7a", "this file has a test of " $text " described so already - tell them apart by their descriptions") }
 
 # ERR_ATOMIC_NOT_PLACE
 fn AtomicNotPlace() Msg { return Msg(Diag.AtomicNotPlace, "P9", "an atomic operation acts on a place - a variable, a field or an element") }

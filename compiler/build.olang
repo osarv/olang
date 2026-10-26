@@ -777,7 +777,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
 }
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
-fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c, filters Array<String&>& = Array<String&>(0)) I32 {
     info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
@@ -798,6 +798,8 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     cmd Vec<String&>
     for w in run { cmd.Push($w) }
     cmd.Push(Shown(bin))
+    # B7a: the words naming the tests to run, read by the test binary's harness
+    for w in filters { cmd.Push($w) }
     out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
@@ -836,7 +838,7 @@ fn (c Config&) skipped(file String&, d mut diag.Diagnostics&) I32 {
 # test FILE FILE ...: each file in a process of its own - this compiler, exe, run again as "test" with the same options
 # (passed, as written) and that one file - one after another in the order listed, each writing straight to this
 # process's output as it goes. A file whose compiler ended by a signal is said to have; 0 when every file passed (B3a)
-fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&>&) I32 {
+fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&>&, filters Array<String&>& = Array<String&>(0)) I32 {
     failed := false
     for f in files {
         args Vec<String&>
@@ -844,6 +846,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         args.Push("test")
         for p in passed { args.Push($p) }
         args.Push($f)
+        for w in filters { args.Push($w) }
         out := try os.Exec(args.ToArray(), "", false) catch os.Error {
             sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true

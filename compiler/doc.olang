@@ -179,7 +179,12 @@ type Entry struct(Line String&, Doc String&, Name String&) {
     At I64 = -1
     Members Vec<Entry>
     Builder Bool    # a function of the module that builds the type it is listed under (B14)
+    Examples Vec<Example>   # the file's tests naming it (B7a)
+    Target String& = ""     # what a test names it by: a top-level item's name, "Type.Method" for a method
 }
+
+# a test naming what it is an example of (B7a): its description, and its body as written, its indentation taken off
+type Example struct(Desc String&, Body String&) { Desc, Body }
 
 # a module: its identity, its path, its own documentation and its items
 type Module struct(Identity String&, Path String&, Doc String&) {
@@ -232,8 +237,81 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
         last := md.Items[md.Items.Len() - 1]
         last.File = m.File
         last.At = I64(decl.Sp.Start)
+        last.Target = $ReceiverName(c, f) "." $name
     }
+    for i in range md.Items.Len() { md.Items[i] = attached(c, mi, md.Items[i], "") }
     return md
+}
+
+# the name a test gives a method's receiver type: its declared name, else as the checker spells it
+fn ReceiverName(c mut typecheck.Checker&, f I64) String {
+    recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
+    if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
+    if c.P.T.KindOf(recv) == types.Kind.Named { return $c.P.L.Names.Text(c.P.T.DeclName(c.P.T.DeclOf(recv))) }
+    return c.Ty(recv)
+}
+
+# B7a: an entry with its examples - module mi's tests naming it - and its members' with theirs, a member named
+# Parent.Member
+fn attached(c mut typecheck.Checker&, mi I64, e Entry, parent String&) Entry {
+    r := e
+    if r.Target == "" { r.Target = $r.Name if parent == "" else $parent "." $r.Name }
+    if r.Name != "" { r.Examples = ExamplesOf(c, mi, r.Target) }
+    ms := Vec<Entry>()
+    for m in e.Members { ms.Push(attached(c, mi, m, r.Target if parent == "" else "")) }
+    r.Members = ms
+    return r
+}
+
+# B7a: the tests of module mi naming target, in the order the file has them
+fn ExamplesOf(c mut typecheck.Checker&, mi I64, target String&) Vec<Example> {
+    out := Vec<Example>()
+    m := c.P.L.Mods[mi]
+    text := m.Src!.Text
+    examplesIn(c, m.Decls, text, target, out)
+    return out
+}
+
+fn examplesIn(c mut typecheck.Checker&, ds Array<ast.Decl&>&, text String&, target String&, out mut Vec<Example>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Test(_, _, body, _) {
+                if ast.TestTarget(d, c.P.L.Names) != target { continue }
+                out.Push(Example(ast.TestDesc(d, text), bodyText(text, body)))
+            }
+            case ast.Decl.If(_, ti) {
+                if ti.Then is not null { examplesIn(c, ti.Then!.Decls, text, target, out) }
+                if ti.Else is not null { examplesIn(c, ti.Else!.Decls, text, target, out) }
+            }
+            case _ { }
+        }
+    }
+}
+
+# a test's body as the file writes it: its statements' lines, their common indentation taken off; a body on the test's
+# own line as written there
+fn bodyText(text String&, body Array<ast.Stmt&>&) String {
+    if body.Len() == 0 { return "" }
+    from := lineStart(text, I64(body[0].Span().Start))
+    to := lineEnd(text, I64(body[body.Len() - 1].Span().End))
+    if text[from:to].TrimStart().StartsWith("test ") {
+        return $text[I64(body[0].Span().Start):I64(body[body.Len() - 1].Span().End)]
+    }
+    # the lines' common indentation taken off
+    least I64 = -1
+    for line in text[from:to].Lines() {
+        if line.Trim().Len() == 0 { continue }
+        k := line.Len() - line.TrimStart().Len()
+        if least < 0 or k < least { least = k }
+    }
+    b := StringBuilder()
+    first := true
+    for line in text[from:to].Lines() {
+        if not first { b.PushChar('\n') }
+        first = false
+        b.Push(line[least:] if least > 0 and line.Len() >= least else line.TrimStart())
+    }
+    return b.ToString()
 }
 
 # the module declaring a method's receiver type, -1 for a built-in one
@@ -433,7 +511,7 @@ fn wordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' }
 
 # the item name of module mi as `doc FILE NAME` prints it
 fn ItemText(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? explain.Missing {
-    e := try item(c, sc, x, mi, name, true)
+    e := attached(c, mi, try item(c, sc, x, mi, name, true), "")
     b := StringBuilder()
     entryText(b, e, "")
     return b.ToString()
@@ -459,6 +537,10 @@ fn (md Module&) Text() String {
 fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
     for line in e.Line.Lines() { b.Push($indent $line "\n") }
     if e.Doc != "" { indented(b, e.Doc, $indent "    ") }
+    for x in e.Examples {
+        b.Push($indent "    example \"" $x.Desc "\"\n")
+        indented(b, x.Body, $indent "        ")
+    }
     prev := false
     for m in e.Members {
         if m.Builder and not prev { b.Push($indent "    builders\n") }
@@ -497,7 +579,7 @@ fn PageName(identity String&) String {
 Style String& = ("body{font-family:system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.5;" $
                  "color:#1d1d1f;background:#fff}pre{background:#f5f5f7;padding:.5rem .75rem;border-radius:4px;" $
                  "overflow-x:auto;margin:.25rem 0}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.9em}" $
-                 ".doc{margin:.25rem 0 1rem 1rem}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
+                 ".doc{margin:.25rem 0 1rem 1rem}.example{margin:.25rem 0 .5rem 1rem}summary{cursor:pointer}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
                  "padding-bottom:.25rem;margin-top:2rem}a{color:#0b57d0}@media(prefers-color-scheme:dark){body{" $
                  "color:#e8e8ea;background:#18181b}pre{background:#26262b}a{color:#8ab4f8}h2{border-color:#333}}")
 
@@ -539,6 +621,9 @@ fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
     id := e.Name
     b.Push($"<pre id=\"" $Escape(id) "\">" $Escape(e.Line) "</pre>\n")
     docHtml(b, e.Doc)
+    for x in e.Examples {
+        b.Push($"<details class=\"example\"><summary>Example: " $Escape(x.Desc) "</summary><pre>" $Escape(x.Body) "</pre></details>\n")
+    }
     prev := false
     for m in e.Members {
         if m.Builder and not prev { b.Push("<h3 class=\"member\">Builders</h3>\n") }

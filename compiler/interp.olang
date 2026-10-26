@@ -825,44 +825,12 @@ fn (x mut Exec&) Entries() Vec<I64>, I64 {
     return tests, main
 }
 
-# a test's name, as its declaration writes it (between the quotes)
+# a test's name as a run reports it: its target, then its description (B7a)
 fn (x mut Exec&) TestName(id I64) String {
     m := x.P.L.Mods[x.P.L.Root]
-    name := findTest(m.Decls, x.Bodies[id].Sp)
-    if name.End == I32(0) { return "test" }
-    s := m.Src!.TextOf(name)
-    if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
-    return $s
-}
-
-fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds.Len() == 0 { return source.Span(0, 0) }
-    for d in ds {
-        match d {
-            case ast.Decl.Test(dsp, name, _) {
-                if dsp == sp { return name }
-            }
-            case ast.Decl.If(_, ti) {
-                found := findTestIf(ti, sp)
-                if found.End > I32(0) { return found }
-            }
-            case _ { }
-        }
-    }
-    return source.Span(0, 0)
-}
-
-fn findTestIf(ti ast.TopIf?&, sp source.Span) source.Span {
-    if ti is null { return source.Span(0, 0) }
-    if ti.Then is not null {
-        f := findTest(ti.Then!.Decls, sp)
-        if f.End > I32(0) { return f }
-    }
-    if ti.Else is not null {
-        f := findTest(ti.Else!.Decls, sp)
-        if f.End > I32(0) { return f }
-    }
-    return findTestIf(ti.ElseIf, sp)
+    d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
+    if d is null { return "test" }
+    return ast.TestLabel(d, m.Src!.Text, x.P.L.Names)
 }
 
 # what a stop says, as the built program says it (S18a, B3e): "FILE:LINE: text", "" for none
