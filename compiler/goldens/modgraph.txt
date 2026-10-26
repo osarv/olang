@@ -130,6 +130,21 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/generators
+===  tests/intsweep.olang
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/intsweep
 ===  tests/intwidths.olang
 | module std/arith
 | module std/prelude/argument
@@ -6060,6 +6075,7 @@
 |   os std/os
 |   scopegen fuzz/scopegen
 | module fuzz/gen
+|   os std/os
 | module fuzz/scopegen
 | module std/cancel
 | module std/chan
@@ -6083,6 +6099,12 @@
 | module std/prelude/vec
 ===  fuzz/gen.olang
 | module fuzz/gen
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
 | module std/prelude/argument
 | module std/prelude/array
 | module std/prelude/complex
@@ -6818,6 +6840,21 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/generators
+=== -t tests/intsweep.olang
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/reflect
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/intsweep
 === -t tests/intwidths.olang
 | module std/arith
 | module std/prelude/argument
@@ -12996,6 +13033,7 @@
 |   os std/os
 |   scopegen fuzz/scopegen
 | module fuzz/gen
+|   os std/os
 | module fuzz/scopegen
 | module std/cancel
 | module std/chan
@@ -13019,6 +13057,12 @@
 | module std/prelude/vec
 === -t fuzz/gen.olang
 | module fuzz/gen
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
 | module std/prelude/argument
 | module std/prelude/array
 | module std/prelude/complex
