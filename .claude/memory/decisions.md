@@ -1307,3 +1307,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   "golib.h" link "golib"` covers them; for the rare header-less case, an extern block names the library once:
   `extern "golib" { fn Add(a I64, b I64) I64 ... }`, a single `extern "z" fn` allowed too; the standalone `link`
   goes. Import alias form KEPT as `import alias "path"` (the user's reasoning). ASKED: extern blocks.
+- QBE extern blocks ANSWERED 2026-10-26 (the user: "I don't mind extern blocks ... why do we need them to name the
+  linkage if all ABIs are the same?"): extern blocks yes. Answered: the name is not an ABI but which library file holds
+  the symbols - the linker (and `interpret`'s dlopen) searches only what it is told, and a symbol name does not say
+  its library; naming it in the source keeps builds flag-free ("a module's interface is its source"). libc needs none.
+  So: `import z "zlib.h" link "z"`, `extern "golib" { fn ... }`, `extern fn` for libc; the standalone `link` goes.
+  C imports DECIDED as laid out (variadic calls, expression macros, .c files compiled by the bundled clang under LTO).
