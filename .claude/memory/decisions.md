@@ -1520,3 +1520,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   enough; if switching, `priv` over `pub`. ASKED.
 - QBM ANSWERED 2026-10-26 (the user: "Keep capitalization"): visibility stays capitalization (M6); no pub/priv.
   The JSON question (QBK 4 follow-up: per-field exceptions by a `JsonKey` method) re-asked.
+- QBN ASKED 2026-10-26 (the user: "Why can't we have per-field attributes?"): proposed (rec) TYPED attributes -
+  `@json.Key("created_at") CreatedAt I64`, an attribute a constructor call of a type a library declares, evaluated
+  and checked while compiling, read by reflection (`try f.Attr<json.Key>()`), no compiler meaning of its own; `@`
+  unambiguous where no left operand stands; serves json, csv, a db mapping, std/flags, GUI editors. Replaces the
+  JsonKey-method idea if taken. ASKED: (1) typed `@` attributes; (2) fields only first, or types/functions/cases too.
+  In effect: the json key policies only (agreed).
