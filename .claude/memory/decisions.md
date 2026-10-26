@@ -1446,3 +1446,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   2.0, threads = 4)` - named only for parameters with a default, after the positional ones, any order, each once; only
   defaulted parameters' names become API; replaces the `default` argument-slot keyword (one way to skip); constructors
   and methods too; calls through a function value positional only (names are no part of a function type). ASKED.
+- QBG DECIDED 2026-10-26 (the user: "defaults can still be passed by position using the default keyword and a named
+  parameter must not be followed by positional parameters"): named arguments `name = value` for parameters that have a
+  default, in any order, each once; parameters with defaults may still be passed by position, `default` keeping its
+  slot; once a named argument appears, no positional one follows; required parameters are positional only;
+  constructors and methods too; calls through a function value positional only. Queued after the definite-init batch
+  (same checker code).

@@ -482,3 +482,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   static inline wrappers, variadic calls, void* as CVoid?&; 166 hand externs gone from std/compiler; seed regenerated.
   Left: C extern variables (stdin, errno), cast macros, C constants typed I32 not adapting (I16(cpoll.POLLIN)),
   interpret refusing struct by value, a big header's whole module checked every build (openssl 3 s), full make cross.
+- QUEUED 2026-10-26: named arguments for defaulted parameters (QBG, decisions.md) after wt-definit merges; generator
+  borrows of inputs and frame views (QBB) after wt-genelide merges; stored errors (errors as values, error zero null)
+  after wt-definit too.
