@@ -22,3 +22,8 @@ field 34
 sum 166167000
 drop 80
 comprehension I64[0, 4, 6]
+drop 90
+outer broken 44
+outer held 0 10
+drop 91
+outer dropped

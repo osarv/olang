@@ -1,7 +1,8 @@
 # D18e: walks made and finished by a for-in or a comprehension, left every way a block can be left - its end, break,
 # continue, return from inside loops, an error leaving the function - with the generator's own scopes holding a
-# destructor, so each walk shows its scopes closed exactly once, where it ended; and walks that escape (a local, a
-# field, a result) beside them
+# destructor, so each walk shows its scopes closed exactly once, where it ended; a walk inside a generator's body, open
+# when that generator is stopped by a break or dropped with its block; and walks that escape (a local, a field, a
+# result) beside them
 import "std/io"
 
 type Res struct(id I64) {
@@ -49,6 +50,11 @@ fn fails(n I64) I64 ? Stop {
     return t
 }
 
+# a walk inside a generator's body, open while the generator is stopped
+fn outer(id I64, n I64) Iterator<I64> {
+    for x in held(id, n) { yield x * 10 }
+}
+
 fn mk(n I64) Generator<I64> { return held(30, n) }
 
 type Box struct(g Generator<I64>) {
@@ -93,4 +99,16 @@ fn main() ? {
     try io.Println("sum " $s)
     c := I64[x * 2 for x in held(80, 4) if x != 1]
     try io.Println("comprehension " $c)
+    for y in outer(90, 5) {
+        if y == 20 { break }
+        t += y
+    }
+    try io.Println("outer broken " $t)
+    {
+        g2 := outer(91, 5)
+        a := try g2.Next() catch default -1
+        b := try g2.Next() catch default -1
+        try io.Println("outer held " $a " " $b)
+    }
+    try io.Println("outer dropped")
 }

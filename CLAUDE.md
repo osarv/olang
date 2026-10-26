@@ -585,6 +585,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   frame's fields in memory per step (the frame comes from the arena and its handle is registered for the drop, so
   CoroElide cannot take it); a filter generator is 1.2x a hand-written iterator struct. A loop scope nothing uses
   gets no header (`idle`, as frame and block scopes), and a scope held at a yield is not used by being held.
+  **A walk made and finished in one place (D18e, 2026-10-26)**: a `for` or comprehension over a generator called
+  right there calls the generator's `.walk` form - its frame from `llvm.coro.alloc` (so CoroElide can put it in the
+  caller's frame and SROA in registers), no drop registered, its Generator's code a `.wnext` testing neither re-entry
+  nor its end (nothing else holds it) - and the caller destroys it on every way out of the loop's block, through that
+  Next (a promise flag of 2), so the destroy is visible beside the resumes once both are inlined. Decided (mine,
+  conservative): the call must be a direct call to a generator function at the for-in's own source, its result scope
+  the loop's block, loop or frame, the walk made and closed on every path that closes the scope (a dataflow in emit,
+  else the arena path), and never in a test build (a failed check closes scopes from outside, through the
+  registration); a generator in a local, a field, a result, an argument or an `any`, and an iterator helper's walk
+  (`gen(n).Sum()`), keep D18b's arena path. Result: the range generator folds to the hand iterator's closed form
+  (0.35 s -> 0.003 s), the filter generator 0.30 -> 0.15 s, below the iterator struct's 0.22 s. Limit: a walk made
+  inside a loop whose exit leaves that loop too (a `return`, an error) keeps an arena frame - CoroElide does not see
+  a destroy behind the exit's LCSSA phi - still destroyed by the caller.
   **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
   `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
   aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).

@@ -25366,3 +25366,55 @@ release's bundled resource directory with nothing else on PATH.
 **Left.** A C extern variable (`stdin`, `errno`) and a cast macro have no form; a C module's named constants are typed
 (`I32`) and do not adapt as literals do, so `I16(cpoll.POLLIN)` is written; `interpret` refuses a struct by value; a
 large header's check is paid on every build.
+
+## A walk made and finished in one place (D18e, 2026-10-26)
+
+A generator's walk paid for its frame: the coroutine's storage came from the arena where the generator landed and its
+handle was registered with that scope for the drop, so the handle escaped and CoroElide could never put the frame in
+the caller - each step loaded and stored the coroutine's state through memory (1.7 ns a value summing a range, against
+a hand iterator folded to a closed form). Where a `for` or a comprehension walks a generator called right there,
+nothing else can reach the walk, so the caller can end it itself.
+
+**What decides it (mine, conservative - in doubt, the arena path).** check marks the hidden iterator of a for-in whose
+source is a direct call to a generator function (`Body.Walks`, `generatorCall`); lower marks that call
+(`Fn.WalkCalls`/`WalkScopes`) when the generator lands in a scope of this function's own - a block, a loop or the
+frame - its result scope found among the callee type's scope variables; emit then runs a two-phase dataflow per such
+scope (`walkFlow`): the walk is made where the scope is open with no walk yet, and every Close of the scope, and every
+Suspend holding it, sees the walk made (or never made) on all paths - else the call stays the ordinary form. A scope
+two marked calls name is dropped. Test builds take none: a failed check closes a test's scopes from outside, through
+the unwind chain, which needs the registration (S18b). A generator held in a local, a field, a result, an argument or
+an `any` is never a direct call at a for-in, so keeps the arena path; so does an iterator helper's walk (`g(n).Sum()`),
+which would need to know the helper keeps nothing of its receiver - recorded, not built.
+
+**How it is built.** Every generator function is written twice, its body as usual and a `.walk` form, the same body
+with the closure made without `__olang_scope_register_dtor` and its code `.wnext`. The coroutine's ramp takes its frame
+from `llvm.coro.alloc` (the arena only where it says so). At the call the caller keeps the handle and the code in
+slots of its own; each Close of the walk's scope - its end, break, continue, a return, an error leaving, a walk inside a
+coroutine dropped at a suspend - stores which way it left and jumps to one end block per walk, which asks the walk to
+destroy itself through its own Next (the promise's running flag set to 2), then goes on the way it was leaving.
+**Two things had to be found by reading the optimized IR.** First, a `coro.destroy` written in the caller was visible
+to CoroElide in the CGSCC iteration before the Next (called through the Generator's function value) was inlined, so
+elision ran before the resumes were there and left the frame in memory; routing the destroy through the same Next
+makes the destroy and the resumes appear together. Second, the for-in's lowering dispatched an error from Next with a
+test even where the clause took every word of the set, a dead branch whose destroy sat behind an LCSSA phi; lower's
+`dispatch` now goes straight to the clause when whole-type items cover the set. **And the `.wnext`**: the walk's Next
+need not test re-entry (S20 - nothing can name the walk from inside its body) nor its end (the loop stops at the first
+`Exhausted` or error), and without those two tests the state machine left after inlining becomes a plain loop.
+
+**Measured** (bench/run.olang's gen rows, 10M values x 20, medians of 9 interleaved runs; instructions by valgrind for
+1M values x 1): range generator 0.35 s -> 0.003 s (21.3M -> 0.27M instructions, the program's start: folded to the
+closed form, as the hand iterator is), filter generator 0.30 s -> 0.15 s (16.6M -> 8.9M; the hand iterator 0.22 s, 12.9M),
+a range generator walked inside another loop 1.69 s -> 0.00 s. The range loop's optimized IR is one induction variable
+and an add, the generator's frame gone; the closure's environment (its captured parameter) is still one arena
+allocation per walk.
+
+**Limit.** A walk made inside a loop and left by an exit that leaves that loop too - a `return` or an error from a walk
+inside another loop - keeps an arena frame: the exit's destroy reads the handle through the loop's LCSSA phi, and
+CoroElide only counts destroys that use the coroutine's begin directly. It is still destroyed by the caller, with no
+drop registered (fewer instructions than before: 72M -> 60M on that shape). Making the exit block part of the loop
+would take a branch on an opaque value, not taken.
+
+Tests: checks/fixtures/generators/exits.olang (every exit, a comprehension, walks inside a coroutine, escaping walks
+beside them; built, `-debug -sanitize` and interpreted with dead regions kept, all alike and as before) with the count
+of walk forms in its IR, exitst.olang (a failed check leaving a walk in a test closes its scopes once), and a test of
+a return out of two loops and an error leaving in tests/generators.olang.
