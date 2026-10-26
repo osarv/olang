@@ -1,5 +1,6 @@
 # check: fail error[D13c]: NonZero has no zero value, so this needs one
-# D13c: the zero value is the constructor run on zeros - one that rejects zero leaves the type with none
+# D13c: the zero value is the constructor run on zeros - one that rejects zero leaves the type with none, and a
+# declaration read before anything assigned it needs one (D13d)
 type RangeError error {
     ZERO
 }
@@ -8,4 +9,5 @@ type NonZero I32(v I32) ? RangeError {
 }
 fn main() ? {
     n NonZero
+    assert I32(n) != 0
 }

@@ -7,4 +7,5 @@ type Counted struct(n I32) {
 }
 fn main() ? {
     c Counted
+    assert c.n == 0
 }
