@@ -590,6 +590,7 @@ fn (e mut Emitter&) declared(k mir.FnKey) {
     if e.itemAt.Has(symbol) { return }
     ty := e.codeType(k)
     e.fnItem(k, ty, symbol, e.passedOf(k, ty), e.hasEnv(k), "")
+    if e.isGenFn(k) { e.fnItem(k, ty, $symbol ".walk", e.passedOf(k, ty), e.hasEnv(k), "") }
 }
 
 # ---- functions whose code is the same, merged ----
@@ -1827,6 +1828,17 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     # function returns it, a "running" word, the result pointer, then the scopes the call passed
     gen Bool = false
     promTy String& = ""
+    # D18e: writing a generator function's ".walk" form - the one a for-in finishing its walk calls: its generator's
+    # drop registered with no scope, the caller destroying the walk where the scope it lives in closes
+    walkForm Bool = false
+    # D18e: the walks this function makes and finishes (findWalks) - each scope's walk call, and at each of its closes
+    # and each suspend holding it (keyed by walkKey) whether the walk is made there
+    walks Map<I64, I64>
+    walkMade Map<I64, Bool>
+    wendN Map<I64, I64>     # how many closes jump to each walk's end block
+    curBlock I64 = 0        # the block and statement being written, and the call
+    curStmt I64 = 0
+    curCall I64 = -1
 }
 
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
@@ -2069,12 +2081,43 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         }
         e.runtime("__olang_check_failed")
         e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not lowered", symbol))
+        e.walkStub(k, f.Ty, symbol, passed, env, "not lowered")
         return
     }
+    if not e.writeBody(k, f, symbol, passed, env, hdr, false) { return }
+    # D18e: a generator function's second form, the one a for-in that finishes its walk calls - written beside the
+    # first in every build, so whether one exists never depends on the program or the build it was compiled in
+    if e.isGenFn(k) { e.writeBody(k, f, $symbol ".walk", passed, env, e.header(k, f.Ty, $symbol ".walk", passed, env, linkFor(e.homeOf(k))), true) }
+}
+
+# a generator function's ".walk" form standing in for a body that could not be made (D18e)
+fn (e mut Emitter&) walkStub(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, what String&) {
+    if not e.isGenFn(k) { return }
+    ws := $symbol ".walk"
+    e.fnItem(k, ty, ws, passed, env, $e.header(k, ty, ws, passed, env, linkFor(e.homeOf(k))) $e.stub(what, ws))
+}
+
+# whether a function is a generator function (D18): its result written Iterator<T ? E> and its body yielding - the
+# function a call runs to make the walk, not the walk's Next
+fn (e mut Emitter&) isGenFn(k mir.FnKey) Bool {
+    return match k {
+        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
+            case typed.BodyOf.Fn(i) => e.P.IsGenerator(e.P.InstanceFn(i))
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+# function k's body written under symbol (its ".walk" form where walkForm, D18e) and made an item; false where its
+# types are not settled, the item then a stub
+fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, env Bool, hdr0 String&, walkForm Bool) Bool {
+    hdr := $hdr0
     fe mut fnEm&e = fnEm(e, f, k)
     fe.passed = passed
     fe.env = env
     fe.gen = f.Gen
+    fe.walkForm = walkForm
     e.badType = false
     if e.Debug { fe.subprogram() }
     fe.run()
@@ -2082,7 +2125,8 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         # a type the program's layouts do not settle (a length a call computes, T7c, is the evaluator's, M8)
         e.runtime("__olang_check_failed")
         e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not emitted", symbol))
-        return
+        if not walkForm { e.walkStub(k, f.Ty, symbol, passed, env, "not emitted") }
+        return false
     }
     b := StringBuilder()
     if fe.gen {
@@ -2109,9 +2153,10 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         nx := e.genNext(k, f, symbol, passed, fe.promTy)
         dr := e.genDrop(symbol, fe.promTy)
         e.fnItem(k, f.Ty, symbol, passed, env, $nx $foldSlots(b.ToString(), f.Locals.Len()) $dr)
-        return
+        return true
     }
     e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
+    return true
 }
 
 # ---- generators (D18) ----
@@ -2126,15 +2171,18 @@ fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, 
     via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
     b := StringBuilder()
     b.Push(e.header(k, f.Ty, symbol, passed, true, "internal"))
-    b.Push("entry:\n  %done = call i1 @llvm.coro.done(ptr %env)\n  br i1 %done, label %over, label %go\ngo:\n")
-    b.Push("  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
+    b.Push("entry:\n  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
     # S20: asked while its walk runs - a Next called from inside it - a guaranteed check fails: resuming a coroutine
-    # that is not suspended is undefined. One compare a Next, on the flag the promise holds for genDrop already
+    # that is not suspended is undefined. One compare a Next, on the flag the promise holds for genDrop already. The
+    # flag 2 is a for-in's request to destroy the walk it finishes (D18e, walkEnd): made through this code, so the
+    # destroy becomes visible to LLVM where this code is inlined - with the resumes, which CoroElide needs together
     e.runtime("__olang_check_failed")
     loc := e.cstr($e.where(f.File, f.Sp) ": " $mir.ExitText(mir.ExitKind.GenRunning) "\n")
     b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %running = load i32, ptr %pr\n")
-    b.Push("  %busy = icmp ne i32 %running, 0\n  br i1 %busy, label %again, label %run\nagain:\n")
-    b.Push("  call void @__olang_check_failed(ptr " $loc ")\n  unreachable\nrun:\n")
+    b.Push("  switch i32 %running, label %again [ i32 0, label %go i32 2, label %drop ]\nagain:\n")
+    b.Push("  call void @__olang_check_failed(ptr " $loc ")\n  unreachable\n")
+    b.Push("drop:\n  call void @llvm.coro.destroy(ptr %env)\n  br label %over\n")
+    b.Push("go:\n  %done = call i1 @llvm.coro.done(ptr %env)\n  br i1 %done, label %over, label %run\nrun:\n")
     if via { b.Push("  %po = getelementptr " $promTy ", ptr %p, i32 0, i32 2\n  store ptr %out, ptr %po\n") }
     for i in range passed {
         b.Push("  %pv" $i " = getelementptr " $promTy ", ptr %p, i32 0, i32 " $(3 + i) "\n  store ptr %v" $i ", ptr %pv" $i "\n")
@@ -2165,6 +2213,7 @@ fn (e mut Emitter&) genDrop(symbol String&, promTy String&) String {
 
 fn (e mut Emitter&) coroDecls() {
     e.declare("llvm.coro.id", "token @llvm.coro.id(i32, ptr, ptr, ptr)")
+    e.declare("llvm.coro.alloc", "i1 @llvm.coro.alloc(token)")
     e.declare("llvm.coro.size.i64", "i64 @llvm.coro.size.i64()")
     e.declare("llvm.coro.align.i64", "i64 @llvm.coro.align.i64()")
     e.declare("llvm.coro.begin", "ptr @llvm.coro.begin(token, ptr)")
@@ -2375,8 +2424,12 @@ fn (fe mut fnEm&) run() {
         fe.head.Push("  store " $fe.promTy " zeroinitializer, ptr %prom\n")
         fe.head.Push("  %rv = getelementptr " $fe.promTy ", ptr %prom, i32 0, i32 0\n")
         fe.pro.Push("  %cid = call token @llvm.coro.id(i32 8, ptr %prom, ptr null, ptr null)\n")
-        fe.pro.Push("  %csz = call i64 @llvm.coro.size.i64()\n  %cal = call i64 @llvm.coro.align.i64()\n")
-        fe.pro.Push("  %cmem = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)\n")
+        # D18e: the frame from the arena only where LLVM has not elided it (llvm.coro.alloc false): a walk made and
+        # destroyed in one function, its handle never escaping, has its frame on that function's stack
+        fe.pro.Push("  %cneed = call i1 @llvm.coro.alloc(token %cid)\n  br i1 %cneed, label %coro.alloc, label %coro.begin\n")
+        fe.pro.Push("coro.alloc:\n  %csz = call i64 @llvm.coro.size.i64()\n  %cal = call i64 @llvm.coro.align.i64()\n")
+        fe.pro.Push("  %cmem0 = call ptr @__olang_scope_alloc_a(ptr %home, i64 %csz, i64 %cal)\n  br label %coro.begin\n")
+        fe.pro.Push("coro.begin:\n  %cmem = phi ptr [ null, %entry ], [ %cmem0, %coro.alloc ]\n")
         fe.pro.Push("  %hdl = call ptr @llvm.coro.begin(token %cid, ptr %cmem)\n")
     }
     # the locals, the scope headers and the result's slot
@@ -2400,6 +2453,7 @@ fn (fe mut fnEm&) run() {
     }
     fe.findDirect()
     fe.findIdle()
+    fe.findWalks()
     for i in range f.Scopes.Len() {
         if fe.direct.Has(i) or fe.idle.Has(i) { continue }
         if f.Scopes[i].Kind == mir.ScopeKind.Builder {
@@ -2410,6 +2464,7 @@ fn (fe mut fnEm&) run() {
             if fe.E.Tests { fe.head.Push("  %u" $i " = alloca %olang.unwind\n") }
         }
     }
+    for en in fe.walks { fe.head.Push("  %wh" $en.Key " = alloca ptr\n  %wc" $en.Key " = alloca ptr\n  %ws" $en.Key " = alloca i32\n") }
     rt := t.RetLlvm(f.Ty)
     if rt != "void" and not fe.gen { fe.head.Push("  %rv = alloca " $rt "\n") }
     # the parameters into their locals, the captures out of the environment
@@ -2488,9 +2543,14 @@ fn (fe mut fnEm&) run() {
             fe.E.declare("__olang_ert_req_clear", "void @__olang_ert_req_clear()")
             fe.w("call void @__olang_ert_req_clear()")
         }
-        for s in bb.Stmts { fe.stmt(s) }
+        fe.curBlock = b
+        for i in range bb.Stmts.Len() {
+            fe.curStmt = i
+            fe.stmt(bb.Stmts[i])
+        }
         fe.term(bb.T)
     }
+    fe.walkEnds()
     fe.label("ret")
     if fe.gen {
         # the walk over: its last result (an error, Exhausted at its end) in the promise, the coroutine at its final
@@ -3231,6 +3291,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
                 fe.w("br label %" $no)
                 fe.label(no)
             } else {
+                fe.walkEnd(I64(sc), fe.walkKey(fe.curBlock, fe.curStmt))
                 fe.E.runtime("__olang_scope_close")
                 fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
                 if fe.E.Tests { fe.unwindPop(sc) }
@@ -3374,6 +3435,191 @@ fn (fe mut fnEm&) findIdle() {
         if k != mir.ScopeKind.Frame and k != mir.ScopeKind.Block and k != mir.ScopeKind.Loop { continue }
         if used[i] or (frame and i == fe.frameScope) { continue }
         fe.idle.Put(i, true)
+    }
+}
+
+# ---- walks made and finished here (D18e) ----
+
+# the walks this function makes and finishes, outside a test build: each call lowering marked (mir.Fn.WalkCalls) whose
+# callee is a generator function, its scope's one such call, made on every path that closes the scope or suspends
+# holding it after making it - a forward dataflow per call, each block's entry state none (0), made (1) or either (2).
+# Where a close or a hold may or may not follow the call, or the call may run again before its scope closes, the walk
+# is left as any other: the callee registers its drop in the scope ("when in doubt, the arena path"). A test build
+# keeps that path everywhere, since a failed check unwinds the scope with no destroy written in this function
+fn (fe mut fnEm&) findWalks() {
+    if fe.E.Tests { return }
+    f := fe.F
+    by Map<I64, I64>     # a scope's walk call, -1 where two name it
+    for i in range f.WalkCalls.Len() {
+        c := I64(f.WalkCalls[i])
+        w := I64(f.WalkScopes[i])
+        gen := match f.Calls[c].Target {
+            case mir.Callee.Fn(k, _) => fe.E.isGenFn(k)
+            case _ => false
+        }
+        if not gen { continue }
+        by.Put(w, -1 if by.Has(w) else c)
+    }
+    for en in by {
+        if en.Value < 0 { continue }
+        made, ok := fe.walkFlow(en.Key, en.Value)
+        if not ok { continue }
+        fe.walks.Put(en.Key, en.Value)
+        for m in made { fe.walkMade.Put(m.Key, m.Value) }
+    }
+}
+
+# where a close (statement i of block b) or a suspend (i = -1) is, as walkMade keys it
+fn (fe fnEm&) walkKey(b I64, i I64) I64 { return b << 20 | (i & 0xFFFFF) }
+
+# the dataflow of findWalks for scope sc and its walk call c: at each close of sc and each suspend holding it, whether
+# the walk is made there; false where some such point, or the call itself, cannot be decided
+fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
+    f := fe.F
+    nb := f.Blocks.Len()
+    st := Array<I64>(nb, -1)
+    st[0] = 0
+    work Vec<I64>
+    work.Push(0)
+    out Map<I64, Bool>
+    for phase in range 2 {
+        # phase 0 runs the states to their fixed point, phase 1 reads them
+        if phase == 1 {
+            for b in range nb {
+                if st[b] >= 0 { work.Push(b) }
+            }
+        }
+        for work.Len() > 0 {
+            b := try work.Pop() catch { unreachable }
+            x := st[b]
+            bb := f.Blocks[b]
+            for i in range bb.Stmts.Len() {
+                match bb.Stmts[i] {
+                    case mir.Stmt.Open(_, s) { if I64(s) == sc: x = 0 }
+                    case mir.Stmt.Close(_, s) {
+                        if I64(s) == sc {
+                            if phase == 1 {
+                                if x == 2: return out, false
+                                out.Put(fe.walkKey(b, i), x == 1)
+                            }
+                            x = 0
+                        }
+                    }
+                    case _ { }
+                }
+            }
+            nexts Vec<I64>
+            match bb.T {
+                case mir.Term.Goto(t) { nexts.Push(I64(t)) }
+                case mir.Term.Branch(_, y, n) {
+                    nexts.Push(I64(y))
+                    nexts.Push(I64(n))
+                }
+                case mir.Term.Switch(_, r, o) {
+                    for i in range r.N { nexts.Push(I64(f.Cases[I64(r.At) + i].To)) }
+                    nexts.Push(I64(o))
+                }
+                case mir.Term.Call(_, k) {
+                    cl := f.Calls[I64(k)]
+                    if I64(k) == c {
+                        # the call runs again before its scope closed (or while the walk may be made): undecided
+                        if x != 0: return out, false
+                        if phase == 0 { fe.walkJoin(st, I64(cl.Ok), 1, work) }
+                        if cl.Err != mir.NoBlock and phase == 0 { fe.walkJoin(st, I64(cl.Err), x, work) }
+                        continue
+                    }
+                    nexts.Push(I64(cl.Ok))
+                    if cl.Err != mir.NoBlock: nexts.Push(I64(cl.Err))
+                }
+                case mir.Term.Wait(_, _, ok, _, failed) {
+                    nexts.Push(I64(ok))
+                    if failed != mir.NoBlock: nexts.Push(I64(failed))
+                }
+                case mir.Term.Suspend(_, _, r, held) {
+                    for j in range held.N {
+                        match f.Refs[I64(held.At) + j] {
+                            case mir.ScopeRef.Scope(s) {
+                                if I64(s) == sc and phase == 1 {
+                                    if x == 2: return out, false
+                                    out.Put(fe.walkKey(b, -1), x == 1)
+                                }
+                            }
+                            case _ { }
+                        }
+                    }
+                    nexts.Push(I64(r))
+                }
+                case _ { }
+            }
+            if phase == 0 {
+                for t in nexts { fe.walkJoin(st, t, x, work) }
+            }
+        }
+    }
+    return out, true
+}
+
+# a successor's entry state met with x, queued again where it changed
+fn (fe fnEm&) walkJoin(st mut Array<I64>&, t I64, x I64, work mut Vec<I64>&) {
+    y := x if st[t] < 0 or st[t] == x else 2
+    if y != st[t] {
+        st[t] = y
+        work.Push(t)
+    }
+}
+
+# where scope sc closes at key: its walk, if it is one this function finishes and the walk is made there, destroyed -
+# at one block per walk (walkEnds), every such close jumping there and back by a number of its own. One block, so the
+# destroy refers to the coroutine's handle where it is made: a close on a way out of a loop the walk is made in (a
+# return, an error, a break past it) would otherwise name it through the loop's exit (an LCSSA phi), which CoroElide
+# does not look through
+fn (fe mut fnEm&) walkEnd(sc I64, key I64) {
+    if not fe.walks.Has(sc) or not (try fe.walkMade.Get(key) catch default false) { return }
+    k := try fe.wendN.Get(sc) catch default 0
+    fe.wendN.Put(sc, k + 1)
+    fe.store("i32", $k, "%ws" $sc)
+    fe.w("br label %wend" $sc)
+    fe.label($"wend" $sc ".c" $k)
+}
+
+# each walk's end block (walkEnd): its destroy - by the walk's own code (genNext), asked with the promise's flag 2,
+# through the same function value as its Next calls, so the destroy is seen where the resumes are once LLVM has
+# inlined that code (D18e) - then back to the close that came
+fn (fe mut fnEm&) walkEnds() {
+    t := fe.E.T
+    for en in fe.wendN {
+        sc := en.Key
+        fe.label($"wend" $sc)
+        c := fe.F.Calls[try fe.walks.Get(sc) catch { unreachable }]
+        fty := types.UnknownT
+        match c.Target {
+            case mir.Callee.Fn(_, ty) { fty = ty }
+            case _ { }
+        }
+        nty := t.Items(t.Fields(t.Repr(t.Result(fty))))[0]
+        fe.E.signature(nty)
+        fe.E.coroDecls()
+        rt := t.RetLlvm(nty)
+        h := fe.load("ptr", "%wh" $sc)
+        code := fe.load("ptr", "%wc" $sc)
+        p := fe.let("call ptr @llvm.coro.promise(ptr " $h ", i32 8, i1 false)")
+        fe.store("i32", "2", fe.let("getelementptr { " $rt ", i32 }, ptr " $p ", i32 0, i32 1"))
+        args := StringBuilder()
+        args.Push("ptr " $h)
+        res := t.Result(nty)
+        if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr " $fe.slot(res)) }
+        for i in range mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), nty) { args.Push(", ptr null") }
+        if rt == "void" {
+            fe.w("call void " $code "(" $args.ToString() ")")
+        } else {
+            fe.let("call " $rt " " $code "(" $args.ToString() ")")
+        }
+        sel := fe.load("i32", "%ws" $sc)
+        b := StringBuilder()
+        b.Push("switch i32 " $sel ", label %wend" $sc ".c0 [")
+        for k in range 1, en.Value { b.Push(" i32 " $k ", label %wend" $sc ".c" $k) }
+        b.Push(" ]")
+        fe.w(b.ToString())
     }
 }
 
@@ -4382,8 +4628,12 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
         home := fe.scope(s)
         gs := fe.E.sym(code)
         env = fe.let("call ptr @" $gs ".coro(ptr " $env ", ptr " $home ")")
-        fe.E.runtime("__olang_scope_register_dtor")
-        fe.w("call void @__olang_scope_register_dtor(ptr " $home ", ptr " $env ", ptr @" $gs ".drop)")
+        # D18e: in the ".walk" form the caller destroys the walk itself, where its scope closes - nothing registered,
+        # so the coroutine's handle stays visible to LLVM and its frame can be elided
+        if not fe.walkForm {
+            fe.E.runtime("__olang_scope_register_dtor")
+            fe.w("call void @__olang_scope_register_dtor(ptr " $home ", ptr " $env ", ptr @" $gs ".drop)")
+        }
     }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
     return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $env ", 1")
@@ -4632,7 +4882,10 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             b.Push(" ]")
             fe.w(b.ToString())
         }
-        case mir.Term.Call(_, c) { fe.call(fe.F.Calls[I64(c)]) }
+        case mir.Term.Call(_, c) {
+            fe.curCall = I64(c)
+            fe.call(fe.F.Calls[I64(c)])
+        }
         case mir.Term.Return(_, x) {
             rt := t.RetLlvm(fe.F.Ty)
             if fe.via {
@@ -4719,7 +4972,11 @@ fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range) {
     fe.w("br label %" $blockName(resume))
     fe.label(drop)
     fe.E.runtime("__olang_scope_close")
-    for sc in hs { fe.w("call void @__olang_scope_close(ptr %s" $sc ")") }
+    for sc in hs {
+        # D18e: a walk this walk made and finishes in a scope it holds, destroyed before that scope closes
+        fe.walkEnd(sc, fe.walkKey(fe.curBlock, -1))
+        fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
+    }
     fe.w("br label %gen.free")
 }
 
@@ -4786,11 +5043,16 @@ fn (fe mut fnEm&) call(c mir.Call) {
     inst := ""
     isExtern := false
     variadic := false
+    # D18e: a walk this function finishes - its generator function's ".walk" form, the walk's handle kept for its end
+    walkSc := I64(-1)
+    for en in fe.walks {
+        if en.Value == fe.curCall { walkSc = en.Key }
+    }
     match c.Target {
         case mir.Callee.Fn(k, fty) {
             fe.E.want(k)
             ty = fty
-            target = "@" $fe.E.sym(k)
+            target = "@" $fe.E.sym(k) $(".walk" if walkSc >= 0 else "")
             if fe.E.hasEnv(k) { env = "null" }
         }
         case mir.Callee.Extern(f, fty) {
@@ -4894,6 +5156,19 @@ fn (fe mut fnEm&) call(c mir.Call) {
         ok := fe.fresh("ok")
         fe.w("br i1 " $bad ", label %" $blockName(c.Err) ", label %" $ok)
         fe.label(ok)
+    }
+    if walkSc >= 0 and value != "" {
+        # the Generator's one field, its walk's function value, holds the coroutine's handle as its environment
+        h, code := "", ""
+        if via {
+            h = fe.load("ptr", fe.let("getelementptr " $fe.ty(res) ", ptr " $out ", i32 0, i32 0, i32 1"))
+            code = fe.load("ptr", fe.let("getelementptr " $fe.ty(res) ", ptr " $out ", i32 0, i32 0, i32 0"))
+        } else {
+            h = fe.let("extractvalue " $fe.ty(res) " " $value ", 0, 1")
+            code = fe.let("extractvalue " $fe.ty(res) " " $value ", 0, 0")
+        }
+        fe.store("ptr", h, "%wh" $walkSc)
+        fe.store("ptr", code, "%wc" $walkSc)
     }
     if c.HasDest and value != "" {
         at, dt := fe.addr(c.Dest)

@@ -306,6 +306,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # 0 the value, 1 the handle's state (free.IsHandle)
+    walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -796,8 +797,15 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
     match s {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
+            # D18e: a for-in's own generator, made by a direct call - the call marked as the walk this block finishes
+            ln.walkSite = typed.SiteId(-1)
+            if indexOf(ln.B.Walks, l) >= 0 {
+                c := callOfExpr(init)
+                if c is not null { ln.walkSite = c.Site }
+            }
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
             v := ln.fitAt(init, ty, sp, ln.storageOf(l))
+            ln.walkSite = typed.SiteId(-1)
             if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead {
                 v = ln.arrayCopy(v, ty, sp, ln.storageOf(l))
             }
@@ -1513,6 +1521,11 @@ fn (ln mut lowering&) module() I64 {
 fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span, raised Bool = false) {
     t := ln.T
     xs := t.Items(from)
+    # the error types of the list a clause tried before takes whole: a code of one of them reaches no later clause, so
+    # a clause taking every type left takes the code with no test (a for-in's Exhausted, its iterator failing with
+    # nothing else, D18e: no path out of the loop but its break)
+    covered := Array<Bool>(xs.Len())
+    left := xs.Len()
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
         tc := ln.tries[ti]
         for ci in range tc.Clauses.Len() {
@@ -1527,6 +1540,10 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
                     if k < 0 and t.Same(t.ErrOf(xs[j]), t.ErrOf(it.Err)) { k = j }
                 }
                 if k < 0 { continue }
+                if it.Word < 0 and not covered[k] {
+                    covered[k] = true
+                    left--
+                }
                 one := mir.Operand.None
                 if it.Word < 0 {
                     hi := ln.prim(typed.PrimOp.Shr, mir.I32T, mir.Operand[code, mir.Operand.Const(mir.I32T, 16)], sp)
@@ -1538,7 +1555,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
                 test1 = one if test1 == mir.Operand.None else ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[test1, one], sp)
             }
             if not always and test1 == mir.Operand.None { continue }
-            if always {
+            if always or left == 0 {
                 ln.toClause(tc, ci, code, from)
                 return
             }
@@ -2113,6 +2130,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     }
     k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.L(dest) if dest != mir.NoLocal else mir.NoPlace
                                dest != mir.NoLocal, ok, code, eb))
+    if c.Site == ln.walkSite and c.Site >= typed.SiteId(0) { ln.markWalk(k, callee, fty, scopes) }
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {
         ln.start(eb)
@@ -2125,6 +2143,31 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     }
     if dest == mir.NoLocal { return mir.Operand.None }
     return mir.Operand.Copy(mir.L(dest))
+}
+
+# D18e: call k, a generator function's for a for-in's own iterator, marked as the walk its block finishes - where the
+# generator it makes lives (its result scope) is a block, a loop turn or the frame this function opens, so the walk is
+# dropped when that scope closes, on every way out of it. Anywhere else (a scope variable, the program's, a region) the
+# call stays unmarked
+fn (ln mut lowering&) markWalk(k I32, callee mir.Callee, fty types.TypeId, scopes mir.Range) {
+    match callee {
+        case mir.Callee.Fn(mir.FnKey.Body(_), _) { }
+        case _ { return }
+    }
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len() {
+        if vs[j] != types.ResultVar or j >= I64(scopes.N) { continue }
+        match ln.F.Refs[I64(scopes.At) + j] {
+            case mir.ScopeRef.Scope(s) {
+                kind := ln.F.Scopes[I64(s)].Kind
+                if kind == mir.ScopeKind.Block or kind == mir.ScopeKind.Loop or kind == mir.ScopeKind.Frame {
+                    ln.F.WalkCalls.Push(k)
+                    ln.F.WalkScopes.Push(s)
+                }
+            }
+            case _ { }
+        }
+    }
 }
 
 # the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a

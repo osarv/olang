@@ -442,6 +442,12 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     # under its own error list) when the body ended - after which every call fails with GenEnd
     Gen Bool = false
     GenEnd I64 = 0
+    # D18e: the calls of generator functions whose walk is made and finished in this function, each with the scope its
+    # generator lives in - one this function opens (a block's, a loop turn's or its frame's), the walk dropped as it
+    # closes, no one else holding the generator (a for-in's hidden iterator). A hint: what the call means is
+    # unchanged - emit may destroy the walk at the scope's close itself instead of the callee registering its drop
+    WalkCalls Vec<I32>
+    WalkScopes Vec<ScopeId>
 }
 
 # S18d: what a Raise at sp says in a kept error return trace: its text where one was given, "" for "raised here"

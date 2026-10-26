@@ -16182,6 +16182,7 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
 # an iterator (S9a): the loop's own copy of it, Next() called each iteration, Exhausted ending the loop
 fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, next I64, cm ast.Compr?&, ce types.TypeId) {
     it := c.hidden(sp, typeOf(src))
+    if c.generatorCall(src) { c.cur().Walks.Push(typed.LocalId(I32(it))) }
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
     k I64 = -1
     if f.Key != source.NameId(0) {
@@ -16200,6 +16201,25 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
     try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
     c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, k)))
+}
+
+# D18e: whether x is a direct call of a generator function - its Generator made right where the walk is, which the
+# hidden iterator alone then holds
+fn (c mut Checker&) generatorCall(x typed.Expr&c) Bool {
+    match x {
+        case typed.Expr.Call(_, _, call) {
+            match call.Target {
+                case typed.Callee.Body(id) {
+                    match c.Bodies[I64(id)].Of {
+                        case typed.BodyOf.Fn(i) { return c.P.IsGenerator(c.P.InstanceFn(i)) }
+                        nomatch { return false }
+                    }
+                }
+                nomatch { return false }
+            }
+        }
+        nomatch { return false }
+    }
 }
 
 # the key and the value locals of an iteration
