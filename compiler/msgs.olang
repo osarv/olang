@@ -729,9 +729,19 @@ type Diag enum {
     ReflArgCompr
     ReflNoType
     ReflMatchSubject
+    LaneLengths
+    LaneReferences
+    LaneCompare
+    LaneMaskBool
 }
 
 # one function each, under the id it is known by
+
+# lane operators (E39)
+fn LaneLengths(a I64, b I64) Msg { return Msg(Diag.LaneLengths, "E39", "these arrays are of lengths " $a " and " $b " - a lane operation takes arrays of one length") }
+fn LaneReferences() Msg { return Msg(Diag.LaneReferences, "E39", "lane operators give elements that may not be or hold references - build the array with a loop") }
+fn LaneCompare(op String&, how String&) Msg { return Msg(Diag.LaneCompare, "E39", $op " does not compare arrays - lane by lane it is '" $how "', an Array<Bool>") }
+fn LaneMaskBool(what String&, ty String&) Msg { return Msg(Diag.LaneMaskBool, "E39", $what " takes lanes of Bool, found " $ty) }
 
 # compile-time reflection (G32-G38)
 fn ReflNoMember(ty String&, name String&) Msg { return Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align") }

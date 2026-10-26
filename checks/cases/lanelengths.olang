@@ -1,0 +1,5 @@
+# check: fail these arrays are of lengths 2 and 3 - a lane operation takes arrays of one length
+# E39: lanes of lengths known while compiling that differ are an error where the operation is written
+fn main() {
+    a := F64[1.0, 2.0] + F64[1.0, 2.0, 3.0]
+}

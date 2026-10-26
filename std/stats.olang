@@ -1,5 +1,6 @@
-# stats - the statistics a data script reaches for: Sum, Mean, Variance and StdDev (sample and population), Median and
-# Percentile, Min and Max, and a Histogram over given edges.
+# stats - the statistics a data script reaches for: Mean, Variance and StdDev (sample and population), Median and
+# Percentile, and a Histogram over given edges. A sum, the least and the greatest element are every array's own -
+# a.Sum(), a.Min(), a.Max(), lane by lane over any expression of lanes (E39) - in the elements' own type.
 #
 #     m := try stats.Mean(prices)
 #     sd := try stats.StdDev(prices)
@@ -7,8 +8,7 @@
 #     counts := stats.Histogram(values, stats.Edges(0.0, 100.0, 20))
 #
 # Each takes an array of any number type - the four floats and the integers - and computes in F64, whatever the
-# elements are: a sum of F16s is not rounded to F16 at every step, and the answer is an F64 (Min and Max give an element
-# back as it is). A List is handed over as l.ToArray(). Ordinary olang, so every function here runs while compiling (K1)
+# elements are: a mean of F16s is not rounded to F16 at every step, and the answer is an F64. A List is handed over as l.ToArray(). Ordinary olang, so every function here runs while compiling (K1)
 # as in a built program and under -i.
 #
 # Sums are pairwise (numpy's): runs of 128 summed in eight interleaved accumulators, then halves added together, so the
@@ -17,7 +17,7 @@
 # squared distances from it - not the one-pass sum of squares, which loses every digit when the values are large and
 # close together.
 #
-# Too few values is an error (Error.TOO_FEW): an empty array has no mean, median or extreme, and one value has no
+# Too few values is an error (Error.TOO_FEW): an empty array has no mean or median, and one value has no
 # sample variance. A NaN among the values makes the answer NaN, as IEEE 754 carries it, and a percentile asked outside
 # 0..100 is a mistake in the program, which stops it as a slice out of range does.
 
@@ -28,10 +28,6 @@ type Error error {
     OUT_OF_RANGE        # a percentile p outside 0 to 100
     BAD_EDGES           # a histogram's edges not two or more and increasing, or Edges given no bin or an empty range
 }
-
-# the sum of the elements, as an F64 - pairwise, so its error grows only with the logarithm of the length. The empty
-# array sums to 0
-fn Sum<T Number>(a Array<T>&) F64 { return pairSum(a, 0, a.Len()) }
 
 # the arithmetic mean
 fn Mean<T Number>(a Array<T>&) F64 ? Error {
@@ -111,22 +107,6 @@ fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? Error {
         out[j] = v[k] if k == n - 1 else lerp(v[k], v[k + 1], pos - F64(k))
     }
     return out
-}
-
-# the least element, as it is - a NaN if there is one, as Min gives it
-fn Min<T Number>(a Array<T>&) T ? Error {
-    if a.Len() == 0 { error Error.TOO_FEW }
-    m := a[0]
-    for i in range 1, a.Len() { m = m.Min(a[i]) }
-    return m
-}
-
-# the greatest element, as it is - a NaN if there is one, as Max gives it
-fn Max<T Number>(a Array<T>&) T ? Error {
-    if a.Len() == 0 { error Error.TOO_FEW }
-    m := a[0]
-    for i in range 1, a.Len() { m = m.Max(a[i]) }
-    return m
 }
 
 # how many elements fall in each bin the edges bound, numpy's histogram: k + 1 increasing edges make k bins, bin i
@@ -294,7 +274,7 @@ fn selectRank(v mut Array<F64>&, k I64) {
 
 test "Sum, Mean, Variance and StdDev" {
     a := F64[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
-    assert Sum(a) == 40.0 and Sum(Array<F64>(0)) == 0.0
+    assert a.Sum() == 40.0 and Array<F64>(0).Sum() == 0.0     # the array's own Sum (E39)
     assert (try Mean(a) catch default -1.0) == 5.0
     assert (try PopulationVariance(a) catch default -1.0) == 4.0
     assert (try PopulationStdDev(a) catch default -1.0) == 2.0
@@ -311,14 +291,13 @@ test "Sum, Mean, Variance and StdDev" {
     assert (try Mean(nan) catch default 0.0).IsNan() and (try Variance(nan) catch default 0.0).IsNan()
 }
 
-test "pairwise sums keep their error small" {
-    # a million tenths: a plain running sum drifts by about 1e-6, the pairwise one by far less
+test "pairwise sums keep the mean's error small" {
+    # a million tenths: a plain running sum (an array's own Sum, in order) drifts by about 1e-6, the pairwise one by far less
     a := Array<F64>(1000000, 0.1)
-    plain F64 = 0.0
-    for x in a { plain += x }
-    assert (Sum(a) - 100000.0).Abs() < 1e-8 and (plain - 100000.0).Abs() > 1e-7
+    plain := a.Sum()
+    assert ((try Mean(a) catch default 0.0) - 0.1).Abs() < 1e-14 and (plain - 100000.0).Abs() > 1e-7
     f := Array<F32>(1000000, F32(0.1))
-    assert (Sum(f) - 100000.00149011612).Abs() < 1e-6                     # each F32 exactly, summed in F64
+    assert ((try Mean(f) catch default 0.0) - 0.10000000149011612).Abs() < 1e-12   # each F32 exactly, summed in F64
 }
 
 test "Median and Percentile interpolate between the closest ranks, as numpy does" {
@@ -344,10 +323,11 @@ test "Median and Percentile interpolate between the closest ranks, as numpy does
 }
 
 test "Min, Max and Histogram" {
-    assert (try Min(I32[4, -2, 9]) catch default 0) == -2 and (try Max(I32[4, -2, 9]) catch default 0) == 9
-    assert (try Max(F32[1.5, 2.5]) catch default 0.0) == 2.5
-    assert (try Max(F64[1.0, NaN, 2.0]) catch default 0.0).IsNan()
-    assert (try Min(Array<F64>(0)) catch Error.TOO_FEW default -1.0) == -1.0
+    # the arrays' own Min and Max (E39)
+    assert (try I32[4, -2, 9].Min() catch default 0) == -2 and (try I32[4, -2, 9].Max() catch default 0) == 9
+    assert (try F32[1.5, 2.5].Max() catch default 0.0) == 2.5
+    assert (try F64[1.0, NaN, 2.0].Max() catch default 0.0).IsNan()
+    assert (try Array<F64>(0).Min() catch ArrayError.EMPTY default -1.0) == -1.0
     h := try Histogram(F64[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, NaN], F64[0.0, 1.0, 2.0, 3.0])
     assert h == I64[2, 2, 3]                     # the last bin holds its right edge; -1, 9 and NaN in none
     e := try Edges(0.0, 1.0, 4)

@@ -3859,6 +3859,58 @@ Help := String(embed "help.txt")
 Weights := embed "model.bin"           # an Array<U8>&, the file's bytes
 ```
 
+### 5.22 Lane operators
+
+**E39.** An array's operators work **lane by lane**: `a + b`, `a * b + c`, `-a`, `x * 2.0`. An operand of one of
+`+ - * / % & | ^ << >>` (binary), of `-` or `~` (unary), or of `and`, `or`, `xor`, `not`, that is an array -
+`Array<T>`, or a declared type extending one (T29f), never text (`String`, nor a declared array type that does not
+extend: its operators are its own, E31) - gives an array whose element `i` is the operator applied to the operands'
+elements `i`; an operand that is not an array is shared by every lane (`a * 2.0`, `2.0 * a`); `@` is no lane operator. Each lane is the
+operation on its elements exactly as written on two values (E31, T6b, E6c, E6d): a lane of `Array<I32>` times an `I64`
+is an `I64`, `U8` lanes wrap, a type's own `Plus` or `Mul` is called per lane (`C64`, `F8E4M3`, a user's type), a
+literal adapts to the elements' type. An element type that is or holds a reference is an error: build such an array
+with a loop. The result's type is `Array<E>` with `E` the lane's type; where every array operand is of one type that
+extends an array and `E` is its element type, it is that type (`v + v` with `v` a `Vec3 extends Array<F64>`).
+
+A whole expression of lane operators is **one loop**: `a * b + c - d` makes no array between its operators, and one
+read by a total or a lane method (below) makes none at all - `(a * b).Sum()` is a dot product
+with no storage. The operands are evaluated once, left to right, before any lane (a call among them once, its result
+held); arrays are borrowed, never copied. A result is **fixed** (laid out in place, T7c) where every array operand's
+length is known while compiling, else a new array built where the expression lands, as a comprehension is (E27).
+
+The operands' lengths must be **equal**. Where both are known while compiling a difference is a compile-time error;
+otherwise they are compared once per operation - never per lane - and a difference aborts as a slice out of range does
+(E16b): `FILE:LINE: lane lengths differ` (S18a). There is no checked form: the lengths are the program's to keep
+equal, as a slice's bounds are.
+
+Arrays have these **lane methods**, the compiler's as `Len()` is, on any array type a lane operator takes:
+- `a.Sum()` - the elements added in order (`+`, E31) to `T`'s zero value; an empty array's is that zero. `Sum` adds in
+  order, so a float sum is the sequential one and vectorizes only where the order does not matter (integers).
+- `a.Min()`, `a.Max()` - the least and greatest by `<` (E31's `Less` for a type of its own), ties the first; a float
+  NaN, once met, is the answer (IEEE's minimum and maximum propagate it). An empty array fails with
+  `ArrayError.EMPTY`, so both are written with `try` (or `!`).
+- `a.LanesEqual(b)`, `a.LanesLess(b)` - `Array<Bool>` of `==` and `<` lane by lane (`==` on two arrays compares the
+  whole arrays, E10, so these are methods). An ordering comparison of arrays (`a < b`, `>`, `<=`, `>=`) is an error
+  naming the method to write: `a.LanesLess(b)`, `b.LanesLess(a)`, `not b.LanesLess(a)`, `not a.LanesLess(b)`.
+- `mask.Select(a, b)` - lane `i` is `a`'s if `mask`'s is true, else `b`'s; `a` or `b` may be one value shared by every
+  lane. `mask` holds `Bool`s.
+- `mask.Some()`, `mask.Every()` - whether any, and whether every, lane of an array of `Bool` is true (an empty array:
+  false, true); they stop at the first lane that decides. With a predicate they are the iterator methods (T35b).
+
+Each takes lane operators as its receiver and arguments with the same fusion: `a.LanesLess(b).Select(a, b)` and
+`(x - y).LanesLess(eps).Every()` are one loop each.
+
+`x op= v` with `x` an array and `op` a lane operator writes `x`'s elements in place, lane by lane - `y += a * k` is an
+axpy with no storage made; the lengths are checked as above. `y = a + b` builds the result and then assigns it (T11b).
+
+```
+d := (a * b).Sum()                      # a dot product: one loop, no array
+y += a * k                              # in place
+m := try (a - b).Max()                  # fails with ArrayError.EMPTY on empty arrays
+c := a.LanesLess(b).Select(a, b)        # the lesser of each pair
+ok := (x - y).LanesLess(eps).Every()
+```
+
 ### 5.18 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles
@@ -4389,10 +4441,10 @@ deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unrea
   broken guarantee from an orderly `os.Exit` (B5b).
 
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
-array length out of range (§3.5 D14b), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
+array length out of range (§3.5 D14b), lanes of different lengths (E39), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
 `FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
-S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
+S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: lane lengths differ`, `FILE:LINE: 'as' named what the
 value is not`, `FILE:LINE: a generator asked for its next value inside its own walk` (S20). An assert's or an `unreachable`'s message (S17, S16d) follows, after
 `: `. A program run with `interpret` (B3e) prints the same.
 
@@ -5165,8 +5217,8 @@ block and control continues after the statement; an error no clause names propag
 raises no error of its own but these, each declared in the prelude as an ordinary error type: `CaseError.WRONG_CASE`
 from an `as` that does not hold (E32), `CaseError.NO_CASE` from an enum's `From` (T17e), `Exhausted.END` from an
 iterator that has run out (S9a), and `ArgumentError.INVALID` from a call whose requirement is false (D17). The methods
-it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OUT_OF_RANGE` (E16d, E16c), and
-`Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
+it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OUT_OF_RANGE` (E16d, E16c), an array's `Min` and `Max` with
+`ArrayError.EMPTY` (E39), and `Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
 `catch` names it, or one of its words.
 
 **R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
@@ -6461,8 +6513,8 @@ nothing is generated, nothing is linked and no file is written. It behaves as th
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
 says, an atomic operation is performed, and a check the language guarantees - a failed `assert`,
-`unreachable`, a slice out of range (E16b), an array length out of range (D14b), an `as` that does not hold (E32) -
-aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
+`unreachable`, a slice out of range (E16b), an array length out of range (D14b), lanes of different lengths (E39),
+an `as` that does not hold (E32) - aborts with the message the built program prints. Where the built program's behaviour is **undefined** - an index
 out of range, dividing by zero, a shift or conversion out of range - or where it traps reading through a null
 reference (T2b), the interpreter stops, naming the operation and where it is, with status 1. A `join` block's tasks
 (§6.8) run as K1 runs them: one after another, at the join - after its body and its deferred code - each to

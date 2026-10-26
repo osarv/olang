@@ -14,7 +14,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `rand.olang` | seeded xoshiro256** generator |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
-| `stats.olang` | sum, mean, variance, percentiles, histograms |
+| `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39) |
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error` |
 | `linalg.olang` | `Matrix<T>`, GEMM, activations, convolutions by patches |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |

@@ -3686,6 +3686,12 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     sc := fe.scope(s)
     p := ""
+    if fill == mir.Operand.None and not fe.E.San {
+        # E39: no fill - each element written before anything reads it
+        fe.E.runtime("__olang_scope_alloc")
+        return fe.pair(cnt, fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")"))
+    }
+    if fill == mir.Operand.None { zero = true }
     if fe.E.San and fe.E.retires(fe.F.File) {
         # B2f: an array made in a module that retires arrays (M19d) has a chunk of its own, zero-filled, so that
         # retiring it can make it unreadable

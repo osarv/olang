@@ -319,11 +319,13 @@ type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Sit
     Checked    # Fill's length (D14b): Abort; None for every other kind and a length known in range
 }
 
-type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check) {
+type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exact Bool = false) {
     Reserve    # how many it will hold at most, null where not known (E27)
     Loop
     Site
     Checked    # the reservation's length, as Fill's (D14b, E15a)
+    Exact      # its loop yields exactly Reserve elements, one each turn (lane operators, E39): made once at that length,
+               # each yield stored in place, never grown and never copied
 }
 
 # an operation over numbers, Bools and Chars - and the few the compiler supplies over other types (Len, Bits, the
@@ -451,6 +453,11 @@ type PrimOp enum {
     ByteSwap
     # args [b]: b, once it holds - a contract's condition checked (D17e), failing with ArgumentError.INVALID
     Holds
+    # E39: args [n, m], two lanes' lengths: n, once they are equal - checked Abort, once per lane operation
+    LaneLen
+    # E39: args [n], a length: nothing, once it is above zero - a total that needs an element (Min, Max), checked Try:
+    # ArrayError.EMPTY
+    NonEmpty
     # T32: args [r, t], r a reference to an instance - a borrow, a temporary's, a copy's box (T32a) - made an "any", ty:
     # the pair of r and table t (a Lit, its index in generic.Program's AnyTables). Where the "any" lives is where r's
     # referent does: a conversion, to section 8

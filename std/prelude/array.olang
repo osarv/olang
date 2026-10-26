@@ -60,12 +60,14 @@ fn (a Array<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
     return true
 }
 
-# what an array's FindIndex fails with: no element keep holds for (NOT_FOUND); a ChunkSize below one (BAD_CHUNK); and
-# an index or a slice outside the array, a.Get(i) and a.SliceOf(lo, hi), which the compiler supplies (E16c, E16d)
+# what an array's FindIndex fails with: no element keep holds for (NOT_FOUND); a ChunkSize below one (BAD_CHUNK); an
+# index or a slice outside the array, a.Get(i) and a.SliceOf(lo, hi), which the compiler supplies (E16c, E16d); and a
+# total that needs an element - a.Min(), a.Max() - of an array with none (EMPTY, E39)
 type ArrayError error {
     NOT_FOUND
     BAD_CHUNK
     OUT_OF_RANGE
+    EMPTY
 }
 
 # the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never

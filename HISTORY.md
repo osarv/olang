@@ -24838,3 +24838,64 @@ time), tests/generators.olang's contract test, std/json's exact-integer test; ch
 o8dsameplace, o8dsameplacecall, o8dmapvalues, o8dorigins, o8ddtortemp, o8dwalked, o8dplacename, r11bcapturedcmp,
 d18contract (each failing on 843871e); the generators scenario's re-entry (built, `-debug -sanitize`, interpreted, in a
 test), embed's link cases (std and a remote repository), cinterop's callback.
+
+## Lane operators (E39, 2026-10-26)
+
+**What:** docs/ideas.md section 4, decided by the user 2026-10-18 as lane-by-lane array operators instead of vector
+types. An array's operators (`+ - * / % & | ^ << >>`, unary `-` `~`, `and or xor not`) work element by element, with a
+non-array operand shared by every lane; a whole expression of them is one loop; `Sum Min Max LanesEqual LanesLess
+Select Some Every` take lane expressions with the same fusion; `x op= v` works in place. std/stats' `Sum`, `Min` and
+`Max` are gone, replaced by the arrays' own (`stats.Mean` and the rest stay); `ArrayError` gained `EMPTY`.
+
+**How it is built (mine).** The idea had sketched prelude operator methods whose bodies are comprehensions, with a
+general fusion of any method whose body is a single comprehension. That was not built: fusing user functions means
+inlining and re-checking their bodies at every use, and the operators alone carry nearly all the value. Instead the
+checker elaborates. `check.expr` checks an operand of a lane operator with `laneAccept` set; an operator, a unary or a
+lane method meeting an array then records a **lane node** (`laneNode`: the operator, its operands, the element type
+the lane will have, which is computed by the same `opValues` a scalar operation uses) instead of a typed expression.
+Whoever reads the result decides what it becomes: a lane method or total walks the node tree once (`laneTotal`,
+`laneOut`), anyone else gets it materialized by `laneOut`. Materializing holds the leaves left to right - arrays
+borrowed (`borrowedSource`), a scalar local read as it is, any other scalar in a hidden local, literals inline -
+checks the length chain once (a new `PrimOp.LaneLen`, which lowers to an Eq check aborting with the new
+`ExitKind.LaneLength`, "lane lengths differ"), then a counted loop builds each element by calling `opValues` and
+`unaryOn` on the elements - so every rule a scalar operation has (T6b's meeting, E6c's wrapping, E31's operator
+methods on C64 or a user's type, E6d's literal meeting) applies per lane with nothing of its own. A fixed result is a
+hidden `out` made by `Make(Fill)` and filled; a run-time one is a `Collect` (E27's block) with the new `Exact` flag: it
+yields exactly its reserve, so lowering makes the array once with no fill (`NewArray` with `Operand.None`) and stores
+each yield at its index - no growth check, no zero fill. The evaluator and `interpret` see only ordinary loops, so they
+agree by construction; tests/lanes.olang decides `assert all(4)` while compiling and bakes four globals beside the
+same calls at run time.
+
+**Decisions (mine):**
+1. A length mismatch aborts once per operation, and is a compile-time error where both lengths are known. No checked
+   form: `try` never turns a check on, and the lengths are the program's to keep equal as a slice's bounds are.
+2. `Sum` adds in order from T's zero value, so a float sum is the sequential one (it vectorizes for integers only) -
+   the same answer as the hand loop and C's; a reassociated sum would be a different result.
+3. `Min`/`Max` by `<`, ties the first, a float NaN the answer once met (IEEE 754-2019 minimum/maximum, as the numbers'
+   `Min`/`Max`); empty fails `ArrayError.EMPTY` (a new word, R22: std fails with its own errors).
+4. `Some()`/`Every()` with no argument on `Bool` lanes, stopping at the first lane that decides; a predicate form stays
+   the iterator's.
+5. `and`/`or`/`xor`/`not` lane by lane on `Bool` arrays, `and`/`or` short-circuiting per lane.
+6. Text is excluded (a `String` has no lane operators), and so is a declared array type that does not extend its
+   base (its operators are its own, E31); one that extends is kept as the result's type when every array operand is of
+   it and the lane type is its element.
+7. An element type that is or holds a reference is refused: where the new array's elements would live would need a
+   rule of its own, and a loop says it.
+8. `a < b` on arrays is an error naming `LanesLess` in the four forms (`==` stays whole-array equality, E10).
+9. `x op= v` writes in place, the target borrowed writably once; `y = a + b` builds and then assigns (T11b reuses
+   storage of the same length).
+10. `@` is no lane operator; `Shuffle`, `Bits`, `FirstSet` and `DotAdd4` are not built.
+11. A run-time result is made with no fill, since the loop writes every element: an `Exact` collect. This is what puts
+    saxpy and select level with C (they were 20-30% behind when the result was zero-filled first).
+
+**Found on the way:** `Array<F64>(0).Min()` failed in MIR with "constant index 0 outside Array<F64, 0>" - the first
+lane read at a constant index on a fixed empty array; it is read through a hidden index local, after the `NonEmpty`
+check (a new `PrimOp`, failing `ArrayError.EMPTY`).
+
+**Measured** (bench/README.md "Lane operators"): dot 0.250 s against 0.236 for the hand loop and for C, isum, axpy
+level with both, saxpy and select level with C and faster than the hand loops (whose arrays are zero-filled).
+
+**Tests:** tests/lanes.olang (every operator and method, meeting, wrapping, fixed and run-time results, an extends
+type, C64, in place, for-in over a lane expression, baked and decided while compiling, empty totals, NaN, read back
+after an arena churn); checks cases lanelengths, lanecompare, lanesomebool, laneselectbool, lanereferences,
+lanemaxtry; the assertloc fixture's "lane lengths differ" line, built and interpreted; std/stats migrated.

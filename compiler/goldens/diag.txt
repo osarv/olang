@@ -608,6 +608,14 @@ c9bview.olang:16:12: note: it is taken out of a collection whose values are not 
    16 |     assert v.id == 3
       |            ^
 compilation failed with 1 error
+=== c9byield.olang
+c9byield.olang:44:17: error[C9b]: 'r.Destroy()' needs 'r' to be the only way left to reach its instance
+   44 |                 r.Destroy()
+      |                 ^~~~~~~~~~~
+c9byield.olang:34:11: note: it is taken out of a collection whose values are not each held only there: 'r' (line 32) is used here, after 'yield 1' (line 33), where the generator's caller may let go of it; read what you need from 'r' before the yield
+   34 |     yield r.t.Len() * 1000 + I64(r.t[9]) + r.n
+      |           ^
+compilation failed with 1 error
 === callparammut.olang
 callparammut.olang:12:9: error[E12]: expected fn(n Node&), found Writer
    12 |   apply(w, n)
@@ -783,8 +791,8 @@ compilation failed with 1 error
 d13czeroref.olang:18:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    18 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:180:12: note: in the standard library's code, here
-  180 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:182:12: note: in the standard library's code, here
+  182 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:11:5: note: here
    11 |     Counter++
@@ -956,6 +964,11 @@ compilation failed with 1 error
 d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    11 |         g = chars(s)
       |           ^
+compilation failed with 1 error
+=== d18contract.olang
+d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
+    3 | fn evens(n I64) [n >= 0] Iterator<I64> {
+      |                 ^~~~~~~~
 compilation failed with 1 error
 === d18errors.olang
 d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
@@ -2555,6 +2568,36 @@ l9typeunparsed.olang:15:5: error[L9]: 'destruct' is a keyword, not a name - choo
    15 |     destruct I64
       |     ^~~~~~~~
 compilation failed with 2 errors
+=== lanecompare.olang
+lanecompare.olang:6:10: error[E39]: '<' does not compare arrays - lane by lane it is 'a.LanesLess(b)', an Array<Bool>
+    6 |     if a < b { }
+      |          ^
+compilation failed with 1 error
+=== lanelengths.olang
+lanelengths.olang:4:24: error[E39]: these arrays are of lengths 2 and 3 - a lane operation takes arrays of one length
+    4 |     a := F64[1.0, 2.0] + F64[1.0, 2.0, 3.0]
+      |                        ^
+compilation failed with 1 error
+=== lanemaxtry.olang
+lanemaxtry.olang:4:20: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    4 |     m := I64[1, 2].Max()
+      |                    ^~~
+compilation failed with 1 error
+=== lanereferences.olang
+lanereferences.olang:9:10: error[E39]: lane operators give elements that may not be or hold references - build the array with a loop
+    9 |     v := W[w, w] + W[w, w]
+      |          ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== laneselectbool.olang
+laneselectbool.olang:5:12: error[E39]: 'Select' takes lanes of Bool, found F64
+    5 |     b := a.Select(a, a)
+      |            ^~~~~~
+compilation failed with 1 error
+=== lanesomebool.olang
+lanesomebool.olang:4:18: error[E39]: 'Some()' takes lanes of Bool, found I32
+    4 |     if I32[1, 2].Some() { }
+      |                  ^~~~
+compilation failed with 1 error
 === lenshape.olang
 lenshape.olang:3:13: error[E31]: Len gives an I64
     3 | fn (b Bag&) Len() I32 { return b.n }
@@ -3804,6 +3847,11 @@ r11bcaptured.olang:6:50: error[R11b]: 'e' is the error a clause took, which a la
     6 |     try f() catch e { k := fn() String { return $e } }
       |                                                  ^
 compilation failed with 1 error
+=== r11bcapturedcmp.olang
+r11bcapturedcmp.olang:10:47: error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
+   10 |         n := xs.Count(fn(x I64) Bool { return e == P.A })
+      |                                               ^
+compilation failed with 1 error
 === r11bcaseform.olang
 r11bcaseform.olang:8:18: error[R11b]: a case of a caught error names an error word, an error type or a named set
     8 |             case 3 { }
@@ -4241,8 +4289,8 @@ compilation failed with 1 error
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
-$ROOT/std/prelude/array.olang:101:5: note: 'a' is declared here
-  101 | fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
+$ROOT/std/prelude/array.olang:103:5: note: 'a' is declared here
+  103 | fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
       |     ^~~~~~~~~~~
 compilation failed with 1 error
 === rv3roforin.olang
@@ -4959,8 +5007,8 @@ compilation failed with 1 error
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
     9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
       |                     ^~~~~
-$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
-   84 |         if try keep(x) { n++ }
+$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
+   86 |         if try keep(x) { n++ }
       |                ^~~~
 compilation failed with 1 error
 === strayfnbody.olang
@@ -4975,14 +5023,14 @@ compilation failed with 2 errors
 strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    10 |     n := b.words.Count(fn(s String&) Bool {
       |                  ^~~~~
-$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
-   84 |         if try keep(x) { n++ }
+$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
+   86 |         if try keep(x) { n++ }
       |                ^~~~
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {
       |          ^~~
-$ROOT/std/prelude/array.olang:84:16: note: built here, where the receiver's part it was handed lives
-   84 |         if try keep(x) { n++ }
+$ROOT/std/prelude/array.olang:86:16: note: built here, where the receiver's part it was handed lives
+   86 |         if try keep(x) { n++ }
       |                ^~~~
 compilation failed with 2 errors
 === strcalleeadapter.olang

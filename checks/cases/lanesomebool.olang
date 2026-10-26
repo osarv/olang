@@ -1,0 +1,5 @@
+# check: fail 'Some()' takes lanes of Bool, found I32
+# E39: Some() with no predicate asks of lanes of Bool whether any holds
+fn main() {
+    if I32[1, 2].Some() { }
+}

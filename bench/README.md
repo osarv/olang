@@ -579,3 +579,21 @@ Linux 6.18; Ubuntu clang 18.1.3; glibc 2.39; olang at master 3a821a1 (the B12 se
 master 9ffa1de). The machine was shared with other agents'
 builds and tests (load average 2-5 during the runs); the checks and timings ran under `/home/user/verify.lock`, which
 keeps full test suites off it but not smaller jobs, so differences under ~10% are within the noise.
+
+## Lane operators (E39, 2026-10-26)
+
+`bench/lanes.olang` against `bench/c/lanes.c`: each kernel written with lane operators and as the hand loop, n = 1M,
+300 passes, seconds including setup (median of 5, the machine idle):
+
+| kernel | lanes | hand loop | C |
+|---|---|---|---|
+| dot, `(a * b).Sum()` F64 | 0.250 | 0.236 | 0.236 |
+| isum, `(a * b).Sum()` I32 | 0.107 | 0.106 | 0.118 |
+| axpy, `y += x * k` F32 | 0.109 | 0.115 | 0.118 |
+| saxpy, `x * k + y` into a new array | 0.162 | 0.212 | 0.163 |
+| select, `x.LanesLess(y).Select(x, y)` | 0.298 | 0.385 | 0.298 |
+
+The fused forms are one loop with no array between (checked in the IR) and vectorize (zmm `vmulps`, `vpmulld`); a
+float `Sum` adds in order, as C's loop does, so dot is the sequential sum in both. The hand loops of saxpy and select
+are slower because `Array<F32>(n)` zero-fills before the loop writes every element; the lane form's new array is made
+with no fill, since the loop writes all of it.

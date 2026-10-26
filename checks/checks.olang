@@ -1036,9 +1036,10 @@ fn assertloc(r mut report&) ? Failed {
     # and a check the language guarantees - a slice, an array length, an 'as' under '!' (a copy into fixed storage is never
     # checked: its length is known while compiling, T7d)
     try r.expect(sh(dir, "\"$OLANG\" build guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
-    wants := String&["guaranteed.olang:14: slice bounds out of range\n", "guaranteed.olang:15: array length out of range\n"
-                     "guaranteed.olang:17: CaseError.WRONG_CASE\n", "guaranteed.olang:19: null reached\n"]
-    args := String&["", " a", " a b", " a b c"]
+    wants := String&["guaranteed.olang:15: slice bounds out of range\n", "guaranteed.olang:16: array length out of range\n"
+                     "guaranteed.olang:19: CaseError.WRONG_CASE\n", "guaranteed.olang:21: null reached\n"
+                     "guaranteed.olang:17: lane lengths differ\n"]
+    args := String&["", " a", " a b", " a b c", " a b c d e"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
         try r.expect(sh(dir, "\"$OLANG\" interpret guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and

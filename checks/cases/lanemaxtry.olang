@@ -1,0 +1,5 @@
+# check: fail this call can fail
+# E39: Max fails with ArrayError.EMPTY on an array with no element, so it is written with try
+fn main() {
+    m := I64[1, 2].Max()
+}

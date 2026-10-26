@@ -1,0 +1,10 @@
+# check: fail lane operators give elements that may not be or hold references
+# E39: an operator whose element result holds a reference makes no lanes - where would the references live
+type W struct(s String&) {
+    s
+}
+fn (a W) Plus(b W) W { return a }
+fn main() {
+    w := W("x")
+    v := W[w, w] + W[w, w]
+}

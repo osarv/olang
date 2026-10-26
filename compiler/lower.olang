@@ -82,11 +82,12 @@ Overflow I64 = 1       # NumberError.OVERFLOW: a narrowing that changes the valu
 Invalid I64 = 2        # NumberError.INVALID: a NaN or an infinity narrowed to an integer
 WrongCase I64 = 3      # CaseError.WRONG_CASE: an "as" naming a case the value is not (E32)
 Contract I64 = 4       # ArgumentError.INVALID: a call's requirement false on entry (D17)
+Empty I64 = 5          # ArrayError.EMPTY: a total that needs an element of an array that has none (E39)
 
 FailIds Array<String&> = String&["std/prelude/array", "std/prelude/number", "std/prelude/number", "std/prelude/enums"
-                                 "std/prelude/argument"]
-FailTypes Array<String&> = String&["ArrayError", "NumberError", "NumberError", "CaseError", "ArgumentError"]
-FailWords Array<String&> = String&["OUT_OF_RANGE", "OVERFLOW", "INVALID", "WRONG_CASE", "INVALID"]
+                                 "std/prelude/argument", "std/prelude/array"]
+FailTypes Array<String&> = String&["ArrayError", "NumberError", "NumberError", "CaseError", "ArgumentError", "ArrayError"]
+FailWords Array<String&> = String&["OUT_OF_RANGE", "OVERFLOW", "INVALID", "WRONG_CASE", "INVALID", "EMPTY"]
 
 # a check's word: its error type and the code it fails with under that type alone
 fn (lw mut Lowerer&) failure(word I64) types.TypeId, I64 {
@@ -259,12 +260,15 @@ type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool, Passes B
 
 # a comprehension being lowered (E27): its buffer (an array reference), how many it holds, its element type, and the
 # scope its storage is made in - where a full buffer's bigger one is made too
-type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT types.TypeId, At mir.ScopeRef) {
+type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT types.TypeId, At mir.ScopeRef, Exact Bool = false
+                       ByRef Bool = true) {
     Buf
     N
     Elem
     ArrT
     At
+    Exact      # E39: Buf is the result itself, made at its length - a yield stored at N, never grown
+    ByRef      # Buf a reference to the array (dereferenced to reach it); false for an exact one held by value
 }
 
 # a place being built: its base and its projections
@@ -2273,6 +2277,20 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         }
     }
     if ln.dead { return mir.Operand.None }
+    if c.Exact and c.Reserve is not null {
+        # E39: as many elements as reserved, one each turn - the result made once at that length and filled in place
+        s0 := ln.built(c.Site)
+        out0 := ln.temp(ty, sp)
+        # no fill: every element is yielded before anything reads it, and a loop left early leaves the array unread
+        ln.emit(mir.Stmt.Assign(sp, mir.L(out0), mir.Rvalue.NewArray(s0, ty, cap, mir.Operand.None)))
+        n0 := ln.temp(mir.I64T, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(n0), mir.Rvalue.Use(ln.constI64(0))))
+        ln.collects.Push(collectCtx(out0, n0, el, ty, s0, true, t.IsRef(t.Repr(ty))))
+        ln.block(c.Loop)
+        try ln.collects.Pop() catch { }
+        if ln.dead { return mir.Operand.None }
+        return mir.Operand.Copy(mir.L(out0))
+    }
     buf := ln.temp(bt, sp)
     s := ln.built(c.Site)
     ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.Const(el, 0))))
@@ -2298,8 +2316,14 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
     v := ln.val(x)
     if ln.dead { return }
     t := ln.T
-    deref := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref])
     n := mir.Operand.Copy(mir.L(cc.N))
+    if cc.Exact {
+        at := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref, mir.Proj.Index(cc.N)] if cc.ByRef else mir.Proj[mir.Proj.Index(cc.N)])
+        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(v)))
+        ln.emit(mir.Stmt.Assign(sp, mir.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
+        return
+    }
+    deref := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref])
     full := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, ln.prim(typed.PrimOp.Len, mir.I64T
                                                                        mir.Operand[mir.Operand.Copy(mir.L(cc.Buf))], sp)], sp)
     grow, store := ln.F.NewBlock(), ln.F.NewBlock()
@@ -2351,6 +2375,23 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
             }
             case _ { }
         }
+        return mir.Operand.None
+    }
+    if op == typed.PrimOp.LaneLen {
+        # E39: two lanes' lengths, the first once they agree - a guaranteed check, once per lane operation
+        a := ln.val(args[0])
+        b := ln.val(args[1])
+        if ln.dead { return mir.Operand.None }
+        ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[a, b], sp)
+        ln.check(ok, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.LaneLength, OutOfBounds, sp)
+        return a
+    }
+    if op == typed.PrimOp.NonEmpty {
+        # E39: a total that needs an element - failing with ArrayError.EMPTY where there is none
+        n := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        ok := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[n, ln.constI64(0)], sp)
+        ln.check(ok, chk if chk != typed.Check.None else typed.Check.Try, mir.ExitKind.ArrayLength, Empty, sp)
         return mir.Operand.None
     }
     if op == typed.PrimOp.Holds {

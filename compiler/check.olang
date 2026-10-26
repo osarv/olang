@@ -188,6 +188,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
+    laneNodes List<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
+    laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
@@ -487,6 +489,7 @@ fn (c mut Checker&) reset() {
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
+    c.laneNodes = List<laneNode>()
     c.lastErrs = types.ListId(0)
     c.inferring = Map<I64, Bool>()
     c.inferredErrs = Map<I64, types.ListId>()
@@ -5828,6 +5831,16 @@ fn bangOf(t String&) String {
 # an expression checked: its typed value. want is the type the value goes to, where one is known - what a literal
 # adapts to (T6) and a lambda takes its types from (D16a) - never a requirement: exprTo makes it fit
 fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
+    # E39: lanes an operator, a total or a lane method takes are left for it to build in one loop; anything else
+    # takes their array, made here
+    accept := c.laneAccept
+    c.laneAccept = false
+    r := c.expr1(x, want, accept)
+    if accept { return r }
+    return c.laneOut(r)
+}
+
+fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Expr&c {
     if x is null { return c.unknown(source.Span(0, 0)) }
     if c.fr().Contract == CtEns and c.fr().ctSubst.Len() > 0 {
         # D17b: a part of a guarantee read at entry - the value kept of it when the call began
@@ -5839,7 +5852,10 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
     match x {
         case ast.Expr.Lit(sp, kind) { return c.literal(sp, kind, want) }
         case ast.Expr.Name(sp, n) { return c.name(sp, n)! }
-        case ast.Expr.Paren(_, y) { return c.expr(y, want) }
+        case ast.Expr.Paren(_, y) {
+            c.laneAccept = accept
+            return c.expr(y, want)
+        }
         case ast.Expr.Unary(sp, op, y) { return c.unary(sp, op, y, want)! }
         case ast.Expr.Binary(sp, op, a, b) {
             if op == token.Tok.In { return c.membership(sp, a, b) }
@@ -5852,7 +5868,7 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
             if pl >= 0 { return c.lit(sp, c.i64(), pl) }
             return c.call(sp, f, args, want)
         }
-        case ast.Expr.ScopeCall(sp, f, sc, args) { return c.scoped(sp, c.call(sp, f, args, want), sc) }
+        case ast.Expr.ScopeCall(sp, f, sc, args) { return c.scoped(sp, c.laneOut(c.call(sp, f, args, want)), sc) }
         case ast.Expr.Member(sp, y, n) { return c.member(sp, y, n, want) }
         case ast.Expr.Index(sp, y, items) { return c.index(sp, y, items) }
         case ast.Expr.ArrayLit(sp, elem, items) { return c.arrayLit(sp, c.resolve(elem), items) }
@@ -6160,44 +6176,19 @@ fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
 fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.TypeId) typed.Expr?&c {
     if op == token.Tok.Embed { return c.embed(sp, y) }
     if op == token.Tok.Not {
+        c.laneAccept = true
         x := c.expr(y, types.BoolT)
+        if c.laneOf(x) >= 0 or c.laneArray(typeOf(x)) { return c.laneUnary(sp, op, x) }   # E39
         if typeOf(x) != types.BoolT and typeOf(x) != types.UnknownT {
             c.err(y.Span(), msgs.OperandNotBool("'not'", c.ty(typeOf(x))))
         }
         return c.negate(sp, x)
     }
     if op == token.Tok.Minus or op == token.Tok.Tilde {
+        c.laneAccept = true
         x := c.value(c.expr(y, want), y.Span())
-        t := typeOf(x)
-        if t == types.UnknownT { return x }
-        if c.isNamed(c.deref(t)) and not (c.isNumber(t) and c.P.Extends(t)) {
-            mname := "Neg" if op == token.Tok.Minus else "BitNot"
-            m := c.roleUse(c.deref(t), mname, 0, sp, msgs.Tok(op.Text()))
-            if m >= 0 {
-                c.opCall = c.text(c.P.FnDecl(m).Name)
-                return c.invoke(sp, sp, m, x, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
-            }
-            # E31: a method of that name shaped otherwise is an ordinary one, and this operator has none
-            if c.notOperator(c.deref(t), mname, sp, msgs.Tok(op.Text()), 0, false) { return c.unknown(sp) }
-            if c.isNumber(t) {
-                c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
-                return c.unknown(sp)
-            }
-        }
-        if op == token.Tok.Minus {
-            if not c.isNumber(t) {
-                c.err(sp, msgs.OperandNotNumber("'-'", c.ty(t)))
-                return c.unknown(sp)
-            }
-            from := c.exprs.Len()
-            c.exprs.Push(x)
-            return typed.Expr.Prim(sp, t, typed.PrimOp.Neg, typed.Check.None, gather(c.exprs, from))
-        }
-        if not c.isInt(t) {
-            c.err(sp, msgs.OperandNotInt("'~'", c.ty(t)))
-            return c.unknown(sp)
-        }
-        return c.prim(sp, t, typed.PrimOp.BitNot, x, null)
+        if c.laneOf(x) >= 0 or c.laneArray(typeOf(x)) { return c.laneUnary(sp, op, x) }   # E39
+        return c.unaryOn(sp, op, x)
     }
     if op == token.Tok.Dollar {
         ps List<typed.Piece&>
@@ -6206,6 +6197,40 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
     }
     c.gap(sp, "this prefix operator")
     return c.unknown(sp)
+}
+
+# "-x" or "~x" on a checked value: a number's operation, or a declared type's Neg or BitNot (E31)
+fn (c mut Checker&) unaryOn(sp source.Span, op token.Tok, x typed.Expr&c) typed.Expr&c {
+    t := typeOf(x)
+    if t == types.UnknownT { return x }
+    if c.isNamed(c.deref(t)) and not (c.isNumber(t) and c.P.Extends(t)) {
+        mname := "Neg" if op == token.Tok.Minus else "BitNot"
+        m := c.roleUse(c.deref(t), mname, 0, sp, msgs.Tok(op.Text()))
+        if m >= 0 {
+            c.opCall = c.text(c.P.FnDecl(m).Name)
+            return c.invoke(sp, sp, m, x, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
+        }
+        # E31: a method of that name shaped otherwise is an ordinary one, and this operator has none
+        if c.notOperator(c.deref(t), mname, sp, msgs.Tok(op.Text()), 0, false) { return c.unknown(sp) }
+        if c.isNumber(t) {
+            c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
+            return c.unknown(sp)
+        }
+    }
+    if op == token.Tok.Minus {
+        if not c.isNumber(t) {
+            c.err(sp, msgs.OperandNotNumber("'-'", c.ty(t)))
+            return c.unknown(sp)
+        }
+        from := c.exprs.Len()
+        c.exprs.Push(x)
+        return typed.Expr.Prim(sp, t, typed.PrimOp.Neg, typed.Check.None, gather(c.exprs, from))
+    }
+    if not c.isInt(t) {
+        c.err(sp, msgs.OperandNotInt("'~'", c.ty(t)))
+        return c.unknown(sp)
+    }
+    return c.prim(sp, t, typed.PrimOp.BitNot, x, null)
 }
 
 # a reference to a number or a Bool read as its value, where an operator needs a value
@@ -6250,6 +6275,12 @@ fn intOnly(op token.Tok) Bool {
            op == token.Tok.Shl or op == token.Tok.Shr
 }
 
+# an operand of a binary operator: left as lanes for it to take where the operator works lane by lane (E39)
+fn (c mut Checker&) opnd(op token.Tok, x ast.Expr&, want types.TypeId) typed.Expr&c {
+    c.laneAccept = laneTok(op)
+    return c.expr(x, want)
+}
+
 # a binary operator: "and"/"or" a conditional (E7); on numbers a Prim at the type its operands meet at (T6b, E6d) - a
 # literal adapting to the other operand where it fits it; on Bools "==", "!=" and xor
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr&c {
@@ -6269,7 +6300,13 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         if c.caseWritten(a) and not c.caseWritten(b) { return c.caseCompare(sp, op, b, a) }
     }
     if op == token.Tok.And or op == token.Tok.Or {
-        x := c.cond1(a)
+        # E39: lanes of Bool combined lane by lane, both evaluated
+        xa := c.value(c.opnd(op, a, types.BoolT), a.Span())
+        if c.laneOf(xa) >= 0 or c.laneArray(typeOf(xa)) {
+            yb := c.value(c.opnd(op, b, types.BoolT), b.Span())
+            return c.laneBinary(sp, c.between(a.Span(), b.Span(), op.Text().Len()), op, xa, yb)
+        }
+        x := c.condOf(a, xa)
         # S8e: the right operand runs only where the left was true ("and") or false ("or")
         held := c.fr().nulls.Len()
         c.pushNulls(a, op == token.Tok.And, c.fr().Block)
@@ -6301,32 +6338,32 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     }
     if not la.Ok and not lb.Ok and (c.litLike(a) != c.litLike(b)) {
         if c.litLike(b) {
-            x0 := c.value(c.expr(a, types.UnknownT), a.Span())
-            tb0 := c.literalBeside(typeOf(x0)) if c.isNumber(typeOf(x0)) else types.UnknownT
+            x0 := c.value(c.opnd(op, a, types.UnknownT), a.Span())
+            tb0 := c.literalBeside(typeOf(x0)) if c.isNumber(typeOf(x0)) or c.laneArray(typeOf(x0)) else types.UnknownT
             fits0 := c.litLikeFits(b, tb0)
-            y0 := c.expr(b, tb0 if fits0 else types.UnknownT)
+            y0 := c.opnd(op, b, tb0 if fits0 else types.UnknownT)
             if not fits0 and c.noMeet(opSp, typeOf(x0), typeOf(y0)) { return c.unknown(sp) }
             return c.opValues(sp, opSp, op, x0, y0, a.Span(), b.Span())
         }
-        y1 := c.value(c.expr(b, types.UnknownT), b.Span())
-        ta1 := c.literalBeside(typeOf(y1)) if c.isNumber(typeOf(y1)) else types.UnknownT
+        y1 := c.value(c.opnd(op, b, types.UnknownT), b.Span())
+        ta1 := c.literalBeside(typeOf(y1)) if c.isNumber(typeOf(y1)) or c.laneArray(typeOf(y1)) else types.UnknownT
         fits1 := c.litLikeFits(a, ta1)
-        x1 := c.expr(a, ta1 if fits1 else types.UnknownT)
+        x1 := c.opnd(op, a, ta1 if fits1 else types.UnknownT)
         if not fits1 and c.noMeet(opSp, typeOf(y1), typeOf(x1)) { return c.unknown(sp) }
         return c.opValues(sp, opSp, op, x1, y1, a.Span(), b.Span())
     }
     x typed.Expr?&c = null
     y typed.Expr?&c = null
     if la.Ok and not lb.Ok and shift {
-        y = c.value(c.expr(b, types.UnknownT), b.Span())
+        y = c.value(c.opnd(op, b, types.UnknownT), b.Span())
         tb := want if c.isInt(want) else c.i64()
         x = c.litOf(a, la, tb) if c.litFits(la, tb) else c.litOf(a, la, types.UnknownT)
     } else if la.Ok and not lb.Ok {
-        y = c.value(c.expr(b, types.UnknownT), b.Span())
+        y = c.value(c.opnd(op, b, types.UnknownT), b.Span())
         x = c.litBeside(a, la, y, op, opSp, false)
         if x is null { return c.unknown(sp) }
     } else if lb.Ok and not la.Ok {
-        x = c.value(c.expr(a, want if shift else types.UnknownT), a.Span())
+        x = c.value(c.opnd(op, a, want if shift else types.UnknownT), a.Span())
         if shift {
             ta := c.literalBeside(typeOf(x))
             if not c.isNumber(ta) { ta = c.opParam(typeOf(x), op) }
@@ -6336,19 +6373,19 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
             if y is null { return c.unknown(sp) }
         }
     } else if c.shiftLit(b) and not c.shiftLit(a) {
-        x = c.value(c.expr(a, types.UnknownT), a.Span())
-        y = c.value(c.expr(b, c.literalBeside(typeOf(x)) if c.isInt(typeOf(x)) else types.UnknownT), b.Span())
+        x = c.value(c.opnd(op, a, types.UnknownT), a.Span())
+        y = c.value(c.opnd(op, b, c.literalBeside(typeOf(x)) if c.isInt(typeOf(x)) else types.UnknownT), b.Span())
     } else if c.shiftLit(a) and not c.shiftLit(b) {
-        y = c.value(c.expr(b, types.UnknownT), b.Span())
-        x = c.value(c.expr(a, c.literalBeside(typeOf(y)) if c.isInt(typeOf(y)) else types.UnknownT), a.Span())
+        y = c.value(c.opnd(op, b, types.UnknownT), b.Span())
+        x = c.value(c.opnd(op, a, c.literalBeside(typeOf(y)) if c.isInt(typeOf(y)) else types.UnknownT), a.Span())
     } else if la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat and not shift and (c.litU64(a) or c.litU64(b)) {
         # T6a: two literal-only operands of one width meet unsigned above signed - a U64 literal's beside an I64's
         u := c.P.T.Prim("U64")
         x = c.litOf(a, la, u if c.litFits(la, u) else types.UnknownT)
         y = c.litOf(b, lb, u if c.litFits(lb, u) else types.UnknownT)
     } else {
-        x = c.value(c.expr(a, types.UnknownT), a.Span())
-        y = c.value(c.expr(b, types.UnknownT), b.Span())
+        x = c.value(c.opnd(op, a, types.UnknownT), a.Span())
+        y = c.value(c.opnd(op, b, types.UnknownT), b.Span())
     }
     return c.opValues(sp, opSp, op, x!, y!, a.Span(), b.Span())
 }
@@ -6386,6 +6423,7 @@ fn (c mut Checker&) opOf(x ast.Expr&) source.Span {
 
 # the type a binary operator's method on t takes its operand as (E31), Unknown for none
 fn (c mut Checker&) opParam(t types.TypeId, op token.Tok) types.TypeId {
+    if c.laneArray(t) { return c.opParam(c.laneElemOf(t), op) }   # E39: beside lanes, an element's
     name := operatorName(op)
     dt := c.deref(t)
     if name == "" or not c.isNamed(dt) { return types.UnknownT }
@@ -6415,6 +6453,20 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
     tb := typeOf(y)
     if ta == types.UnknownT or tb == types.UnknownT {
         return c.lit(sp, types.BoolT if compares(op) else types.UnknownT, 0)
+    }
+    # E39: an array's operators work lane by lane - but a declared type's own operator taking an array is that operator
+    if laneTok(op) and (c.laneOf(x) >= 0 or c.laneOf(y) >= 0 or c.laneArray(ta) or c.laneArray(tb)) {
+        own := not c.laneArray(ta) and c.laneOf(x) < 0 and c.isNamed(c.deref(ta)) and c.roleMethod(c.deref(ta), operatorName(op), 1) >= 0
+        if not own { return c.laneBinary(sp, opSp, op, x, y) }
+        x = c.laneOut(x)
+        y = c.laneOut(y)
+        ta = typeOf(x)
+        tb = typeOf(y)
+    }
+    if compares(op) and op != token.Tok.EqEq and op != token.Tok.NotEq and (c.laneArray(ta) or c.laneArray(tb)) {
+        how := "a.LanesLess(b)" if op == token.Tok.Lt else ("b.LanesLess(a)" if op == token.Tok.Gt else ("not b.LanesLess(a)" if op == token.Tok.Le else "not a.LanesLess(b)"))
+        c.err(opSp, msgs.LaneCompare(msgs.Tok(op.Text()), how))
+        return c.lit(sp, types.BoolT, 0)
     }
     if ta == types.BoolT and tb == types.BoolT {
         if op == token.Tok.EqEq or op == token.Tok.NotEq or op == token.Tok.Xor {
@@ -6651,8 +6703,19 @@ fn (c mut Checker&) litLikeFits(x ast.Expr&, t types.TypeId) Bool {
 # the type a literal beside a value of type t adapts to: t, or - a declared type that does not extend its base - the
 # base it reads as (T29f)
 fn (c mut Checker&) literalBeside(t types.TypeId) types.TypeId {
+    if c.laneArray(t) { return c.literalBeside(c.laneElemOf(t)) }   # E39: beside lanes, an element
     if c.isNamed(t) and c.isNumber(t) and not c.P.Extends(t) { return c.under(t) }
     return t
+}
+
+# a condition checked already, x, held to be a Bool (E7)
+fn (c mut Checker&) condOf(k ast.Expr&, x typed.Expr&c) typed.Expr&c {
+    t := typeOf(x)
+    if t != types.BoolT and t != types.UnknownT {
+        c.err(k.Span(), msgs.CondNotBoolType(c.ty(t)))
+        return c.unknown(k.Span())
+    }
+    return x
 }
 
 # a condition: a Bool (E7)
@@ -10201,11 +10264,17 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
 fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&
                                targs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0), gsp source.Span = source.Span(0, 0)) typed.Expr&c {
     # E13c: a number written as a literal is a receiver like any other value, of its own type (T6a)
+    lm := targs.Len() == 0 and laneMethodName(c.text(n), args.Len())
+    c.laneAccept = lm   # E39: a total or a lane method takes lanes as they are
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {
         c.dropArgs(args)
         return c.unknown(sp)
+    }
+    if lm and (c.laneOf(rx) >= 0 or c.laneArray(rt)) {
+        nm := c.text(n)
+        if c.laneOf(rx) >= 0 or c.P.MethodOf(c.deref(rt), n) < 0 or nm == "Some" or nm == "Every" { return c.laneMethod(sp, nsp, nm, rx, args) }
     }
     if targs.Len() > 0 {
         # G12: type arguments name the method's own variables - only a declared method has any
@@ -14066,6 +14135,11 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         return
     }
     bop := compoundOp(op)
+    if c.laneArray(t) and laneTok(bop) {
+        # E39: "a += b" on an array - in place, lane by lane, in one loop
+        c.laneAssign(sp, osp, bop, p, value)
+        return
+    }
     if not c.isNumber(t) or (c.isNamed(t) and not c.P.Extends(t)) {
         if t == types.UnknownT { return }
         # x op= v on a declared type: x = x op v through its operator's method (E31)
@@ -15003,6 +15077,547 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
     }
     c.fr().LoopFails = fails
     return typed.Expr.Collect(sp, at, typed.Collect(null, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None))
+}
+
+# ---- lanes (E39) ----
+
+# A lane operation not built yet. An array's operators work element by element (E39), and a whole expression of them -
+# with a total or a lane method taking it - is made one loop, no array between: each operation is a node, and what
+# takes it gets a placeholder naming the node - an array-typed Lit of bits LaneMagic + its index (an array's own Lit
+# is all-zero bits, D13c, so no other value is one). What takes a placeholder as lanes builds on its node; anything
+# else takes the array, made where it stands (laneOut)
+type laneNode struct(Kind I64, Op token.Tok, Sp source.Span, OpSp source.Span, A I64, B I64, C I64, X typed.Expr?&
+                     Elem types.TypeId, Len I64, Decl types.TypeId) {
+    Kind       # LaneArr, LaneScalar, LaneBin, LaneUn, LaneCmp, LaneSel
+    Op         # the operator: of LaneBin and LaneUn; EqEq or Lt for LaneCmp
+    Sp
+    OpSp
+    A          # the operands' nodes: LaneBin's two, LaneUn's one, LaneCmp's two, LaneSel's mask then its two choices
+    B
+    C
+    X          # a leaf's value: an array (LaneArr) or what every lane shares (LaneScalar)
+    Elem       # the type of its elements; Unknown where they are no operation, which building them says
+    Len        # its length where it is known while compiling (T7c), else -1
+    Decl       # the declared array type the operation keeps - every array operand of it of that type (T29e) - else
+               # Unknown: the result is an Array<Elem>
+}
+
+LaneArr I64 = 0
+LaneScalar I64 = 1
+LaneBin I64 = 2
+LaneUn I64 = 3
+LaneCmp I64 = 4
+LaneSel I64 = 5
+LaneMagic I64 = 1 << 40
+
+# the operators that work lane by lane on arrays (E39); "==" and "!=" compare whole arrays (E10), "<" and the other
+# orderings none (LanesLess)
+fn laneTok(op token.Tok) Bool {
+    return op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star or op == token.Tok.Slash or
+           op == token.Tok.Percent or op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret or
+           op == token.Tok.Shl or op == token.Tok.Shr or op == token.Tok.Xor or op == token.Tok.And or op == token.Tok.Or
+}
+
+# the methods every array has that take lanes as they are (E39): the totals, the comparisons, the choice
+fn laneMethodName(name String&, n I64) Bool {
+    return match name {
+        case "Sum", "Min", "Max", "Some", "Every" => n == 0
+        case "LanesEqual", "LanesLess" => n == 1
+        case "Select" => n == 2
+        case _ => false
+    }
+}
+
+# whether values of type t are arrays the lane operators take (E39): an Array<T>, of a fixed length or not, through
+# references, or a declared type extending one (T29e; one over an array that does not extend it has none of its
+# operators, T29f) - never text, whose "+" is no sum
+fn (c mut Checker&) laneArray(t types.TypeId) Bool {
+    d := c.deref(t)
+    if d == types.UnknownT or d == c.textType() { return false }
+    if c.isNamed(d) and not c.P.Extends(d) { return false }
+    return c.arrayOf(d) != types.UnknownT
+}
+
+fn (c mut Checker&) laneElemOf(t types.TypeId) types.TypeId { return c.P.T.Elem(c.arrayOf(t)) }
+
+# the node a placeholder names, -1 for any other expression
+fn (c mut Checker&) laneOf(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Lit(_, ty, bits) {
+            if bits >= LaneMagic and bits < LaneMagic + c.laneNodes.Len() and c.arrayOf(ty) != types.UnknownT { return bits - LaneMagic }
+            return -1
+        }
+        nomatch { return -1 }
+    }
+}
+
+fn (c mut Checker&) laneAdd(n laneNode) I64 {
+    c.laneNodes.Push(n)
+    return c.laneNodes.Len() - 1
+}
+
+# the array a node gives: its declared type, else an Array of its elements - fixed where its length is known (T7c)
+fn (c mut Checker&) laneType(k I64) types.TypeId {
+    n := c.laneNodes[k]
+    if n.Decl != types.UnknownT { return n.Decl }
+    return c.P.T.Array(n.Elem, c.P.T.Const(c.i64(), n.Len) if n.Len >= 0 else types.TypeId(0))
+}
+
+fn (c mut Checker&) laneHold(sp source.Span, k I64) typed.Expr&c { return typed.Expr.Lit(sp, c.laneType(k), LaneMagic + k) }
+
+# an operand of a lane operation as a node: a placeholder's own, or a leaf - an array, or a value every lane shares
+fn (c mut Checker&) laneLeaf(x typed.Expr&c) I64 {
+    k := c.laneOf(x)
+    if k >= 0 { return k }
+    t := typeOf(x)
+    if c.laneArray(t) {
+        at := c.arrayOf(t)
+        lt := c.P.T.Length(at)
+        n := c.P.T.ConstValue(lt) if lt != types.TypeId(0) and c.P.T.KindOf(lt) == types.Kind.Const else -1
+        d := c.deref(t)
+        decl := d if c.isNamed(d) else types.UnknownT
+        return c.laneAdd(laneNode(LaneArr, token.Tok.Plus, x.Span(), x.Span(), -1, -1, -1, x, c.P.T.Elem(at), n, decl))
+    }
+    return c.laneAdd(laneNode(LaneScalar, token.Tok.Plus, x.Span(), x.Span(), -1, -1, -1, x, t, -1, types.UnknownT))
+}
+
+# the length operands agree on while compiling: one's where it is known; where two are and differ, said at sp
+fn (c mut Checker&) laneLen(ks Array<I64>&, sp source.Span) I64 {
+    n I64 = -1
+    for k in ks {
+        m := c.laneNodes[k].Len
+        if m < 0 { continue }
+        if n >= 0 and m != n {
+            c.err(sp, msgs.LaneLengths(n, m))
+            return n
+        }
+        n = m
+    }
+    return n
+}
+
+# the declared array type an operation on these operands keeps: the one every array operand is of, its elements of
+# type e still (T29e) - else none
+fn (c mut Checker&) laneDecl(ks Array<I64>&, e types.TypeId) types.TypeId {
+    d := types.UnknownT
+    for k in ks {
+        n := c.laneNodes[k]
+        if n.Kind == LaneScalar { continue }
+        if n.Decl == types.UnknownT { return types.UnknownT }
+        if d == types.UnknownT {
+            d = n.Decl
+        } else if not c.P.T.Same(d, n.Decl) {
+            return types.UnknownT
+        }
+    }
+    if d == types.UnknownT or not c.P.T.Same(c.laneElemOf(d), e) { return types.UnknownT }
+    return d
+}
+
+# what an operator gives on two elements of these types, as opValues makes it - Unknown where it is no operation
+fn (c mut Checker&) laneBinType(op token.Tok, ta types.TypeId, tb types.TypeId) types.TypeId {
+    if ta == types.UnknownT or tb == types.UnknownT { return types.UnknownT }
+    if op == token.Tok.And or op == token.Tok.Or or op == token.Tok.Xor {
+        return types.BoolT if ta == types.BoolT and tb == types.BoolT else types.UnknownT
+    }
+    if c.isNamed(ta) and not (c.isNumber(ta) and c.P.Extends(ta)) {
+        m := c.roleMethod(ta, operatorName(op), 1)
+        if m >= 0 { return c.laneResult(m, ta) }
+    }
+    if c.isNamed(tb) and not c.isNumber(tb) {
+        m := c.commuting(tb, op)
+        if m >= 0 { return c.laneResult(m, tb) }
+    }
+    if not c.isNumber(ta) or not c.isNumber(tb) { return types.UnknownT }
+    if op == token.Tok.Shl or op == token.Tok.Shr { return ta if c.isInt(ta) and c.isInt(tb) else types.UnknownT }
+    m := ta
+    if ta != tb { m = c.P.Meet(ta, tb) }
+    if m < types.TypeId(0) { return types.UnknownT }
+    if intOnly(op) and not c.isInt(m) { return types.UnknownT }
+    if c.isNamed(m) and not c.P.Extends(m) { return types.UnknownT }
+    return m
+}
+
+fn (c mut Checker&) laneUnType(op token.Tok, t types.TypeId) types.TypeId {
+    if t == types.UnknownT { return t }
+    if op == token.Tok.Not { return types.BoolT if t == types.BoolT else types.UnknownT }
+    if c.isNamed(t) and not (c.isNumber(t) and c.P.Extends(t)) {
+        m := c.roleMethod(t, "Neg" if op == token.Tok.Minus else "BitNot", 0)
+        return c.laneResult(m, t) if m >= 0 else types.UnknownT
+    }
+    if op == token.Tok.Minus { return t if c.isNumber(t) else types.UnknownT }
+    return t if c.isInt(t) else types.UnknownT
+}
+
+# the result an operator method m gives on a receiver of type t - a generic type's, its variables bound by t (G9b)
+fn (c mut Checker&) laneResult(m I64, t types.TypeId) types.TypeId {
+    sig := c.P.Sig(m)
+    if c.P.VarCount(generic.FnOwner(m)) > 0 { sig = c.implSig(m, t) }
+    if sig == types.UnknownT { return types.UnknownT }
+    return c.deref(c.P.T.Result(sig))
+}
+
+# x op y lane by lane (E39): a placeholder for the operation, built where something takes it
+fn (c mut Checker&) laneBinary(sp source.Span, opSp source.Span, op token.Tok, x typed.Expr&c, y typed.Expr&c) typed.Expr&c {
+    a := c.laneLeaf(x)
+    b := c.laneLeaf(y)
+    e := c.laneBinType(op, c.laneNodes[a].Elem, c.laneNodes[b].Elem)
+    ks := I64[a, b]
+    return c.laneHold(sp, c.laneAdd(laneNode(LaneBin, op, sp, opSp, a, b, -1, null, e, c.laneLen(ks, opSp), c.laneDecl(ks, e))))
+}
+
+fn (c mut Checker&) laneUnary(sp source.Span, op token.Tok, x typed.Expr&c) typed.Expr&c {
+    a := c.laneLeaf(x)
+    e := c.laneUnType(op, c.laneNodes[a].Elem)
+    ks := I64[a]
+    return c.laneHold(sp, c.laneAdd(laneNode(LaneUn, op, sp, sp, a, -1, -1, null, e, c.laneNodes[a].Len, c.laneDecl(ks, e))))
+}
+
+# a lane method's argument: lanes as they are, a literal adapted to the element type of the lanes beside it (T6)
+fn (c mut Checker&) laneArg(x ast.Expr&, beside types.TypeId) typed.Expr&c {
+    c.laneAccept = true
+    want := c.literalBeside(beside) if c.litLike(x) and beside != types.UnknownT else types.UnknownT
+    return c.value(c.expr(x, want), x.Span())
+}
+
+# the totals and the lane methods every array has (E39), on rx - lanes or an array
+fn (c mut Checker&) laneMethod(sp source.Span, nsp source.Span, name String&, rx typed.Expr&c, args Array<ast.Expr&>&) typed.Expr&c {
+    k := c.laneLeaf(rx)
+    if name == "LanesEqual" or name == "LanesLess" {
+        y := c.laneArg(args[0], c.laneNodes[k].Elem)
+        b := c.laneLeaf(y)
+        ea, eb := c.laneNodes[k].Elem, c.laneNodes[b].Elem
+        e := types.BoolT if ea != types.UnknownT and eb != types.UnknownT else types.UnknownT
+        op := token.Tok.EqEq if name == "LanesEqual" else token.Tok.Lt
+        ks := I64[k, b]
+        return c.laneHold(sp, c.laneAdd(laneNode(LaneCmp, op, sp, nsp, k, b, -1, null, e, c.laneLen(ks, nsp), types.UnknownT)))
+    }
+    if name == "Select" {
+        if c.laneNodes[k].Elem != types.BoolT and c.laneNodes[k].Elem != types.UnknownT {
+            c.err(nsp, msgs.LaneMaskBool("'Select'", c.ty(c.laneNodes[k].Elem)))
+        }
+        # the choices in order, a literal one adapted to the other's elements
+        ya typed.Expr?&c = null
+        yb typed.Expr?&c = null
+        if not c.litLike(args[0]) { ya = c.laneArg(args[0], types.UnknownT) }
+        if not c.litLike(args[1]) { yb = c.laneArg(args[1], types.UnknownT) }
+        if ya is null { ya = c.laneArg(args[0], c.laneElemType(yb)) }
+        if yb is null { yb = c.laneArg(args[1], c.laneElemType(ya)) }
+        a := c.laneLeaf(ya!)
+        b := c.laneLeaf(yb!)
+        ea, eb := c.laneNodes[a].Elem, c.laneNodes[b].Elem
+        e := types.UnknownT
+        if ea != types.UnknownT and eb != types.UnknownT {
+            if c.P.T.Same(ea, eb) {
+                e = ea
+            } else if c.isNumber(ea) and c.isNumber(eb) and c.P.Meet(ea, eb) >= types.TypeId(0) {
+                e = c.P.Meet(ea, eb)
+            } else {
+                c.err(nsp, msgs.OperandsDiffer("'Select'", c.ty(ea), c.ty(eb)))
+            }
+        }
+        ks := I64[k, a, b]
+        return c.laneHold(sp, c.laneAdd(laneNode(LaneSel, token.Tok.Plus, sp, nsp, k, a, b, null, e, c.laneLen(ks, nsp), c.laneDecl(I64[a, b], e))))
+    }
+    return c.laneTotal(sp, nsp, name, k)
+}
+
+# the element type of an expression lanes or an array, else its own type; Unknown for none
+fn (c mut Checker&) laneElemType(x typed.Expr?&c) types.TypeId {
+    if x is null { return types.UnknownT }
+    k := c.laneOf(x)
+    if k >= 0 { return c.laneNodes[k].Elem }
+    t := typeOf(x)
+    return c.laneElemOf(t) if c.laneArray(t) else t
+}
+
+# what a lane loop reads: each leaf's value held before it, and its length
+type laneVals struct() {
+    N I64 = -1            # the local holding the length, -1 where it is known while compiling
+    held Map<I64, I64>    # by leaf node: the local holding its value - an array's borrowed once - absent for a literal
+}
+
+# each leaf of node k evaluated once, in the order written, before the loop - an array borrowed (E12c) - and the length
+# every array has, each but the first checked against it once (LaneLen, a guaranteed check)
+fn (c mut Checker&) laneSetup(sp source.Span, k I64) laneVals {
+    lv := laneVals()
+    order List<I64>
+    c.laneLeaves(k, order)
+    fixed := c.laneNodes[k].Len
+    n typed.Expr?&c = c.lit(sp, c.i64(), fixed) if fixed >= 0 else null
+    checks := false
+    for leaf in order {
+        ln := c.laneNodes[leaf]
+        if ln.Kind == LaneArr {
+            h := c.borrowedSource(ln.Sp, ln.X!)
+            lv.held.Put(leaf, h)
+            if ln.Len >= 0 { continue }
+            l := c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null)
+            if n is null {
+                n = l
+            } else {
+                from := c.exprs.Len()
+                c.exprs.Push(n)
+                c.exprs.Push(l)
+                n = typed.Expr.Prim(sp, c.i64(), typed.PrimOp.LaneLen, typed.Check.Abort, gather(c.exprs, from))
+                checks = true
+            }
+            continue
+        }
+        match ln.X! {
+            case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+            nomatch {
+                # a local read where it is; anything else held in a hidden local of its own
+                lp := readPlace(ln.X!)
+                at I64 = -1
+                if lp is not null {
+                    match lp {
+                        case typed.Place.Local(_, _, l) { at = I64(l) }
+                        nomatch { }
+                    }
+                }
+                if at < 0 {
+                    at = c.hidden(ln.Sp, typeOf(ln.X!))
+                    c.emit(typed.Stmt.Let(ln.Sp, typed.LocalId(I32(at)), ln.X!))
+                }
+                lv.held.Put(leaf, at)
+            }
+        }
+    }
+    if n is not null and (fixed < 0 or checks) {
+        lv.N = c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(lv.N)), n))
+    }
+    return lv
+}
+
+# the leaves under node k, left to right as written
+fn (c mut Checker&) laneLeaves(k I64, out mut List<I64>&) {
+    n := c.laneNodes[k]
+    if n.Kind == LaneArr or n.Kind == LaneScalar {
+        out.Push(k)
+        return
+    }
+    if n.A >= 0 { c.laneLeaves(n.A, out) }
+    if n.B >= 0 { c.laneLeaves(n.B, out) }
+    if n.C >= 0 { c.laneLeaves(n.C, out) }
+}
+
+# how many lanes the loop walks: the known length, or the local holding it
+fn (c mut Checker&) laneCount(sp source.Span, k I64, lv laneVals&) typed.Expr&c {
+    if c.laneNodes[k].Len >= 0 { return c.lit(sp, c.i64(), c.laneNodes[k].Len) }
+    return c.readLocal(sp, lv.N)
+}
+
+# a loop over the lanes: a counter i from 0, the loop leaving where it reaches n - its counter, block, outer block, undo
+# mark and statements' start, for laneLoopClose
+fn (c mut Checker&) laneLoopOpen(sp source.Span, n typed.Expr&c) I64, I64, I64, I64, I64 {
+    i := c.hidden(sp, c.i64())
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(i)), c.lit(sp, c.i64(), 0)))
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Loop, sp)
+    c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, i), n), id))
+    return i, id, outer, mark, from
+}
+
+fn (c mut Checker&) laneLoopClose(sp source.Span, i I64, id I64, outer I64, mark I64, from I64) {
+    b := c.close(id, outer, mark, from)
+    c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, i)))
+}
+
+# node k's element at lane i, in the loop
+fn (c mut Checker&) laneElem(sp source.Span, k I64, lv laneVals&, i typed.Expr&c) typed.Expr&c {
+    n := c.laneNodes[k]
+    if n.Kind == LaneArr {
+        h := try lv.held.Get(k) catch default -1
+        if h < 0 { return c.unknown(sp) }
+        ht := c.localType(h)
+        base typed.Place&c = typed.Place.Deref(sp, c.deref(ht), c.readLocal(sp, h))
+        return c.read(sp, typed.Place.Elem(sp, n.Elem, typed.Elem(base, i, typed.Check.None)))
+    }
+    if n.Kind == LaneScalar {
+        h := try lv.held.Get(k) catch default -1
+        if h < 0 { return n.X! }
+        return c.readLocal(n.Sp, h)
+    }
+    if n.Kind == LaneUn {
+        ea := c.laneElem(sp, n.A, lv, i)
+        if n.Op == token.Tok.Not {
+            c.laneBool(ea, n.Sp, "'not'")
+            return c.negate(n.Sp, ea)
+        }
+        return c.laneOut(c.unaryOn(n.Sp, n.Op, ea))
+    }
+    if n.Kind == LaneSel {
+        em := c.laneElem(sp, n.A, lv, i)
+        ea := c.laneElem(sp, n.B, lv, i)
+        eb := c.laneElem(sp, n.C, lv, i)
+        if n.Elem == types.UnknownT { return c.unknown(n.Sp) }
+        return typed.Expr.Cond(n.Sp, n.Elem, typed.Cond(em, c.fit(ea, n.Elem, n.Sp), c.fit(eb, n.Elem, n.Sp)))
+    }
+    ea := c.laneElem(sp, n.A, lv, i)
+    eb := c.laneElem(sp, n.B, lv, i)
+    if n.Op == token.Tok.And or n.Op == token.Tok.Or {
+        if not c.laneBool(ea, n.OpSp, msgs.Tok(n.Op.Text())) or not c.laneBool(eb, n.OpSp, msgs.Tok(n.Op.Text())) { return c.unknown(n.Sp) }
+        if n.Op == token.Tok.And { return typed.Expr.Cond(n.Sp, types.BoolT, typed.Cond(ea, eb, c.lit(n.Sp, types.BoolT, 0))) }
+        return typed.Expr.Cond(n.Sp, types.BoolT, typed.Cond(ea, c.lit(n.Sp, types.BoolT, 1), eb))
+    }
+    return c.laneOut(c.opValues(n.Sp, n.OpSp, n.Op, ea, eb, n.Sp, n.Sp))
+}
+
+# whether a lane's element is a Bool, said at sp where it is not
+fn (c mut Checker&) laneBool(x typed.Expr&c, sp source.Span, what String&) Bool {
+    t := typeOf(x)
+    if t == types.BoolT or t == types.UnknownT { return true }
+    c.err(sp, msgs.OperandNotBool(what, c.ty(t)))
+    return false
+}
+
+# the lanes of node k built: errors said, and a value of no use - where its elements are no operation
+fn (c mut Checker&) laneSay(sp source.Span, k I64) typed.Expr&c {
+    from := c.stmts.Len()
+    lv := c.laneSetup(sp, k)
+    c.laneElem(sp, k, lv, c.lit(sp, c.i64(), 0))
+    c.stmts.Truncate(from)
+    return c.unknown(sp)
+}
+
+# what an expression is where nothing takes it as lanes: a placeholder made the array it names - the leaves evaluated,
+# then one loop computing every operation of it lane by lane into the result, made once at its length (a fixed array
+# where its length is known while compiling, T7c); any other expression as it is
+fn (c mut Checker&) laneOut(x typed.Expr&c) typed.Expr&c {
+    k := c.laneOf(x)
+    if k < 0 { return x }
+    sp := x.Span()
+    n := c.laneNodes[k]
+    if n.Elem == types.UnknownT { return c.laneSay(sp, k) }
+    if c.isRef(n.Elem) or c.P.T.HoldsRefs(n.Elem) {
+        c.err(sp, msgs.LaneReferences())
+        return c.unknown(sp)
+    }
+    from := c.stmts.Len()
+    lv := c.laneSetup(sp, k)
+    r typed.Expr?&c = null
+    if n.Len >= 0 {
+        ft := c.P.T.Array(n.Elem, c.P.T.Const(c.i64(), n.Len))
+        out := c.hidden(sp, ft)
+        ifrom := c.exprs.Len()
+        if c.zeroCalls(n.Elem) { c.exprs.Push(c.zero(sp, n.Elem)) }
+        fill := typed.Expr.Make(sp, ft, typed.Make(typed.MakeKind.Fill, 0, gather(c.exprs, ifrom), c.lit(sp, c.i64(), n.Len)
+                                                   typed.SiteId(-1), typed.Check.None))
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(out)), fill))
+        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.lit(sp, c.i64(), n.Len))
+        e := c.laneElem(sp, k, lv, c.readLocal(sp, i))
+        dst := typed.Place.Elem(sp, n.Elem, typed.Elem(typed.Place.Local(sp, ft, typed.LocalId(I32(out))), c.readLocal(sp, i), typed.Check.None))
+        c.emit(typed.Stmt.Assign(sp, dst, c.fit(e, n.Elem, sp)))
+        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+        r = c.readLocal(sp, out)
+    } else {
+        at := c.P.T.Array(n.Elem, types.TypeId(0))
+        cfrom := c.stmts.Len()
+        cid, couter, cmark := c.open(typed.BlockKind.Collect, sp)
+        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.readLocal(sp, lv.N))
+        e := c.laneElem(sp, k, lv, c.readLocal(sp, i))
+        c.emit(typed.Stmt.Yield(sp, c.fit(e, n.Elem, sp)))
+        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+        b := c.close(cid, couter, cmark, cfrom)
+        r = typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, lv.N), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
+    }
+    if n.Decl != types.UnknownT { r = c.convert(sp, r!, n.Decl) }
+    return typed.Expr.Seq(sp, typeOf(r!), typed.Seq(gather(c.stmts, from), r))
+}
+
+# a total of lanes (E39), in one loop over them: Sum adding each element to its type's zero value in order (an empty
+# array's Sum the zero value); Min and Max the first element no later one is less than, or greater than, by "<" - a
+# float's NaN the answer once met - failing with ArrayError.EMPTY where there is none; Some and Every whether any, or
+# every, lane of Bools holds
+fn (c mut Checker&) laneTotal(sp source.Span, nsp source.Span, name String&, k I64) typed.Expr&c {
+    n := c.laneNodes[k]
+    e := n.Elem
+    if e == types.UnknownT { return c.laneSay(sp, k) }
+    if (name == "Some" or name == "Every") and e != types.BoolT {
+        c.err(nsp, msgs.LaneMaskBool("'" $name "()'", c.ty(e)))
+        return c.unknown(sp)
+    }
+    from := c.stmts.Len()
+    lv := c.laneSetup(sp, k)
+    cnt := c.laneCount(sp, k, lv)
+    if name == "Sum" {
+        acc := c.hidden(sp, e)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(acc)), c.zero(sp, e)))
+        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, cnt)
+        s := c.opValues(sp, nsp, token.Tok.Plus, c.readLocal(sp, acc), c.laneElem(sp, k, lv, c.readLocal(sp, i)), sp, sp)
+        c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, e, typed.LocalId(I32(acc))), c.fit(s, e, sp)))
+        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+        return typed.Expr.Seq(sp, e, typed.Seq(gather(c.stmts, from), c.readLocal(sp, acc)))
+    }
+    if name == "Some" or name == "Every" {
+        some := name == "Some"
+        r := c.hidden(sp, types.BoolT)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(r)), c.lit(sp, types.BoolT, 0 if some else 1)))
+        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, cnt)
+        x := c.laneElem(sp, k, lv, c.readLocal(sp, i))
+        tfrom := c.stmts.Len()
+        c.stmts.Push(typed.Stmt.Assign(sp, typed.Place.Local(sp, types.BoolT, typed.LocalId(I32(r))), c.lit(sp, types.BoolT, 1 if some else 0)))
+        c.stmts.Push(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(id))))
+        then := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, tfrom))
+        c.emit(typed.Stmt.If(sp, typed.If(x if some else c.negate(sp, x), then, null)))
+        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+        return typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, from), c.readLocal(sp, r)))
+    }
+    # Min, Max
+    chk := c.failOp(types.TypeId[c.preludeWord("std/prelude/array", "ArrayError", "EMPTY")], nsp)
+    c.emit(typed.Stmt.Eval(sp, typed.Expr.Prim(sp, types.VoidT, typed.PrimOp.NonEmpty, chk, c.one(cnt))))
+    # the first lane, built again with nothing said - building it in the loop says what is wrong with it
+    z := c.hidden(sp, c.i64())   # lane 0 through a local: a constant index into a fixed array of none is an error
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(z)), c.lit(sp, c.i64(), 0)))
+    g := c.P.L.Diags.Hold()
+    first := c.laneElem(sp, k, lv, c.readLocal(sp, z))
+    c.P.L.Diags.EndHold()
+    c.P.L.Diags.Drop(g)
+    m := c.hidden(sp, e)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(m)), c.fit(first, e, sp)))
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.laneCount(sp, k, lv))
+    v := c.hidden(sp, e)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(v)), c.fit(c.laneElem(sp, k, lv, c.readLocal(sp, i)), e, sp)))
+    less := c.opValues(sp, nsp, token.Tok.Lt, c.readLocal(sp, v), c.readLocal(sp, m), sp, sp) if name == "Min" else
+        c.opValues(sp, nsp, token.Tok.Lt, c.readLocal(sp, m), c.readLocal(sp, v), sp, sp)
+    if c.P.T.IsFloat(c.under(e)) {
+        # a NaN is the answer once met, as a float's own Min and Max give it (IEEE 754-2019's minimum and maximum)
+        nan := c.prim(sp, types.BoolT, typed.PrimOp.Ne, c.readLocal(sp, v), c.readLocal(sp, v))
+        less = typed.Expr.Cond(sp, types.BoolT, typed.Cond(less, c.lit(sp, types.BoolT, 1), nan))
+    }
+    tfrom := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Assign(sp, typed.Place.Local(sp, e, typed.LocalId(I32(m))), c.readLocal(sp, v)))
+    then := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, tfrom))
+    c.emit(typed.Stmt.If(sp, typed.If(less, then, null)))
+    c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+    return typed.Expr.Seq(sp, e, typed.Seq(gather(c.stmts, from), c.readLocal(sp, m)))
+}
+
+# "x op= v" on an array (E39): in place, lane by lane - x's place evaluated once and borrowed writably, v's lanes
+# evaluated before the loop, every lane of x stored with its own value op v's
+fn (c mut Checker&) laneAssign(sp source.Span, osp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&) {
+    t := p.Type()
+    rt := c.P.T.Ref(c.deref(t), types.Writable)
+    h := c.hidden(sp, rt)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.fit(c.read(sp, p), rt, sp)))
+    tk := c.laneLeaf(c.readLocal(sp, h))
+    v := c.laneArg(value, c.laneElemOf(t))
+    vk := c.laneLeaf(v)
+    e := c.laneElemOf(t)
+    ks := I64[tk, vk]
+    ok := c.laneAdd(laneNode(LaneBin, op, sp, osp, tk, vk, -1, null, c.laneBinType(op, e, c.laneNodes[vk].Elem), c.laneLen(ks, osp), types.UnknownT))
+    if c.laneNodes[ok].Elem == types.UnknownT {
+        c.laneSay(sp, ok)
+        return
+    }
+    lv := c.laneSetup(sp, ok)
+    i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.laneCount(sp, ok, lv))
+    x := c.laneElem(sp, ok, lv, c.readLocal(sp, i))
+    base typed.Place&c = typed.Place.Deref(sp, c.deref(rt), c.readLocal(sp, h))
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Elem(sp, e, typed.Elem(base, c.readLocal(sp, i), typed.Check.None)), c.fit(x, e, osp)))
+    c.laneLoopClose(sp, i, id, outer, mark, lfrom)
 }
 
 # the body run for each value: the loop's statements, or a comprehension's element yielded where its filter holds

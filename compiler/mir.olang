@@ -308,6 +308,7 @@ type ExitKind enum {
     ArrayLength    # D14b: "array length out of range"
     As             # E32: "'as' named what the value is not"
     FixedLength    # T7d: "array length does not match its fixed storage"
+    LaneLength     # E39: "lane lengths differ" - two arrays of a lane operation of different lengths
     GenRunning     # S20: "a generator asked for its next value inside its own walk" - a Next while it runs
     Error          # E35: an error a "!" took - its message, the error's name ("io.Error.FULL"), is the exit's text
     Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
@@ -325,6 +326,7 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.ArrayLength => "array length out of range"
         case ExitKind.As => "'as' named what the value is not"
         case ExitKind.FixedLength => "array length does not match its fixed storage"
+        case ExitKind.LaneLength => "lane lengths differ"
         case ExitKind.GenRunning => "a generator asked for its next value inside its own walk"
     }
 }
@@ -1530,7 +1532,7 @@ fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) type
         return types.UnknownT
     }
     if not t.IsInt(t.Repr(v.operandType(n))) { v.bad("a new array's length that is no integer") }
-    v.want(v.operandType(fill), t.Elem(a), "a new array's fill")
+    if fill != Operand.None { v.want(v.operandType(fill), t.Elem(a), "a new array's fill") }   # None: each element written before it is read (E39)
     return ty
 }
 

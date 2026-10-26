@@ -1,0 +1,121 @@
+# lanes: an array's operators lane by lane (E39) against the same loops written by hand - "MODE FORM N PASSES", MODE
+#   dot      the F64 dot product of two arrays, PASSES times: (a * b).Sum(), one loop and no array between
+#   isum     the I32 dot product: (a * b).Sum() over integers, which vectorizes (a float sum is added in order)
+#   axpy     y += x * a in place, F32, PASSES times
+#   saxpy    z := x * a + y, a new F32 array each pass, its elements summed in order
+#   select   z := x.LanesLess(y).Select(x, y) - the lesser of each pair - a new F64 array each pass, summed
+# FORM is lanes or loop (the same computation written as a loop); every mode prints one number, and the C version
+# (c/lanes.c) computes the same with plain loops.
+import "std/io"
+import "std/os"
+
+type Usage error {
+    ARGS
+    MODE
+}
+
+# the pseudo-random values every mode starts from, in [0, 1), as c/lanes.c makes them
+fn values(n I64, seed I64) Array<F64> {
+    a := Array<F64>(n)
+    s := seed
+    for i in range n {
+        s = s * 6364136223846793005 + 1442695040888963407
+        a[i] = F64(s >> 33) / 2147483648.0
+    }
+    return a
+}
+
+fn narrow(a Array<F64>&) Array<F32> {
+    out := Array<F32>(a.Len())
+    for i in range a.Len() { out[i] = F32(a[i]) }
+    return out
+}
+
+fn ints(a Array<F64>&) Array<I32> {
+    out := Array<I32>(a.Len())
+    for i in range a.Len() { out[i] = I32(a[i] * 1000.0) }
+    return out
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 5 { error Usage.ARGS }
+    mode := args[1]
+    lanes := args[2] == "lanes"
+    n := try args[3].ParseInt()
+    passes := try args[4].ParseInt()
+    a := values(n, 1)
+    b := values(n, 2)
+    if mode == "dot" {
+        t := 0.0
+        for p in range passes {
+            if lanes {
+                t += (a * b).Sum()
+            } else {
+                s := 0.0
+                for i in range n { s += a[i] * b[i] }
+                t += s
+            }
+        }
+        try io.Println($t)
+    } else if mode == "isum" {
+        x := ints(a)
+        y := ints(b)
+        t I64 = 0
+        for p in range passes {
+            if lanes {
+                t += (x * y).Sum()
+            } else {
+                s I32 = 0
+                for i in range n { s += x[i] * y[i] }
+                t += s
+            }
+        }
+        try io.Println($t)
+    } else if mode == "axpy" {
+        x := narrow(a)
+        y := narrow(b)
+        k F32 = 0.5
+        for p in range passes {
+            if lanes {
+                y += x * k
+            } else {
+                for i in range n { y[i] += x[i] * k }
+            }
+        }
+        s := 0.0
+        for v in y { s += v }
+        try io.Println($s)
+    } else if mode == "saxpy" {
+        x := narrow(a)
+        y := narrow(b)
+        k F32 = 0.5
+        t := 0.0
+        for p in range passes {
+            if lanes {
+                z := x * k + y
+                t += z[p % n]
+            } else {
+                z := Array<F32>(n)
+                for i in range n { z[i] = x[i] * k + y[i] }
+                t += z[p % n]
+            }
+        }
+        try io.Println($t)
+    } else if mode == "select" {
+        t := 0.0
+        for p in range passes {
+            if lanes {
+                z := a.LanesLess(b).Select(a, b)
+                t += z[p % n]
+            } else {
+                z := Array<F64>(n)
+                for i in range n { z[i] = a[i] if a[i] < b[i] else b[i] }
+                t += z[p % n]
+            }
+        }
+        try io.Println($t)
+    } else {
+        error Usage.MODE
+    }
+}

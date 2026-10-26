@@ -293,6 +293,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
   `a[lo:hi]` is a borrow tagged with the base's scope and permission; `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
+- **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
+  work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
+  values (T6b, E6c, E31 - C64 and a user's types too); a whole expression is one loop, and `a.Sum()`, `Min()`/`Max()`
+  (`ArrayError.EMPTY` on an empty array, NaN propagating), `LanesEqual`/`LanesLess` (`Array<Bool>`), `mask.Select(a,
+  b)`, `mask.Some()`/`Every()` take one with no array made. Lengths: a compile-time error where known, else one check per
+  operation aborting with "lane lengths differ" (no checked form, mine). Fixed operands give a fixed result; run-time
+  ones a new array where it lands, made with no fill. `x op= v` is in place. Not for text, a non-extending declared
+  array type, or elements holding references; `a < b` on arrays is an error naming `LanesLess`. Built as a checker
+  elaboration (`laneNode`s materialized by whoever reads them), not prelude methods, so a user's own map-shaped
+  functions do not fuse (mine). std/stats' Sum/Min/Max went to it. Measured level with the hand loop and C at -O3.
 - **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
   reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
   depth (the user's call). The prelude declares `Eq` (and `Hash`) by contents on every array, `String`, `List`, `Map`

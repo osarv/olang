@@ -23,6 +23,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `any.olang` - run-time trait values (`any Trait&`, T32-T34).
 - `errsets.olang` - error types declared as types, named error sets and the error a catch clause names (T19, T19a,
   R11b, R3a), each computation baked while compiling beside the same one at run time.
+- `lanes.olang` - lane-by-lane array operators, totals, lane comparisons and masks (E39), baked and decided while
+  compiling beside the run time.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

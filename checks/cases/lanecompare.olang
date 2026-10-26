@@ -1,0 +1,7 @@
+# check: fail '<' does not compare arrays - lane by lane it is 'a.LanesLess(b)', an Array<Bool>
+# E39: the orderings are no lane operators - "==" compares whole arrays, LanesLess compares lane by lane
+fn main() {
+    a := F64[1.0, 2.0]
+    b := F64[2.0, 1.0]
+    if a < b { }
+}

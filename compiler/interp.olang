@@ -575,6 +575,7 @@ fn AbortWhy(k mir.ExitKind) String& {
         case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
         case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"
         case mir.ExitKind.FixedLength => "it copies an array of another length into fixed storage, which aborts the program"
+        case mir.ExitKind.LaneLength => "a lane operation in it meets arrays of different lengths, which aborts the program"
         case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
         case mir.ExitKind.GenRunning => "it asks a generator for its next value from inside the generator's own walk, which aborts the program"
         case mir.ExitKind.Error => "an error reaches '!', which ends the program"

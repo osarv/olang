@@ -64,6 +64,16 @@ fn table() Array<String&>& {
         "dispatch: any Shape&|dispatch|dispatch|any 1000000 100"
         "dispatch: enum match|dispatch|dispatch|enum 1000000 100"
         "dispatch: one type, direct|dispatch|dispatch|direct 1000000 100"
+        "lanes: dot|lanes|lanes|dot lanes 1000000 300"
+        "lanes: dot, hand loop|lanes|lanes|dot loop 1000000 300"
+        "lanes: isum|lanes|lanes|isum lanes 1000000 300"
+        "lanes: isum, hand loop|lanes|lanes|isum loop 1000000 300"
+        "lanes: axpy|lanes|lanes|axpy lanes 1000000 300"
+        "lanes: axpy, hand loop|lanes|lanes|axpy loop 1000000 300"
+        "lanes: saxpy|lanes|lanes|saxpy lanes 1000000 300"
+        "lanes: saxpy, hand loop|lanes|lanes|saxpy loop 1000000 300"
+        "lanes: select|lanes|lanes|select lanes 1000000 300"
+        "lanes: select, hand loop|lanes|lanes|select loop 1000000 300"
     ]
 }
 
