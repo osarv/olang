@@ -1466,3 +1466,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and the count. A test with no target (`test "desc" { }`) stays for what is about no one declaration (language
   features, whole programs, integration). Same-file and uniqueness rules as before. Recorded as the form unless the
   user objects.
+- DOC EXAMPLES CONFIRMED 2026-10-26 (the user: "No this is good"): tests naming a target are its examples; no
+  `example` keyword.
