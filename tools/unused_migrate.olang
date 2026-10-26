@@ -1,0 +1,339 @@
+# unused_migrate - what is never read or does nothing is an error (2026-10-26, the user's decisions): a local declared
+# and never read (D3b), an import nothing is reached through (M5a), and a call statement that gives a value and does
+# nothing else (S3). Each is fixed from the compiler's own diagnostic:
+#
+#     for i in range n { work() }    ->  for _ in range n { work() }      (a for-in's name, a case's binding, one of
+#     q, r := divmod(a, b)           ->  _, r := divmod(a, b)              several names declared, never read)
+#     x := 3                         ->  (the line left out)               (a declaration whose value calls nothing)
+#     x := build(a)                  ->  build(a)                          (a declaration whose value is one call)
+#     import "std/os"                ->  (the line left out)
+#     a.Len()                        ->  (the line left out)
+#
+# A declaration whose value is anything else (a call inside an expression, several lines) is listed for a person, as is
+# one written beside other code on its line. Each file is compiled (test when it has tests, compile otherwise), the edits
+# applied, and that repeats until nothing more changes - a call left standing may itself do nothing, a declaration left
+# out may leave another unread. A checks/cases program that must fail keeps the failure it is about: only its names are
+# made "_" - its declarations, imports and calls are left as they are, the errors they now add beside it harmless. Running
+# it again changes nothing.
+#
+#     $OLANG build tools/unused_migrate.olang && build/tools_unused_migrate [--olang PATH] [-j N] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+BareMessage String& = "is never read - write '_' in its place"
+DeclMessage String& = "is declared and never read"
+ImportMessage String& = "nothing here is reached through"
+IdleMessage String& = "gives a value and does nothing else"
+
+# what an edit does: a name made "_", a line left out, a declaration made the call its value is
+KindBare String& = "bare"
+KindDrop String& = "drop"
+KindDecl String& = "decl"
+
+# the line with the name at column index at made "_"; "" where no name starts there
+fn bareAt(text String&, at I64) String {
+    if at >= text.Len() or not srcmask.IsIdStart(text[at]) { return "" }
+    e := at
+    for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+    return $text[:at] "_" $text[e:]
+}
+
+# whether the code of a line - comments aside - opens and closes its brackets alike, and ends no block it did not open
+fn balanced(text String&) Bool {
+    mask := srcmask.Mask(text, true)
+    depth I64 = 0
+    for i in range text.Len() {
+        if mask[i] != 'c' { continue }
+        c := text[i]
+        if c == '(' or c == '[' or c == '{' { depth++ }
+        if c == ')' or c == ']' or c == '}' {
+            depth--
+            if depth < 0 { return false }
+        }
+    }
+    return depth == 0
+}
+
+# the code of a line, its comment and the whitespace around it left out
+fn codeOf(text String&) String {
+    mask := srcmask.Mask(text, true)
+    e := 0
+    for i in range text.Len() {
+        if mask[i] == 'm' { break }
+        e = i + 1
+    }
+    return $srcmask.Strip(text[:e])
+}
+
+# where the value of a declaration starting at column index at begins: after its ":=" or its "=" (a type between); -1 for
+# none ("x T")
+fn valueAt(text String&, at I64) I64 {
+    mask := srcmask.Mask(text, true)
+    depth I64 = 0
+    for i in range at, text.Len() {
+        if mask[i] != 'c' { continue }
+        c := text[i]
+        if c == '(' or c == '[' or c == '<' { depth++ }
+        if c == ')' or c == ']' or c == '>' { depth-- }
+        if depth != 0 { continue }
+        if c == ':' and i + 1 < text.Len() and text[i + 1] == '=' { return i + 2 }
+        if c == '=' and (i + 1 >= text.Len() or text[i + 1] != '=') and (i == 0 or (text[i - 1] != '!' and text[i - 1] != '<' and text[i - 1] != '>')) { return i + 1 }
+    }
+    return -1
+}
+
+# whether a value is one call: a chain of names, members and indexes ending in a call's ")" - "try" and "!" around it
+# allowed - with nothing after it
+fn oneCall(v String&) Bool {
+    t := $srcmask.Strip(v)
+    if t.StartsWith("try ") { t = $srcmask.Strip(t[4:]) }
+    if t.EndsWith("!") { t = $t[:t.Len() - 1] }
+    if t.Len() == 0 or not srcmask.IsIdStart(t[0]) or not t.EndsWith(")") { return false }
+    mask := srcmask.Mask(t, true)
+    i := 0
+    for i < t.Len() {
+        c := t[i]
+        if mask[i] != 'c' { return false }
+        if srcmask.IsWord(c) or c == '.' {
+            i++
+            continue
+        }
+        if c == '(' or c == '[' or c == '<' {
+            close := closeOf(t, mask, i)
+            if close < 0 { return false }
+            i = close + 1
+            continue
+        }
+        return false
+    }
+    return true
+}
+
+# the index of the bracket closing the one at start (its own kind counted), -1 for none
+fn closeOf(t String&, mask String&, start I64) I64 {
+    open := t[start]
+    shut := ')' if open == '(' else (']' if open == '[' else '>')
+    depth I64 = 0
+    for k in range start, t.Len() {
+        if mask[k] != 'c' { continue }
+        if t[k] == open { depth++ }
+        if t[k] == shut {
+            depth--
+            if depth == 0 { return k }
+        }
+    }
+    return -1
+}
+
+# what to do with a declaration never read at column index at of a line: drop the line, keep its value as a statement
+# (the new line), or nothing ("" and false) for a person to decide
+fn declEdit(text String&, at I64) String, Bool {
+    code := codeOf(text)
+    if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return "", false }
+    v := valueAt(text, at)
+    if v < 0 { return "", true }
+    value := $srcmask.Strip(text[v:])
+    mask := srcmask.Mask(text, true)
+    for i in range v, text.Len() {
+        if mask[i] == 'm' {
+            value = $srcmask.Strip(text[v:i])
+            break
+        }
+    }
+    if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return "", true }
+    # a constructor's, a case's or a conversion's value made for nothing is no statement either
+    if oneCall(value) and not value.StartsWith("try ") and value[0].IsUpper() { return "", true }
+    if oneCall(value) { return $text[:at] $value, false }
+    return "", false
+}
+
+fn main() ? {
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths Vec<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else {
+                jobs = try args[i + 1].ParseInt() catch default 3
+            }
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_unused_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1 { jobs = 1 }
+    olang = $diagedit.RealPathOf(olang)
+    files Vec<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed Vec<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    tmp := try os.MkTemp("", "unused_migrate") catch {
+        srcmask.SayErr("unused_migrate: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("unused_migrate: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    total I64 = 0
+    left Vec<String&>
+    fileArray := files.ToArray()
+    for round in range 1, 20 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        requests Vec<diagedit.Request>
+        for o in outputs {
+            for row in o.Split("\n") {
+                path, line, col, isError, _, msg := try diagedit.ParseRow(row) catch { continue }
+                full := diagedit.RealPathOf(path)
+                if not isError or not diagedit.Allowed(full, allowed) { continue }
+                kind := ""
+                if msg.Contains(BareMessage) { kind = KindBare }
+                if msg.Contains(DeclMessage) { kind = KindDecl }
+                if msg.StartsWith(ImportMessage) or msg.Contains(IdleMessage) { kind = KindDrop }
+                if kind != "" { requests.Push(diagedit.Request($full, line, col, $kind, "", $row)) }
+            }
+        }
+        made := apply(requests, left)
+        srcmask.Say("round " $round ": " $made " edits")
+        total += made
+        if made == 0 { break }
+    }
+    srcmask.Say("total: " $total " edits")
+    for l in left { srcmask.Say("by hand: " $l) }
+}
+
+# whether a checks/cases header names a line - LINE:COL: - which leaving a line out would make wrong
+fn namesLines(expect Vec<String&>&) Bool {
+    for t in expect {
+        for k in range t.Len() {
+            if t[k] == ':' and k > 0 and t[k - 1].IsDigit() and k + 1 < t.Len() and t[k + 1].IsDigit() { return true }
+        }
+    }
+    return false
+}
+
+# the edits applied to their files, a file's last first so a line left out moves nothing still to do; how many were
+# made, what could not be in left
+fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
+    paths Vec<String&>
+    for r in requests {
+        if not (r.Path in paths) { paths.Push($r.Path) }
+    }
+    made I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch { continue }
+        expect Vec<String&>
+        diagedit.ExpectedTexts(src, expect)
+        keepLines := namesLines(expect)
+        lines := src.Split("\n")
+        mine Vec<diagedit.Request>
+        for r in requests {
+            if r.Path == path { mine.Push(r) }
+        }
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line { return a.Line > b.Line }
+            return a.Col > b.Col
+        })
+        dropped mut Array<Bool>& = Array<Bool>(lines.Len(), false)
+        changed := false
+        seen Vec<String&>
+        for r in mine {
+            # a module imported by several files compiled is reported once by each
+            key := $r.Line ":" $r.Col
+            if key in seen or diagedit.ContainsAny(r.Why, expect) or r.Line - 1 >= lines.Len() { continue }
+            seen.Push($key)
+            idx := r.Line - 1
+            if dropped[idx] { continue }
+            text := $lines[idx]
+            at := r.Col - 1
+            # a program that must fail keeps its declarations, its imports and its calls: what fails may be among them
+            if expect.Len() > 0 and r.Kind != KindBare { continue }
+            if r.Kind == KindBare {
+                out := bareAt(text, at)
+                if out.Len() == 0 {
+                    if not (r.Why in left) { left.Push($r.Why) }
+                    continue
+                }
+                lines[idx] = $out
+                diagedit.Realign(lines, idx, out.Len() - text.Len(), at)
+            } else {
+                drop := r.Kind == KindDrop
+                out := ""
+                if r.Kind == KindDecl { out, drop = declEdit(text, at) }
+                if drop and (keepLines or not balanced(text) or codeOf(text).Contains("{")) {
+                    drop = false
+                    out = ""
+                }
+                if drop {
+                    dropped[idx] = true
+                } else if out.Len() > 0 {
+                    lines[idx] = $out
+                } else {
+                    if not (r.Why in left) { left.Push($r.Why) }
+                    continue
+                }
+            }
+            made++
+            changed = true
+        }
+        if not changed { continue }
+        b := StringBuilder()
+        first := true
+        for k in range lines.Len() {
+            if dropped[k] { continue }
+            if not first { b.PushChar('\n') }
+            b.Push(lines[k])
+            first = false
+        }
+        try os.WriteFile(path, b.ToString()) catch { srcmask.SayErr("unused_migrate: cannot write " $path) }
+    }
+    return made
+}
+
+test "a name never read made '_'" {
+    assert bareAt("    for i in range n { f() }", 8) == "    for _ in range n { f() }"
+    assert bareAt("    q, r := divmod(a, b)", 4) == "    _, r := divmod(a, b)"
+    assert bareAt("        case Shape.Rect(w, h) { x += w }", 27) == "        case Shape.Rect(w, _) { x += w }"
+    assert bareAt("    (", 4) == ""
+}
+
+test "a declaration never read: its line left out, or its one call kept" {
+    out, drop := declEdit("    x := 3", 4)
+    assert drop and out == ""
+    out2, drop2 := declEdit("    y := build(a) # made", 4)
+    assert not drop2 and out2 == "    build(a)"
+    out3, drop3 := declEdit("    z := a + f(b)", 4)
+    assert not drop3 and out3 == ""
+    out4, drop4 := declEdit("    t I64 = 0", 4)
+    assert drop4 and out4 == ""
+    out5, drop5 := declEdit("    v Vec<I64>", 4)
+    assert drop5 and out5 == ""
+    out6, drop6 := declEdit("    w := try load(p)!", 4)
+    assert not drop6 and out6 == "    try load(p)!"
+    out7, drop7 := declEdit("    if c { k := 1 }", 15)
+    assert not drop7 and out7 == ""
+    out8, drop8 := declEdit("    v := Vec<I64>()", 4)
+    assert drop8 and out8 == ""
+}
+
+test "one call, and not an expression holding one" {
+    assert oneCall("f(x)") and oneCall("a.b[2].C<I64>(x, y)") and oneCall("try g()") and oneCall("h()!")
+    assert not oneCall("f(x) + 1") and not oneCall("(f(x))") and not oneCall("3") and not oneCall("\"a\"")
+}

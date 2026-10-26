@@ -307,6 +307,9 @@ type Diag enum {
     MethodOnBuiltinType
     MethodInUse
     UnderscoreDeclared
+    LocalUnused
+    LocalUnusedBare
+    ImportUnused
     ShadowsGlobal
     ShadowsFunction
     ShadowsBuildConst
@@ -1704,6 +1707,12 @@ fn MethodOnBuiltinType(ty String&) Msg { return Msg(Diag.MethodOnBuiltinType, "M
 fn MethodInUse(ty String&, text String&) Msg { return Msg(Diag.MethodInUse, "M21", $ty " already has a method " $text " in this module") }
 
 # ERR_UNDERSCORE_DECLARED
+fn LocalUnused(name String&) Msg { return Msg(Diag.LocalUnused, "D3b", $name " is declared and never read - read it, or leave the declaration out") }
+
+fn LocalUnusedBare(name String&) Msg { return Msg(Diag.LocalUnusedBare, "D3b", $name " is never read - write '_' in its place") }
+
+fn ImportUnused(alias String&, spec String&) Msg { return Msg(Diag.ImportUnused, "M5a", "nothing here is reached through " $alias " - remove 'import \"" $spec "\"'") }
+
 fn UnderscoreDeclared() Msg { return Msg(Diag.UnderscoreDeclared, "D8c", "'_' discards a value and names nothing, so it cannot be declared") }
 
 # ERR_SHADOWS_GLOBAL

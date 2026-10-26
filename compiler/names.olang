@@ -62,11 +62,15 @@ type Table struct() {
     waiting Map<source.NameId, Bool>   # the names a pending branch declares (B9c): not unknown until it is decided
 }
 
-# a parameter, a local or a type variable in scope
-type local struct(Name source.NameId, Sp source.Span, Kind What) {
+# a parameter, a local or a type variable in scope; a local that must be read (D3b) is Check - Bare where "_" may stand
+# in its place - and Used once something reads it
+type local struct(Name source.NameId, Sp source.Span, Kind What, Check Bool = false, Bare Bool = false, Used Bool = false) {
     Name
     Sp
     Kind
+    Check
+    Bare
+    Used
 }
 
 # T4, T7: the names every module sees as a type
@@ -97,6 +101,12 @@ type Resolver struct(L mut load.Loader&) {
     # S8a: the local ifs whose condition B9a evaluated reading no build constant, by (file, the condition's start) - the
     # same on every build, which the checker reports once the condition checks
     Same Map<pair.Pair<I64, I64>, Bool>
+    # D3b: the local branches of the item the build left out, whose text only is there; M5a: the aliases a module's code
+    # names, and the top-level branches of each module the build left out
+    skipped Vec<source.Span>
+    aliasUsed Map<I64, Bool>
+    skippedTop Vec<pair.Pair<I64, source.Span>>
+    pendingTop Map<I64, Bool>
 }
 
 # ---- the program ----
@@ -125,7 +135,42 @@ fn (r mut Resolver&) Resolve() {
         m := r.L.Mods[mi]
         if m.Decls.Len() > 0 { r.bodies(mi, m.Decls) }
     }
+    for mi in range r.L.Mods.Len() { r.unusedImports(mi) }
 }
+
+# M5a: each import of module mi its code names nothing through - not judged in a module a top-level condition of which
+# evaluation decides (B9c), a branch of which is still to come; an alias re-exported (M14) its importers use
+fn (r mut Resolver&) unusedImports(mi I64) {
+    m := r.L.Mods[mi]
+    if m.C or m.Src is null or r.pendingTop.Has(mi) { return }
+    for imp in m.Imports {
+        if imp.Target < 0 or imp.Alias == "" or load.Public(imp.Alias) { continue }
+        n := r.L.Names.Intern(imp.Alias)
+        if r.aliasUsed.Has(key(mi, I32(n))) { continue }
+        named := false
+        for st in r.skippedTop {
+            if st.First == mi and Mentions(m.Src!.Text, st.Second, imp.Alias) { named = true }
+        }
+        if named { continue }
+        r.L.Diags.Error(r.at(mi, imp.Sp), msgs.ImportUnused(r.tok(n), imp.Spec))
+    }
+}
+
+# D3b, M5a: whether the text in sp names name - as a word, not inside a longer one
+fn Mentions(text String&, sp source.Span, name String&) Bool {
+    if name.Len() == 0 { return false }
+    lo := I64(sp.Start)
+    hi := I64(sp.End) if I64(sp.End) <= text.Len() else text.Len()
+    for i := lo, i + name.Len() <= hi, i++ {
+        if text[i] != name[0] or text[i:i + name.Len()] != name { continue }
+        before := i > 0 and identChar(text[i - 1])
+        after := i + name.Len() < text.Len() and identChar(text[i + name.Len()])
+        if not before and not after { return true }
+    }
+    return false
+}
+
+fn identChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # the checker's decision for a pending top-level if (B9c): its imports loaded, its branch's declarations entered and
 # resolved
@@ -400,7 +445,10 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     ty := try t.types.Get(n) catch default -1
     if ty >= 0 { return Ref(What.Type, r.mi, ty) }
     a := try t.aliases.Get(n) catch default -1
-    if a >= 0 { return Ref(What.Import, a, -1) }
+    if a >= 0 {
+        r.aliasUsed.Put(key(r.mi, I32(n)), true)   # M5a
+        return Ref(What.Import, a, -1)
+    }
     name := r.text(n)
     if r.L.Consts.Has(name) { return Ref(What.Build, -1, -1) }
     pc := try r.preludeConsts.Get(n) catch default Ref(What.None, -1, -1)
@@ -444,11 +492,43 @@ fn (r mut Resolver&) mark() I64 { return r.undo.Len() }
 fn (r mut Resolver&) popTo(mark I64) {
     for r.undo.Len() > mark {
         p := try r.undo.Pop() catch { return }
+        r.judge(try r.scope.Get(p.First) catch default -1)
         if p.Second < 0 {
             r.scope.Remove(p.First)
         } else {
             r.scope.Put(p.First, p.Second)
         }
+    }
+}
+
+# D3b: a local leaving its scope that must be read and was not - unless a branch the build left out names it
+fn (r mut Resolver&) judge(i I64) {
+    if i < 0 or i >= r.locals.Len() { return }
+    l := r.locals[i]
+    if not l.Check or l.Used { return }
+    name := r.text(l.Name)
+    for sp in r.skipped {
+        if Mentions(r.L.Mods[r.mi].Src!.Text, sp, name) { return }
+    }
+    r.L.Diags.Error(r.at(r.mi, l.Sp), msgs.LocalUnusedBare(r.tok(l.Name)) if l.Bare else msgs.LocalUnused(r.tok(l.Name)))
+}
+
+# D3b: a local declared that must be read - bare where "_" may stand in its place
+fn (r mut Resolver&) declareRead(n source.NameId, sp source.Span, bare Bool) {
+    had := r.locals.Len()
+    r.declare(n, sp)
+    if r.locals.Len() > had {
+        l := r.locals[r.locals.Len() - 1]
+        r.locals[r.locals.Len() - 1] = local(l.Name, l.Sp, l.Kind, true, bare)
+    }
+}
+
+# a name written as what an assignment, a compound one or an increment changes: resolved, and no read of a local (D3b)
+fn (r mut Resolver&) target(x ast.Expr&) {
+    match x {
+        case ast.Expr.Name(sp, n) { r.record(sp, r.lookup(n)) }
+        case ast.Expr.Paren(_, y) { r.target(y) }
+        case _ { r.expr(x) }
     }
 }
 
@@ -508,6 +588,7 @@ fn (r mut Resolver&) startItem(mi I64) {
     r.undo.Clear()
     r.itemNames.Clear()
     r.itemInits.Clear()
+    r.skipped.Clear()
     r.inCond = false
     r.item++
 }
@@ -520,6 +601,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
             case ast.Decl.If(_, ti) {
                 chosen := r.L.Chosen(mi, ti.Cond!.Span().Start)
                 if chosen == load.Pending {
+                    r.pendingTop.Put(mi, true)   # M5a: its imports are not judged
                     r.startItem(mi)
                     r.topConds(ti)
                 } else {
@@ -563,6 +645,9 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
 }
 
 fn (r mut Resolver&) bodiesIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    # M5a: a branch left out names its imports in its text only
+    if chosen != index { r.skippedTop.Push(pair.Pair(mi, ti.Then!.Sp)) }
+    if ti.Else is not null and chosen != index + 1 { r.skippedTop.Push(pair.Pair(mi, ti.Else!.Sp)) }
     if chosen == index and ti.Then!.Decls.Len() > 0 { r.bodies(mi, ti.Then!.Decls) }
     if ti.ElseIf is not null { r.bodiesIf(mi, ti.ElseIf!, chosen, index + 1) }
     if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { r.bodies(mi, ti.Else!.Decls) }
@@ -780,7 +865,15 @@ fn (r mut Resolver&) block(body Array<ast.Stmt&>&) {
 fn (r mut Resolver&) stmt(s ast.Stmt?&) {
     if s is null { return }
     match s {
-        case ast.Stmt.ExprS(_, x) { r.expr(x) }
+        case ast.Stmt.ExprS(_, x) {
+            # D3b: "n++" and "n--" change n, and read nothing
+            match x {
+                case ast.Expr.Unary(_, op, a), ast.Expr.Postfix(_, op, a) {
+                    if op == token.Tok.Inc or op == token.Tok.Dec { r.target(a) } else { r.expr(x) }
+                }
+                case _ { r.expr(x) }
+            }
+        }
         case ast.Stmt.Var(_, v) { r.varDecl(v) }
         case ast.Stmt.Multi(_, mu) {
             for x in mu.Values { r.expr(x) }
@@ -788,17 +881,17 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
                 match t {
                     case ast.Expr.Name(sp, n) {
                         if mu.Define and r.text(n) != "_" {
-                            r.declare(n, sp)
+                            r.declareRead(n, sp, true)
                         } else if not mu.Define {
-                            r.expr(t)
+                            r.target(t)
                         }
                     }
-                    case _ { r.expr(t) }
+                    case _ { r.target(t) }
                 }
             }
         }
         case ast.Stmt.Assign(_, _, target, value) {
-            r.expr(target)
+            r.target(target)
             r.expr(value)
         }
         case ast.Stmt.TryStore(_, inner, clauses) {
@@ -847,7 +940,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             if word is not null { r.path(word) }
         }
         case ast.Stmt.Spawn(_, targets, call) {
-            for t in targets { r.expr(t) }
+            for t in targets { r.target(t) }
             r.expr(call)
         }
         case ast.Stmt.Join(_, j) {
@@ -870,7 +963,13 @@ fn (r mut Resolver&) varDecl(v ast.VarDecl&) {
     # a constructor's pun is its parameter, already in scope (C4)
     if v.Field and v.Ty is null and v.Values.Len() == 0 and not v.Infer { return }
     # a field named as a parameter is C2a's error, the checker's to say
-    for i in range v.Names.Len() { r.declare(v.Names[i], v.NameSps[i], v.Field) }
+    for i in range v.Names.Len() {
+        if v.Field {
+            r.declare(v.Names[i], v.NameSps[i], true)
+        } else {
+            r.declareRead(v.Names[i], v.NameSps[i], false)
+        }
+    }
     # S8c: a local declared with its own value may be fixed - which the checker decides, knowing its type and its writes
     if not v.Field and v.Values.Len() == v.Names.Len() {
         for n in v.Names {
@@ -886,14 +985,15 @@ fn (r mut Resolver&) forNames(from I32, k source.NameId, n source.NameId) {
 }
 
 fn (r mut Resolver&) forName(from I32, id source.NameId) {
-    if id == source.NameId(0) { return }
+    # "_" holds the place of a name the loop does not read (D3b)
+    if id == source.NameId(0) or r.text(id) == "_" { return }
     sp := r.nameSpan(r.mi, from, id)
     i := try r.scope.Get(id) catch default -1
     if (i >= 0 and r.locals[i].Kind == What.Local) or id in r.Tables[r.mi].values {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ForInNameExists(r.tok(id), r.text(id)))
         r.bind(id, sp, What.Local)
     } else {
-        r.declare(id, sp)
+        r.declareRead(id, sp, true)
     }
 }
 
@@ -930,6 +1030,7 @@ fn (r mut Resolver&) ifStmt(i ast.If&) {
 
 fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Bool) {
     if b.Group < 0 { return }
+    if decided and not taken { r.skipped.Push(b.Sp) }   # D3b: its text only is left
     if decided {
         if taken {
             r.L.Diags.Choose(b.Group)
@@ -944,11 +1045,12 @@ fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Boo
 
 # an else-if chain after a branch the build took: none of it is compiled
 fn (r mut Resolver&) dropAll(i ast.If&) {
+    r.skipped.Push(i.Then!.Sp)
     if i.Then!.Group >= 0 { r.L.Diags.CutOff(i.Then!.Group) }
     if i.Else is null { return }
     match i.Else {
         case ast.Stmt.If(_, e) { r.dropAll(e) }
-        nomatch { }
+        case _ { r.skipped.Push(i.Else!.Span()) }
     }
 }
 
@@ -1030,14 +1132,14 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
         case ast.Pattern.Bind(sp, n) {
             if n not in bound {
                 bound.Push(n)
-                r.declare(n, sp)
+                r.declareRead(n, sp, true)
             }
         }
         case ast.Pattern.Type(_, ty, n, sp) {
             r.typeRef(ty)
             if r.text(n) != "_" and n not in bound {
                 bound.Push(n)
-                r.declare(n, sp)
+                r.declareRead(n, sp, true)
             }
         }
         nomatch { }
@@ -1072,6 +1174,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             for a in args { r.expr(a) }
         }
         case ast.Expr.ScopeCall(sp, f, scope, args) {
+            r.read(r.lookup(scope))   # D3b
             r.expr(f)
             for a in args { r.expr(a) }
         }
@@ -1128,8 +1231,17 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
 fn (r mut Resolver&) name(sp source.Span, n source.NameId) {
     ref := r.lookup(n)
     r.record(sp, ref)
+    r.read(ref)
     # "_" in a condition is a case test's wildcard (E32: "if t == Tree.Node(_, _)"), no build constant
     if ref.Kind == What.None and r.inCond and r.text(n) != "_" { r.unknownInCond(sp, n) }
+}
+
+# D3b: a local read
+fn (r mut Resolver&) read(ref Ref) {
+    if ref.Kind != What.Local or ref.Index < 0 or ref.Index >= r.locals.Len() { return }
+    l := r.locals[ref.Index]
+    if l.Used { return }
+    r.locals[ref.Index] = local(l.Name, l.Sp, l.Kind, l.Check, l.Bare, true)
 }
 
 # B10: a name nothing declares, in a condition, with nothing near it - most likely a build constant -D did not define.
@@ -1313,7 +1425,9 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
         case ast.TypeRef.Ref(sp, of, scope, _) {
             r.typeRef(of)
             if scope != source.NameId(0) and r.text(scope) != "return" {
-                r.record(r.nameSpan(r.mi, of.Span().End, scope), r.lookup(scope))
+                sref := r.lookup(scope)
+                r.record(r.nameSpan(r.mi, of.Span().End, scope), sref)
+                r.read(sref)   # D3b: where a reference lives says where the local does
             }
         }
         case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
@@ -1343,6 +1457,7 @@ fn (r mut Resolver&) aliasModule(path Array<source.NameId>&) I64 {
     for k in range path.Len() - 1 {
         next := try r.Tables[t].aliases.Get(path[k]) catch default -1
         if next < 0 { return -1 }
+        if k == 0 { r.aliasUsed.Put(key(r.mi, I32(path[0])), true) }   # M5a
         if k > 0 and not load.Public(r.text(path[k])) { return -1 }
         t = next
     }
