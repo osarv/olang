@@ -914,10 +914,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   used it - it declares its own); the methods live in `number.olang` beside the traits (M19: a default lives in its
   trait's module). Not done: a named constant adapting like a literal (`f F32 = Pi` is an error; `F32(Pi)` is written) -
   E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
-- **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
-  copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Take` is `Get` and `Remove` in
-  one, `Update`, ordered walks by insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count Fold Map Filter
-  ToList`.
+- **The prelude's collections are Vec, Map and StringBuilder; List is `std/list` (M19d, QZ2, the user's decision
+  2026-10-17, built 2026-10-26).** The prelude holds the built-in types' methods, the protocol traits and errors, `Vec<T>`
+  (below), `Map<K, V>` (a handle; `Get` fails on a miss, `Take` is `Get` and `Remove` in one, `Update`, ordered walks by
+  insertion of slot) and `StringBuilder` (now over a `Vec<Char>`); `String` and `Array` are built in. Every other
+  container is std: `list.List<T>` (`import "std/list"` - chunked, never moves, a handle; `list.Of(a)`, `list.From(it)`,
+  `list.Error`, `list.Iter`; `RunFrom` walks), `pair.Pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"),
+  set, deque, heap. Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count
+  Fold Map Filter ToVec`, `Map`/`Filter` building a Vec (`a.ToVec()`, `it.ToVec()` replace `ToList`). Decided (mine):
+  std/list vacates nothing (vacate stays the prelude's - "no module has a privilege the language does not give"), so a
+  List's removals free nothing early; json still encodes and decodes `list.List` (it imports std/list); the type
+  `ListIter` is `list.Iter`, `ListError` `list.Error` (the std naming rule). `tools/list_vec.olang` migrates: by
+  default (and in `olang fix`) it keeps a List, qualified and imported; `--vec` moves code onto Vec, as the repository
+  was (2,302 of 2,484 `List<` in 314 of 349 files - the compiler entirely, std but json and std/list, the corpus, the
+  checks but the cases about a List). Found on the way, pre-existing: a Vec of `any` values or of possibly-null
+  references could not grow (the prelude's `vacate` on such an element was read as a call through it - T32b, T2c);
+  `$` of a `Vec<Char>` aborted (an array of Char renders as text, so Vec's Str found no `[`). Recorded limit: a
+  callback handed elements holding references from a Str's receiver (`it.tags.Iter().Some(f)` over a `Vec<String&>`)
+  is refused as building where the receiver lives (E11c); ListIter's own Some had let it through; a `for` loop compiles.
 - **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,
   `Clone()` a Vec of its own; it is a type argument, field, global, capture or task argument like any value. Growth
@@ -979,8 +993,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `olang bindgen HEADER.h` (X16) writes a header's declarations from clang's tree, macros' values computed by clang;
   `interpret` loads the linked libraries and refuses structs and extern types (B3e). Still no extern variables, and
   the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
-- **std API details.** `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt SwapRemove IndexOf Remove
-  Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `try l.Get(i)` checked, first chunk held on its own. `Map`: `Put Get
+- **std API details.** `Vec`, and std/list's `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt
+  SwapRemove IndexOf Remove Reverse Sort Join ToArray Clone`, `v[i]` unchecked, `try v.Get(i)` checked (a List's first
+  chunk held on its own). `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
   reads olang literal syntax; every base is a `Radix` (`TextError.BAD_BASE`, a literal one decided while compiling);

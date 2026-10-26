@@ -1341,7 +1341,7 @@ fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Dia
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
 
 # ERR_TYPE_ARG_NAMED_SCOPE
-fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") }
+fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container") }
 
 # ERR_INVALID_REFERENCE_TARGET
 fn InvalidReferenceTarget(ty String&) Msg { return Msg(Diag.InvalidReferenceTarget, "T24", $ty " cannot be a reference - only a struct, an enum or an array can") }

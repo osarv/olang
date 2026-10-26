@@ -12,6 +12,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse` |
 | `rand.olang` | seeded xoshiro256** generator |
+| `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.Of(a)`, `list.From(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39) |
@@ -46,18 +47,20 @@ A name never repeats its module's: `io.Error`, not `io.Error`; `os.Error`, `json
 `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` - the module is already written before the dot. Two exceptions:
 
 - a module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `heap.Heap`, `rand.Rand`,
-  as Go's `list.List`);
+  `list.List`, as Go's);
 - a module with several error types names the others by subject (`linalg.ShapeError`, `linalg.ActivationError`,
   `http.HeaderError`), and the one for the module as a whole is still `Error`.
 
-The prelude is the exception to the rule, since its names are bare everywhere (`ListError`, `MapError`, `TextError`,
+The prelude is the exception to the rule, since its names are bare everywhere (`VecError`, `MapError`, `TextError`,
 `ArrayError`, `NumberError`, `CaseError`, `ArgumentError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with
 every module's own. `tools/stutter_rename.olang` renames the old names in other code (`olang fix` runs it).
 
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
-  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator` (the helpers and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
+  without an import. It holds the built-in types' methods, the protocol traits and errors, and three collections - `vec`
+  (`Vec`, the growable array), `map` and `text`'s `StringBuilder`; every other container is a module above (QZ2).
+  `array`, `text` (`String`), `vec`, `map`, `iterator` (the helpers - `Map`, `Filter` and `ToVec` building a Vec - and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `argument` (`ArgumentError`, what a call whose contract's condition is false fails with, D17), `enums`
