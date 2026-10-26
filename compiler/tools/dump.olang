@@ -468,6 +468,12 @@ fn (w mut walker&) decl(d ast.Decl&) {
             w.stmts(body)
         }
         case ast.Decl.If(_, i) { w.topIf(i) }
+        case ast.Decl.Set(sp, target, value) {
+            if w.skipped(sp.Start) { return }
+            w.line("SET", sp)
+            w.expr(target)
+            w.expr(value)
+        }
     }
 }
 
