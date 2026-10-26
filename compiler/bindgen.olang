@@ -118,6 +118,7 @@ type gen struct(header String&) {
     taken := Map<String&, I64>()                        # every top-level name the output declares
     byKey := Map<String&, String&>()                    # a record's key: the typedef naming it
     named := false                                      # the records named: a record reached later is named then
+    ownFile := Map<String&, I64>()                      # the functions the imported file itself declares (a .c's)
     why String& = ""
     file I64 = 0                                        # where the walk is: 0 elsewhere, 1 the header, 2 the probe
 }
@@ -272,6 +273,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
                 }
             }
             static := text(n, "storageClass") == "static" or flag(n, "inline")
+            if where == 1 and static { g.ownFile.Put($name, 0) }
             mangled := text(n, "mangledName")
             sym mut String&g = $("" if mangled == "" or mangled == name else mangled)
             g.funcs.Push(cFunc($name, typeOf(n), ps.ToArray(), pts.ToArray(), static, sym))
@@ -878,6 +880,10 @@ fn (g mut gen&) write(head String&) String {
         }
         if f.Static and not g.all {
             g.skipped.Push($f.Name ": static or inline in the header - no symbol to link")
+            continue
+        }
+        if f.Static and g.ownFile.Has(f.Name) {
+            g.skipped.Push($f.Name ": static in its file - C's own to that file")
             continue
         }
         line := try g.function(f) catch Skip {
@@ -1602,7 +1608,7 @@ fn Translate(include String&, own String&, clang String&, flags Array<String&>&,
         tr.Why = firstError(o.Stderr)
         return tr
     }
-    g.readMacros(o.Stdout, probe, own, tr.Deps)
+    g.readMacros(o.Stdout, probe, "", tr.Deps)
     # the declarations, and each integer macro's value as an enumerator of the probe
     ints := g.intMacros()
     pb := StringBuilder()

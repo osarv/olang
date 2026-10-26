@@ -5583,7 +5583,14 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         c.err(sp, msgs.ArraySizeMismatch(c.P.T.ConstValue(c.P.T.Length(have)), c.P.T.ConstValue(c.P.T.Length(want))))
         return x
     }
-    c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
+    ws := c.ty(want)
+    hs := c.tyOf(x)
+    if ws == hs and c.isNamed(c.deref(want)) and c.isNamed(c.deref(have)) {
+        # two types of one name, declared by two modules - two C imports translating one header among them (X18)
+        ws = $ws " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(want)))].Identity
+        hs = $hs " of " $c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(c.deref(have)))].Identity
+    }
+    c.err(sp, msgs.TypeMismatch(ws, hs))
     return x
 }
 

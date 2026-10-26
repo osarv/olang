@@ -649,7 +649,7 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
         identity = $"<" $spec ">"
     }
     kb := StringBuilder()
-    kb.Push($CImportFormat "\n" $include "\n" $own "\n" $clangStamp(l.Clang) "\n")
+    kb.Push($CImportFormat "\n" $include "\n" $own "\n" $fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
     for f in l.CFlags { kb.Push($f "\n") }
     ck := sha256.Hex(kb.ToString())[:32]
     dir := $fetch.CacheDir() "/cimport"
@@ -732,8 +732,8 @@ fn keepFile(dir String&, path String&, text String&) Bool {
     return true
 }
 
-# what clang is, for a translation's key: its real path, size and time ("" for none)
-fn clangStamp(clang String&) String {
+# what a program is, for a translation's key - clang, this compiler: its real path, size and time ("" for none)
+fn fileStamp(clang String&) String {
     if clang == "" { return "" }
     real := try os.RealPath(target.WhereIs(clang)) catch default ""
     if real == "" { return $clang }

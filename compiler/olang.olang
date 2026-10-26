@@ -37,6 +37,7 @@ import "lsp"
 import "mcp"
 import typecheck "check"
 import "std/pair"
+import sha "std/sha256"
 
 fn main() ? {
     os.OnCrash("olang: internal compiler error: the compiler crashed - a bug in the compiler, not in the program\n")
@@ -543,6 +544,20 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.Units.Push(u)
     }
     if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
+    # X20: each C import's own C, compiled beside the modules into the same bitcode, so the link inlines it
+    for m in l.Mods {
+        if m.CUnit == "" { continue }
+        ctext := try os.ReadFile(m.CUnit) catch os.Error {
+            build.Unbuildable($"its C import's code " $m.CUnit " was lost while it was read")
+            error build.Failed.UNBUILT
+        }
+        cir := cIr&prog(m.CUnit, ctext, cfg)
+        if cir == "" {
+            build.Unbuildable($"clang cannot compile its C import's code " $m.CUnit)
+            error build.Failed.UNBUILT
+        }
+        prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
+    }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.REPORTED }
@@ -804,6 +819,12 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         why := interp.LoadLibrary(ln)
         if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink($ln[2:] if ln.StartsWith("-l") else $ln, why)) }
     }
+    # X20: a C import's own C, compiled into a shared library and loaded the same way
+    for m in l.Mods {
+        if m.CUnit == "" { continue }
+        why := cLibrary(m.CUnit, cfg)
+        if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink(m.CUnit, why)) }
+    }
     if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
@@ -825,6 +846,85 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         abort()
     }
     return status
+}
+
+# a C import's C (X20) as LLVM IR the build compiles as it compiles a module's: clang's IR of it before any pass - for this
+# build's modes (debug information, the race detector) - its functions given the attributes every olang function
+# carries, the target's CPU and features, so the link's optimizer inlines one into the other both ways (C's own say
+# what its command line's CPU means to that clang, which need not be the set the build names). Kept beside the C, by
+# a hash of the C and the flags; "" where clang cannot make it
+fn cIr(unit String&, text String&, cfg build.Config&) String {
+    args Vec<String&>
+    args.Push($cfg.Clang)
+    for f in cfg.CFlags() { args.Push($f) }
+    if cfg.Debug { args.Push("-g") }
+    if cfg.Race { args.Push("-fsanitize=thread") }
+    for a in String&["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
+    kb := StringBuilder()
+    for a in args { kb.Push($a "\n") }
+    kb.Push(cfg.Target.Attrs)
+    kb.Push(text)
+    path := $unit[:unit.Len() - 2] "." $sha.Hex(kb.ToString())[:16] ".ll"
+    kept := try os.ReadFile(path) catch os.Error default ""
+    if kept != "" { return kept }
+    if cfg.Clang == "" { return "" }
+    out := try os.Exec(args.ToArray(), text) catch os.Error { return "" }
+    if out.Status != 0 {
+        try io.PrintErr(out.Stderr) catch io.Error { }
+        return ""
+    }
+    ir := retarget(out.Stdout, cfg.Target.Attrs)
+    tmp := $path "." $build.Pid() ".tmp"
+    try os.WriteFile(tmp, ir) catch os.Error { return ir }
+    try os.Rename(tmp, path) catch os.Error { }
+    return ir
+}
+
+# C's IR with each attribute group's CPU, features and tuning replaced by attrs - where it names a CPU at all
+fn retarget(ir String&, attrs String&) String {
+    b := StringBuilder()
+    for line in ir.Lines() {
+        if not (line.StartsWith("attributes #") and line.Contains("\"target-cpu\"")) {
+            b.Push(line)
+            b.PushChar('\n')
+            continue
+        }
+        rest := $line
+        for key in String&["\"target-cpu\"=\"", "\"target-features\"=\"", "\"tune-cpu\"=\""] {
+            k := try rest.Find(key) catch default -1
+            if k < 0 { continue }
+            e := try rest[k + key.Len():].FindByte('"') catch default -1
+            if e < 0 { continue }
+            rest = $rest[:k] $rest[k + key.Len() + e + 1:]
+        }
+        close := try rest.FindLast("}") catch default -1
+        if close < 0 {
+            b.Push(line)
+        } else {
+            b.Push($rest[:close] $attrs " " $rest[close:])
+        }
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+# a C import's C (X20), for interpret: compiled into a shared library beside it - where it is not there yet, or older -
+# and loaded; "" when it is loaded, else why not
+fn cLibrary(unit String&, cfg build.Config&) String {
+    so := $unit[:unit.Len() - 2] ".so"
+    ui := try os.Stat(unit) catch os.Error { return "its code is lost" }
+    si := try os.Stat(so) catch os.Error default os.FileInfo(os.FileKind.OTHER, 0, 0)
+    if si.Kind != os.FileKind.FILE or si.ModTime < ui.ModTime {
+        if cfg.Clang == "" { return "a C import's code needs clang to be compiled" }
+        args Vec<String&>
+        args.Push($cfg.Clang)
+        for f in cfg.CFlags() { args.Push($f) }
+        for a in String&["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
+        out := try os.Exec(args.ToArray()) catch os.Error { return "clang could not be run" }
+        if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
+        try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
+    }
+    return interp.LoadLibrary(so)
 }
 
 # explain FILE NAME (B11b): the program FILE is the root of checked as for a build - its values and asserts decided,
