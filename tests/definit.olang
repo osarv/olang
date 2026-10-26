@@ -135,6 +135,23 @@ fn diAfterHidden(xs Array<I64>&) I64 {
     return p.v * 100 + t
 }
 
+# a counted loop whose body moves its counter writes some elements again and others never: the array is cleared (D14d)
+fn diDirty(n I64) I64 {
+    b := Array<I64>(n, 77)
+    return b[n - 1]
+}
+
+fn diMoved(n I64) I64 {
+    a := Array<I64>(n)
+    for i in range n {
+        i = 0
+        a[i] = 1
+    }
+    s I64 = 0
+    for x in a { s += x }
+    return s
+}
+
 # a global with no zero value, and text, given their values by top-level ifs below them (D13e)
 DiBackend String
 if TargetOs == "linux" { DiBackend = "epoll" } else { DiBackend = "kqueue" }
@@ -156,6 +173,7 @@ DiSquaresBaked := diSquares(4)
 DiFillBaked := diFill(3)
 DiFixedLen := I64[i for i in range 6].Len()
 DiAfterDoBaked := diAfterDo(3)
+DiMovedBaked := diMoved(50)
 DiAfterHiddenBaked := diAfterHidden(I64[4, 5, 6, 7])
 
 test "a never-null reference assigned in both branches (D13d)" {
@@ -231,6 +249,14 @@ test "comprehensions write each element once (E27, T7c)" {
 test "Array<T>(n) filled by the loop after it (D14d)" {
     assert diFill(4) == F32[0.0, 0.5, 1.0, 1.5]
     assert DiFillBaked == F32[0.0, 0.5, 1.0]
+}
+
+test "a counted fill whose counter is assigned keeps its clear (D14d)" {
+    for k in range 3 {
+        { assert diDirty(100000) == 77 }
+        { assert diMoved(100000) == 1 }
+    }
+    assert DiMovedBaked == 1
 }
 
 test "definitely assigned references read back after the arena churns (D13d, O2)" {

@@ -2251,9 +2251,10 @@ handles: no `try` reaches it.
 **D14d (an array the next loop fills).** `Array<T>(n)` with no fill, declared as a local (`a := Array<T>(n)`, `a
 Array<T> = Array<T>(n)`), is not cleared when the statement after its declaration is `for i in range n` or `for i in
 range 0, n` - `n` the same name or the same integer literal - whose body has `a[i] = e` among its own statements (not
-inside a nested block) and mentions `a` nowhere else, nor holds a `break`, `continue` or `return`: the loop writes every
-element before anything can read one. Any other shape - another bound, a conditional store, a second mention, a loop that
-may stop early - keeps the clear (T8), as does an element type that is an array or owns what it holds. A program cannot
+inside a nested block) and mentions `a` nowhere else, never assigns `i` (`i = 0`, `i += 2`, `i++`, anywhere in it), nor
+holds a `break`, `continue` or `return`: the loop writes every element before anything can read one. Any other shape -
+another bound, a conditional store, a second mention, a counter the body moves, a loop that may stop early - keeps the
+clear (T8), as does an element type that is an array or owns what it holds. A program cannot
 tell the two apart.
 
 **D15.** In the second form (`:=`), no type is written; the declared type is the type of `expr`, which may be any
