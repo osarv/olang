@@ -509,3 +509,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   way: a D16d closure UAF (held only through its innermost capture), `oblige` on set terms, G11 on any's arguments.
   Left: a held generator's &t elements read at the generator; a generator held in a local still lands by obligations
   (552 MB with program-scope arguments); explain of a method on a prelude type. Next: bulk review 3 (since C imports).
+- 2026-10-26 CET: walks merged (3f0cef0, verified; merge = tip + memory): Reversed/Windows/TakeWhile/SkipWhile/
+  FlatMap/StepBy/Partition, `olang test -fuzz NAME` (B19, std/fuzz, testdata/fuzz replay), std/prop property tests
+  (B19a, reflection, shrinking), docs/profiling.md, a filter matching no test fails with did-you-mean. Decided (mine,
+  the agent's two questions) for the checker batch: a filter fails only when no listed file has a match (the driver
+  collects the children's status); test targets may name iterator defaults and array methods (`Iterator.TakeWhile`,
+  `Array.Windows`).
