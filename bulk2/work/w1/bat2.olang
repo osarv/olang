@@ -1,0 +1,259 @@
+# a battery of integer operations at one width, its text
+fn bat<T Integer>(z T, k I64) String {
+    one := T(k)
+    zero := one - one
+    mn := T.Min
+    mx := T.Max
+    vals := Vec<T>()
+    vals.Push(mn)
+    vals.Push(mn + one)
+    vals.Push(zero - one)
+    vals.Push(zero)
+    vals.Push(one)
+    vals.Push(one + one)
+    vals.Push(mx - one)
+    vals.Push(mx)
+    vals.Push(mx / (one + one + one))
+    vals.Push(mn / (one + one + one + one + one))
+    b := StringBuilder()
+    for x in vals {
+        b.Push($x " ")
+        b.Push($(-x) " " $(~x) " " $x.Format(16) " " $x.Format(2) " " $F64(x) " " $F32(x) " " $BF16(x) " " $F16(x) " ")
+        b.Push($I64(x) " " $U8(x) " " $I128(x) " " $U128(x) " " $x.PopCount() " " $x.LeadingZeros() " " $x.TrailingZeros() " ")
+        b.Push($x.RotateLeft(3) " " $x.RotateRight(5) " ")
+        b.Push($x.Hash() "\n")
+        for y in vals {
+            b.Push($(x + y) " " $(x - y) " " $(x * y) " " $(x & y) " " $(x | y) " " $(x ^ y) " " $(x < y) " " $(x == y) " " $(x >= y))
+            if y != zero and not (x == mn and y == zero - one and mn < zero) {
+                b.Push(" " $(x / y) " " $(x % y))
+            }
+            b.Push("\n")
+        }
+    }
+    return b.ToString()
+}
+
+K mut I64 = 1
+import "std/io"
+BI1 := bat(I1(0), 1)
+BU1 := bat(U1(0), 1)
+BI2 := bat(I2(0), 1)
+BU2 := bat(U2(0), 1)
+BI3 := bat(I3(0), 1)
+BU3 := bat(U3(0), 1)
+BI7 := bat(I7(0), 1)
+BU7 := bat(U7(0), 1)
+BI8 := bat(I8(0), 1)
+BU8 := bat(U8(0), 1)
+BI9 := bat(I9(0), 1)
+BU9 := bat(U9(0), 1)
+BI15 := bat(I15(0), 1)
+BU15 := bat(U15(0), 1)
+BI16 := bat(I16(0), 1)
+BU16 := bat(U16(0), 1)
+BI17 := bat(I17(0), 1)
+BU17 := bat(U17(0), 1)
+BI24 := bat(I24(0), 1)
+BU24 := bat(U24(0), 1)
+BI31 := bat(I31(0), 1)
+BU31 := bat(U31(0), 1)
+BI32 := bat(I32(0), 1)
+BU32 := bat(U32(0), 1)
+BI33 := bat(I33(0), 1)
+BU33 := bat(U33(0), 1)
+BI48 := bat(I48(0), 1)
+BU48 := bat(U48(0), 1)
+BI53 := bat(I53(0), 1)
+BU53 := bat(U53(0), 1)
+BI54 := bat(I54(0), 1)
+BU54 := bat(U54(0), 1)
+BI63 := bat(I63(0), 1)
+BU63 := bat(U63(0), 1)
+BI64 := bat(I64(0), 1)
+BU64 := bat(U64(0), 1)
+BI65 := bat(I65(0), 1)
+BU65 := bat(U65(0), 1)
+BI100 := bat(I100(0), 1)
+BU100 := bat(U100(0), 1)
+BI127 := bat(I127(0), 1)
+BU127 := bat(U127(0), 1)
+BI128 := bat(I128(0), 1)
+BU128 := bat(U128(0), 1)
+fn main() {
+    rI1 := bat(I1(0), K)
+    if rI1 != BI1 { io.Println("MISMATCH I1")! }
+    io.Println("== I1")!
+    io.Println(rI1)!
+    rU1 := bat(U1(0), K)
+    if rU1 != BU1 { io.Println("MISMATCH U1")! }
+    io.Println("== U1")!
+    io.Println(rU1)!
+    rI2 := bat(I2(0), K)
+    if rI2 != BI2 { io.Println("MISMATCH I2")! }
+    io.Println("== I2")!
+    io.Println(rI2)!
+    rU2 := bat(U2(0), K)
+    if rU2 != BU2 { io.Println("MISMATCH U2")! }
+    io.Println("== U2")!
+    io.Println(rU2)!
+    rI3 := bat(I3(0), K)
+    if rI3 != BI3 { io.Println("MISMATCH I3")! }
+    io.Println("== I3")!
+    io.Println(rI3)!
+    rU3 := bat(U3(0), K)
+    if rU3 != BU3 { io.Println("MISMATCH U3")! }
+    io.Println("== U3")!
+    io.Println(rU3)!
+    rI7 := bat(I7(0), K)
+    if rI7 != BI7 { io.Println("MISMATCH I7")! }
+    io.Println("== I7")!
+    io.Println(rI7)!
+    rU7 := bat(U7(0), K)
+    if rU7 != BU7 { io.Println("MISMATCH U7")! }
+    io.Println("== U7")!
+    io.Println(rU7)!
+    rI8 := bat(I8(0), K)
+    if rI8 != BI8 { io.Println("MISMATCH I8")! }
+    io.Println("== I8")!
+    io.Println(rI8)!
+    rU8 := bat(U8(0), K)
+    if rU8 != BU8 { io.Println("MISMATCH U8")! }
+    io.Println("== U8")!
+    io.Println(rU8)!
+    rI9 := bat(I9(0), K)
+    if rI9 != BI9 { io.Println("MISMATCH I9")! }
+    io.Println("== I9")!
+    io.Println(rI9)!
+    rU9 := bat(U9(0), K)
+    if rU9 != BU9 { io.Println("MISMATCH U9")! }
+    io.Println("== U9")!
+    io.Println(rU9)!
+    rI15 := bat(I15(0), K)
+    if rI15 != BI15 { io.Println("MISMATCH I15")! }
+    io.Println("== I15")!
+    io.Println(rI15)!
+    rU15 := bat(U15(0), K)
+    if rU15 != BU15 { io.Println("MISMATCH U15")! }
+    io.Println("== U15")!
+    io.Println(rU15)!
+    rI16 := bat(I16(0), K)
+    if rI16 != BI16 { io.Println("MISMATCH I16")! }
+    io.Println("== I16")!
+    io.Println(rI16)!
+    rU16 := bat(U16(0), K)
+    if rU16 != BU16 { io.Println("MISMATCH U16")! }
+    io.Println("== U16")!
+    io.Println(rU16)!
+    rI17 := bat(I17(0), K)
+    if rI17 != BI17 { io.Println("MISMATCH I17")! }
+    io.Println("== I17")!
+    io.Println(rI17)!
+    rU17 := bat(U17(0), K)
+    if rU17 != BU17 { io.Println("MISMATCH U17")! }
+    io.Println("== U17")!
+    io.Println(rU17)!
+    rI24 := bat(I24(0), K)
+    if rI24 != BI24 { io.Println("MISMATCH I24")! }
+    io.Println("== I24")!
+    io.Println(rI24)!
+    rU24 := bat(U24(0), K)
+    if rU24 != BU24 { io.Println("MISMATCH U24")! }
+    io.Println("== U24")!
+    io.Println(rU24)!
+    rI31 := bat(I31(0), K)
+    if rI31 != BI31 { io.Println("MISMATCH I31")! }
+    io.Println("== I31")!
+    io.Println(rI31)!
+    rU31 := bat(U31(0), K)
+    if rU31 != BU31 { io.Println("MISMATCH U31")! }
+    io.Println("== U31")!
+    io.Println(rU31)!
+    rI32 := bat(I32(0), K)
+    if rI32 != BI32 { io.Println("MISMATCH I32")! }
+    io.Println("== I32")!
+    io.Println(rI32)!
+    rU32 := bat(U32(0), K)
+    if rU32 != BU32 { io.Println("MISMATCH U32")! }
+    io.Println("== U32")!
+    io.Println(rU32)!
+    rI33 := bat(I33(0), K)
+    if rI33 != BI33 { io.Println("MISMATCH I33")! }
+    io.Println("== I33")!
+    io.Println(rI33)!
+    rU33 := bat(U33(0), K)
+    if rU33 != BU33 { io.Println("MISMATCH U33")! }
+    io.Println("== U33")!
+    io.Println(rU33)!
+    rI48 := bat(I48(0), K)
+    if rI48 != BI48 { io.Println("MISMATCH I48")! }
+    io.Println("== I48")!
+    io.Println(rI48)!
+    rU48 := bat(U48(0), K)
+    if rU48 != BU48 { io.Println("MISMATCH U48")! }
+    io.Println("== U48")!
+    io.Println(rU48)!
+    rI53 := bat(I53(0), K)
+    if rI53 != BI53 { io.Println("MISMATCH I53")! }
+    io.Println("== I53")!
+    io.Println(rI53)!
+    rU53 := bat(U53(0), K)
+    if rU53 != BU53 { io.Println("MISMATCH U53")! }
+    io.Println("== U53")!
+    io.Println(rU53)!
+    rI54 := bat(I54(0), K)
+    if rI54 != BI54 { io.Println("MISMATCH I54")! }
+    io.Println("== I54")!
+    io.Println(rI54)!
+    rU54 := bat(U54(0), K)
+    if rU54 != BU54 { io.Println("MISMATCH U54")! }
+    io.Println("== U54")!
+    io.Println(rU54)!
+    rI63 := bat(I63(0), K)
+    if rI63 != BI63 { io.Println("MISMATCH I63")! }
+    io.Println("== I63")!
+    io.Println(rI63)!
+    rU63 := bat(U63(0), K)
+    if rU63 != BU63 { io.Println("MISMATCH U63")! }
+    io.Println("== U63")!
+    io.Println(rU63)!
+    rI64 := bat(I64(0), K)
+    if rI64 != BI64 { io.Println("MISMATCH I64")! }
+    io.Println("== I64")!
+    io.Println(rI64)!
+    rU64 := bat(U64(0), K)
+    if rU64 != BU64 { io.Println("MISMATCH U64")! }
+    io.Println("== U64")!
+    io.Println(rU64)!
+    rI65 := bat(I65(0), K)
+    if rI65 != BI65 { io.Println("MISMATCH I65")! }
+    io.Println("== I65")!
+    io.Println(rI65)!
+    rU65 := bat(U65(0), K)
+    if rU65 != BU65 { io.Println("MISMATCH U65")! }
+    io.Println("== U65")!
+    io.Println(rU65)!
+    rI100 := bat(I100(0), K)
+    if rI100 != BI100 { io.Println("MISMATCH I100")! }
+    io.Println("== I100")!
+    io.Println(rI100)!
+    rU100 := bat(U100(0), K)
+    if rU100 != BU100 { io.Println("MISMATCH U100")! }
+    io.Println("== U100")!
+    io.Println(rU100)!
+    rI127 := bat(I127(0), K)
+    if rI127 != BI127 { io.Println("MISMATCH I127")! }
+    io.Println("== I127")!
+    io.Println(rI127)!
+    rU127 := bat(U127(0), K)
+    if rU127 != BU127 { io.Println("MISMATCH U127")! }
+    io.Println("== U127")!
+    io.Println(rU127)!
+    rI128 := bat(I128(0), K)
+    if rI128 != BI128 { io.Println("MISMATCH I128")! }
+    io.Println("== I128")!
+    io.Println(rI128)!
+    rU128 := bat(U128(0), K)
+    if rU128 != BU128 { io.Println("MISMATCH U128")! }
+    io.Println("== U128")!
+    io.Println(rU128)!
+}
