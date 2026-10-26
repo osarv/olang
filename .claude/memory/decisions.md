@@ -1549,3 +1549,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   no compiler meaning (what changes compilation is a keyword or rule), typed values checked while compiling, read only
   by reflection, std's first set json.Key/Skip/Keys, csv.Column/Skip, flags.Help; on fields, cases, types, functions
   and methods (with function reflection). Queued after the profiler, with the json key policies.
+- Attribute rules settled with the user 2026-10-26: any declared type (struct, enum case, declared number type) whose
+  value is built while compiling may be an attribute, no marker; built-in types may not (they name no meaning, and
+  attributes are found by type, so two libraries using String would collide); at most one attribute of each type on
+  a declaration; `@Name` without parentheses for a constructor with no arguments; the reader decides where it looks.
