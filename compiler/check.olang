@@ -6090,7 +6090,8 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr?&c {
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind == names.What.None {
         # B11: said once in a body - each misspelling one error - and not at all for a type said unknown already
-        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) and not c.unknownTypes.Has(pair.Pair(c.fr().Mi, I64(n))) {
+        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) and not c.unknownTypes.Has(pair.Pair(c.fr().Mi, I64(n))) and
+           not c.P.R.ImportSaid(n) {
             c.err(sp, msgs.UnknownName(c.tok(n)))
             c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
         }
@@ -10485,6 +10486,9 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         }
         if name == "Hash" or name == "Str" {
             c.gap(nsp, "a method the compiler supplies (E10b, E11c)")
+        } else if dt == c.charType() and (name == "PadStart" or name == "PadEnd") {
+            # T29f: a Char is no Integer, so it has neither - its character is padded as text
+            c.err(nsp, msgs.CharNoPad(c.tok(n), name))
         } else {
             c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n)))   # the receiver as written, a reference one too
         }
