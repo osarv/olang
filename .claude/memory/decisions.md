@@ -1568,3 +1568,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   callee's result and error set match (musttail); the evaluator loops. Into the batch with the other yeses.
 - Item 3 DECIDED 2026-10-26 (the user: "Build it"): std/bitset - BitSet<T> of an enum's cases in one U64 (T.Cases.Len()
   <= 64 checked while compiling), `in`, + - & |, walking set cases, `.Bits()` from raw values for C flag words.
+- Item 4 DECIDED 2026-10-26 (the user: "Build it"): std/order, `order.ByFields<T>` comparing by fields in declared
+  order (reflection, unrolled); each field must have `<`.
