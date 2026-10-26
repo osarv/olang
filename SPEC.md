@@ -7517,8 +7517,10 @@ declared. `interpret` (B3e) compiles that C into a shared library and loads it a
 **X21 (variadic calls).** A variadic extern function (X1) takes, after the arguments for its parameters, any number of
 **variable arguments**, each passed as C's default argument promotions pass it: an integer literal as an `I32` where
 it fits one (an `I64`, else a `U64`), a floating-point literal as an `F64`; a value of an integer type narrower than
-32 bits as an `I32`, of a float type narrower than 64 as an `F64`, of a declared number type (T29) as its base; any
-other number as itself; a reference or an array as a pointer, as X3 passes one. A `Bool` (write `I32(b)`), a struct by
+32 bits as an `I32` (`U5`, `I12` among them, T4a: its value, sign- or zero-extended), of one between 32 and 64 bits as
+an `I64` or, unsigned, a `U64` (`U33`), of a float type narrower than 64 as an `F64`, of a declared number type (T29)
+as its base; any other number as itself, but an integer wider than 64 bits, which no C type of olang's holds (X2) - a
+compile-time error naming a conversion; a reference or an array as a pointer, as X3 passes one. A `Bool` (write `I32(b)`), a struct by
 value (pass a reference), a function and anything else are compile-time errors. Nothing checks what the arguments are
 against what the function reads - a format string's directives, a count - and a mismatch is undefined behaviour, as a
 wrong prototype is (X1a). An olang function is never variadic.

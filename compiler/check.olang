@@ -10963,7 +10963,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 
 # X21: a variable argument of a variadic extern - a literal at C's type for it (an integer an I32 where it fits, else an
 # I64 or a U64; a float an F64), any other value at its own type promoted as C promotes it: an integer narrower than
-# I32 an I32, a float narrower than F64 an F64; a reference or an array crosses as its address, as for a parameter (X3)
+# I32 an I32 (I5, U20 among them, T4a), one between 32 and 64 bits an I64 or a U64, a float narrower than F64 an F64; a
+# reference or an array crosses as its address, as for a parameter (X3)
 fn (c mut Checker&) varArg(x ast.Expr&) typed.Expr&c {
     v := c.fold(x)
     if v.Ok {
@@ -10975,8 +10976,17 @@ fn (c mut Checker&) varArg(x ast.Expr&) typed.Expr&c {
     if t == types.UnknownT { return e }
     r := c.P.T.Repr(t)
     k := c.P.T.KindOf(r)
-    if c.P.T.IsInt(r) and k != types.Kind.Int {
-        if c.P.T.Bits(r) < 32 { return c.convert(x.Span(), e, c.P.T.Prim("I32")) }
+    if c.P.T.IsInt(r) {
+        w := c.P.T.Bits(r)
+        if w < 32 { return c.convert(x.Span(), e, c.P.T.Prim("I32")) }
+        # T4a: a width C has no type for, between 32 and 64 bits, as the next of C's that holds it; wider, none does
+        if k == types.Kind.Int and w > 64 {
+            c.err(c.argSpan(x), msgs.VarArgWide(c.ty(t)))
+            return c.unknown(x.Span())
+        }
+        if k == types.Kind.Int and w != 32 and w != 64 {
+            return c.convert(x.Span(), e, c.P.T.Prim("U64") if c.P.T.IsUnsigned(r) else c.i64())
+        }
         return c.convert(x.Span(), e, r) if r != t else e
     }
     if c.P.T.IsFloat(r) {

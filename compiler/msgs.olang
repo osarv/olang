@@ -260,6 +260,7 @@ type Diag enum {
     LinkName
     InterpLink
     VarArgType
+    VarArgWide
     LinkOnOlangImport
     CHeaderNotFound
     CFileNotFound
@@ -1552,6 +1553,9 @@ fn InterpLink(text String&, why String&) Msg { return Msg(Diag.InterpLink, "B3e"
 
 # ERR_VAR_ARG_TYPE
 fn VarArgType(ty String&) Msg { return Msg(Diag.VarArgType, "X21", $ty " cannot be a C variable argument - pass a number, a reference or an array; a Bool as 'I32(b)', a struct by reference") }
+
+# ERR_VAR_ARG_WIDE
+fn VarArgWide(ty String&) Msg { return Msg(Diag.VarArgWide, "X21", $ty " cannot be a C variable argument - no C type of olang's holds it; convert it, 'I64(x)' or 'U64(x)'") }
 
 # ERR_LINK_ON_OLANG_IMPORT
 fn LinkOnOlangImport() Msg { return Msg(Diag.LinkOnOlangImport, "X17", "'link' names the library a C header's declarations are in - an olang module needs none") }
