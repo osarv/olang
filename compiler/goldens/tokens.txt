@@ -1,26 +1,21 @@
 # the C tokenizer's stream (compiler/tools/tokdiff.olang) - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)
-5f6f549da8ab4019 593591c8e23d7b6c bench/benchlib.olang
+e36588e03de7da04 593591c8e23d7b6c bench/benchlib.olang
 3c9e307e09724c2e fd7e70f47be7a8f7 bench/binarytrees.olang
 6e6f6fc00177ef6e 43bd5ab10cc91037 bench/dispatch.olang
 120bc7ae072ad914 370573078f54d092 bench/fannkuch.olang
-2d6b27a77806b75a b454e51032ad3a0f bench/fused.olang
-bb982345309be18f e7283ce1dcface29 bench/gemm.olang
 684ead08665a0819 0f9208839b9bcd16 bench/gen.olang
 596a48cdf09f7597 93fd4013f7faac3a bench/ir.olang
 dcfece5863dbf955 f08ba199e9cca5be bench/knucleotide.olang
 c76f241b9995c1f1 c01f8d8568f62076 bench/lanes.olang
 4278e78a3a4f0623 997bb3e3a80fe75a bench/mandelbrot.olang
 5381bb271a41b775 b087f9f67d9c24ef bench/matmul.olang
-9450ce9117705606 7003518b0b413a38 bench/mlp.olang
 3b27f2ecada303ae 6a8e380b1285fd93 bench/nbody.olang
 2e8a33a4363ce8b2 93aeecc8cebe12e2 bench/parallel.olang
 8dbc28ea2a6f9156 4d4aaaeb035719c7 bench/regex.olang
 aba76bc73d2e48d2 fec036d0f5a3f185 bench/repro/alloc_order.olang
 a0b466e8496a3342 33cd3b9e3d97daee bench/repro/bf16_narrow.olang
-74ec40f69772337f c337d6e99c92621c bench/repro/captured_value.olang
 642d9902df93670a 59266f429e180ce8 bench/repro/closure_call.olang
 23d3ecca41e3eeac 7320193dfa4eae5d bench/repro/fresh_into_field.olang
-0555f1a35ddcaf94 41f1c95793847f25 bench/repro/linalg_global_constant.olang
 b2a7bca430571ead 59515ef6fe4af20d bench/repro/list_sum.olang
 cdd11912c2d8f808 c203b83bcd16a765 bench/repro/map_count.olang
 03140dc3989edd8d dcab63dcd9562733 bench/repro/opt.olang
@@ -28,8 +23,6 @@ cdd11912c2d8f808 c203b83bcd16a765 bench/repro/map_count.olang
 0606d65561f376a7 c58c8ac9999bd130 bench/repro/return_local_array.olang
 357fe9de63544360 14a3e43282f57e8f bench/repro/wrapping_div.olang
 e671628ca83c6e9f ffa85843a9544579 bench/run.olang
-efd033778e976b8b 3bc20a0ab462a7f0 bench/runfused.olang
-766897d607fa13a8 14a38c23e9e36027 bench/rungemm.olang
 9d7cdb75c2151570 5720f3dabf270a01 bench/sha256.olang
 5766ab5f779efa5c 88a566a4776037f4 bench/spectral.olang
 df62cdd6adcde86c 6a9330dbc749c145 bench/sum.olang
@@ -177,7 +170,7 @@ f7c33e496c7f0137 d4ff1bcbebbdadaf checks/cases/callvaluekeepsframe.olang
 cc3d6cb9f952c0e0 c67632a40bb66668 checks/cases/cascademember.olang
 c70005089ecad85b 04f5e0e3be1a0c24 checks/cases/charnopad.olang
 98f788ce31e2943a c56744f2966d9f47 checks/cases/choicename.olang
-98def44e1b9c6925 d29e5c50265c70c1 checks/cases/chunkpool.olang
+2fa6cc023f4f4683 5b9a3455b7aee8ec checks/cases/chunkpool.olang
 408ab252adedbcd2 da830eb29a78f694 checks/cases/commaendsline.olang
 7ea68203f07bb66e d49ca4b22bf58e91 checks/cases/compoundnarrow.olang
 ed2336c6dac850e9 4f55b79e34bfc57a checks/cases/comprfilter.olang
@@ -492,7 +485,7 @@ fa6b96b5fbc8657e 5bd7d72c041bd194 checks/cases/g8bunknown.olang
 8f42b6a6b89fdc95 58a7ea61afebf5d2 checks/cases/g9count.olang
 158b69878f43b44a 2bea6e24801ed8d4 checks/cases/g9dctorreadonly.olang
 1a3fa3c50ff155f9 182b79919f490a98 checks/cases/g9dhashable.olang
-4d1e6e2575cf47f3 9ada05e00c888f16 checks/cases/gemmflat.olang
+b48611250a4f1bbb e88bd123bc8d6095 checks/cases/gemmflat.olang
 886f24ca9e082c44 605c65950aa40153 checks/cases/genericarray.olang
 c05293bdd3b7f14e be6f884f642823bd checks/cases/genericenum.olang
 2ac921fd1b663ae2 ec42b1dd55ae5288 checks/cases/globaltypename.olang
@@ -740,8 +733,6 @@ c385af11748be396 192d55a90c8b6b30 checks/cases/o25scopeargborrow.olang
 162a68d39a0472d6 66dc2f2c7c2b9300 checks/cases/o26aderived.olang
 e29393d4c547db91 d0e65ec0902c7694 checks/cases/o26afieldafter.olang
 873a8d97c806d633 0fc1fb02a1adce9c checks/cases/o26ainlinearray.olang
-0373d0a22919b9fb 473773bf72a99df4 checks/cases/o26alatermodule.olang
-b4789affcf9e796d baeb8671fe663635 checks/cases/o26alatermodulekept.olang
 f465e1c027495960 0e309f3997c7e296 checks/cases/o26anumberstore.olang
 f07f0de180c59039 767f2b325ea137f4 checks/cases/o26anumberstorefix.olang
 38f8f9b4687b92ad c31367c0c96c8690 checks/cases/o26areflocal.olang
@@ -1423,7 +1414,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 cee1f07ce5c823a4 0b2ab9b7260bcdc3 checks/cases/zeroeffect.olang
 421c2c81179ecd47 e52cffa3930d8968 checks/cases/zerofails.olang
 cac538143f451671 c557aace7c83fe6c checks/cases/zeroshared.olang
-da541531477b1f13 5578f7a2bc4ac696 checks/checks.olang
+1992a095bad65624 519d7588993d0065 checks/checks.olang
 065c0b56cd69d56d 96453e93ea5914d9 checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 194da2145c13b91f checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang
@@ -1518,9 +1509,11 @@ e54f43ce2c600392 b28c24ab93c52594 checks/fixtures/landing/infos.olang
 39ae698b0b9a1e68 beeefcf146db2b17 checks/fixtures/landing/progscope.olang
 c605e186ca637fc7 c61bb20b54c224c8 checks/fixtures/landing/resultviews.olang
 84f440f20d18de8d d1b9deeb5170c36a checks/fixtures/landing/valueloop.olang
+a71d908a74dc1870 254fde8a628d1ff8 checks/fixtures/latermodule/kept.olang
+2e509b5f44b126cc 6e9aee304c28762d checks/fixtures/latermodule/mat.olang
+ed84776dc2a2ca81 198371e463ab7181 checks/fixtures/latermodule/view.olang
 90497f36b3664c81 7ea3f6cdab4fe939 checks/fixtures/lazytype/a.olang
 208978d9c7c8c30c 6f657f713f440b5a checks/fixtures/lazytype/b.olang
-1a6428a4fa16c03b 9062c3bfe4033004 checks/fixtures/linalg/shapes.olang
 741bcfa482fda242 32ce13045625b9fa checks/fixtures/listloop/loop.olang
 76fffb29d63c5b89 2873b06c439368a6 checks/fixtures/objnames/a.olang
 3e9f430920663be8 390571c66ec1da0f checks/fixtures/objnames/a/b.olang
@@ -1609,7 +1602,7 @@ eaf694f576639969 e2c432022ad8cd56 checks/fixtures/strheld/strdepth.olang
 bacb940102cd6a25 7b466219726810cd checks/fixtures/strheld/transientlambda.olang
 d56237a461aa191f 0fa6da8488d4201f checks/fixtures/strheld/trydefault.olang
 d888814393d74e16 888adcbd509416b8 checks/fixtures/target/loop.olang
-8577fae5116fee70 e8b1f5ff9d48177e checks/fixtures/tbaa/narrow.olang
+5ebf558d56fba2dd 9507c69d3efbd50e checks/fixtures/tbaa/narrow.olang
 98485f58b25be8ab 571476ab01e9d4bc checks/fixtures/testends/banged.olang
 596819aa42248238 dc6e512e9dc96ea9 checks/fixtures/testends/checkbanged.olang
 97a8abdf89b01b58 66c18004c4db3d44 checks/fixtures/testends/contractbanged.olang
@@ -1748,7 +1741,6 @@ befe3499933a5ea0 f0979f602b7c580a std/hex.olang
 5ed3fb0b33e95bdb 472bef307938ab3e std/http.olang
 5b2ad250c5d97b75 b662fc1e7a3e8c30 std/io.olang
 e8130554a3f5755d a085fa3728337be2 std/json.olang
-eb99e18ac14bf7b4 32ecfb67fc53d74d std/linalg.olang
 75b95273546e92b8 071b66126690eb4e std/list.olang
 afe9e4eb3d80bc84 295a30796f517634 std/net.olang
 b2044a17a8e2bd1a ef129821e8ed18f3 std/os.olang
@@ -1773,7 +1765,7 @@ c8084dee1594dd3d b664355e59cc684b std/prelude/tests/text.olang
 50088e2a4773780d 2629171b1e66b5e2 std/prelude/tests/vec.olang
 c213f00720cb2b3c 37eff9c82ba9802a std/prelude/text.olang
 f6b630d5256c05cf 83633cdabbeb8ccb std/prelude/vec.olang
-86acac82a2b3771d d865a3fa5415d228 std/rand.olang
+0f0c014e5493fbbe d865a3fa5415d228 std/rand.olang
 2c7aad19be1ee4b8 5979e666ec2ff9be std/regex.olang
 8c89c7c6e339f767 59a9785280de9922 std/set.olang
 bc28a1433d1e5371 35223dfbae5f4b37 std/sha256.olang
@@ -1810,7 +1802,7 @@ d171e33a34599ef2 fd1dacddda3ee54c tools/checkerror_rename.olang
 4baf39c14f085c3c b2315e1d860e5d81 tools/diagedit.olang
 f6d5e99269a8a149 8017843e54c93ff8 tools/donefail_migrate.olang
 c3eb27963949e69b a955cdb12abe454d tools/equality_migrate.olang
-a4252780549e1e60 ca34120c938e5149 tools/errors_migrate.olang
+d0debd5a7af72add ca34120c938e5149 tools/errors_migrate.olang
 5407140f3229dd15 86fd1e3aee8b4432 tools/errortype_migrate.olang
 9c0adb5998f3b584 d12213680806b15b tools/helper_rename.olang
 c525d58b9104da37 2acf15c61333d81e tools/int_literal_i64.olang
@@ -1825,6 +1817,6 @@ b6bf9845e2bd779c 8ba3c810a6b2da90 tools/perm_mut.olang
 bb5bbfff8686c8ee c8870e03a3e145e5 tools/precedence_migrate.olang
 75739ef705dc4c79 7a2e178af558c213 tools/results_migrate.olang
 b121771da31ed87e c33eb58705f6a47b tools/srcmask.olang
-905eb1552996842f fb6bf5bc8a597d87 tools/stutter_rename.olang
+74551bf9709382ce fb6bf5bc8a597d87 tools/stutter_rename.olang
 1391b0610c73a442 ed97591342be411a tools/syntax_migrate.olang
 7af170e6b950c60b f0a620f70a7b5798 tools/try_migrate.olang

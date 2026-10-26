@@ -1047,43 +1047,6 @@
 | ok - a value of any type written by its type
 | ok - a value of any type read through its constructor
 | ok - whole numbers are read and written exactly, through I64's and U64's ranges
-=== test std/linalg.olang
-| status 0
-| ok - the compile-time values are the run time's
-| ok - a product's multiply-adds are fused exactly where the target has fused multiply-add
-| ok - a new matrix is zeros; a view shares its storage, and writing it writes the matrix
-| ok - element operators, in-place forms and Map
-| ok - a row is added to every row, and outer products are added in place
-| ok - shapes that do not fit are an error under try
-| ok - Gemm against the plain sum, every transpose, alpha and beta, across block boundaries
-| ok - products either side of the direct path's bounds are the plain sum
-| ok - a workspace's Gemm is Gemm, and keeps its panels from one product to the next
-| ok - a workspace's panels at least double as its products grow, so a growing product replaces them rarely
-| ok - the product operators, and products of views
-| ok - products in every element type: F16, BF16 and F8 computed in F32, integers wrapping
-| ok - sums, means, norms and extremes
-| ok - random fills are reproducible from the seed
-| ok - conversions round as a conversion does
-| ok - rendering, equality and hashing
-| ok - Solve and Inverse
-| ok - ParallelRows covers every row once
-| ok - matrix-vector products both ways round, of views too, and products of one to four rows
-| ok - rank-1 and rank-2 updates, accumulating, decayed or replacing
-| ok - clamps, masked updates and random masks
-| ok - row reductions, normalised rows and the softmax of rows
-| ok - the fast activations: their errors against the C library, and their limits
-| ok - Cast converts as a conversion does, the 8-bit floats included
-| ok - GemmBatch is a Gemm per matrix: every transpose, alpha and beta, strided storage, threads
-| ok - a Gemm per matrix written into b[g, m] is GemmBatch
-| ok - a triangular result is computed below its diagonal only, and nothing above it is touched
-| ok - a triangular left operand is read in its lower triangle only, transposed or not
-| ok - causal attention's six products, in one call each, are the products per sequence and head
-| ok - thin products and transposed ones: a convolution's sixteen channels, its weights' gradient, ten classes
-| ok - the activations: their values, their slopes, and GELU's error
-| ok - an activation's slope and backward at F32, and through it at F16, are the F64 ones rounded
-| ok - GemmAct is Gemm, the bias row and the activation, in one pass
-| ok - patches: Im2col is their definition, and the products read them from the images
-| ok - a small causal product is decided while compiling, and the run time agrees
 === test std/list.olang
 | status 0
 | ok - an empty list
@@ -1620,9 +1583,6 @@
 === run o26ainlinearray.olang
 | status 0
 | alpha3
-=== run o26alatermodule.olang
-| status 0
-| 1.5 2
 === run o26anumberstorefix.olang
 | status 0
 === run o26areflocal.olang
