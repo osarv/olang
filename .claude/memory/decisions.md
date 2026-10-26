@@ -1518,3 +1518,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the use site, a naming convention to decide (types capitalized, functions/fields lowercase?), every private
   declaration in std/compiler migrated. Recommended: still keep capitalization unless lowercase public names matter
   enough; if switching, `priv` over `pub`. ASKED.
+- QBM ANSWERED 2026-10-26 (the user: "Keep capitalization"): visibility stays capitalization (M6); no pub/priv.
+  The JSON question (QBK 4 follow-up: per-field exceptions by a `JsonKey` method) re-asked.
