@@ -1,0 +1,62 @@
+import "std/io"
+
+type Named trait {
+    Name() String
+}
+type Cat struct(n String&) {
+    n
+}
+fn (c Cat&) Name() String { return "cat " $c.n }
+
+type Node struct(v I64, s String&) {
+    v
+    s
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        l := Vec<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        c := Cat("junk " $i)
+        t += c.n.Len()
+    }
+    return t
+}
+
+N mut I64 = 3
+
+fn main() {
+    a := Cat("alpha " $N)
+    b := Cat("beta " $N)
+    xs := Vec<any Named&>()
+    xs.Push(a)
+    xs.Push(b)
+    for i in range 20 { xs.Push(Cat("t" $i)) }
+    for i in range 15 { try xs.Pop() catch { } }
+    try xs.RemoveAt(0) catch { }
+    xs.Truncate(3)
+    xs[0] = Cat("new " $N)
+    churn()
+    io.Println($a.Name() " / " $b.Name())!
+    o := StringBuilder()
+    for x in xs { o.Push($x.Name() " | ") }
+    io.Println(o.ToString())!
+    # possibly-null references
+    ns := Vec<Node?&>()
+    k := Node(1, "kept " $N)
+    ns.Push(k)
+    for i in range 20 { ns.Push(Node(i, "n" $i)) }
+    ns.Push(null)
+    for i in range 10 { try ns.Pop() catch { } }
+    try ns.SwapRemove(0) catch { }
+    ns.Truncate(4)
+    churn()
+    io.Println($k.s " " $k.v)!
+    p := StringBuilder()
+    for n in ns {
+        if n is null { p.Push("null ") } else { p.Push($n.s " ") }
+    }
+    io.Println(p.ToString())!
+}

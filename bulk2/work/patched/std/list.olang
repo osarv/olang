@@ -1,0 +1,1557 @@
+# list - List<T>: a growable sequence that never moves what it stores, for when that matters - an element's place is
+# its own for as long as the list lives, and growing copies nothing. Imported with `import "std/list"`; the type is
+# list.List<T>. The growable array a program reaches for first is the prelude's Vec<T>, which keeps its elements in
+# one contiguous buffer and moves them into a bigger one as it grows; a List is the choice where that move is what is
+# to be avoided: elements too big to copy at each doubling, a list grown so large that holding the old buffer beside the
+# new one at a doubling would not fit, a walk (RunFrom) holding a run of the elements while the list grows.
+#
+# Storage is a run of chunks, each twice the size of the last (8, 16, 32 ...), so appending never moves anything
+# that is already stored. That is the whole design: a contiguous growable array has to reallocate and copy as it
+# grows, and every borrow taken before a growth then points at a stale copy. A List never hands out its chunks
+# for writing - "l[i]" gives a copy of the element, as "for x in l" does - so nothing it stores can go stale, and there
+# is no invalidation rule to learn. When contiguous storage is wanted, ToArray copies once, at a point the
+# program chose and can see. A few operations do move elements within the chunks - RemoveAt and Insert shift the
+# ones after the position, Sort and Reverse reorder them - and cost what that costs; Push, Pop, Clear and indexing
+# move nothing.
+#
+# Because the sizes double, where element i lives is arithmetic: chunk k starts at position 8 * (2^k - 1), so
+# i + 8 is 8 * 2^k plus the offset into chunk k, and k is the place of i + 8's highest set bit, less 3. The chunks
+# are kept in an array of their own (doubled as it fills, which happens only when a chunk is added), so "l[i]"
+# costs that bit position - six comparisons - and two loads, whatever the length. A chunk Pop or Clear empties is
+# kept, and filled again by the next Push to reach it, so a list that shrinks and grows again allocates nothing new.
+#
+# Most lists are short - a cell of a spatial grid, a node's neighbours, the words of a line - so the first chunk is held
+# on its own: a list that never outgrows it is one allocation, made by its first Push, with no array of chunks at all
+# (that is made with the second chunk), and "l[i]" below 8 and a walk of such a list read it directly, with no bit
+# position to find.
+#
+# A List is a HANDLE: everything it holds - the chunks and the counts - is one record, made where the List is
+# constructed (C2d), and a List value is one reference to it. So a copy of a List value ("b := a", a field, an element, a
+# by-value argument) is a second name for the same list, as a Go map is, and a Push through either is seen through both;
+# Clone() is the copy with storage of its own. (A List whose counts were copied beside shared chunks would be two lists
+# overwriting each other's elements.) "Array<List<T>>(n, List<T>())" is n names for one list, as a fill copies one value
+# (T8).
+#
+# Everything a List allocates lives where the List was made (its record and the record's fields are bare "&", C2d), so
+# it is reclaimed with that scope like anything else, and costs no destructor. Being ordinary std code, it says nothing
+# of the positions it empties (vacate is the prelude's alone, O8d): a slot past a List's end may still hold what was
+# there, so early freeing treats what it holds as still held, and only the List's scope closing reclaims it.
+
+# what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
+# (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
+type Error error {
+    EMPTY
+    NOT_FOUND
+    OUT_OF_RANGE
+}
+
+type List<T> struct() {
+    s mut listState<T>& = listState<T>() # the list itself; every copy of this value names the same one
+}
+
+# what a List holds - private, reached only through a List
+type listState<T> struct() {
+    chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0) # the chunks made, in order, once there are two:
+    # chunk k holds firstChunk << k elements
+    first mut Array<T>& = Array<T>(0) # chunk 0, made by the first Push - empty before it
+    nChunks I64 = 0                   # how many of them are in use - the last of those is the tail
+    made I64 = 0                      # how many are made: those past nChunks wait to be filled again
+    tail mut Array<T>& = Array<T>(0)  # the last chunk in use, which Push fills
+    used I64 = 0                      # how much of the tail is filled
+    room I64 = 0                      # the tail's length, 0 before the first chunk
+    count I64 = 0
+}
+
+# the first chunk's capacity, 2^firstChunkLog; each one after it doubles, so n elements take about log2(n / 8)
+# chunks and never more than twice the storage they need
+firstChunkLog I64 = 3
+firstChunk I64 = 8
+
+fn (l mut List<T>&) Push(x T) {
+    s := l.s
+    if s.used == s.room { s.grow(x) }
+    s.tail[s.used] = x
+    s.used++
+    s.count++
+}
+
+# every element of a, in order - as Push does each, with the check for a full chunk made once per chunk rather
+# than once per element
+fn (l mut List<T>&) PushAll(a Array<T>&) {
+    s := l.s
+    if a.Len() <= s.room - s.used { # it fits in the tail: the common case, kept short
+        for j in range a.Len() { s.tail[s.used + j] = a[j] }
+        s.used += a.Len()
+        s.count += a.Len()
+        return
+    }
+    from I64 = 0
+    for from < a.Len() {
+        if s.used == s.room { s.grow(a[from]) }
+        n I64 = a.Len() - from
+        if s.room - s.used < n { n = s.room - s.used }
+        for j in range n { s.tail[s.used + j] = a[from + j] }
+        s.used += n
+        from += n
+    }
+    s.count += a.Len()
+}
+
+# a new tail, twice the size of the last - the one made before, when Pop or Clear left it; the array of chunks doubles
+# when it has no room for another. A new chunk is filled with fill, the element about to be pushed, rather than with
+# T's zero value: no slot is read before it is written, and an element type whose constructor cannot run on zeros has
+# no zero value at all (D13c) - a List of such values is as ordinary as any other
+fn (s mut listState<T>&) grow(fill T) {
+    if s.nChunks < s.made {
+        s.tail = s.chunk(s.nChunks)
+    } else if s.made == 0 {
+        s.first = Array<T>(firstChunk, fill)
+        s.tail = s.first
+        s.made = 1
+    } else {
+        if s.chunks.Len() == 0 {
+            s.chunks = Array<mut Array<T>&>(4, s.first) # every slot past made written before it is read
+        } else if s.made == s.chunks.Len() {
+            more mut Array<mut Array<T>&>&s = Array<mut Array<T>&>(s.made * 2, s.first)
+            for k in range s.made { more[k] = s.chunks[k] }
+            s.chunks = more
+        }
+        s.chunks[s.made] = Array<T>(firstChunk << s.made, fill)
+        s.tail = s.chunks[s.made]
+        s.made++
+    }
+    s.nChunks++
+    s.used = 0
+    s.room = s.tail.Len()
+}
+
+# chunk k of those made - the first is held on its own, so a list that never outgrows it has no array of chunks
+fn (s listState<T>&) chunk(k I64) mut Array<T>&s {
+    if k == 0 { return s.first }
+    return s.chunks[k]
+}
+
+fn (l List<T>&) Len() I64 { return l.s.count }
+
+# the place of x's highest set bit - floor(log2(x)) - for x > 0, by halving the range it can be in six times
+fn highBit(x I64) I64 {
+    k I64 = 0
+    if x >= 4294967296 {
+        x = x >> 32
+        k += 32
+    }
+    if x >= 65536 {
+        x = x >> 16
+        k += 16
+    }
+    if x >= 256 {
+        x = x >> 8
+        k += 8
+    }
+    if x >= 16 {
+        x = x >> 4
+        k += 4
+    }
+    if x >= 4 {
+        x = x >> 2
+        k += 2
+    }
+    if x >= 2 { k += 1 }
+    return k
+}
+
+# the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l.Get(i)" checks it
+fn (l List<T>&) At(i I64) T {
+    if i < firstChunk { return l.s.first[i] }
+    p I64 = i + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    return l.s.chunks[k][p - (firstChunk << k)]
+}
+
+# the element at position i, failing with OUT_OF_RANGE where i is no position - "l[i]" checked, as an array's Get is
+# (E16d)
+fn (l List<T>&) Get(i I64) T ? Error.OUT_OF_RANGE {
+    if i < 0 or i >= l.s.count { error Error.OUT_OF_RANGE }
+    return l.At(i)
+}
+
+# replaces the element at position i - "l[i] = x" (E31), unchecked as At is
+fn (l mut List<T>&) SetAt(i I64, x T) {
+    if i < firstChunk {
+        l.s.first[i] = x
+        return
+    }
+    p I64 = i + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    l.s.chunks[k][p - (firstChunk << k)] = x
+}
+
+# the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key:
+# "try l.First() catch default 0" gives a fallback
+fn (l List<T>&) First() T ? Error.EMPTY {
+    if l.s.count == 0 { error Error.EMPTY }
+    return l.s.first[0]
+}
+
+# the last element - failing with EMPTY when there is none
+fn (l List<T>&) Last() T ? Error.EMPTY {
+    s := l.s
+    if s.count == 0 { error Error.EMPTY }
+    if s.used == 0 {
+        c := s.chunk(s.nChunks - 2)
+        return c[c.Len() - 1]
+    }
+    return s.tail[s.used - 1]
+}
+
+# removes the last element and gives it - failing with EMPTY when there is none, so a list used as a stack or a work
+# list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
+fn (l mut List<T>&) Pop() T ? Error.EMPTY {
+    s := l.s
+    if s.count == 0 { error Error.EMPTY }
+    s.dropLast()
+    return s.tail[s.used]
+}
+
+# one element fewer at the end. The tail stays where it is when it empties - so a Push straight after fills it again -
+# and the chunk before it, which is full, becomes the tail when one more is dropped
+fn (s mut listState<T>&) dropLast() {
+    if s.used == 0 {
+        s.nChunks--
+        s.tail = s.chunk(s.nChunks - 1)
+        s.room = s.tail.Len()
+        s.used = s.room
+    }
+    s.used--
+    s.count--
+}
+
+# removes every element. The chunks are kept and filled again by the Pushes that follow, so emptying a list and
+# filling it again allocates nothing
+fn (l mut List<T>&) Clear() {
+    s := l.s
+    s.count = 0
+    s.used = 0
+    if s.made > 0 {
+        s.nChunks = 1
+        s.tail = s.first
+        s.room = s.tail.Len()
+    }
+}
+
+# keeps the first n elements and removes the rest - nothing changes when the list holds n or fewer, so "l.Truncate(k)"
+# after a Sort leaves the top k whatever the length (Rust's Vec::truncate), and none is kept for an n of 0 or less.
+# Moves nothing; the chunks it empties are kept for the Pushes that follow, as Pop's are. (A copy of the first k is
+# "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
+fn (l mut List<T>&) Truncate(n I64) {
+    s := l.s
+    if n >= s.count { return }
+    if n <= 0 {
+        l.Clear()
+        return
+    }
+    p I64 = n - 1 + firstChunk # where element n - 1 lives, as At finds it
+    k I64 = highBit(p) - firstChunkLog
+    s.nChunks = k + 1
+    s.tail = s.chunk(k)
+    s.room = s.tail.Len()
+    s.used = p - (firstChunk << k) + 1
+    s.count = n
+}
+
+# removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
+# moving down one place as TakeAt moves them
+fn (l mut List<T>&) RemoveAt(i I64) ? Error.OUT_OF_RANGE { try l.TakeAt(i) }
+
+# removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
+# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
+# checked once per call
+fn (l mut List<T>&) TakeAt(i I64) T ? Error.OUT_OF_RANGE {
+    s := l.s
+    if i < 0 or i >= s.count { error Error.OUT_OF_RANGE }
+    p I64 = i + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    o I64 = p - (firstChunk << k)
+    c := s.chunk(k)
+    x := c[o]
+    for n in range s.count - 1 - i { # each element after i moved into the place before it, chunk by chunk
+        if o + 1 < c.Len() {
+            c[o] = c[o + 1]
+            o++
+        } else {
+            next := s.chunk(k + 1)
+            c[o] = next[0]
+            c = next
+            k++
+            o = 0
+        }
+    }
+    s.dropLast()
+    return x
+}
+
+# puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
+# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not fails with OUT_OF_RANGE, checked once
+# per call
+fn (l mut List<T>&) Insert(i I64, x T) ? Error.OUT_OF_RANGE {
+    s := l.s
+    if i < 0 or i > s.count { error Error.OUT_OF_RANGE }
+    if i == s.count {
+        l.Push(x)
+        return
+    }
+    l.Push(x) # one place more at the end, filled below
+    p I64 = s.count - 1 + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    o I64 = p - (firstChunk << k)
+    c := s.chunk(k)
+    for n in range s.count - 1 - i { # each element from the end down to i moved into the place after it
+        if o > 0 {
+            c[o] = c[o - 1]
+            o--
+        } else {
+            before := s.chunk(k - 1)
+            c[0] = before[before.Len() - 1]
+            c = before
+            k--
+            o = before.Len() - 1
+        }
+    }
+    c[o] = x
+}
+
+# the elements in the opposite order, in place
+fn (l mut List<T>&) Reverse() {
+    i I64 = 0
+    j I64 = l.s.count - 1
+    for i < j {
+        t := l.At(i)
+        l.SetAt(i, l.At(j))
+        l.SetAt(j, t)
+        i++
+        j--
+    }
+}
+
+# sorts the list in place so that less(l[i], l[i - 1]) holds nowhere - stable, as an array's Sort is: the elements are
+# copied into one contiguous array, sorted there by Array.Sort, and copied back, so it costs two copies beside the sort
+fn(l mut List<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
+    s := l.s
+    a := l.ToArray()
+    try a.Sort(less)
+    at I64 = 0
+    for k in range s.nChunks {
+        c := s.chunk(k)
+        n I64 = c.Len()
+        if k == s.nChunks - 1 { n = s.used }
+        for j in range n { c[j] = a[at + j] }
+        at += n
+    }
+}
+
+# a new List - built where the result lands - holding the same elements in the same order, with storage of its own:
+# the copy a List value's own copy is not (a copy of the value names the same list). The elements are copied as values,
+# so a List of references gives a list of the same references
+fn (l List<T>&) Clone() List<T> {
+    c := List<T>()
+    s := l.s
+    for k in range s.nChunks {
+        n I64 = s.chunk(k).Len()
+        if k == s.nChunks - 1 { n = s.used }
+        c.PushAll(s.chunk(k)[:n])
+    }
+    return c
+}
+
+# a new List holding the elements of a, in order: "list.Of(I32[3, 1, 2])", or n copies of one value,
+# "list.Of(Array<I32>(n, v))". The reverse of ToArray
+fn Of<T>(a Array<T>&) List<T> {
+    out := List<T>()
+    out.PushAll(a)
+    return out
+}
+
+# a new List of every value an iterator gives, in order: "list.From(m.Keys())". Fails with what the iterator fails with
+fn From<I Iterator<T ? E>, T ? E>(it mut I&) List<T> ? E {
+    out := List<T>()
+    for x in try it { out.Push(x) }
+    return out
+}
+
+# a position in a List - handed out fresh by Iter(), so the list keeps none and every loop gets its own: two
+# loops over one list, nested or one after the other, never disturb each other. It holds the chunk it is in, so
+# each step is a load and a few compares. "for x in l" walks a List run by run rather than through it (S9f); generic
+# code over Iterator<T> takes it.
+type Iter<T> struct(of List<T>&) {
+    list listState<T>&of = of.s
+    chunk mut Array<T>&of = of.s.first # the chunk holding the next element; the first before it is entered
+    k I64 = 0                          # the next chunk's number
+    i I64 = 0                          # the next element's place in chunk
+    room I64 = 0                       # chunk's length
+    at I64 = 0                         # how many elements have been given
+}
+
+fn (it mut Iter<T>&) Next() T ? Exhausted {
+    if it.at >= it.list.count { error Exhausted.END }
+    if it.i == it.room { # this chunk is used up: on to the next one
+        it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
+        it.room = it.chunk.Len()
+        it.k++
+        it.i = 0
+    }
+    it.i++
+    it.at++
+    return it.chunk[it.i - 1]
+}
+
+# moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
+# that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
+fn (it mut Iter<T>&) enter() ? Exhausted {
+    if it.at >= it.list.count { error Exhausted.END }
+    if it.i == it.room {
+        it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
+        it.room = it.chunk.Len()
+        it.k++
+        it.i = 0
+    }
+}
+
+# where the run from i ends: the chunk's end, or the list's
+fn (it Iter<T>&) runEnd() I64 {
+    if it.list.count - it.at < it.room - it.i { return it.i + it.list.count - it.at }
+    return it.room
+}
+
+# the elements in the order they were pushed, through an iterator (S9c) - what generic code over Iterator<T> takes
+fn (l List<T>&) Iter() Iter<T> { return Iter<T>(l) }
+
+# the iterator helpers (Iterator, M19e), each walking the rest of the list run by run - a counted loop over a slice of
+# each chunk, as "for x in l" is (S9f) - and leaving the iterator where Next would have: just past the element Some or Every
+# stopped at, or at the end
+
+# true when keep holds for at least one remaining element
+fn(it mut Iter<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for j, x in run {
+            if try keep(x) {
+                it.i += j + 1
+                it.at += j + 1
+                return true
+            }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return false
+}
+
+# true when keep holds for every remaining element - so for none, when there are none
+fn(it mut Iter<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for j, x in run {
+            if not try keep(x) {
+                it.i += j + 1
+                it.at += j + 1
+                return false
+            }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return true
+}
+
+# how many remaining elements keep holds for
+fn(it mut Iter<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
+    c I64 = 0
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            if try keep(x) { c++ }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return c
+}
+
+# every remaining element folded into one, starting from init
+fn(it mut Iter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
+    acc U = init
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            acc = try f(acc, x)
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return acc
+}
+
+# a new Vec - in the caller's scope - of f applied to every remaining element
+fn(it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
+    out mut Vec<U>&return = Vec<U>()
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            out.Push(try f(x))
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return out
+}
+
+# a new Vec - in the caller's scope - of the remaining elements keep holds for
+fn(it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
+    out mut Vec<T>&return = Vec<T>()
+    for {
+        try it.enter() catch Exhausted { break }
+        run := it.chunk[it.i:it.runEnd()]
+        for x in run {
+            if try keep(x) { out.Push(x) }
+        }
+        it.i += run.Len()
+        it.at += run.Len()
+    }
+    return out
+}
+
+# the elements stored next to each other from position at: a read-only slice of the chunk holding at, from at to that
+# chunk's end or the list's - failing with Exhausted when at is the list's length. What "for x in l" walks (S9f): a loop
+# over the runs, and within each a counted loop over a slice, which the optimizer vectorizes as it does a loop over an
+# array. The loop asks for the next run where the last one ended, so an element pushed while it runs is walked too, as
+# the iterator would give it.
+fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
+    s := l.s
+    if at >= s.count or at < 0 { error Exhausted.END }
+    if s.nChunks == 1 { return s.first[at:s.used] } # a list in one chunk - most are - is one run
+    return s.runIn(highBit(at + firstChunk) - firstChunkLog, at)
+}
+
+# the run in chunk k from position at: to the chunk's end, or the list's when k is the last chunk in use
+fn (s listState<T>&) runIn(k I64, at I64) Array<T>&s {
+    if k == s.nChunks - 1 { return s.chunk(k)[at + firstChunk - (firstChunk << k):s.used] }
+    return s.chunk(k)[at + firstChunk - (firstChunk << k):]
+}
+
+# the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
+# independent of the list, which may be discarded, or keep growing, without affecting it. Made filled with the first
+# element, which needs no zero value of T (D13c), as the chunks do not
+fn (l List<T>&) ToArray() mut Array<T>& {
+    s := l.s
+    if s.count == 0 { return Array<T>(0) } # no element, so no zero value of T is needed (D13c)
+    out mut Array<T>&return = Array<T>(s.count, s.first[0])
+    at I64 = 0
+    for k in range s.nChunks {
+        c := s.chunk(k)
+        n I64 = c.Len()
+        if k == s.nChunks - 1 { n = s.used }
+        for i in range n { out[at + i] = c[i] }
+        at += n
+    }
+    return out
+}
+
+# the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
+fn (l List<String&>&) Join(sep String&) String {
+    n I64 = 0
+    for p in l { n += p.Len() }
+    if l.Len() > 1 { n += sep.Len() * (l.Len() - 1) }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i, p in l {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in p {
+            out[w] = c
+            w++
+        }
+    }
+    return out
+}
+
+# whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
+fn (l List<T>&) Has(x T) Bool {
+    for y in l {
+        if y == x { return true }
+    }
+    return false
+}
+
+# the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none, as
+# Find does: "try l.IndexOf(x) catch default -1" gives a fallback
+fn (l List<T>&) IndexOf(x T) I64 ? Error.NOT_FOUND {
+    for i, y in l {
+        if y == x { return i }
+    }
+    error Error.NOT_FOUND
+}
+
+# removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
+# moves them - and says whether there was one, as Map's Remove does
+fn (l mut List<T>&) Remove(x T) Bool {
+    i := try l.IndexOf(x) catch { return false }
+    try l.RemoveAt(i) catch { unreachable } # a position IndexOf found
+    return true
+}
+
+# removes the element at position i as SwapTake does, giving nothing
+fn (l mut List<T>&) SwapRemove(i I64) ? Error.OUT_OF_RANGE { try l.SwapTake(i) }
+
+# removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
+# the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
+# one that is not fails with OUT_OF_RANGE, checked once per call, as TakeAt checks it
+fn (l mut List<T>&) SwapTake(i I64) T ? Error.OUT_OF_RANGE {
+    s := l.s
+    if i < 0 or i >= s.count { error Error.OUT_OF_RANGE }
+    x := l.At(i)
+    s.dropLast()
+    if i < s.count { l.SetAt(i, s.tail[s.used]) } # the last element, just dropped, moved into the gap
+    return x
+}
+
+# whether two Lists hold equal elements in the same order - "==" (E10a), each pair by its own "==", as two arrays compare
+fn (l List<T>&) Eq(o List<T>&) Bool {
+    if l.Len() != o.Len() { return false }
+    for i in range l.Len() {
+        if l[i] != o[i] { return false }
+    }
+    return true
+}
+
+# the elements' hashes combined in order, as an array's (HashElements) - so equal Lists hash alike (E10b)
+fn (l List<T>&) Hash() I64 {
+    h I64 = 0
+    for y in l { h = h * 1099511628211 + y.Hash() }
+    return h
+}
+
+# how "$" renders a List (E11c): as an array of its elements renders, with the List named in front - "List<I64>[1, 2, 3]",
+# "List<String&>["a", "b"]", "List<I64>[]" - so a List prints apart from an array of the same elements, and each element
+# renders as it does inside any other value: text quoted, a Char as a character literal, a value whose type declares
+# Str as its Str says. Rendered run by run from the list's own storage, so nothing is copied but the text
+fn (l List<T>&) Str() String {
+    b := StringBuilder()
+    match T {
+        case Char { # an array of Char renders as text, so these are written here
+            b.Push("List<Char>[")
+            for i, c in l {
+                if i > 0 { b.Push(", ") }
+                b.Push(charLiteral(c))
+            }
+        }
+        nomatch {
+            b.Push("List<" $typeWritten(Array<T>(0)) ">[")
+            at I64 = 0
+            for {
+                run := try l.RunFrom(at) catch Exhausted { break }
+                r := $run # "T[...]": the element type as written, then the items
+                o := try r.FindByte('[') catch { unreachable }
+                if at > 0 { b.Push(", ") }
+                b.Push($r[o + 1:r.Len() - 1])
+                at += run.Len()
+            }
+        }
+    }
+    b.PushChar(']')
+    return b.ToString()
+}
+
+# T as written - what "$" puts before an array's items
+fn typeWritten<T>(a Array<T>&) String {
+    r := $a[0:0] # "T[]"
+    return $r[:r.Len() - 2]
+}
+
+# c as a character literal writes it - how "$" renders a Char inside another value (E11a)
+fn charLiteral(c Char) String {
+    if c == '\n' { return "'\\n'" }
+    if c == '\t' { return "'\\t'" }
+    if c == '\r' { return "'\\r'" }
+    if c == '\0' { return "'\\0'" }
+    if c == '\\' { return "'\\\\'" }
+    if c == '\'' { return "'\\''" }
+    return "'" $c "'"
+}
+
+# the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
+# prelude is part of every program
+
+if TestBuild {
+    test "an empty list" {
+        l List<I32>& = List<I32>()
+        assert l.Len() == 0
+        a Array<I32>& = l.ToArray()
+        assert a.Len() == 0
+    }
+
+    test "pushes survive many chunk boundaries, in order" {
+        l mut List<I64>& = List<I64>()
+        for i in range 1000 {
+            l.Push(I64(i) * 3)
+        }
+        l.Push(7) # a literal adapts to the list's own T (G9a)
+        assert l.Len() == 1001
+        a Array<I64>& = l.ToArray()
+        assert a.Len() == 1001
+        for i in range 1000 {
+            assert a[i] == I64(i) * 3
+        }
+        assert a[1000] == 7
+    }
+
+    test "ToArray is a copy, independent of the list" {
+        l mut List<I32>& = List<I32>()
+        l.Push(1)
+        l.Push(2)
+        a mut Array<I32>& = l.ToArray()
+        a[0] = 99
+        l.Push(3)
+        b Array<I32>& = l.ToArray()
+        assert b[0] == 1
+        assert a.Len() == 2
+        assert b.Len() == 3
+    }
+
+    # a test's own type - private, so the prelude names nothing a program might want to call its own
+    type listKV struct(k I32, v I32) {
+        k
+        v
+    }
+
+    test "a list of structs" {
+        l mut List<listKV>& = List<listKV>()
+        for i in range I32(20) {
+            l.Push(listKV(i, i * i))
+        }
+        a Array<listKV>& = l.ToArray()
+        assert a[19].v == 361
+    }
+
+    # ToArray's result is built where it lands, whatever the list's own scope - an outer list flattens into an inner
+    # block's array freely
+    test "an outer list flattened into an inner block" {
+        l mut List<I32>& = List<I32>()
+        l.Push(1)
+        l.Push(2)
+        if l.Len() == 2 {
+            a Array<I32>& = l.ToArray()
+            assert a.Len() == 2
+            assert a[1] == 2
+        }
+    }
+
+    test "a List is iterable: every loop over it gets its own position" {
+        l mut List<I64>& = List<I64>()
+        for i in range 20 { l.Push(i) } # crosses two chunks (8, then 16)
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 190
+        again I64 = 0
+        for x in l { again += x } # a second loop starts from the beginning
+        assert again == 190
+        pairs I64 = 0
+        for a in l { for b in l { if a == b { pairs++ } } } # nested loops keep separate positions
+        assert pairs == 20
+        for x in List<I32>() { unreachable } # an empty list yields nothing
+    }
+
+    # G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
+    # references into it and copies nothing
+    fn wordsOf(t String&) List<String&>&t {
+        out mut List<String&>&t = List<String&>()
+        start I64 = 0
+        for i in range t.Len() + 1 {
+            if i == t.Len() or t[i] == ' ' {
+                if i > start { out.Push(t[start:i]) }
+                start = i + 1
+            }
+        }
+        return out
+    }
+
+    test "a List of references: the words of a line, as slices of it" {
+        line String& = "to be or not"
+        ws := wordsOf(line)
+        assert ws.Len() == 4
+        n := 0
+        for w in ws { n++ }
+        assert n == 4
+        arr := ws.ToArray()
+        assert arr[0].Eq("to") and arr[3].Eq("not")
+    }
+
+    # a list held by value and pushed to from inside a loop: the call borrows the list (E12c), so its chunks are
+    # built where the list lives - they used to be built in the loop's own block and freed with it
+    fn listChurn() I64 {
+        t I64 = 0
+        for i in range 2000 {
+            p := Array<I64>(4, I64(i) + 7777)
+            t = t + p[0]
+        }
+        return t
+    }
+
+    test "pushing from inside a loop builds where the list lives" {
+        l := List<I64>()
+        for i in range 100 { l.Push(i) }
+        assert listChurn() > 0
+        sum I64 = 0
+        for x in l { sum = sum + x }
+        assert sum == 4950
+    }
+
+    test "a list's elements, walked through a lambda" {
+        l mut List<I32>& = List<I32>()
+        for i in range 20 { l.Push(I32(i)) }
+        limit I32 = 15
+        assert l.Iter().Some(fn(x) { return x > limit }) and not l.Iter().Every(fn(x) { return x > limit })
+        assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
+        assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 190
+        big := l.Iter().Filter(fn(x) { return x >= limit })
+        assert big.Len() == 5 and big.ToArray()[0] == 15
+        halves := l.Iter().Map(fn(x) { return F64(x) / 2.0 })
+        assert halves.Len() == 20 and halves.ToArray()[3] == 1.5
+    }
+
+    # E27: a comprehension over a List's iterator, whose length is not known before the loop - the buffer starts at
+    # 100 and doubles, so 250 elements grow it twice
+    test "a comprehension walks a List" {
+        l mut List<I32>& = List<I32>()
+        for i in range I32(250) { l.Push(i) }
+        evens := I32[x for x in l if x % 2 == 0]
+        assert evens.Len() == 125
+        assert evens[124] == 248
+        all := I32[x for x in l]
+        assert all.Len() == 250 and all[249] == 249
+    }
+
+    test "membership in a List" {
+        l mut List<I32>& = List<I32>()
+        l.Push(4)
+        l.Push(9)
+        assert 9 in l
+        assert 5 not in l
+    }
+
+    # E31: "l[i]" and "l[i] = x" reach any position directly - the chunk is worked out from i, not searched for - on
+    # both sides of every chunk boundary
+    test "indexing a List" {
+        l mut List<I64>& = List<I64>()
+        for i in range 1000 { l.Push(I64(i) * 3) }
+        for i in range 1000 { assert l[i] == I64(i) * 3 }
+        assert l[0] == 0 and l[7] == 21 and l[8] == 24 and l[23] == 69 and l[24] == 72 and l[999] == 2997
+        l[8] = -1 # the first element of the second chunk
+        l[7] = -2 # the last of the first
+        l[999] += 3
+        assert l[8] == -1 and l[7] == -2 and l[999] == 3000
+        assert l.Len() == 1000 # storing replaces, it never appends
+        sum I64 = 0
+        for x in l { sum += x } # the iterator sees what was stored
+        assert sum == 1498500 - 25 - 23 + 3
+        one mut List<I32>& = List<I32>()
+        one.Push(5)
+        one[0] = 6
+        assert one[0] == 6 and one.Len() == 1
+    }
+
+    # E16d: "try l.Get(i)" checks i against the length and fails with OUT_OF_RANGE, as an array's Get does
+    test "a checked index into a List" {
+        l mut List<I32>& = List<I32>()
+        for i in range 20 { l.Push(I32(i)) }
+        assert (try l.Get(19) catch default -1) == 19
+        assert (try l.Get(20) catch default -1) == -1
+        assert (try l.Get(-1) catch Error.OUT_OF_RANGE default -1) == -1
+        e List<I32>& = List<I32>()
+        assert (try e.Get(0) catch default 7) == 7
+    }
+
+    # a List of structs and of references indexes like any other
+    test "indexing a List of structs and of references" {
+        kv mut List<listKV>& = List<listKV>()
+        for i in range 30 { kv.Push(listKV(I32(i), I32(i) * 2)) }
+        assert kv[17].v == 34
+        kv[17] = listKV(0, 99) # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
+        assert kv[17].v == 99 and kv[17].k == 0
+        line String& = "to be or not"
+        ws := wordsOf(line)
+        assert ws[1] == "be" and ws[3] == "not"
+        mine mut List<String&>& = List<String&>()
+        for w in ws { mine.Push(w) }
+        mine[1] = line[6:8]
+        assert mine[1] == "or" and ws[1] == "be"
+    }
+
+    # PushAll adds a whole array, filling the tail and starting new chunks as Push would
+    test "PushAll appends an array across chunk boundaries" {
+        l mut List<I32>& = List<I32>()
+        l.Push(-1)
+        l.PushAll(I32[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) # fills the first chunk and spills into the second
+        big := Array<I32>(100)
+        for i in range 100 { big[i] = I32(i) + 10 }
+        l.PushAll(big)
+        l.PushAll(Array<I32>(0)) # nothing to add
+        assert l.Len() == 111
+        for i in range 111 { assert l[i] == I32(i) - 1 }
+        a := l.ToArray()
+        assert a.Len() == 111 and a[0] == -1 and a[110] == 109
+        t mut List<Char>& = List<Char>()
+        t.PushAll("abc") # text is an Array<Char>, so it goes in as one
+        t.Push('d')
+        assert String(t.ToArray()) == "abcd"
+    }
+
+    # the iterator holds the chunk it is in rather than searching for it from the start at every step, so a walk is a
+    # load per element whatever the length; two walks, nested, still keep separate positions
+    test "walking a long List" {
+        l mut List<I64>& = List<I64>()
+        for i in range 100000 { l.Push(i) }
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 4999950000
+        n I64 = 0
+        for i, x in l {
+            assert x == i
+            n++
+        }
+        assert n == 100000
+        it := l.Iter()
+        assert (try it.Next() catch default -1) == 0 and (try it.Next() catch default -1) == 1
+        l2 mut List<I32>& = List<I32>()
+        for i in range 9 { l2.Push(I32(i)) }
+        pairs I32 = 0
+        for a in l2 { for b in l2 { if a == b { pairs++ } } }
+        assert pairs == 9
+    }
+
+    # S9d: a type's own Iter wins over At and Len, so "for x in l", a comprehension, the iterator helpers and generic code
+    # that knows a List only as Indexable all walk it through its iterator - which the checks confirm in the code
+    # generated (checks.olang, "a List is walked by its iterator") - and Indexable's default Iter changes nothing for it
+    fn indexedTotal<C Indexable<T>, T>(c C&) I64 {
+        s I64 = 0
+        for x in c { s += x }
+        return s
+    }
+
+    test "a List with At is still walked by its own iterator" {
+        l mut List<I32>& = List<I32>()
+        for i in range 50 { l.Push(I32(i)) }
+        sum I32 = 0
+        for x in l { sum += x }
+        assert sum == 1225
+        assert indexedTotal(l) == 1225
+        assert I32[x for x in l if x >= 40].Len() == 10
+        assert l.Iter().Count(fn(x) { return x % 10 == 0 }) == 5
+        it Iter<I32> = l.Iter() # List's own Iter, not Indexable's IndexIter
+        assert (try it.Next() catch default -1) == 0
+    }
+
+    # the same, computed while compiling (K2, S18c): the evaluator runs indexing, PushAll and the iterator as the
+    # run time does
+    fn listIndexed() I64 {
+        l := List<I64>()
+        for i in range 40 { l.Push(i) }
+        l.PushAll(I64[100, 200])
+        l[8] = 1000
+        l[41] += 1
+        s I64 = 0
+        for i in range l.Len() { s += l[i] }
+        for x in l { s += x }
+        return s + (try l.Get(42) catch default 7)
+    }
+
+    listIndexedBaked := listIndexed()
+
+    test "indexing a List, evaluated while compiling as at run time" {
+        assert listIndexedBaked == 2 * (780 - 8 + 1000 + 100 + 201) + 7
+        assert listIndexed() == listIndexedBaked
+        assert listIndexed() == 4153
+    }
+
+    # S9f: "for x in l" walks a List run by run - a counted loop over each chunk's slice - with every loop rule as before:
+    # a break leaves the whole loop, a continue goes on to the next element, the index counts across chunks, a return
+    # leaves from inside, and an element pushed while the loop runs is walked too
+    fn listRuns(n I64) I64 {
+        l := List<I64>()
+        for i in range n { l.Push(i) }
+        firstBig I64 = -1
+        for i, x in l {
+            assert i == x
+            if x > 20 {
+                firstBig = x
+                break # leaves the loop over the runs, not just this run
+            }
+        }
+        odd I64 = 0
+        for x in l {
+            if x % 2 == 0 { continue }
+            odd += x
+        }
+        grown I64 = 0
+        for x in l {
+            if x < 3 { l.Push(100 + x) } # walked later in this same loop
+            grown += x
+        }
+        return firstBig * 1000000 + odd * 100 + grown - (n * (n - 1) / 2 + 303)
+    }
+
+    fn firstOver(l List<I64>&, limit I64) I64 ? {
+        for x in l {
+            if x > limit { return x }
+        }
+        error Error.NOT_FOUND
+    }
+
+    listRunsBaked := listRuns(40)
+
+    test "S9f: a List is walked run by run, and every loop rule holds" {
+        assert listRuns(40) == listRunsBaked
+        assert listRunsBaked == 21 * 1000000 + 400 * 100
+        l := List<I64>()
+        for i in range 100 { l.Push(i * 2) }
+        assert (try firstOver(l, 150) catch default -1) == 152
+        assert (try firstOver(l, 500) catch default -1) == -1
+        pairs I64 = 0
+        for a in l { for b in l { if a == b { pairs++ } } } # nested loops over one list keep their own places
+        assert pairs == 100
+        sq := I64[x * x for x in l if x < 10] # a comprehension walks it too
+        assert sq.Len() == 5 and sq[4] == 64
+        for x in List<I32>() { unreachable }
+    }
+
+    # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Some or
+    # Every stopped at - so Next goes on from there - or at the end
+    test "S9f: Iter's helpers walk run by run and leave the iterator where Next would" {
+        l := List<I64>()
+        for i in range 50 { l.Push(i) }
+        it := l.Iter()
+        assert (try it.Next() catch default -1) == 0
+        assert it.Some(fn(x) { return x == 30 })
+        assert (try it.Next() catch default -1) == 31
+        assert not it.Every(fn(x) { return x < 40 })
+        assert (try it.Next() catch default -1) == 41
+        assert it.Count(fn(x) { return x % 2 == 0 }) == 4 # 42 44 46 48
+        assert (try it.Next() catch default -1) == -1
+        assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 1225
+        assert l.Iter().Map(fn(x) { return x * 2 }).Len() == 50 and l.Iter().Filter(fn(x) { return x >= 45 }).Len() == 5
+        assert l.Iter().Every(fn(x) { return x < 50 }) and not l.Iter().Some(fn(x) { return x > 49 })
+        l.Push(50) # an exhausted iterator sees what is pushed after
+        assert (try it.Next() catch default -1) == 50
+    }
+
+    import "pair"
+
+    # the newer operations
+
+    # the elements of l, in order, as text - "[0 1 2]" - so a test compares a whole list in one assert
+    fn listShow(l List<I64>&) String& {
+        b := StringBuilder()
+        b.PushChar('[')
+        for i, x in l {
+            if i > 0 { b.PushChar(' ') }
+            b.Push($x)
+        }
+        b.PushChar(']')
+        return b.ToString()
+    }
+
+    # 0, 1, ... n - 1
+    fn listUpTo(n I64) List<I64>& {
+        l mut List<I64>&return = List<I64>()
+        for i in range n { l.Push(i) }
+        return l
+    }
+
+    test "Pop, First and Last, on both sides of every chunk boundary" {
+        l := listUpTo(57) # chunks of 8, 16 and 32, the last holding 33
+        assert (try l.First() catch default -1) == 0 and (try l.Last() catch default -1) == 56
+        n I64 = 57
+        for n > 0 {
+            n--
+            assert (try l.Pop() catch default -1) == n
+            assert l.Len() == n
+            if n > 0 { assert (try l.Last() catch default -1) == n - 1 and (try l.First() catch default -1) == 0 }
+        }
+        assert (try l.Pop() catch default -1) == -1 # nothing left: Pop fails, as First and Last do
+        assert (try l.First() catch default -1) == -1 and (try l.Last() catch default -1) == -1
+        missed := false
+        try l.Pop() catch { missed = true }
+        assert missed
+        for i in range 30 { l.Push(i * 10) } # the chunks Pop emptied are filled again
+        assert l.Len() == 30 and l[0] == 0 and l[7] == 70 and l[8] == 80 and l[29] == 290
+        assert listShow(l) == listShow(Of(I64[x * 10 for x in range 30]))
+    }
+
+    test "Pop and Push back and forth at a chunk boundary, and a work list" {
+        l := listUpTo(8) # the first chunk exactly full
+        for k in range 5 {
+            l.Push(100) # into the second chunk
+            assert (try l.Pop() catch default -1) == 100
+            assert (try l.Pop() catch default -1) == 7 # back into the first
+            l.Push(7)
+        }
+        assert listShow(l) == "[0 1 2 3 4 5 6 7]"
+        total I64 = 0
+        work := listUpTo(5)
+        for {
+            x := try work.Pop() catch { break }
+            total += x
+            if x == 4 { work.Push(10) } # a work list may grow while it is emptied
+        }
+        assert total == 20 and work.Len() == 0
+    }
+
+    test "Clear empties a list and keeps its chunks for the Pushes that follow" {
+        l := listUpTo(100)
+        l.Clear()
+        assert l.Len() == 0 and listShow(l) == "[]" and l.ToArray().Len() == 0
+        for x in l { unreachable }
+        assert (try l.Last() catch default -1) == -1
+        for i in range 40 { l.Push(i + 1000) }
+        assert l.Len() == 40 and l[0] == 1000 and l[8] == 1008 and l[24] == 1024 and l[39] == 1039
+        a := l.ToArray()
+        assert a.Len() == 40 and a[39] == 1039
+        sum I64 = 0
+        for x in l { sum += x }
+        assert sum == 40 * 1000 + 780
+        e := List<I32>()
+        e.Clear() # an empty list, never grown, clears too
+        e.Push(1)
+        assert e.Len() == 1 and e[0] == 1
+    }
+
+    # an iterator over a List that shrinks under it - Clear, or Pop below its position - ends at the list's new end (it
+    # went on through the chunks past it, reading what is no element), and one grown past its position again goes on with
+    # what the list holds there: -1, 0 and 14, as one number so a global can bake it
+    fn listIterShrunk() I64 {
+        l := listUpTo(20)
+        it := l.Iter()
+        for j in range 15 { x := try it.Next() catch Exhausted { unreachable } }
+        l.Clear()
+        l.Push(100)
+        a := try it.Next() catch default -1
+        b := it.Count(fn(x) { return true })
+        for i in range 30 { l.Push(i) } # position 15 holds 14 now
+        c := try it.Next() catch default -1
+        p := listUpTo(20)
+        pt := p.Iter()
+        for j in range 12 { x := try pt.Next() catch Exhausted { unreachable } }
+        for j in range 10 { x := try p.Pop() catch { unreachable } }
+        d := try pt.Next() catch default -1
+        e := pt.Some(fn(x) { return true })
+        return a * 1000000 + b * 10000 + c * 100 + d * 10 + (1 if e else 0)
+    }
+
+    listIterShrunkBaked := listIterShrunk()
+
+    test "an iterator over a List ends where the list now ends after Clear or Pop" {
+        assert listIterShrunk() == listIterShrunkBaked
+        assert listIterShrunkBaked == -1000000 + 1400 - 10
+    }
+
+    test "TakeAt, RemoveAt and Insert move the elements after the position, across chunk boundaries" {
+        l := listUpTo(60)
+        model := Of(I64[x for x in range 60])
+        assert (try l.TakeAt(7)) == 7 # the last of the first chunk
+        assert (try l.TakeAt(7)) == 8 # what moved into its place, from the second
+        assert (try l.TakeAt(0)) == 0
+        assert (try l.TakeAt(l.Len() - 1)) == 59 # the last element: nothing moves
+        assert l.Len() == 56 and l[0] == 1 and l[6] == 9 and l[54] == 57 and l[55] == 58
+        try l.Insert(0, -1)
+        try l.Insert(8, -8)         # the first place of the second chunk
+        try l.Insert(24, -24)       # the first place of the third
+        try l.Insert(l.Len(), -100) # at the end: a Push
+        assert l.Len() == 60 and l[0] == -1 and l[1] == 1 and l[8] == -8 and l[24] == -24 and l[59] == -100
+        assert l[7] == 9 and l[9] == 10 and l[23] == 24 and l[25] == 25 and l[58] == 58
+        one := List<I32>()
+        try one.Insert(0, 5)
+        assert (try one.TakeAt(0)) == 5 and one.Len() == 0
+        for i in range 20 { (try one.Insert(0, I32(i))) } # inserting at the front reverses
+        assert one[0] == 19 and one[19] == 0 and one[8] == 11
+        assert model.Len() == 60
+        try model.RemoveAt(0) # gives nothing: Remove lets go, Take gives
+        try model.RemoveAt(7)
+        try model.SwapRemove(0)
+        assert model.Len() == 57 and model[0] == 59 and model[6] == 7 and model[7] == 9
+    }
+
+    test "Reverse and Sort reorder a List in place" {
+        for n in I64[0, 1, 2, 8, 9, 24, 25, 57] {
+            l := listUpTo(n)
+            l.Reverse()
+            assert l.Len() == n
+            for i in range n { assert l[i] == n - 1 - i }
+            l.Sort(fn(a, b) { return a < b })
+            for i in range n { assert l[i] == i }
+        }
+        keys := List<I32>()
+        for i in range 300 { keys.Push(I32(i)) }
+        keys.Sort(fn(x, y) { return x % 3 < y % 3 }) # stable: equal keys keep their order
+        assert keys[0] == 0 and keys[1] == 3 and keys[99] == 297 and keys[100] == 1 and keys[299] == 299
+        words := Of("pear fig apple kiwi banana".Split(" "))
+        words.Sort(fn(a, b) { return a < b })
+        assert words.Join(" ") == "apple banana fig kiwi pear"
+        words.Reverse()
+        assert words.Join(",") == "pear,kiwi,fig,banana,apple"
+    }
+
+    test "an array, and an iterator, made into a List" {
+        a := Of(I32[3, 1, 2])
+        assert a.Len() == 3 and a[0] == 3 and a[2] == 2
+        f := Of(Array<I64>(100, 7)) # n copies of one value
+        assert f.Len() == 100 and f[99] == 7 and f[8] == 7
+        assert Of(Array<I32>(0)).Len() == 0
+        m := From(I32[x * x for x in range I32(10)].Iter())
+        assert m.Len() == 10 and m[9] == 81
+        evens := listUpTo(30).Iter().Filter(fn(x) { return x % 2 == 0 })
+        assert From(evens.Iter()).Len() == 15
+    }
+
+    test "Join puts a separator between the texts of a List" {
+        more String& = "two three four five six seven eight nine ten"
+        l := List<String&>()
+        assert l.Join(", ") == ""
+        l.Push("one")
+        assert l.Join(", ") == "one"
+        for w in more.Split(" ") { l.Push(w) }
+        assert l.Join(", ") == "one, two, three, four, five, six, seven, eight, nine, ten"
+        assert l.Join("") == "onetwothreefourfivesixseveneightnineten"
+    }
+
+    # the same, while compiling (K2, S18c): Pop, RemoveAt, Insert, Reverse, Sort and Clear as the run time does them -
+    # the result a number, every element weighed by its place, so the global is baked as one
+    fn listReshaped() I64 {
+        l := listUpTo(30)
+        x := try l.Pop() catch { return -1 }
+        try l.Insert(8, x) catch { unreachable }
+        r := try l.TakeAt(0) catch { unreachable }
+        l.Reverse()
+        l.Sort(fn(a, b) { return a % 10 < b % 10 })
+        h I64 = r
+        for i, y in l { h = h * 31 + y * (i + 1) }
+        l.Clear()
+        l.Push(5)
+        return h * 7 + (try l.Last() catch default -1)
+    }
+
+    listReshapedBaked := listReshaped()
+
+    test "reshaping a List, evaluated while compiling as at run time" {
+        assert listReshaped() == listReshapedBaked
+        l := listUpTo(30)
+        x := try l.Pop() catch { unreachable }
+        try l.Insert(8, x)
+        assert (try l.TakeAt(0)) == 0
+        l.Reverse()
+        l.Sort(fn(a, b) { return a % 10 < b % 10 })
+        assert listShow(l) == "[20 10 21 11 1 22 12 2 23 13 3 24 14 4 25 15 5 26 16 6 27 17 7 28 18 8 19 9 29]"
+    }
+
+    # elements that are references to what can be stored through - each a node with a mutable link - reordered and taken
+    # out by every new operation, and still the same instances afterwards
+    type listNode struct(v I64) {
+        v
+        next mut listNode?& = null
+    }
+
+    test "a List of mutable references, reordered and emptied" {
+        l := List<mut listNode&>()
+        for i in range 30 { l.Push(listNode(30 - i)) }
+        l.Sort(fn(a, b) { return a.v < b.v })
+        l.Reverse()
+        x := (try l.TakeAt(3))
+        try l.Insert(0, x)
+        p := try l.Pop() catch { unreachable }
+        f := try l.First() catch { unreachable }
+        k := try l.Last() catch { unreachable }
+        f.next = k # still writable, and still the list's own instances
+        assert x.v == 27 and p.v == 1 and f == x and l[0].next == k and k.v == 2
+        l.Clear()
+        assert l.Len() == 0 and x.next!.v == 2
+    }
+
+    # a List is a handle: its chunks and its counts are one record, so a copy of a List value is another name for the same
+    # list - a Push through either is seen through both, where the copy used to keep counts of its own beside the shared
+    # chunks and the two overwrote each other's elements. Clone() is the copy with storage of its own
+    type listHolder struct() {
+        items List<I64>
+    }
+
+    fn listCopies() I64 {
+        a := List<I64>()
+        a.Push(1)
+        b := a # the same list
+        b.Push(2)
+        a.Push(3)
+        assert b.Len() == 3 and a.Len() == 3 and b[1] == 2 and a[2] == 3
+        c := a.Clone() # a list of its own
+        c.Push(4)
+        a[0] = 10
+        assert a.Len() == 3 and c.Len() == 4 and c[0] == 1 and c[3] == 4 and a[0] == 10
+        h := listHolder()
+        for i in range 20 { h.items.Push(i) }
+        g := h # a struct holding a List copies the handle with it
+        g.items.Push(99)
+        assert h.items.Len() == 21 and h.items[20] == 99
+        shared := Array<List<I64>>(3, List<I64>()) # a fill copies one value: three names for one list (T8)
+        shared[0].Push(5)
+        assert shared[2].Len() == 1 and shared[2][0] == 5
+        s I64 = 0
+        for x in a { s += x }
+        for x in c { s += x }
+        return s * 1000 + h.items.Len() + shared[1].Len()
+    }
+    listCopiesBaked := listCopies()
+
+    test "a copy of a List value names the same list, and Clone makes another" {
+        assert listCopiesBaked == (15 + 10) * 1000 + 22
+        assert listCopies() == listCopiesBaked
+    }
+
+    # Clone copies every chunk, walked in order, and builds where its result lands - here past the block of the list it
+    # copies, read back after the arena that list lived in was reused
+    fn listChurnArena() I64 {
+        t I64 = 0
+        for i in range 500 {
+            p := Array<I64>(64, I64(i))
+            t += p[63]
+        }
+        return t
+    }
+
+    test "a List's Clone outlives the list it copies, across chunk boundaries" {
+        kept := List<I64>()
+        if kept.Len() == 0 {
+            src := listUpTo(100) # chunks of 8, 16, 32 and 64
+            kept = src.Clone()
+            src.Push(100)
+            src[0] = -1
+        }
+        assert listChurnArena() > 0
+        assert kept.Len() == 100 and kept[0] == 0 and kept[99] == 99
+        words := List<String&>()
+        line String& = "a bb ccc"
+        for w in line.Split(" ") { words.Push(w) }
+        copy := words.Clone() # a List of references clones to the same references
+        assert copy.Len() == 3 and copy[2] == words[2]
+    }
+
+    # Clone of a List of every length around the first chunk's edge - held on its own, with no array of chunks until a second
+    # is made - and the next chunks': the clone holds the same elements and grows apart from the list
+    fn listCloneEdges() I64 {
+        s I64 = 0
+        for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 56, 57] {
+            l := listUpTo(n)
+            c := l.Clone()
+            c.Push(1000)
+            l.Push(2000)
+            assert c.Len() == n + 1 and l.Len() == n + 1 and c[n] == 1000 and l[n] == 2000, "Clone of " $n
+            for i, x in c { s += x * (i + 1) }
+        }
+        return s
+    }
+    listCloneEdgesBaked := listCloneEdges()
+
+    test "Clone at every chunk boundary, evaluated while compiling as at run time" {
+        assert listCloneEdges() == listCloneEdgesBaked
+    }
+
+    test "Truncate keeps the first n, across chunk boundaries, and Push carries on after them" {
+        for n in I64[0, 1, 7, 8, 9, 23, 24, 25, 100] {
+            l := listUpTo(100)
+            l.Truncate(n)
+            assert l.Len() == n, "Truncate(" $n ")"
+            ok := true
+            for i, x in l {
+                if x != i { ok = false }
+            }
+            assert ok
+            l.Push(-1) # the next Push goes right after them, into the chunk they ended in
+            l.PushAll(I64[-2, -3])
+            assert l.Len() == n + 3 and l[n] == -1 and l[n + 2] == -3
+            assert (try l.Last() catch default 0) == -3
+        }
+        l := listUpTo(5)
+        l.Truncate(9) # more than it holds: nothing changes
+        assert listShow(l) == "[0 1 2 3 4]"
+        # top k: sorted, then cut
+        s := Of(I64[5, 1, 9, 3, 7, 8])
+        s.Sort(fn(a, b) { return a > b })
+        s.Truncate(3)
+        assert listShow(s) == "[9 8 7]"
+    }
+
+    # Truncate while compiling (K2)
+    fn listTruncated() I64 {
+        l := listUpTo(40)
+        l.Truncate(17)
+        l.Push(100)
+        return l.Len() * 1000 + l[16] + l[17]
+    }
+    listTruncatedBaked := listTruncated()
+
+    test "Truncate evaluated while compiling as at run time" {
+        assert listTruncatedBaked == 18116 and listTruncated() == listTruncatedBaked
+    }
+
+    # IndexOf and Remove find an element by "==" (E10a) - the first equal one - and SwapTake fills the gap with the last
+    # element, on both sides of every chunk boundary
+    test "IndexOf, Remove and SwapRemove, across chunk boundaries" {
+        l := listUpTo(30)
+        assert (try l.IndexOf(0) catch default -1) == 0 and (try l.IndexOf(8) catch default -1) == 8
+        assert (try l.IndexOf(29) catch default -1) == 29 and (try l.IndexOf(30) catch default -1) == -1
+        l.Push(8) # a second 8: IndexOf and Remove find the first
+        assert (try l.IndexOf(8) catch default -1) == 8
+        assert l.Remove(8) and l.Len() == 30 and (try l.IndexOf(8) catch default -1) == 29
+        assert not l.Remove(100) and l.Len() == 30    # nothing equal: nothing removed, and Remove says so
+        assert (try l.SwapTake(0)) == 0 and l[0] == 8 # the last element into the gap
+        assert (try l.SwapTake(l.Len() - 1)) == 29    # the last itself: nothing moves
+        assert (try l.SwapTake(8)) == 9               # the first element of the second chunk
+        assert listShow(l) == "[8 1 2 3 4 5 6 7 28 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27]"
+        # the last element in a chunk of its own, then in the chunk before: the tail moves back, and Push carries on
+        m := listUpTo(9)
+        assert (try m.SwapTake(0)) == 0 and m[0] == 8
+        assert (try m.SwapTake(0)) == 8 and m[0] == 7 and m.Len() == 7
+        m.Push(100)
+        assert listShow(m) == "[7 1 2 3 4 5 6 100]"
+        one := Of(I64[5])
+        assert (try one.SwapTake(0)) == 5 and one.Len() == 0 and (try one.IndexOf(5) catch default -1) == -1
+        words := Of("to be or not to be".Split(" ")) # text compares by its contents
+        assert (try words.IndexOf("be") catch default -1) == 1 and words.Remove("to") and words[0] == "be"
+    }
+
+    # the same, computed while compiling (K2)
+    fn listSearched() I64 {
+        l := listUpTo(20)
+        l.Remove(3)
+        x := try l.SwapTake(0) catch { unreachable }
+        return (try l.IndexOf(19) catch default -1) * 100 + x * 10 + l.Len()
+    }
+    listSearchedBaked := listSearched()
+
+    test "IndexOf, Remove and SwapRemove, evaluated while compiling as at run time" {
+        assert listSearchedBaked == 18 and listSearched() == listSearchedBaked
+    }
+
+    # E11c: "$" renders a List as an array of its elements renders, the List named in front, each element as it renders
+    # inside any other value - so text is quoted, a Char is a character literal, a List inside a List renders as a List
+    fn listRendered() String {
+        b := StringBuilder()
+        b.Push($List<I64>() " ")
+        b.Push($listUpTo(3) " ")
+        t := List<String&>()
+        t.Push("a\"b")
+        t.Push("")
+        b.Push($t " ")
+        c := List<Char>()
+        for x in "x\n'" { c.Push(x) }
+        b.Push($c " ")
+        n := List<List<I64>>()
+        n.Push(listUpTo(2))
+        n.Push(List<I64>())
+        b.Push($n " ")
+        p := List<pair.Pair<String&, F64>>()
+        p.Push(pair.Pair<String&, F64>("k", 0.5))
+        b.Push($p)
+        return b.ToString()
+    }
+    listRenderedBaked := listRendered()
+
+    test "$ renders a List's elements, not its storage" {
+        r := listRendered()
+        assert r == ("List<I64>[] List<I64>[0, 1, 2] List<String&>[\"a\\\"b\", \"\"] List<Char>['x', '\\n', '\\''] "
+            "List<List<I64>>[List<I64>[0, 1], List<I64>[]] List<Pair<String&, F64>>[Pair(\"k\", 0.5)]")
+        assert listRenderedBaked == r # the evaluator renders as the run time does
+        long := listUpTo(1000)        # many chunks: their spare slots are never shown
+        expect := StringBuilder()
+        expect.Push("List<I64>[")
+        for i in range 1000 {
+            if i > 0 { expect.Push(", ") }
+            expect.Push($i)
+        }
+        expect.Push("]")
+        assert $long == expect.ToString()
+        long.Truncate(9)
+        assert $long == "List<I64>[0, 1, 2, 3, 4, 5, 6, 7, 8]"
+    }
+
+    # elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
+    # iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
+    type listBag struct() {
+        items List<I64>& = List<I64>()
+    }
+    type listItem struct(n I64) {
+        n
+    }
+    fn listFind(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+        for f in l {
+            if f.First == key { return f.Second }
+        }
+        error Error.NOT_FOUND
+    }
+    fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+        for f in l.Iter() {
+            if f.First == key { return f.Second }
+        }
+        error Error.NOT_FOUND
+    }
+    test "S9f: a List of references, walked by every route" {
+        bags := List<listBag&>()
+        bags.Push(listBag())
+        bags.Push(listBag())
+        s I64 = 0
+        for b in bags { s += b.items.Len() + 1 }
+        for b in bags.Iter() { s += b.items.Len() + 1 }
+        assert s == 4
+        #(a helper's callback handed an element something can be stored through is refused - the element's scope is
+        #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
+        items := List<listItem&>()
+        items.Push(listItem(4))
+        items.Push(listItem(5))
+        assert items.Iter().Count(fn(b) { return b.n > 4 }) == 1
+        m := List<pair.Pair<String&, listItem&>>()
+        k String& = "x"
+        m.Push(pair.Pair<String&, listItem&>(k, listItem(4)))
+        assert (try listFind(m, "x") catch { unreachable }).n == 4
+        assert (try listFindIter(m, "x") catch { unreachable }).n == 4
+    }
+
+    # a removal empties the positions it no longer uses and a shift moves each element (M19d's vacate): SwapTake of the last
+    # element moves nothing into its own place, Insert and TakeAt shift text across chunk boundaries, and what Clear and
+    # Truncate emptied is filled again by Push - the same while compiling as at run time
+    fn listVacated() I64 {
+        l := List<String&>()
+        for i in range 40 { l.Push($i) }
+        a := try l.SwapTake(39) catch default "" # the last: nothing moves into the gap
+        b := try l.SwapTake(0) catch default ""  # the last moved into position 0
+        try l.Insert(7, "in") catch { unreachable }
+        c := try l.TakeAt(20) catch default "" # the elements after 20 move down, across chunks
+        assert l[0] == "38" and l[7] == "in" and l[8] == "7" and l[20] == "20" and l[37] == "37" and l.Len() == 38
+        l.Truncate(30)
+        for i in range 5 { l.Push("t" $i) }
+        assert l[29] == "29" and l[30] == "t0" and l[34] == "t4"
+        n := l.Len()
+        l.Clear()
+        l.Push("z")
+        assert l[0] == "z"
+        return a.Len() * 1000000 + b.Len() * 100000 + c.Len() * 10000 + n * 10 + l.Len()
+    }
+    listVacatedBaked := listVacated()
+
+    test "removals empty what they no longer use and shifts move, evaluated while compiling as at run time" {
+        assert listVacatedBaked == 2120351 and listVacated() == listVacatedBaked
+    }
+}

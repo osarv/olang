@@ -1,0 +1,8 @@
+import "std/io"
+H := Array<I64>(3, 4)
+fn poke(s mut Array<I64>&, k I64) { s[0] = k }
+K mut I64 = 9
+fn main() {
+    poke(H, K)
+    io.Println($H)!
+}

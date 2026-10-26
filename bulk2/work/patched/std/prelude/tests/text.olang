@@ -1,0 +1,372 @@
+# the prelude's newer text methods, and its number reading and writing, tested - a module of its own, not part of the
+# prelude, so these are compiled only when they are run
+
+test "TrimStart and TrimEnd borrow the receiver's storage, as Trim does" {
+    assert "  x y \t".TrimStart() == "x y \t" and "  x y \t".TrimEnd() == "  x y"
+    assert "".TrimStart() == "" and "   ".TrimEnd() == "" and "ab".TrimStart() == "ab" and "ab".TrimEnd() == "ab"
+    line String& = "\t key = value \r\n"
+    assert line.TrimEnd().TrimStart() == line.Trim()
+}
+
+test "ToUpper and ToLower change ASCII letters and nothing else" {
+    assert "Hello, World! 123".ToUpper() == "HELLO, WORLD! 123"
+    assert "Hello, World! 123".ToLower() == "hello, world! 123"
+    assert "".ToUpper() == "" and "@[`{".ToUpper() == "@[`{" and "@[`{".ToLower() == "@[`{"   # the bytes around the letters
+    e := String(U8[0xC3, 0xA9, 'a', 0xC3, 0x89])                        # "éaÉ": UTF-8 left as it is
+    u := e.ToUpper()
+    assert u[0] == 0xC3 and u[1] == 0xA9 and u[2] == 'A' and u[3] == 0xC3 and u[4] == 0x89 and e.ToLower() == e
+    s String& = "MiXeD"
+    assert s.ToLower() == "mixed" and s == "MiXeD"                         # new text: the receiver is unchanged
+}
+
+test "FindLast finds the last occurrence, failing when there is none" {
+    assert (try "abcabc".FindLast("bc") catch default -1) == 4
+    assert (try "abcabc".FindLast("abc") catch default -1) == 3
+    assert (try "abc".FindLast("x") catch default -1) == -1
+    assert (try "abc".FindLast("abcd") catch default -1) == -1
+    assert (try "abc".FindLast("") catch default -1) == 3 and (try "".FindLast("") catch default -1) == 0
+    assert (try "aaa".FindLast("aa") catch default -1) == 1
+}
+
+test "text orders by its bytes with < and the comparisons derived from it" {
+    a String& = "apple"
+    assert a < "banana" and "banana" > a and a <= "apple" and a >= "apple" and not (a < "apple")
+    assert "ab" < "abc" and "" < "a" and "B" < "a" and not ("b" < "B")             # bytewise: upper case first
+    assert "a" < "b" < "c" and not ("a" < "c" < "b")                                # chained, as for numbers
+    words := "pear fig apple kiwi banana".Split(" ")
+    words.Sort(fn(x, y) { return x < y })
+    assert words.Join(" ") == "apple banana fig kiwi pear"
+}
+
+# the lines of text, each in brackets
+fn bracketed(text String&) String& {
+    b := StringBuilder()
+    for line in text.Lines() {
+        b.PushChar('[')
+        b.Push(line)
+        b.PushChar(']')
+    }
+    return b.ToString()
+}
+
+# the lines of text kept in a Vec - borrows of the text, so the Vec lives where the text does
+fn linesOf(t String&) Vec<String&>&t {
+    out mut Vec<String&>&t = Vec<String&>()
+    for line in t.Lines() { out.Push(line) }
+    return out
+}
+
+test "Lines gives each line without its newline, as io.Lines reads a file's" {
+    assert bracketed("") == "" and bracketed("a") == "[a]" and bracketed("a\n") == "[a]"
+    assert bracketed("a\nb") == "[a][b]" and bracketed("a\n\n") == "[a][]" and bracketed("\n") == "[]"
+    assert bracketed("a\r\nb\r\n") == "[a][b]" and bracketed("a\r") == "[a]" and bracketed("\r\n") == "[]"
+    assert bracketed("a\r\r\nb") == "[a\r][b]"                       # only the one carriage return goes
+    text String& = "first\nsecond\n\nfourth"
+    kept := linesOf(text)
+    assert kept.Len() == 4 and kept[0] == "first" and kept[2] == "" and kept[3] == "fourth"
+    n I64 = 0
+    it := text.Lines()
+    for {
+        line := try it.Next() catch Exhausted { break }
+        n += line.Len()
+    }
+    assert n == 17 and (try it.Next() catch default "end") == "end"      # an iterator that has run out stays out
+    assert text.Lines().Count(fn(l) { return l.Len() > 0 }) == 3
+}
+
+test "Join puts a separator between the texts of an array" {
+    assert String&["a", "b", "c"].Join(", ") == "a, b, c"
+    assert String&["only"].Join(", ") == "only" and Array<String&>(0).Join(", ") == ""
+    assert String&["", "", ""].Join("-") == "--" and String&["x", "y"].Join("") == "xy"
+    parts := "2026-10-09".Split("-")
+    assert parts.Join("/") == "2026/10/09"
+    assert $String&["a", "b"] == "String&[\"a\", \"b\"]"                   # $ renders the array as source
+}
+
+# ParseFloat's value of text, or a NaN when it fails
+fn float(text String&) F64 {
+    return try text.ParseFloat() catch { return 0.0 / 0.0 }
+}
+
+# the word ParseFloat fails with, or "ok"
+fn floatProblem(text String&) String& {
+    try text.ParseFloat() catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    return "ok"
+}
+
+test "ParseFloat reads a decimal number to the nearest F64" {
+    assert float("0") == 0.0 and float("-0").Bits() == U64(0x8000000000000000) and float("0").Bits() == 0
+    assert float("1") == 1.0 and float("-1") == -1.0 and float("+1") == 1.0 and float("0.1") == 0.1
+    assert float("0.30000000000000004") == 0.30000000000000004 and float("1e23") == 1e23
+    assert float("8.98846567431158e307") == 8.98846567431158e307 and float("1.7976931348623157e308") == 1.7976931348623157e308
+    assert float("2.2250738585072011e-308").Bits() == 0xFFFFFFFFFFFFF          # just below the smallest normal
+    assert float("2.2250738585072014e-308").Bits() == 0x10000000000000
+    assert float("4.9e-324").Bits() == 1 and float("2.4703282292062328e-324").Bits() == 1
+    assert float("2.4703282292062327e-324") == 0.0                             # exactly half the smallest: to even
+    assert float("1e-400") == 0.0 and float("-1e-400").Bits() == U64(0x8000000000000000)
+    assert float("9007199254740993") == 9007199254740992.0                     # halfway: to even
+    assert float("9007199254740993.00000000000000000001") == 9007199254740994.0 # past 19 digits, just above halfway
+    assert float("0.1000000000000000055511151231257827021181583404541015625") == 0.1
+    assert float("123456789012345678901234567890") == 1.2345678901234568e29
+    assert float("1E2") == 100.0 and float("1e+2") == 100.0 and float("100e-2") == 1.0 and float("0e99") == 0.0
+    assert float("-9223372036854775808") == -9223372036854775808.0
+    assert float(".5") == 0.5 and float("5.") == 5.0 and float("-.25e1") == -2.5 and float("007.50") == 7.5
+    long := StringBuilder()
+    long.PushChar('1')
+    long.Push("0".Repeat(400))
+    long.Push("e-400")
+    assert float("0.000000000000000000000000000001") == 1e-30 and float(long.ToString()) == 1.0
+}
+
+test "ParseFloat reads the infinities and NaN, so what $ writes reads back" {
+    assert float("inf") == 1.0 / 0.0 and float("-inf") == -1.0 / 0.0 and float("+Infinity") == 1.0 / 0.0
+    assert float("INF") == 1.0 / 0.0 and float("-InFiNiTy") == -1.0 / 0.0
+    n := float("nan")
+    assert n != n and float("NaN").Bits() == U64(0x7FF8000000000000) and float("-nan").Bits() == U64(0xFFF8000000000000)
+    for x in F64[0.1, -2.5, 1e300, 5e-324, 1.0 / 3.0, -0.0, 123456789.125, 1.0 / 0.0, -1.0 / 0.0, 2.0 / 3.0] {
+        assert float($x).Bits() == x.Bits()
+    }
+}
+
+test "ParseFloat names what was wrong" {
+    assert floatProblem("") == "EMPTY" and floatProblem("1.5") == "ok"
+    for bad in String&["-", "+", ".", "-.", "e5", "1e", "1e+", "1.5x", " 1", "1 ", "1_000", "0x10", "--1", "1.2.3", "infin"
+        "nana", "in", "1e5e5", "+-1"] {
+        assert floatProblem(bad) == "INVALID"
+    }
+    assert floatProblem("1e309") == "OVERFLOW" and floatProblem("-1e400") == "OVERFLOW"
+    assert floatProblem("1.7976931348623159e308") == "OVERFLOW"                 # rounds past the largest F64
+    assert floatProblem("1.7976931348623158e308") == "ok"                       # rounds down to it
+    assert floatProblem("1e-99999") == "ok" and floatProblem("1e99999") == "OVERFLOW"
+    assert floatProblem(" 2.5 ".Trim()) == "ok"
+}
+
+test "ShortestDecimal gives the fewest digits that read back" {
+    f, e := try F64(0.1).ShortestDecimal() catch { unreachable }
+    assert f == 1 and e == -1
+    f, e = try F64(100.0).ShortestDecimal() catch { unreachable }
+    assert f == 1 and e == 2
+    f, e = try F64(-123.456).ShortestDecimal() catch { unreachable }
+    assert f == 123456 and e == -3
+    f, e = try F64(5e-324).ShortestDecimal() catch { unreachable }
+    assert f == 5 and e == -324
+    f, e = try F64(1.7976931348623157e308).ShortestDecimal() catch { unreachable }
+    assert f == 17976931348623157 and e == 292
+    f, e = try F64(7.120236347223045e-307).ShortestDecimal() catch { unreachable }     # a power of two: 16 digits
+    assert f == 7120236347223045 and e == -322
+    f, e = try F64(-0.0).ShortestDecimal() catch { unreachable }
+    assert f == 0 and e == 0
+    nan F64 = 0.0 / 0.0
+    failed := false
+    f, e = try nan.ShortestDecimal() catch { failed = true } default 0, 0
+    assert failed
+    failed = false
+    f, e = try F64(1.0 / 0.0).ShortestDecimal() catch { failed = true } default 0, 0
+    assert failed
+    for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 123.456, 3.141592653589793] {
+        d, p := try x.ShortestDecimal() catch { unreachable }
+        assert float($d "e" $p) == x
+    }
+}
+
+# the same, while compiling (K2): ParseFloat's three ways - Clinger's, Eisel and Lemire's, and the digits shifted -
+# and the shortest digits, exactly as at run time
+fn floatsRead() U64 {
+    h U64 = 0
+    for t in String&["0.1", "1e23", "9007199254740993", "2.4703282292062328e-324", "123456789012345678901234567890"
+        "0.1000000000000000055511151231257827021181583404541015625", "-1.5e-300", "inf"] {
+        h = h * 1099511628211 + (try t.ParseFloat() catch default 0.0).Bits()
+    }
+    d, p := try F64(2.0 / 3.0).ShortestDecimal() catch default 0, 0
+    return h + d + U64(p)
+}
+floatsReadBaked := floatsRead()
+floatsMutable mut I64 = 1           # read at run time, so the comparison below is made there
+
+test "ParseFloat and ShortestDecimal, evaluated while compiling as at run time" {
+    assert floatsRead() == floatsReadBaked
+    assert floatsMutable == 1 and float("1e23") == 1e23
+}
+
+# what ParseInt makes of t in base, or the word it fails with
+fn intIn(t String&, base I64) String {
+    v := try t.ParseInt(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    return $v
+}
+
+# what ParseUint makes of t in base, or the word it fails with
+fn uintIn(t String&, base I64) String {
+    v := try t.ParseUint(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
+        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    return $v
+}
+
+test "ParseInt and ParseUint read the digits of any base from 2 to 36" {
+    assert intIn("ff", 16) == "255" and intIn("FF", 16) == "255" and intIn("-7f", 16) == "-127" and intIn("+10", 16) == "16"
+    assert intIn("1010", 2) == "10" and intIn("777", 8) == "511" and intIn("z", 36) == "35" and intIn("Zz", 36) == "1295"
+    assert intIn("7fffffffffffffff", 16) == "9223372036854775807" and intIn("-8000000000000000", 16) == "-9223372036854775808"
+    assert intIn("8000000000000000", 16) == "OVERFLOW" and intIn("-8000000000000001", 16) == "OVERFLOW"
+    assert intIn("2", 2) == "INVALID" and intIn("8", 8) == "INVALID" and intIn("g", 16) == "INVALID"
+    assert intIn("0x10", 16) == "INVALID" and intIn("1_000", 10) == "INVALID"     # no prefix, no separators
+    assert uintIn("ffffffffffffffff", 16) == "18446744073709551615" and uintIn("10000000000000000", 16) == "OVERFLOW"
+    assert uintIn("18446744073709551615", 10) == "18446744073709551615" and uintIn("18446744073709551616", 10) == "OVERFLOW"
+    assert uintIn("1" $"0".Repeat(64), 2) == "OVERFLOW" and uintIn("1".Repeat(64), 2) == "18446744073709551615"
+    assert uintIn("+7", 10) == "7" and uintIn("-7", 10) == "INVALID" and uintIn("-0", 10) == "INVALID"
+    assert uintIn("", 10) == "EMPTY" and uintIn("+", 10) == "INVALID" and intIn("-", 16) == "INVALID"
+    assert uintIn("42", 10) == "42" and (try "42".ParseUint() catch default 0) == 42      # base 10 unless another is given
+}
+
+test "base 0 reads an integer as olang writes its literal (L10)" {
+    assert intIn("0", 0) == "0" and intIn("007", 0) == "7" and intIn("1_000_000", 0) == "1000000"   # 0 is no octal prefix
+    assert intIn("0xFF_FF", 0) == "65535" and intIn("0XfF", 0) == "255" and intIn("0b1010_1010", 0) == "170"
+    assert intIn("0B11", 0) == "3" and intIn("-0x10", 0) == "-16" and intIn("+0b1", 0) == "1"
+    assert intIn("0xFFFFFFFFFFFFFFFF", 0) == "-1"                # a bit pattern, read as an I64 (L10a)
+    assert intIn("0x8000000000000000", 0) == "-9223372036854775808" and intIn("-0x1", 0) == "-1"
+    assert intIn("9223372036854775807", 0) == "9223372036854775807" and intIn("9223372036854775808", 0) == "OVERFLOW"
+    assert intIn("-9223372036854775808", 0) == "-9223372036854775808"
+    assert uintIn("18446744073709551615", 0) == "18446744073709551615" and uintIn("18_446_744_073_709_551_616", 0) == "OVERFLOW"
+    assert uintIn("0xFFFF_FFFF_FFFF_FFFF", 0) == "18446744073709551615" and uintIn("0x1_0000_0000_0000_0000", 0) == "OVERFLOW"
+    assert uintIn("0b" $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" $"0".Repeat(64), 0) == "OVERFLOW"
+    # a '_' stands between two digits (L10b), and a prefix needs digits of its own base after it
+    for bad in String&["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1"
+                       "0x-1", "--1", "0_x1"] {
+        assert intIn(bad, 0) == "INVALID" and uintIn(bad, 0) == "INVALID"
+    }
+    assert intIn("", 0) == "EMPTY" and uintIn("-1", 0) == "INVALID"
+}
+
+# every reading above, as one text - computed while compiling (K2) into parsedBaked, and at run time where its argument
+# is a mutable global, which the evaluator may not read
+fn parsedAll(rounds I64) String {
+    b := StringBuilder()
+    for r in range rounds {
+        for t in String&["0", "-17", "ff", "0xFF_FF", "0b1_0", "-0x10", "1_000", "18446744073709551615", "zz", "", "0x"] {
+            for base in I64[0, 2, 10, 16, 36] {
+                b.Push(intIn(t, base))
+                b.PushChar(' ')
+                b.Push(uintIn(t, base))
+                b.PushChar(';')
+            }
+        }
+    }
+    return b.ToString()
+}
+parsedBaked := parsedAll(1)
+parsedRounds mut I64 = 1
+
+test "ParseInt and ParseUint, evaluated while compiling as at run time" {
+    assert parsedAll(parsedRounds) == parsedBaked
+    assert parsedBaked.StartsWith("0 0;0 0;0 0;0 0;0 0;-17 INVALID;")
+}
+
+test "PadStart and PadEnd make text a column wide" {
+    assert "7".PadStart(3) == "  7" and "7".PadEnd(3) == "7  " and "ab".PadEnd(4, '.') == "ab.." and "ab".PadStart(4, '*') == "**ab"
+    assert "abc".PadStart(3) == "abc" and "abcd".PadStart(2) == "abcd" and "abcd".PadEnd(0) == "abcd"    # never cut
+    assert "".PadStart(2) == "  " and "".PadEnd(0) == "" and "x".PadStart(-5) == "x"
+    assert ("-7").PadStart(4, '0') == "00-7"                     # text has no sign: padded as it is
+    s String& = "kept"
+    p := s.PadStart(6)
+    p[0] = '>'
+    assert s == "kept" and p == "> kept"                          # new text: the receiver is unchanged
+}
+
+test "the integers pad as numbers, zeros after a sign" {
+    n I64 = -7
+    assert n.PadStart(4, '0') == "-007" and n.PadStart(4) == "  -7" and n.PadEnd(4) == "-7  " and n.PadStart(1, '0') == "-7"
+    k I64 = 42
+    assert k.PadStart(5) == "   42" and k.PadStart(5, '0') == "00042" and k.PadEnd(5, '.') == "42..."
+    b I8 = -128
+    h I16 = 300
+    u U16 = 65535
+    w U32 = 4000000000
+    q U64 = 18446744073709551615
+    assert b.PadStart(6, '0') == "-00128" and h.PadStart(4) == " 300" and u.PadEnd(6) == "65535 "
+    assert w.PadStart(11, '0') == "04000000000" and q.PadStart(21) == " 18446744073709551615" and q.PadEnd(3) == $q
+    line I32 = 7
+    caret := $line.PadStart(4) " | " $" ".Repeat(5) "^"
+    assert caret == "   7 |      ^"
+}
+
+test "Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint" {
+    assert I64(255).Format(16) == "ff" and I64(255).Format(2) == "11111111" and I64(255).Format(8) == "377" and I64(255).Format() == "255"
+    assert I64(0).Format(16) == "0" and I64(35).Format(36) == "z" and I64(-255).Format(16) == "-ff" and I64(-1).Format(2) == "-1"
+    big I64 = 9223372036854775807
+    least I64 = -9223372036854775807 - 1
+    assert big.Format(16) == "7fffffffffffffff" and least.Format(16) == "-8000000000000000"
+    assert least.Format(2) == "-1" $"0".Repeat(63) and least.Format() == $least
+    top U64 = 18446744073709551615
+    assert top.Format(16) == "ffffffffffffffff" and top.Format(36) == "3w5e11264sgsf" and top.Format() == $top
+    b I8 = -128
+    h I16 = -300
+    w U32 = 4000000000
+    u U16 = 65535
+    assert b.Format(16) == "-80" and h.Format(10) == "-300" and w.Format(16) == "ee6b2800" and u.Format(2) == "1".Repeat(16)
+    c Char = 'A'
+    assert c.Format(16) == "41" and c.Format() == "65" # a Char's is its code: U8's method, inherited
+    m U64 = U64(least)
+    assert m.Format(16) == "8000000000000000" # an I64's bits, read unsigned
+    for base in range 2, 37 {
+        for v in I64[0, 1, -1, 35, -36, 1000003, -987654321, big, least] {
+            assert (try v.Format(Radix(base)).ParseInt(Radix(base)) catch default 0) == v
+        }
+        for v in U64[0, 7, 18446744073709551615, 12345678901234567890] {
+            assert (try v.Format(Radix(base)).ParseUint(Radix(base)) catch default 1) == v
+        }
+    }
+}
+
+# Format's texts, computed while compiling (K2) into formatBaked and at run time from a mutable global
+fn formattedAll(start I64) String {
+    b := StringBuilder()
+    for base in I64[2, 8, 10, 16, 36] {
+        for v in I64[start, -start, start * 1000003, -9223372036854775807 - 1] {
+            b.Push(v.Format(Radix(base)!))
+            b.PushChar(' ')
+            b.Push(U64(v).Format(Radix(base)!))
+            b.PushChar(';')
+        }
+    }
+    return b.ToString()
+}
+formatBaked := formattedAll(255)
+formatStart mut I64 = 255
+
+test "Format, evaluated while compiling as at run time" {
+    assert formattedAll(formatStart) == formatBaked
+    assert formatBaked.StartsWith("11111111 11111111;-11111111 ")
+    assert I64(255).Format(16) == "ff"          # an assert the evaluator decides (S18c)
+    bad I64 = 40
+    assert (try I64(Radix(bad)) catch TextError default 0) == 0   # a base computed while running, made a Radix
+}
+
+# E11c: "$" renders a StringBuilder as the text it holds, as ToString gives it - not as the Vec it keeps it in
+fn builderRendered() String {
+    b := StringBuilder()
+    b.Push("one ")
+    b.PushChar('2')
+    l := Vec<StringBuilder>()
+    l.Push(b)
+    return $b "|" $l "|" $StringBuilder()
+}
+builderRenderedBaked := builderRendered()
+
+test "$ renders a StringBuilder as its text" {
+    assert builderRendered() == "one 2|Vec<StringBuilder>[one 2]|"
+    assert builderRenderedBaked == builderRendered()
+}
+
+extern fn strerror(code I32) CStr?&
+
+test "text goes to C NUL-terminated and comes back copied (X15)" {
+    c := "abc".ToC()
+    assert c.Len() == 4 and c[3] == 0 and c[0] == 'a'
+    assert "".ToC() == U8[0]
+    e := strerror(2)
+    assert e is not null
+    s := e.StringFromC(100)
+    assert s == "No such file or directory"
+    assert e.StringFromC(2) == "No" and e.StringFromC(0) == ""
+    assert ("hi".ToC()).Len() == 3
+}

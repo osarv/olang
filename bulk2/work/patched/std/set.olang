@@ -1,0 +1,157 @@
+# set - Set<T>: values held once each, asked about by "x in s". A Map of the values to nothing (Map<T, Bool>, the Bool
+# unused), so an element is any type a Map key may be - one with "Hash() I64" agreeing with "==": the integers, String,
+# a struct, enum or array of such parts (E10b). Imported with `import "std/set"`; the type is set.Set<T>.
+#
+# A Set is a HANDLE, as the Map under it is: a copy of a Set value is a second name for the same set, and Clone() is
+# the copy with storage of its own. Union, Intersect and Difference build a new Set where the result lands.
+
+type Set<T Hashable<T>> struct() {
+    m Map<T, Bool> = Map<T, Bool>()
+}
+
+# a Set holding every element of a, each once
+fn Of<T Hashable<T>>(a Array<T>&) Set<T> {
+    s := Set<T>()
+    for x in a { s.m.Put(x, true) }
+    return s
+}
+
+# adds x, and says whether it was not there before
+fn (s mut Set<T>&) Add(x T) Bool {
+    if s.m.Has(x) { return false }
+    s.m.Put(x, true)
+    return true
+}
+
+# every element of a added
+fn (s mut Set<T>&) AddAll(a Array<T>&) {
+    for x in a { s.m.Put(x, true) }
+}
+
+# removes x, and says whether it was there
+fn (s mut Set<T>&) Remove(x T) Bool { return s.m.Remove(x) }
+
+# whether x is an element - what "x in s" asks (E29)
+fn (s Set<T>&) Has(x T) Bool { return s.m.Has(x) }
+
+fn (s Set<T>&) Len() I64 { return s.m.Len() }
+
+# removes every element, keeping the storage for the next ones
+fn (s mut Set<T>&) Clear() { s.m.Clear() }
+
+# the elements, one at a time, in no order to rely on: "for x in s" walks them
+fn (s Set<T>&) Iter() MapKeyIter<T, Bool> { return s.m.Keys() }
+
+# a Set with storage of its own holding the same elements
+fn (s Set<T>&) Clone() Set<T> {
+    c := Set<T>()
+    for x in s.m.Keys() { c.m.Put(x, true) }
+    return c
+}
+
+# the elements in s or in o
+fn (s Set<T>&) Union(o Set<T>&) Set<T> {
+    c := s.Clone()
+    for x in o.m.Keys() { c.m.Put(x, true) }
+    return c
+}
+
+# the elements in both
+fn (s Set<T>&) Intersect(o Set<T>&) Set<T> {
+    c := Set<T>()
+    for x in s.m.Keys() {
+        if o.m.Has(x): c.m.Put(x, true)
+    }
+    return c
+}
+
+# the elements in s and not in o
+fn (s Set<T>&) Difference(o Set<T>&) Set<T> {
+    c := Set<T>()
+    for x in s.m.Keys() {
+        if not o.m.Has(x): c.m.Put(x, true)
+    }
+    return c
+}
+
+# whether every element of s is in o
+fn (s Set<T>&) IsSubset(o Set<T>&) Bool {
+    if s.Len() > o.Len() { return false }
+    for x in s.m.Keys() {
+        if not o.m.Has(x): return false
+    }
+    return true
+}
+
+# the elements in an array of their own, in the order a walk gives them
+fn (s Set<T>&) ToArray() mut Array<T>& {
+    return s.m.Keys().ToVec().ToArray()
+}
+
+# whether two Sets hold the same elements - "==" (E10a)
+fn (s Set<T>&) Eq(o Set<T>&) Bool { return s.Len() == o.Len() and s.IsSubset(o) }
+
+# the elements' hashes summed, so equal Sets hash alike whatever order they were added in
+fn (s Set<T>&) Hash() I64 {
+    h I64 = 0
+    for x in s.m.Keys() { h += x.Hash() }
+    return h
+}
+
+# how "$" renders a Set: its elements in braces, in the order a walk gives them - "Set{1, 2, 3}"
+fn (s Set<T>&) Str() String {
+    b := StringBuilder()
+    b.Push("Set{")
+    n I64 = 0
+    for x in s.m.Keys() {
+        if n > 0: b.Push(", ")
+        n++
+        r := $Array<T>(1, x)                               # "T[x]", x rendered as inside any value
+        open := try r.Find("[") catch default 0
+        b.Push(r[open + 1:r.Len() - 1])
+    }
+    b.PushChar('}')
+    return b.ToString()
+}
+
+if TestBuild {
+
+test "a Set holds each value once" {
+    s := Set<I64>()
+    assert s.Add(3) and s.Add(4) and not s.Add(3)
+    assert s.Len() == 2 and 3 in s and 5 not in s
+    assert s.Remove(3) and not s.Remove(3) and s.Len() == 1
+    t := Of(I64[1, 2, 2, 3])
+    assert t.Len() == 3
+    sum := 0
+    for x in t { sum += x }
+    assert sum == 6
+    t.Clear()
+    assert t.Len() == 0 and 1 not in t
+}
+
+test "Set algebra" {
+    a := Of(I64[1, 2, 3, 4])
+    b := Of(I64[3, 4, 5])
+    assert a.Union(b) == Of(I64[1, 2, 3, 4, 5])
+    assert a.Intersect(b) == Of(I64[3, 4])
+    assert a.Difference(b) == Of(I64[1, 2])
+    assert Of(I64[3]).IsSubset(b) and not a.IsSubset(b)
+    assert a.Hash() == Of(I64[4, 3, 2, 1]).Hash()
+    c := a.Clone()
+    c.Add(9)
+    assert 9 not in a and a.Len() == 4
+    d := a
+    d.Add(10)
+    assert 10 in a
+}
+
+test "a Set of text" {
+    w := Set<String&>()
+    line := "the cat and the hat"
+    for word in line.Split(" ") { w.Add(word) }
+    assert w.Len() == 4 and "cat" in w and "dog" not in w
+    assert $Of(String&["x"]) == "Set{\"x\"}" and $Of(I64[7]) == "Set{7}"
+}
+
+}

@@ -1,0 +1,30 @@
+# compile-time reflection (G32-G38): what "T.Kind" gives, and the descriptors "T.Fields", "T.Cases", "T.Params" and
+# "T.Results" hold. A descriptor is a value of no fields whose type says which member it describes - the compiler makes
+# them, with the member's type and its position as arguments, so a generic taking one ("fn decode<P>(p P) P.Type") is
+# compiled once per member, and everything it asks of one is a constant there
+
+# what kind of type a type is (G32): coarse - I32 and I64 are both Integer, the exact type is "match T"'s (G13). A
+# declared type has its base's kind
+type TypeKind enum {
+    Struct
+    Enum
+    Integer
+    Float
+    Bool
+    Array
+    Reference
+    Function
+}
+
+# a field (G34): of a struct, or of an enum's case C - a struct's fields are its one case's - at position I. Its
+# arguments after T are constants, which the compiler writes
+type FieldInfo<T, C, I> struct() { }
+
+# an enum's case C (G34), or a struct's one case
+type CaseInfo<T, C> struct() { }
+
+# a parameter at position I (G34): of a function type, or of a type's constructor
+type ParamInfo<T, I> struct() { }
+
+# a function type's result at position I (G34)
+type ResultInfo<T, I> struct() { }

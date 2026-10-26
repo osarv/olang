@@ -1,0 +1,9 @@
+import "std/io"
+type H struct() {
+    arr mut Array<I64>& = Array<I64>(1000, 1)
+}
+fn main() {
+    h := H()
+    for i in range 100000 { h.arr = I64[x * 2 for x in h.arr] }
+    io.Println($h.arr[0])!
+}

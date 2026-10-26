@@ -1,0 +1,116 @@
+# heap - Heap<T>: a priority queue, a binary heap ordered by a function given at construction - the least element by
+# that order at the top. Push and Pop take O(log n), Peek O(1): a scheduler's next event, Dijkstra's next node, the k
+# largest of a stream. "heap.Heap<I64>(fn(a, b) { return a < b })" gives the smallest first; reverse the comparison for
+# the largest. Imported with `import "std/heap"`; the type is heap.Heap<T>.
+#
+# Equal elements come out in no order to rely on. A Heap is a HANDLE, as a Vec is (it holds one): a copy of a Heap value
+# is a second name for the same heap.
+
+# what a Heap's operations fail with: a Peek or Pop of an empty heap
+type Error error {
+    EMPTY
+}
+
+type Heap<T> struct(less fn(a T, b T) Bool) {
+    s mut state<T>& = state<T>(less)
+}
+
+type state<T> struct(less fn(a T, b T) Bool) {
+    less
+    items Vec<T> = Vec<T>()
+}
+
+fn (h Heap<T>&) Len() I64 { return h.s.items.Len() }
+
+# x added
+fn (h mut Heap<T>&) Push(x T) {
+    s := h.s
+    v := s.items
+    v.Push(x)
+    i := v.Len() - 1
+    for i > 0 {
+        up := (i - 1) / 2
+        if not s.less(x, v[up]) { break }
+        v[i] = v[up]
+        i = up
+    }
+    v[i] = x
+}
+
+# the top element - the least by the order - left in the heap
+fn (h Heap<T>&) Peek() T ? Error.EMPTY {
+    if h.s.items.Len() == 0 { error Error.EMPTY }
+    return h.s.items[0]
+}
+
+# the top element, taken off
+fn (h mut Heap<T>&) Pop() T ? Error.EMPTY {
+    s := h.s
+    v := s.items
+    if v.Len() == 0 { error Error.EMPTY }
+    top := v[0]
+    last := try v.Pop() catch VecError { unreachable }
+    n := v.Len()
+    if n == 0 { return top }
+    i I64 = 0
+    for {
+        c := 2 * i + 1
+        if c >= n { break }
+        if c + 1 < n and s.less(v[c + 1], v[c]): c++
+        if not s.less(v[c], last) { break }
+        v[i] = v[c]
+        i = c
+    }
+    v[i] = last
+    return top
+}
+
+# removes every element
+fn (h mut Heap<T>&) Clear() { h.s.items.Clear() }
+
+# every element taken off in order, least first, into an array of its own - the heap left empty
+fn (h mut Heap<T>&) Drain() mut Array<T>& {
+    out := Vec<T>()
+    for h.Len() > 0 { out.Push(try h.Pop() catch Error { unreachable }) }
+    return out.ToArray()
+}
+
+if TestBuild {
+
+test "a Heap gives its elements least first" {
+    h := Heap<I64>(fn(a I64, b I64) Bool { return a < b })
+    for x in I64[5, 1, 9, 3, 7, 3, 8, 2] { h.Push(x) }
+    assert h.Len() == 8 and h.Peek()! == 1
+    assert h.Drain() == I64[1, 2, 3, 3, 5, 7, 8, 9]
+    assert h.Len() == 0
+    assert (try h.Pop() catch Error.EMPTY default -1) == -1
+}
+
+type job struct(prio I64, name String&) {
+    prio, name
+}
+
+test "a Heap ordered the other way gives the largest first" {
+    h := Heap<job>(fn(a job, b job) Bool { return a.prio > b.prio })
+    h.Push(job(2, "low"))
+    h.Push(job(9, "urgent"))
+    h.Push(job(5, "mid"))
+    assert h.Pop()!.name == "urgent" and h.Pop()!.name == "mid" and h.Peek()!.name == "low"
+}
+
+test "a Heap sorts many numbers" {
+    h := Heap<I64>(fn(a I64, b I64) Bool { return a < b })
+    x I64 = 12345
+    for i in range 2000 {
+        x = (x * 1103515245 + 12345) % 2147483648
+        h.Push(x % 1000)
+    }
+    prev I64 = -1
+    for h.Len() > 0 {
+        y := h.Pop()!
+        assert y >= prev
+        prev = y
+    }
+}
+
+}

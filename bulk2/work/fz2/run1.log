@@ -1,0 +1,86 @@
+seed 1 case -1: does not compile at -d (step 1)
+seed 7 case -1: does not compile at -d (step 1)
+seed 10 case 25: global baked while compiling is not the -d run time's value
+seed 10 case 25: assert decided false while compiling: the evaluator disagrees with the -d run time
+seed 11 case -1: does not compile at -d (step 1)
+seed 10 case 25: -i disagrees with the -d run
+seed 13 case -1: does not compile at -d (step 1)
+seed 15 case -1: does not compile at -d (step 1)
+seed 16 case 8: global baked while compiling is not the -d run time's value
+seed 16 case 15: global baked while compiling is not the -d run time's value
+seed 16 case 17: global baked while compiling is not the -d run time's value
+seed 16 case 8: assert decided false while compiling: the evaluator disagrees with the -d run time
+seed 16 case 15: assert decided false while compiling: the evaluator disagrees with the -d run time
+seed 16 case 17: assert decided false while compiling: the evaluator disagrees with the -d run time
+seed 16 case 22: -b disagrees with the -d run
+seed 16 case 23: -b disagrees with the -d run
+seed 16 case 24: -b disagrees with the -d run
+seed 16 case 25: -b disagrees with the -d run
+seed 16 case 26: -b disagrees with the -d run
+seed 16 case 27: -b disagrees with the -d run
+seed 16 case 28: -b disagrees with the -d run
+seed 16 case 29: -b disagrees with the -d run
+seed 16 case -1: -b run failed
+seed 16 case 0: -i disagrees with the -d run
+seed 16 case 1: -i disagrees with the -d run
+seed 16 case 2: -i disagrees with the -d run
+seed 16 case 3: -i disagrees with the -d run
+seed 16 case 4: -i disagrees with the -d run
+seed 16 case 5: -i disagrees with the -d run
+seed 16 case 6: -i disagrees with the -d run
+seed 16 case 7: -i disagrees with the -d run
+seed 16 case 8: -i disagrees with the -d run
+seed 16 case 9: -i disagrees with the -d run
+seed 16 case 10: -i disagrees with the -d run
+seed 16 case 11: -i disagrees with the -d run
+seed 16 case 12: -i disagrees with the -d run
+seed 16 case 13: -i disagrees with the -d run
+seed 16 case 14: -i disagrees with the -d run
+seed 16 case 15: -i disagrees with the -d run
+seed 16 case 16: -i disagrees with the -d run
+seed 16 case 17: -i disagrees with the -d run
+seed 16 case 18: -i disagrees with the -d run
+seed 16 case 19: -i disagrees with the -d run
+seed 16 case 20: -i disagrees with the -d run
+seed 16 case 21: -i disagrees with the -d run
+seed 16 case 22: -i disagrees with the -d run
+seed 16 case 23: -i disagrees with the -d run
+seed 16 case 24: -i disagrees with the -d run
+seed 16 case 25: -i disagrees with the -d run
+seed 16 case 26: -i disagrees with the -d run
+seed 16 case 27: -i disagrees with the -d run
+seed 16 case 28: -i disagrees with the -d run
+seed 16 case 29: -i disagrees with the -d run
+seed 16 case -1: -i run failed
+seed 17 case 0: -i disagrees with the -d run
+seed 17 case 1: -i disagrees with the -d run
+seed 17 case 2: -i disagrees with the -d run
+seed 17 case 3: -i disagrees with the -d run
+seed 17 case 4: -i disagrees with the -d run
+seed 17 case 5: -i disagrees with the -d run
+seed 17 case 6: -i disagrees with the -d run
+seed 17 case 7: -i disagrees with the -d run
+seed 17 case 8: -i disagrees with the -d run
+seed 17 case 9: -i disagrees with the -d run
+seed 17 case 10: -i disagrees with the -d run
+seed 17 case 11: -i disagrees with the -d run
+seed 17 case 12: -i disagrees with the -d run
+seed 17 case 13: -i disagrees with the -d run
+seed 17 case 14: -i disagrees with the -d run
+seed 17 case 15: -i disagrees with the -d run
+seed 17 case 16: -i disagrees with the -d run
+seed 17 case 17: -i disagrees with the -d run
+seed 17 case 18: -i disagrees with the -d run
+seed 17 case 19: -i disagrees with the -d run
+seed 17 case 20: -i disagrees with the -d run
+seed 17 case 21: -i disagrees with the -d run
+seed 17 case 22: -i disagrees with the -d run
+seed 17 case 23: -i disagrees with the -d run
+seed 17 case 24: -i disagrees with the -d run
+seed 17 case 25: -i disagrees with the -d run
+seed 17 case 26: -i disagrees with the -d run
+seed 17 case 27: -i disagrees with the -d run
+seed 17 case 28: -i disagrees with the -d run
+seed 17 case 29: -i disagrees with the -d run
+seed 17 case -1: -i run failed
+fuzz: 20 programs, 450 cases (450 globals baked while compiling), 85 findings (in /home/user/review/bulk2/work/fz2/build/fz/runLXvS8h)

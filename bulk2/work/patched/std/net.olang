@@ -1,0 +1,713 @@
+# net - TCP and UDP sockets, blocking, over the C library's socket calls through "extern fn" (§11) as io and os are.
+# A server listens, accepts each connection and serves it - one task per connection is the shape (spawn's threads are
+# 1:1, P1e); a client dials. IPv4 and IPv6 alike: an IP is either, an Addr is an IP and a port, written as
+# "127.0.0.1:8080" or "[::1]:8080". Every failure is a net.Error naming why. There is no async I/O. A name is resolved by
+# Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo is read through extern types,
+# X10, and a plain-data struct, X11); ParseIP and ParseAddr read only numbers (and "localhost").
+#
+# A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), or sooner at
+# x.Destroy() (C9b); each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
+# Imported with `import "std/net"`.
+
+import "time"
+
+extern fn socket(domain I32, kind I32, protocol I32) I32
+extern fn bind(fd I32, addr Array<U8>, len U32) I32
+extern fn listen(fd I32, backlog I32) I32
+extern fn accept4(fd I32, addr Array<U8>, len Array<U32>, flags I32) I32
+extern fn connect(fd I32, addr Array<U8>, len U32) I32
+extern fn send(fd I32, buf Array<U8>, len I64, flags I32) I64
+extern fn recv(fd I32, buf Array<U8>, len I64, flags I32) I64
+extern fn sendto(fd I32, buf Array<U8>, len I64, flags I32, addr Array<U8>, alen U32) I64
+extern fn recvfrom(fd I32, buf Array<U8>, len I64, flags I32, addr Array<U8>, alen Array<U32>) I64
+extern fn getsockname(fd I32, addr Array<U8>, len Array<U32>) I32
+extern fn getpeername(fd I32, addr Array<U8>, len Array<U32>) I32
+extern fn setsockopt(fd I32, level I32, name I32, value Array<U8>, len U32) I32
+extern fn shutdown(fd I32, how I32) I32
+extern fn close(fd I32) I32
+extern fn __olang_err() I32
+
+afInet I32 = 2
+afInet6 I32 = 10
+sockStream I32 = 1
+sockDgram I32 = 2
+sockCloexec I32 = 0x80000
+solSocket I32 = 1
+soReuseaddr I32 = 2
+soRcvtimeo I32 = 20
+soSndtimeo I32 = 21
+ipprotoIpv6 I32 = 41
+ipv6V6only I32 = 26
+msgNosignal I32 = 0x4000
+shutWr I32 = 1
+
+# why a network call failed. REFUSED: nothing listens at the address dialed; IN_USE: the address to listen at is taken;
+# TIMEOUT: a timeout set on the socket passed, or the connection attempt timed out; RESET: the other side reset or
+# closed the connection while this side was writing; UNREACHABLE: no route to the network or host; ADDRESS: text that
+# is no address, a port outside 0-65535, or an address this machine does not have (an IPv6 one where IPv6 is off);
+# UNKNOWN_HOST: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
+# CLOSED: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
+# did; DENIED: not permitted (a port below 1024, say); FAILED: any other reason
+type Error error {
+    REFUSED
+    IN_USE
+    TIMEOUT
+    RESET
+    UNREACHABLE
+    ADDRESS
+    UNKNOWN_HOST
+    CLOSED
+    DENIED
+    FAILED
+}
+
+# fails with the Error naming "why" - what __olang_err() said (X6's classes) right after a call reported failure
+fn raise(why I32) ? Error {
+    match why {
+        case 3 { error Error.DENIED }
+        case 7 { error Error.REFUSED }
+        case 8 { error Error.IN_USE }
+        case 9 { error Error.TIMEOUT }
+        case 10 { error Error.RESET }
+        case 11 { error Error.UNREACHABLE }
+        case 12 { error Error.ADDRESS }
+        case _ { error Error.FAILED }
+    }
+}
+
+# whether a call that failed was interrupted by a signal, and is to be made again
+fn interrupted() Bool { return __olang_err() == 13 }
+
+# ---- addresses ----
+
+# an IPv4 or an IPv6 address. An IPv4 one is held in its first four bytes. "==" compares the family and the bytes
+type IP struct(v6 Bool = false) {
+    V6 Bool = v6
+    bytes := Array<U8>(16)
+}
+
+# a.b.c.d
+fn IPv4(a U8, b U8, c U8, d U8) IP {
+    ip := IP()
+    ip.bytes[0] = a
+    ip.bytes[1] = b
+    ip.bytes[2] = c
+    ip.bytes[3] = d
+    return ip
+}
+
+# the IPv6 address of sixteen bytes, in order - failing with ADDRESS for another number of them
+fn IPv6(b Array<U8>&) IP ? Error.ADDRESS {
+    if b.Len() != 16 { error Error.ADDRESS }
+    ip := IP(true)
+    for i in range 16 { ip.bytes[i] = b[i] }
+    return ip
+}
+
+# 127.0.0.1, ::1, and the address that means every one of this machine's (0.0.0.0, ::), for listening on all of them
+fn Loopback4() IP { return IPv4(127, 0, 0, 1) }
+fn Loopback6() IP {
+    ip := IP(true)
+    ip.bytes[15] = 1
+    return ip
+}
+fn Any4() IP { return IP() }
+fn Any6() IP { return IP(true) }
+
+# the address the bytes are: 4 an IPv4 one, 16 an IPv6 one
+fn (ip IP&) Bytes() Array<U8> {
+    out := Array<U8>(16 if ip.V6 else 4)
+    for i in range out.Len() { out[i] = ip.bytes[i] }
+    return out
+}
+
+# whether it is a loopback address - 127.0.0.0/8 or ::1
+fn (ip IP&) IsLoopback() Bool {
+    if not ip.V6 { return ip.bytes[0] == 127 }
+    for i in range 15 {
+        if ip.bytes[i] != 0: return false
+    }
+    return ip.bytes[15] == 1
+}
+
+# a decimal number of at most "most" from at, and where it ends - failing with ADDRESS where there is none
+fn decimalAt(t String&, at I64, most I64) I64, I64 ? Error.ADDRESS {
+    v I64 = 0
+    i := at
+    for i < t.Len() and t[i].IsDigit() and i - at < 5 {
+        v = v * 10 + I64(t[i] - '0')
+        i++
+    }
+    if i == at or v > most or (i - at > 1 and t[at] == '0') { error Error.ADDRESS }
+    return v, i
+}
+
+fn parse4(t String&) IP ? Error.ADDRESS {
+    ip := IP()
+    at I64 = 0
+    for k in range 4 {
+        if k > 0 {
+            if at >= t.Len() or t[at] != '.' { error Error.ADDRESS }
+            at++
+        }
+        v, next := try decimalAt(t, at, 255)
+        ip.bytes[k] = U8(v)
+        at = next
+    }
+    if at != t.Len() { error Error.ADDRESS }
+    return ip
+}
+
+fn hexDigit(c Char) I64 {
+    if c.IsDigit() { return I64(c - '0') }
+    if c >= 'a' and c <= 'f' { return I64(c - 'a') + 10 }
+    if c >= 'A' and c <= 'F' { return I64(c - 'A') + 10 }
+    return -1
+}
+
+# RFC 4291's text: eight groups of up to four hex digits, "::" standing for one run of zero groups, the last two groups
+# optionally written as an IPv4 address ("::ffff:1.2.3.4")
+fn parse6(t String&) IP ? Error.ADDRESS {
+    groups := Array<I64>(8)
+    n I64 = 0
+    gap I64 = -1                                  # where "::" stands, in groups
+    at I64 = 0
+    if t.StartsWith("::") {
+        gap = 0
+        at = 2
+    }
+    for at < t.Len() {
+        if n == 8 { error Error.ADDRESS }
+        # an IPv4 tail
+        dot := try t[at:].FindByte('.') catch default -1
+        colon := try t[at:].FindByte(':') catch default -1
+        if dot >= 0 and (colon < 0 or dot < colon) {
+            if n > 6 { error Error.ADDRESS }
+            v4 := try parse4(t[at:])
+            groups[n] = I64(v4.bytes[0]) << 8 | I64(v4.bytes[1])
+            groups[n + 1] = I64(v4.bytes[2]) << 8 | I64(v4.bytes[3])
+            n += 2
+            at = t.Len()
+            break
+        }
+        v I64 = 0
+        start := at
+        for at < t.Len() and hexDigit(t[at]) >= 0 and at - start < 4 {
+            v = v * 16 + hexDigit(t[at])
+            at++
+        }
+        if at == start { error Error.ADDRESS }
+        groups[n] = v
+        n++
+        if at == t.Len() { break }
+        if t[at] != ':' { error Error.ADDRESS }
+        at++
+        if at < t.Len() and t[at] == ':' {
+            if gap >= 0 { error Error.ADDRESS }
+            gap = n
+            at++
+        } else if at == t.Len() {
+            error Error.ADDRESS                     # a trailing single ':'
+        }
+    }
+    if gap < 0 and n != 8 or gap >= 0 and n == 8 { error Error.ADDRESS }
+    ip := IP(true)
+    zeros := 8 - n
+    k I64 = 0
+    for i in range n {
+        if i == gap: k += zeros
+        ip.bytes[2 * k] = U8(groups[i] >> 8)
+        ip.bytes[2 * k + 1] = U8(groups[i] & 0xFF)
+        k++
+    }
+    return ip
+}
+
+# the address text writes: "192.168.0.1", "::1", "fe80::1", "localhost" (as 127.0.0.1) - failing with ADDRESS for
+# anything else (a host name is not resolved)
+fn ParseIP(t String&) IP ? Error.ADDRESS {
+    if t == "localhost" { return Loopback4() }
+    found := true
+    try t.FindByte(':') catch { found = false }
+    if found { return try parse6(t) }
+    return try parse4(t)
+}
+
+# how "$" renders an IP: dotted decimal, or RFC 5952's IPv6 text - lowercase, leading zeros dropped, the longest run of
+# two or more zero groups (the first of equal ones) written "::"
+fn (ip IP&) Str() String {
+    if not ip.V6 { return $ip.bytes[0] "." $ip.bytes[1] "." $ip.bytes[2] "." $ip.bytes[3] }
+    g := Array<I64>(8)
+    for i in range 8 { g[i] = I64(ip.bytes[2 * i]) << 8 | I64(ip.bytes[2 * i + 1]) }
+    best I64 = -1
+    bestLen I64 = 1
+    i I64 = 0
+    for i < 8 {
+        if g[i] != 0 {
+            i++
+            continue
+        }
+        j := i
+        for j < 8 and g[j] == 0 { j++ }
+        if j - i > bestLen {
+            best = i
+            bestLen = j - i
+        }
+        i = j
+    }
+    b := StringBuilder()
+    for k in range 8 {
+        if k == best {
+            b.Push("::")
+            continue
+        }
+        if best >= 0 and k > best and k < best + bestLen { continue }
+        if k > 0 and k != best + bestLen: b.PushChar(':')
+        b.Push(g[k].Format(16))
+    }
+    return b.ToString()
+}
+
+# an IP and a port: where to listen, dial or send
+type Addr struct(host IP, port U16) {
+    Host IP = host
+    Port U16 = port
+}
+
+# "host:port" - an IPv6 host in brackets, "[::1]:8080" - read into an Addr, failing with ADDRESS for anything else
+fn ParseAddr(t String&) Addr ? Error.ADDRESS {
+    if t.Len() > 0 and t[0] == '[' {
+        shut := try t.FindByte(']') catch { error Error.ADDRESS }
+        if shut + 1 >= t.Len() or t[shut + 1] != ':' { error Error.ADDRESS }
+        host := try parse6(t[1:shut])
+        port, end := try decimalAt(t, shut + 2, 65535)
+        if end != t.Len() { error Error.ADDRESS }
+        return Addr(host, U16(port))
+    }
+    colon := try t.FindLast(":") catch { error Error.ADDRESS }
+    host := try ParseIP(t[:colon])
+    if host.V6 { error Error.ADDRESS }              # an IPv6 host is written in brackets
+    port, end := try decimalAt(t, colon + 1, 65535)
+    if end != t.Len() { error Error.ADDRESS }
+    return Addr(host, U16(port))
+}
+
+fn (a Addr&) Str() String {
+    if a.Host.V6 { return "[" $a.Host "]:" $a.Port }
+    return $a.Host ":" $a.Port
+}
+
+# a C sockaddr_in or sockaddr_in6 for a, as the bytes the kernel reads: the family in this machine's order, the port
+# in the network's (big-endian), then the address
+fn sockaddr(a Addr&) Array<U8> {
+    sa := Array<U8>(28 if a.Host.V6 else 16)
+    family := afInet6 if a.Host.V6 else afInet
+    sa[0] = U8(family & 0xFF)
+    sa[1] = U8(family >> 8)
+    sa[2] = U8(a.Port >> 8)
+    sa[3] = U8(a.Port & 0xFF)
+    if a.Host.V6 {
+        for i in range 16 { sa[8 + i] = a.Host.bytes[i] }
+    } else {
+        for i in range 4 { sa[4 + i] = a.Host.bytes[i] }
+    }
+    return sa
+}
+
+# the Addr a sockaddr the kernel wrote names
+fn fromSockaddr(sa Array<U8>&) Addr {
+    family := I32(sa[0]) | I32(sa[1]) << 8
+    port := U16(sa[2]) << 8 | U16(sa[3])
+    if family == afInet6 {
+        ip := IP(true)
+        for i in range 16 { ip.bytes[i] = sa[8 + i] }
+        return Addr(ip, port)
+    }
+    return Addr(IPv4(sa[4], sa[5], sa[6], sa[7]), port)
+}
+
+# a new socket of the kind for a's family - an IPv6 one taking IPv4 connections too where a is IPv6's "any" address
+fn open(a Addr&, kind I32) I32 ? Error {
+    fd := socket(afInet6 if a.Host.V6 else afInet, kind | sockCloexec, 0)
+    if fd < 0 { try raise(__olang_err()) }
+    return fd
+}
+
+fn setInt(fd I32, level I32, name I32, v I32) {
+    b := Array<U8>(4)
+    b[0] = U8(v & 0xFF)
+    b[1] = U8((v >> 8) & 0xFF)
+    b[2] = U8((v >> 16) & 0xFF)
+    b[3] = U8((v >> 24) & 0xFF)
+    setsockopt(fd, level, name, b, 4)
+}
+
+# what getsockname or getpeername says of fd
+fn nameOf(fd I32, peer Bool) Addr ? Error {
+    sa := Array<U8>(28)
+    len := U32[28]
+    rc := getpeername(fd, sa, len) if peer else getsockname(fd, sa, len)
+    if rc < 0 { try raise(__olang_err()) }
+    return fromSockaddr(sa)
+}
+
+# ---- names ----
+
+extern type aiNode
+extern type cSockaddr
+
+# C's struct addrinfo, as glibc lays it out on x86-64 and AArch64: what getaddrinfo is asked for (hints) and one entry of
+# what it answers
+type aiFields struct() {
+    flags I32 = 0
+    family I32 = 0
+    socktype I32 = 0
+    protocol I32 = 0
+    addrlen U32 = 0
+    addr cSockaddr?& = null
+    canonname cSockaddr?& = null
+    next aiNode?& = null
+}
+
+extern fn getaddrinfo(node Array<U8>, service Array<U8>, hints aiFields&, res mut Array<aiNode?&>&) I32
+extern fn freeaddrinfo(res aiNode&)
+extern fn memcpy(dst mut aiFields&, src aiNode&, n I64) aiNode?&
+extern fn memmove(dst mut Array<U8>&, src cSockaddr&, n I64) cSockaddr?&
+
+# getaddrinfo's answers that say the name has no address: EAI_NONAME, EAI_NODATA, EAI_FAIL, EAI_ADDRFAMILY (glibc's
+# numbers); EAI_AGAIN is the name server not answering
+fn lookupFailed(rc I32) ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    match rc {
+        case -2, -5, -4, -9 { error Error.UNKNOWN_HOST }
+        case -3 { error Error.UNREACHABLE }
+        case _ { error Error.FAILED }
+    }
+}
+
+# every address a name has - the C library's answer (its hosts file, then DNS), in its order, each once. A name that is
+# an address already is that address, asked of no one; an empty name or one with no address fails with UNKNOWN_HOST
+fn Lookup(host String&) Array<IP> ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    if host == "" { error Error.UNKNOWN_HOST }
+    if host != "localhost" {
+        numeric := true
+        ip := try ParseIP(host) catch { numeric = false } default IP()
+        if numeric { return IP[ip] }
+    }
+    hints := aiFields()
+    hints.socktype = sockStream
+    out := Array<aiNode?&>(1)
+    rc := getaddrinfo(host.ToC(), "0".ToC(), hints, out)
+    if rc != 0 { try lookupFailed(rc) }
+    head := out[0]
+    ips := Vec<IP>()
+    p := head
+    for p is not null {
+        f := aiFields()
+        memcpy(f, p, 48)
+        sa := Array<U8>(28)
+        a := f.addr
+        if a is not null and (f.family == afInet or f.family == afInet6) {
+            memmove(sa, a, I64(f.addrlen.Min(28)))
+            ip := fromSockaddr(sa).Host
+            if ip not in ips { ips.Push(ip) }
+        }
+        p = f.next
+    }
+    if head is not null { freeaddrinfo(head) }
+    if ips.Len() == 0 { error Error.UNKNOWN_HOST }
+    return ips.ToArray()
+}
+
+# "host:port" - a name or an address, an IPv6 one in brackets - read into the Addr of the host's first address, failing
+# with ADDRESS for text of another shape and as Lookup does for a name with no address
+fn Resolve(t String&) Addr ? Error.ADDRESS, Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    if t.Len() > 0 and t[0] == '[' { return try ParseAddr(t) }
+    colon := try t.FindLast(":") catch { error Error.ADDRESS }
+    port, end := try decimalAt(t, colon + 1, 65535)
+    if end != t.Len() { error Error.ADDRESS }
+    ips := try Lookup(t[:colon])
+    return Addr(ips[0], U16(port))
+}
+
+# ---- TCP ----
+
+# a connection, either side's: read and written as a stream of bytes until it is destroyed (its scope's end, or
+# Destroy())
+type Conn struct(fd I32) {
+    fd
+} destruct {
+    close(fd)
+}
+
+# a listening socket: Accept gives each connection made to it
+type Listener struct(fd I32) {
+    fd
+} destruct {
+    close(fd)
+}
+
+# a socket listening at a, which may name port 0 for one the system chooses (Addr() says which), and the "any"
+# address to listen on every one this machine has. The address may be listened at again at once after a previous
+# listener closed (SO_REUSEADDR); IPv6's "any" takes IPv4 connections too
+fn Listen(a Addr&, backlog I32 = 128) Listener& ? Error {
+    fd := try open(a, sockStream)
+    setInt(fd, solSocket, soReuseaddr, 1)
+    if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
+    sa := sockaddr(a)
+    if bind(fd, sa, U32(sa.Len())) < 0 or listen(fd, backlog) < 0 {
+        why := __olang_err()
+        close(fd)
+        try raise(why)
+    }
+    return Listener(fd)
+}
+
+# the address the listener is at - with the port the system chose, where Listen was given 0
+fn (l Listener&) Addr() Addr ? Error { return try nameOf(l.fd, false) }
+
+# waits for a connection and gives it
+fn (l mut Listener&) Accept() Conn& ? Error {
+    for {
+        sa := Array<U8>(28)
+        len := U32[28]
+        fd := accept4(l.fd, sa, len, sockCloexec)
+        if fd >= 0 { return Conn(fd) }
+        if not interrupted() { try raise(__olang_err()) }
+    }
+    unreachable
+}
+
+# a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, TIMEOUT when the system gives up
+fn Dial(a Addr&) Conn& ? Error {
+    fd := try open(a, sockStream)
+    sa := sockaddr(a)
+    if connect(fd, sa, U32(sa.Len())) < 0 {
+        why := __olang_err()
+        close(fd)
+        try raise(why)
+    }
+    return Conn(fd)
+}
+
+# what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of buf -
+# waiting until something does. Fails with CLOSED once the other side has closed and everything it sent has been read,
+# TIMEOUT when a timeout set by SetTimeout passes first, RESET when the connection was reset
+fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
+    if buf.Len() == 0 { return buf[:0] }
+    for {
+        n := recv(c.fd, buf, buf.Len(), 0)
+        if n > 0 { return buf[:n] }
+        if n == 0 { error Error.CLOSED }
+        if not interrupted() { try raise(__olang_err()) }
+    }
+    unreachable
+}
+
+# all of data written, however many sends it takes - failing with RESET when the other side has gone (never a signal:
+# the send asks for none, MSG_NOSIGNAL), TIMEOUT when a timeout set by SetTimeout passes
+fn (c Conn&) Write(data Array<U8>&) ? Error {
+    sent I64 = 0
+    for sent < data.Len() {
+        n := send(c.fd, data[sent:], data.Len() - sent, msgNosignal)
+        if n >= 0 {
+            sent += n
+        } else if not interrupted() {
+            try raise(__olang_err())
+        }
+    }
+}
+
+# says no more will be written: the other side reads to the end (CLOSED), and may still write back
+fn (c Conn&) CloseWrite() { shutdown(c.fd, shutWr) }
+
+# a Read or Write waiting longer than d fails with TIMEOUT from now on; 0 waits for ever (the default)
+fn (c Conn&) SetTimeout(d time.Duration) {
+    tv := Array<U8>(16)
+    sec := I64(d) / 1000000000
+    usec := I64(d) % 1000000000 / 1000
+    for i in range 8 {
+        tv[i] = U8((sec >> (8 * i)) & 0xFF)
+        tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
+    }
+    setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
+    setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
+}
+
+# this side's address, and the other side's
+fn (c Conn&) Local() Addr ? Error { return try nameOf(c.fd, false) }
+fn (c Conn&) Remote() Addr ? Error { return try nameOf(c.fd, true) }
+
+# ---- UDP ----
+
+# a UDP socket: datagrams sent to and received from any address, each whole or not at all
+type UDP struct(fd I32) {
+    fd
+} destruct {
+    close(fd)
+}
+
+# a UDP socket bound to a (port 0 for one the system chooses, Local() saying which)
+fn ListenUDP(a Addr&) UDP& ? Error {
+    fd := try open(a, sockDgram)
+    if a.Host.V6: setInt(fd, ipprotoIpv6, ipv6V6only, 0)
+    sa := sockaddr(a)
+    if bind(fd, sa, U32(sa.Len())) < 0 {
+        why := __olang_err()
+        close(fd)
+        try raise(why)
+    }
+    return UDP(fd)
+}
+
+# data sent to a as one datagram
+fn (u UDP&) SendTo(data Array<U8>&, a Addr&) ? Error {
+    sa := sockaddr(a)
+    for sendto(u.fd, data, data.Len(), msgNosignal, sa, U32(sa.Len())) < 0 {
+        if not interrupted() { try raise(__olang_err()) }
+    }
+}
+
+# the next datagram, read into the front of buf and handed back as that front, with the address it came from; one
+# longer than buf is cut to it
+fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&buf, Addr ? Error {
+    for {
+        sa := Array<U8>(28)
+        len := U32[28]
+        n := recvfrom(u.fd, buf, buf.Len(), 0, sa, len)
+        if n >= 0 { return buf[:n], fromSockaddr(sa) }
+        if not interrupted() { try raise(__olang_err()) }
+    }
+    unreachable
+}
+
+# a RecvFrom waiting longer than d fails with TIMEOUT from now on; 0 waits for ever
+fn (u UDP&) SetTimeout(d time.Duration) {
+    tv := Array<U8>(16)
+    sec := I64(d) / 1000000000
+    usec := I64(d) % 1000000000 / 1000
+    for i in range 8 {
+        tv[i] = U8((sec >> (8 * i)) & 0xFF)
+        tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
+    }
+    setsockopt(u.fd, solSocket, soRcvtimeo, tv, 16)
+}
+
+fn (u UDP&) Local() Addr ? Error { return try nameOf(u.fd, false) }
+
+
+# ---- the tests ----
+
+if TestBuild {
+
+test "addresses are read and written as text" {
+    assert $ParseIP("192.168.0.1")! == "192.168.0.1" and $ParseIP("localhost")! == "127.0.0.1"
+    assert $ParseIP("::1")! == "::1" and $ParseIP("::")! == "::" and $ParseIP("FE80:0:0:0:0:0:0:1")! == "fe80::1"
+    assert $ParseIP("2001:db8:0:0:1:0:0:1")! == "2001:db8::1:0:0:1" and $ParseIP("2001:db8:0:1:1:1:1:1")! == "2001:db8:0:1:1:1:1:1"
+    assert $ParseIP("::ffff:1.2.3.4")! == "::ffff:102:304" and ParseIP("::1")!.IsLoopback()
+    assert ParseIP("10.0.0.1")! == IPv4(10, 0, 0, 1) and ParseIP("::1")! == Loopback6()
+    for bad in String&["", "1.2.3", "1.2.3.4.5", "256.1.1.1", "01.2.3.4", "1::2::3", ":1", "1:", "1:2:3:4:5:6:7:8:9", "g::1"
+        "example.com"] {
+        try ParseIP(bad) catch Error.ADDRESS { continue }
+        unreachable
+    }
+    a := ParseAddr("127.0.0.1:8080")!
+    assert a.Port == 8080 and $a == "127.0.0.1:8080" and $ParseAddr("[::1]:443")! == "[::1]:443"
+    for bad in String&["127.0.0.1", "127.0.0.1:65536", "::1:80", "[::1]80", "1.2.3.4:x"] {
+        try ParseAddr(bad) catch Error.ADDRESS { continue }
+        unreachable
+    }
+}
+
+test "names are resolved through the C library, numbers read as they are" {
+    for ip in Lookup("localhost")! { assert ip.IsLoopback() }
+    assert Lookup("10.1.2.3")! == IP[IPv4(10, 1, 2, 3)] and Lookup("::1")! == IP[Loopback6()]
+    a := Resolve("localhost:8080")!
+    assert a.Port == 8080 and a.Host.IsLoopback() and $Resolve("[::1]:443")! == "[::1]:443"
+    try Lookup("") catch Error.UNKNOWN_HOST { } catch { unreachable "an empty name" }
+    # a name the standard reserves never to exist (RFC 6761) - or a machine with no name server, which cannot say
+    try Lookup("no-such-host.invalid") catch Error.UNKNOWN_HOST, Error.UNREACHABLE { } catch { unreachable "resolved" }
+    for bad in String&["localhost", "localhost:", "localhost:65536", "[::1]80"] {
+        try Resolve(bad) catch Error.ADDRESS { continue } catch { }
+        unreachable $bad
+    }
+}
+
+# the server half of the loopback test: accepts one connection, echoes what it reads, upper-cased, until the client
+# closes its side
+fn echoOnce(l mut Listener&, served mut counted&) ? Error {
+    c := l.Accept()!
+    buf := Array<U8>(64)
+    for {
+        got := try c.Read(buf) catch Error.CLOSED { break }
+        out := String(Array<Char>(got.Len()))
+        for i in range got.Len() { out[i] = Char(got[i]).ToUpper() }
+        c.Write(out)!
+        served.n += got.Len()
+    }
+    c.Destroy()
+}
+
+type counted struct() {
+    n I64 = 0
+}
+
+test "a TCP connection over loopback carries bytes both ways" {
+    for host in String&["127.0.0.1", "::1"] {
+        l := try Listen(Addr(ParseIP(host)!, 0)) catch Error.ADDRESS { continue }     # a machine without IPv6
+        at := l.Addr()!
+        assert at.Port != 0
+        served mut counted& = counted()
+        reply mut counted& = counted()
+        join {
+            spawn echoOnce(l, served)!
+            c := Dial(at)!
+            assert c.Remote()!.Port == at.Port
+            c.Write("hello, ")!
+            c.Write("net")!
+            c.CloseWrite()
+            buf := Array<U8>(64)
+            text := StringBuilder()
+            for {
+                got := try c.Read(buf) catch Error.CLOSED { break }
+                text.Push(String(got))
+            }
+            reply.n = text.Len()
+            assert text.ToString() == "HELLO, NET"
+        }
+        assert served.n == 10 and reply.n == 10
+    }
+}
+
+test "dialing where nothing listens is refused, and a taken address is in use" {
+    l := Listen(Addr(Loopback4(), 0))!
+    at := l.Addr()!
+    try Listen(at) catch Error.IN_USE { } catch Error { unreachable }
+    l.Destroy()
+    try Dial(at) catch Error.REFUSED { return }
+    unreachable
+}
+
+test "a read times out" {
+    l := Listen(Addr(Loopback4(), 0))!
+    c := Dial(l.Addr()!)!
+    c.SetTimeout(time.Millis(50))
+    start := time.Now()
+    try c.Read(Array<U8>(8)) catch Error.TIMEOUT { } catch Error { unreachable }
+    assert time.Elapsed(start) >= time.Millis(40)
+}
+
+test "UDP datagrams travel over loopback" {
+    a := ListenUDP(Addr(Loopback4(), 0))!
+    b := ListenUDP(Addr(Loopback4(), 0))!
+    b.SetTimeout(time.Seconds(5))
+    a.SendTo("ping", b.Local()!)!
+    buf := Array<U8>(16)
+    got, from := b.RecvFrom(buf)!
+    assert String(got) == "ping" and from.Port == a.Local()!.Port
+    b.SendTo("pong", from)!
+    a.SetTimeout(time.Seconds(5))
+    back, _ := a.RecvFrom(buf)!
+    assert String(back) == "pong"
+}
+
+}

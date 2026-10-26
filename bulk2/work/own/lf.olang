@@ -1,0 +1,14 @@
+import "std/io"
+type H struct() {
+    arr mut Array<I64>& = Array<I64>(1000, 1)
+}
+fn dbl(a Array<I64>&) Array<I64> {
+    b := Array<I64>(a.Len())
+    for i in range a.Len() { b[i] = a[i] * 2 }
+    return b
+}
+fn main() {
+    h := H()
+    for i in range 100000 { h.arr = dbl(h.arr) }
+    io.Println($h.arr[0])!
+}

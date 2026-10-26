@@ -1,0 +1,200 @@
+# deque - Deque<T>: a double-ended queue, pushed and popped at both ends in constant time - a work list taken from
+# either end, a sliding window, a breadth-first search's frontier. A ring buffer that doubles when full, its elements
+# moved into the new one in order; Front, Back and "d[i]" (from the front, unchecked as an array index is, "checked
+# d[i]" checked) read without moving anything. Imported with `import "std/deque"`; the type is deque.Deque<T>.
+#
+# A Deque is a HANDLE, as Vec and Map are: a copy of a Deque value is a second name for the same deque, and Clone()
+# is the copy with storage of its own. As a Vec's, a replaced buffer stays where the Deque lives until that scope closes.
+
+# what a Deque's operations fail with: a Front, Back or Pop of an empty deque
+type Error error {
+    EMPTY
+}
+
+type Deque<T> struct() {
+    s mut state<T>& = state<T>()
+}
+
+type state<T> struct() {
+    buf mut Array<T>& = Array<T>(0)
+    head I64 = 0                                   # where the front element is
+    n I64 = 0
+}
+
+# room for one more, the elements moved into a buffer twice the size when the ring is full - filled with x, the
+# element about to be stored, so no zero value is needed (D13c)
+fn (s mut state<T>&) room(x T) {
+    if s.n < s.buf.Len() { return }
+    old := s.buf
+    size I64 = 8 if old.Len() == 0 else old.Len() * 2
+    nb mut Array<T>&s = Array<T>(size, x)
+    for i in range s.n { nb[i] = old[(s.head + i) % old.Len()] }
+    s.buf = nb
+    s.head = 0
+}
+
+fn (d Deque<T>&) Len() I64 { return d.s.n }
+
+# x after the back
+fn (d mut Deque<T>&) PushBack(x T) {
+    s := d.s
+    s.room(x)
+    s.buf[(s.head + s.n) % s.buf.Len()] = x
+    s.n++
+}
+
+# x before the front
+fn (d mut Deque<T>&) PushFront(x T) {
+    s := d.s
+    s.room(x)
+    s.head = (s.head + s.buf.Len() - 1) % s.buf.Len()
+    s.buf[s.head] = x
+    s.n++
+}
+
+# the front element, taken off
+fn (d mut Deque<T>&) PopFront() T ? Error.EMPTY {
+    s := d.s
+    if s.n == 0 { error Error.EMPTY }
+    x := s.buf[s.head]
+    s.head = (s.head + 1) % s.buf.Len()
+    s.n--
+    return x
+}
+
+# the back element, taken off
+fn (d mut Deque<T>&) PopBack() T ? Error.EMPTY {
+    s := d.s
+    if s.n == 0 { error Error.EMPTY }
+    s.n--
+    return s.buf[(s.head + s.n) % s.buf.Len()]
+}
+
+fn (d Deque<T>&) Front() T ? Error.EMPTY {
+    s := d.s
+    if s.n == 0 { error Error.EMPTY }
+    return s.buf[s.head]
+}
+
+fn (d Deque<T>&) Back() T ? Error.EMPTY {
+    s := d.s
+    if s.n == 0 { error Error.EMPTY }
+    return s.buf[(s.head + s.n - 1) % s.buf.Len()]
+}
+
+# element i counted from the front - a copy, as a Vec's is. Unchecked: "checked d[i]" checks i against Len()
+fn (d Deque<T>&) At(i I64) T {
+    s := d.s
+    return s.buf[(s.head + i) % s.buf.Len()]
+}
+
+fn (d mut Deque<T>&) SetAt(i I64, x T) {
+    s := d.s
+    s.buf[(s.head + i) % s.buf.Len()] = x
+}
+
+# removes every element, keeping the buffer for the next ones
+fn (d mut Deque<T>&) Clear() {
+    d.s.n = 0
+    d.s.head = 0
+}
+
+# the elements front to back, in an array of their own
+fn (d Deque<T>&) ToArray() mut Array<T>& {
+    s := d.s
+    out mut Array<T>&return = Array<T>(0)
+    if s.n == 0 { return out }
+    out = Array<T>(s.n, s.buf[s.head])
+    for i in range s.n { out[i] = s.buf[(s.head + i) % s.buf.Len()] }
+    return out
+}
+
+# a Deque with storage of its own holding the same elements
+fn (d Deque<T>&) Clone() Deque<T> {
+    c := Deque<T>()
+    s := d.s
+    for i in range s.n { c.PushBack(s.buf[(s.head + i) % s.buf.Len()]) }
+    return c
+}
+
+# a position in a Deque, front to back: "for x in d" walks one
+type Iter<T> struct(of Deque<T>&) {
+    d Deque<T>&of = of
+    i I64 = 0
+}
+
+fn (it mut Iter<T>&) Next() T ? Exhausted {
+    if it.i >= it.d.Len() { error Exhausted.END }
+    it.i++
+    return it.d.At(it.i - 1)
+}
+
+fn (d Deque<T>&) Iter() Iter<T> { return Iter<T>(d) }
+
+# whether two Deques hold equal elements in the same order - "==" (E10a)
+fn (d Deque<T>&) Eq(o Deque<T>&) Bool {
+    if d.Len() != o.Len() { return false }
+    for i in range d.Len() {
+        if d.At(i) != o.At(i): return false
+    }
+    return true
+}
+
+fn (d Deque<T>&) Hash() I64 {
+    h I64 = -3750763034362895579
+    for i in range d.Len() { h = (h ^ d.At(i).Hash()) * 1099511628211 }
+    return h
+}
+
+# how "$" renders a Deque: its elements front to back, as an array renders, after "Deque" - "Deque[1, 2, 3]"
+fn (d Deque<T>&) Str() String {
+    r := $d.ToArray()                                    # "T[...]"
+    open := try r.Find("[") catch default 0
+    return "Deque" $r[open:]
+}
+
+if TestBuild {
+
+test "a Deque is pushed and popped at both ends" {
+    d := Deque<I64>()
+    for i in range 20 { d.PushBack(i) }
+    d.PushFront(-1)
+    d.PushFront(-2)
+    assert d.Len() == 22 and d.Front()! == -2 and d.Back()! == 19 and d[2] == 0
+    assert d.PopFront()! == -2 and d.PopBack()! == 19 and d.Len() == 20
+    sum := 0
+    for x in d { sum += x }
+    assert sum == -1 + 171
+    d.Clear()
+    v := try d.PopFront() catch Error.EMPTY default 99
+    assert v == 99
+    assert (try d.Back() catch Error.EMPTY default 7) == 7
+}
+
+test "a Deque used as a ring wraps and grows in order" {
+    d := Deque<I64>()
+    for round in range 50 {
+        d.PushBack(round)
+        d.PushBack(round + 1000)
+        assert d.PopFront()! >= 0
+    }
+    assert d.Len() == 50
+    a := d.ToArray()
+    for i in range a.Len() - 1 { assert a[i] != a[i + 1] }
+    c := d.Clone()
+    c.PushBack(5)
+    assert c.Len() == 51 and d.Len() == 50 and c != d
+    d.PushBack(5)
+    assert c == d and c.Hash() == d.Hash()
+    d[0] = 77
+    assert d.Front()! == 77 and $Deque<I64>() == "Deque[]"
+}
+
+test "a Deque of text" {
+    q := Deque<String&>()
+    q.PushBack("b")
+    q.PushFront("a")
+    assert $q == "Deque[\"a\", \"b\"]" and q.PopBack()! == "b"
+}
+
+}

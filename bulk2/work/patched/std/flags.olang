@@ -1,0 +1,326 @@
+# flags - a program's command-line options, declared with their types, defaults and help, then read from os.Args():
+#
+#     p := flags.Flags("grep", "search files for text")
+#     count := p.Int("count", 'n', 10, "stop after this many matches")
+#     quiet := p.Bool("quiet", 'q', "print nothing, only set the status")
+#     try p.Parse(os.Args()) catch flags.Error.HELP {
+#         try io.Print(p.Help())
+#         return
+#     } catch flags.Error {
+#         try io.PrintErrln(p.Message())
+#         os.Exit(2)
+#     }
+#     ... count.Get() ... quiet.Get() ... p.Args() ...
+#
+# Each declaration gives a handle whose Get() reads the value after Parse - the default until then, and where the command
+# line does not set it. A flag is written "--name value", "--name=value", "-n value" or "-n=value" (a Bool's alone,
+# "--quiet", or "--quiet=false"); several one-letter Bools go together ("-qv"); "--" ends the flags, and every other
+# argument is positional, in order, in Args(). "-h" and "--help" make Parse fail with HELP, Help() being the text to
+# print. A short name of 0 means none. Imported with `import "std/flags"`.
+
+# why Parse failed - Message() says it in a sentence, naming the argument: HELP: "-h" or "--help" was given; UNKNOWN: a
+# flag nothing declared; MISSING: a flag that takes a value came last; BAD_VALUE: a value that is not the flag's type;
+# DECLARED_TWICE: two declarations share a name or a short name
+type Error error {
+    HELP
+    UNKNOWN
+    MISSING
+    BAD_VALUE
+    DECLARED_TWICE
+}
+
+# what a flag holds
+type Kind enum { Bool, Int, Float, Text }
+
+type flag struct(name String&, short Char, kind Kind, help String&) {
+    name
+    short
+    kind
+    help
+    isSet Bool = false
+    b Bool = false
+    i I64 = 0
+    f F64 = 0.0
+    t mut String& = ""
+    shown mut String& = ""                    # the default, as Help writes it
+}
+
+# the declared flags and, after Parse, the positional arguments. A handle: a copy names the same parser
+type Flags struct(program String&, about String& = "") {
+    s mut state& = state(program, about)
+}
+
+type state struct(program String&, about String&) {
+    program
+    about
+    all Vec<mut flag&> = Vec<mut flag&>()
+    args Vec<String&> = Vec<String&>()
+    message mut String& = ""
+}
+
+# handles to declared flags: Get() is the value, IsSet() whether the command line gave it
+type BoolFlag struct(f mut flag&) { f }
+type IntFlag struct(f mut flag&) { f }
+type FloatFlag struct(f mut flag&) { f }
+type TextFlag struct(f mut flag&) { f }
+
+fn (h BoolFlag&) Get() Bool { return h.f.b }
+fn (h IntFlag&) Get() I64 { return h.f.i }
+fn (h FloatFlag&) Get() F64 { return h.f.f }
+fn (h TextFlag&) Get() String&h { return h.f.t }
+fn (h BoolFlag&) IsSet() Bool { return h.f.isSet }
+fn (h IntFlag&) IsSet() Bool { return h.f.isSet }
+fn (h FloatFlag&) IsSet() Bool { return h.f.isSet }
+fn (h TextFlag&) IsSet() Bool { return h.f.isSet }
+
+fn (p mut Flags&) add(name String&, short Char, kind Kind, help String&) mut flag&p {
+    s := p.s
+    r mut flag&s = flag(name, short, kind, help)
+    s.all.Push(r)
+    return r
+}
+
+# a flag that is off unless given: "--name", "-x"
+fn (p mut Flags&) Bool(name String&, short Char, help String&) BoolFlag {
+    return BoolFlag(p.add(name, short, Kind.Bool, help))
+}
+
+fn (p mut Flags&) Int(name String&, short Char, value I64, help String&) IntFlag {
+    r := p.add(name, short, Kind.Int, help)
+    r.i = value
+    r.shown = $value
+    return IntFlag(r)
+}
+
+fn (p mut Flags&) Float(name String&, short Char, value F64, help String&) FloatFlag {
+    r := p.add(name, short, Kind.Float, help)
+    r.f = value
+    r.shown = $value
+    return FloatFlag(r)
+}
+
+fn (p mut Flags&) Text(name String&, short Char, value String&, help String&) TextFlag {
+    r := p.add(name, short, Kind.Text, help)
+    r.t = $value
+    r.shown = $value if value.Len() > 0 else ""
+    return TextFlag(r)
+}
+
+# the positional arguments, in order, after Parse
+fn (p Flags&) Args() Vec<String&> { return p.s.args }
+
+# what the last failing Parse failed on, as a sentence: "grep: unknown flag --colour (see --help)"
+fn (p Flags&) Message() String&p { return p.s.message }
+
+# what Message() says, for the failure about to be raised
+fn (s mut state&) say(what String&) {
+    s.message = $s.program ": " $what " (see --help)"
+}
+
+fn (s state&) byName(name String&) mut flag&s ? Error.UNKNOWN {
+    for f in s.all {
+        if f.name == name: return f
+    }
+    error Error.UNKNOWN
+}
+
+fn (s state&) byShort(c Char) mut flag&s ? Error.UNKNOWN {
+    for f in s.all {
+        if f.short != 0 and f.short == c: return f
+    }
+    error Error.UNKNOWN
+}
+
+# value given to the flag f, read as its type
+fn (s mut state&) setValue(f mut flag&, value String&, shown String&) ? Error {
+    match f.kind {
+        case Kind.Bool {
+            if value == "true" { f.b = true } else if value == "false" { f.b = false } else {
+                s.say($shown " takes true or false, not \"" $value "\"")
+                error Error.BAD_VALUE
+            }
+        }
+        case Kind.Int {
+            f.i = try value.ParseInt(0) catch ParseError {
+                s.say($shown " takes an integer, not \"" $value "\"")
+                error Error.BAD_VALUE
+            }
+        }
+        case Kind.Float {
+            f.f = try value.ParseFloat() catch ParseError {
+                s.say($shown " takes a number, not \"" $value "\"")
+                error Error.BAD_VALUE
+            }
+        }
+        case Kind.Text { f.t = $value }
+    }
+    f.isSet = true
+}
+
+# the command line read: args[0] is the program's own name, as os.Args() gives it, and is skipped. Flags take their
+# values, the rest are Args(); fails with an Error (and a Message()) for anything the declarations do not allow
+fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
+    s := p.s
+    s.args.Clear()
+    for i in range s.all.Len() {
+        for j in range i + 1, s.all.Len() {
+            a := s.all[i]
+            b := s.all[j]
+            if a.name == b.name or (a.short != 0 and a.short == b.short) {
+                s.say("--" $a.name " is declared twice")
+                error Error.DECLARED_TWICE
+            }
+        }
+    }
+    i I64 = 1
+    for i < args.Len() {
+        arg := args[i]
+        i++
+        if arg == "--" {
+            for i < args.Len() {
+                s.args.Push(args[i])
+                i++
+            }
+            break
+        }
+        if arg == "-h" or arg == "--help" { error Error.HELP }
+        if arg.Len() < 2 or arg[0] != '-' {
+            s.args.Push(arg)
+            continue
+        }
+        long := arg[1] == '-'
+        body := arg[2:] if long else arg[1:]
+        eq := try body.FindByte('=') catch default -1
+        key := body[:eq] if eq >= 0 else body
+        f mut flag?&s = null
+        if long {
+            f = try s.byName(key) catch Error.UNKNOWN {
+                s.say("unknown flag --" $key)
+                error Error.UNKNOWN
+            }
+        } else if key.Len() > 1 and eq < 0 {
+            # several one-letter Bools together: "-qv"
+            for c in key {
+                g := try s.byShort(c) catch Error.UNKNOWN {
+                    s.say("unknown flag -" $c)
+                    error Error.UNKNOWN
+                }
+                if g.kind != Kind.Bool {
+                    s.say("-" $c " takes a value, and is written alone")
+                    error Error.MISSING
+                }
+                g.b = true
+                g.isSet = true
+            }
+            continue
+        } else {
+            f = try s.byShort(key[0]) catch Error.UNKNOWN {
+                s.say("unknown flag -" $key)
+                error Error.UNKNOWN
+            }
+        }
+        fl := f!    # set by both branches that reach here
+        shown := $("--" if long else "-") $key
+        if eq >= 0 {
+            try s.setValue(fl, body[eq + 1:], shown)
+        } else if fl.kind == Kind.Bool {
+            fl.b = true
+            fl.isSet = true
+        } else {
+            if i >= args.Len() {
+                s.say($shown " takes a value")
+                error Error.MISSING
+            }
+            try s.setValue(fl, args[i], shown)
+            i++
+        }
+    }
+}
+
+fn kindWord(k Kind) String {
+    match k {
+        case Kind.Bool { return "" }
+        case Kind.Int { return " INT" }
+        case Kind.Float { return " NUMBER" }
+        case Kind.Text { return " TEXT" }
+    }
+}
+
+# the help text: what the program is, then each flag with its short name, its value's kind, what it does and its
+# default - in the order declared, the descriptions in one column
+fn (p Flags&) Help() String {
+    s := p.s
+    b := StringBuilder()
+    b.Push($"usage: " $s.program " [flags] [arguments]\n")
+    if s.about.Len() > 0: b.Push($s.about "\n")
+    b.Push("\nflags:\n")
+    heads := Vec<String&>()
+    width I64 = 10
+    for f in s.all {
+        lead := ("-" $f.short ", ") if f.short != 0 else "    "
+        heads.Push($lead "--" $f.name $kindWord(f.kind))
+        if heads[heads.Len() - 1].Len() > width: width = heads[heads.Len() - 1].Len()
+    }
+    heads.Push("-h, --help")
+    for i in range heads.Len() {
+        b.Push("  ")
+        b.Push(heads[i].PadEnd(width + 2))
+        if i < s.all.Len() {
+            f := s.all[i]
+            b.Push(f.help)
+            if f.shown.Len() > 0: b.Push($" (default " $f.shown ")")
+        } else {
+            b.Push("show this help")
+        }
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+if TestBuild {
+
+test "flags are read in every spelling, the rest are arguments" {
+    p := Flags("tool", "does things")
+    n := p.Int("count", 'n', 10, "how many")
+    v := p.Bool("verbose", 'v', "say more")
+    q := p.Bool("quiet", 'q', "say less")
+    o := p.Text("output", 'o', "out.txt", "where to write")
+    r := p.Float("rate", 0, 0.5, "how fast")
+    assert n.Get() == 10 and not v.Get() and o.Get() == "out.txt" and r.Get() == 0.5
+    p.Parse(String&["tool", "a", "--count", "3", "-vq", "b", "--output=x.txt", "--rate=2.5", "--", "-n", "c"])!
+    assert n.Get() == 3 and v.Get() and q.Get() and o.Get() == "x.txt" and r.Get() == 2.5 and n.IsSet()
+    args := p.Args()
+    assert args.Len() == 4 and args[0] == "a" and args[1] == "b" and args[2] == "-n" and args[3] == "c"
+    p.Parse(String&["tool", "-n=0x10", "--verbose=false", "-o", "y"])!
+    assert n.Get() == 16 and not v.Get() and o.Get() == "y" and p.Args().Len() == 0
+}
+
+test "what the declarations do not allow fails, with a message" {
+    p := Flags("tool")
+    p.Int("count", 'n', 10, "how many")
+    p.Bool("verbose", 'v', "say more")
+    try p.Parse(String&["tool", "--colour"]) catch Error.UNKNOWN { } catch Error { unreachable }
+    assert p.Message() == "tool: unknown flag --colour (see --help)"
+    try p.Parse(String&["tool", "-n"]) catch Error.MISSING { } catch Error { unreachable }
+    try p.Parse(String&["tool", "-n", "ten"]) catch Error.BAD_VALUE { } catch Error { unreachable }
+    assert p.Message() == "tool: -n takes an integer, not \"ten\" (see --help)"
+    try p.Parse(String&["tool", "-vn"]) catch Error.MISSING { } catch Error { unreachable }
+    try p.Parse(String&["tool", "--verbose=maybe"]) catch Error.BAD_VALUE { } catch Error { unreachable }
+    try p.Parse(String&["tool", "x", "--help"]) catch Error.HELP { } catch Error { unreachable }
+    p.Bool("very", 'v', "clash")
+    try p.Parse(String&["tool"]) catch Error.DECLARED_TWICE { } catch Error { unreachable }
+}
+
+test "the help text lists every flag" {
+    p := Flags("tool", "does things")
+    p.Int("count", 'n', 10, "how many")
+    p.Bool("verbose", 0, "say more")
+    p.Text("output", 'o', "", "where to write")
+    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n"
+        "  -n, --count INT    how many (default 10)\n"
+        "      --verbose      say more\n"
+        "  -o, --output TEXT  where to write\n"
+        "  -h, --help         show this help\n")
+}
+
+}

@@ -1,0 +1,8 @@
+type P struct(a I24, b U128) { a
+    b }
+extern fn takes(p P) I32
+extern fn takesr(p P&) I32
+export fn give(p P) P { return p }
+export fn arr(a Array<P>&) I64 { return a.Len() }
+extern fn ta(a Array<U7>&) I32
+fn main() { }

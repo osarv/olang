@@ -1,0 +1,4 @@
+export fn f(x I24) I24 { return x }
+export fn g(x U128) U128 { return x }
+export fn h(a Array<U7>&) I64 { return a.Len() }
+fn main() { }

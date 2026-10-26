@@ -1,0 +1,9 @@
+import "std/io"
+G := I64[1, 2, 3]
+H := Array<I64>(3, 4)
+fn poke(s mut Array<I64>&, k I64) { s[0] = k }
+fn main() {
+    s := H[0:2]
+    s[0] = 9
+    io.Println($G " " $H)!
+}

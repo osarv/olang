@@ -1,0 +1,12 @@
+import "std/io"
+type H struct() {
+    arr mut Array<I64>& = Array<I64>(64, 1)
+}
+fn main() {
+    h := H()
+    for i in range 2000 {
+        h.arr = h.arr * 2 + h.arr - 1
+        if i % 3 == 0 { h.arr = h.arr.LanesLess(h.arr * 0 + 100).Select(h.arr, 1) }
+    }
+    io.Println($h.arr.Sum() " " $h.arr[63])!
+}

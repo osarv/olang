@@ -1,0 +1,22 @@
+# std/arith.ShiftLeft at a width the eight's branches do not name: widthOf gives 64, so a count of 10 on an I9 is not
+# INVALID but the shift itself - out of range, undefined (E8a) - and at -O3 the program segfaults (reduced from the
+# differential fuzzer's seed 16 with odd-width primitives)
+import "std/io"
+import "std/arith"
+
+type S struct(p Array<I9>&) {
+    f := Array<I9>(1)
+    for i in range 1 { f[i] = p[i] }
+}
+
+fn calc(x6 I33, x7 I33) I64 {
+    s := S(I9[try arith.ShiftLeft(I9(x6), I64(I17(x7))) catch default -1])
+    return 3 + I64(s.f[0])
+}
+
+A mut I33 = -6
+B mut I33 = 10
+
+fn main() {
+    io.Println($calc(A, B))!
+}
