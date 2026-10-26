@@ -200,8 +200,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
   keywords may name fields (typed, never punned). `_` discards and is never a name.
-- **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, beyond 64
-  bits an error (L10); a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond
+- **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, one past 64
+  bits adapts only to a type wide enough for it, beyond 128 an error (L10); a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond
   its target's range is an error (L12b). Escapes include `\0` and `\r`; a literal never crosses its line (L13).
 - **Text literals by number, and raw text (L13-L15, L14a, the user's decision 2026-10-24: "add all if they are
   standard").** `\x41` (a byte, two hex digits), `\u{1F600}` (a code point, 1-6 hex digits, written as UTF-8; a
@@ -245,8 +245,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/arith` and `Narrow`, `$`, a supplied `Hash`, `Format`, the new `t.ParseAs<T>()`, E37's bit operations and the
   `Integer` trait all hold at every width, computed exactly at compile time and under `interpret` (the evaluator's
   two-word arithmetic). Storage is the next of 1, 2, 4, 8, 16 bytes (LLVM's `iN`, C's `_BitInt`). Decided (mine):
-  a literal holds 64 bits (a wider value is computed, `U128(1) << 100`; E4a's exact computation is within 64 bits, an
-  error past it); atomics take the 8/16/32/64-bit widths, `ByteSwap` whole bytes, and only the eight cross the C
+  a literal holds up to 128 bits (2026-10-26: `x U128 = 340282366920938463463374607431768211455`, `x I128 = 1 << 100`;
+  E4a's exact computation runs from I128's least to U128's greatest, and a value past 64 bits has no type of its own,
+  so `x := 1 << 100` is an error naming the type); atomics take the 8/16/32/64-bit widths, `ByteSwap` whole bytes, and only the eight cross the C
   boundary (X2); `Integer` lists every width, sixteen to a line; no `Sqrt`/`PadStart` for the new widths
   yet. A declared type may not be named `I2` (it is one now): the cinterop fixture's struct was renamed.
 - **A literal's own type: an integer is `I64`, a float `F64` (T6a, the user's calls, 2026-10-08/10).** A literal

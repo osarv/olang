@@ -1,0 +1,6 @@
+# check: fail error[T6]: '99999999999999999999999' does not fit U64
+# L10, T6: a decimal literal past U64's maximum still fits only a type wide enough for it
+fn main() {
+    z U64 = 99999999999999999999999
+    assert z > 0
+}

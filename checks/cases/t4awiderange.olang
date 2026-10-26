@@ -1,0 +1,5 @@
+# check: fail error[E4a]: this literal expression has no value - no integer type holds it
+# E4a: the exact computation holds I128's least to U128's greatest, at every step - 1 << 128 is past U128 even in a U128
+fn main() {
+    x U128 = (1 << 128) - 1
+}

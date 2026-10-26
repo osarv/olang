@@ -1,0 +1,5 @@
+# check: fail error[T6]: '170141183460469231731687303715884105728' does not fit I128
+# T6, T4a: a literal past 64 bits fits a wide type only where its value does - 2^127 is past I128's greatest
+fn main() {
+    x I128 = 170141183460469231731687303715884105728
+}

@@ -24982,3 +24982,26 @@ wrote at the time; docs/ and compiler/ cite no section of SPEC.md's §5 (their "
 **The `Integer` trait's list across lines (T35c).** With the seed reading a line break in a `for` list, the prelude
 lists all 256 widths in `Integer` itself, sixteen to a line, and the sixteen helper traits (`signed1to16` ...) are
 gone. Messages are unchanged: they already named a run of widths by its ends.
+
+**128-bit literals (E4a, L10, L10a, T5, T6a; decided 2026-10-26).** T4a had left literals at 64 bits, because the
+port's fold computed magnitudes as `U64`; the spec now says what the evaluator computes. A literal-only expression is
+computed exactly from `I128`'s least, -2^127, to `U128`'s greatest, 2^128 - 1, at every step, so `x U128 =
+340282366920938463463374607431768211455`, `x I128 = 1 << 100` and `x I128 = -(1 << 127)` are written as they are, and
+`1 << 128` (even inside `(1 << 128) - 1`) has no value. The checker's `litv` carries such a value as a sign and a `U128`
+magnitude (`Wide`, with `Big` set too, so every reader of its 64-bit view - which most of the checker is - takes it for
+no `I64`); the compiler uses `I128`/`U128` arithmetic itself, which the seed written again first lets it. A value past
+64 bits becomes two 64-bit constants (MIR's `Const` holds 64 bits) joined by a shift and an or in the target's type, so
+lowering, emit, the evaluator and `interpret` needed nothing new - LLVM folds them back into one constant.
+**Decided (mine):** (1) a literal past 64 bits has no type of its own - `x := 1 << 100`, `$(1 << 64)` and a wide literal
+beside an `I64` are errors naming the type to write (T6a); a decimal literal's own type stays `I64`, then `U64`, and the
+build constants (`-define`, B10) stay 64-bit, having no target. (2) A hexadecimal or binary pattern of more than 64 bits
+is its unsigned value wherever it adapts - no 128-bit two's-complement reading, so it fits a signed type only where the
+value does; one of at most 64 bits keeps L10a's two readings. (3) Beside a value past 64 bits, in `<<` and `& | ^`, a
+64-bit pattern is its bits (`0xFFFF_FFFF_FFFF_FFFF << 64` is the high half of `U128`), where `+ - *` keep its `I64`
+reading, as they always did. (4) `/` and `%` past 64 bits truncate toward zero and `>>` floors, as an integer type's
+do. (5) Below 64 bits nothing changed: a `U64` value's division still folds to nothing (not a literal-only value), as
+before. `$(1 << 64)` (checks/cases/e4ashiftunadapted) now says it has no type of its own rather than E8a's "past its
+literal's width" - which stays for a negative amount and for a float literal shifted. Messages: L10 "beyond 128 bits -
+the largest integer literal is U128's ...", E4a "no integer type holds it, from I128's least to U128's greatest", and
+the new T6a one. Tests: tests/intwidths.olang's `litCase` (baked, decided while compiling, run), checks cases
+t4awideliteral, t4awiderange, t4awideint, inttoolarge, inttoowideu64.

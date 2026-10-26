@@ -1,7 +1,6 @@
-# check: fail error[E8a, E4a]: this shift is past its literal's width, and nothing adapts it to a wider type
-# E4a/E8a: "1 << 64" adapted to a wider type would be computed exactly; with nothing adapting it, it is an I64 shift by
-# 64, its literal's own type's (T6a), which E8a leaves undefined - so it is an error, as a written amount past a typed
-# value's width is
+# check: fail error[T6a, E4a]: this literal expression's value needs more than 64 bits
+# E4a/T6a: "1 << 64" is computed exactly, and a value past 64 bits has no type of its own - with nothing adapting it
+# (a rendering asks for none) it is an error naming the type to write
 fn main() ? {
     t := $(1 << 64)
 }

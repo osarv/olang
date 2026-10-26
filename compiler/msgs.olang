@@ -417,6 +417,7 @@ type Diag enum {
     OperandNotNumber
     TupleNotAValue
     LiteralExprNoValue
+    LiteralNoOwnType
     LiteralDoesNotMeet
     ShiftOutOfRange
     DivideByZero
@@ -1945,7 +1946,7 @@ fn NoteLiteralRangeExpr(text String&, ty1 String&, ty2 String&, ty3 String&) Msg
 fn StrOfNothing() Msg { return Msg(Diag.StrOfNothing, "E11a", "'$' has nothing to render - this call returns no value") }
 
 # ERR_INT_LITERAL_TOO_LARGE
-fn IntLiteralTooLarge(tok String&) Msg { return Msg(Diag.IntLiteralTooLarge, "L10", $tok " is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") }
+fn IntLiteralTooLarge(tok String&) Msg { return Msg(Diag.IntLiteralTooLarge, "L10", $tok " is beyond 128 bits - the largest integer literal is U128's 340282366920938463463374607431768211455") }
 
 # ERR_NEG_LITERAL_TOO_LARGE
 fn NegLiteralTooLarge(tok String&) Msg { return Msg(Diag.NegLiteralTooLarge, "L10", "-" $tok " is below I64's minimum") }
@@ -1963,7 +1964,8 @@ fn OperandNotNumber(tok String&, ty String&) Msg { return Msg(Diag.OperandNotNum
 fn TupleNotAValue() Msg { return Msg(Diag.TupleNotAValue, "D8c", "several results are not one value - destructure them ('a, b := f()'), or pass them as all of a call's arguments") }
 
 # ERR_LITERAL_EXPR_NO_VALUE
-fn LiteralExprNoValue() Msg { return Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value - it needs more than 64 bits, which no literal holds; convert an operand to a wider type, as 'U128(1) << 100'") }
+fn LiteralExprNoValue() Msg { return Msg(Diag.LiteralExprNoValue, "E4a", "this literal expression has no value - no integer type holds it, from I128's least to U128's greatest") }
+fn LiteralNoOwnType(what String&) Msg { return Msg(Diag.LiteralNoOwnType, "T6a, E4a", $what " needs more than 64 bits, and a literal's own type is at most U64 - give it the type it should have, as 'x U128 = ...', or convert an operand, as 'U128(1) << 100'") }
 
 # ERR_LITERAL_DOES_NOT_MEET
 fn LiteralDoesNotMeet(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.LiteralDoesNotMeet, "E6d", "this literal does not fit " $ty1 ", and " $ty2 " does not flow into " $ty3 " - convert one") }

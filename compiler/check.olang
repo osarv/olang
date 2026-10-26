@@ -4885,6 +4885,20 @@ type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     I
     F
     Hex Bool = false   # a hex or binary pattern: I its bits, read unsigned where an unsigned type is wanted (L10a)
+    # an integer past 64 bits - below I64's least or above U64's greatest, up to I128's least and U128's greatest
+    # (E4a): Neg and W its sign and magnitude, Big set too, so a reader of the 64-bit view I takes it for no I64
+    Wide Bool = false
+    Neg Bool = false
+    W U128 = 0
+}
+
+# an integer literal value past 64 bits, its sign and magnitude (E4a, T4a)
+fn wideLit(neg Bool, m U128) litv {
+    v := litv(true, false, true, I64(U64(m & U128(U64(0) - 1))), 0.0)
+    v.Wide = true
+    v.Neg = neg
+    v.W = m
+    return v
 }
 
 # E4a: whether x is a number written as a literal - a numeric literal, alone, negated or in parentheses, or arithmetic
@@ -4915,13 +4929,14 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
             text := c.src(sp)
             if kind == token.Tok.IntLit {
                 if text.Len() > 2 and text[0] == '0' and (text[1] == 'x' or text[1] == 'X' or text[1] == 'b' or text[1] == 'B') {
-                    u := try text.ParseUint(0) catch { return noLit() }
+                    # L10a: a pattern of at most 64 bits keeps both readings; a wider one is its unsigned value
+                    u := try text.ParseUint(0) catch { return ofMag(false, try wideDigits(text) catch { return noLit() }) }
                     h := intLit(I64(u))
                     h.Hex = true
                     return h
                 }
                 v := try text.ParseInt(0) catch {
-                    u := try text.ParseUint(0) catch { return noLit() }
+                    u := try text.ParseUint(0) catch { return ofMag(false, try wideDigits(text) catch { return noLit() }) }
                     return litv(true, false, true, I64(u), 0.0)
                 }
                 return intLit(v)
@@ -4940,7 +4955,7 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
             if op == token.Tok.Minus {
                 if v.IsFloat { return floatLit(-v.F) }
                 n, m := magOf(v)
-                return ofMag(not n, m) if m != U64(0) else intLit(0)
+                return ofMag(not n, m) if m != U128(0) else intLit(0)
             }
             if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
                 r := intLit(~v.I)
@@ -4968,28 +4983,47 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
             if op == token.Tok.Plus { return addMag(na, ma, nb, mb) }
             if op == token.Tok.Minus { return addMag(na, ma, not nb, mb) }
             if op == token.Tok.Star {
-                if ma != U64(0) and mb > U64(0xFFFFFFFFFFFFFFFF) / ma { return noLit() }
+                if ma != U128(0) and mb > ~U128(0) / ma { return noLit() }
                 p := ma * mb
-                return ofMag(na != nb and p != U64(0), p)
+                return ofMag(na != nb and p != U128(0), p)
             }
             if op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret {
+                if va.Wide or vb.Wide { return wideBits(op, va, vb) }
                 r := va.I & vb.I if op == token.Tok.Amp else va.I | vb.I if op == token.Tok.Pipe else va.I ^ vb.I
                 out := intLit(r)
                 if (va.Big or vb.Big) and r < 0 { out = litv(true, false, true, r, 0.0) }
                 out.Hex = va.Hex or vb.Hex
                 return out
             }
+            # E4a: a shift by an amount within 128 bits, exactly - a 64-bit pattern shifted left is its bits (L10a)
+            if (op == token.Tok.Shl or op == token.Tok.Shr) and not vb.Big and vb.I >= 0 and vb.I < 128 {
+                y := U128(vb.I)
+                if op == token.Tok.Shl {
+                    if na and va.Hex and not va.Wide { na, ma = false, U128(U64(va.I)) }
+                    if na { return noLit() }
+                    m := ma << y
+                    if (m >> y) != ma { return noLit() }
+                    return ofMag(false, m)
+                }
+                if va.Wide or va.Big or vb.I >= 64 {
+                    # the floor of x over 2^y: a negative one rounds away from zero
+                    if not na { return ofMag(false, ma >> y) }
+                    return ofMag(true, ((ma - 1) >> y) + 1)
+                }
+                return intLit(va.I >> vb.I)
+            }
+            if va.Wide or vb.Wide {
+                # E4a: a quotient or remainder past 64 bits, truncated toward zero as an integer type's is
+                if mb == U128(0) { return noLit() }
+                if op == token.Tok.Slash { return ofMag(na != nb, ma / mb) }
+                if op == token.Tok.Percent { return ofMag(na, ma % mb) }
+                return noLit()
+            }
             if va.Big or vb.Big { return noLit() }
             x1 := va.I
             y1 := vb.I
             if op == token.Tok.Slash and y1 != 0 and not (x1 == I64(-9223372036854775807) - 1 and y1 == -1) { return intLit(x1 / y1) }
             if op == token.Tok.Percent and y1 != 0 and y1 != -1 { return intLit(x1 % y1) }
-            if op == token.Tok.Shl and not na and y1 >= 0 and y1 < 64 {
-                m := ma << U64(y1)
-                if (m >> U64(y1)) != ma { return noLit() }
-                return ofMag(false, m)
-            }
-            if op == token.Tok.Shr and y1 >= 0 and y1 < 64 { return intLit(x1 >> y1) }
             return noLit()
         }
         nomatch { return noLit() }
@@ -5017,32 +5051,65 @@ fn (c mut Checker&) foldPart(x ast.Expr&) litv {
     return c.fold(x)
 }
 
-# an integer literal value's sign and magnitude: exact for every value T6a gives a literal, I64's and U64's
-fn magOf(v litv) Bool, U64 {
-    if v.Big { return false, U64(v.I) }
-    if v.I < 0 { return true, U64(0) - U64(v.I) }
-    return false, U64(v.I)
+# an integer literal value's sign and magnitude: exact for every value E4a computes, from I128's least to U128's greatest
+fn magOf(v litv) Bool, U128 {
+    if v.Wide { return v.Neg, v.W }
+    if v.Big { return false, U128(U64(v.I)) }
+    if v.I < 0 { return true, U128(U64(0) - U64(v.I)) }
+    return false, U128(U64(v.I))
 }
 
-# the literal value of a sign and magnitude: an I64, a U64 above I64's maximum (L10), or none beyond both
-fn ofMag(neg Bool, m U64) litv {
-    lim := U64(1) << 63
+# the literal value of a sign and magnitude: an I64, a U64 above I64's maximum (L10), a value past both up to I128's
+# least and U128's greatest (E4a, T4a), or none beyond those
+fn ofMag(neg Bool, m U128) litv {
+    if m == U128(0) { return intLit(0) }
+    lim := U128(1) << 63
     if not neg {
         if m < lim { return intLit(I64(m)) }
-        return litv(true, false, true, I64(m), 0.0)
+        if m < (U128(1) << 64) { return litv(true, false, true, I64(m), 0.0) }
+        return wideLit(false, m)
     }
-    if m <= lim { return intLit(I64(U64(0) - m)) }
+    if m <= lim { return intLit(I64(U64(0) - U64(m))) }
+    if m <= (U128(1) << 127) { return wideLit(true, m) }
     return noLit()
 }
 
-fn addMag(na Bool, ma U64, nb Bool, mb U64) litv {
+fn addMag(na Bool, ma U128, nb Bool, mb U128) litv {
     if na == nb {
         s := ma + mb
         if s < ma { return noLit() }
-        return ofMag(na and s != U64(0), s)
+        return ofMag(na, s)
     }
-    if ma >= mb { return ofMag(na and ma != mb, ma - mb) }
+    if ma >= mb { return ofMag(na, ma - mb) }
     return ofMag(nb, mb - ma)
+}
+
+# E4a: & | ^ on values past 64 bits, in two's complement wide enough for both: a 64-bit pattern is its bits there (L10a)
+fn wideBits(op token.Tok, va litv, vb litv) litv {
+    ea, ba := twos(va)
+    eb, bb := twos(vb)
+    e := ea and eb if op == token.Tok.Amp else ea or eb if op == token.Tok.Pipe else ea != eb
+    r := ba & bb if op == token.Tok.Amp else ba | bb if op == token.Tok.Pipe else ba ^ bb
+    if not e { return ofMag(false, r) }
+    if r == U128(0) { return noLit() }
+    return ofMag(true, U128(0) - r)
+}
+
+# a value as its sign extension and its low 128 bits
+fn twos(v litv) Bool, U128 {
+    if v.Hex and not v.Wide { return false, U128(U64(v.I)) }
+    n, m := magOf(v)
+    if n { return true, U128(0) - m }
+    return false, m
+}
+
+# the digits of an integer literal no 64 bits hold, as an unsigned 128-bit value (L10, L10a); separators were checked by
+# the scanner (L10b)
+fn wideDigits(text String&) U128 ? ParseError {
+    t := text.Replace("_", "")
+    if t.Len() > 2 and t[0] == '0' and (t[1] == 'x' or t[1] == 'X') { return try t[2:].ParseAs<U128>(16) }
+    if t.Len() > 2 and t[0] == '0' and (t[1] == 'b' or t[1] == 'B') { return try t[2:].ParseAs<U128>(2) }
+    return try t.ParseAs<U128>(10)
 }
 
 # a literal-only expression's value as a literal of the type wanted, or of its own (T6a: I64, F64; a U64 above I64's
@@ -5050,6 +5117,11 @@ fn addMag(na Bool, ma U64, nb Bool, mb U64) litv {
 fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     sp := x.Span()
     target := c.under(want)
+    if not c.P.T.IsNumber(target) and v.Wide {
+        # T6a, E4a: a value past 64 bits has no type of its own - only a type it adapts to holds it
+        c.err(c.opOf(x) if c.opOf(x) != sp else sp, msgs.LiteralNoOwnType(msgs.Tok(c.src(sp)) if c.opOf(x) == sp else "this literal expression's value"))
+        return c.unknown(sp)
+    }
     if not c.P.T.IsNumber(target) {
         # T6a, E4a: a U64 literal's expression is a U64 - but a negative value, I64's least (L10) among them, an I64
         want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big or (c.litU64(x) and v.I >= 0) else c.i64()
@@ -5078,7 +5150,7 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     }
     if c.P.T.IsFloat(target) {
         # T6: an integer literal adapts to a float type it does not overflow
-        if floatOverflows(target, F64(U64(v.I)) if v.Big else F64(v.I)) {
+        if floatOverflows(target, litF64(v)) {
             c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
             return c.unknown(sp)
         }
@@ -5092,12 +5164,26 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
         }
         return c.unknown(sp)
     }
+    if v.Wide {
+        # E4a, T4a: a value past 64 bits is made of its two words, a constant holding 64 bits (MIR's Const): the high
+        # word, sign-extended and shifted, beside the low one, zero-extended
+        b := (U128(0) - v.W) if v.Neg else v.W
+        hi := c.convert(sp, c.lit(sp, c.i64(), I64(b >> 64)), want)
+        lo := c.convert(sp, c.lit(sp, c.P.T.Prim("U64"), I64(b)), want)
+        return c.prim(sp, want, typed.PrimOp.BitOr, c.prim(sp, want, typed.PrimOp.Shl, hi, c.lit(sp, c.i64(), 64)), lo)
+    }
     if v.Big and not c.P.T.IsUnsigned(target) {
         # T4a: a literal above I64's maximum in a signed type wider than 64 bits - a constant holds a wide signed type's
         # value sign-extended from 64 bits (MIR's Const), so it is the U64 literal widened
         return c.prim(sp, want, typed.PrimOp.Convert, c.lit(sp, c.P.T.Prim("U64"), v.I), null)
     }
     return c.lit(sp, want, v.I)
+}
+
+# an integer literal's value as an F64, rounded once (a test of a float type's range, T6)
+fn litF64(v litv) F64 {
+    if v.Wide { return -F64(v.W) if v.Neg else F64(v.W) }
+    return F64(U64(v.I)) if v.Big else F64(v.I)
 }
 
 # whether a finite value rounds to an infinity in a narrower float type (T6, L12b)
@@ -5126,6 +5212,14 @@ fn (c mut Checker&) overflowsF64(x ast.Expr&) Bool {
 
 # an integer literal's value as a float type's bits, rounded once (T4: never through F64 first)
 fn intFloatBits(t types.TypeId, v litv) I64 {
+    if v.Wide {
+        # rounded once from the magnitude, then the sign: rounding to nearest is symmetric
+        m := v.W
+        if t == types.TypeId(13) { return I64((-F32(m) if v.Neg else F32(m)).Bits()) }
+        if t == types.TypeId(12) { return I64((-BF16(m) if v.Neg else BF16(m)).Bits()) }
+        if t == types.TypeId(11) { return I64((-F16(m) if v.Neg else F16(m)).Bits()) }
+        return I64((-F64(m) if v.Neg else F64(m)).Bits())
+    }
     if v.Big {
         u := U64(v.I)
         if t == types.TypeId(13) { return I64(F32(u).Bits()) }
@@ -5148,6 +5242,13 @@ fn floatBits(t types.TypeId, f F64) I64 {
 
 fn intFits(tt types.Table&, v litv, t types.TypeId) Bool {
     bits := tt.Bits(t)
+    if v.Wide {
+        # E4a, T4a: a value past 64 bits, in a type of up to 128
+        if bits <= 64 { return false }
+        if tt.IsUnsigned(t) { return not v.Neg and (bits == 128 or v.W < (U128(1) << U128(bits))) }
+        lim := U128(1) << U128(bits - 1)
+        return v.W <= lim if v.Neg else v.W < lim
+    }
     if tt.IsUnsigned(t) {
         if v.Big { return bits >= 64 }
         if v.Hex { return bits >= 64 or (v.I >= 0 and (bits == 63 or v.I < (I64(1) << bits))) }
@@ -5164,7 +5265,7 @@ fn (c mut Checker&) litFits(v litv, t types.TypeId) Bool {
     u := c.under(t)
     if not c.P.T.IsNumber(u) { return false }
     if v.IsFloat { return c.P.T.IsFloat(u) and not floatOverflows(u, v.F) }
-    if c.P.T.IsFloat(u) { return not floatOverflows(u, F64(v.I)) }
+    if c.P.T.IsFloat(u) { return not floatOverflows(u, litF64(v)) }
     return intFits(c.P.T, v, u)
 }
 
@@ -6333,7 +6434,7 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     }
     shift := op == token.Tok.Shl or op == token.Tok.Shr
     # E8a, E4a: a literal shifted by a literal past its own type's width, with nothing adapting it to compute it exactly
-    if shift and want == types.UnknownT and numberLitsOnly(a) and lb.Ok and not lb.IsFloat and not lb.Big and (lb.I < 0 or lb.I >= 64) {
+    if shift and want == types.UnknownT and numberLitsOnly(a) and lb.Ok and not lb.IsFloat and not lb.Big and (lb.I < 0 or (lb.I >= 64 and not (la.Ok and not la.IsFloat))) {
         c.err(b.Span(), msgs.ShiftUnadapted())
         return c.unknown(sp)
     }
@@ -11665,7 +11766,7 @@ fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable&c {
                 v := noLit()
                 if cd.Value is null {
                     na, ma := magOf(prev)
-                    v = addMag(na, ma, false, U64(1)) if prev.Ok else noLit()
+                    v = addMag(na, ma, false, U128(1)) if prev.Ok else noLit()
                 } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
                     v = c.foldPart(cd.Value!)
                 }
@@ -11721,12 +11822,16 @@ fn textBytes(t String&) Array<U8> {
     return b
 }
 
-fn litText(v litv) String { return $U64(v.I) if v.Big else $v.I }
+fn litText(v litv) String {
+    if v.Wide { return "-" $v.W if v.Neg else $v.W }
+    return $U64(v.I) if v.Big else $v.I
+}
 
 # whether an integer literal's value fits the integer type t (T17e)
 fn (c mut Checker&) rawFits(v litv, t types.TypeId) Bool {
     u := c.under(t)
     w := c.P.T.Bits(u)
+    if v.Wide or w > 64 { return not v.Wide and not (v.Big and not c.P.T.IsUnsigned(u)) and intFits(c.P.T, v, u) }
     if c.P.T.IsUnsigned(u) {
         if v.Big { return w == 64 }
         if v.I < 0 { return false }

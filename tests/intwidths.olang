@@ -54,6 +54,23 @@ fn i128Case(n I64) String {
         $(I128(-7) / 2))
 }
 
+# literals past 64 bits (E4a, L10, L10a): computed exactly up to 128 bits, a value adapting to a type wide enough for it -
+# the decimal, the hexadecimal and the shifted forms, and a literal-only expression of them, beside a run-time value
+fn litCase(n I64) String {
+    a U128 = 340282366920938463463374607431768211455
+    b I128 = 1 << 100
+    c I128 = -170141183460469231731687303715884105728
+    d U128 = 0xFFFF_FFFF_FFFF_FFFF << 64
+    e I100 = (1 << 99) - 1
+    f U128 = (1 << 100) / 3 - (1 << 90) % 7
+    g I128 = -(1 << 100) >> 3
+    h U128 = (1 << 127) | 5
+    k F64 = 1 << 100
+    m := I128(n) * (1 << 100) + 340282366920938463463374607431768211 # n is 2
+    return ($a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k " " $m " " $(a == U128.Max) " "
+        $(c == I128.Min))
+}
+
 # conversions between widths, to and from floats, each rounding once (T4, E26)
 fn convCase(n I64) String {
     w := U128(1) << U128(n) | 1 # 2^100 + 1
@@ -127,6 +144,7 @@ ParseBaked := parseCase(9)
 ArithBaked := arithCase(27)
 FlowBaked := flowCase(4)
 HashBaked := hashCase(6)
+LitBaked := litCase(2)
 
 # what each computation gives
 WantI1 := "-1 0 -1 0 -1 1"
@@ -146,6 +164,10 @@ WantMethod := ("efcdab bcdefa bcdefa 17 0 8070605040302010000000000000000 3 5 -5
 WantParse := "-170141183460469231731687303715884105728 340282366920938463463374607431768211455 9 127 1 0 2"
 WantArith := "127 0 536870912 -1 7 9 27"
 WantFlow := "-8388481 -18446744073709551614 504"
+WantLit := ("340282366920938463463374607431768211455 1267650600228229401496703205376 "
+    "-170141183460469231731687303715884105728 340282366920938463444927863358058659840 "
+    "633825300114114700748351602687 422550200076076467165567735124 -158456325028528675187087900672 "
+    "170141183460469231731687303715884105733 1.2676506002282294e+30 340284902222138919922177600838178963 true true")
 
 # the inputs again, read at run time
 One mut I64 = 1
@@ -229,6 +251,12 @@ fn wides(n I64) Array<U100> {
     a := Array<U100>(n)
     for i in range n { a[i] = U100(i) << 90 }
     return a
+}
+
+test "E4a, L10: literals of up to 128 bits are computed exactly and adapt to a type wide enough" {
+    assert LitBaked == WantLit
+    assert litCase(Two) == WantLit
+    assert litCase(2) == WantLit # S18c: decided while compiling
 }
 
 test "T4a: an array of a new width made in a function is read back after an arena churn, its lanes adding" {

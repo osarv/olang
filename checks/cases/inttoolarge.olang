@@ -1,7 +1,7 @@
-# check: fail error[L10]: '99999999999999999999999' is beyond 64 bits
-# L10: a decimal literal beyond U64's maximum is an error, not I64's maximum
+# check: fail error[L10]: '999999999999999999999999999999999999999999' is beyond 128 bits
+# L10: a decimal literal beyond U128's maximum is an error, not saturated
 type E error { X }
 fn main() ? E {
-    z U64 = 99999999999999999999999
+    z U128 = 999999999999999999999999999999999999999999
     assert z > 0
 }

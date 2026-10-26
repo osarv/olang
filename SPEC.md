@@ -175,12 +175,16 @@ an ordinary name everywhere else.
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
 `decimal-int ::= digit { digit-sep digit }`. No unary minus is
 part of the literal itself (negation is the unary `-` operator, §5). An `INT_LIT`'s own type follows its
-written value: `I64`, and `U64` for a decimal value above `I64`'s maximum (T6a). A decimal literal beyond `U64`'s maximum, `18446744073709551615`, is a compile-time error - it is never
-saturated or wrapped - and so is a hexadecimal or binary one needing more than 64 bits.
+written value: `I64`, and `U64` for a decimal value above `I64`'s maximum (T6a). A larger one, up to `U128`'s maximum,
+`340282366920938463463374607431768211455`, has no type of its own: it adapts to a type wide enough for it (T6, T4a). A
+decimal literal beyond `U128`'s maximum is a compile-time error - it is never saturated or wrapped - and so is a
+hexadecimal or binary one needing more than 128 bits.
 
 **L10a.** `hex-int ::= ( "0x" | "0X" ) hex-digit { digit-sep hex-digit }`, where `hex-digit` is `0`-`9`,
 `a`-`f` or `A`-`F`. At least one digit is required, so `0x` alone is an error. A hexadecimal literal
-denotes a **bit pattern** of at most 64 bits. Adapting to an unsigned type (T6) it is worth those bits read unsigned, so
+denotes a **bit pattern** of at most 128 bits. One needing more than 64 bits is worth its bits read unsigned wherever it
+adapts (`x U128 = 0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF` is `U128`'s maximum), and fits a signed type only where
+that value does. One of at most 64 bits has two readings. Adapting to an unsigned type (T6) it is worth those bits read unsigned, so
 it fits any unsigned type wide enough to hold the pattern - `x U64 = 0x9E3779B97F4A7C15`, `0xFFFFFFFFFFFFFFFF` as
 `U64`'s maximum; everywhere else it is worth its `I64` reading, so the full width of `I64` is writable:
 `0xFFFFFFFFFFFFFFFF` is `-1` in an `I64` and does not fit an `I32`. A literal-only expression (E4a) built from such
@@ -542,10 +546,9 @@ bits; `ByteSwap` (E37) a width of whole bytes; and only the eight cross the C bo
 arithmetic wraps modulo 2^w (E6c), and its division, remainder, ordering, right shift and conversions treat its value
 as unsigned. `F16` and `BF16` round every result to their own precision, as the hardware does; where the target has
 no instructions for them the arithmetic is carried out in `F32` and rounded back, with the same result. A float's bit
-pattern is read and written as an unsigned integer of its width (E33). A literal cannot be written above `I64`'s
-maximum; a larger `U64` is computed (`U64(0) - 1`). A literal holds at most 64 bits: one above `I64`'s maximum adapts to a
-signed or unsigned type wider than 64 bits (T4a) as its `U64` value, and a wider value - `U128(1) << 100` - is computed
-from a converted operand, a literal-only expression needing more than 64 bits being an error (E4a).
+pattern is read and written as an unsigned integer of its width (E33). A literal holds at most 128 bits (L10):
+`x U128 = 340282366920938463463374607431768211455` and `x I128 = 1 << 100` are written as they are (E4a), and one past
+64 bits adapts only to a type wide enough for it, having no type of its own (T6a).
 
 **T6.** There is no implicit conversion between any two distinct types except the two T6b states - a number
 widening within its family, and a declared type flowing into its base - and the adaptation of a literal. A
@@ -592,7 +595,8 @@ own type (E6d).
 
 **T6a.** Where nothing adapts it, a literal's own type is: `I64` for an integer literal, `U64` for a decimal one above
 `I64`'s maximum (L10; a hexadecimal or binary literal is a bit pattern, read as an `I64` unless it adapts to an unsigned
-type, L10a), `F64` for a float literal, `Char` for a character literal, and `Bool` for `true`/`false` - the widest
+type, L10a), none for one past 64 bits - it adapts to a type wide enough for it, and where nothing adapts it, as in `x :=
+1 << 100`, it is an error naming the type to write - `F64` for a float literal, `Char` for a character literal, and `Bool` for `true`/`false` - the widest
 signed integer and the widest float, so a value nothing types is never narrowed or wrapped by a type nobody chose. This
 is the type `:=` infers (§6.2 D15: `x := 0` is an `I64`) and the type such a literal carries into a context that
 requires no particular type of it - a range of literals (S9b), a type variable only literals reach (G9a), a `-define` build
@@ -2821,10 +2825,13 @@ rounding once as `F64` arithmetic does, the result rounded once more to the targ
 operands as their types say, two literals of differing types meeting as T6 ranks them: `7 / 2` is `3` and
 `(1 + 2) * 0.5` is `1.5`. A shift is exact too - `x << n` is `x` times 2^n and `x >> n` the floor of `x` over 2^n,
 the amount bounded by no width - so `x I64 = 1 << 40` is 1099511627776 and `x I32 = 1 << 31` is an error, the value
-2147483648 not fitting (E8a's width check is for a shift nothing adapts). The exact computation holds what a literal
-holds - a magnitude below 2^64, of either sign; a value past it - `1 << 100`, or `18446744073709551615 + 1` - has no
-value even where its target is wider (T4a), and is an error naming the fix, a converted operand (`U128(1) << 100`), as
-is a negative amount (E8a). So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
+2147483648 not fitting (E8a's width check is for a shift nothing adapts). The exact computation holds every value an
+integer type holds, from `I128`'s least, -2^127, to `U128`'s greatest, 2^128 - 1, at every step - so `x I128 = 1 <<
+100` and `x U128 = 0xFFFF_FFFF_FFFF_FFFF << 64` are as written (T4a), while a value past that range - `1 << 128`, or
+`340282366920938463463374607431768211455 + 1`, even where a later step would bring it back - has none, and is an error,
+as is a negative amount (E8a). A value past 64 bits adapts only to a type wide enough for it: with nothing adapting it (`x := 1
+<< 100`) it is an error naming the type to write, since a literal's own type is at most `U64` (T6a). Beside a value past
+64 bits, in `<<` and `& | ^`, a pattern of at most 64 bits (L10a) is its bits. So `b U8 = 1 + 2`, `f F32 = 0.5 * 2.0` and `u U64 = 9223372036854775807 + 1` are valid,
 `g < 1.0 / 3.0` with `g` an `F32` compares two `F32`s as `g < 0.333` would, and `b U8 = 200 + 100` and
 `x I32 = 2147483647 + 1` are compile-time errors: the value does not fit. It is likewise an error where the value
 has none - a float computation whose finite operands give an infinity (`1e308 * 10.0`) - and an integer `/` or `%` by
