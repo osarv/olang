@@ -1,0 +1,213 @@
+# Definite initialisation (D13d, D13e) and arrays made with no clear (E27, T7c, D14d): a local or a global declared
+# with no value and assigned on every path before it is read - its type with no zero value included - and the
+# comprehensions and fills that write each element once. Each run-time test sits beside one the compile-time
+# evaluator decides (a baked global, an assert it decides, S18c, K2).
+
+type DiNode struct(v I64) {
+    v
+}
+
+DiMade mut I64 = 0
+
+# a constructor with an effect: no zero value (D13c), so a declaration of it with no value must be assigned first
+type DiEff struct(v I64) {
+    v
+    DiMade = DiMade + 1
+}
+
+type DiShape enum {
+    Dot
+    Circle(r I64)
+    Square(s I64)
+}
+
+type DiErr error { BAD }
+
+fn diFind(k I64) DiNode& ? DiErr {
+    if k < 0 { error DiErr.BAD }
+    return DiNode(k)
+}
+
+# a reference never null, assigned in both branches
+fn diPick(c Bool) I64 {
+    n DiNode&
+    if c {
+        n = DiNode(1)
+    } else {
+        n = DiNode(2)
+    }
+    return n.v
+}
+
+# a match: every arm assigns or leaves
+fn diArea(s DiShape) I64 {
+    a DiNode&
+    match s {
+        case DiShape.Dot { return 0 }
+        case DiShape.Circle(r) { a = DiNode(3 * r * r) }
+        case DiShape.Square(q) { a = DiNode(q * q) }
+    }
+    return a.v
+}
+
+# a try whose clause leaves, and an else-if chain
+fn diTried(k I64) I64 {
+    n DiNode&
+    n = try diFind(k) catch DiErr { return -1 }
+    m DiNode&
+    if k > 10 {
+        m = DiNode(10)
+    } else if k > 5 {
+        m = DiNode(5)
+    } else {
+        m = DiNode(0)
+    }
+    return n.v + m.v
+}
+
+# an effectful constructor's value assigned on every path: no zero made, so the constructor runs once a call
+fn diEff(c Bool) I64 {
+    e DiEff
+    if c {
+        e = DiEff(7)
+    } else {
+        e = DiEff(8)
+    }
+    return e.v
+}
+
+# a type with a zero value read before it is assigned reads the zero; one assigned first has none written
+fn diZero(c Bool) I64 {
+    x I64
+    y I64
+    if c { y = 5 } else { y = 6 }
+    return x + y
+}
+
+# a constructor's field assigned in its branches (C2a)
+type DiPair struct(big Bool) {
+    big
+    n DiNode&
+    if big {
+        n = DiNode(100)
+    } else {
+        n = DiNode(1)
+    }
+}
+
+# a comprehension of a count known while compiling is a fixed array (T7c); one over a run-time range is exact
+fn diSquares(n I64) Array<I64> { return I64[i * i for i in range n] }
+
+fn diFill(n I64) Array<F32> {
+    a := Array<F32>(n)
+    for i in range n {
+        a[i] = F32(i) * 0.5
+    }
+    return a
+}
+
+# a global with no zero value, and text, given their values by top-level ifs below them (D13e)
+DiBackend String
+if TargetOs == "linux" { DiBackend = "epoll" } else { DiBackend = "kqueue" }
+
+DiRoot DiNode&
+if TargetOs == "linux" {
+    DiRoot = DiNode(7)
+} else if TargetOs == "macos" {
+    DiRoot = DiNode(8)
+} else {
+    DiRoot = DiNode(9)
+}
+
+# baked by the evaluator, as run below (K2)
+DiPicked := diPick(false)
+DiAreaBaked := diArea(DiShape.Square(4))
+DiZeroBaked := diZero(true)
+DiSquaresBaked := diSquares(4)
+DiFillBaked := diFill(3)
+DiFixedLen := I64[i for i in range 6].Len()
+
+test "a never-null reference assigned in both branches (D13d)" {
+    assert diPick(true) == 1
+    assert diPick(false) == 2
+    assert DiPicked == 2
+}
+
+test "a match and a try assign on every path (D13d)" {
+    assert diArea(DiShape.Dot) == 0
+    assert diArea(DiShape.Circle(2)) == 12
+    assert diArea(DiShape.Square(3)) == 9
+    assert DiAreaBaked == 16
+    assert diTried(-3) == -1
+    assert diTried(7) == 12
+    assert diTried(20) == 30
+    assert diTried(1) == 1
+}
+
+test "an effectful constructor assigned first runs once (D13c, D13d)" {
+    before := DiMade
+    assert diEff(true) == 7
+    assert diEff(false) == 8
+    assert DiMade == before + 2
+}
+
+test "a zero value is read where nothing assigned it (D13d)" {
+    assert diZero(true) == 5
+    assert diZero(false) == 6
+    assert DiZeroBaked == 5
+}
+
+test "a constructor's field assigned in its branches (D13d)" {
+    assert DiPair(true).n.v == 100
+    assert DiPair(false).n.v == 1
+}
+
+test "a global given its value by a top-level if (D13e)" {
+    assert DiBackend == "epoll" or DiBackend == "kqueue"
+    assert DiRoot.v == 7 or DiRoot.v == 8 or DiRoot.v == 9
+    if TargetOs == "linux" {
+        assert DiBackend == "epoll"
+        assert DiRoot.v == 7
+    }
+}
+
+test "comprehensions write each element once (E27, T7c)" {
+    a := I64[i * 3 for i in range 5]
+    assert a.Len() == 5
+    assert a == I64[0, 3, 6, 9, 12]
+    assert DiFixedLen == 6
+    n := 4
+    assert diSquares(n) == I64[0, 1, 4, 9]
+    assert DiSquaresBaked == I64[0, 1, 4, 9]
+    b := I64[x + 1 for x in a]
+    assert b == I64[1, 4, 7, 10, 13]
+    c := I64[x for x in a if x % 2 == 0]
+    assert c == I64[0, 6, 12]
+    d := I32[I32(i) for i in range 2, n * 2, 2]
+    assert d == I32[2, 4, 6]
+    assert I64[i for i in range 0].Len() == 0
+}
+
+test "Array<T>(n) filled by the loop after it (D14d)" {
+    assert diFill(4) == F32[0.0, 0.5, 1.0, 1.5]
+    assert DiFillBaked == F32[0.0, 0.5, 1.0]
+}
+
+test "definitely assigned references read back after the arena churns (D13d, O2)" {
+    kept := Vec<DiNode&>()
+    for i in range 200 {
+        n DiNode&kept
+        if i % 2 == 0 {
+            n = DiNode(i)
+        } else {
+            n = DiNode(-i)
+        }
+        kept.Push(n)
+        junk := Array<I64>(64, i)
+        assert junk[0] == i
+    }
+    total I64 = 0
+    for x in kept { total += x.v }
+    assert total == -100
+    assert kept[198].v == 198 and kept[199].v == -199
+}

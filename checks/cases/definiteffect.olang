@@ -1,0 +1,15 @@
+# check: fail note: read here before it is assigned on every path - assign it on each path before this read
+# D13d, D13c: a constructor with an effect gives its type no zero value, so a declaration of it with no value is read only
+# after every path assigned it; whether the type has a zero value is decided by running its constructor, so the
+# error is D13c's, with a note at the read
+Made mut I64 = 0
+type Eff struct(v I64) {
+    v
+    Made = Made + 1
+}
+fn a(c Bool) I64 {
+    e Eff
+    if c { e = Eff(1) }
+    return e.v
+}
+fn main() { a(true) }

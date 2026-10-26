@@ -1956,7 +1956,7 @@ fn NoteUnassignedArm() Msg { return Msg(Diag.NoteUnassignedArm, "", "this arm do
 fn NoteUnassignedClause() Msg { return Msg(Diag.NoteUnassignedClause, "", "this clause runs when the try fails, which may be before the assignment") }
 
 # NOTE_READ_UNASSIGNED
-fn NoteReadUnassigned() Msg { return Msg(Diag.NoteReadUnassigned, "", "read here before it is assigned on every path") }
+fn NoteReadUnassigned() Msg { return Msg(Diag.NoteReadUnassigned, "", "read here before it is assigned on every path - assign it on each path before this read") }
 
 # NOTE_HERE
 fn NoteHere() Msg { return Msg(Diag.NoteHere, "", "here") }

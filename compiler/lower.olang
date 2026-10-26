@@ -797,8 +797,10 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
             if ln.B.Locals[I64(l)].Unset {
-                # D13d: assigned on every path before any read - nothing is written for its declaration
+                # D13d: assigned on every path before any read - nothing is written for its declaration; its storage
+                # is marked set with no value (Use(None) writes nothing), so element stores may follow
                 if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
+                ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(mir.Operand.None)))
                 return
             }
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
@@ -929,8 +931,8 @@ fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, 
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
     buf := ln.temp(ty, sp)
-    el := t.Elem(t.Repr(ty))
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.Const(el, 0))))
+    # no fill: every element is copied in at once
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
     return mir.Operand.Copy(mir.L(buf))
 }
@@ -1757,7 +1759,8 @@ fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, s
     src := ln.local(v, from, sp)
     n := mir.Operand.Const(mir.I64T, ln.fixedLen(ln.arrayOf(from)))
     buf := ln.temp(to, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.Const(t.Elem(t.Repr(to)), 0))))
+    # no fill: every element is copied in at once
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
     return mir.Operand.Copy(mir.L(buf))
 }
@@ -2238,7 +2241,10 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     n := mir.Operand.None
     if m.Length is not null { n = ln.val(m.Length) }
     fv := mir.Operand.Const(el, 0)
-    if m.Items.Len() > 0 {
+    if m.NoClear {
+        # D14d: the loop after it writes every element before anything reads one - no clear, no zero value made
+        fv = mir.Operand.None
+    } else if m.Items.Len() > 0 {
         zero := match m.Items[0] {
             case typed.Expr.Call(_, _, k) => k.Zero
             case _ => false
@@ -2264,6 +2270,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
     fixed := ln.fixedLen(at)
     if fixed >= 0 {
         ops := Array<mir.Operand>(fixed)
+        if fv == mir.Operand.None { fv = mir.Operand.Const(el, 0) }   # a fixed array's no clear is its local's (Unset)
         for i in range fixed { ops[i] = fv }
         v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
         if not t.IsRef(t.Repr(ty)) { return v }
@@ -2326,7 +2333,8 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     }
     buf := ln.temp(bt, sp)
     s := ln.built(c.Site)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.Const(el, 0))))
+    # no fill: an element is yielded before anything reads it, and only the yielded ones are copied out
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.None)))
     n := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(n), mir.Rvalue.Use(ln.constI64(0))))
     ln.collects.Push(collectCtx(buf, n, el, bt, s))
@@ -2334,7 +2342,8 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     try ln.collects.Pop() catch { }
     if ln.dead { return mir.Operand.None }
     out := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.L(n)), mir.Operand.Const(el, 0))))
+    # no fill: every element is copied in at once
+    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.L(n)), mir.Operand.None)))
     dst := ln.F.Place(mir.Base.Local(out), mir.Proj[mir.Proj.Deref] if t.IsRef(t.Repr(ty)) else mir.Proj[])
     ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref]), mir.Operand.Copy(mir.L(n))))
     return mir.Operand.Copy(mir.L(out))
@@ -2365,7 +2374,7 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
     more := ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[ln.prim(typed.PrimOp.Mul, mir.I64T
                                                                    mir.Operand[n, ln.constI64(2)], sp), ln.constI64(1)], sp)
     nb := ln.temp(cc.ArrT, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.Const(cc.Elem, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, ln.F.Place(mir.Base.Local(nb), mir.Proj[mir.Proj.Deref]), deref, n))
     ln.emit(mir.Stmt.Assign(sp, mir.L(cc.Buf), mir.Rvalue.Use(mir.Operand.Copy(mir.L(nb)))))
     ln.goto(store)

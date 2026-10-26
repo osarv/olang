@@ -3181,6 +3181,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
     if fe.dbgSp >= 0 { fe.locate(stmtSpan(s)) }
     match s {
         case mir.Stmt.Assign(_, p, rv) {
+            if rv == mir.Rvalue.Use(mir.Operand.None) { return }   # declared, nothing written (D13d)
             pt := fe.placeType(p)
             if fe.fillInPlace(p, pt, rv) { return }
             if fe.viaMem(pt) and fe.intoPlace(p, pt, rv) { return }

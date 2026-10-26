@@ -1,0 +1,7 @@
+# check: fail error[D13e]: this 'if' assigns 'Root' and has no 'else', and Node& has no zero value
+# D13e: a global with no zero value given its value by a top-level if must be assigned in every branch the build may
+# choose - here no branch is taken on another target
+type Node struct(v I64) { v }
+Root Node&
+if TargetOs == "linux" { Root = Node(7) }
+fn main() { }

@@ -257,6 +257,18 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
     unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
+    # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
+    # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
+    # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
+    comprState I64 = 0
+    comprId I64 = -1
+    comprOuter I64 = -1
+    comprMark I64 = -1
+    comprFrom I64 = -1
+    comprOut I64 = -1
+    comprIdx I64 = -1
+    comprKnown I64 = -1
+    noClear Bool = false        # D14d: the Array<T>(n) being checked is filled by the loop after it - made with no clear
     # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
     # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
     # requirements the evaluator decides, each a body of its own; the conversions likewise (D17g)
@@ -9872,8 +9884,10 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b)
     lchk := typed.Check.Abort
+    nc := c.noClear and args.Len() == 1 and not c.owning(elem) and c.P.T.KindOf(c.P.T.Repr(elem)) != types.Kind.Array
+    c.noClear = false
     return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
-                                              c.site(typed.SiteKind.Make, sp), lchk))
+                                              c.site(typed.SiteKind.Make, sp), lchk, nc))
 }
 
 # the name a span begins with - a written type's first word - else the span
@@ -14505,7 +14519,11 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         } else if i < v.Values.Len() {
             wasNull := c.nullDecl
             if v.Ty is not null and not v.Infer { c.nullDecl = c.typeWrittenAt(v.Ty!) }
+            # D14d: Array<T>(n) whose every element the counted loop after it writes before any read - no clear
+            filled := not v.Field and v.Names.Len() == 1 and c.filledNext(v.Names[i], v.Values[i])
+            c.noClear = filled
             x = c.exprTo(v.Values[i], want)
+            c.noClear = false
             c.nullDecl = wasNull
             if v.Ty is null or v.Infer {
                 t = c.inferred(v.Values[i], x!, keep)
@@ -14548,6 +14566,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
+        # D14d: a fixed array so filled is not written before the loop (its value is never seen)
+        if i < v.Values.Len() and not v.Field and v.Names.Len() == 1 and c.P.T.KindOf(c.P.T.Repr(t)) == types.Kind.Array and
+           c.P.T.Length(c.P.T.Repr(t)) != types.TypeId(0) and c.noClearMade(x) { c.cur().Locals[id].Unset = true }
         if pend.Group >= 0 { c.unsets.Push(unsetCand(pend.Body, id, pend.Group, pend.NoZero, pend.ValueAt, pend.Sp, pend.Ty, pend.Field)) }
         if v.Ty is not null and not v.Infer { c.fr().typeAt.Put(id, c.typeWrittenAt(v.Ty!)) }
         if inferred { c.roLet(id, x!) }
@@ -15639,9 +15660,14 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
         n := c.hidden(sp, c.i64())
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, coll), null)))
+        # T7c: a fixed array's length is the comprehension's count, known while compiling
+        if cm is not null and c.P.T.Length(at) != types.TypeId(0) and c.P.T.KindOf(c.P.T.Length(at)) == types.Kind.Const {
+            c.comprKnown = c.P.T.ConstValue(c.P.T.Length(at))
+        }
         c.counted(sp, f, k, n, coll, at, -1, -1, cm, ce)
         return c.readLocal(sp, n)
     }
+    if cm is not null { c.comprOpen(sp) }
     dt := c.deref(st)
     if c.P.T.KindOf(dt) == types.Kind.Any {
         # T32b: an "any" of an iterator trait walked through its table's Next
@@ -15909,16 +15935,179 @@ fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
     f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, Array<ast.Stmt&>(0), Array<ast.Catch&>(0))
     from := c.stmts.Len()
     fails := c.fr().LoopFails
-    id, outer, mark := c.open(typed.BlockKind.Collect, sp)
-    c.walk(sp, f, cm, et)
-    b := c.close(id, outer, mark, from)
+    # the walk opens the comprehension's block where its source's setup ends (comprOpen), or fills a fixed array
+    wState, wId, wOuter, wMark, wFrom := c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom
+    wOut, wIdx, wKnown := c.comprOut, c.comprIdx, c.comprKnown
+    c.comprState, c.comprOut, c.comprIdx, c.comprKnown = 1, -1, -1, -1
+    reserve := c.walk(sp, f, cm, et)
+    if c.comprState == 1 { c.comprOpen(sp) }
+    state, id, outer, mark, cfrom, out := c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom, c.comprOut
+    c.comprState, c.comprId, c.comprOuter, c.comprMark, c.comprFrom = wState, wId, wOuter, wMark, wFrom
+    c.comprOut, c.comprIdx, c.comprKnown = wOut, wIdx, wKnown
     # E27, S9e: a comprehension whose own calls can fail is written under try - said at its "for"
     if c.fr().LoopFails > fails and c.fr().Tries == 0 {
         fa := try c.src(sp).Find(" for ") catch default -1
         c.err(source.Span(sp.Start + I32(fa + 1), sp.Start + I32(fa + 4)) if fa >= 0 else sp, msgs.ComprNeedsTry())
     }
     c.fr().LoopFails = fails
-    return typed.Expr.Collect(sp, at, typed.Collect(null, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None))
+    if state == 3 {
+        # T7c: no if, a count known while compiling - a fixed array, each element written once in place
+        r := c.readLocal(sp, out)
+        return typed.Expr.Seq(sp, typeOf(r), typed.Seq(gather(c.stmts, from), r))
+    }
+    b := c.close(id, outer, mark, cfrom)
+    # its storage reserved from the count its source knows before the loop, made once at it where every value is kept
+    # (no if); none known, grown (E27)
+    exact := reserve is not null and cm.Filter is null
+    r := typed.Expr.Collect(sp, at, typed.Collect(reserve, b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, exact))
+    if cfrom == from { return r }
+    return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+}
+
+# D14d: whether "name := Array<T>(n)" (or typed so) is followed, as the next statement of its block, by a counted loop
+# "for i in range n" (or "range 0, n", the same n - a name or a literal) whose body writes name[i] as a whole at its top
+# level, mentions name nowhere else and holds no break, continue or return - so every element is written before
+# anything reads the array, and its clear is never seen. Read off the text where it is about mentions: a mention is
+# always the name written, so anything more is a mention more, and the clear is kept. An element type that owns or is
+# an array is excluded (a store into one reads what it replaces)
+fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
+    fr := c.fr()
+    if fr.restAt >= fr.rest.Len() { return false }
+    n := match value {
+        case ast.Expr.Call(_, f, args) => args[0] if args.Len() == 1 and isArrayCtor(c, f) else null
+        case _ => null
+    }
+    if n is null or not plainLen(n) { return false }
+    match fr.rest[fr.restAt] {
+        case ast.Stmt.ForIn(_, f) {
+            if f.Key != source.NameId(0) or f.Tried or f.Clauses.Len() > 0 or f.Body.Len() == 0 { return false }
+            match f.Source {
+                case ast.Expr.Range(_, rargs) {
+                    if rargs.Len() == 1 {
+                        if not c.sameLen(rargs[0], n) { return false }
+                    } else if rargs.Len() == 2 {
+                        if not (c.isZeroLit(rargs[0]) and c.sameLen(rargs[1], n)) { return false }
+                    } else {
+                        return false
+                    }
+                }
+                nomatch { return false }
+            }
+            writes := 0
+            for st in f.Body {
+                match st {
+                    case ast.Stmt.Assign(_, op, target, _) {
+                        if op == token.Tok.Assign and c.indexOf(target, name, f.Name) { writes++ }
+                    }
+                    nomatch { }
+                }
+            }
+            if writes != 1 { return false }
+            from, to := f.Body[0].Span().Start, f.Body[f.Body.Len() - 1].Span().End
+            text := c.src(source.Span(from, to))
+            return wordCount(text, c.text(name)) == 1 and wordCount(text, "break") == 0 and
+                   wordCount(text, "continue") == 0 and wordCount(text, "return") == 0
+        }
+        nomatch { return false }
+    }
+}
+
+# whether an expression is "Array<T>" naming the built-in array (a call of it then makes one)
+fn isArrayCtor(c mut Checker&, f ast.Expr&) Bool {
+    match f {
+        case ast.Expr.Generic(_, g, targs) {
+            if targs.Len() != 1 { return false }
+            match g {
+                case ast.Expr.Name(_, gn) { return c.text(gn) == "Array" }
+                nomatch { return false }
+            }
+        }
+        nomatch { return false }
+    }
+}
+
+# a length a later range can be told to be the same as: a name or an integer literal
+fn plainLen(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Name(_, _) => true
+        case ast.Expr.Lit(_, k) => k == token.Tok.IntLit
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) sameLen(a ast.Expr&, b ast.Expr&) Bool {
+    if not plainLen(a) or not plainLen(b) { return false }
+    match a {
+        case ast.Expr.Name(_, n) {
+            match b {
+                case ast.Expr.Name(_, m) { return n == m }
+                nomatch { return false }
+            }
+        }
+        nomatch { }
+    }
+    return c.src(a.Span()) == c.src(b.Span())
+}
+
+fn (c mut Checker&) isZeroLit(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(sp, k) => k == token.Tok.IntLit and c.src(sp) == "0"
+        case _ => false
+    }
+}
+
+# whether a target is "name[i]"
+fn (c mut Checker&) indexOf(target ast.Expr&, name source.NameId, i source.NameId) Bool {
+    match target {
+        case ast.Expr.Index(_, x, items) {
+            if items.Len() != 1 { return false }
+            xn := match x {
+                case ast.Expr.Name(_, m) => m
+                case _ => source.NameId(0)
+            }
+            ixn := match items[0] {
+                case ast.Expr.Name(_, m) => m
+                case _ => source.NameId(0)
+            }
+            return xn == name and ixn == i
+        }
+        nomatch { return false }
+    }
+}
+
+# how often a word stands whole in a text - not part of a longer name
+fn wordCount(t String&, w String&) I64 {
+    n I64 = 0
+    i I64 = 0
+    for i + w.Len() <= t.Len() {
+        if t[i:i + w.Len()] == w {
+            before := i == 0 or not (t[i - 1].IsLetter() or t[i - 1].IsDigit() or t[i - 1] == '_')
+            j := i + w.Len()
+            after := j >= t.Len() or not (t[j].IsLetter() or t[j].IsDigit() or t[j] == '_')
+            if before and after { n++ }
+        }
+        i++
+    }
+    return n
+}
+
+# whether a declaration's value is an Array<T>(n) made with no clear (D14d)
+fn (c mut Checker&) noClearMade(x typed.Expr?&) Bool {
+    if x is null { return false }
+    return match x {
+        case typed.Expr.Make(_, _, m) => m.NoClear
+        case _ => false
+    }
+}
+
+# E27: the comprehension being walked opens its block here, where its source's setup ends - the walk's own
+# statements from now on its loop's
+fn (c mut Checker&) comprOpen(sp source.Span) {
+    if c.comprState != 1 { return }
+    c.comprFrom = c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Collect, sp)
+    c.comprId, c.comprOuter, c.comprMark = id, outer, mark
+    c.comprState = 2
 }
 
 # ---- lanes (E39) ----
@@ -16527,7 +16716,15 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
         return
     }
     sp := cm.Value.Span()
+    out, idx := c.comprOut, c.comprIdx
     v := c.exprTo(cm.Value, ce)
+    if cm.Filter is null and out >= 0 {
+        # T7c: the fixed array's element at the counter
+        ot := c.localType(out)
+        dst typed.Place&c = typed.Place.Elem(sp, ce, typed.Elem(typed.Place.Local(sp, ot, typed.LocalId(I32(out))), c.readLocal(sp, idx), typed.Check.None))
+        c.emit(typed.Stmt.Assign(sp, dst, c.fit(v, ce, sp)))
+        return
+    }
     if cm.Filter is null {
         c.emit(typed.Stmt.Yield(sp, v))
         return
@@ -16800,6 +16997,21 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), cnt))
     k := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, t, 0)))
+    # T7c: a comprehension's count where every bound is known while compiling
+    if cm is not null {
+        known := Array<I64>(rargs.Len(), 0)
+        all := true
+        for i in range rargs.Len() {
+            kv := c.knownInt(rargs[i])
+            if kv < types.TypeId(0) { all = false } else { known[i] = c.P.T.ConstValue(kv) }
+        }
+        if all {
+            lo0 := known[0] if rargs.Len() > 1 else 0
+            hi0 := known[1] if rargs.Len() > 1 else known[0]
+            st0 := known[2] if rargs.Len() > 2 else 1
+            if st0 > 0 { c.comprKnown = (hi0 - lo0 + st0 - 1) / st0 if hi0 > lo0 else 0 }
+        }
+    }
     c.counted(sp, f, k, n, -1, types.UnknownT, lo, st, cm, ce)
     return c.readLocal(sp, n)
 }
@@ -16807,6 +17019,19 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
 # the counted loop of a for-in: k from 0 below n, the element - coll's at k, or lo + k * st - and the position (the
 # key) declared each turn
 fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64, at types.TypeId, lo I64, st I64, cm ast.Compr?&, ce types.TypeId) {
+    if cm is not null and c.comprState == 1 {
+        if cm.Filter is null and c.comprKnown >= 0 and ce != types.UnknownT {
+            # E27, T7c: a fixed array of the known count, declared with no value and written element by element
+            ft := c.P.T.Array(ce, c.P.T.Const(c.i64(), c.comprKnown))
+            out := c.hidden(sp, ft)
+            c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(out)), c.lit(sp, ft, 0)))
+            c.cur().Locals[out].Unset = true   # D13d: every element written before it is read
+            c.comprOut, c.comprIdx, c.comprState = out, k, 3
+        } else {
+            c.comprOpen(sp)
+        }
+    }
+    c.comprKnown = -1
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)

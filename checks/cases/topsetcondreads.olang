@@ -1,0 +1,5 @@
+# check: fail error[D13e]: this condition reads 'X', which its 'if' assigns
+# D13e: the condition deciding which branch assigns a global cannot read that global
+X I64
+if X == 0 { X = 5 } else { X = 6 }
+fn main() { }
