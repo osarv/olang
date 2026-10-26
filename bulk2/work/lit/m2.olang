@@ -1,0 +1,4 @@
+fn f(x U8) U8 { return x >> 70 }
+fn g(x I32) I32 { return x << 40 }
+fn h(x I64) I64 { return x << 64 }
+fn main() { }

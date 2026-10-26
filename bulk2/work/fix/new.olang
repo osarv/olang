@@ -1,0 +1,17 @@
+import "std/io"
+import "std/list"
+fn total(l list.List<I64>&) I64 {
+    t I64 = 0
+    for x in l { t += x }
+    return t
+}
+fn main() {
+    l := list.List<I64>()
+    for i in range 10 { l.Push(i) }
+    m := l
+    m.Push(100)
+    io.Println($l " " $total(l) " " $l.Len())!
+    k := list.List<list.List<I64>>()
+    k.Push(l)
+    io.Println($k)!
+}

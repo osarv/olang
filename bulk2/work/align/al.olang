@@ -1,0 +1,28 @@
+import "std/io"
+type S struct(a I128, b I128) { a
+    b }
+fn mk(n I64) Array<I128> {
+    a := Array<I128>(n)
+    for i in range n { a[i] = I128(i) << 70 }
+    return a
+}
+fn ss(n I64) Array<S> {
+    a := Array<S>(n)
+    for i in range n { a[i] = S(I128(i) << 70, I128(i)) }
+    return a
+}
+N mut I64 = 1
+fn main() {
+    t I128 = 0
+    for k in range 1000 {
+        pad := Array<U8>(N * 8 + k % 3)
+        x := mk(N)
+        y := ss(N)
+        z := x + x
+        y[0] = y[N - 1]
+        t += x[0] + z[N - 1] + y[0].a + I128(pad.Len())
+        w := x
+        t += w[0]
+    }
+    io.Println($t)!
+}

@@ -1,0 +1,17 @@
+import "std/io"
+type S struct(a I128) { a }
+N mut I64 = 1
+fn copy(d mut Array<S>&, s Array<S>&) { d[0] = s[0] }
+fn main() {
+    t I128 = 0
+    for k in range 50 {
+        pad := Array<U8>(8)
+        x := Array<S>(N)
+        pad2 := Array<U8>(8)
+        y := Array<S>(N)
+        x[0] = S(I128(k) << 70)
+        copy(y, x)
+        t += y[0].a + I128(pad.Len() + pad2.Len())
+    }
+    io.Println($t)!
+}

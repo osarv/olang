@@ -1,0 +1,22 @@
+import "std/io"
+type H struct() {
+    buf mut Array<I64>& = Array<I64>(4, 1)
+}
+G mut H& = H()
+fn drop() I64 {
+    G.buf = Array<I64>(4, 9)
+    return 1
+}
+fn churn() I64 {
+    t I64 = 0
+    for i in range 100 {
+        x := Array<I64>(4, i)
+        t += x[1]
+    }
+    return t
+}
+fn main() {
+    G.buf += drop()
+    churn()
+    io.Println($G.buf)!
+}
