@@ -470,3 +470,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (prelude `grown`), seed regenerated; checker gaps stop the build. Left: a Map's Vec value named by a local then Put not
   freed early (needs a relaxation); dispatch direct +1.5%. Next: generator frame elision, C imports (QBE), kernel
   tuning + Tensor (QBC/QBD).
+- QUEUED 2026-10-26 (the user: no linalg in std): remove std/linalg after the C-imports batch merges - std/linalg.olang,
+  its uses in tests/shared.olang, checks cases (chunkpool, gemmflat, o26alatermodule*, tbaa/narrow, linalg/shapes),
+  bench (gemm, fused, mlp, rungemm, runfused, repro/captured_value, repro/linalg_global_constant), std/rand's mention,
+  docs, CLAUDE.md/SPEC. Keep the checks' compiler points (rewrite cases without linalg where they test the compiler).
+  The kernel work (backup/wt-tensor a005f9f, NOTES.md) goes to oann's port. Also after C imports: generator frame
+  elision.

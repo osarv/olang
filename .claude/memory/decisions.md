@@ -1368,3 +1368,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   last two dimensions, leading dimensions folded into rows); Gemm/GemmBatch/GemmAct/GemmPatches keep taking Matrix;
   layer-level operations take and return Tensors and call the Matrix kernels inside. Built when oann is ported (QBH as
   recommended - the user did not object); kernel tuning now.
+- REVERSED 2026-10-26 (the user: "Forget about matrices and stdlinalg. No linalg in stdlib and tensors do not embed
+  matrices. Tensors are part of oann and they declare everything themselves"): std/linalg leaves the standard library;
+  Tensor and its kernels live in oann, declaring everything themselves (no Matrix underneath); QBD/QBH's Tensor-over-
+  Matrix plan withdrawn. The kernel tuning stopped at WIP a005f9f (wt-tensor, pushed as backup/wt-tensor; NOTES.md:
+  F32 2048 106 -> 133 GFLOPS vs OpenBLAS 143, F64 51 -> 57 vs 70 - packing through registers, BLIS loop order, L2
+  blocking) for oann's port to take. Removing std/linalg (its tests, checks cases, bench, docs, SPEC/CLAUDE mentions)
+  queued after the C-imports batch merges.
