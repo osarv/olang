@@ -314,3 +314,131 @@ test "D18e: a walk left by a return out of two loops, or by an error, closes its
     assert (try guardedFails(Ten) catch Bad default -1) == -1
     assert Dropped == d + 33
 }
+
+# ---- D18c: elements borrowed from what a generator was given, or kept by its walk ----
+
+# the words of t, each a view of t's own text
+fn spans(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == ' ' { i++ }
+        j := i
+        for j < t.Len() and t[j] != ' ' { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+# what spans gives, kept where the caller's text lives - an obligation on the caller (O10b)
+fn keepSpans(t String&, out mut Vec<String&>&) {
+    for w in spans(t) { out.Push(w) }
+}
+
+fn spanTotal(t String&) I64 {
+    n I64 = 0
+    for w in spans(t) { n += w.Len() }
+    return n
+}
+
+# text built and dropped in blocks of its own: storage freed early, or closed with a block, would be written over
+fn churnText() I64 {
+    n I64 = 0
+    for i in range 200 {
+        junk := Vec<String&>()
+        for k in range 4 { junk.Push($i "-churn-" $k) }
+        n += junk[3].Len()
+    }
+    return n
+}
+
+SpanTotal := spanTotal("one two three") # baked while compiling (K2)
+
+test "D18c: a generator's elements borrowed from what it was given live where that does" {
+    t := $"alpha beta" " gamma"
+    kept := Vec<String&>()
+    keepSpans(t, kept)
+    for w in spans(t) {
+        churnText()
+        kept.Push(w)
+    }
+    churnText()
+    assert kept.Len() == 6 and kept[0] == "alpha" and kept[4] == "beta" and kept[5] == "gamma"
+    assert spans(t).Count(fn(w) { return w.Len() == 5 }) == 2
+    g := spans(t)
+    a := try g.Next() catch default ""
+    b := try g.Next() catch default ""
+    churnText()
+    assert a == "alpha" and b == "beta"
+    lens := I64[w.Len() for w in spans(t)]
+    assert lens.Len() == 3 and lens[2] == 5
+    assert SpanTotal == 11 and spanTotal("ab c") == 3 # decided while compiling (S18c)
+    assert spanTotal(t) == 14
+}
+
+type Pt struct(x I64) {
+    x
+}
+
+# each point made once and kept by the walk, handed out as it is made and then all again
+fn points(n I64) Iterator<Pt&return> {
+    all mut Vec<Pt&>&return = Vec<Pt&>()
+    for i in range n {
+        p Pt&return = Pt(i * 10)
+        all.Push(p)
+        yield p
+    }
+    for p in all { yield p }
+}
+
+fn labels(n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $"label " $i
+        yield s
+    }
+}
+
+fn labelTotal(n I64) I64 {
+    t I64 = 0
+    for s in labels(n) { t += s.Len() }
+    return t
+}
+
+LabelTotal := labelTotal(3) # baked while compiling (K2)
+
+test "D18c: a generator's elements kept by its walk live where the generator does" {
+    g := labels(3)
+    a := try g.Next() catch default ""
+    b := try g.Next() catch default ""
+    churnText()
+    c := try g.Next() catch default ""
+    churnText()
+    assert a == "label 0" and b == "label 1" and c == "label 2"
+    pg := points(3)
+    seen := Vec<Pt&>()
+    for p in pg {
+        churnText()
+        seen.Push(p)
+    }
+    churnText()
+    assert seen.Len() == 6 and seen[1].x == 10 and seen[4].x == 10 and seen[5].x == 20
+    total I64 = 0
+    for p in points(4) { total += p.x }
+    assert total == 120
+    assert LabelTotal == 21 and labelTotal(2) == 14 # decided while compiling (S18c)
+}
+
+# holds a value with a destructor in its frame, given constant text - which lives in the program's scope
+fn holding(t String&) Iterator<I64> {
+    r := Res(t.Len())
+    yield r.id
+    yield r.id + 1
+}
+
+test "D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given" {
+    d := Dropped
+    for x in holding("constant") { break }
+    assert Dropped == d + 1
+    n I64 = 0
+    for x in holding("eight ch") { n += x }
+    assert n == 17 and Dropped == d + 2
+}

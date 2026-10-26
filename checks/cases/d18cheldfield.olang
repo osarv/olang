@@ -1,0 +1,21 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# D18c: a generator held in a field, walked twice - its kept elements live where the instance does
+fn labels(n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $"label " $i
+        yield s
+    }
+}
+
+type Holder struct(g ViewGenerator<String>) {
+    g
+}
+
+fn main() {
+    kept := Vec<String&>()
+    {
+        h := Holder(labels(2))
+        for w in h.g { kept.Push(w) }
+        for w in h.g { kept.Push(w) }
+    }
+}

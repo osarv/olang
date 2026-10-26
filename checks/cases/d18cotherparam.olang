@@ -1,0 +1,8 @@
+# check: fail error[D18c, T22a]: this generator yields what 'u' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&u>'), or yield a copy ('$x', 'x.Clone()')
+# D18c: an element borrowed from what 't' refers to is not what 'u' refers to - nothing shows u outlives t
+fn other(t String&, u String&) Iterator<String&t> {
+    yield u
+}
+
+fn main() {
+}

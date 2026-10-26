@@ -1,0 +1,8 @@
+# check: fail error[D18c]: 'u' is no parameter of this generator - its elements borrow from a reference parameter ('Iterator<T&p>') or live where it does ('Iterator<T&return>')
+# D18c: an element borrows from a parameter of the generator's
+fn firsts(t String&) Iterator<String&u> {
+    yield t
+}
+
+fn main() {
+}

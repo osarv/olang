@@ -227,6 +227,9 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     buildFile Vec<I64>                    # ... and that build's innermost site (a callee's, through a call)
     buildAt Vec<source.Span>
     noBuild Vec<Bool>                     # by scope variable: where nothing may be built - a Str's receiver's (E11c)
+    homeVar I64 = -1                      # D18c: a generator's Next whose elements live where it does - its capture of that
+    walkElem Map<I64, Term>               # D18e, D18c: a for-in's own walk of a generator borrowing parameter p - where p's argument lives
+    lastGenArg Term = Term.None           # ... the last such call's, for the walk's local it initializes
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
@@ -430,6 +433,7 @@ fn (s mut Scoper&) fnValues() {
                 }
             }
             if body.Gen {
+                if body.GenBad { continue }
                 s.P.L.Diags.Error(at, msgs.GenYieldsBorrow(kept))
                 continue
             }
@@ -545,6 +549,10 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.resBound = false
     s.targets.Clear()
     s.resultVar = -1
+    s.homeVar = -1
+    if body.Gen and body.GenHome and body.GenElem >= typed.LocalId(0) { s.homeVar = s.captureVar(b, body.GenElem) }
+    s.walkElem.Clear()
+    s.lastGenArg = Term.None
     s.report = report
     s.plan = typed.NewPlan(body)
     s.buildsVar.Clear()
@@ -1267,6 +1275,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     }
     callee := s.bodyOf(c!.Target)
     if callee < 0 or not s.summed(callee) { return }
+    # D18e: a generator a for-in makes and finishes lives in the loop's block, whatever it was given - nothing else can
+    # reach the walk, which is dropped as that block is left
+    if s.walkLocal(I64(l)) { return }
     # a constructor's instance is built where it is declared, C2d holding it to what it holds (O18a)
     if s.P.T.Role(s.calleeType(c!)) == types.RoleCtor { return }
     rv := s.resultVarOf(s.calleeType(c!))
@@ -1281,6 +1292,14 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     s.flowRun(ss, from)
     s.landOK = s.flKept
     s.flMode = 0
+}
+
+# D18e: whether local l is a for-in's own walk of a generator it makes right there (typed.Body.Walks)
+fn (s mut Scoper&) walkLocal(l I64) Bool {
+    for w in s.B!.Walks {
+        if I64(w) == l { return true }
+    }
+    return false
 }
 
 # whether an argument borrows a for-in's copy of an element: a value, its storage the loop's block (O17, O10c)
@@ -4146,9 +4165,13 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
         s.landing = land and not part
         if part { s.tempLand = 1 if land else 0 }
+        s.lastGenArg = Term.None
         v := s.val(x, s.blockTerm(loc.In))
         s.landing = false
         s.tempLand = -1
+        # D18c: a walk of a generator whose elements borrow from a parameter - each element lives where its argument does
+        if s.lastGenArg.Runs() and s.walkLocal(I64(l)) { s.walkElem.Put(I64(l), s.lastGenArg) }
+        s.lastGenArg = Term.None
         s.bindLocal(l, x!)
         s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
         h := try s.splitHome.Get(I64(l)) catch default Term.None
@@ -4934,6 +4957,9 @@ fn (s mut Scoper&) retValue(sp source.Span, x typed.Expr&) {
 # the term result k is built or borrowed in
 fn (s mut Scoper&) resultTerm(k I64) Term {
     if s.P.T.KindOf(s.B!.Ty) != types.Kind.Func { return s.here() }
+    # D18c: a generator's elements borrowed - from what its parameter refers to, or where it lives - live there
+    ge := s.genElemTerm()
+    if ge != Term.None { return ge }
     e := s.P.T.ResultFrom(s.B!.Ty, k)
     if e >= 0 {
         if e < s.B!.Params.Len() {
@@ -4972,9 +4998,17 @@ fn (s mut Scoper&) arenaValue(t types.TypeId) Bool {
     }
 }
 
+# D18c: where a generator's Next being judged gives elements that are borrowed: the scope of the capture they live with
+# (typed.Body.GenElem) - None for one whose values are built where each Next's result goes
+fn (s mut Scoper&) genElemTerm() Term {
+    if not s.B!.Gen or s.B!.GenElem < typed.LocalId(0) { return Term.None }
+    return s.terms[I64(s.B!.GenElem)]
+}
+
 # result k's mark (ResultMark), where the body's type gives one its parameters can say
 fn (s mut Scoper&) resultMark(k I64) typed.Mark {
     if s.P.T.KindOf(s.B!.Ty) != types.Kind.Func { return typed.Mark.Bare }
+    if s.genElemTerm() != Term.None { return typed.Mark.Of(s.B!.GenElem) }   # D18c: borrowed, as "T&p" is
     e := s.P.T.ResultFrom(s.B!.Ty, k)
     if e >= s.B!.Params.Len() { return typed.Mark.TypeVar }
     return s.B!.ResultMark(s.P.T, k)
@@ -4982,6 +5016,11 @@ fn (s mut Scoper&) resultMark(k I64) typed.Mark {
 
 fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     t := x.Type()
+    if s.B!.GenBad {
+        # D18c: a generator whose element names no reference parameter - check's one error
+        s.val(x, Term.None)
+        return
+    }
     if not s.holds(t) {
         # an array value: its type holds no reference, so its function may have no result scope to build it in (the
         # typed contract gives none), and then what it is made of outlives the call only in the program's scope - where
@@ -6479,7 +6518,25 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
         return fresh(beta[rv] if rv >= 0 else here)
     }
+    # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
+    if callee >= 0 {
+        match s.Bodies[callee].Of {
+            case typed.BodyOf.Fn(inst) {
+                f := s.P.InstanceFn(inst)
+                if s.P.IsGenerator(f) {
+                    el := s.P.GenElem(f)
+                    s.lastGenArg = beta[owner[el]] if el >= 0 and el < n and owner[el] >= 0 else Term.None
+                }
+            }
+            case _ { }
+        }
+    }
     e := s.P.T.ResultFrom(fty, 0)
+    # D18c: the Next of a walk a for-in makes of such a generator gives elements living where that argument does
+    if e == 0 and n > 0 {
+        wl := s.argLocal(c.Args[0])
+        if wl >= 0 and s.walkElem.Has(wl) { return existing(try s.walkElem.Get(wl) catch default Term.Untraced) }
+    }
     if e >= 0 {
         # a result borrowed from parameter e lives where its argument's referent does (O13)
         for v in range vars.Len() {
@@ -7433,7 +7490,24 @@ fn (s mut Scoper&) order(a Term, b Term) I64 {
         case _ { }
     }
     if s.gammaHolds(a, b) { return Holds }
+    # D18c: in a generator's Next whose elements live where it does, every capture - a parameter's - outlives that: the
+    # generator's arguments outlive it (O14a), held so where it was made (D16d)
+    if s.homeVar >= 0 and b == Term.Var(s.homeVar) and s.captureTerm(a) { return Holds }
     return Obliged
+}
+
+# whether a term is one of the body's captures' scope variables (D16c)
+fn (s mut Scoper&) captureTerm(t Term) Bool {
+    match t {
+        case Term.Var(k) {
+            if k >= s.B!.Vars.Len() { return false }
+            return match s.B!.Vars[k] {
+                case typed.ScopeVar.Capture(_) => true
+                case _ => false
+            }
+        }
+        case _ { return false }
+    }
 }
 
 # the order and the obligations already recorded
@@ -7686,6 +7760,13 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
         if exact and (s.fitNarrow or not s.fitLocalRead) { m = msgs.ReferenceNarrowed() }
     } else if kind == FitPayload {
         m = msgs.PayloadOutlived()
+    } else if (kind == FitOwn or kind == FitReturn) and s.inRet and s.genElemTerm() != Term.None {
+        # D18c: a yield where the generator's elements live elsewhere than this value can be shown to
+        where := "where the generator does"
+        if not s.B!.GenHome {
+            where = "with what '" $s.P.L.Names.Text(s.B!.Locals[I64(s.B!.GenElem)].Name) "' refers to"
+        }
+        m = msgs.GenYieldShorter(where)
     } else if kind == FitOwn {
         m = msgs.OwnCannotOutlive()
     } else if kind == FitField {

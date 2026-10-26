@@ -1,0 +1,13 @@
+# check: fail error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+# D18c: an element kept by the walk lives where the generator does - not in the walk's own frame, which ends with it
+fn heads(n I64) Iterator<Array<I64>&return> {
+    buf := Array<I64>(4)
+    for i in range n {
+        buf[0] = i
+        yield buf[0:1]
+    }
+}
+
+fn main() {
+    for h in heads(2) { }
+}

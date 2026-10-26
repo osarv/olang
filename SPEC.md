@@ -1492,7 +1492,9 @@ and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails 
 `Chain`) fail as the iterators they wrap do.
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
-second name for the same walk, as a `Vec`'s copy is the same `Vec`.
+second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
+(fn() T& ? E, Exhausted)) { next }`, whose `Next() T&g ? E, Exhausted` gives a read-only reference borrowed from the
+value it is called on (O13): what a generator whose elements are borrowed gives (D18c).
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
@@ -2031,7 +2033,8 @@ is equivalent to a bare `return` with no value, which is only valid when the fun
 it gives a `Generator<T ? E>`, a value whose `Next()` runs the body on from where it last stopped to its next `yield`,
 whose value that `Next()` gives. `Iterator<T ? E>` is where the declaration says what its caller is given; the
 `Generator<T ? E>` it stands for is the call's type (`g := evens(10)` declares one; a field holds one as
-`Generator<I64>`). A generator may be a method, and generic.
+`Generator<I64>`) - a `ViewGenerator<T ? E>` where its elements are borrowed (D18c). A generator may be a method, and
+generic.
 
 ```
 fn evens(n I64) Iterator<I64> {
@@ -2066,16 +2069,35 @@ scopes it has open while it is stopped - is made where the generator lands, as a
 (D16d): `for x in evens(10)` makes it in the loop's block. Its arguments must outlive it (O14a): they are held in it for
 as long as it is walked. A walk stopped part way and never finished is dropped with the scope it lives in: the scopes
 it holds open close then, innermost first, their destructors running (O15). The value a `yield` gives is built where
-that `Next()`'s result goes, which no local of the generator outlives: `&return` in a generator is a compile-time error,
-and no local is moved into the result scope (O26a) - a yielded local whose references are the generator's own storage
-is O26's error, and the value to yield is a copy built where it goes (`$x`, `x.Clone()`). A value array yielded is
-copied there (T7b).
+that `Next()`'s result goes, which no local of the generator outlives: `&return` in a generator is a compile-time error
+but where its elements are kept by its walk (D18c), and no local is moved into the result scope (O26a) - a yielded
+local whose references are the generator's own storage is O26's error, and the value to yield is a copy built where it
+goes (`$x`, `x.Clone()`). A value array yielded is copied there (T7b).
 
-**D18c (what a generator may yield).** A yielded reference is judged as a returned one (O13, O14): new storage, built
-where the `Next()`'s result goes, or storage that outlives every place a `Next()` result may go. A reference into what
-the generator's arguments refer to (`yield t[a:b]` of a parameter `t String&`) is a compile-time error (T22a: a call
-through the `Next` it is cannot show it outlives where its result goes) - yield a copy. Values (`Iterator<String>`,
-`Iterator<I64>`) are the caller's own.
+**D18c (what a generator may yield).** A generator's element type says where its elements live, and a `yield` is
+judged as a `return` of that kind (O13, O14):
+- **Values, built per value**: an element type with no scope in it (`Iterator<I64>`, `Iterator<String>`,
+  `Iterator<Node&>`). A yielded reference is judged as a built result: new storage, built where the `Next()`'s result
+  goes, or storage that outlives every place a `Next()` result may go. A reference into what the generator's arguments
+  refer to (`yield t[a:b]` of a parameter `t String&`) is a compile-time error (T22a: a call through the `Next` it is
+  cannot show it outlives where its result goes) - yield a copy, or write the elements borrowed (below). Values
+  (`Iterator<String>`, `Iterator<I64>`) are the caller's own.
+- **Borrowed from a parameter**: `Iterator<T&p ? E>`, `p` a reference parameter of the generator's - `fn words(t
+  String&) Iterator<String&t>`. Each element is a reference living where what `p` refers to does, as a result borrowed
+  from `p` (O13): a yielded value must outlive that (`yield t[i:j]`, constant data, a global's), and a temporary yielded
+  is built there. Where a `for` or a comprehension walks such a generator called right there (D18e), each element lives
+  where the argument for `p` does: `for w in words(t) { kept.Push(w) }` keeps them as long as what `t` refers to lives.
+- **Kept by its walk**: `Iterator<T&return ? E>`. Each element is a reference living where the generator does - its
+  result scope (D18b) - which `&return` names in its body (O26). A local declared `x T&return` lives there, and so do
+  what is built into one and a temporary yielded; what its arguments refer to outlives it. What is kept there stays
+  until the generator's scope closes, however many values the walk gives, and no element outlives the generator.
+
+Either borrowed form gives a `ViewGenerator<T ? E>` (T35b), `T` the elements' referent: its `Next()` gives a reference
+borrowed from the generator value it is called on, so wherever else it is walked - held in a local, a field, given to
+the iterator helpers - an element lives where that value does. Its elements are read-only, and never null: `mut` or
+`?&` in such an element is a compile-time error, and so is a scope naming no reference parameter (a by-value
+parameter's own storage is the walk's copy, O14). A `ViewGenerator` is no `any Iterator<T&>&`: its `Next()` says where
+its references live, as the trait's does not (T32a).
 
 **D18d (a generator's cost).** A `Next()` is a call through a function value that resumes the body where it stopped -
 no thread, no stack of its own, no allocation per value: the generator's storage is made once, where it lands, and its
@@ -2087,7 +2109,10 @@ block is left, by its end, `break`, `continue`, `return` or an error, and its st
 cannot keep it in the caller's own frame - in registers, as a hand-written loop's. What D18b says of where values are
 built and when scopes close holds unchanged: the difference is cost alone. A generator held anywhere else - a local
 (`g := evens(10)`), a field, a result, an argument, an `any` - is walked as D18b says. In a test build every walk is,
-since a failed check closes a test's scopes from outside the function (S18b).
+since a failed check closes a test's scopes from outside the function (S18b). Such a walk lives in the block the loop's
+statement is, whatever the generator was given: the generator is made there - not where something it was given lives,
+a constant's text or a global's array in the program's scope - and dropped as that block is left (D18b), its storage
+reclaimed and the scopes it holds closed, their destructors run.
 
 ### 3.5 Variable declarations
 
@@ -5912,7 +5937,9 @@ fn inner() Point& {
 ```
 
 It is valid only inside a function that has a result scope; anywhere else — a function with no result, a
-borrowed result, a test — it names nothing and is a compile-time error.
+borrowed result, a test, a generator (whose `Next()` has one per call, D18b) — it names nothing and is a compile-time
+error. In a generator whose elements are kept by its walk (`Iterator<T&return>`, D18c) it names where the generator
+lives, which every element and every `Next()` result lives no longer than.
 
 **O26a (a returned local lives where the result goes).** A value local the function returns lives in the **result
 scope** - its own storage, and everything built into it - with nothing written: `&return` is implied, and `&l` of such
@@ -7787,8 +7814,9 @@ variable of its own - one its parameters name that is not in the type's list is 
 **G11.** A type argument may be a **reference**, written with a bare marker (`List<String&>`): wherever
 the instantiation holds a value of that type, the reference lives in its container's scope (O5), as an
 array's element reference does, and a parameter of that type is passed with its scope (O4b). A type
-argument naming a variable (`List<String&x>`) is a compile-time error: the variable belongs to the
-function writing it, inside generic code that cannot see it (O11). A type variable written without a marker
+argument naming a variable (`List<String&x>`, `any Iterator<String&x>&`) is a compile-time error: the variable belongs to the
+function writing it, inside generic code that cannot see it (O11). A generator's element is the one exception: its
+result `Iterator<T&p ? E>` or `Iterator<T&return ? E>` says where its elements live (D18c). A type variable written without a marker
 (`x T`) and bound to a reference is that reference; written with one (`x T&`), `T` is the referent's type.
 Reference-shapedness is part of an instantiation's identity (G16a), so `List<String>` and `List<String&>`
 are two types.

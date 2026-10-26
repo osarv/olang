@@ -24,6 +24,16 @@ type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) {
 
 fn (g mut Generator<T ? E>&) Next() T ? E, Exhausted { return try g.next() }
 
+# what a generator whose elements are borrowed gives (D18c): one whose result is written Iterator<T&p ? E> - each element
+# a reference into what its parameter p refers to - or Iterator<T&return ? E> - into storage its walk keeps, where the
+# generator lives - gives a ViewGenerator<T ? E>, T the elements' referent. Its Next gives a read-only reference that
+# lives where the generator does, at least: no shorter than what Next is called on
+type ViewGenerator<T ? E> struct(next (fn() T& ? E, Exhausted)) {
+    next
+}
+
+fn (g mut ViewGenerator<T ? E>&) Next() T&g ? E, Exhausted { return try g.next() }
+
 # what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
 # "l.Iter().Count(f)", "m.Iter().Some(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
 # Each walks the iterator onward from where it stands. Each fails with what the iterator and its callbacks fail with

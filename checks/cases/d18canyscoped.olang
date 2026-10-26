@@ -1,0 +1,17 @@
+# check: fail error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
+# G11: an 'any' of an iterator names no scope - 'any Iterator<String&t>&' is no type
+fn words(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == 0x20 { i++ }
+        j := i
+        for j < t.Len() and t[j] != 0x20 { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+fn main() {
+    t := "a b"
+    a any Iterator<String&t>& = words(t)
+}

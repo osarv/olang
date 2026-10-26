@@ -1,0 +1,20 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# D18c: an element borrowed from what 't' refers to lives no longer than it - not in a list outliving it
+fn words(t String&) Iterator<String&t> {
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and t[i] == 0x20 { i++ }
+        j := i
+        for j < t.Len() and t[j] != 0x20 { j++ }
+        if j > i { yield t[i:j] }
+        i = j
+    }
+}
+
+fn main() {
+    kept := Vec<String&>()
+    {
+        t := $"a b"
+        for w in words(t) { kept.Push(w) }
+    }
+}

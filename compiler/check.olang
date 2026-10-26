@@ -61,6 +61,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     Gen Bool = false       # a generator's body, its Next's (D18): a lambda whose yields give its values (S20)
+    GenHome I64 = -1       # ... whose elements live where it does (D18c): the capture "&return" names there
     deferBlocks Vec<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
@@ -2890,7 +2891,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     gen := c.P.IsGenerator(f)
     if fd.S.Results.Len() > 0 {
         for r in fd.S.Results {
-            if gen { c.genResultMet(r) } else if not c.errorResult(r) { c.writtenMet(r) }
+            if gen { c.genResultMet(f, r) } else if not c.errorResult(r) { c.writtenMet(r) }
         }
     }
     # D18: a generator fails as its Next does, its errors written in its result
@@ -2932,7 +2933,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     dropped := big and c.P.T.Items(c.P.InstanceArgs(inst)).Len() > 0
     if dropped { body = Array<ast.Stmt&>(0) }
     if gen and not dropped {
-        c.cur().Root = c.genRoot(fd, sig)
+        c.cur().Root = c.genRoot(fd, sig, c.P.GenElem(f))
         c.pop()
         for k2 in range pushed { c.P.L.Diags.PopContext() }
         c.P.L.Diags.ContextBase(base)
@@ -5196,6 +5197,8 @@ fn (c mut Checker&) markOf(t ast.TypeRef?&) typed.Mark {
                 # O26: only where there is a result scope - a result built, not one borrowed or none; a generator's is
                 # one Next call's, which its locals outlive (D18b)
                 if c.fr().Gen {
+                    # D18c: where its elements live there, storage its walk keeps - where the generator lives
+                    if c.fr().GenHome >= 0 { return typed.Mark.Of(typed.LocalId(I32(c.fr().GenHome))) }
                     c.err(sp, msgs.GenReturnScope())
                 } else if not c.hasResultScope() {
                     c.err(sp, msgs.ReturnScopeNone())
@@ -8118,7 +8121,15 @@ fn (c mut Checker&) borrowedResult(k typed.Call&) Bool {
 # (the program's), or the result scope; recorded on the call for section 8
 fn (c mut Checker&) scoped(sp source.Span, x typed.Expr&c, sc source.NameId) typed.Expr&c {
     m := typed.Mark.Return
-    if c.text(sc) == "return" and c.fr().Gen { c.err(sp, msgs.GenReturnScope()) }   # D18b
+    if c.text(sc) == "return" and c.fr().Gen {
+        # D18b: a generator's result scope is one Next call's - but where its elements live where it does, "&return"
+        # is there, storage its walk keeps (D18c)
+        if c.fr().GenHome >= 0 {
+            m = typed.Mark.Of(typed.LocalId(I32(c.fr().GenHome)))
+        } else {
+            c.err(sp, msgs.GenReturnScope())
+        }
+    }
     if c.text(sc) != "return" {
         id := c.localOrCapture(sc, sp)
         if id < 0 and c.P.GlobalDecl(c.fr().Mi, sc) is null {
@@ -9623,6 +9634,16 @@ fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
             }
             for a in args {
                 if generic.IsErrsArgOf(a) { continue }
+                # G11: a trait's type argument names no scope, as a type's does not
+                match a {
+                    case ast.TypeRef.Ref(_, _, sc, _) {
+                        if sc != source.NameId(0) {
+                            c.err(a.Span(), msgs.TypeArgNamedScope())
+                            return false
+                        }
+                    }
+                    nomatch { }
+                }
                 if not c.writtenMet(a) { return false }
             }
             return true
@@ -17945,13 +17966,48 @@ fn (c mut Checker&) genEnd(sp source.Span) typed.Stmt&c {
     return typed.Stmt.Raise(sp, c.P.PreludeType("std/prelude/iterator", "Exhausted"), 0)
 }
 
-# a generator's result, Iterator<T ? E> (D18): no type of its own to meet, its arguments each as any type written is
-fn (c mut Checker&) genResultMet(r ast.TypeRef&) {
+# a generator's result, Iterator<T ? E> (D18): no type of its own to meet, its arguments each as any type written is -
+# its element, where it names a scope, borrowed from a reference parameter or living where the generator does (D18c)
+fn (c mut Checker&) genResultMet(f I64, r ast.TypeRef&) {
     match r {
         case ast.TypeRef.Named(_, _, args) {
             if args.Len() == 0 { return }
             for a in args {
                 if not generic.IsErrsArgOf(a) { c.writtenMet(a) }
+            }
+            c.genElemMet(f, args[0])
+        }
+        nomatch { }
+    }
+}
+
+# D18c: a generator's element naming a scope - "T&p", p a reference parameter, or "T&return" - read-only, never null
+fn (c mut Checker&) genElemMet(f I64, a ast.TypeRef&) {
+    el := c.P.GenElem(f)
+    if el == generic.GenPerTurn { return }
+    x := a
+    writable := false
+    match x {
+        case ast.TypeRef.Perm(_, of, w, _) {
+            writable = w
+            if of is not null { x = of }
+        }
+        nomatch { }
+    }
+    match x {
+        case ast.TypeRef.Ref(sp, _, sc, nullable) {
+            if writable { c.err(a.Span(), msgs.GenElemWritable()) }
+            if nullable { c.err(sp, msgs.GenElemNullable()) }
+            name := c.text(sc)
+            at := try c.src(sp).Find($"&" $name) catch default -1
+            nsp := source.Span(sp.Start + I32(at + 1), sp.Start + I32(at + 1 + name.Len())) if at >= 0 else sp
+            if el == generic.GenBadScope {
+                c.err(nsp, msgs.GenElemScopeUnknown(c.tok(sc)))
+            } else if el >= 0 {
+                ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+                if el < ps.Len() and not c.isRef(ps[el]) {
+                    c.err(nsp, msgs.GenElemByValue(c.tok(sc), $name " " $c.ty(ps[el]) "&"))
+                }
             }
         }
         nomatch { }
@@ -17960,7 +18016,7 @@ fn (c mut Checker&) genResultMet(r ast.TypeRef&) {
 
 # a generator's own body (D18): "return Generator(next)", next a lambda - the Next its value calls - capturing the
 # generator's parameters where it is made and holding the body written. Its requirements (D17) are checked on entry
-fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId) typed.Block&c {
+fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId, el I64) typed.Block&c {
     sp := fd.Sp
     from := c.stmts.Len()
     gt := c.P.T.Result(sig)
@@ -17970,7 +18026,15 @@ fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId) typed.Block&c {
         return typed.Block(typed.BlockId(0), gather(c.stmts, from))
     }
     ft := c.P.T.Items(c.P.T.Params(csig))[0]
-    next := c.genLambda(fd, ft)
+    # D18c: elements living where the generator does are kept in storage of its result scope - which its Next reaches
+    # through a capture of a reference living there, null, made for it
+    home I64 = -1
+    if el == generic.GenFromReturn {
+        ht := c.P.T.Ref(gt, types.ReadOnly | types.Nullable)
+        home = c.local(source.NameId(0), sp, ht, typed.LocalKind.Hidden, typed.Mark.Return)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(home)), c.lit(sp, ht, 0)))
+    }
+    next := c.genLambda(fd, ft, el, home)
     ctor := c.ctorBody(gt)
     was := c.ctorCalled
     c.ctorCalled = gt
@@ -17983,7 +18047,7 @@ fn (c mut Checker&) genRoot(fd ast.Func&, sig types.TypeId) typed.Block&c {
 # a generator's Next (D18): a lambda of type ft, no parameters, its result the element and its errors E and Exhausted.
 # The generator's parameters are its locals, each set once, from what was captured where the generator was made, as its
 # body begins - so they are written as a function's are, and are its own from then on
-fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
+fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) typed.Expr&c {
     sp := fd.Sp
     parent := c.fr()
     pfi := c.frames.Len() - 1
@@ -17998,9 +18062,23 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
     c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
     from := c.stmts.Len()
     pb := c.Bodies[parent.Body]
+    if el == generic.GenBadScope { c.Bodies[id].GenBad = true }   # genElemMet's error: its yields judged no further
+    if home >= 0 {
+        # D18c: where the generator lives, captured - the scope "&return" names in its body, its elements' (GenHome)
+        ht := pb.Locals[home].Ty
+        b := c.Bodies[id]
+        inner := I64(b.AddLocal(typed.Local(source.NameId(0), sp, ht, typed.BlockId(0), typed.LocalKind.Capture, typed.Mark.Infer)))
+        fr.captures.Push(typed.Capture(typed.LocalId(I32(inner)), c.read(sp, typed.Place.Local(sp, ht, typed.LocalId(I32(home))))))
+        b.Vars.Push(typed.ScopeVar.Capture(typed.LocalId(I32(inner))))
+        b.GenElem = typed.LocalId(I32(inner))
+        b.GenHome = true
+        fr.GenHome = inner
+    }
     args Vec<I64>
     whole := true
+    k I64 = -1
     for p in pb.Params {
+        k++
         pl := pb.Locals[I64(p)]
         if pl.Name == source.NameId(0) or c.text(pl.Name) == "_" {
             whole = false
@@ -18008,6 +18086,11 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
         }
         cap := c.captureIn(c.frames.Len() - 1, pl.Name, pl.Sp)
         if cap < 0 { continue }
+        # D18c: the parameter its elements borrow from - where what it refers to lives (one by value is genElemMet's
+        # error, and then its yields are judged no further)
+        if k == el {
+            if c.isRef(c.localType(cap)) { c.cur().GenElem = typed.LocalId(I32(cap)) } else { c.cur().GenBad = true }
+        }
         ct := c.localType(cap)
         x := c.readLocal(pl.Sp, cap)
         # a value array is captured as a read-only borrow (T7b): the local is the array, copied

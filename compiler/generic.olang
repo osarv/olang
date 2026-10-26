@@ -93,6 +93,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     vars Vec<varRow>
     errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
     genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
+    genElems Map<I64, I64>             # ... where each one's elements live (D18c): GenPerTurn, GenFromReturn or a parameter
     membersOf Map<types.TypeId, Array<types.TypeId>&> # a closed trait's members (T31a), once asked for
     memberSets Map<types.TypeId, Map<types.TypeId, Bool>&>
     typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
@@ -347,6 +348,65 @@ fn (p mut Program&) IsErrVar(t types.TypeId) Bool {
 fn (p mut Program&) IsGenerator(f I64) Bool {
     p.Sig(f)
     return try p.genFns.Get(f) catch default false
+}
+
+# D18c: where a generator's elements live, as its result writes it - GenPerTurn where its element type names no scope
+# ("Iterator<String&>", "Iterator<I64>": each value is built where its Next's result goes), GenFromReturn for
+# "Iterator<T&return>" (in storage its walk keeps, where the generator lives), else the index among its signature's
+# parameters, the receiver first, of the one its element borrows from ("Iterator<String&t>"); GenBadScope for a name no
+# parameter has (check says so)
+GenPerTurn I64 = -1
+GenFromReturn I64 = -2
+GenBadScope I64 = -3
+
+fn (p mut Program&) GenElem(f I64) I64 {
+    p.Sig(f)
+    return try p.genElems.Get(f) catch default GenPerTurn
+}
+
+# where the elements of a generator declared fd live, from its written result (GenElem)
+fn genElemOf(p Program&, fd ast.Func&) I64 {
+    if fd.S.Results.Len() != 1 { return GenPerTurn }
+    match fd.S.Results[0] {
+        case ast.TypeRef.Named(_, _, args) {
+            if args.Len() == 0 { return GenPerTurn }
+            a := args[0]
+            match a {
+                case ast.TypeRef.Perm(_, of, _, _) { if of is not null { a = of } }
+                nomatch { }
+            }
+            match a {
+                case ast.TypeRef.Ref(_, _, sc, _) {
+                    if sc == source.NameId(0) { return GenPerTurn }
+                    if p.L.Names.Text(sc) == "return" { return GenFromReturn }
+                    k I64 = 0
+                    if fd.Recv is not null {
+                        if fd.Recv!.Name == sc { return 0 }
+                        k = 1
+                    }
+                    for prm in fd.S.Params {
+                        if prm.Name == sc { return k }
+                        k++
+                    }
+                    return GenBadScope
+                }
+                nomatch { return GenPerTurn }
+            }
+        }
+        nomatch { return GenPerTurn }
+    }
+}
+
+# D18c: the ViewGenerator<T ? E> a generator whose elements are borrowed stands for, its result written t an
+# Iterator<T& ? E>: T the elements' referent; Unknown where its element is no reference
+fn (p mut Program&) viewGeneratorOf(t types.TypeId) types.TypeId {
+    g := try p.FindDecl("std/prelude/iterator", "ViewGenerator") catch { return types.UnknownT }
+    args := p.T.Items(p.T.Args(t))
+    if args.Len() == 0 or p.T.KindOf(args[0]) != types.Kind.Ref { return types.UnknownT }
+    out := Array<types.TypeId>(args.Len())
+    out[0] = p.T.Referent(args[0])
+    for i in range 1, args.Len() { out[i] = args[i] }
+    return p.Instance(g, p.T.List(out))
 }
 
 # D18: the Generator<T ? E> a generator's result written t, an Iterator<T ? E>, stands for; Unknown where t is no
@@ -2438,6 +2498,15 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         g := p.generatorOf(p.T.Result(sig))
         if g != types.UnknownT {
             p.genFns.Put(f, true)
+            # D18c: one whose elements are borrowed gives a ViewGenerator<T ? E>, its Next's result read-only and borrowed
+            el := genElemOf(p, row.F)
+            if el != GenPerTurn {
+                vg := p.viewGeneratorOf(p.T.Result(sig))
+                if vg != types.UnknownT {
+                    g = vg
+                    p.genElems.Put(f, el)
+                }
+            }
             sig = p.T.Func(p.T.Params(sig), g, types.ListId(0), p.T.ScopesOf(sig))
         }
     }

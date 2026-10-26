@@ -1,0 +1,14 @@
+# check: fail error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+# D18c: a generator's borrowed elements are read-only views
+type Node struct(v I64) { v }
+
+fn nodes(n I64) Iterator<Node&return> {
+    for i in range n {
+        x Node&return = Node(i)
+        yield x
+    }
+}
+
+fn main() {
+    for x in nodes(3) { x.v = 4 }
+}

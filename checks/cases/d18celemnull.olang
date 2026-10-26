@@ -1,0 +1,10 @@
+# check: fail error[D18c]: a generator's borrowed element is never null - write it 'T&p' or 'T&return'
+# D18c: a generator's borrowed element is a reference never null
+type Node struct(v I64) { v }
+
+fn firsts(n Node&) Iterator<Node?&n> {
+    yield n
+}
+
+fn main() {
+}

@@ -1,0 +1,14 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# D18c: an element kept by a generator's walk lives where the generator does - the for-in's block, which a list
+# declared before the loop outlives
+fn labels(n I64) Iterator<String&return> {
+    for i in range n {
+        s String&return = $"label " $i
+        yield s
+    }
+}
+
+fn main() {
+    kept := Vec<String&>()
+    for w in labels(3) { kept.Push(w) }
+}

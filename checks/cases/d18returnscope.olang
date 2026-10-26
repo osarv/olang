@@ -1,4 +1,4 @@
-# check: fail error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator
+# check: fail error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks storage its walk keeps only where its elements live there: 'Iterator<T&return>'
 # D18b: a generator's result scope is one Next call's - no local lives there
 fn f() Iterator<String&> {
     s String&return = $3

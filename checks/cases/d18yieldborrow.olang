@@ -1,4 +1,4 @@
-# check: fail error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')
+# check: fail error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&t>'), or yield a copy ('$x', 'x.Clone()')
 # D18c: a reference into what the generator was given cannot be shown to outlive where a Next result goes
 fn parts(t String&) Iterator<String&> {
     yield t[0:1]

@@ -1,0 +1,10 @@
+# check: fail error[D18c, O14]: 'n' is a value, its own storage the walk's copy - its elements can borrow only from what a reference parameter refers to: 'n Node&'
+# D18c, O14: a by-value parameter's own storage is the walk's copy - nothing borrows from it
+type Node struct(v I64) { v }
+
+fn firsts(n Node) Iterator<Node&n> {
+    yield n
+}
+
+fn main() {
+}
