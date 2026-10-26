@@ -93,10 +93,10 @@ f6ef4c90946dda0f 8bab0932fefe4b72 checks/cases/b6elemfieldmap.olang
 40d7030f34000e63 88c8dde5a3515e3a checks/cases/b6elemrows.olang
 32c46ca7f8f79964 66cdfc5eef1ae936 checks/cases/b6elemvalue.olang
 070eae2bc66896a0 9916f6000940ed44 checks/cases/b6matchfield.olang
-2198667e1649cd87 35022c47a046f29f checks/cases/b7atargetelsewhere.olang
-b1b24b126dfdea33 bad9e11543474856 checks/cases/b7atargetmethod.olang
-ab11bb3eeabfc425 088ee6176096e282 checks/cases/b7atargettwice.olang
-cfb462b51188b350 c69905708bfbb48e checks/cases/b7atargetunknown.olang
+5c727c7ed3ed493d ddb82a7d825649ab checks/cases/b7atargetelsewhere.olang
+db4c0d6ca533fd41 10769307147bdf5e checks/cases/b7atargetmethod.olang
+13b4b383749a458f 81a9b36bd13c8c82 checks/cases/b7atargettwice.olang
+43c5cb414d00b022 d7e45497332df800 checks/cases/b7atargetunknown.olang
 d2180ed4fff4b00f 4d5ef16798077f71 checks/cases/b9aglobal.olang
 c33d51818f46b990 c08e2dbd2a280911 checks/cases/b9aminover.olang
 fdbb26e44bf95d43 dbb47420a30ecf1d checks/cases/b9anomeet.olang
@@ -1447,7 +1447,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 be1f342e8f9179a1 2bf5f1af528d3861 checks/cases/zerofails.olang
 cac538143f451671 c557aace7c83fe6c checks/cases/zeroshared.olang
-93e30b997d2dcf92 d1f54dfb66940881 checks/checks.olang
+4a652113058e69c0 e46449987107d0ef checks/checks.olang
 065c0b56cd69d56d 96453e93ea5914d9 checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 194da2145c13b91f checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 d3fdf60e8368dbb1 checks/fixtures/agree/math.olang

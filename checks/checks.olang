@@ -1055,16 +1055,16 @@ fn assertloc(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret nullerror.olang > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "-i: a null error raised", dir)
     # B7a: a test naming a target is reported by it; words after the file pick the tests to run
-    try r.expect(sh(dir, "\"$OLANG\" test targets.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("ok - twice: doubles\n") and outOf(dir).Contains("FAIL - twice: fails on purpose\n") and
-                 outOf(dir).Contains("ok - Box.Get: gives its value\n") and outOf(dir).Contains("4 passed, 1 failed"),
-                 "a test's target in its report", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test targets.olang Box > out.txt 2>&1") == 0 and
-                 outOf(dir).Contains("ok - Box: holds a value\nok - Box.Get: gives its value\n2 passed, 0 failed"),
-                 "a type's tests picked, its methods' with them", dir)
-    try r.expect(sh(dir, "\"$OLANG\" test targets.olang plain Box.Get > out.txt 2>&1") == 0 and
-                 outOf(dir).Contains("ok - Box.Get: gives its value\nok - a plain one\n2 passed, 0 failed"),
-                 "a method's tests and a description's text picked", dir)
+    ran := sh(dir, "\"$OLANG\" test targets.olang > out.txt 2>&1")
+    all := outOf(dir)
+    try r.expect(ran == 1 and all.Contains("ok - twice: doubles\n") and all.Contains("FAIL - twice: fails on purpose\n") and
+                 all.Contains("ok - Box.Get: gives its value\n") and all.Contains("4 passed, 1 failed"), "a test's target", dir)
+    ran = sh(dir, "\"$OLANG\" test targets.olang Box > out.txt 2>&1")
+    picked String& = "ok - Box: holds a value\nok - Box.Get: gives its value\n2 passed, 0 failed"
+    try r.expect(ran == 0 and outOf(dir).Contains(picked), "a type's tests picked, its methods' with them", dir)
+    ran = sh(dir, "\"$OLANG\" test targets.olang plain Box.Get > out.txt 2>&1")
+    picked = "ok - Box.Get: gives its value\nok - a plain one\n2 passed, 0 failed"
+    try r.expect(ran == 0 and outOf(dir).Contains(picked), "a method's tests and a description's text picked", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)
