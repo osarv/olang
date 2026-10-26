@@ -3168,6 +3168,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
         ln.start(ok)
         return mir.Operand.Copy(mir.L(dest))
     }
+    if t.KindOf(ty) == types.Kind.ErrVal { return ln.hashErr(ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp), ty, sp) }
     if ln.scalar(ty) {
         x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
         if t.IsInt(r) and t.Bits(r) > 64 {
@@ -3216,6 +3217,43 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
         ln.gap(sp, "a Hash helper for a type with no parts")
     }
     return mir.Operand.Copy(mir.L(h))
+}
+
+# T20, E10b: an error value's hash by the error it holds - its type's identity and its word - never by its code, which
+# numbers the error in its own set: so values equal across sets ("PErr.BAD" as a PErr and as a LoadError) hash alike.
+# null hashes as the number 0 does
+fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    p := ln.L.P
+    x := ln.asI64(v, ty, sp)
+    hi := ln.prim(typed.PrimOp.Shr, mir.I64T, mir.Operand[x, ln.constI64(16)], sp)
+    w := ln.prim(typed.PrimOp.BitAnd, mir.I64T, mir.Operand[x, ln.constI64(65535)], sp)
+    res := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.mix(ln.constI64(0), sp))))
+    after := ln.F.NewBlock()
+    es := t.Items(t.ErrValItems(ty))
+    for j in range es.Len() {
+        d := t.DeclOf(t.ErrOf(es[j]))
+        key := stableKey($p.L.Mods[t.DeclModule(d)].Identity "." $t.Names.Text(t.DeclName(d)))
+        hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[hi, ln.constI64(j + 1)], sp)
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(hit, yes, no))
+        ln.start(yes)
+        h := ln.mix(ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[ln.constI64(key), w], sp), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.goto(after)
+        ln.start(no)
+    }
+    ln.goto(after)
+    ln.start(after)
+    return mir.Operand.Copy(mir.L(res))
+}
+
+# a text's FNV-1a hash, the same in every compilation: an error type's identity
+fn stableKey(text String&) I64 {
+    h U64 = 14695981039346656037
+    for c in text { h = (h ^ U64(c)) * 1099511628211 }
+    return I64(h)
 }
 
 # a type's zero value (D13c): a constructor with no parameters called, else all zero bits - which of these, or the

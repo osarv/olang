@@ -1030,7 +1030,8 @@ took (R11b), and it is used in these ways and no others:
   test has shown is not null (known by the program's structure, never by evaluation). A case's block narrows `e`;
 - `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.EMPTY`, another module's type by
   its module's name - and `null` for none;
-- hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key;
+- hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key - by the error it holds (its type and
+  word), whatever set it is held as, so two error values `==` across sets hash alike;
 - a value fits where its set is expected only when every word it can be is in that set (a wider set's value after
   narrowing has shown it is): `l LoadError = e` with `e` a `ParseError` fits; the other way is a compile-time error
   naming the test that narrows;
