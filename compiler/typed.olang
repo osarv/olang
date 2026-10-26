@@ -683,6 +683,9 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     RaiseAt Vec<I32>
     RaiseWhat Vec<String&>
     Gen Bool = false    # a generator's Next (D18): a lambda its Suspends give values from, its end an Exhausted
+    # D18e: the hidden iterators of for-ins over a generator made by a direct call right there - the call's walk made
+    # and finished in the for-in's block, no one else holding the generator (check.walkIter)
+    Walks Vec<LocalId>
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {

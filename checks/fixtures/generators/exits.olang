@@ -1,0 +1,134 @@
+# D18e: walks made and finished by a for-in or a comprehension, left every way a block can be left - its end, break,
+# continue, return from inside loops, an error leaving the function - with the generator's own scopes holding a
+# destructor, so each walk shows its scopes closed exactly once, where it ended; a walk inside a generator's body, open
+# when that generator is stopped by a break or dropped with its block; and walks that escape (a local, a field, a
+# result, a generator given text from a block around the loop it is walked in) beside them
+import "std/io"
+
+type Res struct(id I64) {
+    id
+} destruct {
+    try io.Println("drop " $id) catch { }
+}
+
+type Stop error {
+    HALT
+}
+
+fn held(id I64, n I64) Iterator<I64> {
+    r := Res(id)
+    for i in range n { yield i + r.id - r.id }
+}
+
+fn upto(n I64) Iterator<I64> {
+    i I64 = 0
+    for i < n {
+        yield i
+        i++
+    }
+}
+
+# a return from inside two loops, the walk made in the inner one
+fn find(n I64, k I64) I64 {
+    t I64 = 0
+    for p in range 3 {
+        for x in held(10 + p, n) {
+            if x == k and p == 1 { return x + p + t }
+            t += x
+        }
+    }
+    return t
+}
+
+# an error leaving the function from inside the walk
+fn fails(n I64) I64 ? Stop {
+    t I64 = 0
+    for x in held(20, n) {
+        if x == 2 { error Stop.HALT }
+        t += x
+    }
+    return t
+}
+
+# a generator given text: its walk lands where the text lives (D18b)
+fn named(id I64, n I64, t String&) Iterator<I64> {
+    r := Res(id)
+    for i in range n { yield i + t.Len() }
+}
+
+# a walk inside a generator's body, open while the generator is stopped
+fn outer(id I64, n I64) Iterator<I64> {
+    for x in held(id, n) { yield x * 10 }
+}
+
+fn mk(n I64) Generator<I64> { return held(30, n) }
+
+type Box struct(g Generator<I64>) {
+    g
+}
+
+fn main() ? {
+    t I64 = 0
+    for x in held(1, 5) { t += x }
+    try io.Println("end " $t)
+    for x in held(2, 100) {
+        if x == 3 { break }
+        t += x
+    }
+    try io.Println("break " $t)
+    for x in held(3, 6) {
+        if x % 2 == 0 { continue }
+        t += x
+    }
+    try io.Println("continue " $t)
+    try io.Println("find " $find(5, 2))
+    try io.Println("fails " $(try fails(5) catch Stop default -1))
+    for a in upto(3) {
+        for b in held(40 + a, 3) {
+            if b == 1 { break }
+            t += a * b
+        }
+    }
+    try io.Println("nested " $t)
+    g := held(50, 4)
+    for x in g { t += x }
+    try io.Println("local " $t)
+    for x in mk(3) { t += x }
+    try io.Println("result " $t)
+    bx := Box(held(60, 3))
+    for x in bx.g { t += x }
+    try io.Println("field " $t)
+    s I64 = 0
+    for p in range 1000 {
+        for x in upto(p) { s += x }
+    }
+    try io.Println("sum " $s)
+    c := I64[x * 2 for x in held(80, 4) if x != 1]
+    try io.Println("comprehension " $c)
+    for y in outer(90, 5) {
+        if y == 20 { break }
+        t += y
+    }
+    try io.Println("outer broken " $t)
+    {
+        g2 := outer(91, 5)
+        a := try g2.Next() catch default -1
+        b := try g2.Next() catch default -1
+        try io.Println("outer held " $a " " $b)
+    }
+    try io.Println("outer dropped")
+    {
+        u := "u" $t
+        for x in named(100, 3, u) { t += x }
+        try io.Println("named once " $t)
+    }
+    try io.Println("named once closed")
+    {
+        u := "u" $t
+        for p in range 2 {
+            for x in named(110 + p, 3, u) { t += x }
+        }
+        try io.Println("named twice " $t)
+    }
+    try io.Println("named twice closed")
+}

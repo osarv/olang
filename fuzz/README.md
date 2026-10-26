@@ -23,7 +23,7 @@ make fuzz SEED=500 COUNT=1000
 
 Each program is built under the scope sanitizer (`-d -s`) and interpreted (`-i`). A value used after its scope
 closed reads poison or faults under `-s`, so it shows as a difference. A program the compiler refuses is left out
-and counted.
+and counted. Its scenarios include generators walked every way a loop can end (D18, D18e).
 
 ```
 make scopefuzz                    # SEED=1 COUNT=100 JOBS=2 SCENARIOS=12

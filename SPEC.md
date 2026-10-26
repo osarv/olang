@@ -2053,6 +2053,14 @@ through the `Next` it is cannot show it outlives where its result goes) - yield 
 no thread, no stack of its own, no allocation per value: the generator's storage is made once, where it lands, and its
 state is a number saying where it stopped. Its value is a function value's two words.
 
+**D18e (a walk made and finished in one place).** Where a `for` or a comprehension walks a generator called right
+there (`for x in evens(10)`, `I64[x for x in evens(10)]`), nothing else can reach the walk: it ends where the loop's
+block is left, by its end, `break`, `continue`, `return` or an error, and its storage is made only if the optimizer
+cannot keep it in the caller's own frame - in registers, as a hand-written loop's. What D18b says of where values are
+built and when scopes close holds unchanged: the difference is cost alone. A generator held anywhere else - a local
+(`g := evens(10)`), a field, a result, an argument, an `any` - is walked as D18b says. In a test build every walk is,
+since a failed check closes a test's scopes from outside the function (S18b).
+
 ### 3.5 Variable declarations
 
 **D10a.** A function declaring a result type must produce one on **every** path: control may not reach

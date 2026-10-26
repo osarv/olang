@@ -25,6 +25,11 @@
 # receiver reaches are the checksum. Str may build nothing where its receiver lives (E11c), so most such bodies are
 # refused; what the compiler accepts must print the same built -s and interpreted.
 #
+# A generator scenario (one in twelve or so) walks generators that build nodes and text in their bodies (D18): by for-ins
+# and comprehensions ending every way - the end, break, continue, a return out of two loops, an error leaving - by a walk
+# inside a generator's body, and through a generator held in a local, the yielded text kept in a list (D18e's walks
+# made and finished in one place beside the ordinary ones).
+#
 # One program in four (HasDtors) also has destructor-bearing types - resources whose destructors count themselves, build
 # through their fields, and spawn tasks building into the scope being closed - made over the target and in blocks of
 # their own. -i runs no destructors, so such a program is checked against itself: built -d -s and built -b, the two
@@ -1135,6 +1140,67 @@ fn (g mut SG&) textOp(ind String&) String& {
     return $ind $q " := " $call "\n" $ind "churn()\n" $ind "acc = acc * 31 + " $q ".Hash()\n"
 }
 
+# a generator scenario (D18, D18e): generators building nodes and text in their bodies, walked by for-ins and
+# comprehensions that end every way - the end, break, continue, a return from inside two loops, an error leaving - a
+# walk inside a generator's body, and walks held in a local; yielded text kept in a list and read back after churns.
+# Each generator is given text made in a block of the walker, never a literal: a walk lands where what it was given
+# lives (D18b), and one given constant text would be dropped - its destructors run - only as the program ends
+fn (g mut SG&) genScenario(k I64) String& {
+    gn := "gn" $k
+    gm := "gm" $k
+    tr := "    r := Tracker()\n" if g.dtors else ""
+    head := ("fn " $gn "(v I64, n I64, t String&) Iterator<String> {\n    x := Node(v)\n    x.next = Node(v + 1)\n" $tr
+             "    for i in range n {\n        s := $t \"-\" $i \"-\" $chain(x)\n        yield s\n        x.next = Node(v + i)\n    }\n}\n"
+             "fn " $gm "(v I64, n I64) Iterator<I64> {\n    mm := \"m\" $v\n    for s in " $gn "(v, n, mm) { yield s.Len() * 3 + v }\n}\n"
+             "fn rt" $k "(n I64, stop I64) I64 {\n    acc I64 = 0\n    for p in range 3 {\n        rr := \"r\" $p\n        for s in " $gn
+             "(p, n, rr) {\n"
+             "            acc = acc * 31 + s.Hash()\n            if acc % 5 == stop {\n                return acc\n            }\n"
+             "        }\n    }\n    return acc\n}\n"
+             "fn er" $k "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    ee := \"e\" $n\n    for s in " $gn "(n, n, ee) {\n"
+             "        if s.Len() > 6 + Run {\n            error SgErr.E\n        }\n        acc = acc * 31 + s.Hash()\n    }\n"
+             "    return acc\n}\n")
+    body mut String& = ""
+    for c in range 2 + g.r(4) {
+        v := g.val()
+        n := g.r(7)
+        w := g.r(9)
+        ind String& = "        "
+        walk String& = $"for s in " $gn "(" $v ", " $n ", t) {\n"
+        if w == 0 { body = $body $ind $walk $ind "    acc = acc * 31 + s.Hash()\n" $ind "}\n" }
+        if w == 1 {
+            body = ($body $ind $walk $ind "    if s.Len() > " $(4 + g.r(4)) " {\n" $ind "        break\n" $ind "    }\n" $ind
+                    "    acc = acc * 31 + s.Hash()\n" $ind "}\n")
+        }
+        if w == 2 {
+            body = ($body $ind $walk $ind "    if s.Hash() % 2 == 0 {\n" $ind "        continue\n" $ind "    }\n" $ind
+                    "    acc = acc * 31 + s.Hash()\n" $ind "}\n")
+        }
+        if w == 3 {
+            keep := "s" if g.chance(50) else "$s"
+            body = $body $ind $walk $ind "    kept.Push(" $keep ")\n" $ind "}\n"
+        }
+        if w == 4 {
+            body = ($body $ind "for z in " $gm "(" $v ", " $n ") {\n" $ind "    if z > " $(g.r(40)) " {\n" $ind "        break\n" $ind
+                    "    }\n" $ind "    acc = acc * 31 + z\n" $ind "}\n")
+        }
+        if w == 5 {
+            q := g.name("c")
+            body = ($body $ind $q " := I64[s.Len() for s in " $gn "(" $v ", " $n ", t) if s.Len() > 3]\n" $ind "churn()\n" $ind
+                    "acc = acc * 31 + " $q ".Len()\n")
+        }
+        if w == 6 {
+            q := g.name("g")
+            a := g.name("a")
+            body = ($body $ind $q " := " $gn "(" $v ", " $n ", t)\n" $ind $a " := try " $q ".Next() catch default \"\"\n" $ind
+                    "churn()\n" $ind "acc = acc * 31 + " $a ".Hash()\n")
+        }
+        if w == 7 { body = $body $ind "acc = acc * 31 + rt" $k "(" $n ", " $(g.r(5)) ")\n" }
+        if w == 8 { body = $body $ind "acc = acc * 31 + (try er" $k "(" $n ") catch SgErr default -1)\n" }
+    }
+    return ($head "fn s" $k "() I64 {\n    acc I64 = 0\n    kept := Vec<String&>()\n    for p in range 3 {\n        t := \"in\" $p\n"
+            $body "        churn()\n    }\n    churn()\n    for s in kept { acc = acc * 31 + s.Hash() }\n    return acc\n}\n")
+}
+
 # a second-name scenario (the fourth any review's B): a helper returns a text local something else also names - a push
 # through a reference local, a handle's copy, a method on a list's element, a chain of borrows, a lambda kept in a list,
 # a field, a destructor of its block. The caller writes into what it was given; the probe's value is computed while
@@ -1241,6 +1307,7 @@ fn Scenario(seed U64, k I64) String& {
     w := g.r(100)
     if w < 12 { return "# scenario " $k "\n" $g.textScenario(k) }
     if w < 22 { return "# scenario " $k "\n" $g.secondScenario(k) }
+    if w < 30 { return "# scenario " $k "\n" $g.genScenario(k) }
     t := Targets - 1 if g.chance(25) else g.r(Targets - 1)    # a Str scenario one time in four
     g.global = t == 9
     decl String& = $Decls[t]

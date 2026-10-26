@@ -375,3 +375,21 @@ range); `c/gen.c` is the plain C loop. `run.olang`'s `gen:` rows, 10M values x 2
 "After" is a loop scope nothing uses getting no header, and a scope held at a yield not counting as used (HISTORY.md,
 "Generator speed"). The resume is inlined where the walk is made; what is left is the coroutine's frame, kept in the
 arena and reached through memory each step - eliding it needs `llvm.coro.alloc` and a destroy at the for-in's end.
+
+The walk form (D18e, HISTORY.md "A walk made and finished in one place"): a `for` over a generator called right there
+gets an elidable frame, destroys the walk itself on every way out and asks it for values through a Next testing
+neither re-entry nor its end. The same rows, medians of 9 interleaved runs, with valgrind's instruction counts for 1M
+values x 1:
+
+| row | before | walk form | instructions before | after |
+|---|---|---|---|---|
+| range, generator | 0.35 s | 0.003 s | 21.3M | 0.27M |
+| range, iterator | 0.003 s | 0.003 s | | |
+| filter, generator | 0.30 s | 0.15 s | 16.6M | 8.9M |
+| filter, iterator | 0.23 s | 0.22 s | 13.9M | 12.9M |
+| filter, loop | 0.15 s | 0.17 s | | |
+
+The range generator folds to the closed form, as the hand iterator does (0.27M is the program's start); the filter
+generator is a plain loop over `i % 3`, below the iterator struct. A walk whose exit also leaves a loop it is made in
+(a `return` or an error from a walk inside another loop) keeps an arena frame: LLVM's CoroElide does not see a destroy
+behind the exit's LCSSA phi. It is destroyed by the caller just the same, with no drop registered.

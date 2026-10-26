@@ -1,0 +1,36 @@
+drop 1
+end 10
+drop 2
+break 13
+drop 3
+continue 22
+drop 10
+drop 11
+find 14
+drop 20
+fails -1
+drop 40
+drop 41
+drop 42
+nested 22
+drop 50
+local 28
+drop 30
+result 31
+drop 60
+field 34
+sum 166167000
+drop 80
+comprehension I64[0, 4, 6]
+drop 90
+outer broken 44
+outer held 0 10
+drop 91
+outer dropped
+drop 100
+named once 56
+named once closed
+drop 110
+drop 111
+named twice 80
+named twice closed

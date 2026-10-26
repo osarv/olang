@@ -1,0 +1,28 @@
+# D18e: a failed check leaving a walk a for-in made closes the generator's scopes once (in a test build the walk keeps
+# its drop registered with the block, which the test's unwinding closes), and the next test runs
+import "std/io"
+
+type Res struct(id I64) {
+    id
+} destruct {
+    try io.Println("drop " $id) catch { }
+}
+
+fn held(id I64, n I64) Iterator<I64> {
+    r := Res(id)
+    for i in range n { yield i + r.id - r.id }
+}
+
+test "a check fails inside the walk" {
+    t I64 = 0
+    for x in held(70, 10) {
+        t += x
+        assert t < 3
+    }
+}
+
+test "the next test walks to the end" {
+    t I64 = 0
+    for x in held(71, 4) { t += x }
+    assert t == 6
+}

@@ -1507,6 +1507,20 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" test reentryt.olang > t.txt 2>&1") == 1, "reentryt", dir)
     try r.expect(sh(dir, $"grep -q 'reentryt.olang:6: " $gone "' t.txt && grep -q 'FAIL - a generator resumed inside its own walk' t.txt " $
                     "&& grep -q 'ok - the next test runs' t.txt") == 0, "reentryt's results", dir)
+    # D18e: walks a for-in makes and finishes, left by every exit, alike built, -d -s and interpreted (dead regions
+    # kept, so a read of reclaimed storage stops it) - and only those are walk forms, not a local, a result or a field
+    try r.expect(sh(dir, "\"$OLANG\" build exits.olang > out.txt 2>&1 && ./build/exits > b.txt 2>&1") == 0, "exits", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize exits.olang > out.txt 2>&1 && ./build/exits.debug.san > d.txt 2>&1") == 0
+                 "exits -d -s", dir)
+    try r.expect(sh(dir, "OLANG_DEADREGIONS=1 \"$OLANG\" interpret exits.olang > i.txt 2>&1") == 0, "exits -i", dir)
+    try r.expect(sh(dir, "cmp -s exits.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "exits output", dir)
+    try r.expect(sh(dir, "grep -c 'call [^@]*@exits_2eheld\\.walk(' build/exits.main.ll > out.txt; " $
+                    "grep -c 'call [^@]*@exits_2eupto\\.walk(' build/exits.main.ll >> out.txt") == 0 and outOf(dir) == "8\n2\n"
+                 "exits' walk forms", dir)
+    # a failed check leaving a walk in a test closes the generator's scopes once, and the next test runs
+    try r.expect(sh(dir, "\"$OLANG\" test exitst.olang > t.txt 2>&1") == 1, "exitst", dir)
+    try r.expect(sh(dir, "grep -c '^drop 70$' t.txt | grep -qx 1 && grep -q 'FAIL - a check fails inside the walk' t.txt && " $
+                    "grep -q '^drop 71$' t.txt && grep -q '1 passed, 1 failed' t.txt") == 0, "exitst's results", dir)
 }
 
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at
