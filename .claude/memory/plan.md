@@ -464,3 +464,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   lane result into a long-lived place in a loop never freed; F7-F11 low. findIdle (D18) and exact collect held. Fixing in
   wt-bfix2 with the queued small items (Vec growth without zero fill, Map's Vec value early free, two diagnostics).
   Next after: generator frame elision; the C-imports batch (QBE); kernel tuning + Tensor (QBC/QBD).
+- 2026-10-26 CEST: bfix2 merged (62348e8, verified): bulk review 2's F1-F11, P1, P2 fixed (evaluator exact at every
+  width, std/arith width-generic, lane op= through x[i] writes back, slices carry their base's permission, E8a ported,
+  lane/comprehension early freeing 1.6 GB -> 1.9 MB, wide-element arena alignment); Vec growth without the zero fill
+  (prelude `grown`), seed regenerated; checker gaps stop the build. Left: a Map's Vec value named by a local then Put not
+  freed early (needs a relaxation); dispatch direct +1.5%. Next: generator frame elision, C imports (QBE), kernel
+  tuning + Tensor (QBC/QBD).
