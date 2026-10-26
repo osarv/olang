@@ -49,7 +49,11 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
-Checks Array<String&>& = withParts(Scenarios) if Target == "" else Array<String&>(0)
+Checks Array<String&>& = withParts(Scenarios) if Target == "" and Only == "" else Array<String&>(0)
+
+# CHECKS_ONLY: while developing, only the cases whose file names hold this text, and no scenario - a run that passes
+# says nothing of the rest
+Only String& = try os.Env("CHECKS_ONLY") catch default ""
 
 # CHECKS_TARGET (make cross): another architecture the cases are built for (B12a) - "-target" added to each case's
 # flags, a run case run through the emulator olang finds - while the scenarios, which look at this machine's own builds,
@@ -70,7 +74,22 @@ fn withParts(names Array<String&>&) Array<String&>& {
 }
 
 # the files in checks/cases
-Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
+Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<String&>(0))
+
+fn only(names Array<String&>&) Array<String&>&names {
+    if Only == "" { return names }
+    n := 0
+    for x in names { if x.Contains(Only): n++ }
+    out mut Array<String&>&names = Array<String&>(n)
+    k := 0
+    for x in names {
+        if x.Contains(Only) {
+            out[k] = x
+            k++
+        }
+    }
+    return out
+}
 
 # where the prelude's objects, and the runtime's (B3), are built once, before the cases start - as the cases did when
 # they all shared one directory. Each has a directory of its own now, since each build also writes an olang_build
@@ -149,7 +168,7 @@ fn runCheck(k I64) String& {
 
 # whether the scenario named "name" passed, printing what went wrong when it did not
 fn passed(name String&) Bool {
-    if Target != "" { return true } # not run for another architecture
+    if Target != "" or Only != "" { return true } # not run for another architecture, or while developing
     found := false
     ok := true
     for i, s in Checks {

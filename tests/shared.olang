@@ -17846,6 +17846,42 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
     assert R2ListBaked
 }
 
+# S8d (2026-10-26): one walk reads what a condition says, so a case test narrows wherever a null test does - the right
+# of "and"/"or", a conditional's values, after an assert, in a loop's body and post clause, after a loop with no break,
+# in conditions built of them - until a statement assigns the local. Baked globals agree with the run time
+fn w8Big(s R2Shape) Bool { return s == R2Shape.Round and s.Area() > 10.0 }
+fn w8Flat(s R2Shape) Bool { return s != R2Shape.Box or s.h < 1.0 }
+fn w8W(s R2Shape) F64 { return s.w if s == R2Shape.Box else -1.0 }
+fn w8H(s R2Shape) F64 {
+    assert s == R2Shape.Box, "a box"
+    return s.h
+}
+fn w8Depth(t R2Tree&) I64 {
+    n := 0
+    for t == R2Tree.Pair {
+        n++
+        t = t.l
+    }
+    return n
+}
+fn w8Leaf(t R2Tree&) I64 {
+    for t != R2Tree.Leaf {
+        t = R2Tree.Leaf(7)
+    }
+    return t.v
+}
+W8Baked := w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Round(R2Disk(1.0))) and w8W(R2Shape.Box(2.0, 1.0)) == 2.0 and
+    w8H(R2Shape.Box(2.0, 5.0)) == 5.0 and w8Depth(r2Tree(5)) == 4 and w8Leaf(R2Tree.Leaf(3)) == 3
+test "S8d: case narrowing in and, or, conditionals, after an assert, in and after loops, agreeing while compiling" {
+    assert W8Baked
+    assert w8Big(R2Shape.Round(R2Disk(2.0))) and not w8Big(R2Shape.Dot)
+    assert w8Flat(R2Shape.Dot) and w8Flat(R2Shape.Box(1.0, 0.5)) and not w8Flat(R2Shape.Box(1.0, 2.0))
+    assert w8W(R2Shape.Box(3.0, 1.0)) == 3.0 and w8W(R2Shape.Dot) == -1.0
+    assert w8H(R2Shape.Box(1.0, 4.0)) == 4.0
+    assert w8Depth(r2Tree(R2Run)) == 3 and w8Depth(R2Tree.Leaf(1)) == 0
+    assert w8Leaf(r2Tree(R2Run)) == 7 and w8Leaf(R2Tree.Leaf(2)) == 2
+}
+
 # E10, E10a, E10b: List and Map declare Eq (and Hash) by their contents, so two of them compare by what they hold and a
 # List is a Map key; a struct reference declaring no Eq compares by identity, a null only with a null, and with a value
 # by what it names

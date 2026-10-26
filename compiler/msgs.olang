@@ -2216,7 +2216,7 @@ fn ArrayNullable() Msg { return Msg(Diag.ArrayNullable, "T2c", "an array is neve
 fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array is never null - its zero value is the empty array: write '" $empty "', or no value, for an empty " $ty) }
 fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array is never null - test whether it is empty: write '" $text $empty "'") }
 fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
-fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', assigned nowhere there") }
+fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', until it is assigned") }
 
 fn NullCompared(x String&, form String&) Msg { return Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
 

@@ -1020,10 +1020,9 @@ took (R11b), and it is used in these ways and no others:
   E10c's error, naming it. Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
-- narrowing (S8d): in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e
-  != X { leave }`, `e` holds what of `X` it can be; in the else of `if e == X`, and after `if e == X { leave }`, its set
-  less `X`; a test for `null` narrows as it does a reference (S8e). Only a local or a parameter not assigned in the
-  narrowed region narrows;
+- narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
+  != X { leave }` - every place S8d lists) `e` holds what of `X` it can be; where it fails, its set less `X`; a test for
+  `null` narrows as it does a reference (S8e). Only a local or a parameter narrows, until a statement assigns it;
 - `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without `_` or `nomatch`
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
@@ -4296,33 +4295,40 @@ payloads) declared with an initializer, and nothing anywhere in its function wri
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
 
-**S8d (narrowing).** In the block of `if e == Shape.Circle { }` - `e` a local or a parameter holding an enum value or
-a reference to one, and the condition that one comparison with a case written (E32), `e` on either side - `e` is known
-to hold that case: `e.r` reads the payload field `r`. Where the case's payload is one type written whole (T17a,
-`Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The same holds in the
-`else` block of `if e != Shape.Circle { } else { }`, and after `if e != Shape.Circle { ... }` with no `else` whose block
-never reaches what follows it (it leaves, D10a, or a `break` or `continue` takes it out of a loop) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
-in that region (an assignment, a compound one, an increment, a target), and not inside a lambda written there. The
-payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they
-are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
-compile-time error naming the whole-value assignment. A field of a
-case the local is not known to hold is no member of an enum, and a compile-time error.
+**S8d (narrowing).** A condition says things of the locals and parameters it tests: `e == Shape.Circle` (a case
+written, E32, `e` on either side) that `e` holds that case; `p is not null` that `p` is not null (S8e); an error
+value compared with a word, a type or a set what of its set it holds (R11b, T20). `!=` and `is null` say the same where
+the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
+say where it fails; parentheses change nothing; anything else says nothing. One walk reads every condition for all
+three, so they hold in the same places. What a condition says holds:
+- in the block of an `if` whose condition it is, and where it fails in the `else` (an `else if` included);
+- after `if c { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a: `if n is null:
+  return 0`), or a `break` or `continue` takes it out of a loop around it - where `c` fails, to the end of the block
+  the `if` stands in;
+- after `assert c`, where it holds;
+- in the right operand of `a and b` where `a` holds, and of `a or b` where `a` fails - so in a condition built of
+  them, and in the block of an `if` or the body of a loop whose condition that is;
+- in the first value of `x if c else y` where `c` holds, the second where it fails;
+- in a loop's body when it is its condition (`for e == Tree.Node { }`, the three-clause form's condition), and in its
+  post clause where the body assigns the local nowhere;
+- after a loop whose condition it is and which holds no `break`, where it fails (`for p is null { p = next() }`): it is
+  left only by that condition failing;
+- and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
+It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
+p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
+lambda written there. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
+through a local (`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
 
-**S8e (null narrowing).** A local or a parameter holding a `T?&` is known not to be null (T2c), and reads as a `T&`:
-- in the block of `if p is not null { }`, and in the `else` of `if p is null { } else { }`;
-- after `if p is null { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a:
-  `if n is null: return 0`), or a `break` or `continue` takes it out of a loop around it - to the end of
-  the block the `if` stands in, and after `assert p is not null`;
-- in the right operand of `p is not null and ...`, and of `p is null or ...` - so in a condition built of them, and in the
-  block of an `if` or the body of a loop whose condition is `p is not null and ...`;
-- in a loop's body when its condition is `p is not null` (`for c is not null { }`, the three-clause form's condition);
-- after a loop whose condition is `p is null` and which holds no `break` (`for p is null { p = next() }`): it is left only
-  by that condition failing;
-- after a statement assigning it a value never null (`p = Node(1)`).
-It holds from there until a statement assigns it (an assignment, a compound one, a target - `p = p.next` reading
-`p.next` before the store), and inside a loop only where nothing in the loop assigns it; not inside a lambda written
-there. As for S8d, a field is never narrowed - a call may change it: a field read through is tested through a local
-(`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
+Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
+(T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
+fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they are read
+there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a compile-time
+error naming the whole-value assignment. A field of a case the local is not known to hold is no member of an enum,
+and a compile-time error.
+
+**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c);
+besides the tests S8d reads, a statement assigning it a value never null (`p = Node(1)`) makes it known not to be null
+from there.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is

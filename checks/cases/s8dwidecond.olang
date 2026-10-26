@@ -1,0 +1,7 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# S8d: a conditional's second value is checked where its condition fails
+type Shape enum { Dot, Ring(r I64) }
+fn r(s Shape) I64 { return 0 if s == Shape.Ring else s.r }
+fn main() {
+    assert r(Shape.Ring(2)) == 0
+}
