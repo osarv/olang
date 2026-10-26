@@ -7089,7 +7089,9 @@ A `fn()` parameter (X2) is passed as two pointers: the function value's code, th
 captured, or nothing for a named function - which the code takes as its one argument, as C's own callbacks take a
 context pointer.
 
-**X3a (foreign opaque storage).** A foreign type with no olang spelling — a `pthread_mutex_t`, say — is held as an
+**X3a (foreign opaque storage).** Where a header declares the type, importing it (X17) gives it its exact size and
+alignment (X18's opaque words, `pthread.pthread_mutex_t`), and nothing below is needed. A foreign type no header in
+reach declares is held as an
 array of `N` elements laid out in place - an inline field `lock := Array<I64>(MutexWords)` (C2e), or a local
 `Array<I64>(N)`, fixed storage either way (T7d) - and handed over by X3's marshalling. Three things make that sound,
 and only the first is about `N`:
@@ -7137,7 +7139,7 @@ module. The declared name is also the symbol the linker resolves against; this s
 not define what happens when no such symbol exists at link time (implementation-defined).
 
 **X6 (the runtime's functions).** The language's runtime support (B3c) provides functions a module calls through
-`extern fn` like any other external function, for what a program needs from its process that the C library would
+an extern declaration naming no library (`extern { fn __olang_err() I32 }`, X1, X9) like any other external function, for what a program needs from its process that the C library would
 only hand over as something X2 cannot receive — a pointer, a structure, or the thread's `errno`. Each is named with the
 prefix `__olang_`, takes any text it is given NUL-terminated, and gives text back by copying it into an array its
 caller supplies (X3) and returning a length, so that nothing crosses the boundary by address. A declaration of one

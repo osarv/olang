@@ -651,15 +651,19 @@ fn (l mut Loader&) cImport(mi I64, imp Import) I64 {
     # a loader made by a tool, given no clang or flags: the build's defaults, so a C import means what it does in a build
     if l.Clang == "" { l.Clang = target.FindClang() }
     if l.CFlags.Len() == 0 { l.CFlags.Push("-D_GNU_SOURCE") }
+    # the tag naming its wrapper functions comes from what the import says alone, so the code built of it is the same
+    # whichever compiler or clang made it (the bootstrap's fixed point); the cache key adds both
     kb := StringBuilder()
-    kb.Push($CImportFormat "\n" $include "\n" $own "\n" $fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
+    kb.Push($CImportFormat "\n" $include "\n" $own "\n")
     for f in l.CFlags { kb.Push($f "\n") }
+    tag := sha256.Hex(kb.ToString())[:12]
+    kb.Push($fileStamp(l.Clang) "\n" $fileStamp("/proc/self/exe") "\n")
     ck := sha256.Hex(kb.ToString())[:32]
     dir := $fetch.CacheDir() "/cimport"
     base := $dir "/" $ck
     text := cachedTranslation(base)
     if text == "" {
-        tr := bindgen.Translate(include, own, l.Clang, l.CFlags.ToArray(), ck[:12], spec)
+        tr := bindgen.Translate(include, own, l.Clang, l.CFlags.ToArray(), tag, spec)
         if tr.Why != "" {
             if tr.NotFound {
                 l.Diags.Error(at, msgs.CHeaderNotFound(spec))
