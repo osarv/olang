@@ -1384,3 +1384,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   signature's `?`. ASKED: the zero value - QAM's 2026-10-18 decision (`null` means "no error", `e == null`, raising a
   null error aborts) kept, so `last mut io.Error` starts as null (rec yes). Queued as a language batch after C imports
   and the linalg removal; with it std `Result<T, E>` (a plain generic enum, no language support).
+- ERROR ZERO DECIDED 2026-10-26 (the user: "make null the base case and it is zero. No other error may ever have the
+  value zero. No listing for storage I agree"): a stored error's zero value is `null` (code 0, "no error"); no error
+  word is ever code 0 (the ABI already reserves 0 for success); no unnamed sets in type arguments.
+- QBI ASKED 2026-10-26 (the user: "for the result type, is it really useful? ... we always know if what we have is the
+  value or the error, throwing it back in makes no sense"): answered - its only use is holding a value-or-error in ONE
+  slot for later: a list of per-item outcomes in input order, a channel or a task's slot of outcomes, a memo cache that
+  remembers failures; everywhere else a catch decides at once. Recommended: no Result in std now - such code declares a
+  two-case generic enum in one line (`type Fetched<T> enum { Ok(v T)  Failed(e ParseError) }`), and std adds one only if
+  many programs write the same; std APIs never return one (errors are errors). In effect: not built.
