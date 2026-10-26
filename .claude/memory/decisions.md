@@ -1570,3 +1570,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   <= 64 checked while compiling), `in`, + - & |, walking set cases, `.Bits()` from raw values for C flag words.
 - Item 4 DECIDED 2026-10-26 (the user: "Build it"): std/order, `order.ByFields<T>` comparing by fields in declared
   order (reflection, unrolled); each field must have `<`.
+- Item 5 DECIDED 2026-10-26 (the user: "Yes"): a top-level `assert cond[, message]`, decided while compiling (true:
+  nothing emitted; false or undecidable: a compile error).
