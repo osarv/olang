@@ -1563,3 +1563,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   keywords are syntax (control flow, declarations); facts the compiler supplies are read through a name (a value's
   supplied methods, a type's namespace: I64.Max, T.Fields, Place.Here); attributes are library data with no compiler
   meaning. Items 2-12 still ASKED.
+- Item 2 DECIDED 2026-10-26 (the user: "Build it now"): guaranteed tail calls `become f(x)` - legal only where no
+  argument borrows a closing scope's storage, nothing deferred or destructed is pending in the closing scopes, and the
+  callee's result and error set match (musttail); the evaluator loops. Into the batch with the other yeses.
