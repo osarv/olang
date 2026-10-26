@@ -2218,15 +2218,9 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
         }
     }
     # the nearest of the file's functions, types and methods
-    best := ""
-    bestD := 2 if t.Len() <= 4 else 3
+    near mut msgs.Nearest& = msgs.Nearest(t)
     for e in tab.Entries {
-        if e.Kind != names.What.Func and e.Kind != names.What.Type { continue }
-        d := nameDistance(t, c.text(e.Name))
-        if d < bestD {
-            bestD = d
-            best = $c.text(e.Name)
-        }
+        if e.Kind == names.What.Func or e.Kind == names.What.Type { near.Offer(c.text(e.Name)) }
     }
     c.P.AllFns()
     for f in range c.P.FnCount() {
@@ -2234,15 +2228,10 @@ fn (c mut Checker&) testTarget(mi I64, nsp source.Span, target ast.Path?&) {
         if decl.Recv is null or c.P.FnModule(f) != mi { continue }
         ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
         if ps.Len() == 0 or not c.isNamed(c.deref(ps[0])) { continue }
-        m := $c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name)
-        d := nameDistance(t, m)
-        if d < bestD {
-            bestD = d
-            best = m
-        }
+        near.Offer($c.text(c.P.T.DeclName(c.P.T.DeclOf(c.deref(ps[0])))) "." $c.text(decl.Name))
     }
-    if best.Len() > 0 {
-        c.err(target.Sp, msgs.TestTargetUnknownMeant(t, best))
+    if near.Best.Len() > 0 {
+        c.err(target.Sp, msgs.TestTargetUnknownMeant(t, near.Best))
     } else {
         c.err(target.Sp, msgs.TestTargetUnknown(t))
     }
@@ -6820,7 +6809,15 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
         # B11: said once in a body - each misspelling one error - and not at all for a type said unknown already
         if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) and not c.unknownTypes.Has(pair.Pair(c.fr().Mi, I64(n))) and
            not c.P.R.ImportSaid(n) {
-            c.err(sp, msgs.UnknownName(c.tok(n)))
+            # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
+            best := c.suggest(c.text(n), true)
+            if best.Len() == 0 {
+                c.err(sp, msgs.UnknownName(c.tok(n)))
+            } else if c.P.T.Prim(best) != types.UnknownT {
+                c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
+            } else {
+                c.err(sp, msgs.UnknownNameMeant(c.tok(n), best))
+            }
             c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
         }
         return c.unknown(sp)
@@ -9403,7 +9400,8 @@ fn (c mut Checker&) importedTypeNamed(name String&) String {
 }
 
 # the name a misspelt one most likely meant (T4, B11): a number's name shortened to its letter and width (Int32 ->
-# I32, Float64 -> F64, Uint8 -> U8), else the nearest type - built in, declared or the prelude's - or, withVars, global
+# I32, Float64 -> F64, Uint8 -> U8), else the nearest type - built in, declared or the prelude's - or, withVars, any name
+# of the module, a local or parameter in scope, or an import's alias
 fn (c mut Checker&) suggest(name String&, withVars Bool) String {
     k := name.Len()
     for k > 0 and name[k - 1].IsDigit() { k-- }
@@ -9412,29 +9410,30 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
         if c.P.T.Prim(cand) != types.UnknownT { return cand }
     }
     if name == "Byte" { return "U8" }
-    best := ""
-    bestD := 2 if name.Len() <= 4 else 3
-    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
-        d := nameDistance(name, x)
-        if d < bestD {
-            bestD = d
-            best = $x
+    near mut msgs.Nearest& = msgs.Nearest(name)
+    # a value's name, nearest first: a local or parameter in scope, an import's alias, the module's own names
+    if withVars {
+        for b in c.fr().bound { near.Offer(c.text(b.Key)) }
+        for imp in c.P.L.Mods[c.fr().Mi].Imports {
+            if imp.Target >= 0 { near.Offer(imp.Alias) }
         }
+    }
+    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
+        near.Offer(x)
     }
     for mi in range c.P.L.Mods.Len() {
         if mi != c.fr().Mi and not c.P.L.Mods[mi].Prelude { continue }
+        own := mi == c.fr().Mi
         for e in c.P.R.Tables[mi].Entries {
-            if e.Kind != names.What.Type and not (withVars and e.Kind == names.What.Global) { continue }
+            # the prelude's types and constants - its functions are methods, reached through a receiver
+            ok := e.Kind == names.What.Type or (withVars and (e.Kind == names.What.Global or (own and e.Kind == names.What.Func)))
+            if not ok { continue }
             t := c.text(e.Name)
-            if mi != c.fr().Mi and not load.Public(t) { continue }
-            d := nameDistance(name, t)
-            if d < bestD {
-                bestD = d
-                best = $t
-            }
+            if not own and not load.Public(t) { continue }
+            near.Offer(t)
         }
     }
-    return best
+    return $near.Best
 }
 
 # whether a number's text has a '_' standing anywhere but between two digits (L10b)
@@ -9455,40 +9454,14 @@ fn isHexDigit(c Char) Bool { return (c >= 'a' and c <= 'f') or (c >= 'A' and c <
 fn (c mut Checker&) noCase(t types.TypeId, n source.NameId) msgs.Msg {
     name := c.text(n)
     cn := c.P.T.CaseNames(t)
-    best := ""
-    bestD := 2 if name.Len() <= 4 else 3
+    near mut msgs.Nearest& = msgs.Nearest(name)
     if cn.Len() > 0 {
-        for x in cn {
-            d := nameDistance(name, c.text(x))
-            if d < bestD {
-                bestD = d
-                best = c.text(x)
-            }
-        }
+        for x in cn { near.Offer(c.text(x)) }
     }
-    if best.Len() > 0 { return msgs.NoSuchCaseMeant(c.ty(t), c.tok(n), best) }
+    if near.Best.Len() > 0 { return msgs.NoSuchCaseMeant(c.ty(t), c.tok(n), near.Best) }
     return msgs.NoSuchCase(c.ty(t), c.tok(n))
 }
 
-# case-insensitive edit distance
-fn nameDistance(a String&, b String&) I64 {
-    if a.Len() > 40 or b.Len() > 40 { return 99 }
-    prev := Array<I64>(b.Len() + 1)
-    cur := Array<I64>(b.Len() + 1)
-    for j in range b.Len() + 1 { prev[j] = j }
-    for i in range 1, a.Len() + 1 {
-        cur[0] = i
-        for j in range 1, b.Len() + 1 {
-            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
-            del := prev[j] + 1
-            ins := cur[j - 1] + 1
-            m := sub if sub < del else del
-            cur[j] = m if m < ins else ins
-        }
-        for j in range b.Len() + 1 { prev[j] = cur[j] }
-    }
-    return prev[b.Len()]
-}
 
 # a written type's instances checked where it is written: each at its first argument (G19)
 # what "$" renders (E11a): a value - a call returning none is said at the "$"
@@ -11123,18 +11096,12 @@ fn (c mut Checker&) namedArgs(params Array<ast.Param&>&, args Array<ast.Expr&>&,
                 }
                 lsp := source.Span(nsp.Start, nsp.Start + I32(c.text(n).Len()))
                 if j < 0 {
-                    best := ""
-                    bestD := 2 if c.text(n).Len() <= 4 else 3
+                    near mut msgs.Nearest& = msgs.Nearest(c.text(n))
                     for q in params {
-                        if q.Dflt is null { continue }
-                        d := nameDistance(c.text(n), c.text(q.Name))
-                        if d < bestD {
-                            bestD = d
-                            best = $c.text(q.Name)
-                        }
+                        if q.Dflt is not null { near.Offer(c.text(q.Name)) }
                     }
-                    if best.Len() > 0 {
-                        c.err(lsp, msgs.NamedArgUnknownMeant(c.tok(n), msgs.Tok(what), best))
+                    if near.Best.Len() > 0 {
+                        c.err(lsp, msgs.NamedArgUnknownMeant(c.tok(n), msgs.Tok(what), near.Best))
                     } else {
                         c.err(lsp, msgs.NamedArgUnknown(c.tok(n), msgs.Tok(what)))
                     }
@@ -11518,7 +11485,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             # T29f: a Char is no Integer, so it has neither - its character is padded as text
             c.err(nsp, msgs.CharNoPad(c.tok(n), name))
         } else {
-            c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n)))   # the receiver as written, a reference one too
+            c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n), c.memberHint(rt, n, true)))   # the receiver as written, a reference one too
         }
         c.dropArgs(args)
         return c.unknown(sp)
@@ -11576,7 +11543,12 @@ fn (c mut Checker&) notInModule(at I64, n source.NameId, nsp source.Span) {
         c.err(nsp, msgs.CNoForm(c.text(n), why))
         return
     }
-    c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n)))
+    # B11: the nearest name it exports - all its names to itself
+    near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+    for e in c.P.R.Tables[at].Entries {
+        if e.Kind != names.What.Import and (at == c.fr().Mi or load.Public(c.text(e.Name)) or m.C) { near.Offer(c.text(e.Name)) }
+    }
+    c.err(nsp, msgs.NotInModule($"module " $m.Identity, c.tok(n), near.Hint()))
 }
 
 fn (c mut Checker&) importPath(x ast.Expr&) Bool {
@@ -11890,12 +11862,12 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
     }
     if not c.isStruct(t) {
         # only a struct has fields: a number's, an array's, a function value's member is a misspelling
-        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n)))
+        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, false)))
         return null
     }
     i := c.fieldIndex(t, n)
     if i < 0 {
-        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n)))
+        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
         return null
     }
     fs := c.P.T.Items(c.P.T.Fields(t))
@@ -11946,6 +11918,46 @@ fn (c mut Checker&) fieldIndex(t types.TypeId, n source.NameId) I64 {
         }
         nomatch { return -1 }
     }
+}
+
+# B11: " - did you mean 'x'?" for a member t has no n of - the nearest of its methods (its type's, a trait default
+# reaching it) and, with fields, a struct's fields, each where this module may name it; "" where none is near
+fn (c mut Checker&) memberHint(t types.TypeId, n source.NameId, fields Bool) String {
+    near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+    dt := c.deref(t)
+    for m in c.P.MethodNames() {
+        f := c.P.MethodOf(dt, m)
+        if f < 0 {
+            ds := c.P.DefaultMethods(dt, m)
+            if ds.Len() != 1 { continue }
+            f = ds[0]
+        }
+        if c.text(m)[0].IsUpper() or c.P.FnModule(f) == c.fr().Mi { near.Offer(c.text(m)) }
+    }
+    if fields and c.isStruct(dt) {
+        td := c.P.TypeDecl(c.P.T.DeclOf(dt))
+        mine := c.P.DeclModule(c.P.T.DeclOf(dt)) == c.fr().Mi
+        if td is not null and td.Body is not null {
+            match td.Body {
+                case ast.TypeBody.Struct(sb) {
+                    for st in sb.Body {
+                        match st {
+                            case ast.Stmt.Var(_, v) {
+                                if v.Field {
+                                    for vn in v.Names {
+                                        if mine or c.text(vn)[0].IsUpper() { near.Offer(c.text(vn)) }
+                                    }
+                                }
+                            }
+                            nomatch { }
+                        }
+                    }
+                }
+                nomatch { }
+            }
+        }
+    }
+    return near.Hint()
 }
 
 # T.Max, T.Min and a float's Inf, NaN, Epsilon, SmallestNormal: a constant of the type (E36) - of a type variable's
@@ -12775,7 +12787,9 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
             # T20: an error word written is an error value of its type - never null
             k := c.wordIndex(c.P.T.DeclOf(t), n)
             if k < 0 or args.Len() > 0 or c.P.IsErrorSet(t) and c.P.ErrorWords(c.P.T.DeclOf(t)).Len() == 0 {
-                c.err(nsp, msgs.NoSuchErrorWord(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))), c.tok(n)))
+                near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+                for w in c.P.ErrorWords(c.P.T.DeclOf(t)) { near.Offer(c.text(w)) }
+                c.err(nsp, msgs.NoSuchErrorWord(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))), c.tok(n), near.Hint()))
                 c.dropArgs(args)
                 return c.unknown(sp)
             }
@@ -13518,7 +13532,7 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<
     defaults := gather(c.exprs, from)
     if bind >= 0 {
         b := fr.errBinds[bi]
-        if not fr.errUsed[bi] { c.err(b.Sp, msgs.CatchNameUnused(c.tok(b.Name)) if not lone else msgs.CatchLoneUnused(c.tok(b.Name))) }
+        if not fr.errUsed[bi] { c.err(b.Sp, msgs.CatchNameUnused(c.tok(b.Name)) if not lone else msgs.CatchLoneUnused(c.tok(b.Name), c.P.ErrorTypeHint(c.fr().Mi, c.text(b.Name)))) }
         fr.errBinds.Truncate(bi)
         fr.errUsed.Truncate(bi)
         c.unwind(umark)
@@ -20676,7 +20690,9 @@ fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n sour
         return c.unknown(sp)
     }
     if f >= 0 { return c.invoke(sp, nsp, f, rx, args, Array<typed.Expr&>(0)) }
-    c.err(nsp, msgs.AnyNoMethod(c.ty(rt), c.tok(n)))
+    near mut msgs.Nearest& = msgs.Nearest(c.text(n))
+    for sl in slots { near.Offer(c.text(sl.Name)) }
+    c.err(nsp, msgs.AnyNoMethod(c.ty(rt), c.tok(n), near.Hint()))
     c.dropArgs(args)
     return c.unknown(sp)
 }
@@ -20749,7 +20765,7 @@ test "type errors: E12, T6b, D10a, S3" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn f(x Bool) I32 {\n    if x { return 1 }\n}\n"
-                       "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + 1\n}\n"))
+                       "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + c\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -20828,7 +20844,7 @@ test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
-                       "    h := fn() { k = 4 }\n    h()\n}\n"))
+                       "    h := fn() { k = k + 4 }\n    h()\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -20897,7 +20913,7 @@ test "errors: inferred sets across a cycle, a narrowing, words, noreturn and ! (
                        "fn never() ? { }\n"
                        "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
                        "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"
-                       "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n}\n"))
+                       "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n    assert x or y or z > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -20943,7 +20959,7 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
 test "a destructor reads its fields bare (C9, C10)" {
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
-    l := testLoad(dir, ("Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n}\n"
+    l := testLoad(dir, ("Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n    if bad { Closed = 0 }\n}\n"
                        "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n"))
     r := names.Resolver(l)
     r.Resolve()

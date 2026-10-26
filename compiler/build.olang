@@ -826,7 +826,7 @@ fn noTestNamed(file String&, words Array<String&>&, known Vec<String&>&) String 
     for w in words {
         for k in known {
             d := closeness(w, k)
-            if d <= (w.Len() + 2) / 3 and d < bestD {
+            if msgs.Near(w, d) and d < bestD {
                 bestD = d
                 best = $k
             }
@@ -839,33 +839,14 @@ fn noTestNamed(file String&, words Array<String&>&, known Vec<String&>&) String 
 # how far word is from a target or description: its edit distance from the closest stretch of text of its own length
 # (so a word of a description is near it), at most what it is from the whole
 fn closeness(word String&, text String&) I64 {
-    best := editDistance(word, text)
+    best := msgs.Distance(word, text)
     if text.Len() > word.Len() {
         for i in range text.Len() - word.Len() + 1 {
-            d := editDistance(word, text[i:i + word.Len()])
+            d := msgs.Distance(word, text[i:i + word.Len()])
             if d < best { best = d }
         }
     }
     return best
-}
-
-fn editDistance(a String&, b String&) I64 {
-    if a.Len() > 60 or b.Len() > 60 { return 99 }
-    prev := Array<I64>(b.Len() + 1)
-    cur := Array<I64>(b.Len() + 1)
-    for j in range b.Len() + 1 { prev[j] = j }
-    for i in range 1, a.Len() + 1 {
-        cur[0] = i
-        for j in range 1, b.Len() + 1 {
-            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
-            del := prev[j] + 1
-            ins := cur[j - 1] + 1
-            m := sub if sub < del else del
-            cur[j] = m if m < ins else ins
-        }
-        for j in range b.Len() + 1 { prev[j] = cur[j] }
-    }
-    return prev[b.Len()]
 }
 
 # B19: the fuzz binary run - libFuzzer's own reports on the standard error as it goes - until it finds a failing input

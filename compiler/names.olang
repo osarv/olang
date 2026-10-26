@@ -1281,38 +1281,20 @@ fn (r mut Resolver&) suggests(name String&) Bool {
     if name == "Byte" { return true }
     best := 2 if name.Len() <= 4 else 3
     for t in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
-        if distance(name, t) < best { return true }
+        if msgs.Distance(name, t) < best { return true }
     }
     for e in r.Tables[r.mi].Entries {
-        if distance(name, r.text(e.Name)) < best { return true }
+        if msgs.Distance(name, r.text(e.Name)) < best { return true }
     }
     for t in r.L.Mods[r.mi].Types {
-        if distance(name, t) < best { return true }
+        if msgs.Distance(name, t) < best { return true }
     }
     for e in r.preludeTypes {
-        if distance(name, r.text(e.Key)) < best { return true }
+        if msgs.Distance(name, r.text(e.Key)) < best { return true }
     }
     return false
 }
 
-# T4: case-insensitive edit distance
-fn distance(a String&, b String&) I64 {
-    if a.Len() > 40 or b.Len() > 40 { return 99 }
-    prev := Array<I64>(b.Len() + 1)
-    cur := Array<I64>(b.Len() + 1)
-    for j in range b.Len() + 1 { prev[j] = j }
-    for i in range 1, a.Len() + 1 {
-        cur[0] = i
-        for j in range 1, b.Len() + 1 {
-            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
-            del := prev[j] + 1
-            ins := cur[j - 1] + 1
-            cur[j] = sub if sub < del and sub < ins else del if del < ins else ins
-        }
-        for j in range b.Len() + 1 { prev[j] = cur[j] }
-    }
-    return prev[b.Len()]
-}
 
 # whether an import of the module exports a type of that name
 fn (r mut Resolver&) importedType(n source.NameId) Bool {
@@ -1501,7 +1483,11 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
             if r.unknownSaid.Len() == said and not os.Exists($r.L.Std "/" $r.text(head) ".olang") and not (head in r.Tables[r.mi].waiting) and
                not r.ImportSaid(head) {
                 r.unknownSaid.Push(pair.Pair(head, I64(-1)))
-                r.L.Diags.Error(r.at(r.mi, hsp), msgs.UnknownImport(r.tok(head)))
+                near mut msgs.Nearest& = msgs.Nearest(r.text(head))
+                for imp in r.L.Mods[r.mi].Imports {
+                    if imp.Target >= 0 { near.Offer(imp.Alias) }
+                }
+                r.L.Diags.Error(r.at(r.mi, hsp), msgs.UnknownImport(r.tok(head), near.Hint()))
             }
             return
         }

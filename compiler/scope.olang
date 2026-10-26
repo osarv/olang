@@ -8232,7 +8232,7 @@ if TestBuild {
                         "}\n"
                         "fn main() {\n"
                         "    p := P()\n"
-                        "    e := p.build(4)\n"
+                        "    assert p.build(4) == E.Leaf(4)\n"
                         "    assert shout(3).Len() == 3\n"
                         "    assert label(5).Len() == 2\n"
                         "    assert pickArm(3, true).Len() == 2\n"

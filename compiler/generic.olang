@@ -915,7 +915,10 @@ fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named Vec<source.Nam
     if text != "return" {
         sp := p.markSpan(t)
         nsp := source.Span(sp.End - I32(text.Len()), sp.End)
-        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, nsp), msgs.UnknownScopeName(msgs.Tok(text)))
+        near mut msgs.Nearest& = msgs.Nearest(text)
+        for nm in named { near.Offer(p.L.Names.Text(nm)) }
+        near.Offer("return")
+        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, nsp), msgs.UnknownScopeName(msgs.Tok(text), near.Hint()))
     }
     return types.OwnScope
 }
@@ -1098,14 +1101,32 @@ fn (p mut Program&) ErrorItemKnown(c Context&, e ast.Path&) Bool {
             if far {
                 p.L.Diags.ErrorOncePerLine(at, msgs.ErrorWordTooFar(nm))
             } else {
-                p.L.Diags.ErrorOncePerLine(at, msgs.NoSuchErrorWord(nm, msgs.Tok(p.text(w))))
+                near mut msgs.Nearest& = msgs.Nearest(p.text(w))
+                for x in ws { near.Offer(p.text(x)) }
+                p.L.Diags.ErrorOncePerLine(at, msgs.NoSuchErrorWord(nm, msgs.Tok(p.text(w)), near.Hint()))
             }
             return false
         }
     }
     text := p.L.Mods[c.Mi].Src!.Text[I64(e.Sp.Start):I64(e.Sp.End)]
-    p.L.Diags.ErrorOncePerLine(at, msgs.UnknownErrorType(msgs.Tok(text)))
+    p.L.Diags.ErrorOncePerLine(at, msgs.UnknownErrorType(msgs.Tok(text), p.ErrorTypeHint(c.Mi, text)))
     return false
+}
+
+# B11: " - did you mean 'x'?" for a misspelt error type - the nearest of the module's own error types and the prelude's
+fn (p mut Program&) ErrorTypeHint(mi I64, text String&) String {
+    near mut msgs.Nearest& = msgs.Nearest(text)
+    for k in range p.L.Mods.Len() {
+        if k != mi and not p.L.Mods[k].Prelude { continue }
+        for ei in range p.R.Tables[k].Entries.Len() {
+            e := p.R.Tables[k].Entries[ei]
+            if e.Kind != names.What.Type { continue }
+            name := p.text(e.Name)
+            if k != mi and not load.Public(name) { continue }
+            if p.T.DeclKindOf(p.DeclFor(k, ei)) == types.DeclKind.Error { near.Offer(name) }
+        }
+    }
+    return near.Hint()
 }
 
 # whether an error type is a named set (T19a): it declares members
@@ -2328,6 +2349,25 @@ fn (p mut Program&) typeKey(t types.TypeId) I64 {
 }
 
 # a type's method of that name (M19): its own, else - where it extends another (T29f) - its base's; -1 for none
+# B11: every name some method or trait default is declared with - the candidates for a misspelt method's name
+fn (p mut Program&) MethodNames() Vec<source.NameId> {
+    p.allFns()
+    seen Map<I64, Bool>
+    out Vec<source.NameId>
+    for e in p.methods {
+        if seen.Has(e.Key.Second) { continue }
+        seen.Put(e.Key.Second, true)
+        out.Push(source.NameId(I32(e.Key.Second)))
+    }
+    for f in p.defaultFns {
+        n := p.fns[f].F.Name
+        if seen.Has(I64(n)) { continue }
+        seen.Put(I64(n), true)
+        out.Push(n)
+    }
+    return out
+}
+
 fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t

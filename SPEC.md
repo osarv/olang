@@ -7093,6 +7093,13 @@ the same form with `note` in place of `error[RULE]`, followed by its source. The
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+A name that names nothing - a local, global, function, type or module alias, a field or method, an enum case, an
+error type or word, a scope name, an import, a named argument, a test target, a command-line option - ends its message
+with the **nearest name** that would have been allowed there, ` - did you mean 'x'?`: the candidate fewest
+single-character edits away (insertions, deletions, substitutions; letters compared without case), counted only within
+about a third of the word (at most `(length + 2) / 3` edits, and fewer than the word's length); of two equally near,
+the one met first - a local or parameter in scope, then an import's alias, then the module's own names and the prelude's
+types and constants. No candidate that near, no suggestion.
 An error identical to one already reported - the same message about the same token, found again by another check that
 reads the same thing - is reported once, and counted once.
 A statement reports at most **one error about where something lives** - a rule of §8, C2d's or T17c's - since a scope
