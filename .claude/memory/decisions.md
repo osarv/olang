@@ -1403,3 +1403,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (decided while compiling, B9), each build assigning it exactly once; that assignment is its initializer (B5a still
   orders initializers by what they read). Reading taken (stated to the user): a type that has a zero value keeps it - a
   read before any assignment gets the zero, no error. ASKED to confirm that reading. Queued as a language batch.
+- QBA reading CONFIRMED 2026-10-26 (the user: "Yes, zero values for things that have them work still"). The user then:
+  "if they are later assigned on all paths, that will be optimized away no?" - answered: a plain zero (numbers, bits)
+  is a dead store LLVM removes at -O3; a zero that allocates (a Vec/Map/List handle's record, a constructor building
+  something) LLVM cannot remove (the arena is opaque to it), so decided (mine): the same flow analysis skips writing
+  the zero where every path assigns before any read - the batch builds it in lowering; a global assigned by a top-level
+  `if` gets that value as its initializer, never a zero first.
