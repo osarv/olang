@@ -898,6 +898,14 @@ d16dlambdaown.olang:9:12: error[O26]: this value refers to this function's own s
     9 |     return fn(x I64) I64 {
       |            ^~
 compilation failed with 1 error
+=== d16dtwoscopes.olang
+d16dtwoscopes.olang:12:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         g = both(a, b)
+      |             ^~~~
+d16dtwoscopes.olang:4:5: note: the callee requires it because of this statement
+    4 |     return fn() { return $a $b }
+      |     ^~~~~~
+compilation failed with 1 error
 === d16espawn.olang
 d16espawn.olang:11:19: error[P2, D16e]: this function value closes before the join does - make it outside, or spawn the lambda itself
    11 |             spawn w(s)
@@ -993,10 +1001,130 @@ d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an ar
    11 |         g = chars(s)
       |           ^
 compilation failed with 1 error
+=== d18canyborrowed.olang
+d18canyborrowed.olang:16:32: error[T32a, T22]: ViewGenerator<String>'s 'Next' says where its references live as Iterator<String&>'s signature does not - it cannot be called through an 'any Iterator<String&>&'
+   16 |     a any Iterator<String&>& = words(t)
+      |                                ^~~~~~~~
+$ROOT/std/prelude/iterator.olang:35:34: note: 'Next' is declared here
+   35 | fn (g mut ViewGenerator<T ? E>&) Next() T&g ? E, Exhausted { return try g.next() }
+      |                                  ^~~~
+compilation failed with 1 error
+=== d18canyscoped.olang
+d18canyscoped.olang:16:20: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
+   16 |     a any Iterator<String&t>& = words(t)
+      |                    ^~~~~~~~
+compilation failed with 1 error
+=== d18celembyvalue.olang
+d18celembyvalue.olang:5:33: error[D18c, O14]: 'n' is a value, its own storage the walk's copy - its elements can borrow only from what a reference parameter refers to: 'n Node&'
+    5 | fn firsts(n Node) Iterator<Node&n> {
+      |                                 ^
+compilation failed with 1 error
+=== d18celemmut.olang
+d18celemmut.olang:3:35: error[D18c]: a generator's borrowed elements are read-only - write its element without 'mut'
+    3 | fn firsts(t mut String&) Iterator<mut String&t> {
+      |                                   ^~~~~~~~~~~~
+compilation failed with 1 error
+=== d18celemnull.olang
+d18celemnull.olang:5:29: error[D18c]: a generator's borrowed element is never null - write it 'T&p' or 'T&return'
+    5 | fn firsts(n Node&) Iterator<Node?&n> {
+      |                             ^~~~~~~
+compilation failed with 1 error
+=== d18celemunknown.olang
+d18celemunknown.olang:3:38: error[D18c]: 'u' is no parameter of this generator - its elements borrow from a reference parameter ('Iterator<T&p>') or live where it does ('Iterator<T&return>')
+    3 | fn firsts(t String&) Iterator<String&u> {
+      |                                      ^
+compilation failed with 1 error
+=== d18cheldfield.olang
+d18cheldfield.olang:18:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   18 |         for w in h.g { kept.Push(w) }
+      |                             ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cheldfield.olang:18:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   18 |         for w in h.g { kept.Push(w) }
+      |                                  ^
+d18cheldfield.olang:19:29: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   19 |         for w in h.g { kept.Push(w) }
+      |                             ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cheldfield.olang:19:34: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   19 |         for w in h.g { kept.Push(w) }
+      |                                  ^
+compilation failed with 2 errors
+=== d18cheldlocal.olang
+d18cheldlocal.olang:14:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         for w in g { kept.Push(w) }
+      |                           ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cheldlocal.olang:14:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   14 |         for w in g { kept.Push(w) }
+      |                                ^
+d18cheldlocal.olang:15:27: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         for w in g { kept.Push(w) }
+      |                           ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cheldlocal.olang:15:32: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   15 |         for w in g { kept.Push(w) }
+      |                                ^
+compilation failed with 2 errors
+=== d18cinputoutlived.olang
+d18cinputoutlived.olang:18:34: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   18 |         for w in words(t) { kept.Push(w) }
+      |                                  ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cinputoutlived.olang:18:39: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   18 |         for w in words(t) { kept.Push(w) }
+      |                                       ^
+compilation failed with 1 error
 === d18contract.olang
 d18contract.olang:3:17: error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
     3 | fn evens(n I64) [n >= 0] Iterator<I64> {
       |                 ^~~~~~~~
+compilation failed with 1 error
+=== d18cotherparam.olang
+d18cotherparam.olang:3:1: error[D18c, T22a]: this generator yields what 'u' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&u>'), or yield a copy ('$x', 'x.Clone()')
+    3 | fn other(t String&, u String&) Iterator<String&t> {
+      | ^~
+compilation failed with 1 error
+=== d18cviewkept.olang
+d18cviewkept.olang:13:31: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   13 |     for w in labels(3) { kept.Push(w) }
+      |                               ^~~~
+$ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
+   60 |     s.data[s.n] = x
+      |     ^
+d18cviewkept.olang:13:36: note: this text lives in a block that closes first - pass a copy, which is made where 'kept' lives: write '$' before it
+   13 |     for w in labels(3) { kept.Push(w) }
+      |                                    ^
+compilation failed with 1 error
+=== d18cviewwrite.olang
+d18cviewwrite.olang:13:27: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+   13 |     for x in nodes(3) { x.v = 4 }
+      |                           ^
+compilation failed with 1 error
+=== d18cyieldframe.olang
+d18cyieldframe.olang:7:15: error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+    7 |         yield buf[0:1]
+      |               ^~~
+compilation failed with 1 error
+=== d18cyieldlocal.olang
+d18cyieldlocal.olang:16:12: error[D18c, S20]: this generator's elements live with what 't' refers to, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+   16 |     yield l[0:1]
+      |            ^
+compilation failed with 1 error
+=== d18cyieldturn.olang
+d18cyieldturn.olang:7:15: error[D18c, S20]: this generator's elements live where the generator does, and this value is not shown to last as long - yield a part of what lives there, or values ('Iterator<T>') and a copy ('$x', 'x.Clone()')
+    7 |         yield s
+      |               ^
 compilation failed with 1 error
 === d18errors.olang
 d18errors.olang:5:4: error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
@@ -1009,7 +1137,7 @@ d18errundeclared.olang:10:11: error[R9, D18]: Bad can escape here, and this gene
       |           ^~~
 compilation failed with 1 error
 === d18returnscope.olang
-d18returnscope.olang:4:7: error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks nothing in a generator
+d18returnscope.olang:4:7: error[D18b]: a generator's result scope is one Next call's, which its locals outlive - '&return' marks storage its walk keeps only where its elements live there: 'Iterator<T&return>'
     4 |     s String&return = $3
       |       ^~~~~~~~~~~~~
 compilation failed with 1 error
@@ -1018,8 +1146,13 @@ d18returnvalue.olang:5:5: error[D18a]: a generator gives its values by 'yield' -
     5 |     return 2
       |     ^~~~~~
 compilation failed with 1 error
+=== d18twoscopes.olang
+d18twoscopes.olang:13:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   13 |         g = both(a, b)
+      |           ^
+compilation failed with 1 error
 === d18yieldborrow.olang
-d18yieldborrow.olang:3:1: error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - yield a copy ('$x', 'x.Clone()')
+d18yieldborrow.olang:3:1: error[D18c, T22a]: this generator yields what 't' refers to, which outlives no Next call it can be shown to - write its elements as borrowed from it ('Iterator<T&t>'), or yield a copy ('$x', 'x.Clone()')
     3 | fn parts(t String&) Iterator<String&> {
       | ^~
 compilation failed with 1 error
@@ -3226,8 +3359,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/iterator.olang:63:5: note: the callee requires it because of this statement
-   63 |     return acc
+$ROOT/std/prelude/iterator.olang:73:5: note: the callee requires it because of this statement
+   73 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
