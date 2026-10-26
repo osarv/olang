@@ -2,7 +2,7 @@
 # continue, return from inside loops, an error leaving the function - with the generator's own scopes holding a
 # destructor, so each walk shows its scopes closed exactly once, where it ended; a walk inside a generator's body, open
 # when that generator is stopped by a break or dropped with its block; and walks that escape (a local, a field, a
-# result) beside them
+# result, a generator given text from a block around the loop it is walked in) beside them
 import "std/io"
 
 type Res struct(id I64) {
@@ -48,6 +48,12 @@ fn fails(n I64) I64 ? Stop {
         t += x
     }
     return t
+}
+
+# a generator given text: its walk lands where the text lives (D18b)
+fn named(id I64, n I64, t String&) Iterator<I64> {
+    r := Res(id)
+    for i in range n { yield i + t.Len() }
 }
 
 # a walk inside a generator's body, open while the generator is stopped
@@ -111,4 +117,18 @@ fn main() ? {
         try io.Println("outer held " $a " " $b)
     }
     try io.Println("outer dropped")
+    {
+        u := "u" $t
+        for x in named(100, 3, u) { t += x }
+        try io.Println("named once " $t)
+    }
+    try io.Println("named once closed")
+    {
+        u := "u" $t
+        for p in range 2 {
+            for x in named(110 + p, 3, u) { t += x }
+        }
+        try io.Println("named twice " $t)
+    }
+    try io.Println("named twice closed")
 }

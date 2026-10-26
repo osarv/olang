@@ -27,3 +27,10 @@ outer broken 44
 outer held 0 10
 drop 91
 outer dropped
+drop 100
+named once 56
+named once closed
+drop 110
+drop 111
+named twice 80
+named twice closed

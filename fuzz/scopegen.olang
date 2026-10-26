@@ -1142,18 +1142,21 @@ fn (g mut SG&) textOp(ind String&) String& {
 
 # a generator scenario (D18, D18e): generators building nodes and text in their bodies, walked by for-ins and
 # comprehensions that end every way - the end, break, continue, a return from inside two loops, an error leaving - a
-# walk inside a generator's body, and walks held in a local; yielded text kept in a list and read back after churns
+# walk inside a generator's body, and walks held in a local; yielded text kept in a list and read back after churns.
+# Each generator is given text made in a block of the walker, never a literal: a walk lands where what it was given
+# lives (D18b), and one given constant text would be dropped - its destructors run - only as the program ends
 fn (g mut SG&) genScenario(k I64) String& {
     gn := "gn" $k
     gm := "gm" $k
     tr := "    r := Tracker()\n" if g.dtors else ""
     head := ("fn " $gn "(v I64, n I64, t String&) Iterator<String> {\n    x := Node(v)\n    x.next = Node(v + 1)\n" $tr
              "    for i in range n {\n        s := $t \"-\" $i \"-\" $chain(x)\n        yield s\n        x.next = Node(v + i)\n    }\n}\n"
-             "fn " $gm "(v I64, n I64) Iterator<I64> {\n    for s in " $gn "(v, n, \"m\") { yield s.Len() * 3 + v }\n}\n"
-             "fn rt" $k "(n I64, stop I64) I64 {\n    acc I64 = 0\n    for p in range 3 {\n        for s in " $gn "(p, n, \"r\") {\n"
+             "fn " $gm "(v I64, n I64) Iterator<I64> {\n    mm := \"m\" $v\n    for s in " $gn "(v, n, mm) { yield s.Len() * 3 + v }\n}\n"
+             "fn rt" $k "(n I64, stop I64) I64 {\n    acc I64 = 0\n    for p in range 3 {\n        rr := \"r\" $p\n        for s in " $gn
+             "(p, n, rr) {\n"
              "            acc = acc * 31 + s.Hash()\n            if acc % 5 == stop {\n                return acc\n            }\n"
              "        }\n    }\n    return acc\n}\n"
-             "fn er" $k "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    for s in " $gn "(n, n, \"e\") {\n"
+             "fn er" $k "(n I64) I64 ? SgErr {\n    acc I64 = 0\n    ee := \"e\" $n\n    for s in " $gn "(n, n, ee) {\n"
              "        if s.Len() > 6 + Run {\n            error SgErr.E\n        }\n        acc = acc * 31 + s.Hash()\n    }\n"
              "    return acc\n}\n")
     body mut String& = ""
