@@ -485,3 +485,5 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
 - QUEUED 2026-10-26: named arguments for defaulted parameters (QBG, decisions.md) after wt-definit merges; generator
   borrows of inputs and frame views (QBB) after wt-genelide merges; stored errors (errors as values, error zero null)
   after wt-definit too.
+- 2026-10-26 CEST: nolinalg merged (23a8c26, verified): std/linalg removed (std, bench gemm/fused/mlp, the linalg
+  scenario); compiler points kept by rewriting gemmflat (local Mat) and o26alatermodule* (a latermodule scenario).
