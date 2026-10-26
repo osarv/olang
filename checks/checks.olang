@@ -45,7 +45,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -407,6 +407,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "k2" { try k2(r) }
         case "bits" { try bits(r) }
         case "retslot" { try retslot(r) }
+        case "widealign" { try widealign(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1156,6 +1157,19 @@ fn retslot(r mut report&) ? Failed {
     # divmod's every return stores into the one slot and branches to its one exit: a single ret
     once String& = "awk '/^define .*divmod/,/^}/' build/retslot.main.ll | grep -c '^  ret ' | grep -qx 1"
     try r.expect(sh(dir, once) == 0, "divmod returns from more than one block", dir)
+}
+
+# T4a: an array of elements LLVM holds 16-aligned (I65 to I128, and what holds them) asks the arena for at least that
+# alignment - an array under 32 bytes otherwise takes 8 (the second bulk review's P1); its elements read back at -O3 and
+# at -debug
+test "an array of 128-bit elements is 16-aligned" { assert passed("widealign") }
+
+fn widealign(r mut report&) ? Failed {
+    dir := fresh("widealign")
+    os.Run("cp checks/fixtures/widealign/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build widealign.olang > out.txt 2>&1 && ./build/widealign") == 0, "widealign", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug widealign.olang > out.txt 2>&1 && ./build/widealign.debug") == 0, "widealign -debug", dir)
+    try r.expect(irHas(dir, "build/widealign.main.ll", "call ptr @__olang_scope_alloc(_zeroed)?_min\\(ptr [^,]*, i64 [^,]*, i64 16\\)"), "no 16-aligned array", dir)
 }
 
 # T36: every numeric primitive has alias tags of its own - a BF16 or F16 element stored through a struct carries one, as

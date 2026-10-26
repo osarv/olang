@@ -3658,6 +3658,21 @@ fn (fe mut fnEm&) objectPtr(v String&, ty types.TypeId) String {
     return "null"
 }
 
+# storage for an array of el elements, bytes long, in the scope whose header is sc: the size class an array takes, and
+# at least an element's own alignment where that is more than 8 (I65 to I128, T4a - LLVM holds an i128 16-aligned);
+# zero-filled where zeroed
+fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroed Bool) String {
+    a := fe.align(el)
+    if a > 8 {
+        f := "__olang_scope_alloc_zeroed_min" if zeroed else "__olang_scope_alloc_min"
+        fe.E.runtime(f)
+        return fe.let("call ptr @" $f "(ptr " $sc ", i64 " $bytes ", i64 " $a ")")
+    }
+    f := "__olang_scope_alloc_zeroed" if zeroed else "__olang_scope_alloc"
+    fe.E.runtime(f)
+    return fe.let("call ptr @" $f "(ptr " $sc ", i64 " $bytes ")")
+}
+
 # a run-time-length array value given storage of its own in scope s: its elements copied there
 fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String { return fe.copyArrayIn(fe.scope(s), v, ty) }
 
@@ -3668,8 +3683,7 @@ fn (fe mut fnEm&) copyArrayIn(hdr String&, v String&, ty types.TypeId) String {
     n := fe.let("extractvalue { i64, ptr } " $v ", 0")
     data := fe.let("extractvalue { i64, ptr } " $v ", 1")
     bytes := fe.let("mul i64 " $n ", " $fe.size(el))
-    fe.E.runtime("__olang_scope_alloc")
-    p := fe.let("call ptr @__olang_scope_alloc(ptr " $hdr ", i64 " $bytes ")")
+    p := fe.arrayStorage(hdr, bytes, el, false)
     fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
     fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " $p ", ptr " $data ", i64 " $bytes ", i1 false)")
     return fe.pair(n, p)
@@ -3715,8 +3729,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     p := ""
     if fill == mir.Operand.None and not fe.E.San {
         # E39: no fill - each element written before anything reads it
-        fe.E.runtime("__olang_scope_alloc")
-        return fe.pair(cnt, fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")"))
+        return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false))
     }
     if fill == mir.Operand.None { zero = true }
     if fe.E.San and fe.E.retires(fe.F.File) {
@@ -3726,13 +3739,11 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         p = fe.let("call ptr @__olang_san_alloc_own(ptr " $sc ", i64 " $bytes ")")
         if zero { return fe.pair(cnt, p) }
     } else if zero {
-        fe.E.runtime("__olang_scope_alloc_zeroed")
-        p = fe.let("call ptr @__olang_scope_alloc_zeroed(ptr " $sc ", i64 " $bytes ")")
+        p = fe.arrayStorage(sc, bytes, el, true)
     }
     if not zero {
         if p == "" {
-            fe.E.runtime("__olang_scope_alloc")
-            p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
+            p = fe.arrayStorage(sc, bytes, el, false)
         }
         big := fe.viaMem(el)
         v := "" if big else fe.val(fill, el)
@@ -4168,8 +4179,7 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
             # program's under the stand-in placement
             el := t.Elem(fa)
             n := fe.fixedLen(fa)
-            fe.E.runtime("__olang_scope_alloc")
-            p := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.program() ", i64 " $(n * fe.size(el)) ")")
+            p := fe.arrayStorage(fe.program(), $(n * fe.size(el)), el, false)
             fe.store(fe.ty(fa), v, p)
             return fe.pair($n, p)
         }
@@ -6271,11 +6281,13 @@ fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Ar
         b.Push("  call void @llvm.memmove.p0.p0.i64(ptr " $n "op, ptr " $n "p, i64 " $n "b, i1 false)\n")
         b.Push("  store { i64, ptr } %old" $i ", ptr " $n "d\n  br label %" $l "e\n" $l "f:\n")
         if copyF[i] >= 0 {
-            e.runtime("__olang_scope_alloc")
+            al := t.Align(el)
+            af := "__olang_scope_alloc_min" if al > 8 else "__olang_scope_alloc"
+            e.runtime(af)
             e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
             b.Push("  " $n "c = load ptr, ptr %f" $copyF[i] "\n  " $n "z = icmp eq ptr " $n "c, null\n")
             b.Push("  " $n "g = load ptr, ptr @__olang_prog_scope\n  " $n "w = select i1 " $n "z, ptr " $n "g, ptr " $n "c\n")
-            b.Push("  " $n "q = call ptr @__olang_scope_alloc(ptr " $n "w, i64 " $n "b)\n")
+            b.Push("  " $n "q = call ptr @" $af "(ptr " $n "w, i64 " $n "b" $(", i64 " $al if al > 8 else "") ")\n")
             b.Push("  call void @llvm.memmove.p0.p0.i64(ptr " $n "q, ptr " $n "p, i64 " $n "b, i1 false)\n")
             b.Push("  " $n "x = insertvalue { i64, ptr } undef, i64 " $n "n, 0\n")
             b.Push("  " $n "y = insertvalue { i64, ptr } " $n "x, ptr " $n "q, 1\n  store { i64, ptr } " $n "y, ptr " $n "d\n")

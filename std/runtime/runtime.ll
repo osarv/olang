@@ -955,6 +955,23 @@ entry:
   ret ptr %p
 }
 
+; an array of elements aligned more than 8 bytes (I65 to I128 and what holds them, T4a, whose LLVM type is i128-aligned):
+; the size class __olang_scope_alloc gives, and at least the element's alignment, minaln (a power of two) - a 16-byte
+; array of I128s 16-aligned, not the 8 an array under 32 bytes takes
+define noalias ptr @__olang_scope_alloc_min(ptr %scope, i64 %rawsize, i64 %minaln) alwaysinline {
+entry:
+  %sizeup = add i64 %rawsize, 7
+  %size8 = and i64 %sizeup, -8
+  %a32 = icmp uge i64 %size8, 32
+  %a64 = icmp uge i64 %size8, 64
+  %alnA = select i1 %a32, i64 32, i64 8
+  %alnB = select i1 %a64, i64 64, i64 %alnA
+  %wider = icmp ugt i64 %minaln, %alnB
+  %aln = select i1 %wider, i64 %minaln, i64 %alnB
+  %p = call ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln)
+  ret ptr %p
+}
+
 ; bump-allocates size bytes from scope, aligned to aln (a power of two, at least 8), growing (linking on one more
 ; chunk) if the current one doesn't have room. O8a: a struct's or an enum's storage takes its own alignment
 ; (cgAllocAlign) - the size class an array's takes would leave a 40-byte struct 64 bytes apart from the next
@@ -1068,6 +1085,26 @@ entry:
   br i1 %big, label %check, label %clear
 check:
   ; the chunk p was bumped from is the scope's head: __olang_scope_alloc takes it from there or puts a new one there
+  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
+  %head = load ptr, ptr %headptr
+  %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4
+  %fresh = load i64, ptr %freshptr
+  %untouched = icmp ne i64 %fresh, 0
+  br i1 %untouched, label %done, label %clear
+clear:
+  call void @llvm.memset.p0.i64(ptr %p, i8 0, i64 %rawsize, i1 false)
+  br label %done
+done:
+  ret ptr %p
+}
+
+; __olang_scope_alloc_zeroed for an array of elements aligned more than 8 bytes (__olang_scope_alloc_min)
+define noalias ptr @__olang_scope_alloc_zeroed_min(ptr %scope, i64 %rawsize, i64 %minaln) {
+entry:
+  %p = call ptr @__olang_scope_alloc_min(ptr %scope, i64 %rawsize, i64 %minaln)
+  %big = icmp uge i64 %rawsize, 4096
+  br i1 %big, label %check, label %clear
+check:
   %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
   %head = load ptr, ptr %headptr
   %freshptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 4
