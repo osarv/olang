@@ -1433,3 +1433,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   builds accumulates until the walk ends (no per-turn reclaim), and storage the generator reuses (a line buffer) makes
   an earlier view read different data later - memory-safe, as a Vec view after growth. Recommended: allow, yielded
   views read-only. In effect: borrows of inputs only (QBB as decided).
+- QBB extension DECIDED 2026-10-26 (the user, arguing for it: "if the internal thing is built on a scope that survived
+  the whole walk, that should be fine too", "if we declare something to outlive the loop in the loop it still outlives
+  the loop right?"): yes - a generator may yield references to what it built where its frame keeps it (`seen.Push(...)`
+  or a `&return` local inside its loop lives until the walk ends, by the ordinary rules), element type
+  `Iterator<T&return>`; yielded views read-only; borrows of inputs `Iterator<T&t>`; plain yields per turn as today. No
+  new scope rule: section 8 judges the yield as a borrowed result. Recorded as decided from the user's reasoning; queued
+  with QBB after generator elision.
