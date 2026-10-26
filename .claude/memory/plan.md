@@ -492,3 +492,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   Array<T>(n) + counted fill skips its clear, comprehensions write once without a clear (0.90 -> 0.25 s), T7c fixed
   comprehension lengths. Left: baked globals' startup function still emitted; compiler/tools/evaldump.olang doesn't
   build. Next: merge genelide (9e56fcd, verified on c6e8e5a).
+- 2026-10-26 CEST: genelide merged (9e56fcd + merge + goldens, full verify on the merged tip passed): D18e generator
+  frame elision where a for-in makes and finishes the walk (range gen 0.35 -> 0.003 s, as a hand iterator; filter gen
+  0.30 -> 0.15 s). Decided (mine): a walk a for-in makes and finishes is dropped where the loop's block is left whatever
+  it was given (fixes a program-scope leak, 591 MB over 4M walks) - in the QBB batch. Next: stored errors + named
+  arguments + tests naming targets (one batch), then QBB (generator borrows, frame views, the walk drop).
