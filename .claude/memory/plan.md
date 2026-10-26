@@ -439,3 +439,7 @@ on sight per rules.md, "Code rules".
   generator re-entry a guaranteed check; extern + any export fn = nothing freed early; embed realpath; Json.Int/Uint
   exact; generator contracts at the first Next with ArgumentError in E; diagnostics). Over-rejection 13 (returning a
   global's storage, O10c) left - older, §8.
+- 2026-10-26 CEST: lanes merged (bb11305, full verify passed on the merge): E39 lane operators (fused, vectorized;
+  saxpy/select level with C, dot ~6% above), T4a I1-I128/U1-U128 (exact in the evaluator, __divti3 for 128-bit
+  division). Queued small: 128-bit literals (decisions.md), Sqrt/PadStart/PadEnd for new widths, the trait-list line
+  breaks in the prelude once the seed parses them.
