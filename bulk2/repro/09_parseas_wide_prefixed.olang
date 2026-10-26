@@ -1,0 +1,8 @@
+# T4a/L10a: ParseAs<T>(0) reads a prefixed literal through ParseInt/ParseUint, which hold 64 bits - so a hexadecimal
+# literal of more than 64 bits, a valid U128 literal in a program (L10a, E4a), fails with OVERFLOW from text
+import "std/io"
+fn main() {
+    a := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch default U128(7)
+    b U128 = 0x1FFFFFFFFFFFFFFFF
+    io.Println($a " " $b)!     # 7 36893488147419103231
+}

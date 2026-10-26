@@ -1,0 +1,19 @@
+# E39: Min and Max build lane 0 twice (laneTotal's "first", then the loop from 0), so a type's own operator method runs
+# n + 1 times for n lanes - E39 says each lane is the operation written, in one loop
+import "std/io"
+
+Calls mut I64 = 0
+type M struct(v I64) { v }
+fn (a M) Plus(b M) M {
+    Calls++
+    return M(a.v + b.v)
+}
+fn (a M) Less(b M) Bool { return a.v < b.v }
+
+N mut I64 = 4
+
+fn main() {
+    a := Array<M>(N, M(1))
+    x := try (a + a).Max() catch default M(-1)
+    io.Println($x.v " after " $Calls " Plus calls for " $N " lanes")!   # 5, not 4
+}

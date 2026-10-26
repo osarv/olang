@@ -1,0 +1,19 @@
+import "std/io"
+type P struct() {
+    arr := Array<I64>(3)
+    xs mut Array<I64>& = Array<I64>(3, 1)
+}
+fn main() {
+    v := Vec<P>()
+    v.Push(P())
+    v[0].arr[1] = 5
+    v[0].xs[1] = 7
+    v[0].arr[2] += 5
+    io.Println($v[0].arr " " $v[0].xs)!
+    w := Vec<Array<I64>&>()
+    w.Push(Array<I64>(3))
+    io.Println($w[0])!
+    a := Array<I64>(3)
+    r := Array<Array<I64>&>(1, a)
+    io.Println($a " " $r[0])!
+}

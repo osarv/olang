@@ -1,0 +1,11 @@
+--- /home/user/wt/bulk2/compiler/eval.olang	2026-10-26 08:03:00.713293259 +0000
++++ patched2/compiler/eval.olang	2026-10-26 08:52:15.642770335 +0000
+@@ -658,7 +658,7 @@
+     }
+ }
+ 
+-fn (m mut Machine&) i64(ty types.TypeId) Bool { return m.shape(ty) == vInt and m.width(ty) == 8 }
++fn (m mut Machine&) i64(ty types.TypeId) Bool { return m.shape(ty) == vInt and m.width(ty) == 8 and m.ibits(ty) == 64 }
+ 
+ # the operators flat computes itself on two I64s: those intOp gives the plain 64-bit answer for
+ fn wordOp(op typed.PrimOp) Bool {

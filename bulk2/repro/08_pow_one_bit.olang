@@ -1,0 +1,7 @@
+# T4a: x.Pow(n) and std/arith's Pow are Integer defaults starting from "r T = 1", which does not fit I1 (values -1, 0):
+# I1's Pow is a compile-time error inside the prelude, though T4a gives every integer of every width Pow
+import "std/io"
+fn main() {
+    x := I1(-1)
+    io.Println($x.Pow(2))!
+}

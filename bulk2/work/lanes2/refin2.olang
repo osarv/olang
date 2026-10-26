@@ -1,0 +1,26 @@
+import "std/io"
+type P struct(s String&) { s }
+fn (a P) Plus(b P) P { return b }
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        x := $"junk" $i
+        t += x.Len()
+    }
+    return t
+}
+N mut I64 = 7
+fn grow(x mut Array<P>&) {
+    y := Array<P>(2, P($"local " $N))
+    x += y
+}
+fn grow2(x mut Array<P>&) {
+    y := Array<P>(2, P($"local " $N))
+    for i in range 2 { x[i] = x[i] + y[i] }
+}
+fn main() {
+    x := Array<P>(2, P("a"))
+    grow(x)
+    churn()
+    io.Println($x[0].s " " $x[1].s)!
+}

@@ -1,0 +1,21 @@
+import "std/io"
+type P struct() {
+    arr := Array<I64>(3)
+}
+fn main() {
+    v := Vec<I64>()
+    for i in range 3 { v.Push(i) }
+    s := v.ViewMut()
+    s += 10
+    io.Println($v)!
+    p := P()
+    p.arr += 3
+    io.Println($p.arr)!
+    q := Vec<P>()
+    q.Push(P())
+    q[0].arr[0] = 9
+    t := q[0]
+    t.arr += 1
+    q[0] = t
+    io.Println($q[0].arr)!
+}

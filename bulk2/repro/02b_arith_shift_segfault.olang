@@ -1,6 +1,6 @@
 # std/arith.ShiftLeft at a width the eight's branches do not name: widthOf gives 64, so a count of 10 on an I9 is not
-# INVALID but the shift itself - out of range, undefined (E8a) - and at -O3 the program segfaults (reduced from the
-# differential fuzzer's seed 16 with odd-width primitives)
+# INVALID but the shift itself - out of range, undefined (E8a). Built -O3 this program prints nothing and exits 48; the
+# fuzzer program it is reduced from (odd-width primitives, seed 16, case 22) segfaults. Expected "2" (INVALID taken)
 import "std/io"
 import "std/arith"
 

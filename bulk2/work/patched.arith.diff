@@ -1,0 +1,55 @@
+--- /home/user/wt/bulk2/std/arith.olang	2026-10-26 08:03:02.897293389 +0000
++++ patched/std/arith.olang	2026-10-26 08:48:14.277484318 +0000
+@@ -58,6 +58,9 @@
+         }
+         nomatch {
+             if a == 0 or b == 0 { return 0 }
++            if T.Min < 0 {
++                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.OVERFLOW }
++            }
+             r := a * b
+             if r / b != a { error Error.OVERFLOW }
+             return r
+@@ -81,6 +84,9 @@
+         }
+         nomatch {
+             if b == 0 { error Error.DIVIDE_BY_ZERO }
++            if T.Min < 0 {
++                if a == T.Min and b == -1 { error Error.OVERFLOW }
++            }
+             return a / b
+         }
+     }
+@@ -94,7 +100,11 @@
+         case I8, I16, I32, I64 {
+             if b == -1 { return 0 }
+         }
+-        nomatch { }
++        nomatch {
++            if T.Min < 0 {
++                if b == -1 { return 0 }
++            }
++        }
+     }
+     return a % b
+ }
+@@ -108,6 +118,10 @@
+             return -a
+         }
+         nomatch {
++            if T.Min < 0 {
++                if a == T.Min { error Error.OVERFLOW }
++                return -a
++            }
+             if a != 0 { error Error.OVERFLOW }
+             return a
+         }
+@@ -166,7 +180,7 @@
+         case I8, U8 => 8
+         case I16, U16 => 16
+         case I32, U32 => 32
+-        nomatch => 64
++        nomatch => T.Max.PopCount() + (1 if T.Min < 0 else 0)
+     }
+ }
+ 

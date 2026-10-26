@@ -1,4 +1,5 @@
-# A slice of an immutable global holding an array is writable through ':=' - "s := G[0:2]" then "s[0] = 9" is accepted.
+# A slice of an immutable global holding an array is writable - "s := G[0:2]; poke(s, 9)", "poke(G[0:2], 9)", "s[0] = 9"
+# are accepted ("poke(G, 9)" is S6's error).
 # E16a says a slice carries its base's permission, so s is read-only (T25b). G is constant data (T25d, K2b): the built
 # program writes .rodata (a segfault, or a store the optimizer drops), while "interpret" changes G
 import "std/io"

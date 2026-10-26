@@ -1,0 +1,11 @@
+# E39: "x op= v" writes x lane by lane while v's lanes are read, so an operand overlapping x reads lanes already
+# written: s += a[0:4] with s = a[1:5] is a running sum, not a lane-by-lane sum of the old values. E39 does not say
+# which (numpy reads the old values since 1.13). All modes agree
+import "std/io"
+N mut I64 = 5
+fn main() {
+    a := Array<I64>(N, 1)
+    s := a[1:5]
+    s += a[0:4]
+    io.Println($a)!       # I64[1, 2, 3, 4, 5]
+}
