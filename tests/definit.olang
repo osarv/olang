@@ -106,6 +106,35 @@ fn diFill(n I64) Array<F32> {
     return a
 }
 
+# a zero value read after a do-while loop, whose break is in its post clause, and after a loop whose only break is in
+# a catch clause inside an index: both loops end, so the read is reached with the zero written (D13d)
+type DiSeven struct(v I64 = 7) {
+    v
+}
+
+fn diAfterDo(k I64) I64 {
+    p DiSeven
+    i I64 = 0
+    do { i++ } for i < k
+    return p.v + i
+}
+
+fn diStep(i I64) I64 ? DiErr {
+    if i >= 3 { error DiErr.BAD }
+    return i
+}
+
+fn diAfterHidden(xs Array<I64>&) I64 {
+    p DiSeven
+    i I64 = 0
+    t I64 = 0
+    for {
+        t += xs[try diStep(i) catch { break }]
+        i++
+    }
+    return p.v * 100 + t
+}
+
 # a global with no zero value, and text, given their values by top-level ifs below them (D13e)
 DiBackend String
 if TargetOs == "linux" { DiBackend = "epoll" } else { DiBackend = "kqueue" }
@@ -126,6 +155,8 @@ DiZeroBaked := diZero(true)
 DiSquaresBaked := diSquares(4)
 DiFillBaked := diFill(3)
 DiFixedLen := I64[i for i in range 6].Len()
+DiAfterDoBaked := diAfterDo(3)
+DiAfterHiddenBaked := diAfterHidden(I64[4, 5, 6, 7])
 
 test "a never-null reference assigned in both branches (D13d)" {
     assert diPick(true) == 1
@@ -155,6 +186,15 @@ test "a zero value is read where nothing assigned it (D13d)" {
     assert diZero(true) == 5
     assert diZero(false) == 6
     assert DiZeroBaked == 5
+}
+
+test "a zero value read after a loop that ends by a break it holds anywhere (D13d)" {
+    assert diAfterDo(3) == 10
+    assert diAfterDo(0) == 8
+    assert DiAfterDoBaked == 10
+    xs := I64[4, 5, 6, 7]
+    assert diAfterHidden(xs) == 715
+    assert DiAfterHiddenBaked == 715
 }
 
 test "a constructor's field assigned in its branches (D13d)" {

@@ -1,0 +1,11 @@
+# check: fail error[D13d]: 'n' is read here before it is assigned on every path, and Node& has no zero value
+# D13d: a do-while loop's break is in its post clause (its condition, read from the second turn), so the loop ends and
+# the read after it is reached with nothing assigned (it was taken for a loop that never ends, the read for dead code)
+type Node struct(v I64) { v }
+fn probe() I64 {
+    n Node&
+    i I64 = 0
+    do { i++ } for i < 3
+    return n.v
+}
+fn main() { probe() }

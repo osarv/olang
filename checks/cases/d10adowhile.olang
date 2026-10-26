@@ -1,0 +1,8 @@
+# check: fail error[D10a]: the end can be reached without returning I64
+# D10a: a do-while loop leaves by its condition, held in its post clause - the end after it is reached (it was taken
+# for a loop that never ends, and the program reached the unreachable inserted at the end)
+fn f() I64 {
+    i I64 = 0
+    do { i++ } for i < 3
+}
+fn main() { f() }

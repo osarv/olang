@@ -149,7 +149,8 @@ fn (w mut Walker&) stmt(st typed.Stmt&, s State) State {
             # anywhere in it)
             a := w.block(body, s)
             w.block(post, s)
-            if not breaks(body, body.Id) { return dead() }
+            # a do-while's condition, and so its break, is in its post clause
+            if not typed.BreaksOut(body, body.Id) and not typed.BreaksOut(post, body.Id) { return dead() }
             if a.On and a.Set { return retag(s, s, a, Cause.Loop, sp) }
             return s
         }
@@ -328,71 +329,3 @@ fn litBool(x typed.Expr&) I64 {
         case _ => -1
     }
 }
-
-# whether a loop's body holds a break of that loop - anywhere in it, the statements its expressions carry included
-fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
-    if b is null { return false }
-    return stmtsBreak(b.Stmts, loop)
-}
-
-fn stmtsBreak(ss Array<typed.Stmt&>&, loop typed.BlockId) Bool {
-    if ss.Len() == 0 { return false }
-    for s in ss {
-        if stmtBreaks(s, loop) { return true }
-    }
-    return false
-}
-
-fn stmtBreaks(s typed.Stmt&, loop typed.BlockId) Bool {
-    return match s {
-        case typed.Stmt.Jump(_, kind, l) => kind == typed.JumpKind.Break and l == loop
-        case typed.Stmt.If(_, i) => exprBreaks(i.Test, loop) or breaks(i.Then, loop) or breaks(i.Else, loop)
-        case typed.Stmt.Block(_, inner) => breaks(inner, loop)
-        case typed.Stmt.Loop(_, body, post) => breaks(body, loop) or breaks(post, loop)
-        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Assign(_, _, x), typed.Stmt.Yield(_, x) => exprBreaks(x, loop)
-        case typed.Stmt.Join(_, j) => breaks(j.Code, loop) or clausesBreak(j.Clauses, loop)
-        case _ => false
-    }
-}
-
-fn exprsBreak(xs Array<typed.Expr&>&, loop typed.BlockId) Bool {
-    if xs.Len() == 0 { return false }
-    for x in xs {
-        if exprBreaks(x, loop) { return true }
-    }
-    return false
-}
-
-fn exprBreaks(x typed.Expr?&, loop typed.BlockId) Bool {
-    if x is null { return false }
-    return match x {
-        case typed.Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
-        case typed.Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
-        case typed.Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
-                                          (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
-        case typed.Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
-        case typed.Expr.Call(_, _, k) => exprsBreak(k.Args, loop)
-        case typed.Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
-        case typed.Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
-        case typed.Expr.Away(_, _, y) => exprBreaks(y, loop)
-        case _ => false
-    }
-}
-
-fn clausesBreak(cs Array<typed.Clause&>&, loop typed.BlockId) Bool {
-    if cs.Len() == 0 { return false }
-    for k in cs {
-        if breaks(k.Code, loop) or exprsBreak(k.Defaults, loop) { return true }
-    }
-    return false
-}
-
-fn armsBreak(arms Array<typed.Arm&>&, loop typed.BlockId) Bool {
-    if arms.Len() == 0 { return false }
-    for a in arms {
-        if armBreaks(a, loop) { return true }
-    }
-    return false
-}
-
-fn armBreaks(a typed.Arm&, loop typed.BlockId) Bool { return breaks(a.Code, loop) or exprBreaks(a.Value, loop) }
