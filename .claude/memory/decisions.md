@@ -1259,3 +1259,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - 2026-10-26 (mine, prel's two questions, details): `vacate` stays prelude-only (std/list's removals free nothing
   early) until real code needs it; Vec gets no iterator overrides of its own for now (E11c's refusal of
   `v.Iter().Some(f)` inside a Str is a recorded limit; a for loop works).
+- 2026-10-26 (the user: "Don't bother migrating oann before the language is done"): oann is not migrated (olang fix,
+  list_vec, etc.) until the language is done; its compiler pin stays where it is.
