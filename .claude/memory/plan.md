@@ -450,3 +450,8 @@ on sight per rules.md, "Code rules".
   T25c) with one error naming `fn Show() String`. Left: generator frame elision (coro.alloc + coro.destroy where a for-in
   makes and finishes the walk); "unknown name 'os'" x3 without an import; E11b hint for 'c'.PadStart(3) in a join.
 NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.ToVec()).
+- 2026-10-26 CEST: prel merged (6c843f3, verified): QZ2 done - List in std/list (list.List, list.Of/From, list.Error,
+  list.Iter), iterator/array helpers and StringBuilder on Vec (ToVec), 2,302 List uses moved to Vec by
+  tools/list_vec.olang --vec; compiler builds 52 -> 44 s. Bench: text +1.06%, regex +0.8% (Vec doubling fills before
+  copy - fix: grow without the zero fill), dispatch any +1.55%. Left: a Map's Vec value first named by a local in the
+  Map's scope then Put is not freed early (131 MB over 1M); oann needs `olang fix`.

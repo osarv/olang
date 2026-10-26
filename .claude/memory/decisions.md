@@ -1256,3 +1256,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   as `_BitInt(N)` until a C API needs one (only the twelve primitives cross, X2). (2) Literals and literal-only
   expressions will hold up to 128 bits, so `x U128 = 340282366920938463463374607431768211455` and `x I128 = 1 << 100`
   work directly - queued for the next small batch (E4a back to 128 bits, exactly as the evaluator computes them).
+- 2026-10-26 (mine, prel's two questions, details): `vacate` stays prelude-only (std/list's removals free nothing
+  early) until real code needs it; Vec gets no iterator overrides of its own for now (E11c's refusal of
+  `v.Iter().Some(f)` inside a Str is a recorded limit; a for loop works).
