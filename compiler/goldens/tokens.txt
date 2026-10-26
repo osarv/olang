@@ -1700,7 +1700,7 @@ f1a66a4afdfb3f7c 23ef99317ee8a8c8 compiler/types.olang
 dfa217d6cc6299f0 ccdf839054700660 compiler/unparse.olang
 4a6a15448dad8cb3 33d5a491fb7243f6 compiler/views.olang
 819ba0b4e2c49fac 9b67520da5b5aca3 fuzz/fuzz.olang
-a1946b11f4af1e0c ca3b8ba64220e78c fuzz/gen.olang
+c8fff570b67e8a73 d86d6f975da20e02 fuzz/gen.olang
 5dc258818024ab13 c82fa0fb58b04884 fuzz/repro/bf16bitcastfold.olang
 3a120091f2c6b982 b5f13fa3ec41fde1 fuzz/repro/bf16fastisel.olang
 ef38dd1ce8af089f d0e7134997ee8d07 fuzz/repro/bf16shrink.olang
