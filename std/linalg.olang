@@ -51,6 +51,10 @@
 
 import "std/rand"
 
+KC4 I64 = 384
+KC8 I64 = 256
+NC I64 = 512
+
 extern fn sysconf(name I32) I64
 
 # a shape that does not fit the operation - two operands of different shapes, a product whose inner dimensions differ
@@ -469,6 +473,26 @@ fn Cast<S, D>(x S, like D) D {
     }
 }
 
+# n elements of src from s, as A, into dst from d - n a constant once inlined. Read into registers first and then
+# written: read and written element by element, LLVM may not make vectors of the reads, since dst could be src
+fn copyRun<T, A>(src Array<T>&, s I64, dst mut Array<A>&, d I64, n I64, z A) {
+    r := tile<A>()
+    for w in range n { r.v[w] = Cast(src[s + w], z) }
+    for w in range n { dst[d + w] = r.v[w] }
+}
+
+# rows w < n of src, each of eight elements from s + w ld, as A into dst from d transposed: element j of row w at
+# d + j n + w. The rows are read as runs into registers, then written - n a constant once inlined
+fn transposeRuns<T, A>(src Array<T>&, s I64, ld I64, dst mut Array<A>&, d I64, n I64, z A) {
+    r := tile<A>()
+    for w in range n {
+        for j in range 8 { r.v[w * 8 + j] = Cast(src[s + w * ld + j], z) }
+    }
+    for j in range 8 {
+        for w in range n { dst[d + j * n + w] = r.v[w * 8 + j] }
+    }
+}
+
 # a tile of accumulators, kept in registers by the micro-kernel (an inline array, indexed only at constants) - room for
 # the largest tile, 12 x 32
 type tile<A> struct() {
@@ -510,6 +534,25 @@ fn (x Patches<T>&) isMatrix() Bool { return false }
 fn (x operand<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I64, role R, sh S, lower Bool, diag I64, dst mut Array<A>&) {
     z A
     wr := panelWidth(z, role, sh)
+    if trans and not lower {
+        # element (w, p) is x[p0 + p, w0 + q + w]: each step of a panel a run of x's row - walked a row of x at a
+        # time, across every panel, so that x is read in order
+        full I64 = width / wr * wr
+        for p in range depth {
+            s I64 = (p0 + p) * x.ld + w0
+            for q in range 0, full, wr { copyRun(x.d, s + q, dst, q * depth + p * wr, wr, z) }
+        }
+        if full < width {
+            n I64 = width - full
+            for p in range depth {
+                s I64 = (p0 + p) * x.ld + w0 + full
+                d I64 = full * depth + p * wr
+                for w in range n { dst[d + w] = Cast(x.d[s + w], z) }
+                for w in range n, wr { dst[d + w] = z }
+            }
+        }
+        return
+    }
     if trans {
         # element (w, p) is x[p0 + p, w0 + q + w]: each step of a panel a run of x's row. Of a triangular x the steps
         # before pAny are zeros, those from pFull on read whole, and only those between - fewer than wr - are cut
@@ -562,7 +605,11 @@ fn (x operand<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I6
                     }
                 }
             } else {
-                for p in range depth {
+                # eight steps at a time: each row's eight read as one run, written out as the eight steps' wr values
+                # each, which follow one another in dst
+                full I64 = depth / 8 * 8
+                for p in range 0, full, 8 { transposeRuns(x.d, s + p, x.ld, dst, base + p * wr, wr, z) }
+                for p in range full, depth {
                     for w in range wr { dst[base + p * wr + w] = Cast(x.d[s + w * x.ld + p], z) }
                 }
             }
@@ -661,6 +708,24 @@ fn (x Patches<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I6
     }
 }
 
+# rows w0 .. w0 + width of x, the depth p0 .. p0 + depth of each, into dst row after row (row w at w depth), as A -
+# then zero rows up to the next whole tile: the left operand as the micro-kernel reads it by rows (rowsA), which packs
+# as a plain copy where the panel's layout is a transpose
+fn (x operand<T>&) packRows<A>(w0 I64, p0 I64, width I64, depth I64, dst mut Array<A>&) {
+    z A
+    mr := tileRows(z)
+    for w in range width {
+        s I64 = (w0 + w) * x.ld + p0
+        d I64 = w * depthBlock(z)
+        for p in range depth { dst[d + p] = Cast(x.d[s + p], z) }
+    }
+    for w in range width, (width + mr - 1) / mr * mr {
+        for p in range depth { dst[w * depthBlock(z) + p] = z }
+    }
+}
+
+fn (x Patches<T>&) packRows<A>(w0 I64, p0 I64, width I64, depth I64, dst mut Array<A>&) { unreachable }
+
 # a panel's windows: each position's first pixel's offset in the images, and its window's top-left pixel (which may lie
 # outside the image, in the padding)
 type windows struct() {
@@ -697,12 +762,14 @@ fn vectorLanes<A>(z A) I64 {
 # the operand where it is, by rows (element (i, k) at i ld + k)
 type packedA struct() { }
 type rowsA struct() { }
+type rowsK struct() { }
 
 # the steps between the elements of one step's rows, and between one step's and the next's
 fn aSteps<A, L>(z A, lay L, ld I64) I64, I64 {
     match L {
         case packedA { return 1, tileRows(z) }
         case rowsA { return ld, 1 }
+        case rowsK { return depthBlock(z), 1 }
     }
 }
 
@@ -921,16 +988,22 @@ fn mulAdd<A>(a A, b A, c A) A {
 # whole tile is wanted). beta == 0 never reads C, so C may hold anything (BLAS's rule)
 fn storeTile<A, T>(acc tile<A>&, nr I64, alpha A, beta A, c mut Array<T>&, co I64, ldc I64, rows I64, cols I64, lim I64) {
     like T
+    # the tile copied into a local first: read through acc, which LLVM must assume may be C, the stores could not be
+    # made vectors (an F64 tile was stored element by element, 9% of a large product)
+    t := tile<A>()
+    for i in range rows {
+        for j in range nr { t.v[i * nr + j] = acc.v[i * nr + j] }
+    }
     if beta == 0 {
         for i in range rows {
             o I64 = co + i * ldc
-            for j in range clampI(lim + i, 0, cols) { c[o + j] = Cast(alpha * acc.v[i * nr + j], like) }
+            for j in range clampI(lim + i, 0, cols) { c[o + j] = Cast(alpha * t.v[i * nr + j], like) }
         }
         return
     }
     for i in range rows {
         o I64 = co + i * ldc
-        for j in range clampI(lim + i, 0, cols) { c[o + j] = Cast(alpha * acc.v[i * nr + j] + beta * Cast(c[o + j], alpha), like) }
+        for j in range clampI(lim + i, 0, cols) { c[o + j] = Cast(alpha * t.v[i * nr + j] + beta * Cast(c[o + j], alpha), like) }
     }
 }
 
@@ -972,7 +1045,12 @@ fn tileCols<A>(z A) I64 {
 # the blocking around the tile, Goto's: kc the depth of a packed panel (k per block), mc the rows of A packed per block
 # (a multiple of the tile's rows; its panel stays in L2), nc the columns of B packed per block (a multiple of the tile's
 # columns, wide or thin; its panel stays in L3)
-kc I64 = 256
+fn depthBlock<A>(z A) I64 {
+    return match A {
+        case F64, I64, U64 => KC8
+        nomatch => KC4
+    }
+}
 
 fn blockRows<A>(z A) I64 {
     mr := tileRows(z)
@@ -981,7 +1059,7 @@ fn blockRows<A>(z A) I64 {
 
 fn blockCols<A>(z A) I64 {
     nr := tileCols(z)
-    return 2048 / nr * nr
+    return NC / nr * nr
 }
 
 # the fraction of the tiles' work that falls inside an m x n result, the rest being padding: what decides the tile
@@ -1088,15 +1166,22 @@ fn gemmRows<SA, A, T, S>(sa SA, ta Bool, i0 I64, i1 I64, p0 I64, depth I64, k I6
     # a result one or two tiles wide reads each element of A once or twice: packing it would cost more than it saves,
     # so A is read where it is
     inPlace Bool = readsInPlace(sa, ta, al) and cols <= 2 * nr
+    # otherwise A not transposed is packed by rows, a plain copy, and read by rows; transposed (or triangular, or
+    # patches) into panels, each step's rows together
+    byRows Bool = not inPlace and not ta and not lower and sa.isMatrix()
     for ic in range i0, i1, mc {
         rows I64 = lesser(mc, i1 - ic)
         # a triangular result: rows whose every column in this block is past the diagonal compute nothing
         if result and ic + rows - 1 + diag < j0 { continue }
         # the depth these rows reach: all of it, or what a triangular left operand leaves
         lo, hi := triangleDepth(lower, ta, ic, rows, p0, depth, diag)
-        if not inPlace and lo < hi { sa.pack(ta, ic, p0 + lo, rows, hi - lo, aPanel(), sh, lower, diag, ap) }
-        for jr in range 0, cols, nr {
-            for ir in range 0, rows, mr {
+        if byRows {
+            sa.packRows(ic, p0, rows, depth, ap)
+        } else if not inPlace and lo < hi {
+            sa.pack(ta, ic, p0 + lo, rows, hi - lo, aPanel(), sh, lower, diag, ap)
+        }
+        for ir in range 0, rows, mr {
+            for jr in range 0, cols, nr {
                 ti I64 = ic + ir
                 tj I64 = j0 + jr
                 tr I64 = lesser(mr, rows - ir)
@@ -1116,7 +1201,11 @@ fn gemmRows<SA, A, T, S>(sa SA, ta Bool, i0 I64, i1 I64, p0 I64, depth I64, k I6
                     }
                 }
                 co I64 = tj * ldc + ti if exchanged else ti * ldc + tj
-                computeTile(sa, inPlace, ti, tr, p0, ks, ke, lower, diag, ap, ir * (hi - lo) - lo * mr, bp, jr * depth, sh, al, bt, c, co, ldc, tr, tc, lim, exchanged)
+                if byRows {
+                    micro(ke - ks, ap, ir * depthBlock(al) + ks, depthBlock(al), rowsK(), 0, ap, 0, bp, jr * depth + ks * nr, sh, al, bt, c, co, ldc, tr, tc, lim, exchanged)
+                } else {
+                    computeTile(sa, inPlace, ti, tr, p0, ks, ke, lower, diag, ap, ir * (hi - lo) - lo * mr, bp, jr * depth, sh, al, bt, c, co, ldc, tr, tc, lim, exchanged)
+                }
             }
         }
         # the epilogue, once these rows are summed: a pass over their part of C while it is in the cache, a row of C at
@@ -1205,8 +1294,8 @@ fn gemmBlocks<SA, SB, A, T, S>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bo
     one A = Cast(1, al)
     for jc in range 0, n, nc {
         cols I64 = lesser(nc, n - jc)
-        for pc in range 0, k, kc {
-            depth I64 = lesser(kc, k - pc)
+        for pc in range 0, k, depthBlock(al) {
+            depth I64 = lesser(depthBlock(al), k - pc)
             sb.pack(tb, jc, pc, cols, depth, bPanel(), sh, false, 0, bp)
             bt A = be if pc == 0 else one
             if tasks <= 1 {
@@ -1299,13 +1388,13 @@ fn productIn<SA, SB, T, A>(m I64, n I64, k I64, a SA, transA Bool, b SB, transB 
 fn packedProduct<SA, SB, A, T>(m I64, n I64, k I64, sa SA, ta Bool, sb SB, tb Bool, al A, be A, c mut Array<T>&, ldc I64, threads I64, ws mut GemmWorkspace<T>&, thin Bool, exchanged Bool, ep epilogue<T>&) {
     mr := tileRows(al)
     nr I64 = vectorLanes(al) if thin else tileCols(al)
-    depthMax I64 = lesser(k, kc)
+    depthMax I64 = lesser(k, depthBlock(al))
     colsMax I64 = lesser((n + nr - 1) / nr * nr, blockCols(al))
     bp := ws.panelB(depthMax * colsMax, al)
     tasks I64 = lesser(threads, (m + mr - 1) / mr)
     if m * n * k < 2000000 { tasks = 1 }
     share I64 = ((m + tasks - 1) / tasks + mr - 1) / mr * mr
-    panel I64 = lesser(blockRows(al), share) * depthMax
+    panel I64 = lesser(blockRows(al), share) * depthBlock(al)
     ap := ws.panelsA(tasks * panel, al)
     if thin {
         gemmBlocks(m, n, k, sa, ta, sb, tb, al, be, c, ldc, share, ap, panel, bp, thinTile(), exchanged, Triangular.None, 0, ep)
@@ -1698,9 +1787,9 @@ fn batchIn<T, A>(c mut Batch<T>&, a Batch<T>&, transA Bool, b Batch<T>&, transB 
     mr := tileRows(z)
     thin, _ := tileChoice(m, n, mr, tileCols(z), vectorLanes(z), false)
     nr I64 = vectorLanes(z) if thin else tileCols(z)
-    depthMax I64 = lesser(k, kc)
+    depthMax I64 = lesser(k, depthBlock(z))
     bsize I64 = depthMax * lesser((n + nr - 1) / nr * nr, blockCols(z))
-    asize I64 = depthMax * lesser((m + mr - 1) / mr * mr, blockRows(z))
+    asize I64 = depthBlock(z) * lesser((m + mr - 1) / mr * mr, blockRows(z))
     tasks I64 = lesser(threads, count)
     if count * m * n * k < 2000000 { tasks = 1 }
     bp := ws.panelB(tasks * bsize, z)
