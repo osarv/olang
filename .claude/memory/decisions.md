@@ -1537,3 +1537,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   module's all) and `T.Methods`, unrolled walks as T.Fields, each a descriptor (`f.Name`, `f.Params`, `f.Results`,
   `f.Errors`, `f.Attr<A>()`, `f(args)` calls it), so a library collects attributed functions while compiling (an
   http router, a CLI's subcommands, a test or benchmark table). Attributes stay data; nothing runs because of one.
+- QBO ASKED 2026-10-26 (the user: "Attributes are an entire can of worms no? Which attributes do we want adding?"):
+  answered - the language would define NO attribute, only the mechanism; rules proposed to keep it closed: (1) the
+  compiler gives no attribute a meaning (no @inline/@packed/@test/@cfg - compilation stays language rules); (2) an
+  attribute is a typed value checked while compiling; (3) read only by reflection while compiling, no run-time cost;
+  (4) std ships few. Proposed first set: json.Key, json.Skip, json.Keys (on a type), csv.Column, csv.Skip, flags.Help;
+  later maybe Deprecated (read by doc/lsp). ASKED: go ahead with that set and those rules, or drop attributes and keep
+  only the json policies. In effect: attributes queued, not started.
