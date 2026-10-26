@@ -3,7 +3,7 @@
 # moved into the new one in order; Front, Back and "d[i]" (from the front, unchecked as an array index is, "checked
 # d[i]" checked) read without moving anything. Imported with `import "std/deque"`; the type is deque.Deque<T>.
 #
-# A Deque is a HANDLE, as List and Vec are: a copy of a Deque value is a second name for the same deque, and Clone()
+# A Deque is a HANDLE, as Vec and Map are: a copy of a Deque value is a second name for the same deque, and Clone()
 # is the copy with storage of its own. As a Vec's, a replaced buffer stays where the Deque lives until that scope closes.
 
 # what a Deque's operations fail with: a Front, Back or Pop of an empty deque
@@ -82,7 +82,7 @@ fn (d Deque<T>&) Back() T ? Error.EMPTY {
     return s.buf[(s.head + s.n - 1) % s.buf.Len()]
 }
 
-# element i counted from the front - a copy, as a List's is. Unchecked: "checked d[i]" checks i against Len()
+# element i counted from the front - a copy, as a Vec's is. Unchecked: "checked d[i]" checks i against Len()
 fn (d Deque<T>&) At(i I64) T {
     s := d.s
     return s.buf[(s.head + i) % s.buf.Len()]

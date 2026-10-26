@@ -205,7 +205,7 @@ test "T25d/O1b: constant text keys put from a for-in, and a global map read thro
 }
 
 # a Map whose values are Lists - a group-by, a multimap - is filled through Get and walked by "for ... in": an entry is a
-# copy of one the map holds, so its Value is the very List
+# copy of one the map holds, so its Value is the very Vec
 fn groupInto(groups mut Map<I64, mut Vec<I64>&>&, n I64) ? {
     for i in range n {
         k I64 = i % 3
@@ -280,7 +280,7 @@ test "removing the entry just given, during a walk" {
     for e in m { assert e.Key % 2 == 1 and e.Value == e.Key }
 }
 
-# Keys and Values walk the map as Iter does, giving one part of each entry; ToList gathers either into a List
+# Keys and Values walk the map as Iter does, giving one part of each entry; ToVec gathers either into a Vec
 test "Keys and Values, one part of every entry" {
     m := Map<String&, I64>()
     assert m.Keys().ToVec().Len() == 0
@@ -335,7 +335,7 @@ test "Keys, Values and Clear, evaluated while compiling as at run time" {
     assert mapParts() == mapPartsBaked
 }
 
-# a Map is a handle, as a List is: a copy of a Map value is another name for the same map - a key removed through one is
+# a Map is a handle, as a Vec is: a copy of a Map value is another name for the same map - a key removed through one is
 # gone from the other, and its count with it - and Clone() is the copy with storage of its own, walked in the same order
 fn mapCopies() I64 {
     m := Map<String&, I64>()

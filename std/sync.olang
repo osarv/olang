@@ -9,7 +9,7 @@
 # (T24) - is changed by Update instead, which hands the callback a copy and stores what it gives back:
 # "m.Update(fn(n I64) I64 { return n + 1 })". Get and Set read and replace the value whole.
 #
-# Each type is a HANDLE, as List and Map are: the lock and what it guards are one record, made where the value is
+# Each type is a HANDLE, as Vec and Map are: the lock and what it guards are one record, made where the value is
 # constructed (C2d), and a copy of the value is a second name for the same lock - which is what a lock handed to two
 # tasks has to be. The lock words sit inside that record and never move, as pthread needs. glibc's initial state of a
 # mutex and of a read-write lock is all zero bytes (PTHREAD_MUTEX_INITIALIZER, PTHREAD_RWLOCK_INITIALIZER), which is

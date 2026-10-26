@@ -1193,7 +1193,7 @@ instantiation, what is copied out of what such a parameter reaches - through any
 read-only as the **argument** a call gives it: a by-value **result** copied out of it is a read-only copy at a call
 whose argument is reached read-only, and writable where the argument is (so `ls[0]` on a read-only
 `List<List<I32>>&` is a read-only copy, as `for x in ls` gives, and `Map.Get` on a read-only map likewise); and where the
-body **keeps** such a copy writable - stores it where it can be written (`Clone`, `ToArray`, `ToList`, `Filter`), lends
+body **keeps** such a copy writable - stores it where it can be written (`Clone`, `ToArray`, `ToVec`, `Filter`), lends
 it writably, or passes it to a callee that does - the parameter takes only a writable argument, an error at a call
 passing a read-only one. Settled once every body is checked; where the element type holds no writable reference,
 nothing of this applies.
@@ -1458,13 +1458,13 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
-`Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
-left - `m.Keys().ToList()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
+`Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter` - the last two building a new `Vec` -
+and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
 (G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
 `Chain`) fail as the iterators they wrap do.
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
-second name for the same walk, as a `List`'s copy is the same list.
+second name for the same walk, as a `Vec`'s copy is the same `Vec`.
 
 **T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
@@ -2125,8 +2125,9 @@ value that is all zero bits is the zero fill (nothing runs), and any other is th
 constant, or, where it holds references, a constructor call for each declaration, each with storage of its own.
 `Array<T>(n)` copies one value into every element, so a `T` whose zero value holds references is an error there:
 the elements would share it; such an array takes a fill or is built element by element. `Array<T>(0)`, its length
-the literal `0`, has no element and needs no zero value of `T`. The prelude's containers never ask for one: a `List`
-fills each new chunk with the element being pushed, and `ToArray`, an array's `Map` and `Filter` fill with an element,
+the literal `0`, has no element and needs no zero value of `T`. The prelude's containers never ask for one: a `Vec`
+fills each new buffer with the element being pushed (as `std/list`'s `List` fills each new chunk), and `ToArray`, an
+array's `Map` and `Filter` fill with an element,
 so a type with no zero value is an element of them as any other.
 
 **D14.** Storage for an array is set aside by building one: `Array<T>(n)` or `Array<T>(n, v)` (T8, E13a),
@@ -2358,9 +2359,11 @@ with no import, and no module may declare a type, a global, a function, a local 
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c); its `TypeKind` enum is what
 reflection's `T.Kind` gives (G32), and its `FieldInfo`, `CaseInfo`, `ParamInfo` and `ResultInfo` are the types of
-reflection's descriptors (G34), made only by the compiler. A program wanting methods over a built-in type declares a type of its own over it
+reflection's descriptors (G34), made only by the compiler. Its collections are `Vec` (the growable array), `Map` and
+`StringBuilder` - `String` and `Array` are built in - and every other container is a module of the standard library,
+imported by name: `std/list`'s `List`, `std/pair`'s `Pair`, `std/set`, `std/deque`, `std/heap`. A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods. The prelude's methods taking a callback - an array's `Some`, `Every`, `FindIndex`,
-`Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `List`'s and a `Vec`'s `Sort`, the iterator helpers
+`Count`, `Map`, `Filter`, `Fold` and `Sort` (its comparator), a `Vec`'s `Sort` (and `std/list`'s `List.Sort`), the iterator helpers
 (T35b) - fail with what the callback fails with, an error-set parameter (G1a) bound to it, and stop where it fails
 (a `Sort` leaving its elements permuted): `try a.Fold(0, fn(acc I64, x I64) I64 { return acc + try parse(x) })`; with
 a callback that cannot fail they cannot either, and are called without `try`.
@@ -2395,27 +2398,31 @@ any types held as one, named `pair.Pair` once imported, its type arguments infer
 `Hash()` - with `==`, what a map key needs - for every instantiation whose two parts have it (a declared one, so a
 `pair.Pair` is a key even where E10b would not apply).
 
-The prelude declares `type List<T>`, a growable sequence whose storage **never moves**: `Push(x)` and `PushAll(a)`
+`std/list` declares `type List<T>` (`list.List<T>` once imported), a growable sequence whose storage **never moves** -
+the container to choose over a `Vec` where that matters: an element is never copied by a growth, and no run of them a
+walk holds is ever replaced: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
-array in the caller's scope, and `Has(x)` asks by `==` (E29); an array's `ToList()` is the other way, a new `List` of
-its elements (`Array<I32>(n, v).ToList()` for `n` copies of one value). It indexes (E31): `l[i]` is `At(i)`, a copy of
+array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.Of(a)` is the other way, a new `List` of an array's elements
+(`list.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.From(it)` a new `List` of every value an
+iterator gives. It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
-`try l.Get(i)` checking `i` against `Len()`, failing with `ListError.OUT_OF_RANGE`. Every one of these costs the same whatever
+`try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OUT_OF_RANGE`. Every one of these costs the same whatever
 the length: storage is a run of chunks, each twice the size of the last, so a position's chunk is found by arithmetic
 rather than by a search, and nothing stored is moved by a later `Push`. `RunFrom(at)` gives the elements stored next
 to each other from position `at` - a read-only slice of the chunk holding it, to that chunk's end or the list's - and
 fails with `Exhausted` at `Len()`, so `for x in l` walks a `List` run by run (S9f), not through `At`. `Iter()` hands
-out a fresh position (S9c), a `ListIter<T>` whose iterator helpers (`Some`, `Every`, `Count`, `Fold`, `Map`, `Filter` -
-M19e overrides) walk the rest of the list run by run too, leaving it where `Next()` would.
-`First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with `ListError.EMPTY` when
+out a fresh position (S9c), a `list.Iter<T>` whose iterator helpers (`Some`, `Every`, `Count`, `Fold`, `Map`, `Filter` -
+M19e overrides, `Map` and `Filter` building a `Vec` as the defaults do) walk the rest of the list run by run too,
+leaving it where `Next()` would.
+`First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with `list.Error.EMPTY` when
 there is none; `Clear()` removes every element, and `Truncate(n)` all but the first `n` (nothing when the list holds
 `n` or fewer, every element for an `n` of `0` or less). None moves anything, and the chunks they
 empty are kept and filled again by the `Push`es that follow. `TakeAt(i)` removes the element at `i` and gives it,
 `RemoveAt(i)` removes it and gives nothing, and `Insert(i, x)` puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each
 moves the elements after `i` one place, so costs their number, and takes `i` from `0` to `Len() - 1` (`TakeAt`,
-`RemoveAt`) or `Len()` (`Insert`) - another fails with `ListError.OUT_OF_RANGE`, checked once per call. `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
+`RemoveAt`) or `Len()` (`Insert`) - another fails with `list.Error.OUT_OF_RANGE`, checked once per call. `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
 through one contiguous copy. `IndexOf(x)` gives the position of the first element equal to `x` by `==` (E10a), failing
-with `ListError.NOT_FOUND` when there is none; `Remove(x)` removes that element as `RemoveAt` would and says whether
+with `list.Error.NOT_FOUND` when there is none; `Remove(x)` removes that element as `RemoveAt` would and says whether
 there was one; `SwapTake(i)` removes the element at `i` and gives it, the last element taking its place - one element
 moved whatever the length, the order not kept - and takes `i` as `TakeAt` does, and `SwapRemove(i)` does the same
 giving nothing. A `List` of texts has `Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an
@@ -2430,7 +2437,9 @@ a `List` value is one reference to that record. So a copy of the value - `b := a
 a by-value argument - is a second name for the same list: a `Push` through either is seen through both, as through
 two references (and as with a Go map). `Clone()` gives a new `List` with the same elements in the same order and
 storage of its own, built where its result lands; elements are copied as values, so a list of references clones to
-a list of the same references.
+a list of the same references. Being an ordinary module, `std/list` says nothing of the positions it empties
+(`vacate` is the prelude's): a position past a `List`'s end may still hold what was there, so early freeing (O8d) takes
+a `List`'s removals for no let-go, and what they removed is reclaimed with the list's scope.
 
 The prelude declares `type Map<K Hashable<K>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with
@@ -2443,7 +2452,7 @@ goes on, and any other change to the map during a walk leaves which entries the 
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
 put - so a map whose keys come and go stays the size of what it holds. `Keys()` and `Values()` hand out iterators over
 one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
-key, keeping the slots and buckets for the keys put next. A `Map` is a **handle**, as a `List` is: a copy of a `Map`
+key, keeping the slots and buckets for the keys put next. A `Map` is a **handle**, as a `Vec` is: a copy of a `Map`
 value is a second name for the same map, and `Clone()` is a new one with the same keys and values (walked in the same
 order) and storage of its own, built where its result lands. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
 order, each `key: value` with the key and the value rendered as inside any other value, in braces after its type:
@@ -2451,18 +2460,19 @@ order, each `key: value` with the key and the value rendered as inside any other
 
 The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer, so
 indexing it and walking it cost what an array's do, past one load of the buffer the `Vec` names. A `Vec` is a
-**handle**, as a `List` and a `Map` are: a copy of a `Vec` value (`b := a`, a field, an element, a by-value argument, a
+**handle**, as a `Map` is: a copy of a `Vec` value (`b := a`, a field, an element, a by-value argument, a
 capture, a task's argument) is a second name for the same `Vec`, and `Clone()` is a new one with the same elements and
 a buffer of its own, built where its result lands; `Array<Vec<T>>(n, Vec<T>())` is `n` names for one `Vec` (T8). It is
 an ordinary value - a type argument (`List<Vec<T>>`, `Map<K, Vec<V>>`, `Vec<Vec<T>>`), a field, a global - and its
 element type needs no zero value: a new buffer is filled with the element being stored. `Vec<T>(cap = 0)` is empty, with
 room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
 buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
-room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of a `List` by the same names and on
-the same terms, failing with `VecError`'s words where a `List` fails with `ListError`'s - `v[i]` and `v[i] = x` (E31,
+room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of `std/list`'s `List` by the same
+names and on the same terms but `RunFrom`, failing with `VecError`'s words (`EMPTY`, `NOT_FOUND`, `OUT_OF_RANGE`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
-and `Clone`; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
+and `Clone`; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&v`, `ViewMut()` writably - a window on the buffer as it is now, good
 until the `Vec` grows (a `Push`, `PushAll`, `Insert` or `Reserve` that replaces the buffer). The buffer a growth
@@ -2471,8 +2481,9 @@ they were - never storage that was freed - and what the elements refer to lives 
 so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a compile-time error where the
 same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-time evaluator stops on (K1) and the scope
 sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
-(E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array;
-a `List` is for what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
+(E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`, `Vec<Char>['a']` (each `Char`
+a character literal, an array of them rendering as text). A `Vec` is the growable array; `std/list`'s `List` is for
+what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
 collections say what they stop using with two operations only the prelude has: `a.retire()`, where they stop using an
 array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - and `p.vacate()`,
 which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d): a removal (`Pop`,
@@ -2515,8 +2526,8 @@ replaced buffer on purpose while copying it, are not held to it.
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
 new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
-`b.Push($n)`. It holds its text in a `List`, so a copy of a `StringBuilder` value names the same text, as a copy of a
-`List` names the same list. `$` renders a `StringBuilder` (E11c) as the text it holds.
+`b.Push($n)`. It holds its text in a `Vec`, so a copy of a `StringBuilder` value names the same text, as a copy of a
+`Vec` names the same `Vec`. `$` renders a `StringBuilder` (E11c) as the text it holds.
 
 Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, counted from the start without overlapping
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
@@ -3016,8 +3027,8 @@ compiler supplies one for every other integer width (T4a) - the eight's mix of t
 word mixed with its high word's hash - and for a **struct, enum or array value** whose type declares neither (in
 either spelling) and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `Bool`, the eight integer types of 8 to 64 bits, `String`, and - agreeing with their `Eq` - `List`, `Map`
-(its entries' hashes summed, so the order they were put in does not count) and `Vec`; a float has none,
+prelude's `HashElements`). The prelude declares `Hash` for `Bool`, the eight integer types of 8 to 64 bits, `String`, and - agreeing with their `Eq` - `Vec` and `Map`
+(its entries' hashes summed, so the order they were put in does not count), as `std/list` does for `List`; a float has none,
 so neither does a value holding one. A **reference** has a hash exactly where `==` compares what it names: one to an
 array whose elements have one (its elements' hashes, as an array value's), or one whose type declares `Eq` and `Hash`;
 one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null reference is `0`. A supplied `Hash`

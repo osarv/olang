@@ -463,14 +463,15 @@ fn earlyfree(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/earlyfree/* " $os.Quote(dir))
     # C9b: conns and sockets hold values with destructors, freed by a Destroy() after each is taken out - sockets'
     # descriptors too, under a limit of 64 open at once
-    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets"]
-    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200"]
+    # mapvec (QF): a Map of Vecs whose values are replaced and removed
+    progs := String&["server", "frames", "mapremove", "session", "ast", "fixedconv", "conns", "sockets", "mapvec"]
+    small := String&["300", "100", "2000", "2000", "5", "300", "2000", "200", "2000"]
     full := String&["example.com\n", "3000000\n", "100\n"
                     "line 999999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "12000000000000\n", "999936 64\n", "16\n"]
+                    "3071\n", "12000000000000\n", "999936 64\n", "16\n", "63 504\n"]
     part := String&["example.com\n", "3000\n", "100\n"
                     "line 1999 of the file - a status text padded out to about a hundred bytes ......................\n"
-                    "3071\n", "270000\n", "1936 64\n", "16\n"]
+                    "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n"]
     for i in range progs.Len() {
         p := progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " $p ".olang > out.txt 2>&1") == 0, $p " build", dir)

@@ -2,21 +2,24 @@
 # program reaches for first - the iterator helpers Map and Filter build a Vec, ToList is ToVec, and StringBuilder holds a
 # Vec. Code written for the prelude's List is rewritten one of two ways:
 #
-#   - by default, onto Vec: a "List<" not after a "." becomes "Vec<", ListError becomes VecError, and a call ".ToList()"
-#     becomes ".ToVec()". A Vec has every operation a List had but RunFrom and the List's own iterator type, so a file
-#     naming ListIter, or calling RunFrom, is listed for a person: that code wants a List (--keep), or Vec's Iter
-#     (Indexable's IndexIter) and a counted walk;
-#   - with --keep, kept on List, imported: "List<" becomes "list.List<", ListError list.Error, ListIter list.Iter, and
-#     'import "std/list"' is added after the file's last import (or before its first declaration). A ".ToList()" is
-#     listed: it is list.Of(a) for an array and list.From(it) for an iterator, which the text does not say.
+#   - by default, kept on List, imported - what "olang fix" runs, since it changes nothing a program computes: "List<"
+#     not after a "." becomes "list.List<", ListError list.Error, ListIter list.Iter, and 'import "std/list"' is added
+#     after the file's last import (or before its first declaration). A ".ToList()" is listed for a person: it is
+#     list.Of(a) for an array and list.From(it) for an iterator, which the text does not say;
+#   - with --vec, onto Vec, the default growable array - how this repository was migrated: a "List<" not after a "."
+#     becomes "Vec<", ListError becomes VecError, and a call ".ToList()" becomes ".ToVec()". A Vec has every operation a
+#     List had but RunFrom and the List's own iterator type, so a file naming ListIter, or calling RunFrom, is listed for
+#     a person: that code wants the List kept, or Vec's Iter (Indexable's IndexIter) and a counted walk. A Vec renders as
+#     "Vec<I64>[...]" where a List rendered as "List<I64>[...]", so text a program compares with what it prints is
+#     a person's to look at too.
 #
 # A file declaring a type List, ListError or ListIter of its own is left alone (std/list itself is one), and a file
 # declaring a method ToList keeps its ToList calls. Comments and string literals are never changed; a "List<" inside a
-# string (a program a test writes) is listed. Idempotent: rewritten code has none of the forms left. Files are rewritten
-# in place and a count printed; --check writes nothing and the exit status says whether anything would change. A Markdown
-# file has its "```olang" blocks rewritten.
+# string (a program a test writes, a rendering it expects) is listed. Idempotent: rewritten code has none of the forms
+# left. Files are rewritten in place and a count printed; --check writes nothing and the exit status says whether anything
+# would change. A Markdown file has its "```olang" blocks rewritten.
 #
-#     $OLANG build tools/list_vec.olang && build/tools_list_vec [--keep] [--check] [-v] FILE|DIR...
+#     $OLANG build tools/list_vec.olang && build/tools_list_vec [--vec] [--check] [-v] FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -108,7 +111,7 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
             if keep {
                 with = "list.Iter"
             } else {
-                r.leave(path, src, t.start, "ListIter: a Vec's Iter() is an IndexIter - or keep the List (--keep)")
+                r.leave(path, src, t.start, "ListIter: a Vec's Iter() is an IndexIter - or keep the List (no --vec)")
             }
         } else if word == "ToList" and afterDot and next == token.Tok.LParen and not ownToList {
             if i + 2 < v.Len() and v[i + 2].k == token.Tok.RParen {
@@ -119,7 +122,7 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
                 }
             }
         } else if word == "RunFrom" and afterDot and next == token.Tok.LParen and not keep {
-            r.leave(path, src, t.start, "RunFrom: a List's alone - keep the List (--keep), or walk a Vec by its positions")
+            r.leave(path, src, t.start, "RunFrom: a List's alone - keep the List (no --vec), or walk a Vec by its positions")
         }
         if with == "" { continue }
         if with.StartsWith("list.") { usedList = true }
@@ -131,6 +134,17 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
     if at == 0 { return src }
     out.Push(src[at:])
     res := out.ToString()
+    if usedList {
+        # M20: the import's alias, list, may be no other name of the file
+        for i in range v.Len() {
+            t := v[i]
+            dotted := (i > 0 and v[i - 1].k == token.Tok.Dot) or (i + 1 < v.Len() and v[i + 1].k == token.Tok.Dot)
+            if t.k == token.Tok.Iden and src[t.start:t.end] == "list" and not dotted {
+                r.leave(path, src, t.start, "a name 'list' beside the import of std/list (M20): rename it")
+                break
+            }
+        }
+    }
     if usedList and not ("\"std/list\"" in src) {
         w := vtokens(res)
         p := importAt(res, w)
@@ -184,15 +198,15 @@ fn walk(dir String&, out mut Vec<String&>&) {
 fn main() ? {
     check := false
     verbose := false
-    keep := false
+    keep := true
     paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
         if a == "--check" {
             check = true
-        } else if a == "--keep" {
-            keep = true
+        } else if a == "--vec" {
+            keep = false
         } else if a == "-v" {
             verbose = true
         } else {
@@ -200,7 +214,7 @@ fn main() ? {
         }
     }
     if paths.Len() == 0 {
-        srcmask.SayErr("usage: tools_list_vec [--keep] [--check] [-v] FILE|DIR...")
+        srcmask.SayErr("usage: tools_list_vec [--vec] [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
     files Vec<String&>
@@ -227,7 +241,7 @@ fn main() ? {
             }
         }
     }
-    for l in r.left { srcmask.Say("left for a person: " $l) }
+    for l in r.left { srcmask.Say("by hand: " $l) }
     verb := "would change " if check else "changed "
     srcmask.Say($verb $changed " files: " $r.n " names")
     if check and changed > 0 { os.Exit(1) }
@@ -254,6 +268,8 @@ test "kept on List: qualified, with the import; ToList listed" {
     assert none == "# a file\nimport \"std/list\"\nfn g(l list.List<I64>&) { }\n"
     again := rewrite("f", got, true, r)
     assert again == got                          # idempotent
+    clash := rewrite("f", "fn g(list List<I64>&) { }\n", true, r)
+    assert clash == "import \"std/list\"\nfn g(list list.List<I64>&) { }\n" and r.left.Len() == 3
 }
 
 test "ListIter and RunFrom are listed onto Vec" {

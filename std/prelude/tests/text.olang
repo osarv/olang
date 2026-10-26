@@ -49,7 +49,7 @@ fn bracketed(text String&) String& {
     return b.ToString()
 }
 
-# the lines of text kept in a List - borrows of the text, so the List lives where the text does
+# the lines of text kept in a Vec - borrows of the text, so the Vec lives where the text does
 fn linesOf(t String&) Vec<String&>&t {
     out mut Vec<String&>&t = Vec<String&>()
     for line in t.Lines() { out.Push(line) }
@@ -341,7 +341,7 @@ test "Format, evaluated while compiling as at run time" {
     assert (try I64(Radix(bad)) catch TextError default 0) == 0   # a base computed while running, made a Radix
 }
 
-# E11c: "$" renders a StringBuilder as the text it holds, as ToString gives it - not as the List it keeps it in
+# E11c: "$" renders a StringBuilder as the text it holds, as ToString gives it - not as the Vec it keeps it in
 fn builderRendered() String {
     b := StringBuilder()
     b.Push("one ")

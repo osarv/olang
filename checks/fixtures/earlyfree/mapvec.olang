@@ -1,0 +1,24 @@
+import "std/io"
+
+# QF, QZ2: a long-running Map whose values are Vecs - each value replaced by a new one, some removed - stays flat: what
+# the Map lets go of is freed at once (O8d), each Vec's record and buffer with it. The Vec is made by a function and
+# handed straight to Put, so it is built for the Map's value place (a local naming it first - "v mut Vec<I64>&m" - keeps
+# every one until the Map's scope closes: a recorded limit)
+N I64 = 1000000
+
+fn mk(i I64) Vec<I64> {
+    v := Vec<I64>()
+    for j in range 8 { v.Push(i + j) }
+    return v
+}
+
+fn main() {
+    m := Map<I64, Vec<I64>>()
+    for i in range N {
+        m.Put(i % 64, mk(i))
+        if i % 7 == 0 { m.Remove((i + 3) % 64) }
+    }
+    t I64 = 0
+    for e in m { t += e.Value.Len() }
+    io.Println($m.Len() " " $t)!
+}

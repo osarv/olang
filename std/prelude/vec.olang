@@ -1,7 +1,7 @@
 # vec - the growable array, the one a program reaches for first: its elements in one contiguous buffer, which doubles as
-# it fills. Where std/list's List never moves what it stores (a chain of chunks, a copy for contiguity), a Vec moves its elements into a new buffer when it grows,
-# and is an array in every other respect: "v[i]" is an element of one array, "for x in v" a counted walk over it, View()
-# lends the elements as an array.
+# it fills. Where std/list's List never moves what it stores (a chain of chunks, a copy for contiguity), a Vec moves its
+# elements into a new buffer when it grows, and is an array in every other respect: "v[i]" is an element of one array,
+# "for x in v" a counted walk over it, View() lends the elements as an array.
 #
 # A Vec is a HANDLE, as Map is: everything it holds - the buffer and the count - is one record, made where the
 # Vec is constructed (C2d), and a Vec value is one reference to it. So a copy of a Vec value ("b := a", a field, an
