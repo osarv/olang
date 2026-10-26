@@ -1526,3 +1526,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   unambiguous where no left operand stands; serves json, csv, a db mapping, std/flags, GUI editors. Replaces the
   JsonKey-method idea if taken. ASKED: (1) typed `@` attributes; (2) fields only first, or types/functions/cases too.
   In effect: the json key policies only (agreed).
+- QBN ANSWERED 2026-10-26 (the user: "1) yes 2) what do you think?"): typed `@` attributes YES (replacing JsonKey).
+  Where, decided (mine, the user deferred): fields, enum cases and types - what reflection already reads (T.Fields,
+  T.Cases, T) - e.g. `@json.Keys(json.Keys.Camel)` on a type so every Encode/Decode of it uses that policy; not on
+  functions until reflection reads functions (an attribute nothing can read is noise, and function attributes invite
+  macro-like uses). Queued with the json key policies after the profiler.
