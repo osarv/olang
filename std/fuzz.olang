@@ -1,0 +1,135 @@
+# fuzz - fuzz targets, run by "olang test -fuzz NAME FILE" (B19), and replayed by every "olang test" (B19a).
+#
+# A fuzz test is a test whose body hands Check what to do with an input:
+#
+#     test json.Parse "never fails but by its errors" {
+#         fuzz.Check(fn(data Array<U8>&) { try json.Parse(String(data)) catch json.Error { } })
+#     }
+#
+# Under "olang test -fuzz NAME FILE" the test named NAME is built with libFuzzer and run once per input it makes, until
+# a check fails (an assert, an unreachable, a "!", an error leaving the test - or, with -sanitize, a reference read after
+# its scope closed); that input is then written to testdata/fuzz/SLUG/ beside the file, SLUG the test's name (Slug).
+# Every plain "olang test" of the file runs the test on the empty input and on each file saved there, so what the
+# fuzzer found stays a regression test. std/prop's properties are driven by the same inputs.
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+
+extern {
+    fn __olang_fuzz_input(buf Array<U8>, cap I64) I64
+    fn __olang_test_running(buf Array<U8>, cap I64) I64
+    fn __olang_test_source(buf Array<U8>, cap I64) I64
+}
+
+# the input libFuzzer hands the running test, failing with NONE where no fuzzer runs: a plain test run
+type Error error {
+    NONE
+}
+
+fn Input() Array<U8> ? Error {
+    n := __olang_fuzz_input(Array<U8>(0), 0)
+    if n < 0 { error Error.NONE }
+    data := Array<U8>(n)
+    __olang_fuzz_input(data, n)
+    return data
+}
+
+# f run on what there is to run it on: under -fuzz, the one input the fuzzer gives this run; else the empty input, then
+# each input saved for this test (Saved), in name order, each named on the standard error before it runs - so a failing
+# one is the last named. Fails with what f fails with, as the test then does
+fn Check<? E>(f fn(data Array<U8>&) ? E) ? E {
+    data := try Input() catch Error {
+        try f(Array<U8>(0))
+        for path in Saved() {
+            saved := try os.ReadFile(path) catch os.Error { continue }
+            try io.PrintErr($"fuzz: replaying " $path "\n") catch io.Error { }
+            try f(saved)
+        }
+        return
+    }
+    try f(data)
+}
+
+# the paths of the inputs saved for the running test, in name order: none outside a test, or with no directory
+fn Saved() Vec<String&> {
+    out Vec<String&>
+    name := running()
+    file := source()
+    if name == "" or file == "" { return out }
+    dir := Corpus(file, name)
+    names := try os.ReadDir(dir) catch os.Error { return out }
+    sorted := Vec<String&>()
+    for n in names {
+        if not n.StartsWith(".") { sorted.Push($n) }
+    }
+    sorted.Sort(fn(a String&, b String&) Bool { return a < b })
+    for n in sorted { out.Push(filepath.Join(dir, n)) }
+    return out
+}
+
+# the running test's name, as its run reports it ("Twice: doubles"), "" outside a test
+fn running() String {
+    n := __olang_test_running(Array<U8>(0), 0)
+    if n < 0 { return "" }
+    buf := Array<U8>(n)
+    __olang_test_running(buf, n)
+    return String(buf)
+}
+
+# the file whose tests run, as the command line named it, "" outside a test
+fn source() String {
+    n := __olang_test_source(Array<U8>(0), 0)
+    if n < 0 { return "" }
+    buf := Array<U8>(n)
+    __olang_test_source(buf, n)
+    return String(buf)
+}
+
+# the running test's name as a directory names it: each run of characters that are no letter or digit one "_", none
+# at either end ("Twice: doubles" is "Twice_doubles"); "test" for a name with no letter or digit
+fn Slug(name String&) String {
+    b := StringBuilder()
+    gap := false
+    for c in name {
+        if c.IsLetter() or c.IsDigit() {
+            if gap and b.Len() > 0 { b.PushChar('_') }
+            b.PushChar(c)
+            gap = false
+        } else {
+            gap = true
+        }
+    }
+    if b.Len() == 0 { return "test" }
+    return b.ToString()
+}
+
+# where the inputs found for the test named name, of file, are kept: testdata/fuzz/SLUG beside the file (Go's layout)
+fn Corpus(file String&, name String&) String {
+    return filepath.Join(filepath.Dir(file), "testdata", "fuzz", Slug(name))
+}
+
+# writes data among the inputs saved for the running test, named by its content's hash (so one input is saved once),
+# and gives its path; "" where there is no running test or it cannot be written
+fn Save(data Array<U8>&) String {
+    name := running()
+    file := source()
+    if name == "" or file == "" { return "" }
+    dir := Corpus(file, name)
+    try os.MkDirAll(dir) catch os.Error { return "" }
+    path := filepath.Join(dir, $"input-" $U64(data.HashElements()).Format(16))
+    try os.WriteFile(path, data) catch os.Error { return "" }
+    return path
+}
+
+test Slug "a test's name as a directory names it" {
+    assert Slug("Twice: doubles") == "Twice_doubles" and Slug("  a--b  ") == "a_b" and Slug(": :") == "test"
+    assert Corpus("tests/x.olang", "p") == "tests/testdata/fuzz/p"
+}
+
+test Check "outside -fuzz, runs on the empty input" {
+    seen mut Vec<I64>& = Vec<I64>()
+    Check(fn(data Array<U8>&) { seen.Push(data.Len()) })
+    assert seen.ToArray() == I64[0] and Saved().Len() == 0
+    assert (try Input() catch Error default "x") == "x"
+}

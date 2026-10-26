@@ -2526,6 +2526,65 @@ none:
   ret i64 -1
 }
 
+;; B19: fuzzing and what it found. The test harness names the test it runs (@__olang_test_name, its name as its run
+; reports it) and the file whose tests these are (@__olang_test_file, as the command line gave it); under "olang test
+; -fuzz" it hands each input libFuzzer makes to the one test fuzzed (@__olang_fuzz_data and its length - -1 where no
+; fuzzer runs). std/fuzz reads them through the functions below, each copying into its caller's buffer as the ones
+; above do. __olang_test_detach takes the running test's recovery point away, so a failed check on this thread aborts
+; the process - what std/prop's child processes want, each a case of a property run on its own (B19a)
+@__olang_test_name = global ptr null
+@__olang_test_file = global ptr null
+@__olang_fuzz_data = global ptr null
+@__olang_fuzz_size = global i64 -1
+
+define i64 @__olang_fuzz_input(ptr %buf, i64 %cap) {
+entry:
+  %n = load i64, ptr @__olang_fuzz_size
+  %none = icmp slt i64 %n, 0
+  br i1 %none, label %out, label %have
+have:
+  %pos = icmp sgt i64 %cap, 0
+  %c = select i1 %pos, i64 %cap, i64 0
+  %fits = icmp ult i64 %n, %c
+  %k = select i1 %fits, i64 %n, i64 %c
+  %d = load ptr, ptr @__olang_fuzz_data
+  call void @llvm.memcpy.p0.p0.i64(ptr %buf, ptr %d, i64 %k, i1 false)
+  br label %out
+out:
+  ret i64 %n
+}
+
+; a C string kept by the harness, or -1 where it has set none
+define private i64 @__olang_kept_cstr(ptr %slot, ptr %buf, i64 %cap) {
+entry:
+  %s = load ptr, ptr %slot
+  %none = icmp eq ptr %s, null
+  br i1 %none, label %no, label %yes
+yes:
+  %len = call i64 @__olang_copy_cstr(ptr %s, ptr %buf, i64 %cap)
+  ret i64 %len
+no:
+  ret i64 -1
+}
+
+define i64 @__olang_test_running(ptr %buf, i64 %cap) {
+entry:
+  %n = call i64 @__olang_kept_cstr(ptr @__olang_test_name, ptr %buf, i64 %cap)
+  ret i64 %n
+}
+
+define i64 @__olang_test_source(ptr %buf, i64 %cap) {
+entry:
+  %n = call i64 @__olang_kept_cstr(ptr @__olang_test_file, ptr %buf, i64 %cap)
+  ret i64 %n
+}
+
+define void @__olang_test_detach() {
+entry:
+  store ptr null, ptr @__olang_jmp_target
+  ret void
+}
+
 ; the variable "name" (NUL-terminated), or -1 when it is not set
 define i64 @__olang_env(ptr %name, ptr %buf, i64 %cap) {
 entry:
