@@ -3,7 +3,9 @@
 # taken where it is safe, and a Token is the signal it checks. Whoever made the token calls Cancel(); the tasks
 # handed it read Cancelled() in their loops, and pass it to anything that waits (chan's RecvUntil/SendUntil),
 # which gives up when it fires. A timeout is the same signal, fired by a deadline instead of a call.
-# Ordinary olang on top of "extern fn", as chan and io are.
+# Ordinary olang over the C library's time.h imported (§11 X17), as chan and io are.
+
+import ctime "time.h"
 
 # why a wait gave up
 type Stopped error {
@@ -11,23 +13,22 @@ type Stopped error {
     TIMED_OUT
 }
 
-# Linux's clock ids, and a timespec as the two words it is
+# Linux's clock ids
 ClockRealtime I32 = 0
 ClockMonotonic I32 = 1
-extern fn clock_gettime(clock I32, ts Array<I64>) I32
 
 # now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set
 fn NowNs() I64 {
-    ts := Array<I64>(2)
-    clock_gettime(ClockMonotonic, ts)
-    return ts[0] * 1000000000 + ts[1]
+    ts := ctime.timespec()
+    ctime.clock_gettime(ClockMonotonic, ts)
+    return ts.tv_sec * 1000000000 + ts.tv_nsec
 }
 
 # the wall clock in nanoseconds - only what pthread_cond_timedwait measures its deadlines against
 fn wallNs() I64 {
-    ts := Array<I64>(2)
-    clock_gettime(ClockRealtime, ts)
-    return ts[0] * 1000000000 + ts[1]
+    ts := ctime.timespec()
+    ctime.clock_gettime(ClockRealtime, ts)
+    return ts.tv_sec * 1000000000 + ts.tv_nsec
 }
 
 # a stop signal, with a deadline when deadlineNs (on NowNs's clock) is not 0. The flag is only ever touched

@@ -1,34 +1,13 @@
+# chan - a bounded, blocking channel. Ordinary olang over pthread.h imported (§11 X17), with no help from the
+# compiler at all: the same claim io.olang makes, held to for the one type that most obviously wants to be a builtin.
+#
+# pthread's mutex and condition variables are pthread.h's own types, as the header lays them out for the target - held
+# in the channel's record, where they never move (pthread needs their address to stay the one they were initialised
+# at), and private, their bytes pthread's: no module but this one names them, and this one only hands them to pthread.
+
 import "cancel"
+import pthread "pthread.h"
 
-# chan - a bounded, blocking channel. Ordinary olang on top of "extern fn", with no help from the
-# compiler at all: the same claim io.olang makes, held to for the one type that most obviously wants to
-# be a builtin.
-
-# pthread's own types are opaque C structs, and X2's extern vocabulary is numeric primitives and arrays of
-# them - so a mutex is a byte array handed over as exactly the pointer pthread wants (X3).
-# These are RESERVATIONS in WORDS, not sizes in bytes (X3a), and both halves of that matter.
-# Reservation: nothing embeds the blob by value - pthread only ever receives a pointer - so over-reserving
-# is free and only under-reserving corrupts. That is what makes one constant right everywhere, because the
-# true size is a property of the architecture rather than of C: glibc's own headers define three different
-# values for pthread_mutex_t (40, 32, 24) by machine, and other platforms differ again. 8 words is 64
-# bytes, comfortably above all of them, for a few bytes per channel.
-# Words: the ELEMENT TYPE is what supplies the alignment. "I64" is 8-aligned, so "Array<I64, 8>" is 8-aligned
-# wherever it sits - inline in a struct (T7c), in a local, in the arena - which is what pthread needs. An
-# "Array<U8, 64>" would be alignment 1 and could land at any offset in its container: measured, a byte blob
-# after a single byte field sits at offset 1, where a word blob sits at 8.
-# And they are private (lowercase), because their bytes are pthread's, not ours - no module but this one can name
-# them, and this one only hands them to pthread, which is free to write them since an extern-param carries no
-# mutability and X3 hands over a bare pointer (X3a).
-MutexWords I32 = 8
-CondWords I32 = 8
-
-extern fn pthread_mutex_init(m Array<I64>, attr I64) I32
-extern fn pthread_mutex_lock(m Array<I64>) I32
-extern fn pthread_mutex_unlock(m Array<I64>) I32
-extern fn pthread_cond_init(c Array<I64>, attr I64) I32
-extern fn pthread_cond_wait(c Array<I64>, m Array<I64>) I32
-extern fn pthread_cond_broadcast(c Array<I64>) I32
-extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 
 # This type synchronises its own state, which is exactly what no compile-time rule could know. It used to
 # say so with a "shared" marker waiving P3's exclusivity for the whole type - a claim nothing verified.
@@ -65,17 +44,17 @@ type Chan<T> struct(cap I64) {
     sent I64 = 0
     taken I64 = 0
     closed Bool = false
-    lock := Array<I64>(MutexWords)      # in the channel itself (T7d): its length is known where it is declared
-    notEmpty := Array<I64>(CondWords)
-    notFull := Array<I64>(CondWords)
+    lock pthread.pthread_mutex_t
+    notEmpty pthread.pthread_cond_t
+    notFull pthread.pthread_cond_t
 }
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
 # final address of the mutex and the constructed value has not reached its home yet.
 fn Init<T>(c mut Chan<T>&) {
-    pthread_mutex_init(c.lock, 0)
-    pthread_cond_init(c.notEmpty, 0)
-    pthread_cond_init(c.notFull, 0)
+    pthread.pthread_mutex_init(c.lock, null)
+    pthread.pthread_cond_init(c.notEmpty, null)
+    pthread.pthread_cond_init(c.notFull, null)
 }
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
@@ -85,7 +64,7 @@ fn place<T>(c mut Chan<T>&, v T) I64 {
     c.tail = (c.tail + 1) % c.size
     c.count = c.count + 1
     c.sent = c.sent + 1
-    pthread_cond_broadcast(c.notEmpty)
+    pthread.pthread_cond_broadcast(c.notEmpty)
     return c.sent - 1
 }
 
@@ -95,7 +74,7 @@ fn oldest<T>(c mut Chan<T>&) T {
     c.head = (c.head + 1) % c.size
     c.count = c.count - 1
     c.taken = c.taken + 1
-    pthread_cond_broadcast(c.notFull)   # a sender waiting for a slot, or for its value to be taken
+    pthread.pthread_cond_broadcast(c.notFull)   # a sender waiting for a slot, or for its value to be taken
     return v
 }
 
@@ -107,26 +86,26 @@ type Error error {
 # no more values will be sent: what is buffered is still received, then Recv fails with Error.CLOSED. Wakes every
 # task waiting on the channel. Closing a closed channel changes nothing.
 fn Close<T>(c mut Chan<T>&) {
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     c.closed = true
-    pthread_cond_broadcast(c.notEmpty)
-    pthread_cond_broadcast(c.notFull)
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_cond_broadcast(c.notEmpty)
+    pthread.pthread_cond_broadcast(c.notFull)
+    pthread.pthread_mutex_unlock(c.lock)
 }
 
 # whether Close has been called. A channel open now may be closed by the time the answer is used - a receiver learns
 # that it has ended from Recv's error, never from this
 fn IsClosed<T>(c mut Chan<T>&) Bool {
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     closed := c.closed
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_mutex_unlock(c.lock)
     return closed
 }
 
 # a Send, the lock held: fails with CLOSED if the channel is closed - the lock let go first, so the channel stays usable
 fn sendOpen<T>(c mut Chan<T>&) ? Error {
     if c.closed {
-        pthread_mutex_unlock(c.lock)
+        pthread.pthread_mutex_unlock(c.lock)
         error Error.CLOSED
     }
 }
@@ -137,41 +116,41 @@ fn withdraw<T>(c mut Chan<T>&) {
     c.tail = 0
     c.count = 0
     c.sent = c.sent - 1
-    pthread_cond_broadcast(c.notFull)
+    pthread.pthread_cond_broadcast(c.notFull)
 }
 
 # blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
 # taken. A condition variable may wake spuriously, so each wait is in a loop re-reading the count under the lock.
 fn Send<T>(c mut Chan<T>&, v T) ? Error {
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     for c.count == c.size and not c.closed {
-        pthread_cond_wait(c.notFull, c.lock)
+        pthread.pthread_cond_wait(c.notFull, c.lock)
     }
     try sendOpen(c)
     ticket := place(c, v)
     for c.rendezvous and c.taken <= ticket and not c.closed {
-        pthread_cond_wait(c.notFull, c.lock)
+        pthread.pthread_cond_wait(c.notFull, c.lock)
     }
     if c.rendezvous and c.taken <= ticket {
         withdraw(c)
         try sendOpen(c)
     }
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_mutex_unlock(c.lock)
 }
 
 # blocks while the channel is empty and open, then takes the oldest value; fails with Error.CLOSED once the
 # channel is closed and everything sent before has been taken
 fn Recv<T>(c mut Chan<T>&) T ? Error {
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     for c.count == 0 and not c.closed {
-        pthread_cond_wait(c.notEmpty, c.lock)
+        pthread.pthread_cond_wait(c.notEmpty, c.lock)
     }
     if c.count == 0 {
-        pthread_mutex_unlock(c.lock)
+        pthread.pthread_mutex_unlock(c.lock)
         error Error.CLOSED
     }
     v := oldest(c)
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_mutex_unlock(c.lock)
     return v
 }
 
@@ -187,52 +166,52 @@ fn (c mut Chan<T>&) Next() T ? Exhausted {
 # (cancel.WakeAt).
 fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error {
     ts := Array<I64>(2)
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     for c.count == c.size and not c.closed {
         if tok.Cancelled() {
-            pthread_mutex_unlock(c.lock)
+            pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
         tok.WakeAt(ts)
-        pthread_cond_timedwait(c.notFull, c.lock, ts)
+        pthread.pthread_cond_timedwait(c.notFull, c.lock, ts)
     }
     try sendOpen(c)
     ticket := place(c, v)
     for c.rendezvous and c.taken <= ticket and not c.closed {
         if tok.Cancelled() {
             withdraw(c)
-            pthread_mutex_unlock(c.lock)
+            pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
         tok.WakeAt(ts)
-        pthread_cond_timedwait(c.notFull, c.lock, ts)
+        pthread.pthread_cond_timedwait(c.notFull, c.lock, ts)
     }
     if c.rendezvous and c.taken <= ticket {
         withdraw(c)
         try sendOpen(c)
     }
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_mutex_unlock(c.lock)
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
 # with Error.CLOSED once it is closed and drained
 fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
     ts := Array<I64>(2)
-    pthread_mutex_lock(c.lock)
+    pthread.pthread_mutex_lock(c.lock)
     for c.count == 0 and not c.closed {
         if tok.Cancelled() {
-            pthread_mutex_unlock(c.lock)
+            pthread.pthread_mutex_unlock(c.lock)
             try tok.Reason()
         }
         tok.WakeAt(ts)
-        pthread_cond_timedwait(c.notEmpty, c.lock, ts)
+        pthread.pthread_cond_timedwait(c.notEmpty, c.lock, ts)
     }
     if c.count == 0 {
-        pthread_mutex_unlock(c.lock)
+        pthread.pthread_mutex_unlock(c.lock)
         error Error.CLOSED
     }
     v := oldest(c)
-    pthread_mutex_unlock(c.lock)
+    pthread.pthread_mutex_unlock(c.lock)
     return v
 }
 

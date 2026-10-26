@@ -7340,11 +7340,12 @@ into these:
   expression as an `F64` (an `F32` for one `f`-suffixed literal), and one whose value is a text literal as a `String`;
 - each macro taking arguments whose body is an expression, as a function (X19).
 
-A typedef of a number is that number (olang declares no aliases); a typedef naming a struct names it. A name olang
-cannot declare - a keyword (L9), one beginning `_` (C's own) - and a declaration of no form above (an extern variable, a
-macro of no value, a function whose types have none) are left out; using one through the alias is a compile-time error
-saying why (`the C import has no olang form of 'stdin': a variable`). A parameter keeps the header's name, its leading
-`_`s dropped (`__format` is `format`), else `a0`, `a1`...
+A typedef of a number is that number (olang declares no aliases); a typedef naming a struct names it; a parameter of a
+GNU C transparent union (glibc's `struct sockaddr *` arguments) is its first member's type. A name olang cannot declare -
+a keyword (L9), one C reserves for itself (beginning `__`, or `_` and a capital) - and a declaration of no form above
+(an extern variable, a macro of no value, a function whose types have none) are left out, and using one through the
+alias is a compile-time error saying why (`the C import has no olang form of 'stdin': a variable`). A parameter keeps
+the header's name, its leading `_`s dropped (`__format` is `format`), else `a0`, `a1`...
 
 The types are those of C on the target (on x86-64 and AArch64 Linux, `long` is 64 bits): `char` an `I8` held, a `U8`
 pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers is an array of them (`const T *` an
@@ -7388,7 +7389,11 @@ wrong prototype is (X1a). An olang function is never variadic.
   an extern type's reference; or `null`. `mut CVoid?&` (C's `void *` not `const`) takes only what may be written
   (T25b), a place lent writably as for a `mut &` parameter (E12c);
 - for an array of `U8` or `I8` (C's `char *`): a `CStr&` (X15), the C string as it is;
-- for a plain-data struct's reference (`S?&`): an array of `S` - C's pointer to its first element.
+- for a plain-data struct's reference (`S?&`), or an extern type's (X10): a `CVoid?&` - a pointer C gave, which C
+  takes back as it gave it (a linked list C built, walked by copying each node out with `memcpy`, then freed);
+- for a plain-data struct's reference (`S?&`): an array of `S` - C's pointer to its first element - or an array of
+  numbers, C's cast of a buffer to the struct (a socket address of any family given as a `struct sockaddr *`, a
+  `struct timespec *` given as two `I64`s); that the buffer holds what C reads there is the program's word (X1a).
 
 What C does with the pointer is X3's: it is the storage's own address, for the call.
 

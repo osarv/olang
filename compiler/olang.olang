@@ -38,6 +38,8 @@ import "mcp"
 import typecheck "check"
 import "std/pair"
 import sha "std/sha256"
+import res "sys/resource.h"
+import cstdlib "stdlib.h"
 
 fn main() ? {
     os.OnCrash("olang: internal compiler error: the compiler crashed - a bug in the compiler, not in the program\n")
@@ -49,14 +51,11 @@ fn main() ? {
     os.Exit(drive(args))
 }
 
-extern fn getrlimit(resource I32, limit Array<U64>) I32
-extern fn abort() noreturn
-
-# whether the process may map a stack of that many bytes: no limit on its address space below it (RLIMIT_AS, 9)
+# whether the process may map a stack of that many bytes: no limit on its address space below it (RLIMIT_AS)
 fn roomFor(bytes I64) Bool {
-    lim := Array<U64>(2)
-    if getrlimit(9, lim) != 0 { return true }
-    return lim[0] > U64(bytes)
+    lim res.rlimit
+    if res.getrlimit(res.RLIMIT_AS, lim) != 0 { return true }
+    return lim.rlim_cur > U64(bytes)
 }
 
 # ---- the command line ----
@@ -843,7 +842,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     # handler adds nothing
     if status == 134 {
         os.OnCrash("")
-        abort()
+        cstdlib.abort()
     }
     return status
 }

@@ -6,6 +6,8 @@
 # from text here too (ParseInt, ParseFloat), and a float's fewest digits worked out (ShortestDecimal) - exactly, in
 # olang, so all of it runs while compiling as at run time.
 
+import cstring "string.h"
+
 # one byte of text (T29h): a U8 that renders as a character, the type of a character literal ('a'), and with U8's
 # arithmetic ('a' + 1 is 'b')
 type Char extends U8
@@ -245,8 +247,6 @@ extern type CStr
 # null (X22)
 extern type CVoid
 
-extern fn strnlen(s CStr&, max I64) I64
-extern fn memcpy(dst Array<U8>, src CStr&, n I64) CStr?&
 
 # the text as C takes a string: its bytes and a NUL after them, as a new array - a "char *" for an extern's
 # "Array<U8>" parameter (X3). A NUL inside the text ends the string C sees there
@@ -259,9 +259,9 @@ fn (t String&) ToC() Array<U8> {
 # the text a C string holds, copied: its bytes up to the first NUL, or the first max of them where there is none
 # sooner. That p names a C string at all is the C function's word (X1a)
 fn (p CStr&) StringFromC(max I64) String {
-    n := strnlen(p, max.Max(0))
+    n := I64(cstring.strnlen(p, U64(max.Max(0))))
     out := Array<U8>(n)
-    memcpy(out, p, n)
+    cstring.memcpy(out, p, U64(n))
     return String(out)
 }
 

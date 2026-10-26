@@ -11,8 +11,8 @@ import "std/os"
 import "diag"
 import "msgs"
 
-extern fn uname(buf Array<U8>) I32
-extern fn access(path Array<U8>, mode I32) I32
+import unistd "unistd.h"
+import utsname "sys/utsname.h"
 
 # a resolved target. Triple is LLVM's, as clang normalizes it; Arch and Os the build constants TargetArch and TargetOs;
 # Cpu TargetCpu, the CPU clang resolved the spec to; Attrs what every generated function carries - CPU, features and
@@ -56,18 +56,17 @@ fn archIndex(a String&) I64 {
 
 # ---- this machine ----
 
-# the operating system (lowercase) and the architecture this machine runs, as uname(2) names them: "linux", "x86_64".
-# struct utsname is six fields of 65 bytes each on Linux, sysname first and machine fifth
+# the operating system (lowercase) and the architecture this machine runs, as uname(2) names them: "linux", "x86_64"
 fn Host() String, String {
-    buf := Array<U8>(390)
-    if uname(buf) != 0 { return "unknown", "unknown" }
-    return cField(buf, 0).ToLower(), cField(buf, 260)
+    u utsname.utsname
+    if utsname.uname(u) != 0 { return "unknown", "unknown" }
+    return cField(u.sysname).ToLower(), cField(u.machine)
 }
 
-# the NUL-terminated text of a 65-byte field
-fn cField(buf Array<U8>&, at I64) String {
+# the NUL-terminated text of one of utsname's fields
+fn cField(buf Array<U8>&) String {
     b := StringBuilder()
-    for i in range at, at + 65 {
+    for i in range buf.Len() {
         if buf[i] == 0 { break }
         b.PushChar(Char(buf[i]))
     }
@@ -84,7 +83,7 @@ fn FindClang() String {
     slash := try exe.FindLast("/") catch default -1
     if slash >= 0 {
         bundled := $exe[:slash] "/../llvm/bin/clang"
-        if access($bundled "\0", 1) == 0 { return bundled }
+        if unistd.access($bundled "\0", unistd.X_OK) == 0 { return bundled }
     }
     for name in Clangs {
         if executable(name) { return $name }
@@ -99,7 +98,7 @@ Clangs := String&["clang-20", "clang-19", "clang-18", "clang"]
 fn WhereIs(name String&) String { return whereIs(name) }
 
 # this process's id
-fn Pid() I32 { return getpid() }
+fn Pid() I32 { return unistd.getpid() }
 
 # whether name - a path, or a name looked up on PATH - is a program this process may run
 fn executable(name String&) Bool { return whereIs(name) != "" }
@@ -107,12 +106,12 @@ fn executable(name String&) Bool { return whereIs(name) != "" }
 # the file a command's name runs - a path, or a name found on PATH as the system finds it - "" where there is none
 # this process may run
 fn whereIs(name String&) String {
-    if name.Contains("/") { return $name if access($name "\0", 1) == 0 else "" } # 1 is X_OK
+    if name.Contains("/") { return $name if unistd.access($name "\0", unistd.X_OK) == 0 else "" }
     path := try os.Env("PATH") catch default ""
     dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
     for dir in dirs.Split(":") {
         cand := $dir "/" $name if dir != "" else $name
-        if access($cand "\0", 1) == 0 { return cand }
+        if unistd.access($cand "\0", unistd.X_OK) == 0 { return cand }
     }
     return ""
 }
@@ -346,14 +345,12 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
     out := try os.Exec(args, input)
     if out.Status == 0 and path != "" and keep {
         try os.MkDirAll(probeDir()) catch os.Error { return out }
-        tmp := $path "." $getpid() ".tmp"
+        tmp := $path "." $unistd.getpid() ".tmp"
         try os.WriteFile(tmp, $key $out.Stdout) catch os.Error { return out }
         try os.Rename(tmp, path) catch os.Error { try os.Remove(tmp) catch os.Error { } }
     }
     return out
 }
-
-extern fn getpid() I32
 
 fn probeDir() String {
     c := try os.Env("OLANG_CACHE") catch default ""

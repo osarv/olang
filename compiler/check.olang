@@ -5656,10 +5656,21 @@ fn (c mut Checker&) cPointerArg(target typed.Callee&, x typed.Expr&c, want types
         if e == c.P.T.Prim("U8") or e == c.P.T.Prim("I8") { return x }
         return null
     }
-    if c.isRef(want) and c.plainStruct(c.deref(want), 0) and c.P.T.KindOf(hu) == types.Kind.Array and c.P.T.Same(c.P.T.Elem(hu), c.deref(want)) {
-        return c.cBorrow(x, want, sp)
+    if c.isRef(want) and c.cStruct(c.deref(want)) and c.P.T.KindOf(hu) == types.Kind.Array {
+        e := c.P.T.Elem(hu)
+        # an array of the struct - C's pointer to its first - or of numbers, C's cast of a buffer to it (a sockaddr's)
+        if c.P.T.Same(e, c.deref(want)) or c.cNumber(c.under(e)) { return c.cBorrow(x, want, sp) }
     }
+    # a pointer C gave, where C takes a pointer to a struct it laid out (freeaddrinfo's): C's to say what it points to
+    if c.isRef(want) and c.cVoidRef(have) and (c.cStruct(c.deref(want)) or c.foreignRef(want)) { return x }
     return null
+}
+
+# whether t is a struct C may be handed a pointer to: a plain-data one (X11), or one of a C import's (X18) - its opaque
+# words included
+fn (c mut Checker&) cStruct(t types.TypeId) Bool {
+    if c.plainStruct(t, 0) { return true }
+    return c.isNamed(t) and c.declKind(t) == types.DeclKind.Struct and c.P.L.Mods[c.P.T.DeclModule(c.P.T.DeclOf(t))].C
 }
 
 # an argument C is handed a pointer to: a reference as it is - writable where the parameter is - a place borrowed, a

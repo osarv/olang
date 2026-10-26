@@ -11,10 +11,12 @@
 # the words after the call - copied in and out of whatever holds the array. Only X2's vocabulary crosses: numbers, and
 # arrays of numbers as parameters; a 16-bit float only inside an array, since libffi has no such type.
 
-extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
-extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
-extern fn __olang_dyncall_var(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8, fixed I64) U64
-extern fn __olang_dyncall_var_check(name Array<U8>, kinds Array<U8>, ret U8, fixed I64) I32
+extern {
+    fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+    fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+    fn __olang_dyncall_var(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8, fixed I64) U64
+    fn __olang_dyncall_var_check(name Array<U8>, kinds Array<U8>, ret U8, fixed I64) I32
+}
 
 # why a call could not be made: no function by its name in what the process has loaded (nor in the C math library),
 # or a kind nothing can pass - a 16-bit float alone, an array as the result, a code that names no kind

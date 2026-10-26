@@ -64,6 +64,7 @@ type record struct(Key String&) {
     Plain I64 = -1                                      # -1 not decided, 0 no, 1 yes, 2 being decided
     Returned Bool = false                               # some function gives one back by pointer: C's to lay out
     Typedef String& = ""                                # a typedef naming it, "" for none
+    Transparent Bool = false                            # a union GNU C passes as its first member (transparent_union)
     Size I64 = -1                                       # its size and alignment, where clang was asked (X18)
     Align I64 = -1
 }
@@ -302,6 +303,7 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
     g.recs[r].Complete = true
     for f in inner(n) {
         k := text(f, "kind")
+        if k == "TransparentUnionAttr" { g.recs[r].Transparent = true }
         if k == "RecordDecl" { g.recordDecl(f, text(f, "name"), own) }
         if k != "FieldDecl" { continue }
         if flag(f, "isBitfield") { g.recs[r].Bitfields = true }
@@ -337,9 +339,11 @@ fn (g mut gen&) namedConst(name String&, decl String&) {
     g.taken.Put($name, 0)
 }
 
-# a C name olang can declare: a word that is no keyword, not beginning with "_" (C's own)
+# a C name olang can declare: a word that is no keyword, not one C reserves for itself - beginning "__", or "_" and a
+# capital ("_exit" is POSIX's, "__fpclassify" and "_IO_getc" glibc's own)
 fn usable(name String&) Bool {
-    if name == "" or name[0] == '_' { return false }
+    if name == "" or name == "_" { return false }
+    if name[0] == '_' and (name.Len() < 2 or name[1] == '_' or name[1].IsUpper()) { return false }
     for c in name {
         if not (c.IsLetter() or c.IsDigit() or c == '_') { return false }
     }
@@ -650,6 +654,11 @@ fn (g mut gen&) valueType(t I64, callback Bool) String ? Skip {
 # a parameter's type (X2, X3, X13)
 fn (g mut gen&) paramType(t I64) String ? Skip {
     n := g.nodes[t]
+    if n.Kind == CKind.Rec {
+        # a transparent union (GNU C's, glibc's "struct sockaddr *" arguments): passed as its first member
+        i := g.recordAt(n.Text)
+        if g.recs[i].Transparent and g.recs[i].Types.Len() > 0 { return try g.paramType(g.parseType(g.recs[i].Types[0])) }
+    }
     if n.Kind == CKind.Ptr { return try g.pointerParam(n.To, n.Ro) }
     if n.Kind == CKind.Arr { return try g.pointerParam(n.To, false) }
     return try g.valueType(t, false)
@@ -673,7 +682,8 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
                 i := g.recOf(to.Text)
                 if not g.holdable(i) { return "mut Array<" $g.name(i) "?&>&" }
             }
-            if to.Kind == CKind.Void { return "mut Array<CVoid?&>&" }
+            # a pointer to a pointer C gives - to void, or to a struct held in place: C's out parameter of one
+            if to.Kind == CKind.Void or to.Kind == CKind.Rec { return "mut Array<CVoid?&>&" }
             return voidRef(ro)
         }
         case CKind.Fn {

@@ -18,10 +18,7 @@ import "target"
 import "std/io"
 import "std/time"
 import "std/filepath"
-
-extern fn getpid() I32
-extern fn sysconf(name I32) I64
-extern fn usleep(us U32) I32
+import unistd "unistd.h"
 
 # ---- what the front end gives ----
 
@@ -233,7 +230,7 @@ fn (c mut Config&) clangVersion() String&c {
 # how many compiles run at once: Jobs, or one per core this machine has online
 fn (c Config&) width() I64 {
     if c.Jobs > 0 { return c.Jobs }
-    n := sysconf(84) # _SC_NPROCESSORS_ONLN
+    n := unistd.sysconf(84) # _SC_NPROCESSORS_ONLN
     return n if n > 0 else 1
 }
 
@@ -452,7 +449,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     # clang reads the IR from a file of this process's own, renamed to irPath once compiled: another build in the same
     # directory, run beside this one, may write irPath at the same time - the same name with other IR, or the same IR
     # truncated and written again under clang's feet
-    irTmp := $irPath[:irPath.Len() - 3] "." $getpid() ".tmp.ll"
+    irTmp := $irPath[:irPath.Len() - 3] "." $unistd.getpid() ".tmp.ll"
     try os.WriteFile(irTmp, ir) catch os.Error {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.REPORTED
@@ -462,7 +459,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
         d.Fatal(diag.Where.Nowhere, msgs.NoClang(irPath))
         error Failed.REPORTED
     }
-    tmp := $path "." $getpid() ".tmp"
+    tmp := $path "." $unistd.getpid() ".tmp"
     args mut Vec<String&>&j = Vec<String&>()
     args.Push($c.Clang)
     for f in flags { args.Push($f) }
@@ -487,7 +484,7 @@ fn claim(path String&, j mut compiles&) Bool {
         made := true
         try os.MkDir(lock) catch os.Error.EXISTS { made = false } catch os.Error { return true }
         if made {
-            try os.WriteFile($lock "/pid", $getpid()) catch os.Error { }
+            try os.WriteFile($lock "/pid", $unistd.getpid()) catch os.Error { }
             j.locks.Push($lock)
             return true
         }
@@ -534,7 +531,7 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> 
         again := compiles()
         for i in j.waits {
             path := paths[i] if i < n + 1 or prog.Runtime != "" else paths[n]
-            for not os.Exists(path) and holderAlive($path ".lock") { usleep(20000) }
+            for not os.Exists(path) and holderAlive($path ".lock") { unistd.usleep(20000) }
             if os.Exists(path) { continue }
             if i < n {
                 u := prog.Units[i]
@@ -584,7 +581,7 @@ fn (c Config&) keep(obj String&) {
     kept := $c.Store "/" $obj[c.Dir.Len() + 1:]
     if os.Exists(kept) { return }
     try os.MkDirAll(c.Store) catch os.Error { return }
-    tmp := $kept "." $getpid() ".tmp"
+    tmp := $kept "." $unistd.getpid() ".tmp"
     try os.Link(obj, tmp) catch os.Error { return }
     try os.Rename(tmp, kept) catch os.Error { try os.Remove(tmp) catch os.Error { } }
 }
@@ -671,7 +668,7 @@ fn Unbuildable(why String&) { sayln($"olang: error: the self-hosted compiler can
 fn unbuilt() I32 { return 1 }
 
 # this process's id, for temporary files' names
-fn Pid() I32 { return getpid() }
+fn Pid() I32 { return unistd.getpid() }
 
 fn (c Config&) ensureDir(d mut diag.Diagnostics&) ? Failed {
     try os.MkDirAll(c.Dir) catch os.Error {

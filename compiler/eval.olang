@@ -4193,16 +4193,18 @@ fn (m mut Machine&) kindWidth(k U8) I64 {
 
 # the runtime's functions live in the program built, and are this process's own here: -i calls them itself, over the
 # interpreted program's command line (Args) - each array argument copied in and out as an extern's is
-extern fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_err() I32
-extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
-extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
-extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
-extern fn __olang_mkdtemp(template Array<U8>) I32
-extern fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
-extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
-extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+extern {
+    fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_err() I32
+    fn __olang_stat(path Array<U8>, out Array<I64>) I32
+    fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+    fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+    fn __olang_mkdtemp(template Array<U8>) I32
+    fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
+    fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+    fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+}
 
 fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
     f := m.fnOfFrame(fi)
