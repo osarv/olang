@@ -1511,3 +1511,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   still want names with underscores. Recommended: keep capitalization (M6) - the policy covers the common case in one
   argument and `JsonKey` the exceptions; revisit if public lowercase fields keep coming up (math, data code). In effect:
   capitalization.
+- QBM follow-up 2026-10-26 (the user: "We could do a priv keyword instead?"): answered - public by default, `priv`
+  marking what stays in the module (Kotlin/Swift-like defaults); better than `pub` if visibility leaves names (fewer
+  keywords, scripts write none), gives lowercase public names and exact JSON keys; costs: forgetting `priv` publishes
+  internals (a library's API grows by accident, and removing a name later breaks callers), visibility not readable at
+  the use site, a naming convention to decide (types capitalized, functions/fields lowercase?), every private
+  declaration in std/compiler migrated. Recommended: still keep capitalization unless lowercase public names matter
+  enough; if switching, `priv` over `pub`. ASKED.
