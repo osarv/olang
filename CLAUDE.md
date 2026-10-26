@@ -766,8 +766,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   keeps whole numbers an F64 cannot hold as `Json.Int`/`Json.Uint`, exact through Decode and Encode, U64's whole range
   (F8); a generator's contract is its first Next's, `ArgumentError` written among `Iterator<T ? E>`'s errors (D18, F9);
   `r.Destroy(); continue`/`break` in the loop that declares `r` ends its path (C9b); B18 names a walk's hidden local and
-  a place by its own let-go; a captured caught name is one error (R11b) (F10). Left: a built result returning a global's
-  storage is O10c's error at a call with no arguments (older than the review).
+  a place by its own let-go; a captured caught name is one error (R11b) (F10). A built result returning a global's
+  storage (bulk review over-rejection 13) stays refused - a built result is writable (T25c), so it would write the
+  global - but at the return now (O14), naming the by-value result, not as O10c at a call with no arguments.
 - **Recorded limits:** long-lived mutated structures holding values a task can reach still only grow (ledger QF), and
   values with destructors are freed only where a `Destroy()` ends them; a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.

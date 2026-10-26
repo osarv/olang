@@ -5013,7 +5013,13 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
         case typed.Mark.TypeVar { s.fit(v.T, dest, exact, x, FitReturn) }
         case _ {
             # a built result: a value whose scope is the result scope (O26), else an obligation where the language
-            # allows one - a function value (O14a), a value holding references (O14c)
+            # allows one - a function value (O14a), a value holding references (O14c). A reference to the program's
+            # storage - a global's, constant data - is none: the caller may write a built result (T25c), so it would
+            # write the global; said at the return, not as an obligation no call can meet
+            if s.report and s.isRef(t) and not s.isFunc(t) and v.T == Term.Program and dest != Term.Program {
+                s.err(s.opTok(x), msgs.ReturnProgramAsBuilt())
+                return
+            }
             if s.isFunc(t) or not s.isRef(t) {
                 s.fit(v.T, dest, exact, x, FitReturn)
             } else if v.T == dest or not s.builtFromParam(x, v.T) {

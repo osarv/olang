@@ -560,6 +560,7 @@ type Diag enum {
     CaseUnknownName
     CaseIsSubject
     ReturnBorrowAsBuilt
+    ReturnProgramAsBuilt
     ReturnOwnStorage
     DeferReturns
     YieldOutside
@@ -2402,6 +2403,7 @@ fn CaseIsSubject(tok String&) Msg { return Msg(Diag.CaseIsSubject, "S13f", $tok 
 
 # ERR_RETURN_BORROW_AS_BUILT
 fn ReturnBorrowAsBuilt() Msg { return Msg(Diag.ReturnBorrowAsBuilt, "O14", "this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'") }
+fn ReturnProgramAsBuilt() Msg { return Msg(Diag.ReturnProgramAsBuilt, "O14, T25c", "this returns a global's storage, and a built result is new storage its caller may write - return the value, which copies it (a result written without '&', T7b)") }
 
 # ERR_RETURN_OWN_STORAGE
 fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - build it in '&return'") }

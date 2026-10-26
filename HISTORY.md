@@ -25033,3 +25033,18 @@ left out because a `Char` inherits `U8`'s own methods and would pad its number; 
 a trait's default, which the test above checks, so `U8` now pads its number like every other width. The rest of the
 eight's methods were already at every width (Format, Hash, Abs, Min, Max, Clamp, Pow, ParseAs, E37's). Tests:
 tests/intwidths.olang's `padCase`, baked, decided and run.
+
+**Returning a global's storage as a built result (O14; bulk review 1's over-rejection 13).** `fn Show() String& {
+return Data }`, `Data` an immutable global, was refused at every call with O10c, "the callee needs one argument's scope
+to outlive another's", for a call with no arguments. Read against SPEC §8 it is not an over-rejection: O14 lets a
+built result hand back a temporary or what lives exactly in the result scope, and the program's scope outlives the
+result scope but is not it. The reason exactness matters here is T25c, not O25g: a built result is new storage its
+caller may write - `x mut String& = Show(); x[0] = 'Z'` compiles and writes it (checked: a built `String&` result is
+written so) - so handing out a global's storage as one would write an immutable global, its constant data included,
+and for a mutable global would give a view early freeing (O8d) never sees taken. So the rule stays; what was wrong
+was where it was said: the scope pass recorded an obligation between the program's scope and the result scope that no
+call could meet. **Decided (mine):** a reference to the program's storage returned as a built result is an error at the
+`return` (O14, T25c), naming the by-value result, which copies it (T7b) - `fn Show() String { return Data }` works and
+gives the caller its own copy. No new form for borrowing from a global (`String&Data` would be a new marker for a
+global, and a caller holding a view of a mutable global would need early freeing to see it; the by-value form costs a
+copy the reader can see). checks/cases/o14returnglobal and o14returnglobalvalue.

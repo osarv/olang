@@ -5731,7 +5731,9 @@ returning a temporary, or by naming it: `&return` (O26).
 - for a **built** result: a temporary, built in the result scope, or a value whose exact scope is the
   result scope (`&return`, O26). A reference into a parameter's data is a compile-time error that names the
   borrowed form (`T&p`) - but for a function value (O14a), a result written as a type variable (O14b) and a value holding references (O14c) - and so is
-  one into the function's own storage, which closes at the return;
+  one into the function's own storage, which closes at the return, and one into the program's storage - a global's, or
+  constant data (T25d): it would outlive every result scope, but a built result is new storage its caller may write
+  (T25c), and that would write the global, so a global is returned by value, which copies it (T7b);
 - for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
   (O10b). A temporary is built in `p`'s scope. A by-value parameter's own storage is the call's copy, in the function's

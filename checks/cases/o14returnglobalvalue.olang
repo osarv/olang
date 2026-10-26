@@ -1,0 +1,10 @@
+# check: run
+# O14, T7b: a global returned by value is a copy of it, which its caller may change without changing the global
+import "std/io"
+Data := String("constant text")
+fn Show() String { return Data }
+fn main() {
+    x := Show()
+    x[0] = 'Z'
+    io.Println($x " " $Data)!
+}
