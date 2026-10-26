@@ -1544,3 +1544,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (4) std ships few. Proposed first set: json.Key, json.Skip, json.Keys (on a type), csv.Column, csv.Skip, flags.Help;
   later maybe Deprecated (read by doc/lsp). ASKED: go ahead with that set and those rules, or drop attributes and keep
   only the json policies. In effect: attributes queued, not started.
+- QBO ANSWERED 2026-10-26 (the user: "I like that only reflection reads attributes. It's more a tag on how to use
+  something rather than something that actually uses it, that is what keywords are for"): attributes as proposed -
+  no compiler meaning (what changes compilation is a keyword or rule), typed values checked while compiling, read only
+  by reflection, std's first set json.Key/Skip/Keys, csv.Column/Skip, flags.Help; on fields, cases, types, functions
+  and methods (with function reflection). Queued after the profiler, with the json key policies.
