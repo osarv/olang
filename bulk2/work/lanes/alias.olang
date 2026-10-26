@@ -1,0 +1,19 @@
+import "std/io"
+fn count(n I64) Array<I64> {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i + 1 }
+    return a
+}
+N mut I64 = 5
+fn main() {
+    a := count(N)
+    s := a[1:5]
+    s += a[0:4]
+    io.Println("in place, overlapping: " $a)!
+    b := count(N)
+    t := b[1:5]
+    u := b[0:4]
+    v := t + u
+    for i in range 4 { b[i + 1] = v[i] }
+    io.Println("built, then stored:    " $b)!
+}

@@ -1,0 +1,43 @@
+# a battery of integer operations at one width, its text
+fn bat<T Integer>(z T, k I64) String {
+    one := T(k)
+    zero := one - one
+    mn := T.Min
+    mx := T.Max
+    vals := Vec<T>()
+    vals.Push(mn)
+    vals.Push(mn + one)
+    vals.Push(zero - one)
+    vals.Push(zero)
+    vals.Push(one)
+    vals.Push(one + one)
+    vals.Push(mx - one)
+    vals.Push(mx)
+    vals.Push(mx / (one + one + one))
+    vals.Push(mn / (one + one + one + one + one))
+    b := StringBuilder()
+    for x in vals {
+        b.Push($x " ")
+        b.Push($(-x) " " $(~x) " " $x.Format(16) " " $x.Format(2) " " $F64(x) " " $F32(x) " " $BF16(x) " " $F16(x) " ")
+        b.Push($I64(x) " " $U8(x) " " $I128(x) " " $U128(x) " " $x.PopCount() " " $x.LeadingZeros() " " $x.TrailingZeros() " ")
+        b.Push($x.RotateLeft(3) " " $x.RotateRight(5) " ")
+        b.Push($x.Hash() "\n")
+        for y in vals {
+            b.Push($(x + y) " " $(x - y) " " $(x * y) " " $(x & y) " " $(x | y) " " $(x ^ y) " " $(x < y) " " $(x == y) " " $(x >= y))
+            if y != zero and not (x == mn and y == zero - one and mn < zero) {
+                b.Push(" " $(x / y) " " $(x % y))
+            }
+            b.Push("\n")
+        }
+    }
+    return b.ToString()
+}
+
+K mut I64 = 1
+import "std/io"
+BI33 := bat(I33(0), 1)
+fn main() {
+    io.Println(BI33)!
+    io.Println("=====")!
+    io.Println(bat(I33(0), K))!
+}

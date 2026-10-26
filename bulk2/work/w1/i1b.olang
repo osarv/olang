@@ -1,0 +1,12 @@
+import "std/io"
+fn g<T Integer>(z T, k I64) String {
+    one := T(k)
+    mx := T.Max
+    d := one + one + one
+    return $one " " $mx " " $d " " $T.Min
+}
+K mut I64 = 1
+fn main() {
+    io.Println(g(I1(0), K))!
+    io.Println($I1.Max " " $I1.Min)!
+}

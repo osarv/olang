@@ -1,0 +1,46 @@
+import "std/io"
+
+fn count(n I64) Array<I64> {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i }
+    return a
+}
+fn ident<T>(x T) T { return x }
+fn takes(x Array<I64>&) I64 { return x.Len() * 100 + x[x.Len() - 1] }
+type Box struct(a Array<I64>&) { a }
+fn dflt(x Array<I64>& = count(2) + 1) I64 { return x[1] }
+
+N mut I64 = 4
+
+fn main() {
+    a := count(N)
+    b := count(N) * 10
+    io.Println($(a + b))!
+    io.Println($((a + b)[2]))!
+    io.Println($((a + b)[1:3]))!
+    io.Println($(a + b).Len())!
+    io.Println($ident(a + b))!
+    io.Println($takes(a + b))!
+    io.Println($Box(a + b).a)!
+    io.Println($dflt())!
+    io.Println($((a + b) == b + a))!
+    io.Println($(22 in a + b))!
+    s I64 = 0
+    for x in a * b { s += x }
+    io.Println($s)!
+    f := fn() I64 { return (a + b)[3] }
+    io.Println($f())!
+    m := match N { case 4 => a - b  case _ => a }
+    io.Println($m)!
+    c := a + b if N > 2 else a - b
+    io.Println($c)!
+    io.Println($((a + b) * (a - b) + -a))!
+    io.Println($(a.LanesLess(b * 0 + 2).Select(a, b)))!
+    io.Println($(a.LanesLess(b * 0 + 2).Select(a * 3, 7)))!
+    io.Println($((a - b).LanesLess(a).Every()) " " $((a - b).LanesLess(a).Some()))!
+    io.Println($(try (a * b).Max() catch default -1) " " $(try (a * b).Min() catch default -1))!
+    io.Println($((a * b).Sum()))!
+    d := a
+    d += b * 2
+    io.Println($d " " $a)!
+}

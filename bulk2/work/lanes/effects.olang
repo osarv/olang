@@ -1,0 +1,35 @@
+import "std/io"
+
+Calls mut I64 = 0
+
+type M struct(v I64) { v }
+fn (a M) Plus(b M) M {
+    Calls += 1
+    return M(a.v + b.v)
+}
+fn (a M) Less(b M) Bool { return a.v < b.v }
+
+fn ms(n I64) Array<M> {
+    a := Array<M>(n)
+    for i in range n { a[i] = M(i) }
+    return a
+}
+
+N mut I64 = 4
+
+fn main() {
+    a := ms(N)
+    b := ms(N)
+    Calls = 0
+    x := try (a + b).Max() catch default M(-1)
+    io.Println("Max " $x.v " Plus calls " $Calls " (4 lanes)")!
+    Calls = 0
+    y := try (a + b).Min() catch default M(-1)
+    io.Println("Min " $y.v " Plus calls " $Calls " (4 lanes)")!
+    Calls = 0
+    z := (a + b).Sum()
+    io.Println("Sum " $z.v " Plus calls " $Calls " (4 lanes + 4 sums)")!
+    Calls = 0
+    w := a + b
+    io.Println("Array " $w.Len() " Plus calls " $Calls)!
+}

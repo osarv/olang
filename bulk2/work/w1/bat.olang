@@ -13,8 +13,10 @@ fn bat<T Integer>(z T, k I64) String {
     vals.Push(one + one)
     vals.Push(mx - one)
     vals.Push(mx)
-    vals.Push(mx / (one + one + one))
-    vals.Push(mn / (one + one + one + one + one))
+    three := one + one + one
+    five := three + one + one
+    if three != zero and not (mn < zero and three == zero - one) { vals.Push(mx / three) }
+    if five != zero and not (mn < zero and five == zero - one) { vals.Push(mn / five) }
     b := StringBuilder()
     for x in vals {
         b.Push($x " ")

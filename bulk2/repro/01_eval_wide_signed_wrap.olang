@@ -1,0 +1,23 @@
+# T4a: a signed integer of 33 to 63 bits does not wrap in the evaluator's fast path - so a baked global, an assert
+# decided while compiling and "olang interpret" disagree with the built program
+import "std/io"
+
+fn wraps(k I64) Bool {
+    a := I40.Max
+    b := a + I40(k) # I40.Max + 1 wraps to I40.Min (E6c)
+    return b < a
+}
+
+fn order(k I64) Bool {
+    x := I40(0) - I40(k)        # -1
+    y := I40.Min / I40(k + 4)   # I40.Min / 5
+    return x < y                # -1 < -109951162777: false
+}
+
+K mut I64 = 1
+WrapsBaked := wraps(1)
+OrderBaked := order(1)
+
+fn main() {
+    io.Println($WrapsBaked " " $wraps(K) " " $OrderBaked " " $order(K))!
+}

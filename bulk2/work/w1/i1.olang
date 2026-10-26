@@ -1,0 +1,16 @@
+import "std/io"
+fn f(k I64) String {
+    one := I1(k)
+    m := I1.Max
+    d := one + one + one
+    return $one " " $m " " $d " " $(m == I1.Min) " " $(d == I1(-1))
+}
+fn g(k I64) String {
+    one := I1(k)
+    return $(I1.Max / (one + one + one))
+}
+K mut I64 = 1
+fn main() {
+    io.Println(f(K))!
+    io.Println(g(K))!
+}

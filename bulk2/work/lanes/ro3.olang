@@ -1,0 +1,7 @@
+import "std/io"
+G := I64[1, 2, 3]
+fn main() {
+    s := G[0:2]
+    s[0] = 9
+    io.Println($G)!
+}
