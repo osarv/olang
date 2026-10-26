@@ -1064,6 +1064,48 @@
 | ok - GemmAct is Gemm, the bias row and the activation, in one pass
 | ok - patches: Im2col is their definition, and the products read them from the images
 | ok - a small causal product is decided while compiling, and the run time agrees
+=== test std/list.olang
+| status 0
+| ok - an empty list
+| ok - pushes survive many chunk boundaries, in order
+| ok - ToArray is a copy, independent of the list
+| ok - a list of structs
+| ok - an outer list flattened into an inner block
+| ok - a List is iterable: every loop over it gets its own position
+| ok - a List of references: the words of a line, as slices of it
+| ok - pushing from inside a loop builds where the list lives
+| ok - a list's elements, walked through a lambda
+| ok - a comprehension walks a List
+| ok - membership in a List
+| ok - indexing a List
+| ok - a checked index into a List
+| ok - indexing a List of structs and of references
+| ok - PushAll appends an array across chunk boundaries
+| ok - walking a long List
+| ok - a List with At is still walked by its own iterator
+| ok - indexing a List, evaluated while compiling as at run time
+| ok - S9f: a List is walked run by run, and every loop rule holds
+| ok - S9f: Iter's helpers walk run by run and leave the iterator where Next would
+| ok - Pop, First and Last, on both sides of every chunk boundary
+| ok - Pop and Push back and forth at a chunk boundary, and a work list
+| ok - Clear empties a list and keeps its chunks for the Pushes that follow
+| ok - an iterator over a List ends where the list now ends after Clear or Pop
+| ok - TakeAt, RemoveAt and Insert move the elements after the position, across chunk boundaries
+| ok - Reverse and Sort reorder a List in place
+| ok - an array, and an iterator, made into a List
+| ok - Join puts a separator between the texts of a List
+| ok - reshaping a List, evaluated while compiling as at run time
+| ok - a List of mutable references, reordered and emptied
+| ok - a copy of a List value names the same list, and Clone makes another
+| ok - a List's Clone outlives the list it copies, across chunk boundaries
+| ok - Clone at every chunk boundary, evaluated while compiling as at run time
+| ok - Truncate keeps the first n, across chunk boundaries, and Push carries on after them
+| ok - Truncate evaluated while compiling as at run time
+| ok - IndexOf, Remove and SwapRemove, across chunk boundaries
+| ok - IndexOf, Remove and SwapRemove, evaluated while compiling as at run time
+| ok - $ renders a List's elements, not its storage
+| ok - S9f: a List of references, walked by every route
+| ok - removals empty what they no longer use and shifts move, evaluated while compiling as at run time
 === test std/net.olang
 | status 0
 | ok - addresses are read and written as text
@@ -1186,28 +1228,6 @@
 | ok - Enumerate, Zip and Chain
 | ok - Sum, Min, Max and their keyed forms
 | ok - an adapter is evaluated while compiling
-=== test std/prelude/tests/list.olang
-| status 0
-| ok - Pop, First and Last, on both sides of every chunk boundary
-| ok - Pop and Push back and forth at a chunk boundary, and a work list
-| ok - Clear empties a list and keeps its chunks for the Pushes that follow
-| ok - an iterator over a List ends where the list now ends after Clear or Pop
-| ok - TakeAt, RemoveAt and Insert move the elements after the position, across chunk boundaries
-| ok - Reverse and Sort reorder a List in place
-| ok - an array, and an iterator, made into a List
-| ok - Join puts a separator between the texts of a List
-| ok - reshaping a List, evaluated while compiling as at run time
-| ok - a List of mutable references, reordered and emptied
-| ok - a copy of a List value names the same list, and Clone makes another
-| ok - a List's Clone outlives the list it copies, across chunk boundaries
-| ok - Clone at every chunk boundary, evaluated while compiling as at run time
-| ok - Truncate keeps the first n, across chunk boundaries, and Push carries on after them
-| ok - Truncate evaluated while compiling as at run time
-| ok - IndexOf, Remove and SwapRemove, across chunk boundaries
-| ok - IndexOf, Remove and SwapRemove, evaluated while compiling as at run time
-| ok - $ renders a List's elements, not its storage
-| ok - S9f: a List of references, walked by every route
-| ok - removals empty what they no longer use and shifts move, evaluated while compiling as at run time
 === test std/prelude/tests/map.olang
 | status 0
 | ok - put, get, replace, remove

@@ -139,9 +139,9 @@ compilation failed with 3 errors
 b11notehandle.olang:14:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         l.Push(t)
       |           ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 b11notehandle.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'm' lives: 't mut String&m = ...'
    13 |         t := "x" $i
       |         ^
@@ -153,9 +153,9 @@ compilation failed with 1 error
 b11notevalue.olang:12:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         out.Push(p)
       |             ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 b11notevalue.olang:11:9: note: 'p' is made here, in a block that closes first - make it where 'out' lives: 'Join&out(...)'
    11 |         p := filepath.Join&t(dir, name)
       |         ^
@@ -399,8 +399,8 @@ c2dexactobliged.olang:24:11: error[O10c]: the callee needs one argument's scope 
 c2dexactobliged.olang:17:25: note: the callee requires it because of this statement
    17 |     if m.slot is null { m.slot = MS<K, V>(key, value) }
       |                         ^
-c2dexactobliged.olang:23:9: note: 'l' is declared here, in a block that closes first - declare it where 'm' lives: 'l mut List<I32>&m = ...'
-   23 |         l mut List<I32>& = List<I32>()
+c2dexactobliged.olang:23:9: note: 'l' is declared here, in a block that closes first - declare it where 'm' lives: 'l mut Vec<I32>&m = ...'
+   23 |         l mut Vec<I32>& = Vec<I32>()
       |         ^
 compilation failed with 1 error
 === c2dfieldentry.olang
@@ -1186,15 +1186,20 @@ derivedcopycapture.olang:18:25: error[C2d]: this builds through a '&p' field who
       |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === derivedhelpercount.olang
-derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
-   12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+derivedhelpercount.olang:13:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
+   13 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:457:25: note: in the standard library's code, here
-  457 |             if try keep(x) { c++ }
+$ROOT/std/list.olang:475:25: note: in the standard library's code, here
+  475 |             if try keep(x) { c++ }
       |                         ^
-derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&, E = nothing
-   12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+derivedhelpercount.olang:13:33: note: instantiated here, with T = Bag&, E = nothing
+   13 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
+compilation failed with 1 error
+=== derivedhelpercountvec.olang
+derivedhelpercountvec.olang:12:21: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
+      |                     ^~~~~~~~~~~
 compilation failed with 1 error
 === e10aprivateeq.olang
 e10aprivateeq.olang:12:5: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
@@ -1343,9 +1348,9 @@ compilation failed with 1 error
 e25scopeargpush.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         xs.Push(mkp&t(i))
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 compilation failed with 1 error
 === e25scopeargreturn.olang
 e25scopeargreturn.olang:8:16: error[O10d]: this value lives in this function's own scope, which closes first
@@ -1420,9 +1425,9 @@ e31bfieldviewbuild.olang:28:31: error[E31, O17]: x[i] gives a copy, and the call
       |                               ^
 compilation failed with 1 error
 === e31bfieldviewmethod.olang
-e31bfieldviewmethod.olang:28:42: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
-   28 | fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
-      |                                          ^
+e31bfieldviewmethod.olang:28:41: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   28 | fn add(l mut Vec<Layer>&, v I64) { l[0].w.Build(v) }
+      |                                         ^
 compilation failed with 1 error
 === e31bfnelem.olang
 e31bfnelem.olang:10:12: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1589,9 +1594,9 @@ compilation failed with 1 error
 e31bviewnoindexnote.olang:39:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    39 |     for k in range 3 { f(s[k], out) }
       |                        ^
-e31bviewnoindexnote.olang:35:38: note: the callee requires it because of this statement
-   35 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
-      |                                      ^~~
+e31bviewnoindexnote.olang:35:37: note: the callee requires it because of this statement
+   35 | fn f(c mut V&, out mut Vec<Pt&>&) { out.Push(id(c.p)) }
+      |                                     ^~~
 e31bviewnoindexnote.olang:37:5: note: 's' is declared here, in a block that closes first - declare it where 'out' lives: 's mut Vs&out = ...'
    37 |     s := Vs(Array<I64>(4))
       |     ^
@@ -1990,10 +1995,10 @@ g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type argume
       |                      ^~~
 compilation failed with 1 error
 === g11named.olang
-g11named.olang:6:11: error[G11]: a type argument's reference marker is bare, as 'List<String&>' - its references live in the container
+g11named.olang:6:11: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
     6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
       |           ^~~~~~~~~~~~
-g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 'List<String&>' - its references live in the container
+g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 'Vec<String&>' - its references live in the container
     6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
       |                                ^~~~~~~~~~~~
 g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
@@ -2522,9 +2527,9 @@ l18bifline.olang:8:10: error: expected '{', found 'else'
       |          ^~~~
 compilation failed with 1 error
 === l18cneedless.olang
-l18cneedless.olang:4:12: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
-    4 |     x List<(I64)>
-      |            ^~~~~
+l18cneedless.olang:4:11: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
+    4 |     x Vec<(I64)>
+      |           ^~~~~
 compilation failed with 1 error
 === l18coldresults.olang
 l18coldresults.olang:3:25: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
@@ -3034,9 +3039,9 @@ compilation failed with 1 error
 o10cnotethroughcall.olang:16:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         keep.Push(m)
       |              ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 o10cnotethroughcall.olang:12:5: note: 'base' is declared here, in a block that closes first - declare it where 'keep' lives: 'base mut String&keep = ...'
    12 |     base := $dir "/"
       |     ^~~~
@@ -3085,8 +3090,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/list.olang:477:5: note: the callee requires it because of this statement
-  477 |     return acc
+$ROOT/std/prelude/iterator.olang:63:5: note: the callee requires it because of this statement
+   63 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
@@ -3305,9 +3310,9 @@ compilation failed with 1 error
 o18cprojectionfresh.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         keep.Push(t)
       |              ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 o18cprojectionfresh.olang:14:9: note: 't' is declared here, in a block that closes first - declare it where 'keep' lives: 't String&keep = ...'
    14 |         t := p.mk().text
       |         ^
@@ -3324,9 +3329,9 @@ compilation failed with 1 error
 o1bglobalarg.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         put(GL, inner)
       |         ^~~
-o1bglobalarg.olang:8:39: note: the callee requires it because of this statement
-    8 | fn put(l mut List<Leaf&>&, n Leaf&) { l.Push(n) }
-      |                                       ^
+o1bglobalarg.olang:8:38: note: the callee requires it because of this statement
+    8 | fn put(l mut Vec<Leaf&>&, n Leaf&) { l.Push(n) }
+      |                                      ^
 compilation failed with 1 error
 === o1bglobalshort.olang
 o1bglobalshort.olang:11:8: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
@@ -3467,9 +3472,9 @@ compilation failed with 1 error
 o25hpairpush.olang:14:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         fields.Push(p)
       |                ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 o25hpairpush.olang:13:9: note: 'p' is declared here, in a block that closes first - declare it where 'fields' lives: 'p mut Pair<String&, Node&>&fields = ...'
    13 |         p := pair.Pair<String&, Node&>("k", value)
       |         ^
@@ -3478,11 +3483,11 @@ compilation failed with 1 error
 o25replacelist.olang:15:13: error[O25]: a reference never narrows - 'still' lives in a block that closes first, and this keeps it longer
    15 |     w.alive = still
       |             ^
-o25replacelist.olang:11:5: note: 'still' is declared here, in a block that closes first - declare it where 'w' lives: 'still mut List<I64>&w = ...'
-   11 |     still := List<I64>()
+o25replacelist.olang:11:5: note: 'still' is declared here, in a block that closes first - declare it where 'w' lives: 'still mut Vec<I64>&w = ...'
+   11 |     still := Vec<I64>()
       |     ^~~~~
 o25replacelist.olang:11:5: note: or refill the one kept - 'w.alive.Clear()', then put the elements in: one made where 'w' lives stays there, beside every one made before it, until that scope closes
-   11 |     still := List<I64>()
+   11 |     still := Vec<I64>()
       |     ^~~~~
 compilation failed with 1 error
 === o26aborrowparam.olang
@@ -4289,9 +4294,9 @@ rv3ctorcopy.olang:14:12: error[C2d]: this instance holds a reference to an argum
       |            ^
 compilation failed with 1 error
 === rv3globalcopy.olang
-rv3globalcopy.olang:5:19: error[T25c]: a mutable global holds no copy of a read-only List<I32> - give it one of its own, made with 'G.Clone()', or drop its 'mut'
-    5 | M mut List<I32> = G
-      |                   ^
+rv3globalcopy.olang:5:18: error[T25c]: a mutable global holds no copy of a read-only Vec<I32> - give it one of its own, made with 'G.Clone()', or drop its 'mut'
+    5 | M mut Vec<I32> = G
+      |                  ^
 compilation failed with 1 error
 === rv3payloadcopy.olang
 rv3payloadcopy.olang:15:14: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
@@ -4307,16 +4312,16 @@ rv3roat.olang:5:7: error[E31, O17]: x[i] gives a copy, and the call can build in
       |       ^
 compilation failed with 2 errors
 === rv3roclone.olang
-rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
+rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'v' reaches where it can be written, and this Vec<Vec<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
-$ROOT/std/prelude/list.olang:352:5: note: 'l' is declared here
-  352 | fn (l List<T>&) Clone() List<T> {
-      |     ^~~~~~~~~~
+$ROOT/std/prelude/vec.olang:231:5: note: 'v' is declared here
+  231 | fn (v Vec<T>&) Clone() Vec<T> {
+      |     ^~~~~~~~~
 compilation failed with 1 error
 === rv3rofilter.olang
-rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
-    4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
+rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<Vec<I64>> is read-only - pass a writable one
+    4 |     return ro.Filter(fn(x Vec<I64>) Bool { return true }).Len()
       |            ^~
 $ROOT/std/prelude/array.olang:103:5: note: 'a' is declared here
   103 | fn (a Array<T>&) Filter<? E>(keep fn(x T) Bool ? E) Array<T> ? E {
@@ -4715,9 +4720,9 @@ compilation failed with 1 error
 s5callresultfield.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         ss.Push(box(t).s)
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 s5callresultfield.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'ss' lives: 't mut String&ss = ...'
    11 |         t := $k "-text"
       |         ^
@@ -4726,9 +4731,9 @@ compilation failed with 1 error
 s5callresultpush.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         bs.Push(box(t))
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 s5callresultpush.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
    11 |         t := $k "-text"
       |         ^
@@ -4737,29 +4742,29 @@ compilation failed with 1 error
 s5capturestruct.olang:15:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         fs.Push(fn() I64 { return x.Sensor.Len() })
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 compilation failed with 1 error
 === s5clonepush.olang
 s5clonepush.olang:10:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         rows.Push(rec.Clone())
       |              ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
-s5clonepush.olang:8:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut List<String&>&rows = ...'
-    8 |         rec := List<String&>()
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
+s5clonepush.olang:8:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut Vec<String&>&rows = ...'
+    8 |         rec := Vec<String&>()
       |         ^~~
 compilation failed with 1 error
 === s5destructnoscope.olang
 s5destructnoscope.olang:15:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    15 |         rows.Push(rec)
       |              ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
-s5destructnoscope.olang:14:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut List<String&>&rows = ...'
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
+s5destructnoscope.olang:14:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut Vec<String&>&rows = ...'
    14 |         rec, next := mk2(k)
       |         ^~~
 compilation failed with 1 error
@@ -4788,9 +4793,9 @@ compilation failed with 1 error
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:176:9: note: the callee requires it because of this statement
-  176 |         l.s.first[i] = x
-      |         ^
+$ROOT/std/prelude/vec.olang:110:40: note: the callee requires it because of this statement
+  110 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
+      |                                        ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
     9 |         t := $k "-loop-text-of-moderate-length"
       |         ^
@@ -4829,9 +4834,9 @@ compilation failed with 1 error
 s5helperlist.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         rows.Push(one(t))
       |              ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 s5helperlist.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'rows' lives: 't mut String&rows = ...'
    13 |         t := $k "-text"
       |         ^
@@ -4840,9 +4845,9 @@ compilation failed with 1 error
 s5keepcall.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         keep(bs, box(t))
       |         ^~~~
-s5keepcall.olang:5:36: note: the callee requires it because of this statement
-    5 | fn keep(l mut List<Box>&, b Box) { l.Push(b) }
-      |                                    ^
+s5keepcall.olang:5:35: note: the callee requires it because of this statement
+    5 | fn keep(l mut Vec<Box>&, b Box) { l.Push(b) }
+      |                                   ^
 s5keepcall.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
    11 |         t := $k "-text"
       |         ^
@@ -4868,31 +4873,31 @@ compilation failed with 1 error
 s5nestedhandle.olang:11:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         users[0][0].Push(t)
       |                     ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 compilation failed with 1 error
 === s5nestedhandlemap.olang
 s5nestedhandlemap.olang:11:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         (try mm.Get(0))[0].Push(t)
       |                            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 s5nestedhandlemap.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         pushFn((try mm.Get(0))[0], t)
       |         ^~~~~~
-s5nestedhandlemap.olang:3:46: note: the callee requires it because of this statement
-    3 | fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
-      |                                              ^
+s5nestedhandlemap.olang:3:45: note: the callee requires it because of this statement
+    3 | fn pushFn(l mut Vec<String&>&, s String&) { l.Push(s) }
+      |                                             ^
 compilation failed with 2 errors
 === s5projection.olang
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         bs.Push(pairish(t).a)
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 s5projection.olang:15:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
    15 |         t := $k "-text"
       |         ^
@@ -4901,9 +4906,9 @@ compilation failed with 1 error
 s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         bs.Push(boxes(t)[0])
       |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 compilation failed with 1 error
 === s5spawnhandle.olang
 s5spawnhandle.olang:8:43: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
@@ -4914,9 +4919,9 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:176:9: note: the callee requires it because of this statement
-  176 |         l.s.first[i] = x
-      |         ^
+$ROOT/std/prelude/vec.olang:110:40: note: the callee requires it because of this statement
+  110 | fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
+      |                                        ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
    11 |         t := $i "-loop-text"
       |         ^
@@ -5206,11 +5211,11 @@ strnotecopies.olang:14:64: error[T25c]: a read-only reference cannot become writ
 strnotecopies.olang:14:59: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |     for n Node?&b = b.head, n is not null, n = n.next { l.Push(n) }
       |                                                           ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 strnotecopies.olang:13:5: note: 'l' cannot be made where 'n' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references
-   13 |     l := List<mut Node&>()
+   13 |     l := Vec<mut Node&>()
       |     ^
 compilation failed with 2 errors
 === stro17captures.olang
@@ -5699,9 +5704,9 @@ t25ccopycallvalue.olang:18:27: error[T25c]: 'Call' writes through or keeps its b
       |                           ^
 compilation failed with 1 error
 === t25ccopydecl.olang
-t25ccopydecl.olang:11:19: error[T25c]: this copies a read-only List<I64>, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own with 'G.Clone()'
-   11 |     y List<I64> = G
-      |                   ^
+t25ccopydecl.olang:11:18: error[T25c]: this copies a read-only Vec<I64>, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own with 'G.Clone()'
+   11 |     y Vec<I64> = G
+      |                  ^
 compilation failed with 1 error
 === t25ccopyfield.olang
 t25ccopyfield.olang:11:8: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
@@ -5769,15 +5774,15 @@ t25ccopypun.olang:8:18: note: 'b' is declared here
       |                  ^~~~~
 compilation failed with 1 error
 === t25ccopyreturn.olang
-t25ccopyreturn.olang:9:29: error[T25c]: a copy of a read-only List<I64> cannot be returned as a writable value - return one of its own, made with 'G.Clone()', or a read-only reference
-    9 | fn get() List<I64> { return G }
-      |                             ^
+t25ccopyreturn.olang:9:28: error[T25c]: a copy of a read-only Vec<I64> cannot be returned as a writable value - return one of its own, made with 'G.Clone()', or a read-only reference
+    9 | fn get() Vec<I64> { return G }
+      |                            ^
 t25ccopyreturn.olang:11:5: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |     get().Push(1)
       |     ^~~
-t25ccopyreturn.olang:9:22: note: the callee requires it because of this statement
-    9 | fn get() List<I64> { return G }
-      |                      ^~~~~~
+t25ccopyreturn.olang:9:21: note: the callee requires it because of this statement
+    9 | fn get() Vec<I64> { return G }
+      |                     ^~~~~~
 compilation failed with 2 errors
 === t25ccopystore.olang
 t25ccopystore.olang:10:10: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
@@ -5877,9 +5882,9 @@ t29fcompound2.olang:7:5: error[T29f]: Pct does not extend its base, so it takes 
       |     ^~
 compilation failed with 1 error
 === t29overgeneric.olang
-t29overgeneric.olang:4:12: error[T29]: a type is declared over a number or an array, not over List<String&> - hold it in a struct's field instead
-    4 | type Names List<String&>
-      |            ^~~~~~~~~~~~~
+t29overgeneric.olang:4:12: error[T29]: a type is declared over a number or an array, not over Vec<String&> - hold it in a struct's field instead
+    4 | type Names Vec<String&>
+      |            ^~~~~~~~~~~~
 compilation failed with 1 error
 === t29overnoextends.olang
 t29overnoextends.olang:7:11: error[T29f]: B does not extend its base, so it takes no '+' - declare its method 'Plus', or declare it with 'extends'
@@ -6089,9 +6094,9 @@ compilation failed with 1 error
 t32anyleak.olang:11:8: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |     xs.Push(q)
       |        ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 t32anyleak.olang:10:5: note: 'q' is declared here, in a block that closes first - declare it where 'xs' lives: 'q mut aSq&xs = ...'
    10 |     q := aSq(2)
       |     ^
@@ -6176,9 +6181,9 @@ compilation failed with 1 error
 t34casebindnote.olang:18:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    18 |             case aBtn b { keep.Push(b) }
       |                                ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
+$ROOT/std/prelude/vec.olang:61:30: note: the callee requires it because of this statement
+   61 |     if s.n == s.data.Len() { s.room(s.n + 1, x) }
+      |                              ^
 t34casebindnote.olang:18:23: note: 'b' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'keep' lives
    18 |             case aBtn b { keep.Push(b) }
       |                       ^
@@ -6439,9 +6444,9 @@ unknownreceiver.olang:9:7: error: unknown type 'Missing'
       |       ^~~~~~~
 compilation failed with 1 error
 === unknowntypearg.olang
-unknowntypearg.olang:10:15: error: unknown type 'Itm' - did you mean 'Item'?
-   10 |     l := List<Itm&>()
-      |               ^~~
+unknowntypearg.olang:10:14: error: unknown type 'Itm' - did you mean 'Item'?
+   10 |     l := Vec<Itm&>()
+      |              ^~~
 compilation failed with 1 error
 === unknowntypehint.olang
 unknowntypehint.olang:4:7: error[T4]: unknown type 'Int32' - the numbers are named by kind and width: did you mean 'I32'?
@@ -6670,9 +6675,9 @@ x10byvalue.olang:5:10: error[X10]: Db is an extern type, held only by reference 
       |          ^~
 compilation failed with 1 error
 === x10typearg.olang
-x10typearg.olang:6:15: error[X10]: Db is an extern type, held only by reference - write 'Db&', or 'Db?&' where it may be null
-    6 |     l := List<Db>()
-      |               ^~
+x10typearg.olang:6:14: error[X10]: Db is an extern type, held only by reference - write 'Db&', or 'Db?&' where it may be null
+    6 |     l := Vec<Db>()
+      |              ^~
 compilation failed with 1 error
 === x11notplain.olang
 x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number of the twelve primitives, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
@@ -6695,8 +6700,8 @@ x12result.olang:4:28: error[X12]: String& cannot go back to C - an export fn giv
       |                            ^~~~~~~~
 compilation failed with 1 error
 === x12type.olang
-x12type.olang:3:17: error[X12]: List<I64> cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference
-    3 | export fn total(l List<I64>) I64 { return l.Len() }
+x12type.olang:3:17: error[X12]: Vec<I64> cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference
+    3 | export fn total(l Vec<I64>) I64 { return l.Len() }
       |                 ^
 compilation failed with 1 error
 === x13lambda.olang
