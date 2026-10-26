@@ -25716,3 +25716,83 @@ past the walk, written through, a borrow of a local, of a turn's block, of the f
 generator held in a local or a field walked twice with its views kept outside; `any Iterator<String&>&` of one,
 `any Iterator<String&t>&`; `mut`, `?&`, an unknown name, a by-value parameter, another parameter), d16dtwoscopes and
 d18twoscopes; the scope fuzzer's generator scenario gains borrowing and frame-view generators.
+
+## Bulk review 3, fixed (D13d, D10a, D14d, S8d, S8e, S6, T25c, D18e, G32-G34, T20, E10b, E11a, X21, 2026-10-26)
+
+A read-only review of ea0a6de..2960c67 (definit, genelide, errvalues, named arguments, test targets, C imports, the
+borrowing generators; /home/user/review/bulk3) reproduced seven findings and four smaller ones. Each fix below has a
+corpus test (with a value the evaluator bakes beside the run-time one) or a check case. Finding 7 (`olang test FILE
+WORD` naming no target) was left to the test-driver batch running beside this one.
+
+**1 and 2: a loop's breaks, one walk (D13d, and D10a with it).** definit judged a loop that holds no break of its own as
+one that never ends, so the code after it was dead and a local read there "definitely assigned" - and lowering wrote no
+zero for it (`Local.Unset`). Its `breaks` asked only the body, while a `do { } for c` is lowered with its condition, and
+so its only break, in the post clause; and its expression walk looked into a handful of kinds, missing a break in a
+catch clause inside an index, a slice bound, an array literal, a rendering, a field read of a temporary, a return's
+value, an assert's condition and the function a call goes through. A never-null reference read after such a loop
+segfaulted under `-debug`; a zero-valued local gave three different answers (-O3, -debug, interpret). check's D10a walk
+had the same two holes: a function ending in a do-while compiled and aborted at its end with "unreachable reached".
+Both now ask one walk, `typed.BreaksOut`, written over every statement, expression and place kind with no catch-all
+(so a new kind must say what it holds), and both ask the post clause. Cases: `definitdowhile`, `definithiddenbreak`
+(eight shapes, one error each), `d10adowhile`; corpus: a zero value read after a do-while and after a loop whose only
+break is in an index's catch, baked and at run time.
+
+**Found on the way, S8d and S8e (soundness).** The walk asking whether a narrowed local is assigned in its block
+(`assignsName`) had the same shape: it looked into an expression only at a statement's top (a `try`, a match value)
+and not at all into a declaration's value, a return's, a call's arguments. `x := try g() catch { e = Shape.Circle(1) }
+default 0` inside `if e == Shape.Holder { ... e.p.v }` kept the narrowing, and the payload was read as the other
+case's - a number read as a reference. The walk is now complete in the same way (every statement and expression kind,
+a lambda's body excepted: a capture is a copy); case `s8dassignclause`.
+
+**3: D14d's counter (miscompile).** The counted fill skipped its clear although the loop's body assigned its counter
+(`for i in range n { i = 0  a[i] = 1 }`), leaving every other element whatever a recycled chunk held. The fill now
+also requires the body to assign the counter nowhere (the S8d walk above); SPEC D14d says so; corpus test against a
+dirtied chunk, baked too.
+
+**4: an immutable global's text written (S6, T25c; older).** A `String` global lent to a `mut Array<Char>&` parameter,
+or to a C `char *` through a C import, was let through: the conversion from a declared type over an array to its base
+names the place's storage (T29a) and borrowed it without asking whether the place may be written. It asks now (S6's
+"cannot be written", as for an array global), so build and `interpret` both refuse while compiling - before, the build
+wrote the global and `interpret` stopped with "it writes constant data". Case `roglobaltext` (the C path included);
+corpus: a writable local's and a `mut` global's text written that way.
+
+**5: a generator held in a local leaked (D18e; the half D18b's note left).** `g := each(Data)` then `for x in g`, over
+a global's array, landed the generator where its argument lives - the program's scope - so a function called a million
+times kept 139 MB. Decided (mine): a local declared from a generator's call whose elements are built per turn, walked
+by one for-in or comprehension later in its own block - in no loop or deferred code there - and named nowhere else
+(never passed, stored, returned, captured or walked again) is that walk's own, exactly as a for-in's own call is: check
+records each for-in or comprehension whose source reads a local (`heldWalks`), and once the attempt has checked every
+body `settleHeldWalks` asks `definit.HeldWalk` - one exhaustive walk counting the local's mentions and finding the walk
+made once per declaration - and adds the local to `typed.Body.Walks`. The scope pass then places it in its block and
+emit makes the `.walk` form where the dataflow allows. Measured: 139 MB -> 1.6 MB, 0.13 s -> 0.00 s (the frame elided);
+under `-debug -sanitize` the output agrees. A local walked in each of two branches, twice, in a loop, or a generator
+whose elements borrow (D18c) keeps D18b's arena path - recorded as a limit (the first is the only one a program is
+likely to write; it needs mutually exclusive mentions, which a later round may add). The generators scenario's count of
+`held.walk` forms rose from 8 to 9 (its `g := held(50, 4)` is such a local); the landing scenario runs one under 8 MB.
+
+**6: error values and reflection (G32-G34, T20).** An error value had no TypeKind, so any generic walker over a type
+holding one - `json.Encode`, `json.Decode` - cascaded into a dozen errors inside std. Decided (mine): `TypeKind` gains
+`Error`; an error value's type (an error type or a named set, by name or as a type argument) lists its words as its
+`T.Cases`, in its set's canonical order - each a case of no fields, its `Name` the word as `$` writes it
+(`io.Error.FULL`), `c()` its value, `v == c` a comparison of codes; `T.Name` is the type or set as written. std/json
+writes an error value as `$` does and null as null, and reads one back by its word, failing with `json.Error.WRONG_KIND`
+on a word not of its type. Found on the way: `ReflAll.Kind == TypeKind.Error` was read as a comparison with an error
+word `Kind` (errItemPath took any name after an error type for a word) - now only a word of it is.
+
+**8 (spec and compiler).** (a) SPEC T20 wrote `e == null` for an error value's null test; the compiler holds E10c's
+one null test, `e is null`, and its diagnostic already names it - SPEC corrected, case `errvalnullcompare`. (b) X21
+promoted only the eight integer types: a `U5` or an `I12` variable argument was refused with "pass a number". The
+widths now promote as C's types would hold them (mine): below 32 bits an `I32`, between 32 and 64 an `I64` or a `U64`,
+wider an error naming a conversion (no C type of olang's holds it, X2); corpus through `snprintf`, case `x21wide`. (c)
+CLAUDE.md and SPEC wrote two error words or cases on one line apart by spaces (`{ FULL  DENIED }`), which the listing
+rule parses as one item; written with commas. (d) `$` of a `Vec<lib.Both>` qualified its elements (B5) but not the type
+argument; an error type in a rendering's type is now qualified as its values are (lowering's ErrValSpelling, the one
+place renderings spell an error type), corpus test.
+
+**9: an error value's hash (E10b).** Hash took an error value's code, which numbers its word within its own set, so
+`PErr.BAD` held as a `PErr` and as a `LoadError` were `==` and hashed differently. It now hashes the error held: a
+constant per entry (an FNV hash of its type's module identity and name, the same in every compilation) mixed with the
+word; null as the number 0. Maps were already right (they recode to the key type first); corpus test with a Map keyed by
+one set and probed through another, baked too.
+
+Also: std/README's naming rule read "`io.Error`, not `io.Error`" since the stutter rename - now "not `io.IoError`".
