@@ -1252,3 +1252,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   t[a:b]`, elements living as long as the generator, as List<String&> does - every new reference element then stays
   allocated until the generator is dropped)? In effect: no - yielded values are built per Next call and reclaimed each
   turn; a borrow of an input is refused (T22a) with "yield a copy". Recommended: keep until real code asks.
+- 2026-10-26 (mine, lanes batch's two questions, details): (1) integers of the new widths do not cross the C boundary
+  as `_BitInt(N)` until a C API needs one (only the twelve primitives cross, X2). (2) Literals and literal-only
+  expressions will hold up to 128 bits, so `x U128 = 340282366920938463463374607431768211455` and `x I128 = 1 << 100`
+  work directly - queued for the next small batch (E4a back to 128 bits, exactly as the evaluator computes them).
