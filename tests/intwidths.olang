@@ -290,3 +290,21 @@ test "T4a: an array of a new width made in a function is read back after an aren
         "7427640235712281649394745344]")
     assert w.Sum() == U100(6) << 90
 }
+
+# Pow at one bit: x.Pow(0) is 1 wrapped to I1's width, -1, and the product never holds a 1 I1 cannot (the second bulk
+# review's F8); U1's 1 is itself
+fn powCase(n I64) String {
+    a := I1(n)  # -1 for an odd n
+    b := I1(0)
+    u := U1(n)
+    return $a.Pow(0) " " $a.Pow(1) " " $a.Pow(2) " " $a.Pow(3) " " $b.Pow(0) " " $b.Pow(5) " " $u.Pow(0) " " $u.Pow(9)
+}
+
+PowBaked := powCase(1)
+WantPow := "-1 -1 -1 -1 -1 0 1 1"
+
+test "T4a: Pow at one bit wraps its 1 as I1 holds it" {
+    assert PowBaked == WantPow
+    assert powCase(One) == WantPow
+    assert powCase(1) == WantPow # S18c: decided while compiling
+}

@@ -49,15 +49,12 @@ fn Mul<T Number>(a T, b T) T ? {
             try floatResult(a, b, r)
             return r
         }
-        case I8, I16, I32, I64 {
-            if a == 0 or b == 0 { return 0 }
-            if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.OVERFLOW }
-            r := a * b
-            if r / b != a { error Error.OVERFLOW }
-            return r
-        }
         nomatch {
             if a == 0 or b == 0 { return 0 }
+            if T.Min < 0 {
+                # the least value times -1 does not fit, and "r / b" would divide it by -1 (E6a)
+                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.OVERFLOW }
+            }
             r := a * b
             if r / b != a { error Error.OVERFLOW }
             return r
@@ -74,13 +71,11 @@ fn Div<T Number>(a T, b T) T ? {
             try floatResult(a, b, r)
             return r
         }
-        case I8, I16, I32, I64 {
-            if b == 0 { error Error.DIVIDE_BY_ZERO }
-            if a == T.Min and b == -1 { error Error.OVERFLOW }
-            return a / b
-        }
         nomatch {
             if b == 0 { error Error.DIVIDE_BY_ZERO }
+            if T.Min < 0 {
+                if a == T.Min and b == -1 { error Error.OVERFLOW }
+            }
             return a / b
         }
     }
@@ -90,24 +85,21 @@ fn Div<T Number>(a T, b T) T ? {
 # there, E6a, so it is not asked)
 fn Rem<T Integer>(a T, b T) T ? {
     if b == 0 { error Error.DIVIDE_BY_ZERO }
-    match T {
-        case I8, I16, I32, I64 {
-            if b == -1 { return 0 }
-        }
-        nomatch { }
+    if T.Min < 0 {
+        if b == -1 { return 0 }
     }
     return a % b
 }
 
-# -a: an unsigned integer's only where a is 0
+# -a: a signed integer's but for its least value, an unsigned integer's only where a is 0
 fn Neg<T Number>(a T) T ? {
     match T {
         case F16, BF16, F32, F64 { return -a }
-        case I8, I16, I32, I64 {
-            if a == T.Min { error Error.OVERFLOW }
-            return -a
-        }
         nomatch {
+            if T.Min < 0 {
+                if a == T.Min { error Error.OVERFLOW }
+                return -a
+            }
             if a != 0 { error Error.OVERFLOW }
             return a
         }
@@ -129,13 +121,21 @@ fn ShiftRight<T Integer>(a T, n I64) T ? {
 }
 
 # x to the power n, failing with OVERFLOW where the true power does not fit - a square no later step needs is never
-# taken, so it fails exactly where the result does not fit (x.Pow(n) wraps)
+# taken, so it fails exactly where the result does not fit (x.Pow(n) wraps). The product starts from the first factor
+# taken, not from 1, which I1 cannot hold: its x.Pow(0) fails
 fn Pow<T Integer>(x T, n U32) T ? {
-    r T = 1
+    if n == 0 {
+        if T.Max < 1 { error Error.OVERFLOW } else { return 1 }
+    }
+    r T = x
+    started := false
     b T = x
     e U32 = n
     for e > 0 {
-        if (e & 1) == 1 { r = try Mul(r, b) }
+        if (e & 1) == 1 {
+            if started { r = try Mul(r, b) } else { r = b }
+            started = true
+        }
         e = e >> 1
         if e > 0 { b = try Mul(b, b) }
     }
@@ -160,14 +160,9 @@ fn floatResult<T Float>(a T, b T, r T) ? {
     if r.IsInf() and a.IsFinite() and b.IsFinite() { error Error.OVERFLOW }
 }
 
-# an integer type's width in bits
+# an integer type's width in bits, of any width (T4a): the bits its largest value sets, and a signed one's sign bit
 fn widthOf<T Integer>(a T) I64 {
-    return match T {
-        case I8, U8 => 8
-        case I16, U16 => 16
-        case I32, U32 => 32
-        nomatch => 64
-    }
+    return T.Max.PopCount() + (1 if T.Min < 0 else 0)
 }
 
 test "integers: what fits is the plain result, what does not fails" {
@@ -239,4 +234,47 @@ test "Checked: each step checked, left to right, the same while compiling as at 
     assert (try Checked(I32(G / 2)) * 2 catch Error.OVERFLOW default Checked(I32(-1))).Value == -1
     assert (try Checked(U8(250)) + 5).Value == 255
     assert (try Checked(U8(250)) + 6 catch default Checked(U8(1))).Value == 1
+}
+
+# every width (T4a): a signed type's least value and -1, a negation, a shift up to the width, each at an odd width, one
+# not a byte multiple, one past a word and one of 128 bits - the same while compiling as at run time
+fn widths(k I64) String {
+    m := I64(0) - k # -1
+    a := try Neg(I24(5) * I24(k)) catch default I24(77)
+    b := try Neg(I128(5) * I128(k)) catch default I128(77)
+    c := try Neg(I24.Min * I24(k)) catch default I24(77)
+    d := try Neg(I1(m)) catch default I1(0)
+    e := try Neg(U7(k)) catch default U7(77)
+    f := try ShiftLeft(I128(k), 100) catch default I128(77)
+    g := try ShiftLeft(U7(k), 6) catch default U7(77)
+    h := try ShiftLeft(U7(k), 7) catch Error.INVALID default U7(77) catch default U7(66)
+    i := try ShiftLeft(I9(k), 8) catch Error.OVERFLOW default I9(77) catch default I9(66)
+    j := try ShiftRight(I65(m), 64) catch default I65(77)
+    l := try ShiftRight(U128(k) << 127, 127) catch default U128(77)
+    n := try ShiftRight(U128(k), 128) catch Error.INVALID default U128(77) catch default U128(66)
+    o := try Div(I24.Min, I24(m)) catch Error.OVERFLOW default I24(77) catch default I24(66)
+    p := try Mul(I24.Min, I24(m)) catch Error.OVERFLOW default I24(77) catch default I24(66)
+    q := try Mul(I24(m), I24.Min) catch Error.OVERFLOW default I24(77) catch default I24(66)
+    r := try Rem(I24.Min, I24(m)) catch default I24(77)
+    s := try Div(I65.Min, I65(m)) catch Error.OVERFLOW default I65(77) catch default I65(66)
+    t := try Rem(I127.Min, I127(m)) catch default I127(77)
+    u := try Mul(I1(m), I1(m)) catch Error.OVERFLOW default I1(0) catch default I1(-1)
+    v := try Pow(I1(m), 1) catch default I1(0)
+    w := try Pow(I1(m), 0) catch Error.OVERFLOW default I1(0) catch default I1(-1)
+    x := try Pow(I1(m) + I1(m), 3) catch default I1(-1)
+    y := try Pow(U1(k), 0) catch default U1(0)
+    z := try Pow(I24(-2) * I24(k), 23) catch default I24(77)
+    return ($a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $i " " $j " " $l " " $n " " $o " " $p " " $q " " $r " "
+        $s " " $t " " $u " " $v " " $w " " $x " " $y " " $z)
+}
+
+BakedWidths := widths(1)
+WantWidths := ("-5 -5 77 0 77 1267650600228229401496703205376 64 77 77 -1 1 77 77 77 77 0 77 0 0 -1 0 0 1 "
+    "-8388608")
+one mut I64 = 1
+
+test "every width: Neg, Shift, Div, Mul, Rem and Pow at widths no case names - baked, decided and run alike (T4a)" {
+    assert BakedWidths == WantWidths
+    assert widths(one) == WantWidths
+    assert widths(1) == WantWidths # S18c: decided while compiling
 }
