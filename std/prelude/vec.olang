@@ -39,26 +39,24 @@ type vecState<T> struct(cap I64) {
 }
 
 # a buffer of room for at least need elements, the elements moved into it when the one there is smaller: twice the size
-# of the last (8 at first), or need, or what was asked for, whichever is most. A new buffer is filled with fill, the
-# element about to be stored, rather than with T's zero value: no slot is read before it is written, and a T with no
-# zero value - a Vec, a Map - is as ordinary an element as any other (D13c). The old buffer is retired (M19d): nothing
-# here uses it again
-fn (s mut vecState<T>&) room(need I64, fill T) {
+# of the last (8 at first), or need, or what was asked for, whichever is most. The new buffer is grown from the old
+# (M19d): its first elements moved out of it, the rest never filled - no slot past the count is read before a Push or
+# an Insert writes it, so a T with no zero value - a Vec, a Map - is as ordinary an element as any other (D13c), and a
+# doubling writes each byte once. The old buffer is retired: nothing here uses it again
+fn (s mut vecState<T>&) room(need I64) {
     if need <= s.data.Len() { return }
     r I64 = 8 if s.data.Len() < 4 else s.data.Len() * 2
     if r < need { r = need }
     if r < s.want { r = s.want }
-    old := s.data
-    s.data = Array<T>(r, fill)
-    nb := s.data
-    for i in range s.n { nb[i] = old[i].vacate() }
+    old := s.data[:s.n]
+    s.data = old.grown(r)
     old.retire()
 }
 
 # x after the last element - into the room left, or into a buffer twice the size, the elements moved into it
 fn (v mut Vec<T>&) Push(x T) {
     s := v.s
-    if s.n == s.data.Len() { s.room(s.n + 1, x) }
+    if s.n == s.data.Len() { s.room(s.n + 1) }
     s.data[s.n] = x
     s.n++
 }
@@ -70,7 +68,7 @@ fn (v mut Vec<T>&) PushAll(a Array<T>&) {
     if s.n + a.Len() > s.data.Len() {
         r I64 = s.data.Len() * 2
         if r < s.n + a.Len() { r = s.n + a.Len() }
-        s.room(r, a[0])
+        s.room(r)
     }
     for i in range a.Len() { s.data[s.n + i] = a[i] }
     s.n += a.Len()
@@ -93,7 +91,7 @@ fn (v mut Vec<T>&) Reserve(n I64) {
         s.want = r
         return
     }
-    s.room(r, s.data[0])
+    s.room(r)
 }
 
 # the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "try v.Get(i)" checks it
@@ -184,7 +182,7 @@ fn (v mut Vec<T>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
 fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i > s.n { error VecError.OUT_OF_RANGE }
-    if s.n == s.data.Len() { s.room(s.n + 1, x) }
+    if s.n == s.data.Len() { s.room(s.n + 1) }
     k I64 = s.n
     for k > i {
         s.data[k] = s.data[k - 1].vacate()

@@ -10649,6 +10649,29 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         c.P.L.Mods[c.fr().Mi].Retires = true
         return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
     }
+    if name == "grown" and args.Len() == 1 and c.isRef(typeOf(rx)) and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
+        # M19d: a collection's buffer grown - a new array of n elements, the first a.Len() moved out of a (each as
+        # vacate moves it) and the rest unwritten, as E39's exact collect leaves none: the prelude's claim that its
+        # collection writes each before reading it (a Vec's room past its count), which the compiler cannot infer
+        el := c.P.T.Elem(c.arrayOf(rt))
+        at := c.P.T.Array(el, types.TypeId(0))
+        from := c.stmts.Len()
+        h := c.hidden(sp, typeOf(rx))
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.value(rx, sp)))
+        nh := c.hidden(sp, c.i64())
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(nh)), c.value(c.exprTo(args[0], c.i64()), args[0].Span())))
+        cfrom := c.stmts.Len()
+        cid, couter, cmark := c.open(typed.BlockKind.Collect, sp)
+        i, id, outer, mark, lfrom := c.laneLoopOpen(sp, c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, h), null))
+        base typed.Place&c = typed.Place.Deref(sp, rt, c.readLocal(sp, h))
+        ep := typed.Place.Elem(sp, el, typed.Elem(base, c.readLocal(sp, i), typed.Check.None))
+        c.noteWrite(ep)
+        c.emit(typed.Stmt.Yield(sp, typed.Expr.Take(sp, el, ep)))
+        c.laneLoopClose(sp, i, id, outer, mark, lfrom)
+        b := c.close(cid, couter, cmark, cfrom)
+        r := typed.Expr.Collect(sp, at, typed.Collect(c.readLocal(sp, nh), b, c.site(typed.SiteKind.Collect, sp), typed.Check.None, true))
+        return typed.Expr.Seq(sp, at, typed.Seq(gather(c.stmts, from), r))
+    }
     if name == "Destroy" and args.Len() == 0 and c.isStruct(c.P.T.Repr(rt)) {
         # C9b: the instance a local names destructed now and its storage reclaimed - compiled only where early
         # freeing's analysis (compiler/free.olang) proves the local the only way left to reach it, which says so where
