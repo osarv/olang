@@ -1375,3 +1375,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   F32 2048 106 -> 133 GFLOPS vs OpenBLAS 143, F64 51 -> 57 vs 70 - packing through registers, BLIS loop order, L2
   blocking) for oann's port to take. Removing std/linalg (its tests, checks cases, bench, docs, SPEC/CLAUDE mentions)
   queued after the C-imports batch merges.
+- ERRORS AS VALUES DECIDED 2026-10-26 (the user: "Ye, let's have them, you didn't want the listing form tho?"): option
+  (b) - an error type or a named set is a value's type anywhere but a function's result (parameters, fields, locals,
+  type arguments: `List<LoadError>`, `Map<net.Error, I64>`, `Result<T, os.Error>`); `catch E e` gives a value, `error e`
+  raises a held one (checked against the function's set); a value is the 32-bit code renumbered to its set; `==`,
+  narrowing, `match`, `$`, Hash as for a payload-free enum. Confirmed: no unnamed listing in type arguments - a set of
+  several types is a named set (`type LoadError error io.Error, ParseError`); the bare list stays only after a
+  signature's `?`. ASKED: the zero value - QAM's 2026-10-18 decision (`null` means "no error", `e == null`, raising a
+  null error aborts) kept, so `last mut io.Error` starts as null (rec yes). Queued as a language batch after C imports
+  and the linalg removal; with it std `Result<T, E>` (a plain generic enum, no language support).
