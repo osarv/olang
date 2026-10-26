@@ -3662,18 +3662,19 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
 }
 
 # T20: an error value's type as source writes it - its error type, the named set it was written as, else its entries
-# in braces; an entry holding some words of a type, those words ("os.Error.DENIED")
+# in braces; an entry holding some words of a type, those words ("os.Error.DENIED") - each qualified as its values are
+# (B5: "lib.Both", the prelude's and the root program's own bare), so "Vec<lib.Both>[lib.LibErr.B]" reads alike
 fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
     t := lw.P.T
     nd := t.ErrValName(ty)
-    if nd >= types.DeclId(0) { return $t.Names.Text(t.DeclName(nd)) }
+    if nd >= types.DeclId(0) { return $lw.errQualifier(nd) $t.Names.Text(t.DeclName(nd)) }
     es := t.Items(t.ErrValItems(ty))
     out := StringBuilder()
     if es.Len() != 1 { out.PushChar('{') }
     k := 0
     for e in es {
         et := t.ErrOf(e)
-        name := t.Names.Text(t.DeclName(t.DeclOf(et)))
+        name := $lw.errQualifier(t.DeclOf(et)) $t.Names.Text(t.DeclName(t.DeclOf(et)))
         if t.KindOf(e) != types.Kind.ErrWords {
             if k > 0 { out.Push(", ") }
             out.Push(name)
@@ -3691,6 +3692,12 @@ fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
     }
     if es.Len() != 1 { out.PushChar('}') }
     return out.ToString()
+}
+
+# B5: what an error type's or a named set's name is qualified by where its values print
+fn (lw mut Lowerer&) errQualifier(d types.DeclId) String {
+    dm := lw.P.T.DeclModule(d)
+    return load.ErrQualifier(lw.P.L.Mods[dm].Identity, dm == lw.P.L.Root)
 }
 
 # whether a type declares Str (E11c), and its body: its Str, rendering it at every depth

@@ -3204,7 +3204,9 @@ its type: the value written the way it would be in source:
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
 - an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.EMPTY`, `os.Error.DENIED`
-  with another module's type by its module's name; `null` for no error.
+  with another module's type by its module's name; `null` for no error. An error type or a named set written as part
+  of a rendering's type - an array literal's element type, a type argument - is qualified the same way:
+  `Vec<os.Error>[os.Error.DENIED]`.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
   renders as a number, a `type Letter Char` - `extends` or not - as a character).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value

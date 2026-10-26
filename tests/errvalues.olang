@@ -153,3 +153,20 @@ test "a caught error is held past its clause" {
     }
     assert xs.Len() == 3 and xs[2] == os.Error.DENIED
 }
+
+# B5, E11a: an error type in a rendering's type is written as its values are - another module's qualified by its name
+fn errRendered() String {
+    v := Vec<os.Error>()
+    v.Push(os.Error.DENIED)
+    a := os.Error[os.Error.DENIED]
+    w := Vec<AnyErr>()
+    w.Push(NetErr.DOWN)
+    return $v " " $a " " $w
+}
+
+ErrRenderedBaked := errRendered()
+
+test "an error type in a rendering is qualified as its values are" {
+    want := "Vec<os.Error>[os.Error.DENIED] os.Error[os.Error.DENIED] Vec<AnyErr>[NetErr.DOWN]"
+    assert errRendered() == want and ErrRenderedBaked == want
+}
