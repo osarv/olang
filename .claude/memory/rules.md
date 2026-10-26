@@ -15,7 +15,7 @@ later paragraph replaced an earlier one, the current rule stands with a one-line
 ## Which repositories are mine to work in
 olang, oann and oagent. **Not hotpath** (osarv/hotpath, the user's company material): the user, 2026-10-21, when I
 cloned it with the others on their local machine: "dont do hotpath tho, that is not yours to meddle with unless I say
-so". Don't clone, read, change or snapshot it unless they ask. Locally (WSL) the three live side by side in
+so". Don't clone, read, change or snapshot it unless they ask. **No company work here at all** (the user, 2026-10-26, the second time: "drop all the company stuff, delete it. There is another session for the company"): no business questions, letters or company records in this session or its memory. Locally (WSL) the three live side by side in
 /home/oscar; in a cloud session in /home/user.
 
 ## No Claude attribution
