@@ -25150,3 +25150,127 @@ the programs hold them - a List, its state and `ListError` to Vec's (`ListIter<T
 programs migrated to Vec, to `std/list`'s in the four kept on List (bench/sum, bench/vec, o17handlewalk, rv7o2forparam),
 the List tests' private `listKV` dropped, a row now naming a type already listed dropped - then laid out again by
 `make layoutgold` (14,581 rows, 79 fewer).
+
+
+## Bulk review 2, fixed (K1, T4a, E39, E31b, E16a, E8a, O8a, O8d, L10a, M19d, K1a, B11, 2026-10-26)
+
+A read-only review of 68c693e..ea0a6de (lanes, small3, prel; /home/user/review/bulk2) reproduced eleven findings and
+traced two more. Each fix below has a test or a check case, and every reproducer runs alike built, built `-debug
+-sanitize` and interpreted with dead regions.
+
+**F1, the evaluator's I64 fast path (miscompile while compiling).** `flatten` took every signed integer held in eight
+bytes for an I64, so I33 to I63 were added and compared as raw words - no wrap at the width, and constants (stored
+sign-extended) met computed values (masked, zero-extended). A true assert was a compile error, a baked global wrong, and
+`interpret` disagreed with the built program. The fast path is now for I64 alone (`ibits == 64`), and a flat form's
+constants are held masked as `canonBits` holds every integer. **Tested by width class**: `tests/intsweep.olang` runs one
+battery - wrapping arithmetic, the bit operations, every comparison, division and remainder where defined, shifts by
+counts inside the width, `I64` and `F64` conversions, rendering - over each type's edge values at 1, 3, 7, 8, 9, 17, 24,
+31, 32, 33, 40, 48, 53, 63, 64, 65, 100, 127 and 128 bits, signed and unsigned, as a digest baked (K2), decided by an
+assert while compiling (S18c) and computed at run time, each against the built program's digest; `checks/cases/sweepeval`
+asserts each digest is not the built program's, so it fails to compile exactly where the evaluator computes the same
+value - on the old evaluator I33's assert was not even decidable (the guard against `Min / -1` compared a sign-extended
+`-1` with a masked one, so it ran the division and the evaluation stopped).
+
+**F2 and F8, std/arith and Pow at every width.** std/arith's integer branches named I8..I64, leaving the other widths to
+`nomatch` branches written for U8..U64: `Neg` failed for every nonzero signed odd width, `ShiftLeft` took 64 as every
+other width (refusing `I128 << 100`, running `U7 << 9` - undefined), and `Div`, `Mul` and `Rem` skipped `Min / -1`.
+Rewritten with no case list: a signed type is `T.Min < 0` (decided per instance, G35), the width `T.Max.PopCount()` and
+one more for the sign, so every shift is inside the width. `Pow` (the prelude's and std/arith's) started its product
+from `r T = 1`, which I1 cannot hold: it starts from the first factor taken now, `x.Pow(0)` is 1 wrapped (-1 at I1), and
+std/arith's `Pow(x, 0)` at I1 fails with OVERFLOW. std/arith's tests and a corpus test cover odd widths both ways.
+
+**F3, a lane store through `x[i]` (lost writes, accepted against T25c).** `v[0].arr += 5` (an inline array of a Vec's
+element), `v[0].xs += 7` (a reference field of it) and `w[0] += 2` (a Vec of read-only array references) were all
+dropped: E31b's write-back met an array target, recorded a checker gap and returned - and a checker gap stopped
+nothing. **Decided (mine)**, by E31b's rules: an inline array of the element is a read-modify-write - the indices held,
+the operand's lanes evaluated (and held) before the element is read, then the loop storing into the copy and the copy
+written back with `SetAt`; an array a reference read out of `x[i]` names is written where it points with nothing
+written back, as `x[i].r[j] += v` is, and through a read-only one it is T25c's error, as on an `Array` of them. A lane
+store there whose lanes call an operator method would run that method between the read and the write-back, and is an
+error naming the written-out form - and so is the scalar compound store through `x[i]` on a declared type with its own
+`Plus` (`v[0].m += M(5)`, found on the way, pre-existing: it was dropped too) and `x[i].f++` through `Inc` or `Plus`.
+`a++` on an array was dropped the same way; it is S3a/E31's error now. **And a checker gap stops a build** ("it does not
+check ... yet"), as lowering's and emission's always did - the root of this finding, older than the range.
+
+**F4, a slice of an immutable global (pre-existing).** `sliceOf` gave every slice of a value array `Writable`, so
+`poke(G[0:2], 9)` and `s := G[0:2]; s[0] = 9` wrote constant data (`-debug` segfaulted, -O3 dropped the store,
+`interpret` changed `G`). A slice now carries its base place's permission (E16a): an immutable global's array, one
+reached through a read-only reference, or a lambda's copy of a captured value slice read-only. And under `interpret` a
+write to an immutable global's own storage, by anything but its initializer, stops as a write to constant data does
+(the built program holds it as constant data, K2b) - before only compile-time evaluation refused it.
+
+**F5, E8a's literal shift amount (pre-existing).** `msgs.ShiftOutOfRange` had no caller: `x >> 70` on a `U8` compiled.
+A shift whose amount is a literal or a literal-only expression is checked against the shifted operand's width, at every
+width, in an operator, a compound assignment (`y <<= 128` on an `I128`) and lane by lane.
+
+**F6, lane results and comprehensions freed early.** `free.mayRegister` took any value holding statements - a lane
+operation's `Seq(..., Collect)`, a comprehension's loop - for one that may register a destructor, so `h.arr = h.arr *
+2` in a loop kept every array (1.6 GB over 100,000 turns of a 1,000-element array; a comprehension 4.5 GB). It walks
+them now - the locals they declare, their stores and their places, tests, loops, jumps, yields - any other statement
+counting as one that may register, nothing new assumed. That alone said "frees it at once" while the memory stayed: the
+plan made a region for the promotion, but its redirect stopped at the `Seq`, so the Collect's buffer was built in the
+function's scope and copied into the region. `topSite`, `siteScope` and `redirect` see through a sequence to its value
+now (its statements run where they stand). Measured: the lane loop 1,626,688 KB -> 1,908 KB, the comprehension loop
+-> 1,732 KB, both agreeing built, `-debug -sanitize` and interpreted with dead regions. No new relaxation: the walk
+applies the existing rule to what it used to refuse to look at.
+
+**F7.** `Min`/`Max` built lane 0 for their start and again in the loop, so a type's `Plus` ran n + 1 times; the loop
+starts at lane 1.
+
+**F9.** `ParseAs<T>(0)` read a prefixed literal through ParseInt or ParseUint, 64 bits at most; for a type wider than
+64 bits a pattern of more than 64 bits is read as L10a reads it in a program, its value unsigned fitting `T` (a `-`
+negating it exactly), up to 128 bits (`readWide`).
+
+**F10, decided (mine): in place, each lane is stored before the next is read.** That is what the fused loop does, and
+what the loop written by hand does - `s := a[1:5]; s += a[0:4]` is a running sum - so E39 says so; building the result
+first, which reads every old value, is `x = x + v`. numpy buffers on overlap; checking overlap at run time would be a
+per-statement cost the program does not show, and forbidding it is not decidable at compile time.
+
+**F11.** E39's "an element type that is or holds a reference is an error" now holds in place (`x += y`), as in `z := x
++ y`.
+
+**P1, an array of 128-bit elements (traced, confirmed in the IR).** I65..I128 are i128-aligned to LLVM, but an array
+under 32 bytes took 8 bytes' alignment from the arena. An array whose element type is aligned past 8 now asks for at
+least that (`__olang_scope_alloc_min`, `__olang_scope_alloc_zeroed_min`): its new arrays, copies, fixed-to-run-time
+conversions and a task target's copy. O8a says so; the `widealign` scenario checks the IR and reads the elements back
+after allocations of odd sizes, built and `-debug`.
+
+**P2, K1a's counter (reproduced).** `c.unknown()` counted every stand-in, and six were slots filled right after - a
+comparison chain's literal operands among them - so a top-level condition `if 0 < L < 3` was refused with nothing said
+and never decided ("unknown name 'Msg'" at its first use). Those slots take an uncounted `c.hole()` now
+(`checks/cases/condchainlit`).
+
+**Queued, done.** **A Vec's growth without the fill (M19d):** `room` made its new buffer `Array<T>(r, fill)` and then
+copied the elements in, writing every byte twice (text +1.06%, regex +0.8% when StringBuilder moved onto Vec). It is the
+prelude-only `old.grown(r)` now - an exact collect (E39's) moving the first `old.Len()` elements, as `vacate` moves them,
+the room past them never filled: the prelude's claim that a Vec writes each slot past its count before reading it. Its
+one cost to the bootstrap: std uses an operation only this compiler knows, so the seed was regenerated. **Diagnostics
+(B11, M10):** a missing import is said once - the M10 error, never "unknown name" again at its other uses, in any body;
+and `Char` has no `PadStart`, said with how its character is padded (`($c).PadStart(n)`). The E11b hint already named
+the whole piece (`'$'c'.PadStart(3)'`), which then met that error.
+
+**Left.** A Map's Vec value first named by a local declared in the Map's scope (`v mut Vec<I64>&m = Vec<I64>()`, pushed
+to, then `Put`) is still not freed when replaced (195 MB over a million turns): the Vec is built in the Map's scope, not
+in a region, and freeing it would need the analysis to follow that local's referent into the place it is copied into -
+a new relaxation (aliasing through the methods called on the local must be ruled out), not justified by the rules as
+they stand. Made by a function and handed to `Put`, it is freed at once (`checks/fixtures/earlyfree/mapvec.olang`).
+
+**The fuzzers.** The differential fuzzer gained `FUZZ_WIDTHS=odd` (gen.olang: I9, I17 and I33 in place of I8, I16 and I32,
+atomics off), the reviewer's mode.
+
+**Measured** (callgrind instructions over the bench programs, `-target x86-64-v3`, ea0a6de's std against this one's):
+every row within 0.2% but those growth touches - text 25.78M -> 25.14M (-2.5%), regex 177.3M -> 173.1M (-2.4%), Vec
+push 19.28M -> 18.82M (-2.4%), Vec fields -2.3%, Vec walk -1.0%, dispatch over an enum 2.446M -> 2.358M (-3.6%) - and
+dispatch's direct row, 988,179 -> 1,002,992 (+1.5%). That row builds a `Vec<Sq>` by Push and reads it with direct calls;
+the whole difference is in `main`, into which the new `room` is inlined (+1.85 instructions an element at 100,000), while
+a `Vec<Sq>` push loop alone is faster with it (31.9M -> 28.0M at a million) - an inlining and layout effect of an
+intended change, left as it is.
+On the finished compiler: `fuzz free` 200 programs (1,528 scenarios run, 2,492 places freeing at once), `fuzz scope`
+200 programs (1,220 scenarios run), the differential fuzzer 80 programs of odd widths (2,400 cases) and 60 of the usual
+ones (1,800 cases), every global baked - no findings. Its first runs found the generator's own bugs, pre-existing and
+the same in both modes: a walk over a Vec's view (QZ2's) gave the view's name back after the walk though the view is
+declared in the enclosing block, so a later declaration reused it ("declared twice", 25 programs); and a shift count
+written `I64(u)` of a U64 the evaluator computes failed D17g's fit - the count is masked first now.
+
+**The seed** was written again (`make seed`): std uses `grown()`, which the old seed's compiler does not know, so the
+old seed could no longer build the current source; `make bootstrap` from the new one gives olang.2 == olang.3.
