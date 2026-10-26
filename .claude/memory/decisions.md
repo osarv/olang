@@ -1395,3 +1395,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   many programs write the same; std APIs never return one (errors are errors). In effect: not built.
 - QBI CLOSED 2026-10-26 (the user: "forget about result. It's closed"): no Result in std or the language; code that
   needs a value-or-error in one slot declares its own two-case enum.
+- QBA DECIDED 2026-10-26 (the user: "Zero values and definite init for any value including globals that is used later.
+  So a global on one line that is assigned through a conditional on the next is fine given that all paths assign it.
+  This is useful for conditional compilation and works since global scope is read top to bottom"): zero values stay;
+  a declaration without a value whose type has no zero value is definitely initialised - every path assigns it before
+  any read - for locals AND globals. A global may be declared without a value and assigned by top-level `if`s below it
+  (decided while compiling, B9), each build assigning it exactly once; that assignment is its initializer (B5a still
+  orders initializers by what they read). Reading taken (stated to the user): a type that has a zero value keeps it - a
+  read before any assignment gets the zero, no error. ASKED to confirm that reading. Queued as a language batch.
