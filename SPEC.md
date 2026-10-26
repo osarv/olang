@@ -6758,7 +6758,8 @@ tests to run in each: a test runs when it names a target (B7a) a word is, or who
 tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs. Words that name
 none of a file's tests fail that file's run, its line naming the words and, where one is near (an edit distance of
 about a third of the word), the nearest target or description: `f.olang: no test is named by 'Bax' - did you mean
-'Box'?`. Each file listed is judged so on its own.
+'Box'?`, and that file's run ends with the status 3. Over several files such a file is no failure where another listed
+file has a test the words name; where none has, the run fails, its last line `no listed file has a test named by 'Bax'`.
 
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the

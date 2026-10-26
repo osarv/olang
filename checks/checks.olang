@@ -1124,9 +1124,16 @@ fn assertloc(r mut report&) ? Failed {
     # B7a: words naming no test fail the run, the nearest target or description suggested
     ran = sh(dir, "\"$OLANG\" test targets.olang Bax > out.txt 2>&1")
     nearest := outOf(dir).Contains("targets.olang: no test is named by 'Bax' - did you mean 'Box'?")
-    try r.expect(ran == 1 and nearest, "a word naming no test, and the nearest", dir)
+    try r.expect(ran == 3 and nearest, "a word naming no test, and the nearest", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang nosuch > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
+    try r.expect(ran == 3 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
+    # B3a: over several files the words fail the run only where no listed file has a test they name
+    ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Box > out.txt 2>&1")
+    some := outOf(dir)
+    try r.expect(ran == 0 and some.Contains("ok - Box: holds a value\n") and
+                 some.Contains("others.olang: no test is named by 'Box'\n"), "a word one listed file's tests answer", dir)
+    ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Bax > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("no listed file has a test named by 'Bax'\n"), "a word no listed file answers", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)

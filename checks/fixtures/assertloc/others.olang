@@ -1,0 +1,3 @@
+# B3a: a file listed beside targets.olang whose tests a word may name none of
+Live mut I64 = 0
+test "another file's own" { assert Live == 0 }
