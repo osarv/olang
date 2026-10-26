@@ -1468,3 +1468,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   user objects.
 - DOC EXAMPLES CONFIRMED 2026-10-26 (the user: "No this is good"): tests naming a target are its examples; no
   `example` keyword.
+- QBK ASKED 2026-10-26 (docs/survey2.md, the second survey): strong recommendations 1 case narrowing as wide as null
+  narrowing (and/or, assert, loops - Rust let-chains); 2 a call statement whose callee has no effect is an error (S3
+  extended, replaces nodiscard/must_use); 3 unused imports are errors; 4 std/json key naming (Camel/Snake/Kebab -
+  lowercase external keys); 5 std walks (reverse, Windows, TakeWhile/SkipWhile, FlatMap, StepBy, Partition). Worth
+  considering 13 (unused locals, caller location default, `become` tail calls, enum bit-sets, derived ordering,
+  top-level assert, unreachable as a value, `.Case` shorthand, guaranteed comptime value, inferred cold paths, test
+  clock, persistent collections, select); tooling 4 (fuzzing in the test runner, reflection-driven property tests, test
+  filter by name, a profiling page). In effect: none built.
