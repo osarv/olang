@@ -25412,7 +25412,16 @@ allocation per walk.
 inside another loop - keeps an arena frame: the exit's destroy reads the handle through the loop's LCSSA phi, and
 CoroElide only counts destroys that use the coroutine's begin directly. It is still destroyed by the caller, with no
 drop registered (fewer instructions than before: 72M -> 60M on that shape). Making the exit block part of the loop
-would take a branch on an opaque value, not taken.
+would take a branch on an opaque value, not taken. A generator given a reference lands where that reference lives
+(D18b): given text from a block around the loop it is walked in, or constant text, its walk is not one of these.
+
+**Found, pre-existing, not fixed (a decision for D18b).** A generator given something in the program scope - constant
+text, `gn(n, "r")` - lands there, so each walk's frame stays until the program ends (148 bytes a walk: 591 MB over 4M
+calls of a function walking one, the compiler before this batch the same) and the destructors of what its body holds
+run only at exit (the scope fuzzer's new generator scenarios found it, as "a destructor did not run"; they now give
+their generators text made in the walker's blocks). The fix this batch's machinery makes cheap: a walk a `for` makes and
+finishes is dropped where the loop's block is left, its frame in that block, whatever it was given - nothing else can
+reach it - which moves those destructors earlier, a change to D18b that the evaluator would follow.
 
 Tests: checks/fixtures/generators/exits.olang (every exit, a comprehension, walks inside a coroutine, escaping walks
 beside them; built, `-debug -sanitize` and interpreted with dead regions kept, all alike and as before) with the count
