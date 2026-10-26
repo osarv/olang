@@ -503,8 +503,8 @@ null is reported where it is written. This is the cost of `null`: §8 continues 
 never outlives what it points at, and no longer guarantees that it points at anything.
 
 **T3.** An anonymous struct or enum shape (written inline rather than through a `type` declaration)
-is a valid type, but has no name and so can never be the target of struct-literal or enum-value
-construction syntax (both require a named type — see §5.6,
+is a valid type, but has no name and so can never be the target of constructor-call or enum-value
+construction syntax (both require a named type — see §9,
 §5.7). A variable declared with such a type can therefore never be given a value directly; this is
 legal but useless, and exists only because the grammar constructing a named type's body
 (`type Name struct { ... }`) is the same grammar as any other struct-body type expression.
@@ -571,7 +571,7 @@ as the one literal holding its value would. Where both operands of a same-type-r
 adapts to `U64` where it is not negative (`18446744073709551615 & 7` is `U64` arithmetic), and a negative one does not
 fit, which is an error. Beside an operand whose type cannot
 represent its value, a literal does not adapt: the two meet at the literal's own type (E6d). A non-literal value of a
-different numeric type requires an **explicit** conversion (§5.12 E26) unless T6b lets it flow.
+different numeric type requires an **explicit** conversion (§5.11 E26) unless T6b lets it flow.
 
 **T6b (numbers flow toward their base).** A number flows implicitly into a type that holds every value of its own,
 so nothing is lost: into a wider type of the same signedness (`I8` → `I16` → `I32` → `I64`, `U8` → `U16` → `U32` →
@@ -606,7 +606,7 @@ is an ordinary expression of its literals' own types, computed as it is written 
 
 **T7.** `Array<T>` is the array type: a sequence of `T` values whose length is decided when the array is built and
 fixed for that array thereafter. The length is **never part of the type** — `Array<I32>` is every array of `I32`, of
-any length — and is read with `....Len()` (§5.9). Where the program fixes a length while compiling, the compiler knows
+any length — and is read with `....Len()` (§5.8). Where the program fixes a length while compiling, the compiler knows
 it and uses it (T7c), and storage may then be laid out with that length (T7d), but no type is ever written with one.
 `Array` is a built-in name taking exactly one type argument; declaring a type named `Array` is a compile-time error.
 The element type may carry a bare reference marker (`Array<Point&>`, an array of references to `Point`), which belongs
@@ -710,14 +710,14 @@ implicitly. An element length is part of its storage's layout, so a local whose 
 disagree is a compile-time error, not a length kept at run time.
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
-each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative `n`
+each element `v` (§5.4 E13a), or by an array literal (§5.6 E19). `n` is any integer expression; a negative `n`
 aborts the program (D14b), and a negative `n` evaluable at compile time is a compile-time error. The fill is **one
 value copied into every element**: an element type whose value holds a reference - a `List` or `Map` (a handle to its
 storage, §11), a struct holding a `&` field - gives every element the same reference, so `Array<Map<K, V>>(n, Map<K,
 V>())` is `n` names for one map; elements meant to be separate are built one by one. Whether the array's length is known while
 compiling is T7c's: `Array<T>(3)` is fixed storage (T7d), `Array<T>(n)` with `n` a parameter is not.
 
-**T10.** Every array has a length, queryable at run time via `....Len()` (§5.9); where it is known while
+**T10.** Every array has a length, queryable at run time via `....Len()` (§5.8); where it is known while
 compiling (T7c) `Len()` is a constant and an index out of range is a compile-time error.
 
 **T11.** **Whether an array is reference-shaped is decided by its reference marker (T24) and by nothing
@@ -800,7 +800,7 @@ memberwise, a nested enum through this same rule. Two cases that happen to share
 still distinct (an enum is a *disjoint* union), because the tag is compared first.
 
 **T17b.** An enum value is created by **naming a case**, and by nothing else: `Type.Case` for a bare tag
-and `Type.Case(args)` for one carrying a payload (§5.8 E22). The arguments are checked against the case's
+and `Type.Case(args)` for one carrying a payload (§5.7 E22). The arguments are checked against the case's
 declared parameters exactly as a call's arguments are checked against its parameters. An enum type
 declares **no constructor** (§9 C1) — selecting a case is what an ordinary function does, fallibly or not,
 and a private case name (M6a) already restricts who may construct one, at finer grain than a constructor
@@ -1234,7 +1234,7 @@ declaring module, never by shape; only what has no name is identified by its str
 **T29.** A **declared** type is nominal, including one whose underlying shape is a primitive (T4).
 `type Meters I32` and `type Feet I32` are different types, and both differ from `I32`: a value of one
 is not assignable to the other, and only an explicit conversion crosses between them. `Meters(x)` converts
-into such a type exactly as `I32(x)` converts out of it (§5.12 E26); where the two share a representation
+into such a type exactly as `I32(x)` converts out of it (§5.11 E26); where the two share a representation
 the conversion moves nothing. An undeclared primitive has no owning module and no name, so two occurrences
 of `I32` remain the same type.
 
@@ -2134,7 +2134,7 @@ program's own scope, which is never closed (§8 O1b).
 
 **D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
 count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
-out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`. A length of `0` is valid and produces a genuinely empty array.
+out-of-range slice bound produces (§5.5 E16b), with the message `array length out of range`. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
@@ -2275,7 +2275,7 @@ global variables, and import aliases (§4.5) alike. There is no separate export 
 or visibility modifier.
 
 **M6a.** The rule reaches *inside* a declaration as well as across the top level: a **struct member**
-(§6.6), an **error word** (§7.6) and a **enum case** (§5.8) are each public or private by their own first character,
+(§6.6), an **error word** (§7.6) and a **enum case** (§5.7) are each public or private by their own first character,
 independently of the type that declares them. An exported type may therefore keep some of its members
 to itself — `t.Id` crosses the module boundary where `t.secret` does not, and `catch Lib.Err.Quiet`
 names a word that `catch Lib.Err.quiet` may not. Privacy is about the boundary only: inside the
@@ -2665,10 +2665,10 @@ an error type, or a global variable: type references (§2.9), call targets
 (§5.4), the `error` statement
 (§7), `catch` clauses
 (§7), a bare variable read or write
-(§5, §6.2), and struct and
-array literal construction (§5.6, §5.7).
+(§5, §6.2), and
+array literal construction (§5.6).
 
-**M12.** An enum value (`Type.Case`, §5.8) is alias-qualified like any other cross-module name: the
+**M12.** An enum value (`Type.Case`, §5.7) is alias-qualified like any other cross-module name: the
 identifiers before the trailing case name are an alias chain (M8) followed by the enum type's own name, so
 `Lib.Dir.North` names a word of an imported type to any chain depth. Both the type and the word are subject
 to M6/M6a — a private type is unreachable, and a private word is unnameable even where its type is public. A case
@@ -2799,8 +2799,8 @@ comparisons (E30's chains among them). Written with spaces and an empty `()` aft
 (`x.Narrow <I32> ()`), it is a compile-time error naming the touching form.
 
 **E4.** `literal ::= BOOL_LIT | NULL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
-**literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
-when it is one of these token literals, an array literal (§5.7), or a
+**literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.6) exactly
+when it is one of these token literals, an array literal (§5.6), or a
 numeric (`INT_LIT`/`FLOAT_LIT`) token literal negated by a single leading unary `-` (§5.2 E11) — the
 sign folds into the literal's own value at that point (a negated `U64` literal is the `I64` it then is, so
 `-9223372036854775808` is `I64`'s minimum, and one below that minimum is an error), the same way T8's compile-time-constant array
@@ -2869,7 +2869,7 @@ exception (E7a). The conditional `a if c else b` (E28) binds looser than every b
 **E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
 type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
 Mixing distinct numeric types that do not meet - by T6b, or with a literal by E6d - is a compile-time error;
-see §5.12 E26 for the explicit conversion this requires instead.
+see §5.11 E26 for the explicit conversion this requires instead.
 
 **E6a.** Integer `/` and `%` have **undefined behaviour** for two operand pairs, and neither is checked
 at run time:
@@ -3362,7 +3362,7 @@ slices, cascading through every caller.
 **E17.** `base . IDEN` requires `base` to be a struct type with a field named `IDEN`; its result
 type is that field's declared type.
 
-### 5.7 Array literals
+### 5.6 Array literals
 
 **E19.** `array-literal ::= elem-type "[" list(arr-item) "]"` (L18a), where
 `elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ] | "any" type-name [ type-args ]
@@ -3391,7 +3391,7 @@ variable (G9), a parameter (an instance of its length, G29) - and storage it is 
 is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<I32>&[r0, r1]`, or of
 arrays held in place, each item a literal of its own and all of one length (`Array<F32>[F32[1, 2], F32[3, 4]]`).
 
-### 5.8 Enum values
+### 5.7 Enum values
 
 **E22.** `enum-value ::= alias-chain IDEN "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]` (§4.4 M8), where the
 argument list is present exactly when the named case carries a payload (T17a), and the identifier before the final
@@ -3399,7 +3399,7 @@ argument list is present exactly when the named case carries a payload (T17a), a
 `IDEN` is one of that type's declared cases (T17). Its type is the named enum type. Across a module
 boundary both the type and the case must be public (M6, M6a).
 
-### 5.9 An array's length
+### 5.8 An array's length
 
 **E23.** `arr.Len()` — every array type, declared ones like `String` included, has a method `Len()` giving
 its length as an `I64`. It is supplied by the compiler rather than declared, since the length lives in the
@@ -3407,7 +3407,7 @@ array's representation; in every other respect it is a method (§4.4 M19). It is
 without `extends` (T29f), and a declared array type may not declare a `Len` of its own. An `I64` converts to a narrower
 integer type only by an explicit conversion (`I32(a.Len())`, T6).
 
-### 5.10 `try` as an expression
+### 5.9 `try` as an expression
 
 **E24.** `try-expr ::= "try" expr { catch-clause }`: a `try` covers the **whole expression after it** - up to that
 expression's end, or the first `catch` - and that expression holds something that can fail as written (R8). Every
@@ -3420,7 +3420,7 @@ what is parenthesized: `2 * (try f()) + 1`. Parentheses directly around the whol
 type is expected; its full semantics (error propagation, signature requirements, and catch clauses in value position)
 are specified in §7.
 
-### 5.11 The scope argument
+### 5.10 The scope argument
 
 **E25.** `scope-arg ::= "&" ( IDEN | "return" )`, written between a call's target name and its opening `(` — at most
 one:
@@ -3458,7 +3458,7 @@ holding no references (by value, or a constructor's instance, which is copied wh
 a parameter (O13) — is a compile-time error, and so is one naming no local or parameter where it is written (a
 parameter's default included: a default has no locals, D8a).
 
-### 5.12 Explicit numeric conversion
+### 5.11 Explicit numeric conversion
 
 **E26.** `TypeName(x)`, where `TypeName` is one of the numeric primitive types (T4/T5) and `x` is a single expression of any numeric type, converts
 `x`'s *value* to `TypeName` and produces a value of that type - the explicit counterpart to T6's
@@ -3495,7 +3495,7 @@ value truncated toward zero is out of an integer type's range, a finite value ma
 and with `NumberError.INVALID` for a NaN or an infinity made an integer; otherwise it gives `T(x)`. It is ordinary
 olang (written over `T(x)` and E36's limits), so the compile-time evaluator computes it as the program does.
 
-### 5.11 Comprehensions
+### 5.12 Comprehensions
 
 **E27.** `comprehension ::= elem-type "[" expr "for" IDEN [ "," IDEN ] "in" ( binary | range ) [ "if" binary ] "]"` is
 a new array holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk, in order — only those for
@@ -3521,7 +3521,7 @@ The source after `in` and the condition after `if` are each a `binary`, not an `
 comprehension, so a conditional (E28) in either position is written in parentheses. The element may be one freely:
 `I32[x if x > 0 else 0 for x in a]`.
 
-### 5.12 Conditional expressions
+### 5.13 Conditional expressions
 
 **E28.** `binary "if" binary "else" expr` is a conditional: the condition after `if` (a `Bool`) is evaluated first,
 then exactly one of the two values - the first when it is `true`, the one after `else` otherwise - and that is the
@@ -3558,7 +3558,7 @@ is judged as though it were stored alone, so `b.last = x if c else "z"` is refus
 scope variable (O25e), an array literal's element (O25c), a global (O1b), a local's exact scope (O25) - it is refused.
 A `match` giving values (S12b) is held the same way.
 
-### 5.13 Membership
+### 5.14 Membership
 
 **E29.** `x in c` and `x not in c` (one operator spelled with two words, at the ordering comparisons' precedence)
 ask whether `x` is in the collection `c`. When `x` has the collection's own type (references aside - or is text
@@ -3575,7 +3575,7 @@ Where a `for` declares its names (`for x in c`, a comprehension's `for x in c`, 
 never means membership: since the names are new (D3/D3a), `for x in c` with `x` already declared is a compile-time
 error, not a loop while `x` is in `c`. That loop is written `for { if x not in c { break } ... }`.
 
-### 5.14 Comparison chains
+### 5.15 Comparison chains
 
 **E30.** A run of the ordering comparisons `<`, `<=`, `>`, `>=` with no parentheses between them, `a op1 b op2 c
 ...`, is a chain: `a op1 b and b op2 c and ...`, each operand evaluated once, left to right, and evaluation stopping at
@@ -3588,7 +3588,7 @@ condition is evaluated), so it is evaluated once, and adapts to the nearest oper
 neighbour first. `==` and `!=` do not chain:
 `a == b == c` is `(a == b) == c`, a comparison of `Bool`s.
 
-### 5.15 Operators declared by types
+### 5.16 Operators declared by types
 
 **E31.** An operator written in the program calls a **method named for it** on its left operand's type, when that
 type declares one:
@@ -3740,7 +3740,7 @@ is added to: `x[i]++` is `x[i] += 1` and `x[i]--` is `x[i] -= 1` (`x` and `i` ev
 `==` and `!=` are a type's `Eq` (E10a) and `$` its `Str` (E11c); `and`, `or`, `not` (they short-circuit, E7), `=`,
 `.`, `try` and `match` are never declared.
 
-### 5.16 `is` and `as`
+### 5.17 `is` and `as`
 
 **E32.** A **case written** as an operand of `==` or `!=` - `Type.Case`, or `Type.Case(...)` with a part for each of its
 payload's fields - is a **test** of the case the other operand holds, an enum value or a reference to one, read through
@@ -3773,7 +3773,7 @@ w := raw[off:off + 784]       # one check here; w's length, 784, is known while 
 s := Dot(w[0:4], x)           # Dot at length 4 (G29), if it takes its arrays by value
 ```
 
-### 5.17 A float's bits
+### 5.18 A float's bits
 
 **E33.** `x.Bits()` — every float type has a method `Bits()` giving the IEEE 754 bit pattern of `x`'s value as the
 unsigned integer type of the same width: an `F16` or a `BF16` gives a `U16`, an `F32` a `U32`, an `F64` a `U64`. The
@@ -3934,7 +3934,7 @@ c := a.LanesLess(b).Select(a, b)        # the lesser of each pair
 ok := (x - y).LanesLess(eps).Every()
 ```
 
-### 5.18 `!`
+### 5.23 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles
 what can fail in the postfix expression before it **as written**, exactly what a `try` there would cover (R8: every
@@ -3987,7 +3987,7 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 `yield-stmnt` in §6.10.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
-either a **call** (§5.1 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
+either a **call** (§5.4 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
 one of the four increment/decrement forms (`++x`, `--x`, `x++`, `x--`, E1), which are expressions by
 grammar but reach statement position only here. Its value, if any, is discarded.
 
@@ -4463,7 +4463,7 @@ deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unrea
   aborts in C — leaving a core dump and skipping the normal exit path, which is what distinguishes a
   broken guarantee from an orderly `os.Exit` (B5b).
 
-**S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
+**S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.5 E16b), an
 array length out of range (§3.5 D14b), lanes of different lengths (E39), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
 `FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
@@ -4708,7 +4708,7 @@ mistake, cannot stop the others, and forbids a correct bounded channel on the wa
 the force of an error.
 
 **So `spawn` checks nothing about what tasks reach.** A program that spawns is responsible for its own
-data races, on the same footing as `extern fn` (§11 X1a) and out-of-range indexing (§5.9 E16e). What
+data races, on the same footing as `extern fn` (§11 X1a) and out-of-range indexing (§5.5 E16e). What
 remains guaranteed is structural rather than checked, and is stated in P1, P1b and P2: every task is
 joined before its `join` block is left, by whichever path leaves it, and a task's arguments cannot
 outlive that block.
@@ -4885,7 +4885,7 @@ worker runs which task is unspecified.
 
 **P8b.** Two accesses to the same memory that are unordered by P8, where at least one is a write, are a
 **data race**, and a program containing one has **undefined behaviour**. This is the same position §11 X1a
-takes on a wrong `extern` prototype and §5.9 E16e takes on an out-of-range index: the language does not
+takes on a wrong `extern` prototype and §5.5 E16e takes on an out-of-range index: the language does not
 define what such a program does, and no guarantee stated anywhere else applies to it.
 
 There is no exception for any type or size. Only P9's atomic methods are atomic, so **no** other access is —
@@ -5091,7 +5091,7 @@ terms: whatever can fail is written with `try`, and nothing else is. Where nothi
 through - a function with no `?`, a lambda whose expected type (D16a) writes no errors - its clauses must take all of it, except in a `test`
 body, where what is let through fails the test (S16).
 
-**R9.** As an **expression** (`try-expr`, §5.1 E24, only where a value is expected): evaluates the
+**R9.** As an **expression** (`try-expr`, §5.9 E24, only where a value is expected): evaluates the
 operand; if it produced its success value, the `try` expression's value is that; if it produced an
 error, the *enclosing function's* execution ends immediately, re-producing that same error as the
 enclosing function's own result (re-encoded under the enclosing function's own `error-list`
@@ -6982,7 +6982,7 @@ ordinary function's body would otherwise begin. One written `noreturn` (`extern 
 `noreturn` function (D8e), taken at its word as the rest of the prototype is (X1a): a foreign function that returns
 after declaring `noreturn` is undefined behaviour.
 
-**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.9 E16e) and a data race
+**X1a (memory safety).** `extern fn` is, with an out-of-range array index (§5.5 E16e) and a data race
 (§6.8 P8b), one of the places in the language where memory safety rests on something the compiler does not
 check. A declaration states a prototype, and the compiler takes it at its
 word: it verifies nothing about the function that actually links, its real signature, its calling
@@ -7437,7 +7437,7 @@ different types, the call is a compile-time error.
 that matching while any other argument binds the same variable: the variable is determined by the other
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
-literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
+literal operands (§5.2). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
 `Pick(1, 2.5)` at `F64`. Where that widest type does not meet the variable's constraint (G19), the variable is
 bound instead to the first type of `F64`, `I64`, `U64`, `F32`, `I32`, `U32`, `F16`, `BF16`, `I16`, `U16`, `I8`, `U8` -
 widest first, a float before an integer of its width - that meets the constraint and that every one of those literals
