@@ -1,0 +1,11 @@
+# B19a: a property with a planted bug - every element below 50 - which prop.Check finds, shrinks to its smallest
+# failing input and saves
+import "std/prop"
+
+type Pt struct(x I64, y I64) [x >= 0] { x, y }
+
+test "every element below 50" {
+    prop.Check(fn(xs Array<I64>&, p Pt) {
+        for x in xs: assert x < 50, "an element of 50 or more"
+    })
+}
