@@ -1331,3 +1331,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `import z "zlib.h" link "z"`; `extern link "golib" { fn ... type Handle }` for a header-less library, its
   declarations in one binding module that others import; `extern { ... }` without link for what is already linked
   (the runtime's own functions); the standalone `link` declaration removed. ASKED (confirm).
+- QBE ANSWERED 2026-10-26 (the user: "Yes this is the form"): C headers imported as modules, `import z "zlib.h" link
+  "z"`; `extern link "golib" { fn ... type Handle }` for a header-less library (one binding module); `extern { }`
+  without link for what is already linked; libc headers imported with no link; standalone `link` removed; `import
+  alias "path"` kept; variadic calls, expression macros, `.c` files compiled by the bundled clang under LTO, static
+  inline header functions compiled as C. Queued as the C-imports batch after bulk review 2.
+- QBF ASKED 2026-10-26 (the user: "why use libc and not just POSIX ... Can't we make our own malloc and time stuff?"):
+  answered - on Linux POSIX *is* libc's functions; libc-free means raw syscalls (Go on Linux). olang's allocator is
+  already its own (arena on mmap). The hard parts: threads (clone + TLS), the vDSO for clocks, signals, DNS/NSS, libm,
+  and dlopen - and any C library imported needs libc anyway. Stable syscalls exist only on Linux (Go went back to libc
+  on macOS/OpenBSD). Recommended: keep libc on hosted targets now; keep the runtime's libc use behind one layer so a
+  libc-free Linux target (static binaries, freestanding later) can be added; musl for static binaries meanwhile. In
+  effect: libc.
