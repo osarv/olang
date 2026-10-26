@@ -1275,3 +1275,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   to bitcode and links it under LTO (C inlined into olang); static inline header functions compiled the same way;
   bindgen kept for writing declarations down. Reverses the old "no @cImport" call, whose reason (an embedded C
   frontend is disproportionate) went once clang ships with the compiler. In effect: bindgen only.
+- QBC ANSWERED 2026-10-26 (the user: "we should just optimize our own F32 kernels then instead of depending on blas
+  too"): no BLAS. Queued: a kernel-tuning batch for std/linalg's F32 (and F64) GEMM to close the 1.3-1.9x gap to OpenBLAS.
+- QBD expanded 2026-10-26 (the user: "either matrix just denotes datasize and batchsize, or all dimensional sizes ...
+  can you lay this question out more"): laid out (a) Matrix = batch x features only, layers/ops know the rest, vs (b)
+  Tensor with every dimension, layers know none; recommended (b), with 2-D views as the kernels' internal form.
+- QBE follow-ups 2026-10-26: the user asked why variadics can't be arrays, why macros are bad, whether extern/link go,
+  and whether this is "a scaled down version of C". Answered: variadic calls can be supported (typed extra arguments);
+  constant and expression macros translate, untyped text ones cannot; `link` stays (a header does not say its library),
+  `extern fn` stays as the low-level form few programs write; whole .c files compile as full C, only the boundary is
+  restricted. Still ASKED.
