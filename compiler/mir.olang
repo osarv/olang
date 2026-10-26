@@ -306,6 +306,7 @@ type ExitKind enum {
     Abort          # S16c: "aborted"
     Unreachable    # S16d: "unreachable reached" - a value match no clause selects too (S12b); msg its message
     NullReached    # T2c, E35: "null reached" - "x!" on a null reference
+    NullError      # T20, R3a: "raised a null error" - "error e" with e holding no error
     Assert         # S18: "assertion failed"
     SliceBounds    # E16b: "slice bounds out of range"
     ArrayLength    # D14b: "array length out of range"
@@ -324,6 +325,7 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.Abort => "aborted"
         case ExitKind.Unreachable => "unreachable reached"
         case ExitKind.NullReached => "null reached"
+        case ExitKind.NullError => "raised a null error"
         case ExitKind.Assert => "assertion failed"
         case ExitKind.SliceBounds => "slice bounds out of range"
         case ExitKind.ArrayLength => "array length out of range"

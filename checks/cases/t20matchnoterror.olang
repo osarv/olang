@@ -1,0 +1,10 @@
+# check: fail error[T20]: the cases name errors, and 'n' is I64, not an error value
+# T20: the cases of a match on errors are matched against an error value
+type P error { A }
+fn main() {
+    n I64 = 1
+    match n {
+        case P.A { }
+        nomatch { }
+    }
+}

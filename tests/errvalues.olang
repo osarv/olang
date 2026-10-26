@@ -1,0 +1,155 @@
+# T20, R11b, R3a: errors as values - an error type or a named set as the type of a parameter, a field, a local, a global,
+# an array's element and a type argument; null its zero value, "no error"; compared, narrowed, matched, rendered, hashed
+# and raised. Each computation is done twice - as a global the evaluator bakes and an assert it decides while compiling
+# (K2, S18c), and on an input the evaluator cannot see (Live, a mutable global), at run time - so the two must agree.
+
+import "std/os"
+
+type ParseErr error { EMPTY, BAD }
+type NetErr error {
+    DOWN
+    SLOW
+}
+type LoadErr error os.Error, ParseErr
+type AnyErr error LoadErr, NetErr
+
+Live mut I64 = 0
+
+fn load(n I64) I64 ? LoadErr {
+    if n == 0 { error ParseErr.EMPTY }
+    if n == 1 { error ParseErr.BAD }
+    if n == 2 { error os.Error.DENIED }
+    return n * 10
+}
+
+# what each of a run's items failed with, in input order - null for one that did not
+type Outcome struct(n I64, err LoadErr) {
+    n
+    err
+}
+
+fn outcomes(from I64, count I64) Vec<Outcome> {
+    out := Vec<Outcome>()
+    for i in range from, from + count {
+        o := Outcome(i, null)
+        v := try load(i) catch e {
+            o.err = e
+        } default -1
+        o.n = v
+        out.Push(o)
+    }
+    return out
+}
+
+# an error value passed and compared with an error type, a set, a word and another value
+fn isParse(e LoadErr) Bool { return e == ParseErr }
+fn same(a LoadErr, b AnyErr) Bool { return a == b }
+
+# a held error raised again, held to the set what a test leaves of it
+fn reraised(e LoadErr) I64 ? ParseErr {
+    if e is null { return 0 }
+    if e != ParseErr { return 1 }
+    error e
+}
+
+# a match on an error value - null among its cases - giving a value
+fn kind(e AnyErr) I64 {
+    return match e {
+        case null => 0
+        case ParseErr.EMPTY => 1
+        case ParseErr => 2
+        case os.Error => 3
+        case NetErr => 4
+    }
+}
+
+fn rendered(from I64, count I64) String {
+    b := StringBuilder()
+    for o in outcomes(from, count) { b.Push($o " ") }
+    return b.ToString()
+}
+
+fn kinds(from I64, count I64) Vec<I64> {
+    out := Vec<I64>()
+    for o in outcomes(from, count) { out.Push(kind(o.err)) }
+    return out
+}
+
+# a Map keyed by an error value, the compiler's Hash for it (E10b)
+fn counted(from I64, count I64) I64 {
+    m Map<LoadErr, I64>
+    for o in outcomes(from, count) {
+        if o.err is null { continue }
+        m.Put(o.err, (try m.Get(o.err) catch default 0) + 1)
+    }
+    return m.Len()
+}
+
+# a lambda capturing an error value, and an array of them
+fn captured(e LoadErr) String {
+    f := fn() String { return "got " $e }
+    return f()
+}
+
+fn firstBad(from I64) I64 {
+    es := LoadErr[ParseErr.EMPTY, null, os.Error.DENIED]
+    k I64 = 0
+    for e in es {
+        if e is not null and e != ParseErr.EMPTY { return k }
+        k++
+    }
+    return -1 + from
+}
+
+BakedRendered := rendered(0, 4)
+BakedKinds := kinds(0, 4)
+BakedCount := counted(0, 5)
+BakedCaptured := captured(ParseErr.BAD)
+BakedFirstBad := firstBad(0)
+BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.DENIED) catch default -1
+                     try reraised(ParseErr.BAD) catch ParseErr.BAD default 7 catch default -1]
+BakedSame := same(ParseErr.BAD, ParseErr.BAD) and not same(ParseErr.BAD, NetErr.DOWN) and isParse(ParseErr.EMPTY)
+
+test "an error value is stored in a field, a local and a Vec, null where nothing failed" {
+    want := "Outcome(-1, ParseErr.EMPTY) Outcome(-1, ParseErr.BAD) Outcome(-1, os.Error.DENIED) Outcome(30, null) "
+    assert BakedRendered == want
+    assert rendered(Live, 4) == want
+    last LoadErr
+    assert last is null
+    assert $last == "null"
+    for o in outcomes(Live, 3) { last = o.err }
+    assert last is not null and last == os.Error.DENIED
+}
+
+test "an error value is matched, null among the cases" {
+    assert BakedKinds.Len() == 4 and BakedKinds[0] == 1 and BakedKinds[1] == 2 and BakedKinds[2] == 3 and BakedKinds[3] == 0
+    assert kinds(Live, 4) == BakedKinds
+    assert kind(NetErr.SLOW) == 4 and kind(ParseErr.EMPTY) == 1
+}
+
+test "an error value is compared with words, types, sets and other values, passed and captured" {
+    assert BakedSame
+    assert same(ParseErr.BAD, ParseErr.BAD) and not same(os.Error.DENIED, NetErr.DOWN)
+    assert BakedCaptured == "got ParseErr.BAD"
+    assert captured(ParseErr.EMPTY) == "got ParseErr.EMPTY"
+    assert BakedFirstBad == 2 and firstBad(Live) == 2
+}
+
+test "an error value is a Map key, and is raised again" {
+    assert BakedCount == 3 and counted(Live, 5) == 3
+    assert BakedReraised == I64[0, 1, 7]
+    assert (try reraised(ParseErr.EMPTY) catch ParseErr e default (1 if e == ParseErr.EMPTY else 2)) == 1
+}
+
+test "a caught error is held past its clause" {
+    held AnyErr
+    try load(Live + 1) catch e { held = e }
+    assert held == ParseErr.BAD and $held == "ParseErr.BAD"
+    held = NetErr.DOWN
+    assert held != ParseErr.BAD
+    xs := Vec<AnyErr>()
+    for i in range 3 {
+        try load(Live + i) catch e { xs.Push(e) }
+    }
+    assert xs.Len() == 3 and xs[2] == os.Error.DENIED
+}

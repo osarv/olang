@@ -25512,3 +25512,55 @@ Tests: checks/fixtures/generators/exits.olang (every exit, a comprehension, walk
 beside them; built, `-debug -sanitize` and interpreted with dead regions kept, all alike and as before) with the count
 of walk forms in its IR, exitst.olang (a failed check leaving a walk in a test closes its scopes once), and a test of
 a return out of two loops and an error leaving in tests/generators.olang.
+
+## Errors as values (T20, R3a, R11b, E10b, E10c, E11a, S13a, D13, 2026-10-26)
+
+The user chose option (b) on 2026-10-26: an error type is a value's type wherever a value goes, and only a function's
+result stays `?`'s ("only allow errors in the right slot"). Until now an error had a name only inside the catch clause
+that took it (R11b's clause-only names, 2026-10-25), and every other use - assigning it, passing it, a field of it, an
+array of them - was refused with a message naming `$e`.
+
+**What it is.** An error type or a named set (T19a) types a parameter, a local, a global, a field, an element or a
+type argument. Its values are its words written qualified, `null` for "no error", and a catch clause's name. A set of
+several types stays a named set there: an unnamed list is written only after a signature's `?` and as catch items,
+since inside a list of type arguments it could not be told from the list's own commas. Writing one as a result is an
+error naming `?`, because a function that fails says so in its signature; a stored error is data, never a second way
+of failing.
+
+**Representation (mine).** A value is the 32-bit code of the error-union convention, with 0 for null, recoded to its
+set's canonical order: entries sorted by the declaring module's identity, then the type's name. That is the order the
+checker already used for a clause's set, so a value read from a catch clause needs no recoding. The checker interns
+`Kind.ErrVal` over the flattened entries. A full-mask word entry is normalized to its type, so `LoadErr` written
+directly, the same set reached through a flattened member, and a clause's set are one type. A named set keeps its name
+for spelling (`ErrValName`). A value going where another set is expected is `mir.Rvalue.Recode`, which emit, the
+evaluator and `interpret` already used for `error e` across function boundaries. So nothing in the back end or the
+evaluator changed but rendering (`renderErr`, a chain of code tests building the qualified word) and a new exit kind
+for raising null.
+
+**Decided (mine).**
+1. Null is the zero value and is tested with `e is null`, as references are (E10c). `e == null` also works, and is
+   the comparison-with-null form T20's list allows. That is consistent with how a word is compared, and distinct from
+   E10c's rule for references, where `x == null` is an error naming `is`. Error values are not references; `==` on
+   them compares codes, so `== null` is the code-0 test it reads as.
+2. Raising null aborts as a failed check does (`FILE:LINE: raised a null error`). That costs one compare, on the raise
+   path only, never on an ordinary path. It is no error of the function's set: a function's set lists what it can
+   fail with, and "no error" is not one of those.
+3. A catch clause's name is a value but is never assigned (`CaughtAssigned`, naming `x := e`). The name stands for
+   what the clause took, and narrowing on it needs it unchanged. A local of its own holds a value that changes.
+4. A wider set's value fits a narrower one only where narrowing has shown it can (`ErrValueNotHeld`, naming the test).
+   The other way, narrower into wider, is implicit (a recode, nothing lost).
+5. Error values have no ordering, no arithmetic and no conversion to or from a number: the code's numbering is an
+   implementation detail of a set.
+6. `case null` is an error where the value is known non-null, decided structurally (a catch name, a word written, a
+   value a test has shown non-null), never by the evaluator. That is the user's rule from QAN.
+
+**Migrated.** R11b's "not a value" errors (`ArrayOfErrors`, `ErrorTypeAsValue`, `ErrorWordAsValue`, `CaughtNotAValue`,
+`CaughtCaptured`) are gone. Their cases (r11bcaptured, r11bcapturedcmp, r11bcomparecaught, r11bnotavalue,
+r11bpassed, t20errorparam) are now run cases showing the same programs working. New fail cases cover each new message:
+t20errorresult, r11bcaughtassigned, t20comparednoterror, t20errvaluenoop, t20matchnoterror, t20nevernull and
+t20valuenotheld. The assertloc scenario raises a held null, built and interpreted.
+
+**Tests.** tests/errvalues.olang does each computation twice: as a baked global plus an assert the evaluator decides
+while compiling, and at run time on an input it cannot see (`Live`). The computations are fields, a `Vec`, a
+`Map<LoadErr, I64>`, a lambda capture, an array literal of errors with null, a `match` with `case null`, comparisons
+across sets, and re-raising narrowed values. They pass built, under `-debug -sanitize` and interpreted.

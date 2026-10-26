@@ -1,7 +1,11 @@
-# check: fail error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
-# R11b: the error a clause took is no value - it is not held, assigned, passed or stored
+# check: run
+# R11b, T20: the error a clause took is a value - held in a local, which keeps it past the clause
 type P error { A }
 fn f() ? P { error P.A }
 fn main() {
-    try f() catch e { y := e }
+    y P
+    try f() catch e { y = e }
+    assert y == P.A
+    z := y
+    assert z is not null
 }

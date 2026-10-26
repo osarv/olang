@@ -1,4 +1,4 @@
-# check: fail error[R11b]: 'e' is compared with an error word, an error type or a named set
+# check: fail error[T20]: 'e' is compared with an error word, an error type, a named set or another error value
 # R11b: a caught error is no number
 type P error { A }
 fn f() ? P { error P.A }

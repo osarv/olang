@@ -1,4 +1,4 @@
-# check: fail error[R11b]: a case of a caught error names an error word, an error type or a named set
+# check: fail error[R11b]: a case of an error value names an error word, an error type, a named set or null
 # R11b: a case of a caught error is no value pattern
 type P error { A }
 fn f() ? P { error P.A }

@@ -690,18 +690,28 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a word declared twice and a member naming nothing are errors (the last two, and `? Pt` with `Pt` a struct, and an
   unknown error type in a function type or a lambda's set, were never reported - fixed). **`catch os.Error e { }`,
   `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
-  caught by the rule that a clause's name must be used) name the error **for the clause alone** (its block and
-  defaults): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
+  caught by the rule that a clause's name must be used) name the error the clause took (an error value, below, never null and never assigned): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
   something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
   combine), `match e` (read as the if-chain it is; exhaustive or `nomatch`/`case _`; a value form with `=>`), `error e`
-  (R3a, held to the function's set by what narrowing leaves). Nothing else - assigning, `:=`, passing, storing,
-  capturing, returning, `try e` - each an error naming `$e`/`error e`. **Not built (the user's open question):** errors
-  as storable values, a zero value for errors, Result. Representation (mine): the name is a hidden `I32` local holding
+  (R3a, held to the function's set by what narrowing leaves). Representation (mine): the name is a hidden `I32` local holding
   the code recoded to the clause's own set (canonical order), assigned where the clause is entered (lowering's
   `toClause`), so the evaluator and `interpret` need nothing new; `error e` is `typed.Stmt.Reraise`, recoded to the
   body's set. Decided (mine): a spawned call's clause names no error (it is a lambda on the task's thread - an error
   naming it); a value `match e` gives every value with `=>`; a case after the cases cover everything is an error.
   `tools/errortype_migrate.olang` (text, idempotent, last of `olang fix`'s text tools) rewrites old declarations.
+- **Errors as values (T20, R3a, R11b, 2026-10-26, the user's option (b)).** An error type or a named set is a value's
+  type everywhere but a function's result (alone, among several, or in a function type - T20's error names `?`):
+  parameters, fields, locals, globals, elements, type arguments (`List<LoadErr>`, `Map<net.Error, I64>`); no unnamed
+  lists there. Values: words written, `null` (no error, the zero value), a catch clause's name (copied where it goes).
+  `==`/`!=` with words, types, sets, `null` and other values (each side something the other can be), narrowing (S8d,
+  null S8e), `match` with `case null` (an error where the value is known non-null: a catch name, a word, a tested
+  value), `$e` qualified as errors print, `null` for none, a supplied Hash, `error e` raising a held value - held to the
+  function's set by what narrowing leaves; raising null stops the program as a failed check, `FILE:LINE: raised a null
+  error`. No arithmetic, ordering or number conversion. A value of a wider set fits a narrower one only after narrowing.
+  Representation (mine): the I32 code under its set's canonical order (module identity, then name), 0 for null - an
+  interned `Kind.ErrVal` type over the set's entries; going between sets is `Rvalue.Recode`, which emit, the evaluator
+  and `interpret` already had. `e is null` is the null test (E10c), as for references. R11b's "storing refused" rules
+  went, and the cases pinning them became run cases.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`

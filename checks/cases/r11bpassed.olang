@@ -1,8 +1,8 @@
-# check: fail error[R11b]: 'e' is the error this clause took
-# R11b: the error a clause took is not passed to a function
+# check: run
+# R11b, T20: the error a clause took is passed to a function whose parameter is of its type
 type P error { A }
 fn f() ? P { error P.A }
-fn g(x I64) { }
+fn g(x P) Bool { return x == P.A }
 fn main() {
-    try f() catch e { g(e) }
+    try f() catch e { assert g(e) }
 }

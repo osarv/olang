@@ -388,6 +388,36 @@ fn (p mut Program&) ErrSetOf(entries types.ListId) types.TypeId {
     return p.T.ErrSet(p.T.List(xs))
 }
 
+# an error value's type (T20): the set entries stand for, merged and in the canonical order, so one set is one type
+fn (p mut Program&) ErrValOf(entries Array<types.TypeId>&) types.TypeId {
+    flat Vec<types.TypeId>
+    for e in entries {
+        if e != types.UnknownT and e != types.DefaultErrT { flat.Push(e) }
+    }
+    es Vec<types.TypeId>
+    p.mergeEntries(flat, es)
+    # an entry holding every word of its type is the type, so one set has one spelling
+    for i in range es.Len() {
+        if p.T.KindOf(es[i]) != types.Kind.ErrWords { continue }
+        et := p.T.ErrOf(es[i])
+        n := p.ErrorWords(p.T.DeclOf(et)).Len()
+        full := U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
+        if (p.T.ErrMask(es[i]) & full) == full { es[i] = et }
+    }
+    xs := es.ToArray()
+    xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return p.errBefore(a, b) })
+    return p.T.ErrVal(p.T.List(xs))
+}
+
+# the error value's type an error type or a named set stands for (T20, T19a), the set's name kept for spelling
+fn (p mut Program&) ErrValOfType(et types.TypeId) types.TypeId {
+    es Vec<types.TypeId>
+    p.EntriesOf(et, es)
+    v := p.ErrValOf(es.ToArray())
+    if p.IsErrorSet(et) and p.T.Items(p.T.ErrValItems(v)).Len() > 1 { p.T.NameErrVal(v, p.T.DeclOf(et)) }
+    return v
+}
+
 fn (p mut Program&) errBefore(a types.TypeId, b types.TypeId) Bool {
     av := p.T.KindOf(a) == types.Kind.Var or p.T.KindOf(a) == types.Kind.ConstExpr
     bv := p.T.KindOf(b) == types.Kind.Var or p.T.KindOf(b) == types.Kind.ConstExpr
@@ -591,7 +621,13 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
         }
         case names.What.Type {
             if ref.Index < 0 { return types.UnknownT }
-            return p.Apply(c, p.DeclFor(ref.Module, ref.Index), args)
+            d := p.DeclFor(ref.Module, ref.Index)
+            # T20: an error type or a named set as a value's type - its error values
+            if p.T.DeclKindOf(d) == types.DeclKind.Error {
+                if args.Len() > 0 { return types.UnknownT }
+                return p.ErrValOfType(p.T.Named(d, types.ListId(0)))
+            }
+            return p.Apply(c, d, args)
         }
         nomatch { return types.UnknownT }
     }
@@ -3299,6 +3335,7 @@ fn (p mut Program&) hasHash(t types.TypeId, depth I64) Bool {
     if depth > 16 { return true }
     k := p.T.KindOf(t)
     if k == types.Kind.Unknown or k == types.Kind.Var or k == types.Kind.ConstExpr { return true }
+    if k == types.Kind.ErrVal { return true }   # T20: an error value hashes its code, which equal values share (R6)
     hn := p.L.Names.Intern("Hash")
     if k == types.Kind.Ref {
         r := p.T.Referent(t)

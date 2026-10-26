@@ -1,9 +1,9 @@
-# check: fail error[R11b]: two caught errors are never compared
-# R11b: two caught errors are compared each with a word or a type, never with each other
+# check: run
+# R11b, T20: two caught errors are error values and compare by their codes
 type P error { A }
 fn f() ? P { error P.A }
 fn main() {
     try f() catch e {
-        try f() catch d { if d == e { } }
+        try f() catch d { assert d == e }
     }
 }

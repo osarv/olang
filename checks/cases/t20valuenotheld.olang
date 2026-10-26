@@ -1,0 +1,10 @@
+# check: fail error[T20]: expected P, found PQ, which can be Q
+# T20: a set's value goes where a narrower set is expected only once a test has narrowed it
+type P error { A }
+type Q error { B }
+type PQ error P, Q
+fn g(x P) { }
+fn main() {
+    v PQ = Q.B
+    g(v)
+}

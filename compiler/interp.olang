@@ -572,6 +572,7 @@ fn AbortWhy(k mir.ExitKind) String& {
     return match k {
         case mir.ExitKind.Unreachable => "it reaches unreachable code, which aborts the program"
         case mir.ExitKind.NullReached => "a '!' in it meets a null, which aborts the program"
+        case mir.ExitKind.NullError => "it raises a null error, which aborts the program"
         case mir.ExitKind.Assert => "an assertion in it fails, which aborts the program"
         case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
         case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"

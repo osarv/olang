@@ -1,0 +1,7 @@
+# check: fail error[R11b]: 'e' names the error this clause took and is never assigned
+# R11b: a clause's name stands for the error it took - a value that changes lives in a local of its own
+type P error { A, B }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e { e = P.B }
+}

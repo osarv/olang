@@ -79,6 +79,10 @@ type Kind enum {
     # an integer type of a width not among the eight above (T4a): A its width in bits, 1 to 128, B 1 for a signed type
     # and 0 for an unsigned one. Interned with the table, I1 to I128 and U1 to U128, so a name always finds it (Prim)
     Int
+    # an error value (T20, QAM): a value whose type is an error type or a named set - A its entries (a ListId: error
+    # types and words entries, ErrWords) merged and in the canonical order (R1a), so one set is one type whichever way
+    # it is written. Held as the 32-bit code renumbered to that order (R6), 0 null - "no error"; it holds no reference
+    ErrVal
 }
 
 # a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
@@ -175,6 +179,7 @@ type Table struct(Names mut source.Names&) {
     declKeys Map<String&, DeclId>       # "IDENTITY:Name"
     bodies Map<TypeId, body>
     caseNames Map<TypeId, Array<source.NameId>&>
+    errValNames Map<TypeId, DeclId>     # T20: the named set an error value's type was first written as, for spelling
     # layouts, per type
     state Vec<I64>
     sizes Vec<I64>
@@ -474,6 +479,21 @@ fn (t mut Table&) Any(tr TypeId) TypeId { return t.intern(data(Kind.Any, I64(tr)
 
 # an error set as an argument (G1a): its entries, already merged and in the canonical order (generic's ErrSetOf)
 fn (t mut Table&) ErrSet(entries ListId) TypeId { return t.intern(data(Kind.ErrSet, I64(entries), 0, 0), 1) }
+
+# an error value's type (T20): its entries, already merged and in the canonical order (generic's ErrValOf)
+fn (t mut Table&) ErrVal(entries ListId) TypeId { return t.intern(data(Kind.ErrVal, I64(entries), 0, 0), 1) }
+
+# an error value's entries
+fn (t Table&) ErrValItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrVal else ListId(0) }
+
+fn (t Table&) IsErrVal(id TypeId) Bool { return t.KindOf(id) == Kind.ErrVal }
+
+# the named set (T19a) an error value's type was first written as - its spelling where it has several entries - or -1
+fn (t Table&) ErrValName(id TypeId) DeclId { return try t.errValNames.Get(id) catch default DeclId(-1) }
+
+fn (t mut Table&) NameErrVal(id TypeId, d DeclId) {
+    if not t.errValNames.Has(id) { t.errValNames.Put(id, d) }
+}
 
 # an error-set argument's entries
 fn (t Table&) ErrSetItems(id TypeId) ListId { return ListId(I32(t.A(id))) if t.KindOf(id) == Kind.ErrSet else ListId(0) }
@@ -881,6 +901,7 @@ fn (t Table&) fieldList(id TypeId) ListId {
 
 # what a type's value is: the representation its layout follows, past any declared type over another (T29)
 fn (t Table&) Repr(id TypeId) TypeId {
+    if t.KindOf(id) == Kind.ErrVal { return TypeId(5) }   # T20: its code, an I32
     r := id
     for t.KindOf(r) == Kind.Named and t.DeclKindOf(t.DeclOf(r)) == DeclKind.Over and t.HasBody(r) { r = t.Base(r) }
     return r
@@ -935,7 +956,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
             align = size
         }
         case Kind.Int { size, align = IntBytes(d.A), IntBytes(d.A) }
-        case Kind.DefaultErr { size, align = 4, 4 }
+        case Kind.DefaultErr, Kind.ErrVal { size, align = 4, 4 }
         case Kind.Func { size, align = 16, 8 }   # T21: the pair (code, environment)
         case Kind.Ref {
             # a reference to a run-time-length array is the pair (length, storage), as the array's value is (T11); an
@@ -1047,7 +1068,7 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64 => $primLlvm[I64(id)]
         case Kind.Int => "i" $d.A
-        case Kind.DefaultErr => "i32"
+        case Kind.DefaultErr, Kind.ErrVal => "i32"
         case Kind.Noreturn => "void"
         case Kind.Func => "{ ptr, ptr }"
         case Kind.Ref => "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"
@@ -1296,6 +1317,11 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         case Kind.Any {
             b.Push("any ")
             t.canon(b, t.AnyTrait(id))
+        }
+        case Kind.ErrVal {
+            b.Push("error{")
+            t.joined(b, t.ErrValItems(id))
+            b.PushChar('}')
         }
         case Kind.ErrSet {
             b.PushChar('?')

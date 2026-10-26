@@ -850,8 +850,19 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
         }
         case typed.Stmt.Reraise(sp, x, from) {
-            # R3a: a caught error raised again - its code recoded from the clause's set to the body's
+            # R3a, T20: an error value raised - its code recoded from its set to the body's; a null one (code 0) stops
+            # the program as a failed check does
             v := ln.val(x)
+            if not ln.dead {
+                l := ln.local(v, x.Type(), sp)
+                nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(l)), mir.Operand.Const(x.Type(), 0)], sp)
+                some, none := ln.F.NewBlock(), ln.F.NewBlock()
+                ln.end(mir.Term.Branch(nz, some, none))
+                ln.start(none)
+                ln.end(mir.Term.Exit(sp, mir.ExitKind.NullError, mir.Operand.None))
+                ln.start(some)
+                v = mir.Operand.Copy(mir.L(l))
+            }
             if not ln.dead and ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() > 0 {
                 ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(v, from, ln.T.Errors(ln.B.Ty)), sp))
             } else if not ln.dead {
@@ -2513,6 +2524,10 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     }
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
+    # T20: an error value made one of a set holding it - its code renumbered (R6)
+    if op == typed.PrimOp.Convert and args.Len() == 1 and t.KindOf(ty) == types.Kind.ErrVal and t.KindOf(args[0].Type()) == types.Kind.ErrVal {
+        return ln.into(ty, mir.Rvalue.Recode(ops[0], t.ErrValItems(args[0].Type()), t.ErrValItems(ty)), sp)
+    }
     if ln.widening(op, args, ty) { return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost()) }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
     if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }
@@ -2745,6 +2760,10 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
         ln.renderAny(b, v, ty, true, sp)
         return
     }
+    if t.KindOf(ty) == types.Kind.ErrVal {
+        ln.renderErr(b, v, ty, sp)
+        return
+    }
     r := t.Repr(ty)
     how := mir.WriteKind.Bool
     direct := true
@@ -2779,6 +2798,47 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
                                mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
+}
+
+# T20, B5: an error value rendered as an error's name prints ("os.Error.DENIED", the prelude's and the root program's
+# bare), null as "null" - a test of its code per word its type holds
+fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
+    t := ln.T
+    p := ln.L.P
+    x := ln.local(v, ty, sp)
+    codes Vec<I64>
+    texts Vec<String&>
+    codes.Push(0)
+    texts.Push("null")
+    es := t.Items(t.ErrValItems(ty))
+    for j in range es.Len() {
+        et := t.ErrOf(es[j])
+        d := t.DeclOf(et)
+        dm := t.DeclModule(d)
+        q := load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root)
+        ws := p.ErrorWords(d)
+        for w in range ws.Len() {
+            if w < 64 and (t.ErrMask(es[j]) & (U64(1) << w)) == 0 { continue }
+            codes.Push(((j + 1) << 16) | w)
+            texts.Push($q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w]))
+        }
+    }
+    after := ln.F.NewBlock()
+    for i in range codes.Len() {
+        if i == codes.Len() - 1 {
+            ln.word(b, texts[i], sp)
+            ln.goto(after)
+            break
+        }
+        hit := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, codes[i])], sp)
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(hit, yes, no))
+        ln.start(yes)
+        ln.word(b, texts[i], sp)
+        ln.goto(after)
+        ln.start(no)
+    }
+    ln.start(after)
 }
 
 # text: an array of Chars, or a reference to one - what a Bytes write appends
@@ -3304,6 +3364,10 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         return
     }
     if ln.renderStr(a, ty, b, sp) { return }
+    if t.KindOf(ty) == types.Kind.ErrVal {
+        ln.renderErr(b, mir.Operand.Copy(ln.mk(a)), ty, sp)
+        return
+    }
     r := t.Repr(ty)
     if t.IsRef(r) {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
@@ -3474,6 +3538,10 @@ fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Spa
         ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
         return
     }
+    if t.KindOf(ty) == types.Kind.ErrVal {
+        ln.renderErr(b, mir.Operand.Copy(ln.mk(a)), ty, sp)
+        return
+    }
     if ln.scalar(ty) {
         how := mir.WriteKind.Bool
         if t.IsUnsigned(r) { how = mir.WriteKind.Uint } else if t.IsInt(r) { how = mir.WriteKind.Int } else if t.IsFloat(r) {
@@ -3545,6 +3613,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
     }
     if k == types.Kind.Const { return $t.ConstValue(ty) }
+    if k == types.Kind.ErrVal { return ln.L.ErrValSpelling(ty) }
     if k == types.Kind.Tuple {
         out := StringBuilder()
         xs := t.Items(t.Parts(ty))
@@ -3590,6 +3659,38 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         return out.ToString()
     }
     return t.Canon(ty)
+}
+
+# T20: an error value's type as source writes it - its error type, the named set it was written as, else its entries
+# in braces; an entry holding some words of a type, those words ("os.Error.DENIED")
+fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
+    t := lw.P.T
+    nd := t.ErrValName(ty)
+    if nd >= types.DeclId(0) { return $t.Names.Text(t.DeclName(nd)) }
+    es := t.Items(t.ErrValItems(ty))
+    out := StringBuilder()
+    if es.Len() != 1 { out.PushChar('{') }
+    k := 0
+    for e in es {
+        et := t.ErrOf(e)
+        name := t.Names.Text(t.DeclName(t.DeclOf(et)))
+        if t.KindOf(e) != types.Kind.ErrWords {
+            if k > 0 { out.Push(", ") }
+            out.Push(name)
+            k++
+            continue
+        }
+        ws := lw.P.ErrorWords(t.DeclOf(et))
+        for i in range ws.Len() {
+            if i < 64 and (t.ErrMask(e) & (U64(1) << i)) != 0 {
+                if k > 0 { out.Push(", ") }
+                out.Push($name "." $t.Names.Text(ws[i]))
+                k++
+            }
+        }
+    }
+    if es.Len() != 1 { out.PushChar('}') }
+    return out.ToString()
 }
 
 # whether a type declares Str (E11c), and its body: its Str, rendering it at every depth

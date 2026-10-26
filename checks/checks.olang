@@ -1048,6 +1048,12 @@ fn assertloc(r mut report&) ? Failed {
         try r.expect(sh(dir, "\"$OLANG\" interpret guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and
                      outOf(dir).StartsWith(w), "-i: " $w, dir)
     }
+    # T20, R3a: raising a null error - a held error value saying "no error"
+    try r.expect(sh(dir, "\"$OLANG\" build nullerror.olang > out.txt 2>&1") == 0, "nullerror did not build", dir)
+    try r.expect(sh(dir, "./build/nullerror > out.txt 2>&1") == 134 and
+                 outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "a null error raised", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret nullerror.olang > out.txt 2>&1") == 134 and
+                 outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "-i: a null error raised", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)

@@ -1,0 +1,5 @@
+# check: fail error[T20]: E is an error type: an error is raised, never returned - write '? E' after the parameters
+# T20: an error value is any value's type but a function's result - a function that fails says so with '?'
+type E error { A }
+fn pick(n I64) E { return E.A }
+fn main() { }

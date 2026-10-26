@@ -1,0 +1,9 @@
+# T20, R3a: raising a held error that is null - no error - stops the program as a failed check does
+type P error { A }
+Live mut I64 = 0
+fn raise(e P) ? P { error e }
+fn main() ? {
+    e P
+    if Live > 0 { e = P.A }
+    try raise(e)
+}

@@ -1,0 +1,7 @@
+# check: fail error[T20]: '+' on P: an error value is no number
+# T20: an error value takes no arithmetic
+type P error { A }
+fn main() {
+    e P = P.A
+    x := e + 1
+}

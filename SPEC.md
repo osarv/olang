@@ -1003,13 +1003,41 @@ nothing to the error-union ABI. A set may not reach itself through its members, 
 name with a word of a member (both compile-time errors): words are qualified, so the second rule is only against
 confusion. A member naming no error type, word or set is a compile-time error (R1).
 
-**T20.** An error type's values (words) carry no data; the full semantics of error types — the
-error-union return convention, `try`/`catch`, and the `error` statement — are specified in
-§7. An error is raised (`error E.WORD`) and caught (`catch E.WORD`), never held: an error type is not a value's type,
-so naming one as the type of a parameter, a local, a field, a result, an element or a type argument is a compile-time
-error, and so is a word written as a value (`e != E.A`) - except where it is compared with the error a catch clause
-took (R11b), the one place an error has a name. Which word failed is told apart by catch clauses
-(`try f() catch E.A { ... } catch E.B { ... }`), or inside one by its name (R11b).
+**T20 (error values).** An error type, or a named error set (T19a), is a **value's type** everywhere but a function's
+result: a parameter, a local, a global, a field, an array's element and a type argument may be one (`List<LoadError>`,
+`Map<net.Error, I64>`). Its values are the set's words, written qualified (`ParseError.EMPTY` is a value wherever a
+value of a set holding it is wanted), and `null`, which says "no error" and is the type's zero value (D13). An error
+value carries no data and holds no reference: it is a number to the scope rules (§8). Writing an error type or a set
+as a function's result - alone or among several results, or in a function type - is a compile-time error naming `?`,
+which says a function fails; the error-union return convention, `try`/`catch` and the `error` statement are §7. A set
+of several types used as a value's type is a named set; an unnamed list is written only after a signature's `?` and
+as a catch clause's items. An error value is made by a word written, by `null`, or by a catch clause naming what it
+took (R11b), and it is used in these ways and no others:
+
+- `==` and `!=` with a word (`e == ParseError.EMPTY`), with an error type or a named set (`e == ParseError`: true
+  where it holds a word of that type, or of what the set stands for), with `null` (`e == null`: whether it holds no
+  error; `e is null` says the same, E10c), and with another error value (the same word). Each side names something the
+  other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
+  compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
+- narrowing (S8d): in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e
+  != X { leave }`, `e` holds what of `X` it can be; in the else of `if e == X`, and after `if e == X { leave }`, its set
+  less `X`; a test for `null` narrows as it does a reference (S8e). Only a local or a parameter not assigned in the
+  narrowed region narrows;
+- `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without `_` or `nomatch`
+  the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
+  compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
+  test has shown is not null (known by the program's structure, never by evaluation). A case's block narrows `e`;
+- `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.EMPTY`, another module's type by
+  its module's name - and `null` for none;
+- hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key;
+- a value fits where its set is expected only when every word it can be is in that set (a wider set's value after
+  narrowing has shown it is): `l LoadError = e` with `e` a `ParseError` fits; the other way is a compile-time error
+  naming the test that narrows;
+- `error e` raises it (R3a).
+
+It has no arithmetic, no ordering and no conversion to or from a number. At run time a value is the 32-bit code of
+the error-union convention (R6) under its own set, `0` for `null`; a value going where a wider or narrower set is
+expected is recoded (R7).
 
 ### 2.7 Function types
 
@@ -2116,8 +2144,8 @@ also be puns (`x, y`) or inferred (`p, q := a, b`).
 `0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`; a `T&` has **no zero value**, so a
 declaration of one with no initializer that is not definitely initialised (D13d), an `Array<T&>(n)` with no fill, and a
 struct field of one with no default or parameter to give it are compile-time errors naming `T?&` - an empty array (0 elements, T7c) for `Array<T>`,
-and the first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
-first case by representation, not by any declared meaning. A type with a **constructor** - every struct (T13), and a
+the first-declared case for an enum — an enum has no other meaningful "zero", so this is the type's
+first case by representation, not by any declared meaning - and `null`, no error, for an error value (T20). A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
 whose zero value is zero bits this is the loader's zeroed storage — real BSS, costing nothing at run time.
 
@@ -3061,8 +3089,8 @@ comparison evaluated while compiling (K1), or under `interpret`, stops with a me
 counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
 such walk.
 
-**E10c (`is null`).** `x is null` is whether a reference, or a function value, holds none; `x is not null` is its
-negation, and `not x is null` the same question (E7a).
+**E10c (`is null`).** `x is null` is whether a reference, or a function value, holds none, or whether an error
+value (T20) holds no error; `x is not null` is its negation, and `not x is null` the same question (E7a).
 
 ```
 is-expr ::= operand "is" [ "not" ] "null"
@@ -3085,7 +3113,7 @@ built-in type declares none; its `==` is the language's.
 **E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
 `Hash() I64` itself - or `hash`, private to its module (M6b) - and must when it declares `Eq` or `eq`. Otherwise the
 compiler supplies one for every other integer width (T4a) - the eight's mix of the value, a width past 64 bits its low
-word mixed with its high word's hash - and for a **struct, enum or array value** whose type declares neither (in
+word mixed with its high word's hash - for an error value (T20: its code, under its own set's numbering), and for a **struct, enum or array value** whose type declares neither (in
 either spelling) and every part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
 prelude's `HashElements`). The prelude declares `Hash` for `Bool`, the eight integer types of 8 to 64 bits, `String`, and - agreeing with their `Eq` - `Vec` and `Map`
@@ -3095,9 +3123,6 @@ array whose elements have one (its elements' hashes, as an array value's), or on
 one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null reference is `0`. A supplied `Hash`
 is called as `x.Hash()` and meets a constraint (G19) such as a `Map`'s key - so a type declaring a method named `Hash`
 (or `hash`) of another shape, an ordinary method (E31) holding the name, has none supplied.
-
-There is no expression that produces a value of an error type (§2.6): an error word is never a
-first-class comparable value, only a function's own result (§7).
 
 **E11.** Prefix `-` requires a numeric
 operand and produces that type (negation). `++`/`--`, prefix or postfix, require an integer- or
@@ -3147,6 +3172,8 @@ its type: the value written the way it would be in source:
 - a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
+- an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.EMPTY`, `os.Error.DENIED`
+  with another module's type by its module's name; `null` for no error.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
   renders as a number, a `type Letter Char` - `extends` or not - as a character).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
@@ -4439,7 +4466,9 @@ guard may let a value through to the next clause, so a guarded clause covers not
 than `Bool` never completes a position (its values cannot be listed). A `case _` with no guard covers every case
 (S13f). A `match` over a `Bool` is exhaustive in the same
 sense when `true` and `false` are both covered - not required of a statement, but it is what lets one used as a value
-(S12b) do without a `nomatch`.
+(S12b) do without a `nomatch`. A `match` on an **error value** (T20) is checked the same way: its cases' items are words, error types,
+named sets and `null`, and they must cover every error it can be and `null` where it can be null; `case null` where it
+cannot be is a compile-time error.
 
 **S13b (patterns).** A pattern names a case of the enum at its position: `Type.Case` matches that case whatever its
 payload holds, and `Type.Case(p, ...)` matches it when each position of its payload matches, in declaration order,
@@ -5142,10 +5171,12 @@ error union (R1) includes the named error type, and the word if the set names wo
 so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
 
-**R3a (raising what was caught).** `error e`, with `e` the name a catch clause gave the error it took (R11b), raises
-that same error - its type and word - again, from that clause's block. It is held to the enclosing function's set as
-`error T.WORD` is (R3): every error `e` can be there - what the clause took, less what a test of `e` has excluded
-(R11b) - must be in a written set, or is taken on by an inferred one (R1a).
+**R3a (raising a held error).** `error e`, with `e` an error value (T20) - a local, a parameter or a global holding
+one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word.
+It is held to the enclosing function's set as `error T.WORD` is (R3): every error `e` can be there - its set, less what
+a test of `e` has excluded (T20) - must be in a written set, or is taken on by an inferred one (R1a). Raising a value
+that holds `null`, no error, stops the program as a failed check does, `FILE:LINE: raised a null error` (S18a); in a
+test it fails the test.
 
 **R4.** Executing an `error` statement immediately ends the enclosing function, producing that
 specific (type, word) pair as its result, in place of a normal `return`ed value — see §7.3. In a
@@ -5269,30 +5300,15 @@ names the error the clause took (R11b); `catch e { }` with no items is one bare 
 that name.
 
 **R11b (the error a clause took).** `catch os.Error e { ... }`, `catch os.Error, ParseError e { ... }`, `catch e
-default ...` name the error the clause took, for the clause alone - its block and its defaults - as a for-in names
-its element. The name's set is what the clause took: the words of what the tried operand can fail with that the
-clause's items name (everything left, for a clause with none), less what earlier clauses took. It is used in five
-ways and no other:
-
-- `$e`, rendering it as an error's name prints (B5): `os.Error.DENIED` - another module's type by its module's name,
-  the prelude's and the root program's bare;
-- `e == T.WORD` and `e != T.WORD`, a word; `e == T` and `e != T`, an error type or a named set, true where the error is
-  of that type, or of what the set stands for. Each side names something `e` can be, else the test is a compile-time
-  error (it could never hold);
-- narrowing: in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e != X {
-  leave }`, `e`'s set is what of `X` it holds; in the else of `if e == X`, and after `if e == X { leave }`, it is its set
-  less `X` (as S8d narrows a case);
-- `match e { case os.Error.DENIED { } case ParseError { } ... }`, each case's items words, types or sets as a catch
-  clause's, tried in order, a `case _` or `nomatch` taking the rest; without one the cases must cover `e`'s set, and a
-  case naming nothing `e` can be is a compile-time error. A case's block narrows `e` to what the case names. `match e`
-  gives a value too (S12b), `case X => v`;
-- `error e`, raising it again (R3a).
-
-Anything else naming `e` is a compile-time error naming `$e` where text is wanted: assigning it or to it, `:=` from
-it, passing it to a function, a constructor or a lambda, capturing it, storing it, returning it, `try e` (which names
-`error e`). The name is declared as any local is (D3, D3a: it may not reuse another's name), and a clause that never
-uses its name is a compile-time error naming the clause without it. Nothing about the error-union ABI changes: the name
-holds the error's code under the clause's own set (R6), recoded where the clause is entered.
+default ...` name the error the clause took, for the clause - its block and its defaults - as a for-in names its
+element. The name is an error value (T20) whose set is what the clause took: the words of what the tried operand can
+fail with that the clause's items name (everything left, for a clause with none), less what earlier clauses took. It is
+never null. It is used as any error value is - compared, narrowed, matched, rendered, passed, stored, captured, raised
+again - and is copied where it goes, so a value taken from it outlives the clause (`last = e`, `l.Push(e)`). The name
+itself is never assigned: assigning to it is a compile-time error naming a local of its own (`x := e`). It is declared
+as any local is (D3, D3a: it may not reuse another's name), a clause that never uses its name is a compile-time error
+naming the clause without it, and `try e` is an error naming `error e`. The name holds the error's code under the
+clause's own set (R6), recoded where the clause is entered.
 
 **R11a.** A `try` may carry **several clauses**, and an error runs the **first** that handles it, in the
 order written. A clause with no `catch-list` handles every error no earlier clause did, and so may only be

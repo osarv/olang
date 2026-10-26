@@ -516,11 +516,9 @@ type Diag enum {
     TryNothingFails
     BangNothingFails
     NestedArrayLiteral
-    ArrayOfErrors
-    ErrorTypeAsValue
+    ErrorAsResult
     ComprehensionReferences
     NotAnEnum
-    ErrorWordAsValue
     TakesNoArgs
     MethodAmbiguous
     DefaultAmbiguous
@@ -725,8 +723,12 @@ type Diag enum {
     CatchNameUnused
     CatchLoneUnused
     CatchNameInTask
-    CaughtNotAValue
-    CaughtCaptured
+    CaughtAssigned
+    ErrComparedNotError
+    ErrValueNoOp
+    ErrMatchNotError
+    ErrNeverNull
+    ErrValueNotHeld
     CaughtComparedToCaught
     CaughtCompareWhat
     CaughtNeverIs
@@ -1155,17 +1157,29 @@ fn CatchLoneUnused(tok String&) Msg { return Msg(Diag.CatchLoneUnused, "R11b", $
 # ERR_CATCH_NAME_IN_TASK
 fn CatchNameInTask(tok String&) Msg { return Msg(Diag.CatchNameInTask, "R11b", "a spawned call's clause runs on the task's thread and names no error - leave " $tok " off, or catch it where the join fails") }
 
-# ERR_CAUGHT_NOT_A_VALUE
-fn CaughtNotAValue(tok String&, text String&) Msg { return Msg(Diag.CaughtNotAValue, "R11b", $tok " is the error this clause took: it is only rendered, compared, matched or raised again here - write '$" $text "' where text is wanted") }
-
-# ERR_CAUGHT_CAPTURED
-fn CaughtCaptured(tok String&, text String&) Msg { return Msg(Diag.CaughtCaptured, "R11b", $tok " is the error a clause took, which a lambda cannot capture - pass '$" $text "' for its text") }
+# ERR_CAUGHT_ASSIGNED
+fn CaughtAssigned(tok String&, text String&) Msg { return Msg(Diag.CaughtAssigned, "R11b", $tok " names the error this clause took and is never assigned - hold a value that changes in a local of its own ('x := " $text "')") }
 
 # ERR_CAUGHT_COMPARED_TO_CAUGHT
-fn CaughtComparedToCaught() Msg { return Msg(Diag.CaughtComparedToCaught, "R11b", "two caught errors are never compared - compare each with an error word or an error type") }
+fn CaughtComparedToCaught() Msg { return Msg(Diag.CaughtComparedToCaught, "T20", "two error types are never compared - compare an error value with each ('e == T')") }
 
 # ERR_CAUGHT_COMPARE_WHAT
-fn CaughtCompareWhat(tok String&) Msg { return Msg(Diag.CaughtCompareWhat, "R11b", $tok " is compared with an error word, an error type or a named set - 'e == T.WORD', 'e == T'") }
+fn CaughtCompareWhat(tok String&) Msg { return Msg(Diag.CaughtCompareWhat, "T20", $tok " is compared with an error word, an error type, a named set or another error value - 'e == T.WORD', 'e == T'") }
+
+# ERR_ERR_COMPARED_NOT_ERROR
+fn ErrComparedNotError(text String&, ty String&, item String&) Msg { return Msg(Diag.ErrComparedNotError, "T20", "'" $text "' is " $ty ", not an error value - only an error value is '" $item "'") }
+
+# ERR_ERR_VALUE_NO_OP
+fn ErrValueNoOp(tok String&, ty String&) Msg { return Msg(Diag.ErrValueNoOp, "T20", $tok " on " $ty ": an error value is no number - it is compared with '==' and '!=', and rendered with '$'") }
+
+# ERR_ERR_MATCH_NOT_ERROR
+fn ErrMatchNotError(text String&, ty String&) Msg { return Msg(Diag.ErrMatchNotError, "T20", "the cases name errors, and '" $text "' is " $ty ", not an error value") }
+
+# ERR_ERR_NEVER_NULL
+fn ErrNeverNull(tok String&) Msg { return Msg(Diag.ErrNeverNull, "T20", $tok " holds an error here, never null - a caught error, a word written or a value a test says is not null") }
+
+# ERR_ERR_VALUE_NOT_HELD
+fn ErrValueNotHeld(ty1 String&, ty2 String&, text String&) Msg { return Msg(Diag.ErrValueNotHeld, "T20", "expected " $ty1 ", found " $ty2 ", which can be " $text " - test it first ('if e == T'), or hold it in a set that has it") }
 
 # ERR_CAUGHT_NEVER_IS
 fn CaughtNeverIs(tok String&, text1 String&, text2 String&) Msg { return Msg(Diag.CaughtNeverIs, "R11b", $tok " is never " $text1 " here - it is " $text2) }
@@ -1180,16 +1194,16 @@ fn ReraiseUndeclared(ty String&) Msg { return Msg(Diag.ReraiseUndeclared, "R3a",
 fn ReraiseWordNotInSet(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReraiseWordNotInSet, "R3a", "the error raised again can be " $ty1 ", and this function's '?' names " $ty2 " - add it after '?', or test the error first") }
 
 # ERR_RAISE_NOT_CAUGHT
-fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or the error a clause took - " $tok " is neither") }
+fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
 
 # ERR_CAUGHT_MATCH_BLOCK
-fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on a caught error giving a value gives it with '=> v' in every case") }
+fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value giving a value gives it with '=> v' in every case") }
 
 # ERR_CAUGHT_CASE_NEVER
 fn CaughtCaseNever(tok String&) Msg { return Msg(Diag.CaughtCaseNever, "R11b", "this case is never reached: the cases before it take every error " $tok " can be") }
 
 # ERR_CAUGHT_CASE_FORM
-fn CaughtCaseForm() Msg { return Msg(Diag.CaughtCaseForm, "R11b", "a case of a caught error names an error word, an error type or a named set") }
+fn CaughtCaseForm() Msg { return Msg(Diag.CaughtCaseForm, "R11b", "a case of an error value names an error word, an error type, a named set or null") }
 
 # ERR_CAUGHT_MATCH_MISSING
 fn CaughtMatchMissing(text String&) Msg { return Msg(Diag.CaughtMatchMissing, "R11b", "this match does not cover " $text " - add a case for it, or 'nomatch'") }
@@ -1199,6 +1213,9 @@ fn ErrorSetHoldsItself(tok String&, text String&) Msg { return Msg(Diag.ErrorSet
 
 # ERR_ERROR_WORD_OF_MEMBER
 fn ErrorWordOfMember(tok String&, ty String&) Msg { return Msg(Diag.ErrorWordOfMember, "T19a", "word " $tok " is " $ty "'s too, a member of this set - name it another way") }
+
+# ERR_ERROR_AS_RESULT
+fn ErrorAsResult(text String&) Msg { return Msg(Diag.ErrorAsResult, "T20", $text " is an error type: an error is raised, never returned - write '? " $text "' after the parameters") }
 
 # ERR_NOT_AN_ERROR_TYPE
 fn NotAnErrorType(tok String&) Msg { return Msg(Diag.NotAnErrorType, "R1", $tok " is no error type - an error set names error types, their words and named sets") }
@@ -2299,20 +2316,11 @@ fn BangNothingFails() Msg { return Msg(Diag.BangNothingFails, "E35", "nothing he
 # ERR_NESTED_ARRAY_LITERAL
 fn NestedArrayLiteral() Msg { return Msg(Diag.NestedArrayLiteral, "E21", "there are no nested array literals - each array is a literal of its own: Array<I32, 2>[I32[1, 2], I32[3, 4]]") }
 
-# ERR_ARRAY_OF_ERRORS
-fn ArrayOfErrors(ty String&) Msg { return Msg(Diag.ArrayOfErrors, "T20", $ty " has no values to put in an array") }
-
-# ERR_ERROR_TYPE_AS_VALUE
-fn ErrorTypeAsValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.ErrorTypeAsValue, "T20", $ty1 " is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch " $ty2 ".WORD { }'), or by the name a clause gives one ('catch " $ty2 " e { if e == " $ty2 ".WORD { } }')") }
-
 # ERR_COMPREHENSION_REFERENCES
 fn ComprehensionReferences() Msg { return Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
 
 # ERR_NOT_AN_ENUM
 fn NotAnEnum(tok String&) Msg { return Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }
-
-# ERR_ERROR_WORD_AS_VALUE
-fn ErrorWordAsValue(text1 String&, text2 String&) Msg { return Msg(Diag.ErrorWordAsValue, "T20", "'" $text1 "' is an error word, not a value - raise it with 'error " $text2 "', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == " $text2 " { } }')") }
 
 # ERR_TAKES_NO_ARGS
 fn TakesNoArgs(tok String&) Msg { return Msg(Diag.TakesNoArgs, "E14", $tok " takes no arguments") }

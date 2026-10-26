@@ -1,0 +1,7 @@
+# check: fail error[T20]: 'n' is I64, not an error value
+# T20: only an error value is compared with an error word or type
+type P error { A }
+fn main() {
+    n I64 = 3
+    if n == P.A { }
+}

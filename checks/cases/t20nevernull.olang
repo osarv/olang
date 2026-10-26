@@ -1,0 +1,12 @@
+# check: fail error[T20]: 'e' holds an error here, never null
+# T20: a caught error is never null, so a null case or test of it is dead
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e {
+        match e {
+            case null { }
+            case P.A { }
+        }
+    }
+}
