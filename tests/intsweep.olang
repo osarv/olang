@@ -1,0 +1,289 @@
+# integers of every width class (T4a) - 1 to 7 bits, 8, 9 to 31, 32, 33 to 63, 64, 65 to 127 and 128, signed and
+# unsigned - through one battery of operations on each type's edge values: what the compile-time evaluator bakes (K2)
+# and decides (S18c) agrees with the run time, digest for digest. The digests were taken from the built program; the
+# evaluator once computed I33 to I63 as I64s, without wrapping (the second bulk review's F1)
+
+# a digest of a battery of integer operations at one width, on its edge values: wrapping arithmetic, the bit operations,
+# comparisons, division and remainder where defined, shifts by counts inside the width, conversions and rendering
+fn sweep<T Integer>(z T, k I64) U64 {
+    one := T(k)
+    zero := one - one
+    w I64 = T.Max.PopCount() + (1 if T.Min < 0 else 0)
+    vals := Vec<T>()
+    vals.Push(T.Min)
+    vals.Push(T.Min + one)
+    vals.Push(zero - one)
+    vals.Push(zero)
+    vals.Push(one)
+    vals.Push(one + one)
+    vals.Push(T.Max - one)
+    vals.Push(T.Max)
+    three := T(3 * k)
+    five := T(5 * k)
+    if three != zero and not (T.Min < 0 and three == zero - one) { vals.Push(T.Max / three) }
+    if five != zero and not (T.Min < 0 and five == zero - one) { vals.Push(T.Min / five) }
+    d U64 = 14695981039346656037
+    for i in range vals.Len() {
+        x := vals[i]
+        d = mix(d, x)
+        d = mix(d, -x)
+        d = mix(d, ~x)
+        d = mixU(d, U64(I64(x)))
+        d = mixU(d, U64(F64(x).Bits()))
+        d = mixU(d, U64(($x).Hash()))
+        for s in I64[0, 1 % w, w / 2, w - 1] {
+            d = mix(d, x << s)
+            d = mix(d, x >> s)
+        }
+        for j in range vals.Len() {
+            y := vals[j]
+            a := x + y
+            b := x - y
+            c := x * y
+            d = mix(d, a)
+            d = mix(d, b)
+            d = mix(d, c)
+            d = mixB(d, a < x)
+            d = mixB(d, b < c)
+            d = mix(d, x & y)
+            d = mix(d, x | y)
+            d = mix(d, x ^ y)
+            lt := x < y
+            eq := x == y
+            le := x <= y
+            gt := x > y
+            ge := x >= y
+            ne := x != y
+            d = mixB(d, lt)
+            d = mixB(d, eq)
+            d = mixB(d, le)
+            d = mixB(d, gt)
+            d = mixB(d, ge)
+            d = mixB(d, ne)
+            if y != zero and not (T.Min < 0 and x == T.Min and y == zero - one) {
+                d = mix(d, x / y)
+                d = mix(d, x % y)
+            }
+        }
+    }
+    return d
+}
+
+# one step of the digest: x's low 64 bits, and its high ones where it has more
+fn mix<T Integer>(d U64, x T) U64 {
+    r := mixU(d, U64(x))
+    if T.Size > 8 { r = mixU(r, U64(x >> 64)) }
+    return r
+}
+
+fn mixB(d U64, b Bool) U64 { return mixU(d, 1 if b else 2) }
+
+fn mixU(d U64, v U64) U64 { return (d ^ v) * 1099511628211 }
+
+SweepI1 := sweep(I1(0), 1)
+SweepU1 := sweep(U1(0), 1)
+SweepI3 := sweep(I3(0), 1)
+SweepU3 := sweep(U3(0), 1)
+SweepI7 := sweep(I7(0), 1)
+SweepU7 := sweep(U7(0), 1)
+SweepI8 := sweep(I8(0), 1)
+SweepU8 := sweep(U8(0), 1)
+SweepI9 := sweep(I9(0), 1)
+SweepU9 := sweep(U9(0), 1)
+SweepI17 := sweep(I17(0), 1)
+SweepU17 := sweep(U17(0), 1)
+SweepI24 := sweep(I24(0), 1)
+SweepU24 := sweep(U24(0), 1)
+SweepI31 := sweep(I31(0), 1)
+SweepU31 := sweep(U31(0), 1)
+SweepI32 := sweep(I32(0), 1)
+SweepU32 := sweep(U32(0), 1)
+SweepI33 := sweep(I33(0), 1)
+SweepU33 := sweep(U33(0), 1)
+SweepI40 := sweep(I40(0), 1)
+SweepU40 := sweep(U40(0), 1)
+SweepI48 := sweep(I48(0), 1)
+SweepU48 := sweep(U48(0), 1)
+SweepI53 := sweep(I53(0), 1)
+SweepU53 := sweep(U53(0), 1)
+SweepI63 := sweep(I63(0), 1)
+SweepU63 := sweep(U63(0), 1)
+SweepI64 := sweep(I64(0), 1)
+SweepU64 := sweep(U64(0), 1)
+SweepI65 := sweep(I65(0), 1)
+SweepU65 := sweep(U65(0), 1)
+SweepI100 := sweep(I100(0), 1)
+SweepU100 := sweep(U100(0), 1)
+SweepI127 := sweep(I127(0), 1)
+SweepU127 := sweep(U127(0), 1)
+SweepI128 := sweep(I128(0), 1)
+SweepU128 := sweep(U128(0), 1)
+
+# what each digest is, as the built program computes it
+WantI1 U64 = 14794243814242678021
+WantU1 U64 = 10237670215518816094
+WantI3 U64 = 14361882408548648461
+WantU3 U64 = 8959959516286611093
+WantI7 U64 = 6141005833892786683
+WantU7 U64 = 9323522768550448702
+WantI8 U64 = 8778453401636789380
+WantU8 U64 = 15189928571814243341
+WantI9 U64 = 13828028980453048603
+WantU9 U64 = 2591752093249823424
+WantI17 U64 = 11607810890567684376
+WantU17 U64 = 15373556894226521170
+WantI24 U64 = 7343556323015588574
+WantU24 U64 = 7365336996728644258
+WantI31 U64 = 15364466905078908498
+WantU31 U64 = 2642794222331061612
+WantI32 U64 = 6558348940404850984
+WantU32 U64 = 11615450141403486164
+WantI33 U64 = 16592714970760744226
+WantU33 U64 = 10458287162955915044
+WantI40 U64 = 9290555130326273806
+WantU40 U64 = 6926590481903395867
+WantI48 U64 = 15527012775371864395
+WantU48 U64 = 5924093082349900222
+WantI53 U64 = 3507490326835965484
+WantU53 U64 = 3321800886484329459
+WantI63 U64 = 5055733048236022056
+WantU63 U64 = 9566045412393815707
+WantI64 U64 = 7374534488567476693
+WantU64 U64 = 7679499886327812260
+WantI65 U64 = 7751525878323856876
+WantU65 U64 = 13179522848119061599
+WantI100 U64 = 8807412394454381551
+WantU100 U64 = 17546510582155029195
+WantI127 U64 = 6927092530863400594
+WantU127 U64 = 7185527845647100094
+WantI128 U64 = 7556063593617736900
+WantU128 U64 = 17729583112629744186
+
+# the input again, read at run time
+One mut I64 = 1
+
+test "T4a: 1 to 9 bits, signed and unsigned - baked, decided while compiling and run agree" {
+    assert SweepI1 == WantI1
+    assert sweep(I1(0), One) == WantI1
+    assert sweep(I1(0), 1) == WantI1 # S18c: decided while compiling
+    assert SweepU1 == WantU1
+    assert sweep(U1(0), One) == WantU1
+    assert sweep(U1(0), 1) == WantU1 # S18c: decided while compiling
+    assert SweepI3 == WantI3
+    assert sweep(I3(0), One) == WantI3
+    assert sweep(I3(0), 1) == WantI3 # S18c: decided while compiling
+    assert SweepU3 == WantU3
+    assert sweep(U3(0), One) == WantU3
+    assert sweep(U3(0), 1) == WantU3 # S18c: decided while compiling
+    assert SweepI7 == WantI7
+    assert sweep(I7(0), One) == WantI7
+    assert sweep(I7(0), 1) == WantI7 # S18c: decided while compiling
+    assert SweepU7 == WantU7
+    assert sweep(U7(0), One) == WantU7
+    assert sweep(U7(0), 1) == WantU7 # S18c: decided while compiling
+    assert SweepI8 == WantI8
+    assert sweep(I8(0), One) == WantI8
+    assert sweep(I8(0), 1) == WantI8 # S18c: decided while compiling
+    assert SweepU8 == WantU8
+    assert sweep(U8(0), One) == WantU8
+    assert sweep(U8(0), 1) == WantU8 # S18c: decided while compiling
+    assert SweepI9 == WantI9
+    assert sweep(I9(0), One) == WantI9
+    assert sweep(I9(0), 1) == WantI9 # S18c: decided while compiling
+    assert SweepU9 == WantU9
+    assert sweep(U9(0), One) == WantU9
+    assert sweep(U9(0), 1) == WantU9 # S18c: decided while compiling
+}
+
+test "T4a: 17 to 33 bits, signed and unsigned - baked, decided while compiling and run agree" {
+    assert SweepI17 == WantI17
+    assert sweep(I17(0), One) == WantI17
+    assert sweep(I17(0), 1) == WantI17 # S18c: decided while compiling
+    assert SweepU17 == WantU17
+    assert sweep(U17(0), One) == WantU17
+    assert sweep(U17(0), 1) == WantU17 # S18c: decided while compiling
+    assert SweepI24 == WantI24
+    assert sweep(I24(0), One) == WantI24
+    assert sweep(I24(0), 1) == WantI24 # S18c: decided while compiling
+    assert SweepU24 == WantU24
+    assert sweep(U24(0), One) == WantU24
+    assert sweep(U24(0), 1) == WantU24 # S18c: decided while compiling
+    assert SweepI31 == WantI31
+    assert sweep(I31(0), One) == WantI31
+    assert sweep(I31(0), 1) == WantI31 # S18c: decided while compiling
+    assert SweepU31 == WantU31
+    assert sweep(U31(0), One) == WantU31
+    assert sweep(U31(0), 1) == WantU31 # S18c: decided while compiling
+    assert SweepI32 == WantI32
+    assert sweep(I32(0), One) == WantI32
+    assert sweep(I32(0), 1) == WantI32 # S18c: decided while compiling
+    assert SweepU32 == WantU32
+    assert sweep(U32(0), One) == WantU32
+    assert sweep(U32(0), 1) == WantU32 # S18c: decided while compiling
+    assert SweepI33 == WantI33
+    assert sweep(I33(0), One) == WantI33
+    assert sweep(I33(0), 1) == WantI33 # S18c: decided while compiling
+    assert SweepU33 == WantU33
+    assert sweep(U33(0), One) == WantU33
+    assert sweep(U33(0), 1) == WantU33 # S18c: decided while compiling
+}
+
+test "T4a: 40 to 64 bits, signed and unsigned - baked, decided while compiling and run agree" {
+    assert SweepI40 == WantI40
+    assert sweep(I40(0), One) == WantI40
+    assert sweep(I40(0), 1) == WantI40 # S18c: decided while compiling
+    assert SweepU40 == WantU40
+    assert sweep(U40(0), One) == WantU40
+    assert sweep(U40(0), 1) == WantU40 # S18c: decided while compiling
+    assert SweepI48 == WantI48
+    assert sweep(I48(0), One) == WantI48
+    assert sweep(I48(0), 1) == WantI48 # S18c: decided while compiling
+    assert SweepU48 == WantU48
+    assert sweep(U48(0), One) == WantU48
+    assert sweep(U48(0), 1) == WantU48 # S18c: decided while compiling
+    assert SweepI53 == WantI53
+    assert sweep(I53(0), One) == WantI53
+    assert sweep(I53(0), 1) == WantI53 # S18c: decided while compiling
+    assert SweepU53 == WantU53
+    assert sweep(U53(0), One) == WantU53
+    assert sweep(U53(0), 1) == WantU53 # S18c: decided while compiling
+    assert SweepI63 == WantI63
+    assert sweep(I63(0), One) == WantI63
+    assert sweep(I63(0), 1) == WantI63 # S18c: decided while compiling
+    assert SweepU63 == WantU63
+    assert sweep(U63(0), One) == WantU63
+    assert sweep(U63(0), 1) == WantU63 # S18c: decided while compiling
+    assert SweepI64 == WantI64
+    assert sweep(I64(0), One) == WantI64
+    assert sweep(I64(0), 1) == WantI64 # S18c: decided while compiling
+    assert SweepU64 == WantU64
+    assert sweep(U64(0), One) == WantU64
+    assert sweep(U64(0), 1) == WantU64 # S18c: decided while compiling
+}
+
+test "T4a: 65 to 128 bits, signed and unsigned - baked, decided while compiling and run agree" {
+    assert SweepI65 == WantI65
+    assert sweep(I65(0), One) == WantI65
+    assert sweep(I65(0), 1) == WantI65 # S18c: decided while compiling
+    assert SweepU65 == WantU65
+    assert sweep(U65(0), One) == WantU65
+    assert sweep(U65(0), 1) == WantU65 # S18c: decided while compiling
+    assert SweepI100 == WantI100
+    assert sweep(I100(0), One) == WantI100
+    assert sweep(I100(0), 1) == WantI100 # S18c: decided while compiling
+    assert SweepU100 == WantU100
+    assert sweep(U100(0), One) == WantU100
+    assert sweep(U100(0), 1) == WantU100 # S18c: decided while compiling
+    assert SweepI127 == WantI127
+    assert sweep(I127(0), One) == WantI127
+    assert sweep(I127(0), 1) == WantI127 # S18c: decided while compiling
+    assert SweepU127 == WantU127
+    assert sweep(U127(0), One) == WantU127
+    assert sweep(U127(0), 1) == WantU127 # S18c: decided while compiling
+    assert SweepI128 == WantI128
+    assert sweep(I128(0), One) == WantI128
+    assert sweep(I128(0), 1) == WantI128 # S18c: decided while compiling
+    assert SweepU128 == WantU128
+    assert sweep(U128(0), One) == WantU128
+    assert sweep(U128(0), 1) == WantU128 # S18c: decided while compiling
+}
