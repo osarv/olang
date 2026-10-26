@@ -33,7 +33,7 @@ type Doc struct(Uri String&, Path String&, Real String&) {
     Text StringBuilder
     Open Bool = true
     Deps Vec<I64>
-    Foreign List<String&>
+    Foreign Vec<String&>
 }
 
 # the worker of the moment: its process, the pipe ends the server talks to it through, and what it was asked
@@ -46,7 +46,7 @@ type Worker struct() {
 
 type Server struct(Cfg mut build.Config&) {
     Cfg
-    Docs List<mut Doc&>
+    Docs Vec<mut Doc&>
     Utf8 Bool = false
     W Worker = Worker()
     Pending Vec<I64>             # the slots still to be checked: changed, or importing one that changed
@@ -478,11 +478,11 @@ fn (w mut worker&) check(k I64) {
 # the analysis's diagnostics published - for the open file in slot k, empty to clear what was said before, and for every
 # other file it reaches that is not checked as a root of its own here - and an empty list for each file in before (the
 # other files published to the last time) not published to now: the other files published to
-fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics&, before List<String&>&) List<String&> {
+fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics&, before Vec<String&>&) Vec<String&> {
     doc := w.s.Docs[k]
     # each file's diagnostics, by real path, as LSP's Diagnostic objects
-    files List<String&>
-    lists List<StringBuilder>
+    files Vec<String&>
+    lists Vec<StringBuilder>
     items := d.Items()
     for i in range items.Len() {
         it := items[i]
@@ -504,7 +504,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
     }
     # this file's - empty to clear what was said before - and every other file's not checked as a root of its own here
     mine := StringBuilder()
-    foreign List<String&>
+    foreign Vec<String&>
     for j in range files.Len() {
         if files[j] == doc.Real { mine = lists[j] }
     }
@@ -547,7 +547,7 @@ fn (w worker&) textOf(a session.Analysis&, real String&) String {
 
 # items[i], an error, as an LSP Diagnostic: its range in its file, its rule as its code, and its notes as related
 # information
-fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, items List<diag.Item>&
+fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, items Vec<diag.Item>&
     i I64, real String&) {
     it := items[i]
     p := session.Positions(w.textOf(a, real), w.s.Utf8)
@@ -787,8 +787,8 @@ fn compilerUnderTest() String {
 fn framed(body String&) String { return $"Content-Length: " $body.Len() "\r\n\r\n" $body }
 
 # the messages an LSP output holds, each body
-fn frames(out String&) List<String&>&out {
-    l mut List<String&>&out = List<String&>()
+fn frames(out String&) Vec<String&>&out {
+    l mut Vec<String&>&out = Vec<String&>()
     r := out[:]
     for {
         at := try r.Find("Content-Length: ") catch { break }

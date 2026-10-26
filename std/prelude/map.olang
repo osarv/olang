@@ -1,4 +1,4 @@
-# Map - values found by key, compared with "==" (E10). Part of the prelude, as List is: "Map<K, V>" is named bare
+# Map - values found by key, compared with "==" (E10). Part of the prelude, as Vec is: "Map<K, V>" is named bare
 # everywhere. A key is any type with a "Hash() I64" agreeing with "==": the prelude gives it to the integers and
 # String, the compiler supplies one for a struct, enum or array value whose parts all have one (E10b), and a key type
 # declaring Eq declares its Hash too.
@@ -7,7 +7,7 @@
 # existing slots into new buckets and copies nothing else; the old bucket array stays in the scope until it closes, as
 # anything an arena holds does.
 #
-# A Map is a HANDLE, as a List is: the buckets, the count and the slots kept for reuse are one record, made where the Map
+# A Map is a HANDLE, as a Vec is: the buckets, the count and the slots kept for reuse are one record, made where the Map
 # is constructed (C2d), and a Map value is one reference to it - so a copy of a Map value is a second name for the same
 # map, as a Go map is, and Clone() is the copy with storage of its own. "Array<Map<K, V>>(n, Map<K, V>())" is n names for
 # one map (T8). Everything a Map allocates lives where it was made, so it is reclaimed with that scope and needs no
@@ -288,12 +288,12 @@ fn (it mut MapIter<K, V>&) advance() ? Exhausted {
 # the entries, one at a time, in no order to rely on. In order of their keys it is two lines - the entries listed, then
 # sorted - with no lookup that could fail:
 #
-#     es := m.Iter().ToList()
+#     es := m.Iter().ToVec()
 #     es.Sort(fn(a, b) { return a.Key < b.Key })
 #     for e in es { ... e.Key ... e.Value ... }
 fn (m Map<K, V>&) Iter() MapIter<K, V> { return MapIter<K, V>(m) }
 
-# the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToList()" for a List of
+# the keys, one at a time, in the order Iter() gives the entries: "for k in m.Keys()", "m.Keys().ToVec()" for a Vec of
 # them. A walk of the map as Iter's is, under the same rule for changes made during it
 fn (m Map<K, V>&) Keys() MapKeyIter<K, V> { return MapKeyIter<K, V>(m) }
 

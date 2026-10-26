@@ -14,13 +14,13 @@ fn (r Ring&) Len() I64 { return 3 }
 type Holder struct() {
     ring mut Ring& = Ring()
 }
-fn walk(hs List<Holder>&) I64 {
+fn walk(hs Vec<Holder>&) I64 {
     t I64 = 0
     for x in hs[0].ring { t += x }
     return t
 }
 fn main() ? {
-    hs := List<Holder>()
+    hs := Vec<Holder>()
     hs.Push(Holder())
     try io.Println($walk(hs))
 }

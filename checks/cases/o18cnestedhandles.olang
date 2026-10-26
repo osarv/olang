@@ -3,7 +3,7 @@
 # O18c/O17b (F3): handles all the way, "h := lll[0][0]; h.Push(x)"
 import "std/io"
 type Blk struct() {
-    S List<I64>
+    S Vec<I64>
     t I64 = 0
 }
 fn churn() ? io.Error {
@@ -12,14 +12,14 @@ fn churn() ? io.Error {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-fn add(lll mut List<List<List<I64>>>&, x I64) {
+fn add(lll mut Vec<Vec<Vec<I64>>>&, x I64) {
     h := lll[0][0]
     h.Push(x)
 }
 fn main() ? {
-    lll := List<List<List<I64>>>()
-    lll.Push(List<List<I64>>())
-    lll[0].Push(List<I64>())
+    lll := Vec<Vec<Vec<I64>>>()
+    lll.Push(Vec<Vec<I64>>())
+    lll[0].Push(Vec<I64>())
     add(lll, 7)
     try churn()
     assert lll[0][0].Len() == 1 and lll[0][0][0] == 7, $lll[0][0]

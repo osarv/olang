@@ -18,7 +18,7 @@ fn (h Hd&) view() Array<mut Node?&>&h {
     return s.first[0:1]
 }
 type Box struct() {
-    items List<mut Node&> = List<mut Node&>()
+    items Vec<mut Node&> = Vec<mut Node&>()
     hd Hd = Hd()
     n I64 = 0
 }

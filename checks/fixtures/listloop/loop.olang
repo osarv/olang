@@ -2,6 +2,7 @@
 # that knows it only as Indexable all walk it run by run through RunFrom, an iterator helper walks its chunks, and none
 # of them calls At. I16 so that nothing in the prelude instantiates it too.
 
+import "std/list"
 type Stop error {
     HERE
 }
@@ -12,7 +13,7 @@ fn total<C Indexable<T>, T>(c C&) I64 {
 }
 
 fn main() ? {
-    l := List<I16>()
+    l := list.List<I16>()
     for i in range 30 { l.Push(I16(i)) }
     sum I16 = 0
     for x in l { sum += x }

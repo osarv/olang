@@ -93,8 +93,8 @@ fn main() {
 }
 
 # what a tool printed for the files, its own diagnostics passed on
-fn run(tool String&, mode String&, files List<String&>&) String {
-    args := List<String&>()
+fn run(tool String&, mode String&, files Vec<String&>&) String {
+    args := Vec<String&>()
     args.Push(tool)
     if mode != "" { args.Push(mode) }
     for f in files { args.Push(f) }
@@ -141,11 +141,11 @@ fn isSpan(t String&) Bool {
 
 # the state of normalizing one rendering: the rows of the section being read, the spans of the file's items
 type norm struct() {
-    out List<String&> = List<String&>()
+    out Vec<String&> = Vec<String&>()
     header String& = ""
-    rows List<String&> = List<String&>()
-    lo List<I64> = List<I64>()
-    hi List<I64> = List<I64>()
+    rows Vec<String&> = Vec<String&>()
+    lo Vec<I64> = Vec<I64>()
+    hi Vec<I64> = Vec<I64>()
 }
 
 # the section read so far written out - its header, then its rows sorted by bytes - and a new one begun

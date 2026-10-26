@@ -9,7 +9,7 @@ type Acc struct() {
 }
 
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     l[0].In.Move(4)
 }

@@ -15,7 +15,7 @@ type Node struct(v I64) {
 }
 fn mk(r Node&, i I64) Node&r { return Node(i) }
 fn keepR(r Node&, i I64) R&r { return R(i) }
-fn make(n Node&, fns mut List<fn(i I64) I64>&) {
+fn make(n Node&, fns mut Vec<fn(i I64) I64>&) {
     fns.Push(fn(i I64) I64 {
         m := mk(n, n.v + i)
         if i % 1000 == 0 { keepR(n, 1) }
@@ -37,7 +37,7 @@ fn churn() I64 {
 }
 fn run() I64 {
     n Node& = Node(1)
-    fns mut List<fn(i I64) I64>& = List<fn(i I64) I64>()
+    fns mut Vec<fn(i I64) I64>& = Vec<fn(i I64) I64>()
     join {
         spawn make(n, fns)
     }

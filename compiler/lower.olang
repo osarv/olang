@@ -51,12 +51,12 @@ type Gap struct(File I64, Sp source.Span, What String&) {
 }
 
 # the lowering of a program's bodies: P the checked program, Bodies check's table of typed bodies
-type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
+type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     P
     Bodies
-    Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
     Free mut free.Free?& = null # the early-free analysis's decisions (O8d), null for none: nothing freed early
-    Gaps List<Gap>
+    Gaps Vec<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
     # B3e: for interpret - each registration of deferred code made with a cleanup of its own (Stmt.Deferred), which
     # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
@@ -65,13 +65,13 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
     # order first referred to, each once: what LowerKey makes next
-    Wanted List<mir.FnKey>
+    Wanted Vec<mir.FnKey>
     wanted Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
     strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
     indexed Bool = false
-    failT List<types.TypeId>        # each check word's error type (failure)
-    failCode List<I64>              # and its code under that type alone
+    failT Vec<types.TypeId>        # each check word's error type (failure)
+    failCode Vec<I64>              # and its code under that type alone
     charT types.TypeId = types.TypeId(-1)
     textT types.TypeId = types.TypeId(-1)
 }
@@ -206,8 +206,8 @@ fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) Bool, String, String {
 }
 
 # the modules whose initialization runs a global's initializer, in order
-fn (lw mut Lowerer&) InitModules() List<I64> {
-    out List<I64>
+fn (lw mut Lowerer&) InitModules() Vec<I64> {
+    out Vec<I64>
     for i in range lw.Bodies.Len() {
         match lw.Bodies[i].Of {
             case typed.BodyOf.Global(m, _) {
@@ -244,8 +244,8 @@ type loopCtx struct(Body typed.BlockId, Depth I64) {
     Body
     Depth
     cont mir.BlockId = mir.NoBlock
-    brk List<mir.BlockId>
-    conts List<mir.BlockId>
+    brk Vec<mir.BlockId>
+    conts Vec<mir.BlockId>
 }
 
 # a try being lowered: the level it stands at, its clauses and each one's entry (made when an error first reaches it),
@@ -255,7 +255,7 @@ type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool, Passes B
     Clauses
     Ends
     Passes     # what its clauses do not take goes on to the try around it (typed.Try.Passes)
-    entries List<mir.BlockId>
+    entries Vec<mir.BlockId>
 }
 
 # a comprehension being lowered (E27): its buffer (an array reference), how many it holds, its element type, and the
@@ -274,7 +274,7 @@ type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT t
 # a place being built: its base and its projections
 type pl struct(B mir.Base) {
     B
-    Ps List<mir.Proj>
+    Ps Vec<mir.Proj>
 }
 
 type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&) {
@@ -287,16 +287,16 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     cur mir.BlockId = mir.BlockId(0)
     dead Bool = false
     gapped Bool = false
-    levels List<level>
+    levels Vec<level>
     # deferred code registered (S19), each with the scope of the level it was registered at, in order
-    defers List<typed.Block&>
-    deferAt List<mir.ScopeId>
-    loops List<loopCtx>
-    tries List<tryCtx>
-    collects List<collectCtx>
-    targets List<pl>    # the places of the Assigns being lowered, innermost last (Place.Target)
-    joins List<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
-    joinS List<mir.ScopeId>
+    defers Vec<typed.Block&>
+    deferAt Vec<mir.ScopeId>
+    loops Vec<loopCtx>
+    tries Vec<tryCtx>
+    collects Vec<collectCtx>
+    targets Vec<pl>    # the places of the Assigns being lowered, innermost last (Place.Target)
+    joins Vec<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
+    joinS Vec<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
     planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
@@ -337,7 +337,7 @@ fn (ln mut lowering&) run() {
         ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
-    caps List<typed.LocalId>
+    caps Vec<typed.LocalId>
     for i in range b.Locals.Len() {
         if b.Locals[i].Kind == typed.LocalKind.Capture {
             caps.Push(typed.LocalId(I32(i)))
@@ -381,7 +381,7 @@ fn (ln mut lowering&) run() {
     }
 }
 
-fn indexOf(xs List<typed.LocalId>, l typed.LocalId) I64 {
+fn indexOf(xs Vec<typed.LocalId>, l typed.LocalId) I64 {
     for i in range xs.Len() {
         if xs[i] == l { return i }
     }
@@ -450,14 +450,14 @@ fn (ln mut lowering&) goto(b mir.BlockId) { ln.end(mir.Term.Goto(b)) }
 
 # a jump from here to a block made later: this block, its terminator set once the block is made (patch); none when
 # nothing reaches here
-fn (ln mut lowering&) leaveOpen(ends mut List<mir.BlockId>&) {
+fn (ln mut lowering&) leaveOpen(ends mut Vec<mir.BlockId>&) {
     if ln.dead { return }
     ends.Push(ln.cur)
     ln.dead = true
 }
 
 # a block every end in ends jumps to, made now and entered; dead where there are none
-fn (ln mut lowering&) patch(ends List<mir.BlockId>) {
+fn (ln mut lowering&) patch(ends Vec<mir.BlockId>) {
     if ends.Len() == 0 {
         ln.dead = true
         return
@@ -599,8 +599,8 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # the sole places a place's let-go releases: the place itself, or the leaves of a struct held in it - each by the
 # fields that reach it from the place, and a handle's reference, field 0
-fn (ln mut lowering&) releases(p typed.Place&, assign Bool = false) List<Array<I64>&> {
-    out List<Array<I64>&>
+fn (ln mut lowering&) releases(p typed.Place&, assign Bool = false) Vec<Array<I64>&> {
+    out Vec<Array<I64>&>
     if not ln.freeing { return out }
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
@@ -630,7 +630,7 @@ fn (ln mut lowering&) releases(p typed.Place&, assign Bool = false) List<Array<I
 }
 
 # what local l holds released, at each of the paths: a sole place's old value let go of
-fn (ln mut lowering&) releaseAt(l mir.LocalId, paths List<Array<I64>&>&, sp source.Span) {
+fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>&>&, sp source.Span) {
     for path in paths {
         q := pl(mir.Base.Local(l))
         for i in path { q = ln.with(q, mir.Proj.Field(i)) }
@@ -729,9 +729,9 @@ fn (ln mut lowering&) exitLevel(i I64) {
 fn (ln mut lowering&) runDefers(i I64, failed Bool) {
     lv := ln.levels[i]
     # the levels above i, set aside while i's deferred code is lowered
-    saved List<level>
+    saved Vec<level>
     for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
-    mine List<I64>
+    mine Vec<I64>
     for k in range ln.defers.Len() {
         if ln.deferAt[k] != lv.S { continue }
         e := ln.onError(k)
@@ -772,9 +772,9 @@ fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
 # join s, at level i, failed with code under its list: its clauses, then the tries around it, take it - as an error
 # reaching the join statement, with every level from i up closed on this path
 fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs types.ListId, sp source.Span) {
-    saved List<level>
+    saved Vec<level>
     for ln.levels.Len() > i { saved.Push(try ln.levels.Pop() catch { unreachable }) }
-    savedT mut List<tryCtx>&ln = List<tryCtx>()
+    savedT mut Vec<tryCtx>&ln = Vec<tryCtx>()
     for ln.tries.Len() > 0 and ln.tries[ln.tries.Len() - 1].Depth > i { savedT.Push(try ln.tries.Pop() catch { unreachable }) }
     pushed := false
     for k in range ln.joinS.Len() {
@@ -982,7 +982,7 @@ fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
     if ln.dead { return }
     yes, no := ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(c, yes, no))
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     ln.start(yes)
     ln.block(i.Then)
     ln.leaveOpen(ends)
@@ -1186,7 +1186,7 @@ fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
     ln.closeBlock()
     try ln.joins.Pop() catch { }
     try ln.joinS.Pop() catch { }
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     ln.leaveOpen(ends)
     ln.clauses(tc, j.Clauses, mir.NoLocal, types.VoidT, ends)
     ln.patch(ends)
@@ -1195,17 +1195,17 @@ fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
 # the errors a join's wait can fail with (P4b): what each task's call can fail with and its clauses do not take whole -
 # its spawns, through the blocks in it but not through a join nested in it (P1a)
 fn (ln mut lowering&) joinErrors(code typed.Block&) types.ListId {
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     ln.spawnErrors(code, out)
     return ln.T.List(out.ToArray())
 }
 
-fn (ln mut lowering&) spawnErrors(bl typed.Block?&, out mut List<types.TypeId>&) {
+fn (ln mut lowering&) spawnErrors(bl typed.Block?&, out mut Vec<types.TypeId>&) {
     if bl is null { return }
     for s in bl.Stmts { ln.stmtSpawnErrors(s, out) }
 }
 
-fn (ln mut lowering&) stmtSpawnErrors(s typed.Stmt&, out mut List<types.TypeId>&) {
+fn (ln mut lowering&) stmtSpawnErrors(s typed.Stmt&, out mut Vec<types.TypeId>&) {
     t := ln.T
     match s {
         case typed.Stmt.Spawn(_, sw) {
@@ -1476,7 +1476,7 @@ fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, 
 fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(0, 0)) Array<mir.Operand>& {
     t := ln.T
     xs := t.Items(from)
-    out mut List<mir.Operand>& = List<mir.Operand>()
+    out mut Vec<mir.Operand>& = Vec<mir.Operand>()
     for j in range xs.Len() {
         et := t.ErrOf(xs[j])
         if t.KindOf(et) != types.Kind.Named { continue }
@@ -1605,11 +1605,11 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ln.tries.Push(tc)
     v := ln.val(t.X)
     try ln.tries.Pop() catch { }
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
         ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
         if relK >= 0 {
-            rel List<Array<I64>&>
+            rel Vec<Array<I64>&>
             rel.Push(I64[0] if relK == 1 else Array<I64>(0))
             ln.releaseAt(slot, rel, sp)
         }
@@ -1624,7 +1624,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
 # the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot;
 # each falls through to where ends lead
 fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.LocalId, ty types.TypeId
-                              ends mut List<mir.BlockId>&) {
+                              ends mut Vec<mir.BlockId>&) {
     for ci in range cls.Len() {
         if tc.entries[ci] == mir.NoBlock { continue }
         cl := cls[ci]
@@ -1801,7 +1801,7 @@ fn (ln mut lowering&) take(p typed.Place&, ty types.TypeId, sp source.Span) mir.
 # a statement's value dropped (S3): a vacate of a sole place releases what it held, and so does a call's result that is
 # a value moved out of one (Pop, TakeAt, Take), once the statement has it (O8d)
 fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
-    rel List<Array<I64>&>
+    rel Vec<Array<I64>&>
     match x {
         case typed.Expr.Take(_, _, p) { rel = ln.releases(p) }
         case _ {
@@ -1907,7 +1907,7 @@ fn (ln mut lowering&) cond(c typed.Cond&, ty types.TypeId, sp source.Span) mir.O
     slot := ln.temp(ty, sp)
     yes, no := ln.F.NewBlock(), ln.F.NewBlock()
     ln.end(mir.Term.Branch(x, yes, no))
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     ln.start(yes)
     a := ln.val(c.A)
     ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(a)))
@@ -1927,11 +1927,11 @@ fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir
     if ln.dead { return mir.Operand.None }
     slot := mir.NoLocal
     if m.IsValue and ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     for a in m.Arms {
         if ln.dead { break }
-        next List<mir.BlockId>
-        hit List<mir.BlockId>
+        next Vec<mir.BlockId>
+        hit Vec<mir.BlockId>
         for k in range a.Alts.Len() {
             if ln.dead { break }
             alt := a.Alts[k]
@@ -2588,7 +2588,7 @@ fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.Si
 # stand-in placement
 fn (ln mut lowering&) capScopes(site typed.SiteId) mir.Range {
     if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.Empty }
-    xs List<mir.ScopeRef>
+    xs Vec<mir.ScopeRef>
     for i := I64(0), ln.plan.Passed(site, i) != typed.Scope.Unset, i++ { xs.Push(ln.scopeRef(ln.plan.Passed(site, i))) }
     return ln.F.ScopeRefs(xs.ToArray())
 }
@@ -2897,7 +2897,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     }
     res := ln.flag(true, sp)
     no := ln.F.NewBlock()
-    ends List<mir.BlockId>
+    ends Vec<mir.BlockId>
     parts, isParts := ln.partsOf(ty)
     cases, isEnum := ln.casesOf(ty)
     if isParts {
@@ -2952,7 +2952,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
 
 # for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
 fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn(tag I64, rec types.TypeId)) {
-    with List<I64>
+    with Vec<I64>
     for i in range cases.Len() {
         if cases[i] != types.TypeId(0) and ln.T.Items(ln.T.Parts(cases[i])).Len() > 0 { with.Push(i) }
     }

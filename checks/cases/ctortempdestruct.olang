@@ -33,7 +33,7 @@ fn main() ? {
         c := k == 42
         y Wrap& = Wrap(local) if c else Wrap(local)
         z := (Wrap(local) if c else Wrap(local)).a.v
-        l := List<Wrap&>()
+        l := Vec<Wrap&>()
         l.Push(Wrap(local))
         g := id(Wrap(local))
         id(Wrap(local))

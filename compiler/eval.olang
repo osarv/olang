@@ -368,15 +368,15 @@ type Machine struct(T mut types.Table&, When Mode) {
     UsedBuild Bool = false
     BuildFns Map<mir.FnKey, Bool>    # the functions whose bodies read a build constant (check's ReadsBuild)
     # the program's code
-    fns List<mir.Fn>
+    fns Vec<mir.Fn>
     cf mut Array<cfn>& = Array<cfn>(64)    # by fns' index, each decoded
     tySize mut Array<I64>& = Array<I64>(1024, -1)    # by type: size, shape, width once settled, -1 before
     tyShape mut Array<I64>& = Array<I64>(1024, -1)
     tyWidth mut Array<I64>& = Array<I64>(1024, -1)
     fnOf Map<mir.FnKey, I64>
-    codeKeys List<mir.FnKey>     # every function a value or a code allocation names, by its own index
+    codeKeys Vec<mir.FnKey>     # every function a value or a code allocation names, by its own index
     codeOf Map<mir.FnKey, I64>
-    codeAllocs List<I64>         # by codeKeys' index: its code allocation, 0 until asked
+    codeAllocs Vec<I64>         # by codeKeys' index: its code allocation, 0 until asked
     externs Map<I64, String&>
     externCode Map<I64, I64>     # an extern's code allocation
     dtors Map<types.TypeId, mir.FnKey>
@@ -386,7 +386,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     tableKeys Map<I64, Array<mir.FnKey>&>
     tableAt Map<I64, I64>
     typeidAt Map<types.TypeId, I64>
-    globals List<global>
+    globals Vec<global>
     globalOf Map<gkey, I64>
     datas Map<dkey, I64>
     # memory
@@ -396,13 +396,13 @@ type Machine struct(T mut types.Table&, When Mode) {
     free mut Array<I64>& = Array<I64>(64)
     al mut Array<alloc>& = Array<alloc>(1024)    # the allocations by slot, nAl of them; slot 0 none
     nAl I64 = 1
-    freeAllocs List<I64>
-    scopes List<scope>
-    freeScopes List<I64>
-    regs List<reg>
-    freeRegs List<I64>
-    tasks List<task>
-    freeTasks List<I64>
+    freeAllocs Vec<I64>
+    scopes Vec<scope>
+    freeScopes Vec<I64>
+    regs Vec<reg>
+    freeRegs Vec<I64>
+    tasks Vec<task>
+    freeTasks Vec<I64>
     # execution
     fs mut Array<frame>& = Array<frame>(64)    # the frames, nFs of them, the top last
     nFs I64 = 0
@@ -410,15 +410,15 @@ type Machine struct(T mut types.Table&, When Mode) {
     # scope variables (frame.Locals, .Scopes, .Vars)
     ws mut Array<I64>& = Array<I64>(1024)
     nWs I64 = 0
-    closing List<I64>
-    gens List<genRec>    # D18: every generator made, by the index its environment holds
-    genWords List<I64>   # their suspended frames' words (genRec.At)
+    closing Vec<I64>
+    gens Vec<genRec>    # D18: every generator made, by the index its environment holds
+    genWords Vec<I64>   # their suspended frames' words (genRec.At)
     # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together: the frame
     # each is registered in, the scope it is registered at, and its entry block - run, under interpret, for the blocks a
     # stop leaves. A frame's own are the last ones while it runs, since every frame above it has returned
-    defF List<I64>
-    defS List<I64>
-    defB List<I64>
+    defF Vec<I64>
+    defS Vec<I64>
+    defB Vec<I64>
     resumed Bool = false
     program I64 = 0
     scratch I64 = 0
@@ -426,22 +426,22 @@ type Machine struct(T mut types.Table&, When Mode) {
     initGlobal I64 = -1
     lastOwnScope I64 = 0
     offAt Map<types.TypeId, I64>
-    offs List<I64>
+    offs Vec<I64>
     writableOf Map<types.TypeId, Bool>
     stopFile I64 = 0
     stopSp source.Span = source.Span(0, 0)
     # M19g: where the program grew each collection whose array was retired, by Retired; the one the last stale use
     # stopped on (-1 for none); the library's files, whose frames the place is looked for below
-    retiredAt List<pair.Pair<I64, source.Span>>
+    retiredAt Vec<pair.Pair<I64, source.Span>>
     StaleAt I64 = -1
     Library Map<I64, Bool>
-    Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
+    Args Vec<String&>          # -i: the interpreted program's command line, its file first (B3e)
     # S18d: the error being returned's last places, oldest first - its file, span, what it did and its own text (a
     # requirement's "pick: y > x", D17), four words a place
-    trace List<I64>
-    whats List<String&>        # the texts trace places name, a place's fourth word its index here, -1 for none
+    trace Vec<I64>
+    whats Vec<String&>        # the texts trace places name, a place's fourth word its index here, -1 for none
     TraceDropped I64 = 0
-    traceStack List<I64>        # the traces of the threads a running task stands beside: each's words, then its count
+    traceStack Vec<I64>        # the traces of the threads a running task stands beside: each's words, then its count
                                 # of words and its dropped places
     # B3e: where the task was spawned whose wait for another task stopped -i (WhyWaits), -1 for none
     WaitTaskFile I64 = -1
@@ -3162,7 +3162,7 @@ fn wideText(lo I64, hi I64, signed Bool) String {
     neg := signed and hi < 0
     l, h := lo, hi
     if neg { l, h = neg128(lo, hi) }
-    parts := List<I64>()
+    parts := Vec<I64>()
     for h != 0 {
         qlo, qhi, rlo, _ := udivmod128(l, h, 1000000000000000000, 0)
         parts.Push(rlo)
@@ -5177,24 +5177,24 @@ fn (m mut Machine&) Main(inits Array<mir.FnKey>&, main mir.FnKey) Stop {
 # storage written out as data: its bytes, the alignment it needs, whether it is constant, and the references in it -
 # at an offset (a word's), to another blob's offset
 type Blob struct() {
-    Bytes List<U8>
+    Bytes Vec<U8>
     Align I64 = 8
     Constant Bool = false
-    At List<I64>
-    To List<I64>        # the blob each reference names - -1 for one another global's image holds (K2b)
-    Off List<I64>
-    Ext List<I64>       # beside each: the evaluator's allocation it names where To is -1 (the caller resolves it), else -1
+    At Vec<I64>
+    To Vec<I64>        # the blob each reference names - -1 for one another global's image holds (K2b)
+    Off Vec<I64>
+    Ext Vec<I64>       # beside each: the evaluator's allocation it names where To is -1 (the caller resolves it), else -1
     # where To is -1, once resolved: the global whose image holds it, and its blob there
-    ExtMod List<I64>
-    ExtName List<source.NameId>
-    ExtIdx List<I64>
+    ExtMod Vec<I64>
+    ExtName Vec<source.NameId>
+    ExtIdx Vec<I64>
 }
 
 # an immutable global's value baked (K2): blob 0 its own storage, then each allocation it reaches, once (K2b: two
 # references to one instance stay one, a cycle is written as itself)
 type Image struct() {
-    Blobs List<Blob>
-    Slots List<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
+    Blobs Vec<Blob>
+    Slots Vec<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
 }
 
 type NotBaked error {
@@ -5209,7 +5209,7 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
     g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
     img := Image()
     blobOf Map<I64, I64>
-    work List<I64>
+    work Vec<I64>
     root := m.globals[g].Store & slotMask
     if m.al[root].Size == 0 { error NotBaked.REFUSED }
     blobOf.Put(root, 0)
@@ -5313,7 +5313,7 @@ fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
 # it is written: "" for none. A call through a function value is decided when it is reached (K1)
 fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen := Map<I64, Bool>()
-    work List<I64>
+    work Vec<I64>
     start := try m.fnOf.Get(k) catch { return $WhyNoBody, 0, source.Span(0, 0) }
     work.Push(start)
     seen.Put(start, true)

@@ -34,7 +34,7 @@ fn repeat<T>(x T, n I64) Iterator<T> {
     for i in range n { yield x }
 }
 
-fn (l List<T>&) Twice() Iterator<T> {
+fn (l Vec<T>&) Twice() Iterator<T> {
     for x in l {
         yield x
         yield x
@@ -98,10 +98,10 @@ test "D18: a generator walked by for-in and by the iterator helpers, while compi
 
 test "D18: a generic generator, a generator method, text built for each value" {
     assert repeat("ab", 3).Count(fn(s) { return s == "ab" }) == 3
-    l := List<I64>()
+    l := Vec<I64>()
     l.Push(1)
     l.Push(Ten)
-    out := List<I64>()
+    out := Vec<I64>()
     for x in l.Twice() { out.Push(x) }
     assert out.Len() == 4 and out[2] == 10 and out[3] == 10
     n I64 = 0
@@ -113,7 +113,7 @@ test "D18: a generic generator, a generator method, text built for each value" {
 }
 
 test "D18: errors - the error leaves, Exhausted after it" {
-    got := List<I64>()
+    got := Vec<I64>()
     failed := false
     for x in try countdown(5) { got.Push(x) } catch Bad { failed = true }
     assert failed and got.Len() == 2 and got[1] == 4
@@ -174,13 +174,13 @@ test "D18b: a walk stopped part way closes its scopes with the scope the generat
 
 test "D18: a walk churned between values reads what it made, not reused storage" {
     for w in words("one two three") {
-        junk := List<I64>()
+        junk := Vec<I64>()
         for i in range 50 { junk.Push(($i "-" $i).Len()) }
         assert w.EndsWith("!") and junk.Len() == 50
     }
 }
 
-fn logged(n I64, log mut List<String&>&) Iterator<I64> {
+fn logged(n I64, log mut Vec<String&>&) Iterator<I64> {
     for i in range n {
         log.Push($i "!")
         yield i
@@ -188,7 +188,7 @@ fn logged(n I64, log mut List<String&>&) Iterator<I64> {
 }
 
 test "D18b: a generator builds into what it was given, where that lives" {
-    log := List<String&>()
+    log := Vec<String&>()
     s I64 = 0
     for x in logged(Ten - 6, log) { s += x }
     assert s == 6 and log.Len() == 4 and log[3] == "3!"

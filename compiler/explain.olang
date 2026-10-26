@@ -101,7 +101,7 @@ fn fnLine(c mut typecheck.Checker&, f I64, sig types.TypeId, body I64) String {
 
 # a function type carrying the names its declaration gives its parameters, the receiver's first
 fn named(c mut typecheck.Checker&, sig types.TypeId, recv ast.Param?&, params Array<ast.Param&>&) types.TypeId {
-    ids List<I64>
+    ids Vec<I64>
     if recv is not null { ids.Push(I64(recv.Name)) }
     if params.Len() > 0 {
         for p in params { ids.Push(I64(p.Name)) }
@@ -397,11 +397,11 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
 # generic instance of it (B11b, the user's call 2026-10-25 - a type has one constructor, other ways to make a value are
 # ordinary functions ending in a call to it), in the order the file declares them - the exported ones, or every one where
 # all is true
-fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) List<I64> {
-    out List<I64>
+fn Builders(c mut typecheck.Checker&, d types.DeclId, all Bool) Vec<I64> {
+    out Vec<I64>
     mi := c.P.DeclModule(d)
     tab := c.P.R.Tables[mi]
-    order List<I64>
+    order Vec<I64>
     for ei in range tab.Entries.Len() {
         if tab.Entries[ei].Kind == names.What.Func { order.Push(ei) }
     }
@@ -448,7 +448,7 @@ fn FnLine(c mut typecheck.Checker&, f I64) String {
 
 # the traits with no type parameters the type meets, from every module of the program
 fn traitsMet(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
-    met List<String&>
+    met Vec<String&>
     for mi in range c.P.R.Tables.Len() {
         tab := c.P.R.Tables[mi]
         for ei in range tab.Entries.Len() {

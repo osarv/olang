@@ -13,11 +13,11 @@ fn churn() I64 {
 fn main() ? {
     m := Map<String&, I64>()
     for i in range 4 { m.Put($i, i) }
-    l := List<String&>()
+    l := Vec<String&>()
     for k in m.Keys() { l.Push(k) }
     vm := Map<I64, String&>()
     vm.Put(1, "a" $l.Len())
-    vl := List<String&>()
+    vl := Vec<String&>()
     for v in vm.Values() { vl.Push(v) }
     churn()
     t I64 = 0

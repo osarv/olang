@@ -50,8 +50,8 @@ fn bracketed(text String&) String& {
 }
 
 # the lines of text kept in a List - borrows of the text, so the List lives where the text does
-fn linesOf(t String&) List<String&>&t {
-    out mut List<String&>&t = List<String&>()
+fn linesOf(t String&) Vec<String&>&t {
+    out mut Vec<String&>&t = Vec<String&>()
     for line in t.Lines() { out.Push(line) }
     return out
 }
@@ -346,7 +346,7 @@ fn builderRendered() String {
     b := StringBuilder()
     b.Push("one ")
     b.PushChar('2')
-    l := List<StringBuilder>()
+    l := Vec<StringBuilder>()
     l.Push(b)
     return $b "|" $l "|" $StringBuilder()
 }

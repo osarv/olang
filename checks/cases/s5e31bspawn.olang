@@ -6,7 +6,7 @@ type Acc struct() {
 fn (a mut Acc&) Add() { a.N++ }
 
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     join {
         spawn l[0].Add()

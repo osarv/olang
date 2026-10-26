@@ -4,12 +4,12 @@
 # the text where the copy is, the statement's block, not where the collection's list lives (O17's split value)
 type Rec struct(name String&) {
     name
-    tags List<String&> = List<String&>()
+    tags Vec<String&> = Vec<String&>()
 }
 fn (r mut Rec&) Tag(t String&) { r.tags.Push(t) }
 
 fn main() ? {
-    l := List<Rec>()
+    l := Vec<Rec>()
     l.Push(Rec("a"))
     for k in range 3 { l[0].Tag("lit") }
 }

@@ -3,7 +3,7 @@
 # it is copied where it lands, so a scope argument places nothing
 type P struct(n I64) { n }
 fn main() {
-    out := List<P&>()
+    out := Vec<P&>()
     t := "x"
     out.Push(P&t(1))
     assert out.Len() == 1

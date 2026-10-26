@@ -82,7 +82,7 @@ fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>
 # curl would add for a body of its own). timeoutMs, when above 0, bounds the whole request in milliseconds.
 fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? Error {
     if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error Error.INVALID }
-    args := List<String&>()
+    args := Vec<String&>()
     for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
     head Bool = method == "HEAD"

@@ -15,7 +15,7 @@ type Holder struct() {
 fn pass(f fn()) fn() { return f }
 fn run() {
     h mut Holder& = Holder()
-    c mut List<I64>& = List<I64>()
+    c mut Vec<I64>& = Vec<I64>()
     g := fn() {
         c.Push(1)
         h.res = R(c.Len())

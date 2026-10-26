@@ -15,7 +15,7 @@ type Bag struct(head mut Node&) {
     head
     k I64 = 3
     m Map<String&, I64> = Map<String&, I64>()
-    l List<I64> = List<I64>()
+    l Vec<I64> = Vec<I64>()
 }
 fn (b Bag&) mk() It { return It(b) }
 fn (b Bag&) Str() String {
@@ -45,12 +45,12 @@ fn main() ? {
     s := $b
     churn()
     assert s == "37/2/1/3/30"
-    m := Map<Char, List<Char>>()
-    l := List<Char>()
+    m := Map<Char, Vec<Char>>()
+    l := Vec<Char>()
     l.Push('x')
     m.Put('a', l)
     t := $m
-    e := Map<I64, List<I64>>()
+    e := Map<I64, Vec<I64>>()
     u := $e
     churn()
     assert t == "Map<Char, List<Char>>{'a': List<Char>['x']}"

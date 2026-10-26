@@ -61,7 +61,7 @@ Target String& = try os.Env("CHECKS_TARGET") catch default ""
 CrossSkip := String&["externruntime2.olang"]
 
 fn withParts(names Array<String&>&) Array<String&>& {
-    all List<String&>
+    all Vec<String&>
     for n in names {
         if n == "strheld" { for p in StrheldPrograms { all.Push($"strheld/" $p) } }
         all.Push($n)

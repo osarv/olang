@@ -32,10 +32,10 @@ fn clobber(n I64) I64 {
     if n > 0 { return clobber(n - 1) + a[3] }
     return a[5]
 }
-fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+fn f(c mut V&, out mut Vec<Pt&>&) { out.Push(id(c.p)) }
 fn main() ? {
     s := Vs(Array<I64>(4))
-    out := List<Pt&>()
+    out := Vec<Pt&>()
     for k in range 3 { f(s[k], out) }
     try churn()
     try io.Println($clobber(10) " " $out[0].X)

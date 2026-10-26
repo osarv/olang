@@ -1,9 +1,9 @@
-# vec - the growable array: its elements in one contiguous buffer, which doubles as it fills. Where List never moves
-# what it stores (a chain of chunks, a copy for contiguity), a Vec moves its elements into a new buffer when it grows,
+# vec - the growable array, the one a program reaches for first: its elements in one contiguous buffer, which doubles as
+# it fills. Where std/list's List never moves what it stores (a chain of chunks, a copy for contiguity), a Vec moves its elements into a new buffer when it grows,
 # and is an array in every other respect: "v[i]" is an element of one array, "for x in v" a counted walk over it, View()
 # lends the elements as an array.
 #
-# A Vec is a HANDLE, as List and Map are: everything it holds - the buffer and the count - is one record, made where the
+# A Vec is a HANDLE, as Map is: everything it holds - the buffer and the count - is one record, made where the
 # Vec is constructed (C2d), and a Vec value is one reference to it. So a copy of a Vec value ("b := a", a field, an
 # element, a by-value argument) is a second name for the same Vec, and a Push through either is seen through both;
 # Clone() is the copy with storage of its own. "Array<Vec<T>>(n, Vec<T>())" is n names for one Vec (T8).
@@ -41,7 +41,7 @@ type vecState<T> struct(cap I64) {
 # a buffer of room for at least need elements, the elements moved into it when the one there is smaller: twice the size
 # of the last (8 at first), or need, or what was asked for, whichever is most. A new buffer is filled with fill, the
 # element about to be stored, rather than with T's zero value: no slot is read before it is written, and a T with no
-# zero value - a Vec, a List - is as ordinary an element as any other (D13c). The old buffer is retired (M19d): nothing
+# zero value - a Vec, a Map - is as ordinary an element as any other (D13c). The old buffer is retired (M19d): nothing
 # here uses it again
 fn (s mut vecState<T>&) room(need I64, fill T) {
     if need <= s.data.Len() { return }
@@ -109,7 +109,7 @@ fn (v Vec<T>&) Get(i I64) T ? VecError.OUT_OF_RANGE {
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is
 fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
 
-# the first element - failing with EMPTY when there is none, as List's First does
+# the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key
 fn (v Vec<T>&) First() T ? VecError.EMPTY {
     if v.s.n == 0 { error VecError.EMPTY }
     return v.s.data[0]
@@ -209,7 +209,7 @@ fn (v Vec<T>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {
 }
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
-# moves them - and says whether there was one, as List's Remove does
+# moves them - and says whether there was one, as Map's Remove does
 fn (v mut Vec<T>&) Remove(x T) Bool {
     i := try v.IndexOf(x) catch { return false }
     try v.RemoveAt(i) catch { unreachable }   # a position IndexOf found
@@ -248,9 +248,36 @@ fn (v Vec<T>&) Eq(o Vec<T>&) Bool { return v.s.data[:v.s.n] == o.s.data[:o.s.n] 
 # the elements' hash, as an array of them hashes - so equal Vecs hash alike (E10b)
 fn (v Vec<T>&) Hash() I64 { return v.s.data[:v.s.n].HashElements() }
 
-# how "$" renders a Vec (E11c): as an array of its elements renders, with the Vec named in front - "Vec<I64>[1, 2, 3]"
+# how "$" renders a Vec (E11c): as an array of its elements renders, with the Vec named in front - "Vec<I64>[1, 2, 3]",
+# "Vec<String&>["a"]", "Vec<Char>['x', '\n']": an array of Char renders as text, so a Vec of them writes each element as a
+# character literal, as it renders inside any other value
 fn (v Vec<T>&) Str() String {
-    r := $v.s.data[:v.s.n]
-    o := try r.FindByte('[') catch { unreachable }
-    return "Vec<" $r[:o] ">" $r[o:]
+    match T {
+        case Char {
+            b := StringBuilder()
+            b.Push("Vec<Char>[")
+            for i in range v.s.n {
+                if i > 0 { b.Push(", ") }
+                b.Push(vecCharLiteral(v.s.data[i]))
+            }
+            b.PushChar(']')
+            return b.ToString()
+        }
+        nomatch {
+            r := $v.s.data[:v.s.n]
+            o := try r.FindByte('[') catch { unreachable }
+            return "Vec<" $r[:o] ">" $r[o:]
+        }
+    }
+}
+
+# c as a character literal writes it - how "$" renders a Char inside another value (E11a)
+fn vecCharLiteral(c Char) String {
+    if c == '\n' { return "'\\n'" }
+    if c == '\t' { return "'\\t'" }
+    if c == '\r' { return "'\\r'" }
+    if c == '\0' { return "'\\0'" }
+    if c == '\\' { return "'\\\\'" }
+    if c == '\'' { return "'\\''" }
+    return "'" $c "'"
 }

@@ -145,15 +145,15 @@ fn leafOf(i I64) Tree<String&>& {
     return Tree.Leaf(s)
 }
 
-fn leaves(n I64) List<Tree<String&>&> {
-    out List<Tree<String&>&>
+fn leaves(n I64) Vec<Tree<String&>&> {
+    out Vec<Tree<String&>&>
     for i in range n { out.Push(Tree.Leaf($"leaf " $i)) }
     return out
 }
 
 test "G6b, T17c: payloads holding references live where the value does - read back after an arena churn" {
     l := leaves(4)
-    v List<Tree<String&>&>
+    v Vec<Tree<String&>&>
     for i in range 3 { v.Push(leafOf(i)) }
     p Tree<String&>& = Tree.Node(leafOf(8), Tree.Leaf("y"))
     assert churn() > 0

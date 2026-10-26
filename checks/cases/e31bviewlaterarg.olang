@@ -6,7 +6,7 @@ type V struct(d mut Array<I64>&, n I64) {
     n
 }
 fn (v mut V&) Put(x I64) { v.d[0] = x }
-fn replace(l mut List<V>&) I64 {
+fn replace(l mut Vec<V>&) I64 {
     l[0] = V(Array<I64>(1), 1)
     return 5
 }
@@ -15,7 +15,7 @@ fn replaceA(a mut Array<V>&) I64 {
     return 5
 }
 fn main() ? {
-    l := List<V>()
+    l := Vec<V>()
     old := Array<I64>(1)
     l.Push(V(old, 0))
     l[0].Put(replace(l))

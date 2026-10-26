@@ -52,8 +52,8 @@ fn main() {
 }
 
 # what a tool printed for the files, its own diagnostics passed on
-fn run(tool String&, mode String&, files List<String&>&) String {
-    args := List<String&>()
+fn run(tool String&, mode String&, files Vec<String&>&) String {
+    args := Vec<String&>()
     args.Push(tool)
     if mode != "" { args.Push(mode) }
     for f in files { args.Push(f) }

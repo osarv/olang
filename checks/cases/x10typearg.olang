@@ -3,5 +3,5 @@
 extern type Db
 
 fn main() ? {
-    l := List<Db>()
+    l := Vec<Db>()
 }

@@ -127,8 +127,8 @@ fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names M
 
 # every type variable written between lo and hi, in order
 fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names Map<String&, Bool>&
-               known Map<String&, Bool>&) List<Occ> {
-    out List<Occ>
+               known Map<String&, Bool>&) Vec<Occ> {
+    out Vec<Occ>
     for i in range lo, hi {
         if src[i] == '<' {
             o := try occurrenceAt(src, mask, i, hi, hasNames, names, known) catch { continue }
@@ -141,10 +141,10 @@ fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names M
 # ---- items ----
 
 # the pieces of code in src: kind 'w' a word, 'p' one punctuation character, 'n' a line end; and where each starts
-fn tokens(src String&, mask String&) List<Char>, List<String&>, List<I64> {
-    kinds List<Char>
-    texts List<String&>
-    starts List<I64>
+fn tokens(src String&, mask String&) Vec<Char>, Vec<String&>, Vec<I64> {
+    kinds Vec<Char>
+    texts Vec<String&>
+    starts Vec<I64>
     i I64 = 0
     n := src.Len()
     for i < n {
@@ -175,13 +175,13 @@ fn tokens(src String&, mask String&) List<Char>, List<String&>, List<I64> {
 # the top-level items as (kind, start, end): "fn", "type" or "other" - those inside a top-level "if"/"else" included. An
 # item starts with a word at the start of a line outside every block, bracket and parenthesis ("destruct" continues the
 # type before it) and runs to the next one. Returned as three lists: kinds ('f', 't', 'o'), starts, ends
-fn items(src String&, mask String&) List<Char>, List<I64>, List<I64> {
+fn items(src String&, mask String&) Vec<Char>, Vec<I64>, Vec<I64> {
     kinds, texts, starts := tokens(src, mask)
-    stack List<Bool>        # one entry per open "{": true for a top-level "if"/"else" block, whose contents are items
+    stack Vec<Bool>        # one entry per open "{": true for a top-level "if"/"else" block, whose contents are items
     paren I64 = 0
-    outKinds List<Char>
-    outStarts List<I64>
-    outEnds List<I64>
+    outKinds Vec<Char>
+    outStarts Vec<I64>
+    outEnds Vec<I64>
     cur Char = ' '
     curStart I64 = 0
     lineStart := true
@@ -290,8 +290,8 @@ fn typeParams(src String&, mask String&, start I64, end I64, names mut Map<Strin
 }
 
 # the occurrences not written inside another's constraint
-fn outermost(occs List<Occ>&) List<Occ> {
-    out List<Occ>
+fn outermost(occs Vec<Occ>&) Vec<Occ> {
+    out Vec<Occ>
     lastEnd I64 = -1
     for o in occs {
         if o.start >= lastEnd {
@@ -323,7 +323,7 @@ fn lineOf(src String&, pos I64) I64 {
 
 # the edits of one item, added to edits and reps; what was changed that deserves a word is added to report
 fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known Map<String&, Bool>&
-               edits mut List<Edit>&, reps mut List<String&>&, report mut List<String&>&, path String&) {
+               edits mut Vec<Edit>&, reps mut Vec<String&>&, report mut Vec<String&>&, path String&) {
     none Map<String&, Bool>
     if kind == 't' {
         names Map<String&, Bool>
@@ -376,10 +376,10 @@ fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known M
 }
 
 # the spaces to put before a trailing comment on each line an edit shortened, so comments aligned in a column stay so
-fn keepCommentColumns(src String&, mask String&, edits List<Edit>&, reps mut List<String&>&, out mut List<Edit>&) {
-    lineStarts List<I64>
-    removedBy List<I64>
-    lastBy List<I64>
+fn keepCommentColumns(src String&, mask String&, edits Vec<Edit>&, reps mut Vec<String&>&, out mut Vec<Edit>&) {
+    lineStarts Vec<I64>
+    removedBy Vec<I64>
+    lastBy Vec<I64>
     for e in edits {
         ls := 0
         for i in range e.start {
@@ -414,16 +414,16 @@ fn keepCommentColumns(src String&, mask String&, edits List<Edit>&, reps mut Lis
 }
 
 # src migrated, and how many edits that took (not counting the comment columns kept)
-fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut List<String&>&) String, I64 {
+fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut Vec<String&>&) String, I64 {
     mask := srcmask.Mask(src, true)
-    edits List<Edit>
-    reps List<String&>
+    edits Vec<Edit>
+    reps Vec<String&>
     kinds, starts, ends := items(src, mask)
     for k in range kinds.Len() {
         rewriteItem(src, mask, kinds[k], starts[k], ends[k], known, edits, reps, report, path)
     }
     n := edits.Len()
-    extra List<Edit>
+    extra Vec<Edit>
     keepCommentColumns(src, mask, edits, reps, extra)
     for e in extra { edits.Push(e) }
     edits.Sort(fn(a, b) {
@@ -476,7 +476,7 @@ fn typeDecls(text String&, out mut Map<String&, Bool>&) {
 fn stdTypes(known mut Map<String&, Bool>&, stdDir String&) {
     for b in BuiltinTypes { known.Put($b, true) }
     std := $stdDir if stdDir != "" else $srcmask.RepoRoot() "/std"
-    files List<String&>
+    files Vec<String&>
     srcmask.Walk(std, files)
     for f in files {
         text := try srcmask.ReadText(f) catch { continue }
@@ -487,7 +487,7 @@ fn stdTypes(known mut Map<String&, Bool>&, stdDir String&) {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     stdDir String& = ""
     i I64 = 1
@@ -504,7 +504,7 @@ fn main() ? {
         }
         i++
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }
@@ -513,7 +513,7 @@ fn main() ? {
     totalEdits I64 = 0
     totalFiles I64 = 0
     totalLines I64 = 0
-    report List<String&>
+    report Vec<String&>
     for path in files {
         src := try srcmask.ReadText(path) catch {
             srcmask.SayErr("bare_typevars: cannot read " $path)
@@ -550,7 +550,7 @@ fn main() ? {
 
 test "a function's later <T> and a type's whole item become T" {
     known Map<String&, Bool>
-    report List<String&>
+    report Vec<String&>
     out, n := migrate("fn max(a <T>, b <T>) <T> { return a }\ntype Box<T> struct(x <T>) { x }\n", "x.olang", known, report)
     assert n == 3
     assert out == "fn max(a <T>, b T) T { return a }\ntype Box<T> struct(x T) { x }\n"
@@ -558,7 +558,7 @@ test "a function's later <T> and a type's whole item become T" {
 
 test "a constraint written later moves to the introduction" {
     known Map<String&, Bool>
-    report List<String&>
+    report Vec<String&>
     out, n := migrate("fn pick(a <T>, b <T Ord>) { }\n", "x.olang", known, report)
     assert n == 2 and out == "fn pick(a <T Ord>, b T) { }\n"
     assert report.Len() == 1

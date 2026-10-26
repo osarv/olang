@@ -9,7 +9,7 @@ type Module struct(Path String&, Dir String&, Src String&) {
     Src
 }
 type R struct() {
-    mods List<mut Module&>
+    mods Vec<mut Module&>
 }
 fn (r mut R&) load(path String&) {
     src := "text" $path

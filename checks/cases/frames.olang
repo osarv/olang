@@ -5,7 +5,7 @@ type Frame struct(d I64) {
     vars Map<String&, I64>
 }
 type Interp struct() {
-    frames List<mut Frame&>
+    frames Vec<mut Frame&>
 }
 fn (it mut Interp&) call(d I64) I64 {
     it.frames.Push(Frame(d))

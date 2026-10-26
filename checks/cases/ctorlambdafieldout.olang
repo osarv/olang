@@ -10,7 +10,7 @@ type D struct(c Ctr&) {
 }
 
 fn main() {
-    ds := List<D>()
+    ds := Vec<D>()
     for i in range 3 {
         ct := Ctr(i)
         ds.Push(D(ct))

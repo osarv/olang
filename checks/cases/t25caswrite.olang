@@ -8,7 +8,7 @@ type Box enum {
     No
 }
 type World struct() {
-    items mut List<Node&>& = List<Node&>()
+    items mut Vec<Node&>& = Vec<Node&>()
 }
 fn viaAs(q Node&) {
     b := Box.R(q)

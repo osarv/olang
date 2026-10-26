@@ -8,7 +8,7 @@ type Bag struct() {
 }
 
 fn main() ? {
-    bags := List<Bag>()
+    bags := Vec<Bag>()
     bags.Push(Bag())
     resetFn(bags[0])
 }

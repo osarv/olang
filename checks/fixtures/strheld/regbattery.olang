@@ -121,7 +121,7 @@ fn main() ? {
     }
     try io.Println("16: " $(Made - Gone))
     {
-        r := List<Res&>()
+        r := Vec<Res&>()
         r.Push(Res(22) if c else Res(23))
     }
     try io.Println("17: " $(Made - Gone))

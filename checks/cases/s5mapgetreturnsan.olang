@@ -5,9 +5,9 @@
 # the result scope, so nothing returned is reclaimed with its block (read back after a churn)
 import "std/io"
 
-fn first() List<I64> ? {
-    lists := List<List<I64>>()
-    lists.Push(List<I64>())
+fn first() Vec<I64> ? {
+    lists := Vec<Vec<I64>>()
+    lists.Push(Vec<I64>())
     l := try lists.First()
     for i in range 30 {
         l.Push(i + 7)
@@ -15,11 +15,11 @@ fn first() List<I64> ? {
     return l
 }
 
-fn inner() List<I64> ? {
-    l List<I64>
+fn inner() Vec<I64> ? {
+    l Vec<I64>
     {
-        m := Map<I64, List<I64>>()
-        m.Put(1, List<I64>())
+        m := Map<I64, Vec<I64>>()
+        m.Put(1, Vec<I64>())
         l = try m.Get(1)
     }
     l.Push(5)
@@ -29,7 +29,7 @@ fn inner() List<I64> ? {
 fn churn() {
     for i in range 200 {
         a := Array<I64>(64, i)
-        b := List<I64>()
+        b := Vec<I64>()
         b.Push(a[3])
         assert b[0] == i
     }

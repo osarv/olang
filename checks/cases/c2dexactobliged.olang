@@ -18,9 +18,9 @@ fn (m mut MM<K, V>&) set(key K, value V) {
     else { m.slot!.entry = ME<K, V>(key, value) }
 }
 fn main() ? {
-    m := MM<I32, mut List<I32>&>()
+    m := MM<I32, mut Vec<I32>&>()
     for i in range 2 {
-        l mut List<I32>& = List<I32>()
+        l mut Vec<I32>& = Vec<I32>()
         m.set(1, l)
     }
 }

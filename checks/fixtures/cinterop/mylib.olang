@@ -12,7 +12,7 @@ type Bad error {
     TOO_BIG
 }
 
-Seen mut List<I64>& = List<I64>()
+Seen mut Vec<I64>& = Vec<I64>()
 Pid I32 = getpid()
 
 export fn add(a I32, b I32) I32 { return a + b }

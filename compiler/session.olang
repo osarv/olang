@@ -764,7 +764,7 @@ CompStruct I64 = 22
 type Items struct() {
     B StringBuilder
     n I64 = 0
-    seen List<String&>
+    seen Vec<String&>
 }
 
 fn (it mut Items&) Add(label String&, kind I64, detail String&) {
@@ -1070,7 +1070,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
         say(doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false).Text())
         return 0
     }
-    roots List<String&>
+    roots Vec<String&>
     for f in files { roots.Push($f) }
     if roots.Len() == 0 { stdModules(roots) }
     try os.MkDirAll(html) catch os.Error {
@@ -1078,7 +1078,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
         return 1
     }
     status I32 = 0
-    mods List<doc.Module>
+    mods Vec<doc.Module>
     for root in roots {
         # each module checked as a program of its own, in a process of its own, so what one analysis builds is gone
         # before the next begins
@@ -1324,7 +1324,7 @@ fn StdModule(spec String&) String {
 }
 
 # every module of the standard library: std's files, then the prelude's
-fn stdModules(out mut List<String&>&) {
+fn stdModules(out mut Vec<String&>&) {
     std := load.StdDir()
     for dir in String&["", "prelude"] {
         at := filepath.Join(std, dir) if dir != "" else $std

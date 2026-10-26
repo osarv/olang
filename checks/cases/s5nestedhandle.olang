@@ -3,9 +3,9 @@
 # - "users[0][0].Push(t)" - holds and lends every level, so what Push keeps lives where the inner list's state does,
 # which a loop's text does not
 fn main() ? {
-    users := List<List<List<String&>>>()
-    users.Push(List<List<String&>>())
-    users[0].Push(List<String&>())
+    users := Vec<Vec<Vec<String&>>>()
+    users.Push(Vec<Vec<String&>>())
+    users[0].Push(Vec<String&>())
     for k in range 3 {
         t := $k "-loop-text"
         users[0][0].Push(t)

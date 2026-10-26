@@ -8,7 +8,7 @@ type Acc struct() {
 fn bump(a mut Acc&) { a.N++ }
 
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     bump(try l[0])
     try io.Println($l[0].N)

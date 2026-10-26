@@ -50,13 +50,13 @@ LiteralIntBits I64 = 64
 # I64's maximum is a U64 (Big), which B9a does not compute in. Known is false for a built-in whose value this
 # compilation has not been told (the target's CPU before the driver resolves it): a condition reading one is undecided
 type Consts struct() {
-    names List<String&>
-    values List<Value>
-    builtin List<Bool>
-    big List<Bool>
-    known List<Bool>
-    raws List<String&>
-    Texts List<String&>
+    names Vec<String&>
+    values Vec<Value>
+    builtin Vec<Bool>
+    big Vec<Bool>
+    known Vec<Bool>
+    raws Vec<String&>
+    Texts Vec<String&>
 }
 
 fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool) {
@@ -274,11 +274,11 @@ type Global struct(Name String&, Sp source.Span, Mut Bool, Declared String&, Ini
 # what a module offers its conditions: its globals by name, the first declaration of each, and whether it is std's
 type Scope struct(Std Bool) {
     Std
-    globals List<Global&>
-    Locals List<source.NameId>    # a local condition's (S8b): every parameter and local named so far in its item
+    globals Vec<Global&>
+    Locals Vec<source.NameId>    # a local condition's (S8b): every parameter and local named so far in its item
     # of them, those declared with a value of their own: a local that may be fixed (S8c), which only the checker can
     # tell - a condition reading one is left to compile-time evaluation, as one calling a function is
-    Fixed List<source.NameId>
+    Fixed Vec<source.NameId>
 }
 
 fn (s mut Scope&) Add(g Global&) {
@@ -320,7 +320,7 @@ type Eval struct(text String&, names source.Names&, scope Scope&, consts Consts&
     depth I64 = 0
     skip I64 = 0
     UsedBuild Bool = false
-    texts List<String&>        # the text values this evaluation met: Value.S indexes them
+    texts Vec<String&>        # the text values this evaluation met: Value.S indexes them
 }
 
 fn (e mut Eval&) addText(t String&) I64 {

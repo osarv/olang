@@ -101,7 +101,7 @@ fn rewriteAt(text String&, at I64) String {
 fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     i I64 = 1
     for i < args.Len() {
@@ -123,9 +123,9 @@ fn main() ? {
     }
     if jobs < 1 { jobs = 1 }
     olang = $diagedit.RealPathOf(olang)
-    files List<String&>
+    files Vec<String&>
     diagedit.OlangFiles(paths, files)
-    allowed List<String&>
+    allowed Vec<String&>
     for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
     tmp := try os.MkTemp("", "as_migrate") catch {
         srcmask.SayErr("as_migrate: cannot make a temporary directory")
@@ -142,11 +142,11 @@ fn main() ? {
         }
     }
     total I64 = 0
-    left List<String&>
+    left Vec<String&>
     fileArray := files.ToArray()
     for round in range 1, 10 {
         outputs := diagedit.CompileAll(olang, fileArray, work, true)
-        requests List<diagedit.Request>
+        requests Vec<diagedit.Request>
         for o in outputs {
             for row in o.Split("\n") {
                 path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
@@ -166,18 +166,18 @@ fn main() ? {
 }
 
 # the edits applied to their files; how many were made, what could not be in left
-fn apply(requests List<diagedit.Request>&, left mut List<String&>&) I64 {
-    paths List<String&>
+fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
+    paths Vec<String&>
     for r in requests {
         if not (r.Path in paths) { paths.Push($r.Path) }
     }
     made I64 = 0
     for path in paths {
         src := try srcmask.ReadText(path) catch { continue }
-        expect List<String&>
+        expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
         lines := src.Split("\n")
-        mine List<diagedit.Request>
+        mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path { mine.Push(r) }
         }
@@ -185,11 +185,11 @@ fn apply(requests List<diagedit.Request>&, left mut List<String&>&) I64 {
             if a.Line != b.Line { return a.Line < b.Line }
             return a.Col > b.Col
         })
-        shLine List<I64>
-        shAt List<I64>
-        shDelta List<I64>
+        shLine Vec<I64>
+        shAt Vec<I64>
+        shDelta Vec<I64>
         changed := false
-        seen List<String&>
+        seen Vec<String&>
         for r in mine {
             # a module imported by several files compiled is reported once by each
             key := $r.Line ":" $r.Col

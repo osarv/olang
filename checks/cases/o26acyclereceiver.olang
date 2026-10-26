@@ -10,12 +10,12 @@ type Expr enum {
     Num(v I64)
     Bin(op Char, l Expr&, r Expr&)
 }
-type Parser struct(toks List<Tok>&) {
+type Parser struct(toks Vec<Tok>&) {
     toks
     at I64 = 0
 }
-fn lex(src String&) List<Tok> {
-    out := List<Tok>()
+fn lex(src String&) Vec<Tok> {
+    out := Vec<Tok>()
     for c in src {
         if c.IsDigit() { out.Push(Tok('n', I64(c - '0'))) }
         else if c != ' ' { out.Push(Tok(c, 0)) }

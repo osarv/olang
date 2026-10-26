@@ -10,7 +10,7 @@ type Node struct(v I64) {
 }
 fn mk(r Node&, i I64) Node&r { return Node(i) }
 fn relay(f fn(i I64) I64, k I64) I64 {
-    t mut List<I64>& = List<I64>()
+    t mut Vec<I64>& = Vec<I64>()
     for j in range k {
         os.RunOnStack(1 << 16, fn() { t.Push(f(j)) })
     }
@@ -24,7 +24,7 @@ fn main() ? {
         m := mk(root, i)
         return m.v
     }
-    got mut List<I64>& = List<I64>()
+    got mut Vec<I64>& = Vec<I64>()
     os.RunOnStack(1 << 20, fn() {
         for i in range 1000 { got.Push(f(i)) }
         a, b I64

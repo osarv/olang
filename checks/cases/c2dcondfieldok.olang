@@ -11,7 +11,7 @@ type M struct(n I64, data mut Array<F64>& = Array<F64>(0)) {
 
 fn main() {
     t F64 = 0.0
-    kept := List<M>()
+    kept := Vec<M>()
     for i in range 3 {
         d := Array<F64>(4, F64(i))
         m := M(2, d)

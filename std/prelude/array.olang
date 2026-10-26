@@ -199,10 +199,10 @@ fn (a mut Array<T>&) Reverse() {
     }
 }
 
-# a new List - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToList()", or n copies of one value,
-# "Array<I32>(n, v).ToList()". The reverse of List's ToArray
-fn (a Array<T>&) ToList() List<T>& {
-    out mut List<T>&return = List<T>()
+# a new Vec - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToVec()", or n copies of one value,
+# "Array<I32>(n, v).ToVec()". The reverse of Vec's ToArray
+fn (a Array<T>&) ToVec() Vec<T>& {
+    out mut Vec<T>&return = Vec<T>()
     out.PushAll(a)
     return out
 }
@@ -458,7 +458,7 @@ fn sortRotate<T>(a mut Array<T>&, lo I64, m I64, hi I64) {
 }
 
 # a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
-# as it takes a List or a Map. "for x in a" does not go through it: an array is walked directly.
+# as it takes a Vec or a Map. "for x in a" does not go through it: an array is walked directly.
 type ArrayIter<T> struct(of Array<T>&) {
     arr Array<T>&of = of
     i I64 = 0

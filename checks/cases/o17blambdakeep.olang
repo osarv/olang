@@ -7,13 +7,13 @@ fn churn() {
         if a[0] == 3 { unreachable }
     }
 }
-fn idList(x mut List<I64>&) List<I64> { return x }
-fn leak(l List<I64>&) fn() I64 { return fn() I64 { return l.Len() } }
+fn idList(x mut Vec<I64>&) Vec<I64> { return x }
+fn leak(l Vec<I64>&) fn() I64 { return fn() I64 { return l.Len() } }
 fn main() ? {
-    base := List<I64>()
+    base := Vec<I64>()
     base.Push(1)
     base.Push(2)
-    fs := List<fn() I64>()
+    fs := Vec<fn() I64>()
     for i in range 3 {
         fs.Push(leak(idList(base)))
         churn()

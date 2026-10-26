@@ -28,7 +28,7 @@ fn (b Bag&) Sum() I64 {
 }
 fn main() ? {
     a := Array<Bag>(1, Bag())
-    l := List<Bag>()
+    l := Vec<Bag>()
     l.Push(Bag())
     for i in range 3 {
         (try a.Get(0) catch default Bag()).Sneak(i + 1)

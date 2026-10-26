@@ -3,7 +3,7 @@
 # E31b/O18c (F2): a handle in a value field of the element's value field, "f.Blocks[b].inner.S.Push(x)"
 import "std/io"
 type Blk struct() {
-    S List<I64>
+    S Vec<I64>
     t I64 = 0
 }
 fn churn() ? io.Error {
@@ -13,7 +13,7 @@ fn churn() ? io.Error {
     }
 }
 type In struct() {
-    S List<I64>
+    S Vec<I64>
     u I64 = 0
 }
 type Blk2 struct() {
@@ -22,7 +22,7 @@ type Blk2 struct() {
 }
 type F struct(K I64) {
     K
-    Blocks List<Blk2>
+    Blocks Vec<Blk2>
 }
 fn add(f mut F&, b I64, x I64) { f.Blocks[b].inner.S.Push(x) }
 fn main() ? {

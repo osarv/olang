@@ -113,28 +113,28 @@ type Gap struct(File I64, Sp source.Span, What String&) {
 
 # what a body's judgment says to its callers: its obligations (O10b), once its component has converged
 type summary struct() {
-    Rels List<rel>
-    Builds List<Bool> # by scope variable: whether the body may build into it (O18c, E11c)
-    Real List<Bool>   # ... a value, not only a task's stand-in (P2), which a derived scope takes (O23a)
+    Rels Vec<rel>
+    Builds Vec<Bool> # by scope variable: whether the body may build into it (O18c, E11c)
+    Real Vec<Bool>   # ... a value, not only a task's stand-in (P2), which a derived scope takes (O23a)
     # by scope variable: where the body's first build into it is, innermost - a callee's own site where it builds there
     # through a call - for E11c's note
-    BuildFile List<I64>
-    BuildAt List<source.Span>
-    Keeps List<Bool>  # by parameter: whether the body may keep something in what it names (O17)
-    Stores List<Bool> # ... store something into it, or hand a writable reference into it out - not only keep its reference
-    Puts List<Bool>   # ... store something into it itself, or by a callee that does - not only hand a reference out (O17b)
+    BuildFile Vec<I64>
+    BuildAt Vec<source.Span>
+    Keeps Vec<Bool>  # by parameter: whether the body may keep something in what it names (O17)
+    Stores Vec<Bool> # ... store something into it, or hand a writable reference into it out - not only keep its reference
+    Puts Vec<Bool>   # ... store something into it itself, or by a callee that does - not only hand a reference out (O17b)
     # a lambda's, by local: the same of each reference it captured, for a lambda that never leaves where it is made,
     # judged by its body (O17, D16c)
-    CapKeeps List<Bool>
-    CapStores List<Bool>
-    CapPuts List<Bool>
+    CapKeeps Vec<Bool>
+    CapStores Vec<Bool>
+    CapPuts Vec<Bool>
     # by constructor parameter of the instance the body returns: where every return's instance bound it, in the body's
     # terms (O13c) - Untraced where the returns disagree or it is not one of the caller's; empty for none
-    ResBind List<Term>
+    ResBind Vec<Term>
     # by field of a constructor's instance: where the instance the field was given bound its own constructor's
     # parameters, in the constructor's terms - from FieldFrom[i] in FieldTerms, -1 for none (O23a)
-    FieldFrom List<I64>
-    FieldTerms List<Term>
+    FieldFrom Vec<I64>
+    FieldTerms Vec<Term>
     Done Bool = false
     Judging Bool = false # its component is being judged to a fixed point: Builds is what the rounds so far found
 }
@@ -154,48 +154,48 @@ FnCall I64 = 2
 
 # the scope pass over a checked program: P the program, Bodies check's typed bodies. Run judges every body and fills
 # Plans, one per body (an empty plan for a body with no code)
-type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
+type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     P
     Bodies
-    Plans List<typed.Plan>
-    Gaps List<Gap>
+    Plans Vec<typed.Plan>
+    Gaps Vec<Gap>
     InstNote fn(inst I64) String = null # the checker's note for an instance's context ("instantiated here, with T = ...")
     Spell fn(t types.TypeId) String = null # a type as source writes it, for a message (the checker's)
-    sums List<mut summary&>
+    sums Vec<mut summary&>
     ctorOf Map<types.TypeId, I64>  # a type's constructor's body (twin 0)
     stTypes Map<types.TypeId, I64> # storeThrough, once asked: 1 being asked, 2 no, 3 yes
     asTypes Map<pair.Pair<I64, I64>, I64> # admitsAt, by (type, writable): 1 being asked, 2 no, 3 yes
     texts Map<I64, String&>        # a diag file's text, by file
-    judged List<Bool>              # by body: whether its scopes were judged (it had code and no unknown type)
+    judged Vec<Bool>              # by body: whether its scopes were judged (it had code and no unknown type)
     # the call graph (Tarjan): each body's callees in edgeTo from edgeFrom[b]; the components, callees' first, in
     # compNodes from compFrom[k]
-    edgeFrom List<I64>
-    edgeTo List<I64>
+    edgeFrom Vec<I64>
+    edgeTo Vec<I64>
     # each body's locals assigned after their declaration (walkBody), in assignedTo from assignedFrom[b]
-    assignedFrom List<I64>
-    assignedTo List<I64>
+    assignedFrom Vec<I64>
+    assignedTo Vec<I64>
     # ... and the locals whose own storage a borrow or a slice names, in borrowedTo from borrowedFrom[b]
-    borrowedFrom List<I64>
-    borrowedTo List<I64>
-    tIndex List<I64>
-    tLow List<I64>
-    tOn List<Bool>
-    tStack List<I64>
+    borrowedFrom Vec<I64>
+    borrowedTo Vec<I64>
+    tIndex Vec<I64>
+    tLow Vec<I64>
+    tOn Vec<Bool>
+    tStack Vec<I64>
     tNext I64 = 0
-    compFrom List<I64>
-    compNodes List<I64>
+    compFrom Vec<I64>
+    compNodes Vec<I64>
     # the body being judged
     B typed.Body?& = null
     Id I64 = -1
     report Bool = false
     plan typed.Plan = typed.Plan(0, 0, 0)
-    terms List<Term>           # by local: where its referent lives (a reference) or its references (a value holding them)
-    stors List<Term>           # by local: where its own storage is
+    terms Vec<Term>           # by local: where its referent lives (a reference) or its references (a value holding them)
+    stors Vec<Term>           # by local: where its own storage is
     copied Map<I64, Bool>      # the by-value run-time array parameters the body has its own copy of, in the frame (D9b)
-    blocks List<typed.BlockId> # the blocks entered, innermost last
-    gamma List<rel>            # the obligations found (O10b)
-    setFrom List<I64>          # the sets of terms not known here (O12): set k's terms in setTerms from setFrom[k]
-    setTerms List<Term>
+    blocks Vec<typed.BlockId> # the blocks entered, innermost last
+    gamma Vec<rel>            # the obligations found (O10b)
+    setFrom Vec<I64>          # the sets of terms not known here (O12): set k's terms in setTerms from setFrom[k]
+    setTerms Vec<Term>
     stmtSp source.Span = source.Span(0, 0) # the statement being judged
     resultVar I64 = -1                     # the result scope's index in Vars, -1 for none
     held Map<I64, typed.Expr&>             # a held local's temporary initializer, built where its one use puts it
@@ -204,34 +204,34 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     # by local never assigned after its declaration: the construction bindings of the instance it holds or refers to,
     # one per constructor parameter in bindTerms from bindFrom (O23a); ctorSite, ctorFrom the constructor call last judged
     bindFrom Map<I64, I64>
-    bindTerms List<Term>
-    bindKids List<I64>         # parallel to bindTerms: the record of the argument's own instance there, -1 for none
+    bindTerms Vec<Term>
+    bindKids Vec<I64>         # parallel to bindTerms: the record of the argument's own instance there, -1 for none
     siteRec Map<I64, I64>      # a call's site: the record its instance's bindings start at
     fieldsAssigned Map<pair.Pair<I64, I64>, Bool> # (struct type, field) any body assigns after construction, -1 all
     # a local assigned after its declaration: the record every value it is given has, merged over a quiet judging of
     # the body first (lateBody) - Untraced where they disagree, none where one has no record (O23a)
     lateBody I64 = -1
     lateGather Bool = false
-    late Map<I64, List<Term>>
+    late Map<I64, Vec<Term>>
     lateNone Map<I64, Bool>
     lateDecl Map<I64, Bool>    # ... whose declaration's value was among them
     ctorSite I64 = -1
     ctorFrom I64 = 0
-    resBind List<Term>         # the returns' instance bindings so far (O13c), resBound once one is seen
+    resBind Vec<Term>         # the returns' instance bindings so far (O13c), resBound once one is seen
     resBound Bool = false
-    targets List<typed.Place&>             # the places of the Assigns being judged, innermost last (Place.Target)
-    buildsVar List<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
-    realVar List<Bool>                     # ... a value, not only a task's stand-in
+    targets Vec<typed.Place&>             # the places of the Assigns being judged, innermost last (Place.Target)
+    buildsVar Vec<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
+    realVar Vec<Bool>                     # ... a value, not only a task's stand-in
     standIn Bool = false                   # the build buildsInto records next is a task's stand-in (P2)
-    buildSp List<source.Span>              # by scope variable: where in this body it first builds there
-    buildFile List<I64>                    # ... and that build's innermost site (a callee's, through a call)
-    buildAt List<source.Span>
-    noBuild List<Bool>                     # by scope variable: where nothing may be built - a Str's receiver's (E11c)
+    buildSp Vec<source.Span>              # by scope variable: where in this body it first builds there
+    buildFile Vec<I64>                    # ... and that build's innermost site (a callee's, through a call)
+    buildAt Vec<source.Span>
+    noBuild Vec<Bool>                     # by scope variable: where nothing may be built - a Str's receiver's (E11c)
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
-    joins List<typed.BlockId>              # the join blocks entered, innermost last (P1a)
+    joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
     taskJoin Term = Term.None              # the join block of the task call val judges next: its temporaries are built there
     taskTemp Bool = false                  # judging a temporary a task is handed: what it holds must last until taskAt's join
     taskAt source.Span = source.Span(0, 0) # ... the argument it is
@@ -242,12 +242,12 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     fitLocalRead Bool = false              # ... that the value is a local read or borrowed, its own scope's to say (O10)
     fitAt Bool = false                     # fitError says its error at fitSp, not at the value (P1g)
     fitSp source.Span = source.Span(0, 0)
-    fnUses List<fnUse>                     # the functions made values, judged once every body is (T22a)
-    kept List<Bool>                        # by local: computeKeeps' finding for a reference parameter
-    keptStore List<Bool>                   # ... that it stores into what the parameter names (Stores)
-    keptPut List<Bool>                     # ... itself, not only by handing a reference out (Puts)
-    under List<Term>                       # the terms fieldTerm's underestimates stand above, a Derived(-1 - k, _) for under[k]
-    underElem List<Bool>                   # ... and whether each was read through an array's element (O23)
+    fnUses Vec<fnUse>                     # the functions made values, judged once every body is (T22a)
+    kept Vec<Bool>                        # by local: computeKeeps' finding for a reference parameter
+    keptStore Vec<Bool>                   # ... that it stores into what the parameter names (Stores)
+    keptPut Vec<Bool>                     # ... itself, not only by handing a reference out (Puts)
+    under Vec<Term>                       # the terms fieldTerm's underestimates stand above, a Derived(-1 - k, _) for under[k]
+    underElem Vec<Bool>                   # ... and whether each was read through an array's element (O23)
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     partDest Map<I64, Term>                # by call site: where a part read out of its built result is put (O18a)
     resAt Term = Term.None                 # the result scope the call judged last was bound to
@@ -256,8 +256,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
     useWhy Map<pair.Pair<I64, I64>, source.Span>   # ... and for a no, the body's statement that made it one
     ueBad source.Span = source.Span(0, 0)
-    regionOnly List<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
-    aliasOf List<I64>                      # by local: the reference parameter it was declared as a second name for, -1 none
+    regionOnly Vec<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
+    aliasOf Vec<I64>                      # by local: the reference parameter it was declared as a second name for, -1 none
     rlChanged Bool = false
     why I64 = 0                            # what the obligations recorded now are for, in a constructor (rel.Why)
     # what decide found for the local the next Let declares: the result term it is moved to (O26a), or that a call it
@@ -276,8 +276,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     inRet Bool = false
     # the flow analysis (flowRun): fl the locals reached, flDirect those a return gives, flKept whether the local is kept
     # beyond its block (O18c), flMode which of the two is asked, flBlock the local's block, flGrew whether a pass grew fl
-    fl List<I64>
-    flDirect List<I64>
+    fl Vec<I64>
+    flDirect Vec<I64>
     flKept Bool = false
     flMode I64 = 0
     soleOf I64 = -1                        # soleArray's local, and whether a use of it may be a second name
@@ -359,8 +359,8 @@ fn (s mut Scoper&) instanceOf(b I64) I64 {
 # in turn, the outermost first: how many were pushed
 fn (s mut Scoper&) instContexts(inst I64) I64 {
     if inst < 0 { return 0 }
-    chain List<generic.Origin>
-    insts List<I64>
+    chain Vec<generic.Origin>
+    insts Vec<I64>
     cur := inst
     for depth in range 32 {
         if s.P.T.Items(s.P.InstanceArgs(cur)).Len() == 0 { break }
@@ -490,7 +490,7 @@ fn (s mut Scoper&) facts(b I64) I64 {
         countTrue(sm.CapKeeps) + countTrue(sm.CapStores) + countTrue(sm.CapPuts)
 }
 
-fn countTrue(xs List<Bool>&) I64 {
+fn countTrue(xs Vec<Bool>&) I64 {
     n I64 = 0
     for x in xs {
         if x { n++ }
@@ -655,7 +655,7 @@ fn (s mut Scoper&) strReceiver() {
     }
 }
 
-fn hasRel(rs List<rel>&, r rel) Bool {
+fn hasRel(rs Vec<rel>&, r rel) Bool {
     for x in rs {
         if x.Hi == r.Hi and x.Lo == r.Lo and x.Exact == r.Exact { return true }
     }
@@ -769,8 +769,8 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
 
 # the parts a value of type t holds in place: a struct's fields, an enum's payloads' fields, an array's elements, a
 # tuple's or record's parts
-fn (s mut Scoper&) parts(t types.TypeId) List<types.TypeId> {
-    out List<types.TypeId>
+fn (s mut Scoper&) parts(t types.TypeId) Vec<types.TypeId> {
+    out Vec<types.TypeId>
     match s.P.T.KindOf(t) {
         case types.Kind.Named {
             if not s.P.T.HasBody(t) { return out }
@@ -828,13 +828,13 @@ fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
 # what a walk of a body finds: the bodies it calls, makes a value of or writes a lambda for, and the locals it assigns
 # after their declaration - a store into the local itself, a task's target
 type walked struct() {
-    Callees List<I64>
-    Assigned List<I64>
-    Borrowed List<I64>            # the locals whose own storage a borrow or a slice names, reached through no reference
-    BorrowedTy List<types.TypeId> # ... each such borrow's type, in order - 0 for a slice
-    Written List<I64>             # the locals whose own storage a store writes, reached through no reference
-    FieldTypes List<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
-    FieldIdx List<I64>            # value, written through a reference
+    Callees Vec<I64>
+    Assigned Vec<I64>
+    Borrowed Vec<I64>            # the locals whose own storage a borrow or a slice names, reached through no reference
+    BorrowedTy Vec<types.TypeId> # ... each such borrow's type, in order - 0 for a slice
+    Written Vec<I64>             # the locals whose own storage a store writes, reached through no reference
+    FieldTypes Vec<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
+    FieldIdx Vec<I64>            # value, written through a reference
 }
 
 fn walkBody(s mut Scoper&, b I64) walked {
@@ -1959,7 +1959,7 @@ fn (s mut Scoper&) soleStrictStmt(st typed.Stmt?&) {
 
 # ---- the flow analysis (O26a, O18c), read off the rest of a block as written ----
 
-fn flHas(xs List<I64>&, x I64) Bool {
+fn flHas(xs Vec<I64>&, x I64) Bool {
     for y in xs {
         if y == x { return true }
     }
@@ -2039,7 +2039,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
             s.flExpr(x)
             if x is null { return }
             if s.flMode == 0 {
-                xs List<I64>
+                xs Vec<I64>
                 s.carried(x, xs)
                 s.returnedArrays(x, xs)
                 for k in xs {
@@ -2086,7 +2086,7 @@ fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr?&, outside Bool, 
     if x is null or not s.holds(ty) { return }
     if s.flMode == 0 {
         if r >= 0 and flHas(s.fl, r) and not (whole and s.plainCopyOf(x, ty)) {
-            xs List<I64>
+            xs Vec<I64>
             s.carried(x, xs)
             for k in xs { s.flAdd(k) }
         }
@@ -2224,7 +2224,7 @@ fn (s mut Scoper&) flCall(c typed.Call&) {
         if r < 0 or not flHas(s.fl, r) { return }
         for j in range 1, n {
             if s.canKeep(c, j) {
-                xs List<I64>
+                xs Vec<I64>
                 s.carried(c.Args[j], xs)
                 for k in xs { s.flAdd(k) }
             }
@@ -2319,7 +2319,7 @@ fn derivedOf(t Term, j I64) Bool {
 
 # whether x carries what local l refers to, or its storage, where it is put (mode 1's local is fl's first)
 fn (s mut Scoper&) carries(x typed.Expr&) Bool {
-    xs List<I64>
+    xs Vec<I64>
     s.carried(x, xs)
     for k in xs {
         if flHas(s.fl, k) { return true }
@@ -2330,7 +2330,7 @@ fn (s mut Scoper&) carries(x typed.Expr&) Bool {
 # the array value locals a return gives whole - a result, or one of several, either value of a conditional (E28), any
 # value of a match (S12b) or a try's default: what is returned shares their storage (T7b), so they live where the result
 # goes (O26a)
-fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut List<I64>&) {
+fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut Vec<I64>&) {
     if x is null { return }
     match x {
         case typed.Expr.Read(_, ty, p, _) {
@@ -2369,7 +2369,7 @@ fn (s mut Scoper&) returnedArrays(x typed.Expr?&, out mut List<I64>&) {
 
 # the locals a value carries where it is put: one it reads that holds references, one whose storage it borrows or
 # slices, through what is built from them - a call's argument it can keep, an item, a choice's values
-fn (s mut Scoper&) carried(x typed.Expr?&, out mut List<I64>&) {
+fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
     if x is null { return }
     match x {
         case typed.Expr.Read(_, ty, p, _), typed.Expr.Take(_, ty, p) {
@@ -2424,7 +2424,7 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut List<I64>&) {
     }
 }
 
-fn (s mut Scoper&) carriedPlace(p typed.Place&, out mut List<I64>&) {
+fn (s mut Scoper&) carriedPlace(p typed.Place&, out mut Vec<I64>&) {
     r := flRoot(p)
     if r >= 0 and not flHas(out, r) { out.Push(r) }
     match p {
@@ -3464,7 +3464,7 @@ fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt?&, l I64, mode I64) Bool 
         }
         case typed.Stmt.Spawn(_, sw) {
             # a task handed it keeps it past the call
-            xs List<I64>
+            xs Vec<I64>
             s.carried(sw.Task, xs)
             if flHas(xs, l) { return false }
             for p in sw.Targets {
@@ -4305,7 +4305,7 @@ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
         return
     }
     first := not s.late.Has(l)
-    if first { s.late.Put(l, List<Term>()) }
+    if first { s.late.Put(l, Vec<Term>()) }
     ts := try s.late.Get(l) catch { return }
     for w in range n {
         t := s.bindTerms[s.ctorFrom + w]
@@ -5565,7 +5565,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         }
         case typed.Expr.Cond(_, ty, c) {
             s.val(c.C, Term.None)
-            xs List<typed.Expr&>
+            xs Vec<typed.Expr&>
             xs.Push(c.A!)
             xs.Push(c.B)
             nd := s.choiceDest(xs, dest)
@@ -5827,7 +5827,7 @@ fn (s mut Scoper&) sliceTerm(base typed.Place&) Term {
 
 # where a choice's new values are built (E28, S12b): where the values it gives that already live somewhere share a scope,
 # read off their shape - else where the choice lands
-fn (s mut Scoper&) choiceDest(xs List<typed.Expr&>&, dest Term) Term {
+fn (s mut Scoper&) choiceDest(xs Vec<typed.Expr&>&, dest Term) Term {
     if s.atDest {
         s.atDest = false
         return dest
@@ -5884,7 +5884,7 @@ fn (s mut Scoper&) join(a Val, b Val, d Term) Val {
 }
 
 fn (s mut Scoper&) setOf(a Term, b Term) Term {
-    xs List<Term>
+    xs Vec<Term>
     s.addToSet(xs, a)
     s.addToSet(xs, b)
     if xs.Len() == 1 { return xs[0] }
@@ -5896,7 +5896,7 @@ fn (s mut Scoper&) setOf(a Term, b Term) Term {
 # where set id's terms end in setTerms
 fn (s mut Scoper&) setEnd(id I64) I64 { return s.setFrom[id + 1] if id + 1 < s.setFrom.Len() else s.setTerms.Len() }
 
-fn (s mut Scoper&) addToSet(xs mut List<Term>&, t Term) {
+fn (s mut Scoper&) addToSet(xs mut Vec<Term>&, t Term) {
     match t {
         case Term.Set(id) {
             for k in range s.setFrom[id], s.setEnd(id) { s.addToSet(xs, s.setTerms[k]) }
@@ -5913,7 +5913,7 @@ fn (s mut Scoper&) addToSet(xs mut List<Term>&, t Term) {
 fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
     s.stmts(m.Held)
     if m.IsValue {
-        xs List<typed.Expr&>
+        xs Vec<typed.Expr&>
         for a in m.Arms {
             if a.Value is not null { xs.Push(a.Value!) }
         }
@@ -5940,7 +5940,7 @@ fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
 
 fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
     if a is null { return plain() }
-    bound List<I64>
+    bound Vec<I64>
     for alt in a.Alts {
         s.val(alt.Test, Term.None)
         for bd in alt.Binds {
@@ -5988,7 +5988,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
         case typed.FnVal.Lambda(id, caps, site) {
             if s.report { s.fnUses.Push(fnUse(s.B!.File, s.firstToken(s.B!.File, sp), I64(id), FnLambda, types.UnknownT)) }
             home := Term.None
-            scopes List<typed.Scope>
+            scopes Vec<typed.Scope>
             lb := I64(id)
             for c in caps {
                 v := s.val(c.Outer, Term.None)
@@ -6635,7 +6635,7 @@ fn (s mut Scoper&) argAt(a typed.Expr&) source.Span {
 # a conditional or a match choosing value places, lent to a reference parameter (E28): a copy, a temporary of this block,
 # its references where the places' are - their term (a set where they differ); None for any other argument
 fn (s mut Scoper&) choiceRefs(a typed.Expr&) Term {
-    xs List<typed.Expr&>
+    xs Vec<typed.Expr&>
     match s.unAway(a) {
         case typed.Expr.Cond(_, _, c) {
             xs.Push(c.A!)
@@ -7205,7 +7205,7 @@ fn (s mut Scoper&) noteThroughResult(rec I64, c typed.Call&, w I64, wname String
     rv := s.resultVarOf(s.calleeType(c))
     if rv < 0 { return false }
     first := -1
-    made List<I64>
+    made Vec<I64>
     for r in s.sums[callee].Rels {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
         ai := s.argOfVar(c, r.Hi)
@@ -7317,7 +7317,7 @@ fn (s mut Scoper&) disagree(at source.Span, t Term, u Term) I64 {
 # E28/S12b: a conditional's or a match's value that does not fit where it is stored, each value judged as though alone -
 # the note at it (B11)
 fn (s mut Scoper&) noteCondValue(rec I64, x typed.Expr&) {
-    vals List<typed.Expr&>
+    vals Vec<typed.Expr&>
     match s.unAway(x) {
         case typed.Expr.Cond(_, _, c) {
             vals.Push(c.A!)
@@ -7432,8 +7432,8 @@ fn (s mut Scoper&) judgeOut(a Term, b Term) I64 { return s.order(a, b) }
 
 # whether the body's obligations show hi outlives lo: a path of relations from hi to lo
 fn (s mut Scoper&) gammaHolds(hi Term, lo Term) Bool {
-    seen List<Term>
-    todo List<Term>
+    seen Vec<Term>
+    todo Vec<Term>
     todo.Push(hi)
     for todo.Len() > 0 {
         t := try todo.Pop() catch { break }
@@ -7924,7 +7924,7 @@ fn (s Scoper&) CalleesOf(b I64) Array<I64> {
 }
 
 fn (s Scoper&) VarRels(b I64) Array<I64> {
-    out List<I64>
+    out Vec<I64>
     if b < 0 or b >= s.sums.Len() or not s.judged[b] { return out.ToArray() }
     for r in s.sums[b].Rels {
         out.Push(relVar(r.Hi))
@@ -7945,7 +7945,7 @@ fn relVar(t Term) I64 {
 # body b's obligations as its signature would state them (B11b, O10b): "a outlives b", each once, a parameter's scope
 # by its name, the result scope as "return", an equality as its two halves
 fn (s Scoper&) Obligations(b I64, nm source.Names&) Array<String&> {
-    out List<String&>
+    out Vec<String&>
     if b >= s.sums.Len() { return out.ToArray() }
     for r in s.sums[b].Rels {
         t := $s.termName(b, r.Hi, nm) " outlives " $s.termName(b, r.Lo, nm)
@@ -7998,7 +7998,7 @@ if TestBuild {
     }
 
     # the body of the root module's function declared at the start of line n
-    fn bodyAt(l mut load.Loader&, bodies List<mut typed.Body&>&, n I64) I64 {
+    fn bodyAt(l mut load.Loader&, bodies Vec<mut typed.Body&>&, n I64) I64 {
         root := l.Mods[l.Root].File
         for k in range bodies.Len() {
             body := bodies[k]

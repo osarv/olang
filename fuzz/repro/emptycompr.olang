@@ -15,7 +15,7 @@ fn cc(n I32) String {
     m := Map<I8, U32>()
     a Array<U16> = U16[1 for x in m.Values()]
     ra Array<U16>&a = a
-    l := List<U16>()
+    l := Vec<U16>()
     e Array<U16> = U16[3 for x in l]
     re Array<U16>&e = e
     return $ra " " $(ra.Len() == 0) " | " $re " " $(re.Len() == 0)

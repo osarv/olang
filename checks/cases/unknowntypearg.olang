@@ -7,9 +7,9 @@
 # nothing more, and the unknown type is said once in its module (B11)
 type Item struct(n I32) { n }
 fn main() ? {
-    l := List<Itm&>()
+    l := Vec<Itm&>()
     l.Push(Item(1))
     for x in l { assert x.n == 1 }
-    m List<Itm> = List<Itm>()
+    m Vec<Itm> = Vec<Itm>()
     assert m.Len() == 0
 }

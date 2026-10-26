@@ -10,9 +10,9 @@ fn churn() I64 {
     return t
 }
 fn main() ? {
-    m := Map<I64, List<String&>>()
-    m.Put(0, List<String&>())
-    m.Put(1, List<String&>())
+    m := Map<I64, Vec<String&>>()
+    m.Put(0, Vec<String&>())
+    m.Put(1, Vec<String&>())
     for i in range 40 {
         l := try m.Get(i % 2)
         t mut String&m = "x" $i

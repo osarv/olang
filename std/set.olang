@@ -85,7 +85,7 @@ fn (s Set<T>&) IsSubset(o Set<T>&) Bool {
 
 # the elements in an array of their own, in the order a walk gives them
 fn (s Set<T>&) ToArray() mut Array<T>& {
-    return s.m.Keys().ToList().ToArray()
+    return s.m.Keys().ToVec().ToArray()
 }
 
 # whether two Sets hold the same elements - "==" (E10a)

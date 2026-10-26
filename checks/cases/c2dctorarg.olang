@@ -8,7 +8,7 @@ type Wrap struct(n Node&) {
     n
 }
 fn main() ? {
-    l mut List<Wrap&>& = List<Wrap&>()
+    l mut Vec<Wrap&>& = Vec<Wrap&>()
     for i in range 2 {
         inner Node& = Node(42)
         l.Push(Wrap(inner))

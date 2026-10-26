@@ -25,7 +25,7 @@ fn main() {
     verbose := false
     level := "0"
     standin := false
-    files List<String&>
+    files Vec<String&>
     k I64 = 1
     for k < args.Len() {
         if args[k] == "-v" {
@@ -127,7 +127,7 @@ fn compare(gold toolkit.Golden&, emitdump String&, level String&, rt Array<Strin
         return r
     }
     # the port's
-    dump := List<String&>()
+    dump := Vec<String&>()
     dump.Push(emitdump)
     if not program { dump.Push("-t") }
     if standin { dump.Push("-standin") }
@@ -198,7 +198,7 @@ fn firstLine(t String&) String {
 }
 
 # each test's ending, by name: "ok" or "FAIL"
-fn outcomes(rows List<String&>&) Map<String&, String&> {
+fn outcomes(rows Vec<String&>&) Map<String&, String&> {
     m Map<String&, String&>
     for row in rows {
         if row.StartsWith("ok - ") {

@@ -8,14 +8,14 @@ type Box enum {
     Has(n Node&)
     No
 }
-fn stash(b Box, l mut List<Node&>&) {
+fn stash(b Box, l mut Vec<Node&>&) {
     match b {
         case Box.Has(n) { l.Push(n) }
         nomatch { }
     }
 }
 fn main() ? {
-    l mut List<Node&>& = List<Node&>()
+    l mut Vec<Node&>& = Vec<Node&>()
     for i in range 2 {
         inner Node& = Node(42)
         stash(Box.Has(inner), l)

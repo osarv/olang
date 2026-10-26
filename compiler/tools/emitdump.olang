@@ -39,7 +39,7 @@ fn main() ? {
 
 fn run(args Array<String&>&) {
     std := try os.Env("OLANG_STD") catch default "std"
-    defines List<String&>
+    defines Vec<String&>
     testBuild := false
     standin := false
     outPath String&args = ""

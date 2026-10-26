@@ -86,11 +86,11 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     R
     T := types.NewTable(L.Names)
     declAt Map<I64, types.DeclId>      # by module and entry, (module << 32) | entry
-    declMi List<I64>                   # by DeclId: its module and its entry in the module's name table
-    declEi List<I64>
+    declMi Vec<I64>                   # by DeclId: its module and its entry in the module's name table
+    declEi Vec<I64>
     varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
     varsN Map<I64, I64>
-    vars List<varRow>
+    vars Vec<varRow>
     errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
     genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
     membersOf Map<types.TypeId, Array<types.TypeId>&> # a closed trait's members (T31a), once asked for
@@ -101,16 +101,16 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     r1bSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
-    fns List<fnRow>
+    fns Vec<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
     fnsAll I64 = -1                    # how many modules there were when allFns last added every one's
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
     methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the first method declared
     sameKey Map<I64, I64>              # by method: the next declared of its receiver key and name (M21: one per instance)
-    defaultFns List<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
-    defaultTraits List<I64>            # beside each, its trait's DeclId
-    instances List<instance>
+    defaultFns Vec<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
+    defaultTraits Vec<I64>            # beside each, its trait's DeclId
+    instances Vec<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
     argReps Map<types.ListId, types.ListId>  # arguments told apart only by function types' parameter names: the first
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
@@ -124,16 +124,16 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # variables bound where it is read (LengthKey), what an evaluation found (set before checking; interp's Analyze),
     # and the ones a check met undecided (ConstAsks)
     Lengths Map<String&, I64>
-    ConstAsks List<ConstAsk>
+    ConstAsks Vec<ConstAsk>
     # E38: the paths of embeds written as no literal, evaluated while compiling - by file and offset (set before
     # checking; interp's Analyze): the path, or "\0" where its evaluation gave none
     Embeds Map<pair.Pair<I64, I64>, String&>
     # B5a: every module's global initializers' bodies in the order they run - a module's after its imports', each
     # after the globals its initializer reads (check's orderGlobals, once every body is checked)
-    InitOrder List<I64>
+    InitOrder Vec<I64>
     # T32: the tables of run-time trait values, one per (instance's type, trait) the checker made a value of - by
     # (Plain type, trait) in anyTableOf - and each trait's slots, once asked
-    AnyTables List<AnyTable>
+    AnyTables Vec<AnyTable>
     anyTableOf Map<pair.Pair<I64, I64>, I64>
     anySlotsOf Map<types.TypeId, Array<AnySlot>&>
     # D17f: the body owning the contract a trait writes on a slot's method, by SlotKey - -1 for none
@@ -149,7 +149,7 @@ type AnyTable struct(Concrete types.TypeId, Trait types.TypeId, Stored types.Typ
     Stored
     File
     Sp
-    Slots List<I64>
+    Slots Vec<I64>
 }
 
 # a trait's slot (T32b): a method of the trait or of one it extends (Trait the instance declaring it, Method its index
@@ -284,7 +284,7 @@ fn (p mut Program&) declVars(d types.DeclId) {
     owner := DeclOwner(d)
     if (try p.varsAt.Get(owner) catch default -1) >= 0 { return }
     td := p.typeDecl(d)
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     if td is not null and td.Params.Len() > 0 {
         for tp in td.Params { ns.Push(tp.Name) }
     }
@@ -377,11 +377,11 @@ fn (p mut Program&) HasErrParam(d types.DeclId) Bool {
 # an error set as an argument: its entries merged (R1c) and in the canonical order - error types by the module
 # declaring them, then by name (R1a), variables after them - so one set is one type
 fn (p mut Program&) ErrSetOf(entries types.ListId) types.TypeId {
-    flat List<types.TypeId>
+    flat Vec<types.TypeId>
     for e in p.T.Items(entries) {
         if e != types.UnknownT and e != types.DefaultErrT { flat.Push(e) }
     }
-    es List<types.TypeId>
+    es Vec<types.TypeId>
     p.mergeEntries(flat, es)
     xs := es.ToArray()
     xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return p.errBefore(a, b) })
@@ -405,7 +405,7 @@ fn (p mut Program&) errBefore(a types.TypeId, b types.TypeId) Bool {
 
 # the union of two error-set arguments (G9: what binds an error-set variable)
 fn (p mut Program&) ErrSetUnion(a types.TypeId, b types.TypeId) types.TypeId {
-    xs := List<types.TypeId>()
+    xs := Vec<types.TypeId>()
     for e in p.T.Items(p.T.ErrSetItems(a)) { xs.Push(e) }
     for e in p.T.Items(p.T.ErrSetItems(b)) { xs.Push(e) }
     return p.ErrSetOf(p.T.List(xs.ToArray()))
@@ -416,7 +416,7 @@ fn (p mut Program&) ErrSetUnion(a types.TypeId, b types.TypeId) types.TypeId {
 fn (p mut Program&) substErrs(l types.ListId, owner I64, args types.ListId) types.ListId {
     if l == types.ListId(0) { return l }
     xs := p.T.Items(args)
-    flat List<types.TypeId>
+    flat Vec<types.TypeId>
     changed := false
     for e in p.T.Items(l) {
         if p.T.KindOf(e) == types.Kind.ConstExpr {
@@ -441,7 +441,7 @@ fn (p mut Program&) substErrs(l types.ListId, owner I64, args types.ListId) type
         }
     }
     if not changed { return l }
-    es List<types.TypeId>
+    es Vec<types.TypeId>
     p.mergeEntries(flat, es)
     return p.T.List(es.ToArray())
 }
@@ -459,12 +459,12 @@ fn (p mut Program&) errsHaveVar(l types.ListId, b Binding&) Bool {
 # passed adds to it. A pattern with no variable of the binding's matches as before, entry by entry
 fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Binding&) Bool {
     if not p.errsHaveVar(pat, b) { return p.unifyLists(pat, actual, b) }
-    fixed List<types.TypeId>
+    fixed Vec<types.TypeId>
     vi I64 = -1
     for e in p.T.Items(pat) {
         if p.isVar(e, b) { vi = p.T.B(e) } else { fixed.Push(e) }
     }
-    rest List<types.TypeId>
+    rest Vec<types.TypeId>
     for e in p.T.Items(actual) {
         if e == types.DefaultErrT or e == types.UnknownT { continue }
         if not p.entryHeld(e, fixed) { rest.Push(e) }
@@ -487,7 +487,7 @@ fn (p mut Program&) ErrsArgOf(c Context&, t ast.TypeRef&) types.TypeId { return 
 fn (p mut Program&) UnifyErrors(pat types.ListId, actual types.ListId, b mut Binding&) Bool { return p.unifyErrs(pat, actual, b) }
 
 # whether an error set's entry is held by one of a list's (R1c: the same error type, its words among theirs)
-fn (p mut Program&) entryHeld(e types.TypeId, l List<types.TypeId>&) Bool {
+fn (p mut Program&) entryHeld(e types.TypeId, l Vec<types.TypeId>&) Bool {
     for x in l {
         if p.T.ErrOf(x) == p.T.ErrOf(e) and (p.T.ErrMask(e) & ~p.T.ErrMask(x)) == U64(0) { return true }
     }
@@ -497,7 +497,7 @@ fn (p mut Program&) entryHeld(e types.TypeId, l List<types.TypeId>&) Bool {
 # whether every error of one set is held by another (T31: a method's set held by its trait's signature's)
 fn (p mut Program&) ErrsHeld(have types.ListId, want types.ListId) Bool {
     if have == want { return true }
-    ws List<types.TypeId>
+    ws Vec<types.TypeId>
     for x in p.T.Items(want) { ws.Push(x) }
     for e in p.T.Items(have) {
         if e == types.DefaultErrT or not p.entryHeld(e, ws) { return false }
@@ -652,7 +652,7 @@ fn isErrsArg(t ast.TypeRef&) Bool {
 fn (p mut Program&) errsArg(c Context&, t ast.TypeRef&) types.TypeId {
     match t {
         case ast.TypeRef.Errs(_, items) {
-            flat List<types.TypeId>
+            flat Vec<types.TypeId>
             for e in items {
                 p.ErrorItemKnown(c, e)
                 p.errorSetEntries(c, e, flat)
@@ -766,9 +766,9 @@ fn (p mut Program&) SigNames(s ast.Sig&) I64 {
 }
 
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
-    ps List<types.TypeId>
-    named List<source.NameId>
-    shares List<I64>
+    ps Vec<types.TypeId>
+    named Vec<source.NameId>
+    shares Vec<I64>
     if recv != types.UnknownT {
         ps.Push(recv)
         named.Push(recvName)
@@ -808,7 +808,7 @@ fn (p mut Program&) contractErrors(s ast.Sig&, el types.ListId) types.ListId {
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
 # OwnScope for a bare marker, "&return", none, or a name that is no earlier parameter
-fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named List<source.NameId>&, shares List<I64>&) I64 {
+fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named Vec<source.NameId>&, shares Vec<I64>&) I64 {
     scope := p.markOf(t)
     if scope == source.NameId(0) { return types.OwnScope }
     for j in range named.Len() {
@@ -899,10 +899,10 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
 # an error set as written (R1, R1c): its items in order, the words of one type one entry, a type named whole holding
 # every word of it, a named set its members (T19a); "?" alone the inferred set's mark (R1a)
 fn (p mut Program&) errorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId {
-    es List<types.TypeId>
+    es Vec<types.TypeId>
     if has and items.Len() == 0 { es.Push(types.DefaultErrT) }
     if has {
-        flat List<types.TypeId>
+        flat Vec<types.TypeId>
         for e in items {
             p.ErrorItemKnown(c, e)
             p.errorSetEntries(c, e, flat)
@@ -915,7 +915,7 @@ fn (p mut Program&) errorList(c Context&, has Bool, items Array<ast.Path&>&) typ
 fn (p mut Program&) ErrorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId { return p.errorList(c, has, items) }
 
 # entries merged as one set holds them (R1c): the words of one type one entry, a type named whole holding every word
-fn (p mut Program&) mergeEntries(flat List<types.TypeId>&, es mut List<types.TypeId>&) {
+fn (p mut Program&) mergeEntries(flat Vec<types.TypeId>&, es mut Vec<types.TypeId>&) {
     for t in flat {
         k I64 = -1
         for j in range es.Len() {
@@ -934,22 +934,22 @@ fn (p mut Program&) mergeEntries(flat List<types.TypeId>&, es mut List<types.Typ
 # an error set's item as the entries it stands for (T19a): an error type, or one of its words, itself; a named set its
 # members in order, each flattened, then its own words where it declares any - a set reached again on its way (a cycle,
 # said at its declaration) and an unknown item stand for nothing (Unknown, an unknown one)
-fn (p mut Program&) errorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) {
-    seen List<types.DeclId>
+fn (p mut Program&) errorSetEntries(c Context&, e ast.Path&, out mut Vec<types.TypeId>&) {
+    seen Vec<types.DeclId>
     p.entriesOf(p.errorSetItem(c, e), out, seen)
 }
 
-fn (p mut Program&) ErrorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) { p.errorSetEntries(c, e, out) }
+fn (p mut Program&) ErrorSetEntries(c Context&, e ast.Path&, out mut Vec<types.TypeId>&) { p.errorSetEntries(c, e, out) }
 
 fn (p mut Program&) ErrorSetItem(c Context&, e ast.Path&) types.TypeId { return p.errorSetItem(c, e) }
 
 # the entries an error type or a set stands for (T19a)
-fn (p mut Program&) EntriesOf(t types.TypeId, out mut List<types.TypeId>&) {
-    seen List<types.DeclId>
+fn (p mut Program&) EntriesOf(t types.TypeId, out mut Vec<types.TypeId>&) {
+    seen Vec<types.DeclId>
     p.entriesOf(t, out, seen)
 }
 
-fn (p mut Program&) entriesOf(t types.TypeId, out mut List<types.TypeId>&, seen mut List<types.DeclId>&) {
+fn (p mut Program&) entriesOf(t types.TypeId, out mut Vec<types.TypeId>&, seen mut Vec<types.DeclId>&) {
     if p.T.KindOf(t) == types.Kind.ErrSet {
         for x in p.T.Items(p.T.ErrSetItems(t)) { out.Push(x) }
         return
@@ -1092,7 +1092,7 @@ fn (p mut Program&) shape(c Context&, body ast.TypeBody&) types.TypeId {
 fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.TypeId {
     ns := Array<source.NameId>(cases.Len())
     ps := Array<types.TypeId>(cases.Len())
-    fs List<source.NameId>
+    fs Vec<source.NameId>
     for i in range cases.Len() {
         ns[i] = cases[i].Name
         ps[i] = p.payload(c, cases[i])
@@ -1764,7 +1764,7 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
     for prm in s.Params {
         if prm.Ty is not null { known.Put(prm.Name, p.Resolve(c, prm.Ty)) }
     }
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     if s.Body.Len() == 0 { return types.ListId(0) }
     for st in s.Body {
         match st {
@@ -2158,8 +2158,8 @@ fn (p mut Program&) DefaultMethod(t types.TypeId, name source.NameId) I64 {
 }
 
 # every default of this name a type's traits declare (M19e): two make a call ambiguous
-fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) List<I64> {
-    out List<I64>
+fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) Vec<I64> {
+    out Vec<I64>
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     for i in range p.defaultFns.Len() {
@@ -2350,7 +2350,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     row := p.fns[f]
     owner := FnOwner(f)
     c := Context(row.Mi, owner)
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     if row.F.Recv is not null { p.introductions(row.Mi, row.F.Recv!.Ty, ns, false) }
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
@@ -2360,7 +2360,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     written := ns.Len()
     for i in range written { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
     # G1a: the error-set variables - its list's "? E", and one its receiver's error-set argument introduces
-    errNames List<source.NameId>
+    errNames Vec<source.NameId>
     if row.F.Recv is not null { errIntroductions(row.F.Recv!.Ty, errNames) }
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
@@ -2372,7 +2372,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     }
     # G29, D9a: each array level a parameter holds by value takes its length from the argument - a variable of the
     # function's own, no name the program can write ("a.Len()" in a note), one instance per set of lengths
-    levels List<I64>
+    levels Vec<I64>
     # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
     if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.Resolve(c, row.F.Recv!.Ty), true, row.F.Recv!.Name, 0, ns, levels) }
     for prm in row.F.S.Params {
@@ -2421,11 +2421,11 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
 # G12: where each variable a function's list introduces that its receiver's type does not name stands among its
 # signature's variables (the receiver's introductions first, then the list's, as Sig orders them): the variables
 # written type arguments give, in the list's order - every one of a free function's
-fn (p mut Program&) OwnVarIndexes(f I64) List<I64> {
+fn (p mut Program&) OwnVarIndexes(f I64) Vec<I64> {
     row := p.fns[f]
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     if row.F.Recv is not null { p.introductions(row.Mi, row.F.Recv!.Ty, ns, false) }
-    out List<I64>
+    out Vec<I64>
     if row.F.TypeParams.Len() > 0 {
         for tp in row.F.TypeParams {
             if not ns.Has(tp.Name) { ns.Push(tp.Name) }
@@ -2468,7 +2468,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
 # G29: the array levels a parameter's type holds by value - itself, where it is an Array<T> value, and the elements of
 # an array held in place (an Array<Array<T>>, under a reference too) - each a variable named for its parameter's
 # length ("a.Len()") or its elements' ("a[0].Len()"), pushed to ns
-fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, depth I64, ns mut List<source.NameId>&, out mut List<I64>&) {
+fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, depth I64, ns mut Vec<source.NameId>&, out mut Vec<I64>&) {
     if depth > 8 { return }
     match p.T.KindOf(t) {
         case types.Kind.Ref { p.lengthLevels(p.T.Referent(t), false, n, depth, ns, out) }
@@ -2510,7 +2510,7 @@ fn (p mut Program&) withLengths(t types.TypeId, byValue Bool, owner I64, k I64) 
 
 # the variables a receiver's type arguments introduce (QW: "fn (l List<T>&) Push(x T)"), in order, each once - the
 # names there that resolve to a type variable
-fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut List<source.NameId>&, inArgs Bool) {
+fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.NameId>&, inArgs Bool) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(sp, path, args) {
@@ -2536,7 +2536,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut List<source.Na
 }
 
 # the names an error-set argument introduces among a receiver's arguments (QAH), at any depth
-fn errIntroductions(t ast.TypeRef?&, out mut List<source.NameId>&) {
+fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(_, _, args) {
@@ -2569,7 +2569,7 @@ fn (p mut Program&) constraint(c Context&, tp ast.TypeParam&) {
 # Tuple of the traits, each of which a binding must satisfy
 fn (p mut Program&) BoundOf(c Context&, tp ast.TypeParam&) types.TypeId {
     if tp.Also.Len() == 0 { return p.Resolve(c, tp.Ty) }
-    ts List<types.TypeId>
+    ts Vec<types.TypeId>
     ts.Push(p.Resolve(c, tp.Ty))
     for a in tp.Also { ts.Push(p.Resolve(c, a)) }
     return p.T.Tuple(p.T.List(ts.ToArray()))
@@ -2730,7 +2730,7 @@ fn (p mut Program&) CtorSig(t types.TypeId) types.TypeId { return p.CtorSigAt(t,
 fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     owner := CtorOwner(d)
     if (try p.varsAt.Get(owner) catch default -1) >= 0 { return p.VarCount(owner) }
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     td := p.typeDecl(d)
     tps Array<ast.TypeParam&>&td = Array<ast.TypeParam&>(0)
     if td is not null and td.Body is not null and (td.Params.Len() == 0) {
@@ -2799,9 +2799,9 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
 }
 
 fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Sig?&, result types.TypeId) types.TypeId {
-    ps List<types.TypeId>
-    named List<source.NameId>
-    shares List<I64>
+    ps Vec<types.TypeId>
+    named Vec<source.NameId>
+    shares Vec<I64>
     if params.Len() > 0 {
         for prm in params {
             ps.Push(p.Resolve(c, prm.Ty))
@@ -3136,7 +3136,7 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
 # an open trait
 fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId>&p {
     if tr in p.membersOf { return try p.membersOf.Get(tr) catch default Array<types.TypeId>(0) }
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     p.members(tr, out, 0)
     xs := out.ToArray()
     set Map<types.TypeId, Bool>
@@ -3148,7 +3148,7 @@ fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId>&p {
     return xs
 }
 
-fn (p mut Program&) members(tr types.TypeId, out mut List<types.TypeId>&, depth I64) {
+fn (p mut Program&) members(tr types.TypeId, out mut Vec<types.TypeId>&, depth I64) {
     if depth > 32 or p.T.KindOf(tr) != types.Kind.Named { return }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
@@ -3171,7 +3171,7 @@ fn (p mut Program&) members(tr types.TypeId, out mut List<types.TypeId>&, depth 
 
 # the traits a trait extends (T30a), as written - its arguments substituted
 fn (p mut Program&) Extended(tr types.TypeId) Array<types.TypeId> {
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     if p.T.KindOf(tr) != types.Kind.Named { return out.ToArray() }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
@@ -3400,12 +3400,12 @@ fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {
 
 # the traits an "any" of r answers to (T32c): r, then what it extends, at any depth, each once
 fn (p mut Program&) AnyCovers(r types.TypeId) Array<types.TypeId> {
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     p.anyCovers(r, out, 0)
     return out.ToArray()
 }
 
-fn (p mut Program&) anyCovers(r types.TypeId, out mut List<types.TypeId>&, depth I64) {
+fn (p mut Program&) anyCovers(r types.TypeId, out mut Vec<types.TypeId>&, depth I64) {
     if depth > 32 or p.T.KindOf(r) != types.Kind.Named or out.Has(r) { return }
     out.Push(r)
     for e in p.Extended(r) { p.anyCovers(e, out, depth + 1) }
@@ -3417,8 +3417,8 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
     have := try p.anySlotsOf.Get(r) catch default Array<AnySlot>(0)
     if have.Len() > 0 or p.anySlotsOf.Has(r) { return have }
     p.allFns()
-    out List<AnySlot>
-    seen List<source.NameId>
+    out Vec<AnySlot>
+    seen Vec<source.NameId>
     covers := p.AnyCovers(r)
     for tr in covers {
         d := p.T.DeclOf(tr)
@@ -3461,7 +3461,7 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
 
 # the tables and slot contracts an attempt of the checker made, gone with its bodies (R1a)
 fn (p mut Program&) ResetAny() {
-    p.AnyTables = List<AnyTable>()
+    p.AnyTables = Vec<AnyTable>()
     p.anyTableOf = Map<pair.Pair<I64, I64>, I64>()
     p.SlotContracts = Map<I64, I64>()
 }
@@ -3671,7 +3671,7 @@ fn (p mut Program&) Descriptor(k I64, t types.TypeId, cs I64, i I64) types.TypeI
     d := p.descDecl(k)
     if d < types.DeclId(0) { return types.UnknownT }
     i64 := p.T.Prim("I64")
-    args List<types.TypeId>
+    args Vec<types.TypeId>
     args.Push(t)
     if k == DescField or k == DescCase { args.Push(p.T.Const(i64, cs)) }
     if k != DescCase { args.Push(p.T.Const(i64, i)) }
@@ -3794,7 +3794,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
 
 # the names of a struct's fields (C2), in order: its constructor body's field declarations
 fn (p mut Program&) FieldNames(t types.TypeId) Array<source.NameId> {
-    out List<source.NameId>
+    out Vec<source.NameId>
     if p.T.KindOf(t) != types.Kind.Named { return out.ToArray() }
     td := p.typeDecl(p.T.DeclOf(t))
     if td is null or td.Body is null { return out.ToArray() }
@@ -3820,7 +3820,7 @@ fn (p mut Program&) FieldNames(t types.TypeId) Array<source.NameId> {
 
 # the names of an enum case's payload fields (T17)
 fn (p mut Program&) CaseFieldNames(t types.TypeId, cs I64) Array<source.NameId> {
-    out List<source.NameId>
+    out Vec<source.NameId>
     if p.T.KindOf(t) != types.Kind.Named { return out.ToArray() }
     td := p.typeDecl(p.T.DeclOf(t))
     if td is null or td.Body is null { return out.ToArray() }
@@ -3855,7 +3855,7 @@ fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>&p {
 # (M6a) left out; and why it has none (the list is no list of that type's), "" where it is one
 fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I64>, String {
     none := Array<I64>(0)
-    out List<I64>
+    out Vec<I64>
     if list == ListResults {
         if p.T.KindOf(t) != types.Kind.Func { return none, "only a function type has results" }
         for i in range p.T.Results(t).Len() { out.Push(i) }
@@ -4065,7 +4065,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
     d := try p.FindDecl(word, c.Text[nstart:c.At])
     if not c.eat("<") { return p.Instance(d, types.ListId(0)) }
     p.declVars(d)
-    args List<types.TypeId>
+    args Vec<types.TypeId>
     for {
         i := args.Len()
         if i >= p.T.DeclParams(d) { error BadCanon.TEXT }
@@ -4091,7 +4091,7 @@ fn canonNumber(c mut cursor&) I64 ? {
 }
 
 fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
-    xs List<types.TypeId>
+    xs Vec<types.TypeId>
     if c.eat(close) { return types.ListId(0) }
     for {
         xs.Push(try p.canonType(c))
@@ -4112,7 +4112,7 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         c.At++
         result = try p.canonType(c)
     }
-    es List<types.TypeId>
+    es Vec<types.TypeId>
     if c.eat(" ?") {
         if c.eat(" ") {
             for {
@@ -4129,7 +4129,7 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
     }
     scopes := types.ScopesId(0)
     if c.eat(" ~[") {
-        xs List<I64>
+        xs Vec<I64>
         for {
             xs.Push(try canonNumber(c))
             if c.eat("]") { break }
@@ -4144,8 +4144,8 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
 }
 
 fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
-    ns List<source.NameId>
-    ps List<types.TypeId>
+    ns Vec<source.NameId>
+    ps Vec<types.TypeId>
     for not c.eat("}") {
         if ns.Len() > 0 and not c.eat(" ") { error BadCanon.TEXT }
         start := c.At

@@ -5,7 +5,7 @@ type Acc struct() {
 }
 fn bumper() fn(c mut Acc&) { return fn(c mut Acc&) { c.N++ } }
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     bumper()(l[0])
 }

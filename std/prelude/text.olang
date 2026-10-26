@@ -1105,11 +1105,11 @@ fn (x F64) ShortestDecimal() U64, I64 ? TextError.NOT_FINITE {
 }
 
 # text built up piece by piece - what a program writing a lot of it (a compiler's output, a report) accumulates
-# before it has it all. Held as a List of Chars, so adding never moves what is already there and costs no more
+# before it has it all. Held as a Vec of Chars, which doubles as it fills, so adding costs no more
 # than writing into a preallocated array would, and copied into one String, once, by ToString. Numbers and other
 # values go in as their renderings: "b.Push($n)".
 type StringBuilder struct() {
-    chars List<Char> = List<Char>()
+    chars Vec<Char> = Vec<Char>()
 }
 
 # adds t at the end

@@ -13,7 +13,7 @@
 # and codegen's cgBoundScopeArg -> cgScopeSlotAt passes the loop body's scope rather than cgOwnAllocSlot's %here.
 import "std/io"
 type Countdown struct(n I64) {
-    left List<I64>
+    left Vec<I64>
     for i in range n { left.Push(n - i) }
 }
 fn main() ? {

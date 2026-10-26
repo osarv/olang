@@ -11,7 +11,7 @@ fn (b aBtn&) Draw() String { return "[" $b.label "]" }
 type aSl struct(at I64) { at }
 fn (s aSl&) Draw() String { return "<" $s.at ">" }
 fn main() {
-    keep := List<aBtn&>()
+    keep := Vec<aBtn&>()
     for i in range 4 {
         w any aW& = aBtn("b" $i)
         match w {

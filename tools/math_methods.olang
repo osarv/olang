@@ -125,8 +125,8 @@ fn simple(t String&) Bool {
 }
 
 # a call's arguments - the text between its brackets - split at the commas outside any bracket, each stripped
-fn splitArgs(t String&) List<String&> {
-    out List<String&>
+fn splitArgs(t String&) Vec<String&> {
+    out Vec<String&>
     mask := srcmask.Mask(t, true)
     depth I64 = 0
     start I64 = 0
@@ -158,7 +158,7 @@ fn lineOf(text String&, at I64) I64 {
 
 # text with every use of alias's functions and constants in code made a method call or a prelude constant; a literal
 # receiver a person should look at is added to notes, with the line it is on (counted from first)
-fn migrate(text String&, alias String&, first I64, notes mut List<String&>&) String {
+fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) String {
     mask := srcmask.Mask(text, false)
     out := StringBuilder()
     last I64 = 0
@@ -233,7 +233,7 @@ fn migrate(text String&, alias String&, first I64, notes mut List<String&>&) Str
 }
 
 # migrates one file; whether it changed
-fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
+fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) Bool {
     if path == "std/math.olang" or path.EndsWith("/std/math.olang") { return false }
     text := try srcmask.ReadText(path) catch {
         srcmask.SayErr("math_methods: cannot read " $path)
@@ -242,7 +242,7 @@ fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
     }
     alias, from, to := mathImport(text, path)
     if alias.Len() == 0 { return false }
-    mine List<String&>
+    mine Vec<String&>
     result := migrate($text[:from] $text[to:], alias, 1, mine)
     for n in mine { notes.Push($path ":" $n) }
     if result == text { return false }
@@ -258,7 +258,7 @@ fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
 
 fn main() ? {
     dry := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         if args[i] == "--dry" { dry = true } else { paths.Push($args[i]) }
@@ -267,13 +267,13 @@ fn main() ? {
         srcmask.Say("Migrates olang sources from std/math's functions to the numbers' methods (M19d, 2026-10-18).\n\n    build/tools_math_methods [--dry] PATH...\n\nsee the header of tools/math_methods.olang")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }
     files.Sort(fn(a, b) { return a < b })
     changed I64 = 0
-    notes List<String&>
+    notes Vec<String&>
     for k, f in files {
         if k > 0 and f == files[k - 1] { continue }
         if migrateFile(f, dry, notes) { changed++ }
@@ -286,7 +286,7 @@ fn main() ? {
 }
 
 test "functions become methods of their first argument, constants the prelude's" {
-    notes List<String&>
+    notes Vec<String&>
     assert migrate("y := math.Sqrt(x) + math.Atan2(a.b, c[1]) * math.Pi\n", "math", 1, notes) == "y := x.Sqrt() + a.b.Atan2(c[1]) * Pi\n"
     assert migrate("z := math.Exp(-(x - m) * k) / math.Sqrt(2.0 * math.Pi)\n", "math", 1, notes) == "z := (-(x - m) * k).Exp() / (2.0 * Pi).Sqrt()\n"
     assert migrate("w := math.Max(best, math.Abs(f(a, b) - c)) + math.E + math.Sqrt2\n", "math", 1, notes) == "w := best.Max((f(a, b) - c).Abs()) + Euler + F64(2).Sqrt()\n"
@@ -295,7 +295,7 @@ test "functions become methods of their first argument, constants the prelude's"
 }
 
 test "literal receivers" {
-    notes List<String&>
+    notes Vec<String&>
     assert migrate("a := math.Sqrt(4) + math.Abs(-3) + math.Exp(-1.5)\n", "math", 1, notes) == "a := 4.0.Sqrt() + (-3).Abs() + (-1.5).Exp()\n"
     assert migrate("b := math.Max(0.0, x) + math.Min(1, n)\n", "math", 1, notes) == "b := x.Max(0.0) + n.Min(1)\n"
     assert notes.Len() == 0
@@ -304,7 +304,7 @@ test "literal receivers" {
 }
 
 test "strings, comments and other modules' names are left alone" {
-    notes List<String&>
+    notes Vec<String&>
     t := "s := \"math.Sqrt(x)\" # math.Sqrt(y)\nmymath.Sqrt(z)\nq.math.Sqrt(w)\n"
     assert migrate(t, "math", 1, notes) == t
 }

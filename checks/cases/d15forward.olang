@@ -8,11 +8,11 @@ Step := Base / 5
 Count := S().xs.Len() + S().n
 Gen := Box<I64>().vs.Len()
 type S struct() {
-    xs := List<I64>()
+    xs := Vec<I64>()
     n := Step + 1
 }
 type Box<T> struct() {
-    vs := List<T>()
+    vs := Vec<T>()
 }
 fn main() ? {
     assert Total == 14 and Count == 3 and Gen == 0

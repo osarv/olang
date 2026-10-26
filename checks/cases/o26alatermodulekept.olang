@@ -8,7 +8,7 @@ import "std/io"
 import "std/linalg"
 
 fn main() ? {
-    ms := List<linalg.Matrix<F64>>()
+    ms := Vec<linalg.Matrix<F64>>()
     for i in range 3 {
         d := Array<F64>(4, F64(i))
         ms.Push(try linalg.View(d, 0, 2, 2))

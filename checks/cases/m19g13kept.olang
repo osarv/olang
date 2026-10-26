@@ -4,7 +4,7 @@ import "std/io"
 fn main() ? {
     v := Vec<Char>()
     v.Push('a')
-    l := List<String&>()
+    l := Vec<String&>()
     l.Push(String(v.View()))
     for i in range 100 { v.Push('b') }
     try io.Println(l[0])

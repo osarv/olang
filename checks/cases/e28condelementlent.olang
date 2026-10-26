@@ -12,7 +12,7 @@ type Acc struct() {
 fn bump(c mut Acc&) { c.N++ }
 fn bumpPt(p mut Pt&) { p.X++ }
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     l.Push(Acc())
     k := l.Len()

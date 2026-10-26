@@ -47,8 +47,8 @@ type record struct(Key String&) {
     Union Bool = false
     Complete Bool = false
     Bitfields Bool = false
-    Names List<String&>
-    Types List<String&>
+    Names Vec<String&>
+    Types Vec<String&>
     Own Bool = false                                    # declared by the header itself
     Name String& = ""
     Used Bool = false
@@ -69,15 +69,15 @@ type Skip error { WHY }
 type gen struct(header String&) {
     header
     typedefs := Map<String&, String&>()
-    recs := List<record>()
+    recs := Vec<record>()
     recIndex := Map<String&, I64>()
     unnamed := Map<String&, I64>()                      # an unnamed struct's tree id: its record
-    funcs := List<cFunc>()
-    consts := List<String&>()                           # "NAME TYPE = VALUE"
+    funcs := Vec<cFunc>()
+    consts := Vec<String&>()                           # "NAME TYPE = VALUE"
     constNames := Map<String&, I64>()
-    nodes := List<ctype>()
-    params := List<I64>()
-    skipped := List<String&>()
+    nodes := Vec<ctype>()
+    params := Vec<I64>()
+    skipped := Vec<String&>()
     taken := Map<String&, I64>()                        # every top-level name the output declares
     usesVoid := false
     why String& = ""
@@ -212,7 +212,7 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             continue
         }
         if kind == "FunctionDecl" and where == 1 {
-            ps mut List<String&>&g = List<String&>()
+            ps mut Vec<String&>&g = Vec<String&>()
             for p in inner(n) {
                 if text(p, "kind") == "ParmVarDecl" { ps.Push(text(p, "name")) }
             }
@@ -281,7 +281,7 @@ fn usable(name String&) Bool {
 
 # a C type's text in tokens: names, numbers and the punctuation of declarators
 fn ctokens(t String&) Array<String&> {
-    out List<String&>
+    out Vec<String&>
     i I64 = 0
     for i < t.Len() {
         c := t[i]
@@ -419,11 +419,11 @@ fn (g mut gen&) declarator(p mut ctp&, base I64, ro Bool, depth I64) I64 {
         }
         p.pos++
     }
-    lengths List<I64>
+    lengths Vec<I64>
     for {
         if p.at() == "(" {
             p.pos++
-            ps List<I64>
+            ps Vec<I64>
             variadic := false
             for p.pos < p.toks.Len() and p.at() != ")" {
                 if p.at() == "..." {
@@ -747,8 +747,8 @@ fn (g mut gen&) write(display String&) String {
 }
 
 # the names a header defines as objects - "#define NAME ...", no parameter list - for the probe to ask clang about
-fn macroNames(header String&) List<String&> {
-    out List<String&>
+fn macroNames(header String&) Vec<String&> {
+    out Vec<String&>
     for line in header.Lines() {
         t := line.Trim()
         if not t.StartsWith("#") { continue }

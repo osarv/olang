@@ -16,7 +16,7 @@ fn retext(s mut Src&, t String&) { s.Text = t }
 fn main() {
     args := String&["a", "bb"]
     dir String& = "d"
-    kept List<String&>
+    kept Vec<String&>
     for k in range args.Len() {
         s := read(args[k])
         kept.Push(s.Path)

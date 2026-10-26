@@ -76,7 +76,7 @@ fn main() {
 
 # the self-hosted loader's graph of a root
 fn loader(dump String&, mode String&, f String&) String {
-    args := List<String&>()
+    args := Vec<String&>()
     args.Push(dump)
     args.Push("modules")
     if mode != "" { args.Push(mode) }
@@ -85,8 +85,8 @@ fn loader(dump String&, mode String&, f String&) String {
 }
 
 # the root programs of the repository
-fn defaultRoots() List<String&> {
-    roots := List<String&>()
+fn defaultRoots() Vec<String&> {
+    roots := Vec<String&>()
     for dir in String&["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
         for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
     }
@@ -99,7 +99,7 @@ fn defaultRoots() List<String&> {
 
 # the synthetic module of build constants is stage 0's way of holding them, not a module anyone imports
 fn withoutBuildModule(t String&) String {
-    rows := List<String&>()
+    rows := Vec<String&>()
     for r in toolkit.Rows(t) {
         if r != "module olang_build" { rows.Push($r) }
     }
@@ -107,7 +107,7 @@ fn withoutBuildModule(t String&) String {
 }
 
 fn withoutHeaders(t String&) String {
-    rows := List<String&>()
+    rows := Vec<String&>()
     for r in toolkit.Rows(t) {
         if not r.StartsWith("== ") { rows.Push($r) }
     }
@@ -116,7 +116,7 @@ fn withoutHeaders(t String&) String {
 
 # the first word of each row of an olang.lock, comments left out
 fn lockKeys(t String&) String {
-    rows := List<String&>()
+    rows := Vec<String&>()
     for r in toolkit.Rows(t) {
         if r.StartsWith("#") { continue }
         sp := try r.FindByte(' ') catch default r.Len()
@@ -127,7 +127,7 @@ fn lockKeys(t String&) String {
 
 # git with a fixed identity and no signing, in dir
 fn gitIn(dir String&, rest Array<String&>&) {
-    args := List<String&>()
+    args := Vec<String&>()
     for a in String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
     for a in rest { args.Push($a) }
     toolkit.Run(args.ToArray(), Array<String&>(0), dir)

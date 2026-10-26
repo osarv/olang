@@ -34,7 +34,7 @@ fn classify(n I64) String {
 
 fn two(a String&, b String&) Bool { return a == b }
 fn sites(n I64) String {
-    l := List<String&>()
+    l := Vec<String&>()
     for i in range n { l.Push("hello") }
     return $two(l[0], l[1]) " " $two("hey", "hey")
 }

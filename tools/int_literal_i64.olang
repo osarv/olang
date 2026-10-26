@@ -99,8 +99,8 @@ fn rangeType(msg String&) String ? {
 
 # the edits the compiler's output asks for in the allowed paths, and the errors mentioning I64 that no note answers (as
 # requests with an empty kind, the error's row in Why)
-fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&
-             unanswered mut List<diagedit.Request>&) {
+fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Request>&
+             unanswered mut Vec<diagedit.Request>&) {
     currentPath := ""
     current := ""
     answered := false
@@ -143,8 +143,8 @@ fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     for k >= 0 and not (text[k:].StartsWith("range") and mask[k] == 'c' and (k == 0 or not srcmask.IsWord(text[k - 1]))) { k-- }
     if k < 0 { error noFix.HERE }
     i := k + 5
-    starts List<I64>
-    ends List<I64>
+    starts Vec<I64>
+    ends Vec<I64>
     start := i
     depth I64 = 0
     for i < n {
@@ -196,8 +196,8 @@ fn startsWithConversion(text String&) Bool {
 }
 
 # the edits applied to their files; how many locals and how many ranges were typed
-fn apply(requests List<diagedit.Request>&) I64, I64 {
-    paths List<String&>
+fn apply(requests Vec<diagedit.Request>&) I64, I64 {
+    paths Vec<String&>
     for r in requests {
         if not (r.Path in paths) { paths.Push($r.Path) }
     }
@@ -209,10 +209,10 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
             os.Exit(1)
             unreachable
         }
-        expect List<String&>
+        expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
         lines := src.Split("\n")
-        mine List<diagedit.Request>
+        mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path { mine.Push(r) }
         }
@@ -221,10 +221,10 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
             if a.Line != b.Line { return a.Line < b.Line }
             return a.Col > b.Col
         })
-        seen List<String&>
-        shLine List<I64>
-        shAt List<I64>
-        shDelta List<I64>
+        seen Vec<String&>
+        shLine Vec<I64>
+        shAt Vec<I64>
+        shDelta Vec<I64>
         for r in mine {
             key := $r.Line ":" $r.Col
             if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
@@ -269,7 +269,7 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
 fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     i I64 = 1
     for i < args.Len() {
@@ -302,9 +302,9 @@ fn main() ? {
         os.Exit(1)
     }
     olang = $diagedit.RealPathOf(olang)
-    files List<String&>
+    files Vec<String&>
     diagedit.OlangFiles(paths, files)
-    allowed List<String&>
+    allowed Vec<String&>
     for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
 
     tmp := try os.MkTemp("", "int_literal_i64") catch {
@@ -323,12 +323,12 @@ fn main() ? {
     }
     totalLocals I64 = 0
     totalRanges I64 = 0
-    unanswered List<diagedit.Request>
+    unanswered Vec<diagedit.Request>
     fileArray := files.ToArray()
     for round in range 1, 9 {
         outputs := diagedit.CompileAll(olang, fileArray, work, true)
-        requests List<diagedit.Request>
-        unanswered = List<diagedit.Request>()
+        requests Vec<diagedit.Request>
+        unanswered = Vec<diagedit.Request>()
         for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
         locals, ranges := apply(requests)
         srcmask.Say("round " $round ": " $locals " locals typed, " $ranges " ranges typed")
@@ -337,9 +337,9 @@ fn main() ? {
         if locals == 0 and ranges == 0 { break }
     }
     srcmask.Say("total: " $totalLocals " locals typed, " $totalRanges " ranges typed")
-    seen List<String&>
+    seen Vec<String&>
     for u in unanswered {
-        expect List<String&>
+        expect Vec<String&>
         text := try srcmask.ReadText(u.Path) catch default ""
         diagedit.ExpectedTexts(text, expect)
         if not (u.Why in seen) and not diagedit.ContainsAny(u.Why, expect) {

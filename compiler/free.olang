@@ -45,7 +45,7 @@ fn orig(k I64, v I64) I64 { return (k << 40) | v }
 fn okind(o I64) I64 { return o >> 40 }
 fn oval(o I64) I64 { return o & ((I64(1) << 40) - 1) }
 
-fn addTo(s mut List<I64>&, x I64) Bool {
+fn addTo(s mut Vec<I64>&, x I64) Bool {
     for y in s {
         if y == x: return false
     }
@@ -53,7 +53,7 @@ fn addTo(s mut List<I64>&, x I64) Bool {
     return true
 }
 
-fn addAllTo(s mut List<I64>&, t List<I64>&) Bool {
+fn addAllTo(s mut Vec<I64>&, t Vec<I64>&) Bool {
     any := false
     for x in t {
         if addTo(s, x): any = true
@@ -61,7 +61,7 @@ fn addAllTo(s mut List<I64>&, t List<I64>&) Bool {
     return any
 }
 
-fn has(s List<I64>&, x I64) Bool {
+fn has(s Vec<I64>&, x I64) Bool {
     for y in s {
         if y == x: return true
     }
@@ -171,89 +171,89 @@ type leaf struct(Path Array<I64>&, Place I64) {
 
 # ---- the analysis ----
 
-type Free struct(P mut generic.Program&, Bodies List<mut typed.Body&>, Sc mut scope.Scoper&) {
+type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut scope.Scoper&) {
     P
     Bodies
     Sc
-    Plans List<typed.Plan>     # the scope pass's, with the regions written in (Decide)
+    Plans Vec<typed.Plan>     # the scope pass's, with the regions written in (Decide)
     passes I64 = 0
-    holdsOf List<I64>          # by type: 0 not asked, 1 holds no reference, 2 holds one (HoldsRefs, asked once)
+    holdsOf Vec<I64>          # by type: 0 not asked, 1 holds no reference, 2 holds one (HoldsRefs, asked once)
     wk mut walker?&             # the one walker, made again for each walk (newWalker) - its lists reused, not grown
     Root I64 = -1              # the root module; -1 for a module compiled on its own, where nothing is freed early
     # the candidate places: keys (a plain type, a field's position or -1 for an array's elements), whether each holds
     # a handle (its one field the reference), its value's type
-    keyTy List<types.TypeId>
-    keyField List<I64>
-    handle List<Bool>
-    valTy List<types.TypeId>
+    keyTy Vec<types.TypeId>
+    keyField Vec<I64>
+    handle Vec<Bool>
+    valTy Vec<types.TypeId>
     placeOf Map<pair.Pair<I64, I64>, I64>
     typeAsked Map<pair.Pair<I64, I64>, I64>    # a key asked: 1 no candidate, 2 a candidate (place in placeOf)
     safeAsked Map<types.TypeId, I64>             # contents asked: 1 being asked, 2 no, 3 yes
-    leafAsked Map<types.TypeId, List<leaf>>
+    leafAsked Map<types.TypeId, Vec<leaf>>
     # by body: its module, whether its code is emitted in the root's object, whether it is the program's own (not std)
-    module List<I64>
-    rootEmitted List<Bool>
-    programCode List<Bool>
-    prelude List<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
+    module Vec<I64>
+    rootEmitted Vec<Bool>
+    programCode Vec<Bool>
+    prelude Vec<Bool>         # whether its code is the prelude's (std/prelude), whose fills are trusted (makeStores)
     # summaries, by body: the origins its result may carry (no New); the places each parameter's value is stored into
     # directly, (param << 32) | place; the parameters whose values it may keep elsewhere; the places it may let go of,
     # or all; what every result is (must); whether every result is new
-    resFrom List<mut List<I64>&>
-    parStored List<mut List<I64>&>
-    parEsc List<mut List<I64>&>
-    parMulti List<mut List<I64>&>   # the parameters a body stores more than once on a path (a loop, two stores)
-    lets List<mut List<I64>&>
-    letsAll List<Bool>
-    mustRes List<I64>
-    resFresh List<Bool>
+    resFrom Vec<mut Vec<I64>&>
+    parStored Vec<mut Vec<I64>&>
+    parEsc Vec<mut Vec<I64>&>
+    parMulti Vec<mut Vec<I64>&>   # the parameters a body stores more than once on a path (a loop, two stores)
+    lets Vec<mut Vec<I64>&>
+    letsAll Vec<Bool>
+    mustRes Vec<I64>
+    resFresh Vec<Bool>
     # by body: whether it may register a destructor in one of its scope variables - its result, its instance, a
     # parameter's scope - so in a region a call of it builds into (F4): a destructor still to run when the region's
     # place would let go of it (O16, condition 4)
-    regOut List<Bool>
-    exports List<I64>          # the export fns' bodies (X12): C may call them from any extern call (F6)
+    regOut Vec<Bool>
+    exports Vec<I64>          # the export fns' bodies (X12): C may call them from any extern call (F6)
     changed Bool = false
     # the program: whether it has tasks (or an extern given a function value), whether a destructor, Str, Eq or Hash
     # lets go of something (they run where no call is written)
     tasks Bool = false
     hidden Bool = false
-    hiddenAt List<I64>         # the places a destructor, Str, Eq or Hash may let go of (where hidden is not set)
+    hiddenAt Vec<I64>         # the places a destructor, Str, Eq or Hash may let go of (where hidden is not set)
     # the final pass's events
-    stores List<store>
-    goes List<letGo>
-    whyKind List<I64>          # by place: the first reason it keeps, RNone while it may be sole
-    libTaken List<Bool>        # by place: a value moved out of it by the library's code - what a collection holds
-    why List<reason>
-    ors List<orCall>
-    orStores List<orStore>
-    Sole List<Bool>            # by place, after Decide
+    stores Vec<store>
+    goes Vec<letGo>
+    whyKind Vec<I64>          # by place: the first reason it keeps, RNone while it may be sole
+    libTaken Vec<Bool>        # by place: a value moved out of it by the library's code - what a collection holds
+    why Vec<reason>
+    ors Vec<orCall>
+    orStores Vec<orStore>
+    Sole Vec<Bool>            # by place, after Decide
     noteAt I64 = -1            # where a reason's note is, when it is not the store (a callee's declaration)
     noteFile I64 = -1
     noteSp source.Span = source.Span(0, 0)
-    mustLocals List<mut List<I64>&> # by body, by local: what every value it holds is (must)
-    withinLocals List<mut List<I64>&> # by body, by local: the parameter every value it holds is reached from (must)
-    freshLocals List<mut List<Bool>&> # by body, by local: whether every value it holds is an object the body made (must)
-    callers List<mut List<I64>&>    # by body: the bodies calling it, found by the walks
+    mustLocals Vec<mut Vec<I64>&> # by body, by local: what every value it holds is (must)
+    withinLocals Vec<mut Vec<I64>&> # by body, by local: the parameter every value it holds is reached from (must)
+    freshLocals Vec<mut Vec<Bool>&> # by body, by local: whether every value it holds is an object the body made (must)
+    callers Vec<mut Vec<I64>&>    # by body: the bodies calling it, found by the walks
     # by body: its locals' origins where its last walk left them - flattened, local l's from savedAt[b][l] to
     # savedAt[b][l + 1] - so its next walk starts from them (summaries only grow: so does each local's least fixed point)
-    saved List<Array<I64>&>
-    savedAt List<Array<I64>&>
+    saved Vec<Array<I64>&>
+    savedAt Vec<Array<I64>&>
     viewGo Map<I64, I64>       # a place kept for a view: the let-go (in goes) its report row is at
     # C9b's destroy targets, each a candidate place of its own (keyField -2): by (body, local), and by place its body,
     # its local, the Destroy()'s span, a use of the local after it and whether the call compiles (-1 and false for
     # every other place)
     destroys I64 = 0
     destroyOf Map<pair.Pair<I64, I64>, I64>
-    dBody List<I64>
-    dLocal List<I64>
-    dSp List<source.Span>
-    dUseSp List<source.Span>
-    dUsed List<Bool>
-    dLoop List<Bool>
-    dOk List<Bool>
-    dIn List<Bool>             # by body: whether it has a destroy target
-    dtorVal List<Bool>         # by place: what it holds has a destructor - never Sole (O15); a Destroy() takes one out
-    destroySole List<Bool>     # by place: sole but for its values' destructors (condition 4) and condition 5
-    destroyUse List<Bool>      # by place: an accepted Destroy() moves out of it - its values are built in regions
+    dBody Vec<I64>
+    dLocal Vec<I64>
+    dSp Vec<source.Span>
+    dUseSp Vec<source.Span>
+    dUsed Vec<Bool>
+    dLoop Vec<Bool>
+    dOk Vec<Bool>
+    dIn Vec<Bool>             # by body: whether it has a destroy target
+    dtorVal Vec<Bool>         # by place: what it holds has a destructor - never Sole (O15); a Destroy() takes one out
+    destroySole Vec<Bool>     # by place: sole but for its values' destructors (condition 4) and condition 5
+    destroyUse Vec<Bool>      # by place: an accepted Destroy() moves out of it - its values are built in regions
     curBody I64 = -1           # the body the pre-pass is in
     sayDestroys Bool = true    # whether a refused Destroy() is reported (not on the error path, where nothing is built)
     Done Bool = false          # whether Decide ran with a root (else every decision is "keep")
@@ -444,14 +444,14 @@ fn (f mut Free&) arrayOf(ty types.TypeId) types.TypeId {
 
 # the candidate places inside a value of type ty held in place, through its by-value struct fields - a struct copied
 # whole copies them
-fn (f mut Free&) leaves(ty types.TypeId) List<leaf> {
+fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
     t := f.T()
     r := t.Plain(t.Repr(ty))
-    out List<leaf>
+    out Vec<leaf>
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct {
         return out
     }
-    known := try f.leafAsked.Get(r) catch default List<leaf>()
+    known := try f.leafAsked.Get(r) catch default Vec<leaf>()
     if f.leafAsked.Has(r) { return known }
     f.leafAsked.Put(r, out)          # a struct holds itself in place only through a reference: no cycle
     fs := t.Items(t.Fields(r))
@@ -538,7 +538,7 @@ fn (f mut Free&) ownCode(b I64) Bool {
 
 # the whole analysis, at a program's root: candidates, summaries to a fixed point, the final pass's events, the
 # decisions, and the regions written into the plans. With no root (a module compiled on its own) nothing is decided
-fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) {
+fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
     f.Plans = plans
     f.Root = root
     n := f.Bodies.Len()
@@ -548,11 +548,11 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) 
         f.rootEmitted.Push(root >= 0 and (m == -3 or m == root))
         f.programCode.Push(f.ownCode(b))
         f.prelude.Push(f.preludeCode(b))
-        f.resFrom.Push(List<I64>())
-        f.parStored.Push(List<I64>())
-        f.parEsc.Push(List<I64>())
-        f.parMulti.Push(List<I64>())
-        f.lets.Push(List<I64>())
+        f.resFrom.Push(Vec<I64>())
+        f.parStored.Push(Vec<I64>())
+        f.parEsc.Push(Vec<I64>())
+        f.parMulti.Push(Vec<I64>())
+        f.lets.Push(Vec<I64>())
         f.letsAll.Push(false)
         f.mustRes.Push(MustTop)
         f.resFresh.Push(true)
@@ -561,10 +561,10 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) 
             case typed.BodyOf.Fn(i) { if f.P.FnDecl(f.P.InstanceFn(i)).Export { f.exports.Push(b) } }
             case _ { }
         }
-        f.mustLocals.Push(List<I64>())
-        f.withinLocals.Push(List<I64>())
-        f.freshLocals.Push(List<Bool>())
-        f.callers.Push(List<I64>())
+        f.mustLocals.Push(Vec<I64>())
+        f.withinLocals.Push(Vec<I64>())
+        f.freshLocals.Push(Vec<Bool>())
+        f.callers.Push(Vec<I64>())
         f.saved.Push(Array<I64>(0))
         f.savedAt.Push(Array<I64>(0))
         f.dIn.Push(false)
@@ -589,15 +589,15 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) 
         order = Array<I64>(n)
         for b in range n { order[b] = b }
     }
-    mustCallers List<List<I64>>
-    for b in range n { mustCallers.Push(List<I64>()) }
+    mustCallers Vec<Vec<I64>>
+    for b in range n { mustCallers.Push(Vec<I64>()) }
     for b in range n {
         for c in f.Sc.CalleesOf(b) {
             if c >= 0 and c < n: mustCallers[c].Push(b)
         }
     }
     rm I64 = 0
-    mq List<I64>
+    mq Vec<I64>
     inMq := Array<Bool>(n, true)
     for b in order { mq.Push(b) }
     for at := 0, at < mq.Len(), at++ {
@@ -618,7 +618,7 @@ fn (f mut Free&) Decide(plans List<typed.Plan>, root I64, destroys Bool = true) 
     # the may-summaries, least fixed point: every body walked once - which finds who calls whom - then again each body
     # a callee of which changed its summary
     rw I64 = 0
-    queue List<I64>
+    queue Vec<I64>
     queued := Array<Bool>(n, true)
     for b in order { queue.Push(b) }
     for at := 0, at < queue.Len(), at++ {
@@ -786,66 +786,66 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     F
     Id
     Final
-    origins List<mut List<I64>&>   # by local: what it may refer into
-    seen List<Bool>            # by local: its origins read in this pass
+    origins Vec<mut Vec<I64>&>   # by local: what it may refer into
+    seen Vec<Bool>            # by local: its origins read in this pass
     grew Bool = false
     params Map<I64, I64>       # a parameter's local: its index in Params
     fields Map<I64, I64>       # a constructor's field local: its field's position
     ctorTy types.TypeId = types.UnknownT
-    targets List<typed.Place&>
-    yieldTo List<I64>          # the element place of each Collect being walked, -1 for none
+    targets Vec<typed.Place&>
+    yieldTo Vec<I64>          # the element place of each Collect being walked, -1 for none
     # statements numbered in walk order, for views and for stores on one path
     no I64 = 0
     cur I64 = 0
-    ends List<I64>             # by statement number: the last number inside it
-    loopAt List<I64>           # each loop's first and last statement numbers
-    loopEnd List<I64>
-    thenFrom List<I64>         # each if's branches: the then's first and last, the else's first and last
-    thenTo List<I64>
-    elseFrom List<I64>
-    elseTo List<I64>
-    declAt List<I64>           # by local: the statement declaring it
-    declSp List<source.Span>   # by local: its initializer, as written - what a hidden one (a walk's) is said by
-    lastAt List<I64>           # the statements a return follows
+    ends Vec<I64>             # by statement number: the last number inside it
+    loopAt Vec<I64>           # each loop's first and last statement numbers
+    loopEnd Vec<I64>
+    thenFrom Vec<I64>         # each if's branches: the then's first and last, the else's first and last
+    thenTo Vec<I64>
+    elseFrom Vec<I64>
+    elseTo Vec<I64>
+    declAt Vec<I64>           # by local: the statement declaring it
+    declSp Vec<source.Span>   # by local: its initializer, as written - what a hidden one (a walk's) is said by
+    lastAt Vec<I64>           # the statements a return follows
     loops I64 = 0              # the loops the statement being walked is in
-    useLocal List<I64>         # local uses: the local, the statement, where
-    useAt List<I64>
-    useSp List<source.Span>
-    deferred List<I64>         # locals read in deferred code
+    useLocal Vec<I64>         # local uses: the local, the statement, where
+    useAt Vec<I64>
+    useSp Vec<source.Span>
+    deferred Vec<I64>         # locals read in deferred code
     inDefer I64 = 0
     quiet I64 = 0              # events not counted: a value walked again for what it refers into
     storeWithin I64 = -1       # the parameter the container being stored into is reached from (withinOf), -1 none
     storeInside I64 = -1       # ... the place a value of which it is reached through (insidePlace), -1 none
-    yieldOrig List<mut List<I64>&>  # what each Collect being walked yields may refer into
+    yieldOrig Vec<mut Vec<I64>&>  # what each Collect being walked yields may refer into
     stmtSp source.Span = source.Span(0, 0)     # the statement being walked
-    readPlace List<I64>        # view reads: the place, the statement
-    readAt List<I64>
-    goPlace List<I64>          # let-goes: the place, the statement, the kind, where, the text
-    goAt List<I64>
-    goKind List<I64>
-    goSp List<source.Span>
-    goRecv List<source.Span>   # a call's receiver (empty for none)
-    goCallee List<I64>         # a call's callee body (LCall), -1 for none
-    goIdx List<I64>            # its index in Free.goes, -1 where it is not recorded there
-    parSite List<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
-    parSitePlace List<I64>
-    parSiteAt List<I64>
+    readPlace Vec<I64>        # view reads: the place, the statement
+    readAt Vec<I64>
+    goPlace Vec<I64>          # let-goes: the place, the statement, the kind, where, the text
+    goAt Vec<I64>
+    goKind Vec<I64>
+    goSp Vec<source.Span>
+    goRecv Vec<source.Span>   # a call's receiver (empty for none)
+    goCallee Vec<I64>         # a call's callee body (LCall), -1 for none
+    goIdx Vec<I64>            # its index in Free.goes, -1 where it is not recorded there
+    parSite Vec<I64>          # stores of a parameter's value into a place: the parameter, the place, the statement
+    parSitePlace Vec<I64>
+    parSiteAt Vec<I64>
     # C9b, in a body with a destroy target: each Destroy() - its target, its statement, the Defer statement it is in
     # (-1 none); each return of a view of a target; by use, the Defer statement it is in; the Defer statements being
     # walked; by Defer statement, the last statement of the block it is in; by statement, the first after it in its
     # block that leaves the function (a return, an error, an unreachable); the Defer statements that are errdefers (S19e)
-    dGoD List<I64>
-    dGoAt List<I64>
-    dGoDefer List<I64>
-    dRetD List<I64>
-    dRetAt List<I64>
-    useDefer List<I64>
-    deferStack List<I64>
+    dGoD Vec<I64>
+    dGoAt Vec<I64>
+    dGoDefer Vec<I64>
+    dRetD Vec<I64>
+    dRetAt Vec<I64>
+    useDefer Vec<I64>
+    deferStack Vec<I64>
     deferEnd Map<I64, I64>
     leaveAfter Map<I64, I64>
     jumpAfter Map<I64, I64>    # by statement: the first break or continue after it in its block, its loop's body block
     jumpAt Map<I64, I64>       # ...and that jump's statement
-    errDefers List<I64>
+    errDefers Vec<I64>
 }
 
 fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
@@ -874,7 +874,7 @@ fn newWalker(f mut Free&, b I64, final Bool) mut walker&f {
     w.seen.Clear()
     for i in range n {
         w.seen.Push(false)
-        if i < w.origins.Len() { w.origins[i].Clear() } else { w.origins.Push(List<I64>()) }
+        if i < w.origins.Len() { w.origins[i].Clear() } else { w.origins.Push(Vec<I64>()) }
         w.declAt.Push(0)
         w.declSp.Push(source.Span(0, 0))
     }
@@ -1001,7 +1001,7 @@ fn (w mut walker&) T() mut types.Table&w { return w.F.P.T }
 
 fn (w mut walker&) block(bl typed.Block&) {
     track := w.Final and w.F.dIn[w.Id]
-    nums List<I64>
+    nums Vec<I64>
     for i in range bl.Stmts.Len() {
         # a statement right before a return: what it stores is the last store on its path
         if i + 1 < bl.Stmts.Len() and leaves(bl.Stmts[i + 1]) { w.lastAt.Push(w.no) }
@@ -1065,7 +1065,7 @@ fn (w mut walker&) holds(ty types.TypeId) Bool {
 }
 
 # a local given more origins
-fn (w mut walker&) give(l I64, o List<I64>&) {
+fn (w mut walker&) give(l I64, o Vec<I64>&) {
     # another pass is needed only where a local grows after this pass read it
     if addAllTo(w.origins[l], o) and w.seen[l] { w.grew = true }
 }
@@ -1177,7 +1177,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
 }
 
 # what a return gives: the result's origins (its views, its moves, its parameters'), and whether it is new
-fn (w mut walker&) result(o List<I64>&) {
+fn (w mut walker&) result(o Vec<I64>&) {
     f := w.F
     for x in o {
         if okind(x) == ONew or (okind(x) == OPl and f.isDestroy(oval(x))): continue
@@ -1247,14 +1247,14 @@ fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
 # a struct value given to a struct held in place: what it holds beyond its candidate leaves, which the place's own
 # leaves now hold. A constructor of the type stores into them itself (its parameters' stores, as for any instance);
 # any other value - a copy, a call's result - gives each leaf a value not made for it (condition 1)
-fn (w mut walker&) copyInto(lvs List<leaf>&, ty types.TypeId, x typed.Expr&, o mut List<I64>&, sp source.Span) List<I64> {
+fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mut Vec<I64>&, sp source.Span) Vec<I64> {
     f := w.F
     t := w.T()
     c := callOf(x)
     b2 := f.calleeBody(c) if c is not null else -1
     if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
-        out List<I64>
+        out Vec<I64>
         w.quiet++
         for y in f.resFrom[b2] {
             if okind(y) == OPar {
@@ -1506,7 +1506,7 @@ fn (w mut walker&) runsAgain() Bool {
 }
 
 # a constructor's field given a value: a store into the field's place, or the instance holding what it is given
-fn (w mut walker&) storeField(k I64, x typed.Expr&, o List<I64>&, sp source.Span) {
+fn (w mut walker&) storeField(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span) {
     pk := w.F.placeKey(w.ctorTy, k)
     if pk >= 0 {
         w.store(pk, x, o, sp, "")
@@ -1523,7 +1523,7 @@ fn (w mut walker&) storeField(k I64, x typed.Expr&, o List<I64>&, sp source.Span
 # a value stored somewhere a view of a place must not go: each place it may refer into keeps (condition 2); a
 # parameter's value stored so is kept by the body (parEsc). What is stored into storage reached through the parameter
 # itself, or through a value of the place itself, stays where it was (inside, j and q - -1 for none, must-facts)
-fn (w mut walker&) escape(o List<I64>&, sp source.Span, where String&, heap Bool, inside I64 = -1, q I64 = -1) {
+fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool, inside I64 = -1, q I64 = -1) {
     f := w.F
     for y in o {
         k := okind(y)
@@ -1544,7 +1544,7 @@ fn (w mut walker&) escape(o List<I64>&, sp source.Span, where String&, heap Bool
 }
 
 # a value stored into candidate place k, its origins o
-fn (w mut walker&) store(k I64, x typed.Expr&, o List<I64>&, sp source.Span, where String&, contained Bool = false) {
+fn (w mut walker&) store(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, where String&, contained Bool = false) {
     w.storeAs(k, x, o, sp, where, false, contained)
 }
 
@@ -1573,7 +1573,7 @@ fn (w mut walker&) use(l I64, sp source.Span) {
 }
 
 # a view read: a value of place k (or moved out of it) read in the statement being walked
-fn (w mut walker&) viewRead(o List<I64>&) {
+fn (w mut walker&) viewRead(o Vec<I64>&) {
     if not w.Final or w.quiet > 0 { return }
     for y in o {
         k := okind(y)
@@ -1586,12 +1586,12 @@ fn (w mut walker&) viewRead(o List<I64>&) {
 
 # what the storage of a place is part of: the origins of the value or reference it is reached through, and - where a
 # candidate place is passed through on the way - that place's own value (a field of what it holds is a view of it)
-fn (w mut walker&) reach(p typed.Place&) List<I64> {
+fn (w mut walker&) reach(p typed.Place&) Vec<I64> {
     f := w.F
     match p {
         case typed.Place.Local(lsp, _, l) {
             w.use(I64(l), lsp)
-            o List<I64>
+            o Vec<I64>
             addAllTo(o, w.origins[I64(l)])
             w.seen[I64(l)] = true
             k := try w.fields.Get(I64(l)) catch default -1
@@ -1618,7 +1618,7 @@ fn (w mut walker&) reach(p typed.Place&) List<I64> {
         case typed.Place.Payload(_, _, pl) { return w.reach(pl.Base) }
         case typed.Place.Temp(_, _, v, _) { return w.expr(v) }
         case typed.Place.Target(_, _) {
-            o List<I64>
+            o Vec<I64>
             if w.targets.Len() > 0 {
                 w.quiet++
                 o = w.reach(w.targets[w.targets.Len() - 1])
@@ -1626,13 +1626,13 @@ fn (w mut walker&) reach(p typed.Place&) List<I64> {
             }
             return o
         }
-        case _ { return List<I64>() }
+        case _ { return Vec<I64>() }
     }
 }
 
 # what the storage holding a place is part of - its container's reach, without the place itself: what is moved out of
 # a place is no longer a value of it
-fn (w mut walker&) reachTo(p typed.Place&) List<I64> {
+fn (w mut walker&) reachTo(p typed.Place&) Vec<I64> {
     match p {
         case typed.Place.Field(_, _, base, _) { return w.reach(base) }
         case typed.Place.Elem(_, _, e) {
@@ -1646,7 +1646,7 @@ fn (w mut walker&) reachTo(p typed.Place&) List<I64> {
 
 # a place's value read: what its storage is part of, its own value a view of the place, and the candidate places a
 # struct held in place copies with it
-fn (w mut walker&) readOf(p typed.Place&, ty types.TypeId) List<I64> {
+fn (w mut walker&) readOf(p typed.Place&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reach(p)
     k := f.placeOfPlace(p)
@@ -1661,7 +1661,7 @@ fn (w mut walker&) readOf(p typed.Place&, ty types.TypeId) List<I64> {
 
 # a place's storage borrowed: what it is part of - the places passed through on the way, read - but not the places a
 # struct held there holds: a reference to the container reaches their current values, never an old one
-fn (w mut walker&) borrowOf(p typed.Place&) List<I64> {
+fn (w mut walker&) borrowOf(p typed.Place&) Vec<I64> {
     f := w.F
     k := f.placeOfPlace(p)
     if k >= 0 { return w.readOf(p, p.Type()) }
@@ -1671,7 +1671,7 @@ fn (w mut walker&) borrowOf(p typed.Place&) List<I64> {
 }
 
 # a place vacated: its value moved out - no longer a view of the place, a value moved out of it
-fn (w mut walker&) takeOf(p typed.Place&, ty types.TypeId) List<I64> {
+fn (w mut walker&) takeOf(p typed.Place&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reachTo(p)
     k := f.placeOfPlace(p)
@@ -1688,8 +1688,8 @@ fn (w mut walker&) takeOf(p typed.Place&, ty types.TypeId) List<I64> {
     return o
 }
 
-fn (w mut walker&) expr(x typed.Expr&) List<I64> {
-    out List<I64>
+fn (w mut walker&) expr(x typed.Expr&) Vec<I64> {
+    out Vec<I64>
     match x {
         case typed.Expr.Read(_, ty, p, _) { out = w.readOf(p, ty) }
         case typed.Expr.Borrow(_, _, p) { out = w.borrowOf(p) }
@@ -1714,10 +1714,10 @@ fn (w mut walker&) expr(x typed.Expr&) List<I64> {
         case typed.Expr.Collect(sp, ty, c) {
             if c.Reserve is not null { w.expr(c.Reserve!) }
             w.yieldTo.Push(w.F.placeKey(w.F.arrayOf(ty), -1))
-            w.yieldOrig.Push(List<I64>())
+            w.yieldOrig.Push(Vec<I64>())
             w.block(c.Loop)
             try w.yieldTo.Pop() catch { }
-            ys := try w.yieldOrig.Pop() catch default List<I64>()
+            ys := try w.yieldOrig.Pop() catch default Vec<I64>()
             addAllTo(out, ys)
             addTo(out, orig(ONew, I64(c.Site)))
         }
@@ -1787,12 +1787,12 @@ fn (w mut walker&) expr(x typed.Expr&) List<I64> {
         case typed.Expr.Away(_, _, y) { out = w.expr(y) }
         case _ { }
     }
-    if not w.holds(x.Type()) { return List<I64>() }
+    if not w.holds(x.Type()) { return Vec<I64>() }
     return out
 }
 
-fn (w mut walker&) arm(a typed.Arm&) List<I64> {
-    out List<I64>
+fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
+    out Vec<I64>
     for alt in a.Alts {
         w.expr(alt.Test)
         for bd in alt.Binds {
@@ -1833,9 +1833,9 @@ fn (w mut walker&) storeOne(k I64, x typed.Expr&, sp source.Span, multi Bool) {
 }
 
 # a call: its arguments' origins, what the callee stores, keeps and lets go of, and what its result may refer into
-fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) List<I64> {
+fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64> {
     f := w.F
-    out List<I64>
+    out Vec<I64>
     b2 := -1
     unknown := true
     helper := false
@@ -1857,7 +1857,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) List<I64
         case typed.Callee.Extern(_) { foreign = true }
         case _ { }
     }
-    args List<List<I64>>
+    args Vec<Vec<I64>>
     for a in c.Args { args.Push(w.expr(a)) }
     if w.holds(ty) and c.Site >= typed.SiteId(0) { addTo(out, orig(ONew, I64(c.Site))) }
     if b2 >= 0 and not unknown {
@@ -1895,7 +1895,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) List<I64
         }
         if w.Final and w.quiet == 0 { w.orCallOf(c, b2) }
         # a view in the result counts as read here
-        rv List<I64>
+        rv Vec<I64>
         for y in out {
             if okind(y) == OPl: rv.Push(y)
         }
@@ -2063,7 +2063,7 @@ fn (f mut Free&) isCase(b I64) Bool {
 
 # a value stored into candidate place k (store, or through a callee's parameter): views in it kept elsewhere, a
 # parameter's value a summary's store, and - in the final walk - whether it was made for the place
-fn (w mut walker&) storeAs(k I64, x typed.Expr&, o List<I64>&, sp source.Span, where String&, multi Bool, contained Bool = false) {
+fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, where String&, multi Bool, contained Bool = false) {
     f := w.F
     # a view of the place itself stored back into it is said as condition 1 says it, below: the new value lives in the
     # old one's storage
@@ -2330,17 +2330,17 @@ fn (w mut walker&) views() {
     f := w.F
     body := w.body()
     # what each local holds a view of (or a value moved out of), and each local's uses - indexed once
-    viewed List<mut List<I64>&>
-    usesOf List<mut List<I64>&>
+    viewed Vec<mut Vec<I64>&>
+    usesOf Vec<mut Vec<I64>&>
     for l in range w.origins.Len() {
-        viewed.Push(List<I64>())
-        usesOf.Push(List<I64>())
+        viewed.Push(Vec<I64>())
+        usesOf.Push(Vec<I64>())
         for y in w.origins[l] {
             if okind(y) == OPl or okind(y) == OMov: viewed[l].Push(oval(y))
         }
     }
     for u in range w.useLocal.Len() { usesOf[w.useLocal[u]].Push(u) }
-    viewers List<I64>
+    viewers Vec<I64>
     for l in range w.origins.Len() {
         if viewed[l].Len() > 0 and not w.params.Has(l): viewers.Push(l)
     }
@@ -2433,7 +2433,7 @@ fn (w mut walker&) localName(l I64) String { return $w.F.P.L.Names.Text(w.body()
 fn (w mut walker&) destroyStore(l I64, x typed.Expr&, sp source.Span) {
     d := w.destroyOf(l)
     if d < 0 { return }
-    mine List<I64>
+    mine Vec<I64>
     mine.Push(orig(OPl, d))
     w.give(l, mine)
     if not w.Final or w.quiet > 0 { return }
@@ -2485,7 +2485,7 @@ fn (w mut walker&) destroyMade(x typed.Expr&) I64, I64, I64, String {
 # a task's call handed what may be a destroy target's instance: it may use it after the Destroy() (C9b)
 fn (w mut walker&) handedToTask(sp source.Span, task typed.Expr&) {
     f := w.F
-    o List<I64>
+    o Vec<I64>
     w.quiet++
     match task {
         case typed.Expr.Call(_, _, c) {
@@ -2523,7 +2523,7 @@ fn (w mut walker&) destroys() {
             f.keep(d, RMade, body.File, f.dSp[d], $"'" $name "' is a field of the instance being built, which holds it too")
         }
         # the target itself, read after the call
-        xs List<I64>
+        xs Vec<I64>
         for u in range w.useLocal.Len() {
             if w.useLocal[u] == x: xs.Push(u)
         }
@@ -2537,7 +2537,7 @@ fn (w mut walker&) destroys() {
         # another name for it, used after
         for l in range w.origins.Len() {
             if l == x or w.params.Has(l) or not has(w.origins[l], orig(OPl, d)): continue
-            ls List<I64>
+            ls Vec<I64>
             for v in range w.useLocal.Len() {
                 if w.useLocal[v] == l: ls.Push(v)
             }
@@ -2571,7 +2571,7 @@ fn (w mut walker&) useSpAt(n I64) source.Span {
 # Defer statement, is not -1 - as an index into the uses, -1 for none: later in the function (up to a return, an error
 # or an unreachable after it in its block, which ends its path), in a later turn of a loop around it that l was
 # declared outside of, or in deferred code registered before it (which runs after it)
-fn (w mut walker&) destroyAfter(l I64, s I64, ds I64, uses List<I64>&) I64 {
+fn (w mut walker&) destroyAfter(l I64, s I64, ds I64, uses Vec<I64>&) I64 {
     if ds >= 0 {
         # deferred: it runs where the block its Defer statement is in ends
         end := try w.deferEnd.Get(ds) catch default w.no
@@ -2600,7 +2600,7 @@ fn (w mut walker&) destroyAfter(l I64, s I64, ds I64, uses List<I64>&) I64 {
 }
 
 # a use of local l in a loop around statement s that l was declared outside of - its next turn - -1 for none
-fn (w mut walker&) loopUse(l I64, s I64, uses List<I64>&) I64 {
+fn (w mut walker&) loopUse(l I64, s I64, uses Vec<I64>&) I64 {
     for i in range w.loopAt.Len() {
         a := w.loopAt[i]
         if not (a < s and s <= w.loopEnd[i]) or w.declAt[l] > a: continue
@@ -2633,7 +2633,7 @@ fn (w mut walker&) viewOf(l I64, k I64) Bool { return has(w.origins[l], orig(OPl
 
 # the first use of local l after statement s may read it - later, in a loop around s declared outside it, or in
 # deferred code - as an index into the uses, -1 for none
-fn (w mut walker&) usedAfter(l I64, s I64, uses List<I64>&) I64 {
+fn (w mut walker&) usedAfter(l I64, s I64, uses Vec<I64>&) I64 {
     # declared after the let-go began: what it holds was read after it, or - in a loop - is made again each turn
     if w.declAt[l] > s { return -1 }
     for u in uses {
@@ -2734,11 +2734,11 @@ fn (m mut mustW&) freshLocal(l I64) Bool {
 type mustW struct(F mut Free&, Id I64) {
     F
     Id
-    must List<I64>
-    within List<I64>
-    assigned List<I64>          # each assignment of a local: the local, its value
-    values List<typed.Expr&>
-    returns List<typed.Expr&>
+    must Vec<I64>
+    within Vec<I64>
+    assigned Vec<I64>          # each assignment of a local: the local, its value
+    values Vec<typed.Expr&>
+    returns Vec<typed.Expr&>
 }
 
 fn (m mut mustW&) isParam(l I64) Bool {
@@ -3128,7 +3128,7 @@ fn (f mut Free&) decide() {
 fn (f mut Free&) destroyErrors() {
     if not f.sayDestroys { return }
     d := f.P.L.Diags
-    said List<I64>
+    said Vec<I64>
     for k in range f.keyTy.Len() {
         if not f.isDestroy(k) or f.dOk[k]: continue
         b := f.dBody[k]
@@ -3540,8 +3540,8 @@ fn (f mut Free&) SolePlace(p typed.Place&) I64 {
 
 # the sole places inside a value of type ty held in place, by the fields that reach them - and for a handle the
 # reference it holds, field 0
-fn (f mut Free&) SoleLeaves(ty types.TypeId) List<leaf> {
-    out List<leaf>
+fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
+    out Vec<leaf>
     if not f.Done { return out }
     for l in f.leaves(ty) {
         if f.IsSole(l.Place) { out.Push(l) }
@@ -3589,7 +3589,7 @@ fn (f mut Free&) Report() String {
     b := StringBuilder()
     places I64 = 0
     keeps I64 = 0
-    rows List<String&>
+    rows Vec<String&>
     for k in range f.keyTy.Len() {
         if not f.reported(k): continue
         # the row is at the place's own let-go - an assignment, a vacate, a value dropped - where there is one, else at
@@ -3767,7 +3767,7 @@ fn (f mut Free&) Dump() String {
 
 # the parameter every value of an expression is reached from - through fields, elements, references and borrowed
 # results - given what each local's every value is reached from, a must-fact: MustNone where it is not one parameter's
-fn (f mut Free&) withinExpr(locals List<I64>&, x typed.Expr&) I64 {
+fn (f mut Free&) withinExpr(locals Vec<I64>&, x typed.Expr&) I64 {
     t := f.T()
     match x {
         case typed.Expr.Lit(_, _, _) { return MustTop }
@@ -3793,7 +3793,7 @@ fn (f mut Free&) withinExpr(locals List<I64>&, x typed.Expr&) I64 {
     }
 }
 
-fn (f mut Free&) withinPl(locals List<I64>&, p typed.Place&) I64 {
+fn (f mut Free&) withinPl(locals Vec<I64>&, p typed.Place&) I64 {
     return match p {
         case typed.Place.Local(_, _, l) => locals[I64(l)] if I64(l) < locals.Len() else MustNone
         case typed.Place.Field(_, _, b, _) => f.withinPl(locals, b)

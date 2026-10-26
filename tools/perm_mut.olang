@@ -57,7 +57,7 @@ fn punAt(src String&, q I64) I64, I64 ? {
     p := q
     for p < n and (src[p] == ' ' or src[p] == '\t') { p++ }
     if p >= n or not srcmask.IsIdStart(src[p]) { error noPun.HERE }
-    ends List<I64>
+    ends Vec<I64>
     for p < n and srcmask.IsWord(src[p]) { p++ }
     ends.Push(p)
     for {
@@ -149,7 +149,7 @@ fn dropPunMut(src String&) String, I64 {
 # ---- the compiler pass ----
 
 # the edits the compiler's output asks for in the allowed paths
-fn editsFrom(output String&, allowed List<String&>&, out mut List<diagedit.Request>&) {
+fn editsFrom(output String&, allowed Vec<String&>&, out mut Vec<diagedit.Request>&) {
     current := ""
     for row in output.Split("\n") {
         path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
@@ -176,8 +176,8 @@ fn editsFrom(output String&, allowed List<String&>&, out mut List<diagedit.Reque
 }
 
 # the edits applied to their files; how many "mut" were removed and added
-fn apply(requests List<diagedit.Request>&) I64, I64 {
-    paths List<String&>
+fn apply(requests Vec<diagedit.Request>&) I64, I64 {
+    paths Vec<String&>
     for r in requests {
         if not (r.Path in paths) { paths.Push($r.Path) }
     }
@@ -189,10 +189,10 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
             os.Exit(1)
             unreachable
         }
-        expect List<String&>
+        expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
         lines := src.Split("\n")
-        mine List<diagedit.Request>
+        mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path { mine.Push(r) }
         }
@@ -201,10 +201,10 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
             if a.Line != b.Line { return a.Line < b.Line }
             return a.Col > b.Col
         })
-        seen List<String&>
-        shLine List<I64>
-        shAt List<I64>
-        shDelta List<I64>
+        seen Vec<String&>
+        shLine Vec<I64>
+        shAt Vec<I64>
+        shDelta Vec<I64>
         for r in mine {
             if diagedit.ContainsAny(r.Why, expect) { continue }
             key := $r.Line ":" $r.Col ":" $r.Kind
@@ -261,7 +261,7 @@ fn apply(requests List<diagedit.Request>&) I64, I64 {
 fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     i I64 = 1
     for i < args.Len() {
@@ -294,9 +294,9 @@ fn main() ? {
         os.Exit(1)
     }
     olang = $diagedit.RealPathOf(olang)
-    files List<String&>
+    files Vec<String&>
     diagedit.OlangFiles(paths, files)
-    allowed List<String&>
+    allowed Vec<String&>
     for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
 
     puns I64 = 0
@@ -337,7 +337,7 @@ fn main() ? {
     fileArray := files.ToArray()
     for round in range 1, 9 {
         outputs := diagedit.CompileAll(olang, fileArray, work, false)
-        requests List<diagedit.Request>
+        requests Vec<diagedit.Request>
         for o in outputs { editsFrom(o, allowed, requests) }
         drops, adds := apply(requests)
         srcmask.Say("round " $round ": " $drops " 'mut' removed, " $adds " 'mut' added")

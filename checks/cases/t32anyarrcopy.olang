@@ -5,7 +5,7 @@ type aSized trait {
     Len() I64
 }
 fn main() {
-    xs := List<any aSized&>()
+    xs := Vec<any aSized&>()
     for i in range 4 {
         a := Array<String&>(2, "x")
         a[0] = "e" $i

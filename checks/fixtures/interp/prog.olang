@@ -56,7 +56,7 @@ fn main() ? Oops, io.Error, os.Error {
     total I32 = 0
     for e in m { total += e.Value }
     p := P(3, 4)
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range 5 { l.Push(i * i) }
     try io.Print("count " $Count " total " $total " sum " $p.Sum() " squares " $l.ToArray() "\n")
     try io.Print("steps " $steps() "\n")

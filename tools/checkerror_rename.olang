@@ -46,7 +46,7 @@ fn rename(src String&, c mut Count&) String {
 }
 
 # the files under a directory with one of the extensions read, build/ and .git/ left out
-fn walk(dir String&, out mut List<String&>&) {
+fn walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
         if n.StartsWith(".") or n == "build" { continue }
@@ -66,7 +66,7 @@ fn wanted(path String&) Bool {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -82,7 +82,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_checkerror_rename [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { walk(p, files) } else { files.Push($p) }
     }

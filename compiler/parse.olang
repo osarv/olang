@@ -48,8 +48,8 @@ fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
 }
 
 # the generic functions a file declares: "fn name<", by name
-fn GenericFnNames(text String&, ts scan.Tokens&) List<String&>&text {
-    out mut List<String&>&text = List<String&>()
+fn GenericFnNames(text String&, ts scan.Tokens&) Vec<String&>&text {
+    out mut Vec<String&>&text = Vec<String&>()
     toks := ts.Toks
     for i in range toks.Len() - 2 {
         if toks[i].Kind == token.Tok.Fn and toks[i + 1].Kind == token.Tok.Iden and toks[i + 2].Kind == token.Tok.Lt {
@@ -89,39 +89,39 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     unclosed Bool = false              # an unclosed block ended at a declaration: the item ends where it stands
     listTry I32 = -1                   # where a try stands that is a whole destructuring's, return's or spawn's value: its
                                        # clause may give one default a result (R9a)
-    ItemStarts List<I32>               # where each top-level item begins, in order - nested ones in an if's branches too
-    ItemKept List<Bool>                # beside ItemStarts: whether the item parsed whole (an L21 may be said in one that did)
+    ItemStarts Vec<I32>               # where each top-level item begins, in order - nested ones in an if's branches too
+    ItemKept Vec<Bool>                # beside ItemStarts: whether the item parsed whole (an L21 may be said in one that did)
     SaidIn Map<I32, I64>               # where each syntax error said starts: the item it was said in (an item may read past
                                        # its own lines before it fails - into the declaration its recovery then reads)
-    vars List<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
-    reflNames List<source.NameId>      # the names an enclosing for-in binds to a reflected list's items (G33): "match f.Type"
-    exprs List<ast.Expr&>              # nodes being gathered into lists, nested lists on top
-    stmts List<ast.Stmt&>
-    tys List<ast.TypeRef&>
-    prms List<ast.Param&>
-    pats List<ast.Pattern&>
-    ids List<source.NameId>
-    sps List<source.Span>
-    decls List<ast.Decl&>
-    salvage List<ast.Decl&>            # a function or type whose body did not parse, as the declaration it still is
+    vars Vec<source.NameId>           # the current item's introduced type variables (G8b), which "match T" takes
+    reflNames Vec<source.NameId>      # the names an enclosing for-in binds to a reflected list's items (G33): "match f.Type"
+    exprs Vec<ast.Expr&>              # nodes being gathered into lists, nested lists on top
+    stmts Vec<ast.Stmt&>
+    tys Vec<ast.TypeRef&>
+    prms Vec<ast.Param&>
+    pats Vec<ast.Pattern&>
+    ids Vec<source.NameId>
+    sps Vec<source.Span>
+    decls Vec<ast.Decl&>
+    salvage Vec<ast.Decl&>            # a function or type whose body did not parse, as the declaration it still is
     typeParamsRead Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0) # the type parameters of the type declaration being read
     # where angle brackets were read as type brackets, by token index (a split ">>" is there twice): a type-argument or
     # type-parameter list's "<" and its ">". The formatter (compiler/fmt.olang) spaces them; nothing in the compiler
     # reads them
-    ArgAngles List<I64>
-    CloseAngles List<I64>
-    TypeGroups List<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
+    ArgAngles Vec<I64>
+    CloseAngles Vec<I64>
+    TypeGroups Vec<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
     # every comparison read as an operand of "&", "|" or "^" with nothing around it, by its span - where E5's
     # bitwise-tighter precedence (2026-10-24) reads the text otherwise; tools/precedence_migrate.olang wraps them
-    Mixed List<source.Span>
+    Mixed Vec<source.Span>
     OldBitwise Bool = false            # read with E5's precedence before 2026-10-24, for tools/precedence_migrate.olang
     # with RecordOperators, the span of every operator's node (binary, chain, in, is) - over one file's tokens, the shape
     # of every expression; tools/precedence_migrate.olang compares two readings by it
     RecordOperators Bool = false
-    Operators List<source.Span>
+    Operators Vec<source.Span>
     # the tokens the formatter spaces as the grammar places them, by token index: each "(" grouping a function type in a
     # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17)
-    TypeGroups List<I64>
+    TypeGroups Vec<I64>
 }
 
 # ---- reading tokens ----
@@ -304,7 +304,7 @@ fn (p mut Parser&) tooDeepAt(i I64) {
 
 # ---- lists, gathered on the parser's stacks ----
 
-fn gather<T>(stack mut List<T>&, from I64) Array<T>&stack {
+fn gather<T>(stack mut Vec<T>&, from I64) Array<T>&stack {
     if stack.Len() == from { return Array<T>(0) }
     a mut Array<T>&stack = Array<T>(stack.Len() - from, stack[from])     # each written below
     for i in range a.Len() { a[i] = stack[from + i] }
@@ -667,7 +667,7 @@ fn (p mut Parser&) typeDecl() ast.Decl&p ? Fail {
 # after "error", or both - at least one of the two, the braces last
 fn (p mut Parser&) errorDecl(at I32, name source.NameId) ast.Decl&p ? Fail {
     p.advance()
-    ms mut List<ast.Path&>&p = List<ast.Path&>()
+    ms mut Vec<ast.Path&>&p = Vec<ast.Path&>()
     if p.sees(token.Tok.Iden) {
         for {
             ms.Push(try p.path())
@@ -741,7 +741,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             raw ast.TypeRef?&p = null
             if not p.sees(token.Tok.LBrace) { raw = try p.typeExpr() }   # T17e: "enum String {"
             try p.want(token.Tok.LBrace)
-            cases mut List<ast.CaseDecl&>&p = List<ast.CaseDecl&>()
+            cases mut Vec<ast.CaseDecl&>&p = Vec<ast.CaseDecl&>()
             p.skipEnds()
             for not p.sees(token.Tok.RBrace) {
                 cat := p.here()
@@ -772,7 +772,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             exts := try p.typeList(token.Tok.Extends)
             members := try p.typeList(token.Tok.For)
             try p.want(token.Tok.LBrace)
-            methods mut List<ast.Func&>&p = List<ast.Func&>()
+            methods mut Vec<ast.Func&>&p = Vec<ast.Func&>()
             p.skipEnds()
             for not p.sees(token.Tok.RBrace) {
                 mat := p.here()
@@ -868,7 +868,7 @@ fn builtinType(t String&) Bool {
 # after a trait's name: "KEYWORD T, U, ..." where the keyword is there - the types it lists, none where it is not
 fn (p mut Parser&) typeList(kw token.Tok) Array<ast.TypeRef&>&p ? Fail {
     if not p.accept(kw) { return Array<ast.TypeRef&>(0) }
-    l mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
+    l mut Vec<ast.TypeRef&>&p = Vec<ast.TypeRef&>()
     for {
         l.Push(try p.typeExpr())
         # QY: on one line separated by ",", on different lines by the line break, the trait's "{" closing the list
@@ -881,7 +881,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
     try p.openAngle()
     wasSkip := p.skip
     p.skip = false
-    l mut List<ast.TypeParam&>&p = List<ast.TypeParam&>()
+    l mut Vec<ast.TypeParam&>&p = Vec<ast.TypeParam&>()
     for {
         # G1a: "? E" closes the list - its error-set parameter, a name alone
         if p.accept(token.Tok.Question) {
@@ -895,7 +895,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
         pn := try p.name()
         p.vars.Push(pn)
         ty ast.TypeRef?&p = null
-        also mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
+        also mut Vec<ast.TypeRef&>&p = Vec<ast.TypeRef&>()
         # its constraint: a trait, or several side by side - their intersection (G19)
         for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() and
             not p.sees(token.Tok.Question) {
@@ -982,7 +982,7 @@ fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
         p.brackets--
     }
     from := p.stmts.Len()
-    chains mut List<ast.Outlives&>&p = List<ast.Outlives&>()
+    chains mut Vec<ast.Outlives&>&p = Vec<ast.Outlives&>()
     p.skipEnds()
     for not p.sees(token.Tok.RBrack) {
         if p.outlivesHere() {
@@ -1009,8 +1009,8 @@ fn (p Parser&) outlivesHere() Bool {
 
 fn (p mut Parser&) outlives() ast.Outlives&p ? Fail {
     at := p.here()
-    ns mut List<source.NameId>&p = List<source.NameId>()
-    sps mut List<source.Span>&p = List<source.Span>()
+    ns mut Vec<source.NameId>&p = Vec<source.NameId>()
+    sps mut Vec<source.Span>&p = Vec<source.Span>()
     for {
         t := p.tk()
         if p.accept(token.Tok.Return) {
@@ -1039,7 +1039,7 @@ fn (p mut Parser&) errorSet(one Bool = false) ast.Sig&p ? Fail {
     if not p.accept(token.Tok.Question) {
         return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), false, Array<ast.Path&>(0))
     }
-    l mut List<ast.Path&>&p = List<ast.Path&>()
+    l mut Vec<ast.Path&>&p = Vec<ast.Path&>()
     if p.sees(token.Tok.Iden) {
         for {
             l.Push(try p.path())
@@ -1346,7 +1346,7 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
 fn (p mut Parser&) errsArg() ast.TypeRef&p ? Fail {
     at := p.here()
     try p.want(token.Tok.Question)
-    l mut List<ast.Path&>&p = List<ast.Path&>()
+    l mut Vec<ast.Path&>&p = Vec<ast.Path&>()
     for {
         l.Push(try p.path())
         if not p.accept(token.Tok.Comma) { break }
@@ -2142,7 +2142,7 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
     p.brackets = 0
     wasSkip := p.skip
     p.skip = false
-    cases mut List<ast.Case&>&p = List<ast.Case&>()
+    cases mut Vec<ast.Case&>&p = Vec<ast.Case&>()
     noMatch ast.Case?&p = null
     for {
         p.skipEnds()
@@ -2259,7 +2259,7 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
 }
 
 # a path's names, in order
-fn pathIds(x ast.Expr&, out mut List<source.NameId>&) {
+fn pathIds(x ast.Expr&, out mut Vec<source.NameId>&) {
     match x {
         case ast.Expr.Name(_, n) { out.Push(n) }
         case ast.Expr.Member(_, b, n) {
@@ -2307,11 +2307,11 @@ fn isLiteral(x ast.Expr&) Bool {
 
 # catch clauses: "catch [A, B.w] [{ ... }] [default v, ...]" - several defaults only where listOk (R9a)
 fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
-    l mut List<ast.Catch&>&p = List<ast.Catch&>()
+    l mut Vec<ast.Catch&>&p = Vec<ast.Catch&>()
     for p.sees(token.Tok.Catch) {
         at := p.advance()
         from := p.exprs.Len()
-        items mut List<ast.Path&>&p = List<ast.Path&>()
+        items mut Vec<ast.Path&>&p = Vec<ast.Path&>()
         if p.sees(token.Tok.Iden) {
             for {
                 items.Push(try p.path())
@@ -2455,7 +2455,7 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
         right := try p.binary(pr + 1)
         if isOrdering(k) and isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
             # a chain: a < b <= c (E30)
-            ops mut List<token.Tok>&p = List<token.Tok>()
+            ops mut Vec<token.Tok>&p = Vec<token.Tok>()
             ops.Push(k)
             from := p.exprs.Len()
             p.exprs.Push(left)

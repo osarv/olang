@@ -32,7 +32,7 @@ fn churn() I64 {
 fn main() ? {
     b := Bag(Node(1, null))
     s := $b
-    keep := List<Junk&>()
+    keep := Vec<Junk&>()
     for i in range 2000 { keep.Push(Junk(-7, -7)) }
     churn()
     try io.Println(s)

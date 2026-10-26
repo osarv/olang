@@ -23,7 +23,7 @@ type K enum {
 }
 type H struct(N I64) {
     N
-    L List<String&>
+    L Vec<String&>
 }
 
 fn (h mut H&) Keep(s String&) { h.L.Push(s) }
@@ -66,8 +66,8 @@ fn local(t String&, at I64) E {
 
 fn keep(h mut H&, t String&, at I64) { h.Keep(mk(t) if at >= 0 else "") }
 
-fn loop(t String&) List<E> {
-    l := List<E>()
+fn loop(t String&) Vec<E> {
+    l := Vec<E>()
     for i in range 4 {
         l.Push(E($t, mk(t) if i >= 0 else ""))
         churn()

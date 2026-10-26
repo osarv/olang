@@ -17,6 +17,8 @@
 # Errors: one error type for reading and for asking (Error). An error carries no data, so where a parse stopped
 # is written into a Position its caller passes ("try json.Parse(text, at)"), when it passes one.
 
+import "list"
+
 # why a text is not JSON, or what a question asked of a value could not answer
 type Error error {
     UNEXPECTED          # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control
@@ -891,8 +893,8 @@ fn From<T>(j Json&) T ? {
             return t[0]
         }
         case Bool { return try j.AsBool() }
-        case List<E> {
-            l := List<E>()
+        case list.List<E> {
+            l := list.List<E>()
             for x in try j.AsArr() { l.Push(try From<E>(x)) }
             return l
         }
@@ -919,7 +921,7 @@ fn From<T>(j Json&) T ? {
             } else if T.Kind == TypeKind.Float {
                 return T(T.Base(try j.AsNum()))
             } else if T.Kind == TypeKind.Array {
-                l := List<T.Element>()
+                l := Vec<T.Element>()
                 for x in try j.AsArr() { l.Push(try From<T.Element>(x)) }
                 return l.ToArray()
             } else if T.Kind == TypeKind.Reference {
@@ -1053,7 +1055,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
         case String, String& { w.text(v) }
         case Char { w.text($v) }
         case Bool { w.out.Push("true" if v else "false") }
-        case List<E>, Vec<E> {
+        case list.List<E>, Vec<E> {
             w.out.PushChar('[')
             for i, x in v {
                 if i > 0 { w.out.PushChar(',') }
@@ -1385,7 +1387,7 @@ if TestBuild {
         doc Json& = Json.Obj(o)
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
         assert doc == (try Parse("{\"ok\": true, \"tags\": [1, null], \"name\": \"olang\"}"))
-        items := List<Json&>()
+        items := Vec<Json&>()
         for i in range 3 { items.Push(Json.Num(F64(i))) }
         assert Encode(Json.Arr(items.ToArray())) == "[0,1,2]"
     }
@@ -1407,7 +1409,7 @@ if TestBuild {
 
     test "a tree lives where its caller puts it, and no longer needs the text" {
         doc := parsed(7)
-        kept := List<Json&>()
+        kept := Vec<Json&>()
         for i in range 5 { kept.Push(parsed(i)) }
         assert churn() > 0
         assert Encode(doc) == "{\"n\":7,\"s\":\"value 7\",\"a\":[7,{\"deep\":\"x\\ty\"}]}"
@@ -1450,7 +1452,7 @@ if TestBuild {
 
     # ---- values of any type (Encode and Decode by reflection, G32-G38) ----
 
-    type Member struct(Id I64, Name String&, Score F64 = 0.5, Tags List<String&> = List<String&>()) { Id, Name, Score, Tags }
+    type Member struct(Id I64, Name String&, Score F64 = 0.5, Tags Vec<String&> = Vec<String&>()) { Id, Name, Score, Tags }
     type Wind enum {
         Calm
         Gust(Speed F64, Dir Char)
@@ -1491,7 +1493,7 @@ if TestBuild {
         assert r.Who.Name == "ada" and r.Days[1] == 2 and r.Ok and Encode(r) == bakedReport
         assert r.Air == Wind.Gust(2.5, 'N') and (try Decode<Wind>("\"Calm\"")) == Wind.Calm
         assert (try Decode<Wind>("\"Gust\"") catch Error.WRONG_KIND default Wind.Calm) == Wind.Calm
-        l := try Decode<List<Member>>("[{\"Id\": 1, \"Name\": \"x\", \"Tags\": [\"a\", \"b\"]}]")
+        l := try Decode<Vec<Member>>("[{\"Id\": 1, \"Name\": \"x\", \"Tags\": [\"a\", \"b\"]}]")
         assert l.Len() == 1 and l[0].Tags.Len() == 2 and l[0].Tags[1] == "b"
         assert (try Decode<I64>("[1]") catch Error.WRONG_KIND default -1) == -1
         assert (try Decode<U8>("300") catch Error.WRONG_KIND default 0) == 0

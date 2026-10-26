@@ -7,7 +7,7 @@ import "std/io"
 
 type Holder struct() {
     v Vec<I64>
-    l List<String&>
+    l Vec<String&>
 }
 
 fn churn() I64 {

@@ -2,10 +2,10 @@
 # O18c: the same through a function of the program's own and a Map, its note naming the text to make elsewhere
 type Box struct(s String&) { s }
 fn box(s String&) Box { return Box(s) }
-fn keep(l mut List<Box>&, b Box) { l.Push(b) }
+fn keep(l mut Vec<Box>&, b Box) { l.Push(b) }
 
 fn main() ? {
-    bs := List<Box>()
+    bs := Vec<Box>()
     m := Map<I64, Box>()
     for k in range 4 {
         t := $k "-text"

@@ -162,11 +162,11 @@ fn modeNumber(word String&) I64 {
 # arguments for a run or interpret, and the options as written (for test's children)
 type CommandLine struct() {
     Mode I64 = 0
-    Files List<String&>
+    Files Vec<String&>
     Word String& = ""
     HasWord Bool = false
-    Args List<String&>
-    Passed List<String&>
+    Args Vec<String&>
+    Passed Vec<String&>
     Spec String& = "native"
     Output String& = ""
     Check Bool = false
@@ -405,7 +405,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Run { return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d) }
     if cl.Mode == Interp {
         # the program's command line is the file, then what follows it (B3f)
-        pargs List<String&>
+        pargs Vec<String&>
         pargs.Push($files[0])
         for a in cl.Args { pargs.Push($a) }
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
@@ -499,7 +499,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 { error build.Failed.REPORTED }
     t := cfg.Target
     dyncall := false
-    hashes List<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
+    hashes Vec<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
     for o in objs {
         if o.From >= 0 {
             # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
@@ -616,7 +616,7 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
     hashOf := Array<String&>(n, "")
     for m in range n {
         md := mods[m]
-        parts List<String&>
+        parts Vec<String&>
         parts.Push(md.Identity)
         parts.Push(md.Path)
         parts.Push(md.Real)
@@ -628,8 +628,8 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
     for m in range n {
         if m == l.Root { continue }
         seen := Array<Bool>(n)
-        order List<I64>
-        work List<I64>
+        order Vec<I64>
+        work Vec<I64>
         work.Push(m)
         for p in range n {
             if mods[p].Prelude { work.Push(p) }
@@ -644,7 +644,7 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
             }
         }
         order.Sort(fn(a I64, b I64) Bool { return a < b })
-        parts List<String&>
+        parts Vec<String&>
         parts.Push(inputs)
         parts.Push(hashOf[m])
         for x in order { parts.Push($mods[x].Identity " " $hashOf[x]) }
@@ -659,8 +659,8 @@ fn recordPath(cfg build.Config&, identity String&, key String&) String {
 }
 
 # the modules whose records are here, read: each one's parts' IR, its size, whether it was cut, its instances
-fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) List<emit.Reused> {
-    out List<emit.Reused>
+fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Vec<emit.Reused> {
+    out Vec<emit.Reused>
     for m in range keys.Len() {
         if keys[m] == "" { continue }
         base := recordPath(cfg, l.Mods[m].Identity, keys[m])
@@ -692,8 +692,8 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
 # the records of the modules this emission wrote: each part's IR, then the record, each written under a temporary
 # name and renamed into place, so a record that is there is whole and so is every file it names, whatever build ran
 # beside this one
-fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made List<emit.Reused>&
-    objs List<emit.Object>&, hashes List<String&>&) {
+fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Vec<emit.Reused>&
+    objs Vec<emit.Object>&, hashes Vec<String&>&) {
     if made.Len() == 0 { return }
     try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
     pid := build.Pid()
@@ -849,7 +849,7 @@ fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d 
 
 # the row a command line's mistake is reported as, and whether it was one
 fn mistake(words Array<String&>&) String {
-    args List<String&>
+    args Vec<String&>
     args.Push("olang")
     for w in words { args.Push($w) }
     d := diag.Diagnostics(false)
@@ -923,7 +923,7 @@ test "the options are recorded wherever they stand, and passed on as written" {
 
 # the row Prepare reports for args, with the target given or native
 fn prepared(words Array<String&>&) String {
-    args List<String&>
+    args Vec<String&>
     args.Push("olang")
     for w in words { args.Push($w) }
     d := diag.Diagnostics(false)

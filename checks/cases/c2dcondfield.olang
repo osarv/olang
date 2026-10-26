@@ -10,7 +10,7 @@ type M struct(n I64, data mut Array<F64>& = null) {
 }
 
 fn main() {
-    ms := List<M>()
+    ms := Vec<M>()
     for i in range 3 {
         d := Array<F64>(4, F64(i))
         ms.Push(M(2, d))

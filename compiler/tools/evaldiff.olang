@@ -21,7 +21,7 @@ fn main() {
     evaldump := toolkit.Env("EVALDUMP", "build/compiler_tools_evaldump")
     verbose := false
     interpret := false
-    files List<String&>
+    files Vec<String&>
     for k in range 1, args.Len() {
         if args[k] == "-v" {
             verbose = true
@@ -136,7 +136,7 @@ fn firstLine(t String&) String {
 }
 
 # each test's ending, by name: "ok" or "FAIL"
-fn outcomes(rows List<String&>&) Map<String&, String&> {
+fn outcomes(rows Vec<String&>&) Map<String&, String&> {
     m Map<String&, String&>
     for row in rows {
         if row.StartsWith("ok - ") {

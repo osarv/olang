@@ -8,7 +8,7 @@ type H struct(fv fn(c mut Acc&)) {
     fv
 }
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     h := H(fn(c mut Acc&) { c.N++ })
     h.fv(l[0])

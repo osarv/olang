@@ -55,7 +55,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     lengths Map<String&, I64>
     embeds Map<pair.Pair<I64, I64>, String&>
     # B9c: the top-level conditions decided as errors - each said once the last check is made, the if taking no branch
-    condErrs List<CondErr>
+    condErrs Vec<CondErr>
     for {
         mark := l.Diags.Count()
         r := names.Resolver(l)
@@ -85,7 +85,7 @@ fn judgeViews(c mut typecheck.Checker&) {
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
 fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
     dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&
-    embeds mut Map<pair.Pair<I64, I64>, String&>&, condErrs mut List<CondErr>&) Bool {
+    embeds mut Map<pair.Pair<I64, I64>, String&>&, condErrs mut Vec<CondErr>&) Bool {
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
@@ -103,7 +103,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         embeds.Put(key, $(path if ok else "\0"))
     }
     if made { return true }
-    undecided List<ast.If&>
+    undecided Vec<ast.If&>
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
         if decided.Has(key) or dead.Has(key) { continue }
@@ -625,17 +625,17 @@ fn (x mut Exec&) Int(body I64, ty types.TypeId) I64, Bool {
 
 # ---- the machine ----
 
-type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval.Mode) {
+type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, When eval.Mode) {
     P
     Bodies
     When
     Lw := lower.Lowerer(P, Bodies)
     M := eval.NewMachine(P.T, When)
-    Unlowered List<mir.FnKey>       # the functions a request reached that did not lower, each once
+    Unlowered Vec<mir.FnKey>       # the functions a request reached that did not lower, each once
     defined Map<mir.FnKey, Bool>
     dtorOf Map<types.TypeId, I64>
     externs Map<I64, Bool>
-    Globals List<I64>               # the global initializers' bodies, in B5a's order (P.InitOrder)
+    Globals Vec<I64>               # the global initializers' bodies, in B5a's order (P.InitOrder)
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
     ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
@@ -667,7 +667,7 @@ fn (x mut Exec&) start() {
         }
     }
     # B5a: set in check's order - a module's after its imports', each after the globals it reads
-    ordered List<I64>
+    ordered Vec<I64>
     for i in x.P.InitOrder {
         if i in x.Globals { ordered.Push(i) }
     }
@@ -715,7 +715,7 @@ fn writtenMut(v ast.VarDecl?&) Bool {
 # k and everything its code can reach lowered and defined in the machine
 fn (x mut Exec&) Need(k mir.FnKey) {
     x.start()
-    work List<mir.FnKey>
+    work Vec<mir.FnKey>
     work.Push(k)
     for work.Len() > 0 {
         key := try work.Pop() catch { break }
@@ -750,7 +750,7 @@ fn (x mut Exec&) Need(k mir.FnKey) {
 
 # what f's code can reach: its calls' and tasks' callees, the code of the function values it makes, the destructors it
 # registers - each pushed onto work; its externs defined by name
-fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
+fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     for c in f.Calls { x.callee(c.Target, work) }
     for t in f.Tasks { x.callee(t.Target, work) }
     for bb in f.Blocks {
@@ -778,7 +778,7 @@ fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
     }
 }
 
-fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
+fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
     match c {
         case mir.Callee.Fn(key, _) { work.Push(key) }
         case mir.Callee.Extern(e, _) {
@@ -792,7 +792,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
 }
 
 # table ti defined for the machine, its functions reached
-fn (x mut Exec&) table(ti I64, work mut List<mir.FnKey>&) {
+fn (x mut Exec&) table(ti I64, work mut Vec<mir.FnKey>&) {
     tab := x.P.AnyTables[ti]
     keys mut Array<mir.FnKey>&x = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
     keys[0] = mir.FnKey.AnyRender(ti, false)
@@ -805,8 +805,8 @@ fn (x mut Exec&) table(ti I64, work mut List<mir.FnKey>&) {
 # ---- what a program has ----
 
 # the root module's test bodies, in order, and its main's body (-1 for none)
-fn (x mut Exec&) Entries() List<I64>, I64 {
-    tests List<I64>
+fn (x mut Exec&) Entries() Vec<I64>, I64 {
+    tests Vec<I64>
     main I64 = -1
     p := x.P
     for i in range x.Bodies.Len() {

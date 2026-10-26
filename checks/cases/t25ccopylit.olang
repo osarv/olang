@@ -4,7 +4,7 @@ type Box struct(P mut Array<I64>&) {
     P
 }
 GB Box = Box(Array<I64>(3))
-G List<I64> = List<I64>()
+G Vec<I64> = Vec<I64>()
 fn main() ? {
     a := Box[GB]
     a[0].P[0] = 1

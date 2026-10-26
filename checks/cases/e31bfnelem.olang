@@ -4,7 +4,7 @@ type Acc struct() {
     N I64 = 0
 }
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     fs := Array<fn(c mut Acc&)>(1, fn(c mut Acc&) { c.N += 10 })
     fs[0](l[0])

@@ -8,7 +8,7 @@ type Reading struct(Sensor String&, Value F64) {
 }
 
 fn main() ? {
-    fs := List<fn() I64>()
+    fs := Vec<fn() I64>()
     for k in range 3 {
         t := $k "-text"
         x := Reading(t, 1.5)

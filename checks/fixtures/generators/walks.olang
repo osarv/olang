@@ -23,7 +23,7 @@ fn slices(t String&) Iterator<String> {
     yield $t[at:]
 }
 
-fn (l List<T>&) Twice() Iterator<T> {
+fn (l Vec<T>&) Twice() Iterator<T> {
     for x in l {
         yield x
         yield x
@@ -52,7 +52,7 @@ type Holder struct(g Generator<I64>) {
 fn main() ? {
     try io.Println("total " $Total)
     for s in slices("a,bb,,ccc") { try io.Println("[" $s "]") }
-    l := List<I64>()
+    l := Vec<I64>()
     l.Push(1)
     l.Push(2)
     for x in l.Twice() { try io.Println($x) }

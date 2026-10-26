@@ -22,7 +22,7 @@ import layout "../compiler/fmt"
 type Unparsable error { SYNTAX }
 
 # the comparisons the old reading of a file has as operands of a bitwise operator
-fn mixed(path String&, text String&, std String&, prelude String&) List<source.Span> ? Unparsable {
+fn mixed(path String&, text String&, std String&, prelude String&) Vec<source.Span> ? Unparsable {
     src := source.Source($path, $text)
     names := source.Names()
     d := diag.Diagnostics(false)
@@ -55,7 +55,7 @@ fn reading(path String&, text String&, std String&, prelude String&, old Bool) S
 }
 
 # text with each span parenthesized
-fn wrap(text String&, spans List<source.Span>&) String {
+fn wrap(text String&, spans Vec<source.Span>&) String {
     opens := Map<I64, I64>()
     closes := Map<I64, I64>()
     for sp in spans {
@@ -81,7 +81,7 @@ fn run() I32 {
     check := false
     verify := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -101,7 +101,7 @@ fn run() I32 {
     }
     std := try os.Env("OLANG_STD") catch default "std"
     prelude := layout.PreludeTypes(std)
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }
@@ -151,7 +151,7 @@ fn run() I32 {
 }
 
 test "a comparison under a bitwise operator is wrapped, nothing else" {
-    spans := List<source.Span>()
+    spans := Vec<source.Span>()
     spans.Push(source.Span(4, 10))
     assert wrap("a & b == c", spans) == "a & (b == c)"
 }

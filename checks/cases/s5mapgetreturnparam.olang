@@ -3,16 +3,16 @@
 # an obligation the call must meet. The map here dies with its block while the list is kept after it
 import "std/io"
 
-fn get(m mut Map<I64, List<I64>>&) List<I64> ? {
+fn get(m mut Map<I64, Vec<I64>>&) Vec<I64> ? {
     l := try m.Get(1)
     return l
 }
 
 fn main() ? {
-    keep List<I64>
+    keep Vec<I64>
     {
-        m := Map<I64, List<I64>>()
-        m.Put(1, List<I64>())
+        m := Map<I64, Vec<I64>>()
+        m.Put(1, Vec<I64>())
         keep = try get(m)
     }
     keep.Push(1)

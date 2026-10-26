@@ -5,9 +5,9 @@
 # this sound program with O10c); the list is read back after an arena churn
 import "std/io"
 
-fn group() List<I64> ? {
-    m := Map<I64, List<I64>>()
-    m.Put(1, List<I64>())
+fn group() Vec<I64> ? {
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, Vec<I64>())
     l := try m.Get(1)
     for i in range 40 {
         l.Push(i * 3)
@@ -19,7 +19,7 @@ fn churn() I64 {
     t I64 = 0
     for i in range 200 {
         a := Array<I64>(64, i)
-        b := List<I64>()
+        b := Vec<I64>()
         b.Push(a[3])
         t += b[0]
     }

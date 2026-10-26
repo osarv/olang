@@ -100,7 +100,7 @@ fn run(mode String&, args Array<String&>&) ? io.Error {
 
 # each file the root of a program, loaded - and its names resolved - as "dump modules" and "dump names" print them
 fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) {
-    defines List<String&>
+    defines Vec<String&>
     testBuild := false
     k I64 = 2
     for k < args.Len() and args[k].StartsWith("-") {
@@ -276,11 +276,11 @@ fn speed(out mut io.Writer&, src source.Source&) {
 # import's alias and the module it reaches (-1 for a remote one or a file that is not there)
 type loader struct(std String&) {
     std
-    paths List<String&>
-    types List<String&>
-    impMod List<I64>
-    impAlias List<String&>
-    impTarget List<I64>
+    paths Vec<String&>
+    types Vec<String&>
+    impMod Vec<I64>
+    impAlias Vec<String&>
+    impTarget Vec<I64>
 }
 
 # the names the prelude declares, " A B ", from every file of std/prelude
@@ -319,8 +319,8 @@ fn (l mut loader&) load(path String&) I64 {
     l.paths.Push($real)
     b := StringBuilder()
     b.PushChar(' ')
-    aliases List<String&>
-    paths List<String&>
+    aliases Vec<String&>
+    paths Vec<String&>
     toks := ts.Toks
     n := toks.Len()
     for i in range n {
@@ -396,12 +396,12 @@ fn preludeTypes(std String&) String {
 type walker struct(src source.Source&) {
     src
     b StringBuilder
-    starts List<I32>
-    failed List<Bool>
+    starts Vec<I32>
+    failed Vec<Bool>
 }
 
 # the item a position is in: the last that starts at or before it
-fn itemOf(starts List<I32>&, at I64) I64 {
+fn itemOf(starts Vec<I32>&, at I64) I64 {
     lo I64 = 0
     hi := starts.Len() - 1
     if hi < 0 or at < I64(starts[0]) { return 0 }
@@ -717,7 +717,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
 fn leavesWhole(rule String&) Bool { return rule == "T17, T19, C2" or rule == "D12b" or rule == "O3" }
 
 # the item a diagnostic belongs to: an unclosed block's is said at the declaration after it, and is the one before
-fn itemOfSaid(starts List<I32>&, s diag.Said&, p parse.Parser&) I64 {
+fn itemOfSaid(starts Vec<I32>&, s diag.Said&, p parse.Parser&) I64 {
     if s.Text.StartsWith("the block opened on line") { return itemOf(starts, s.Start - 1) }
     i := try p.SaidIn.Get(I32(s.Start)) catch default -1
     return i if i >= 0 else itemOf(starts, s.Start)
@@ -862,8 +862,8 @@ type tokText struct(Text String&, Start I64) {
 
 # a file's tokens as their texts, statement ends and commas left out - a list's items are separated by either (QY,
 # L18a), and the text written puts each list on one line - angles a character each
-fn tokenTexts(text String&, ts scan.Tokens&) List<tokText> {
-    l := List<tokText>()
+fn tokenTexts(text String&, ts scan.Tokens&) Vec<tokText> {
+    l := Vec<tokText>()
     for t in ts.Toks {
         k := t.Kind
         if k == token.Tok.Eof { break }

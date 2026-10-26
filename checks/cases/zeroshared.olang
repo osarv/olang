@@ -1,7 +1,7 @@
 # check: fail error[D13c]: Bag's zero value holds references, which a fill would share
 # D13c: a zero value holding references cannot be copied into every element - they would share it
 type Bag struct() {
-    items mut List<I32>& = List<I32>()
+    items mut Vec<I32>& = Vec<I32>()
 }
 fn main() ? {
     bags := Array<Bag>(3)

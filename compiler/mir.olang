@@ -402,7 +402,7 @@ type ConstNode enum {
 
 # a basic block: its statements, run in order, and its terminator
 type BasicBlock struct() {
-    Stmts List<Stmt>
+    Stmts Vec<Stmt>
     T Term = Term.None
 }
 
@@ -416,27 +416,27 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     Ty
     File
     Sp
-    Params List<LocalId>
-    Captures List<LocalId>
-    Vars List<VarKind>
-    Locals List<Local>
-    Scopes List<ScopeInfo>
-    Blocks List<BasicBlock>
-    Projs List<Proj>
-    Ops List<Operand>
-    Refs List<ScopeRef>
-    Places List<Place>
-    Calls List<Call>
-    Cases List<Case>
-    Tasks List<Task>
-    Clauses List<TaskClause>
-    Items List<typed.Item>
-    Consts List<ConstNode>
-    ConstItems List<I32>
-    Bytes List<U8>
-    Taken List<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
-    RaiseAt List<I32>       # S18d: a Raise's span's start whose trace line says RaiseWhat's text (typed.Body's)
-    RaiseWhat List<String&>
+    Params Vec<LocalId>
+    Captures Vec<LocalId>
+    Vars Vec<VarKind>
+    Locals Vec<Local>
+    Scopes Vec<ScopeInfo>
+    Blocks Vec<BasicBlock>
+    Projs Vec<Proj>
+    Ops Vec<Operand>
+    Refs Vec<ScopeRef>
+    Places Vec<Place>
+    Calls Vec<Call>
+    Cases Vec<Case>
+    Tasks Vec<Task>
+    Clauses Vec<TaskClause>
+    Items Vec<typed.Item>
+    Consts Vec<ConstNode>
+    ConstItems Vec<I32>
+    Bytes Vec<U8>
+    Taken Vec<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
+    RaiseAt Vec<I32>       # S18d: a Raise's span's start whose trace line says RaiseWhat's text (typed.Body's)
+    RaiseWhat Vec<String&>
     # D18: a generator's Next - the lambda its body is (typed.Body.Gen), a coroutine: each call through its value runs
     # it from where it suspended (Term.Suspend) to its next Suspend or its end, a Raise - its Exhausted.END (GenEnd,
     # under its own error list) when the body ended - after which every call fails with GenEnd
@@ -631,13 +631,13 @@ type verifier struct(F Fn&, T mut types.Table&) {
     pendAt mut Array<Bool>& = Array<Bool>(0)
     stackAt mut Array<I64>& = Array<I64>(0)
     stackN mut Array<I64>& = Array<I64>(0)
-    stacks List<ScopeId>
+    stacks Vec<ScopeId>
     reached mut Array<Bool>& = Array<Bool>(0)
     # the state walking a block
     init mut Array<Bool>& = Array<Bool>(0)
     live mut Array<Bool>& = Array<Bool>(0)
     pend mut Array<Bool>& = Array<Bool>(0)
-    stack List<ScopeId>
+    stack Vec<ScopeId>
     changed Bool = false
 }
 
@@ -979,12 +979,12 @@ fn (v mut verifier&) switchSuccs(r Range, o BlockId) Array<BlockId> {
 fn (v mut verifier&) reach() {
     nb := v.F.Blocks.Len()
     v.reached = Array<Bool>(nb)
-    work List<BlockId>
+    work Vec<BlockId>
     work.Push(BlockId(0))
     v.reached[0] = true
     for work.Len() > 0 {
         b := try work.Pop() catch { unreachable }
-        succ List<BlockId>
+        succ Vec<BlockId>
         for s in v.succs(v.F.Blocks[I64(b)].T) { succ.Push(s) }
         # a cleanup's entry, reached from where its deferred code is registered
         for st in v.F.Blocks[I64(b)].Stmts {

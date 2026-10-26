@@ -121,7 +121,7 @@ fn Sysroot() String { return try os.Env("OLANG_SYSROOT") catch default "" }
 # OLANG_EMULATOR (a command, its words split at spaces), else qemu-ARCH or qemu-ARCH-static found on PATH, told where the
 # architecture's C library is (OLANG_SYSROOT, else /usr/ARCH-linux-gnu where that exists). Fails where there is none
 fn (t Target&) Runner() Array<String&> ? Bad {
-    out List<String&>
+    out Vec<String&>
     if not t.Foreign { return out.ToArray() }
     env := try os.Env("OLANG_EMULATOR") catch default ""
     if env != "" {
@@ -207,7 +207,7 @@ fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hos
         return t
     }
     # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
-    args List<String&>
+    args Vec<String&>
     args.Push($clang)
     if triple != "" { args.Push($"--target=" $triple) }
     if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }

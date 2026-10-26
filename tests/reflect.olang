@@ -73,7 +73,7 @@ fn double<T>(v mut T&) {
 
 fn what<T>() String {
     return match T {
-        case List<E> => "a list of " $E.Name
+        case Vec<E> => "a list of " $E.Name
         case Map<K, V> => "a map from " $K.Name " to " $V.Name
         case Tree<E> => "a tree of " $E.Name
         case Hashable => "hashable " $T.Name
@@ -134,7 +134,7 @@ test "a value built through its constructor, defaults taken where written" {
 }
 
 test "match T: generic cases bind their arguments, traits are met, the first case wins" {
-    assert what<List<I32>>() == "a list of I32"
+    assert what<Vec<I32>>() == "a list of I32"
     assert what<Map<String&, F64>>() == "a map from String& to F64"
     assert what<Tree<Bool>>() == "a tree of Bool"
     assert what<I64>() == "hashable I64"

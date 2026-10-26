@@ -206,17 +206,17 @@ test "T25d/O1b: constant text keys put from a for-in, and a global map read thro
 
 # a Map whose values are Lists - a group-by, a multimap - is filled through Get and walked by "for ... in": an entry is a
 # copy of one the map holds, so its Value is the very List
-fn groupInto(groups mut Map<I64, mut List<I64>&>&, n I64) ? {
+fn groupInto(groups mut Map<I64, mut Vec<I64>&>&, n I64) ? {
     for i in range n {
         k I64 = i % 3
-        if k not in groups { groups.Put(k, List<I64>()) }
+        if k not in groups { groups.Put(k, Vec<I64>()) }
         g := try groups.Get(k)
         g.Push(i)
     }
 }
 
 fn groupBy(n I64) I64 {
-    groups := Map<I64, mut List<I64>&>()
+    groups := Map<I64, mut Vec<I64>&>()
     try groupInto(groups, n) catch { }                 # every key is put before it is got
     total I64 = 0
     for e in groups { total += e.Key * 1000 + e.Value.Len() }
@@ -283,16 +283,16 @@ test "removing the entry just given, during a walk" {
 # Keys and Values walk the map as Iter does, giving one part of each entry; ToList gathers either into a List
 test "Keys and Values, one part of every entry" {
     m := Map<String&, I64>()
-    assert m.Keys().ToList().Len() == 0
+    assert m.Keys().ToVec().Len() == 0
     for w in String&["pear", "fig", "apple", "kiwi"] { m.Put(w, w.Len()) }
-    ks := m.Keys().ToList()
+    ks := m.Keys().ToVec()
     ks.Sort(fn(a, b) { return a < b })
     assert ks.Join(",") == "apple,fig,kiwi,pear"
     total I64 = 0
     for v in m.Values() { total += v }
     assert total == 5 + 3 + 4 + 4
     assert m.Keys().Count(fn(k) { return k.Len() == 4 }) == 2 and m.Values().Every(fn(v) { return v >= 3 })
-    vs := m.Values().ToList()
+    vs := m.Values().ToVec()
     vs.Sort(fn(a, b) { return a < b })
     assert vs[0] == 3 and vs[3] == 5
     n I64 = 0
@@ -342,14 +342,14 @@ fn mapCopies() I64 {
     for k in String&["a", "b", "c", "d", "e", "f", "g"] { m.Put(k, 1) }
     n := m
     assert n.Remove("a")
-    assert m.Len() == 6 and not m.Has("a") and m.Keys().ToList().Len() == 6
+    assert m.Len() == 6 and not m.Has("a") and m.Keys().ToVec().Len() == 6
     c := m.Clone()
     c.Put("z", 26)
     m.Put("b", 2)
     assert c.Len() == 7 and m.Len() == 6 and (try c.Get("b") catch default -1) == 1 and (try m.Get("b") catch default -1) == 2
-    order := m.Keys().ToList()                    # the clone walks in the order the map does
+    order := m.Keys().ToVec()                    # the clone walks in the order the map does
     same I64 = 0
-    for i, k in c.Keys().ToList() {
+    for i, k in c.Keys().ToVec() {
         if i < order.Len() and k == order[i] { same++ }
     }
     parts := Array<Map<String&, I64>>(2, Map<String&, I64>())   # one map, two names (T8)
@@ -387,7 +387,7 @@ test "a Map's Clone outlives the map it copies" {
 test "a Map walked in order of its keys: its entries listed, then sorted" {
     m := Map<String&, I64>()
     for w in "pear fig apple fig kiwi apple fig".Split(" ") { m.Update($w, 0, fn(n I64) I64 { return n + 1 }) }
-    es := m.Iter().ToList()
+    es := m.Iter().ToVec()
     es.Sort(fn(a, b) { return a.Key < b.Key })
     b := StringBuilder()
     for e in es { b.Push($e.Key "=" $e.Value " ") }
@@ -402,8 +402,8 @@ fn mapRendered() String {
     m := Map<String&, I64>()
     m.Put("a\"b", 1)
     b.Push($m " ")
-    c := Map<Char, List<Char>>()
-    l := List<Char>()
+    c := Map<Char, Vec<Char>>()
+    l := Vec<Char>()
     l.Push('\n')
     c.Put('x', l)
     b.Push($c " ")

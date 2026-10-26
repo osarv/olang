@@ -2,7 +2,7 @@
 # G10d: one type built by a constructor called with graphs of two element types, the instances in one List
 type G<T> struct(seed T) {
     seed
-    vals List<T> = List<T>()
+    vals Vec<T> = Vec<T>()
 }
 type Layer struct<T>(g mut G<T>&, width I64) {
     {
@@ -13,7 +13,7 @@ type Layer struct<T>(g mut G<T>&, width I64) {
 fn main() ? {
     gf := G<F32>(0.5)
     gi := G<I64>(3)
-    l := List<Layer>()
+    l := Vec<Layer>()
     l.Push(Layer(gf, 10))
     l.Push(Layer(gi, 20))
     l.Push(Layer(gf, 30))

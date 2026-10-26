@@ -9,7 +9,7 @@ fn spin(n I64) I64 {
     return x
 }
 fn grow(n I64) I64 {
-    l := List<I64>()
+    l := Vec<I64>()
     l.Push(n)
     for x in l { l.Push(x + 1) }
     return l.Len()

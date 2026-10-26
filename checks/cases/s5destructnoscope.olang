@@ -2,14 +2,14 @@
 # E25/O10c: destructured results land in the block the statement stands in; without a scope argument ("mk2&rows(k)")
 # the list is the loop's, and cannot be pushed outward
 import "std/io"
-fn mk2(n I64) List<String&>, I64 {
-    l := List<String&>()
+fn mk2(n I64) Vec<String&>, I64 {
+    l := Vec<String&>()
     for i in range n { l.Push($i) }
     return l, n + 1
 }
 
 fn main() ? {
-    rows := List<List<String&>>()
+    rows := Vec<Vec<String&>>()
     for k in range 3 {
         rec, next := mk2(k)
         rows.Push(rec)

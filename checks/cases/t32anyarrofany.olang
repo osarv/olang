@@ -10,7 +10,7 @@ type aW trait {
 type aBtn struct(label String&) { label }
 fn (b aBtn&) Draw() String { return "[" $b.label "]" }
 fn main() {
-    xs := List<any aSized&>()
+    xs := Vec<any aSized&>()
     for i in range 3 {
         a := Array<any aW&>(2, aBtn("first"))
         a[1] = aBtn("b" $i)

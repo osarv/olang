@@ -7,12 +7,13 @@
 # See it: bench/repro/opt.olang (build/bench_repro_opt list_sum), then  grep -n "xor <" build/list_sum.opt.ll  (the vector xor of the inner loop)
 import "std/io"
 import "std/os"
+import "std/list"
 
 fn main() ? {
     args := os.Args()
     n := try args[1].ParseInt()
     passes := try args[2].ParseInt()
-    l := List<I64>()
+    l := list.List<I64>()
     for i in range n { l.Push(i * 7) }
     total I64 = 0
     for p in range passes {

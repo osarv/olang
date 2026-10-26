@@ -7,7 +7,7 @@ type Node struct(v I64) {
     next mut Node?& = null
 }
 fn main() ? {
-    fields := List<pair.Pair<String&, Node&>>()
+    fields := Vec<pair.Pair<String&, Node&>>()
     for i in range 2 {
         value Node& = Node(i)
         p := pair.Pair<String&, Node&>("k", value)

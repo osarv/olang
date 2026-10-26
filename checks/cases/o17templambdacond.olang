@@ -17,7 +17,7 @@ fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
 fn main() ? {
     b1 := Box()
     b2 := Box()
-    fs := List<fn() I64>()
+    fs := Vec<fn() I64>()
     for i in range 3 {
         fs.Push(leak(b1 if i >= 0 else b2))
         churn()

@@ -9,7 +9,7 @@ type P struct() {
     at I64 = 0
 }
 fn (p mut P&) mk() Token { return Token(1, "t" $p.at) }
-fn grab(p mut P&, keep mut List<String&>&) {
+fn grab(p mut P&, keep mut Vec<String&>&) {
     for i in range 3 {
         t := p.mk().text
         keep.Push(t)
@@ -17,6 +17,6 @@ fn grab(p mut P&, keep mut List<String&>&) {
 }
 fn main() ? {
     p := P()
-    keep := List<String&>()
+    keep := Vec<String&>()
     grab(p, keep)
 }

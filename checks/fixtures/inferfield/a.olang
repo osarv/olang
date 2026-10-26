@@ -24,12 +24,12 @@ fn Three() I64 {
 }
 
 type S struct() {
-    xs := List<I64>()
-    ys := List<String&>()
+    xs := Vec<I64>()
+    ys := Vec<String&>()
 }
 
 type Box<T> struct() {
-    vs := List<T>()
+    vs := Vec<T>()
 }
 
 test "a body reads a ':=' field before its type's turn" {

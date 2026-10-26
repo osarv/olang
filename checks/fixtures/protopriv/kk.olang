@@ -13,7 +13,7 @@ fn (a Vec2) plus(b Vec2) Vec2 { return Vec2(a.X + b.X) }
 fn (a Vec2) less(b Vec2) Bool { return a.X < b.X }
 
 type Bag struct() {
-    items mut List<I32>& = List<I32>()
+    items mut Vec<I32>& = Vec<I32>()
 }
 fn (b Bag&) at(i I64) I32 { return b.items[i] }
 fn (b Bag&) len() I64 { return b.items.Len() }

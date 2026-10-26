@@ -28,7 +28,7 @@ fn Die(why String&) noreturn {
 # runs args[0] with args, in dir when it is not "", with the environment extended by env ("NAME=value" each), and gives
 # what it did. A program that cannot be started ends the tool, saying so
 fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String& = "") os.Output {
-    full := List<String&>()
+    full := Vec<String&>()
     if env.Len() > 0 {
         full.Push("env")
         for e in env { full.Push(e) }
@@ -58,8 +58,8 @@ fn Env(name String&, fallback String&) String {
 # ---- text as rows ----
 
 # the rows of a text as awk reads them: split at each newline, the last row needing none, an empty text having none
-fn Rows(t String&) List<String&> {
-    rows := List<String&>()
+fn Rows(t String&) Vec<String&> {
+    rows := Vec<String&>()
     at I64 = 0
     for at < t.Len() {
         nl := try t[at:].FindByte('\n') catch default (t.Len() - at)
@@ -70,7 +70,7 @@ fn Rows(t String&) List<String&> {
 }
 
 # the rows joined, a newline after each
-fn Text(rows List<String&>&) String {
+fn Text(rows Vec<String&>&) String {
     b := StringBuilder()
     for r in rows {
         b.Push(r)
@@ -80,8 +80,8 @@ fn Text(rows List<String&>&) String {
 }
 
 # the rows sorted by bytes (LC_ALL=C sort)
-fn Sorted(rows List<String&>&) List<String&> {
-    l := List<String&>()
+fn Sorted(rows Vec<String&>&) Vec<String&> {
+    l := Vec<String&>()
     for r in rows { l.Push(r) }
     l.Sort(fn(a String&, b String&) Bool { return a < b })
     return l
@@ -103,8 +103,8 @@ fn IsNumber(t String&) Bool {
 }
 
 # the whitespace-separated words of a row, as awk's fields are
-fn Fields(t String&) List<String&> {
-    f := List<String&>()
+fn Fields(t String&) Vec<String&> {
+    f := Vec<String&>()
     i I64 = 0
     for i < t.Len() {
         for i < t.Len() and (t[i] == ' ' or t[i] == '\t') { i++ }
@@ -144,14 +144,14 @@ fn Read(path String&) String& {
 }
 
 # the files git tracks that match pattern ("*.olang"), sorted
-fn Tracked(pattern String&) List<String&> {
+fn Tracked(pattern String&) Vec<String&> {
     o := Run(String&["git", "ls-files", pattern])
     return Sorted(Rows(o.Stdout))
 }
 
 # the names in dir that end in suffix, in byte order, each with dir/ before it; none for a directory that is not there
-fn Matching(dir String&, suffix String&) List<String&> {
-    l := List<String&>()
+fn Matching(dir String&, suffix String&) Vec<String&> {
+    l := Vec<String&>()
     names := try os.ReadDir(dir) catch os.Error { return l }
     for n in names {
         if n.EndsWith(suffix) { l.Push($dir "/" $n) }
@@ -160,8 +160,8 @@ fn Matching(dir String&, suffix String&) List<String&> {
 }
 
 # the files of an acceptance tool's command line, else the default list
-fn FilesOr(args Array<String&>&, fallback List<String&>&) List<String&> {
-    l := List<String&>()
+fn FilesOr(args Array<String&>&, fallback Vec<String&>&) Vec<String&> {
+    l := Vec<String&>()
     if args.Len() > 1 {
         for i in range 1, args.Len() { l.Push(args[i]) }
         return l
@@ -234,7 +234,7 @@ fn Sections(t String&) I64 {
 
 # the sections of a golden: its keys in order, and each key's body
 type Golden struct() {
-    Keys List<String&> = List<String&>()
+    Keys Vec<String&> = Vec<String&>()
     Bodies Map<String&, String&> = Map<String&, String&>()
 }
 
@@ -455,7 +455,7 @@ fn DumpSections(t String&) Golden {
 }
 
 type HashGolden struct() {
-    Paths List<String&> = List<String&>()
+    Paths Vec<String&> = Vec<String&>()
     Source Map<String&, String&> = Map<String&, String&>()
     Dump Map<String&, String&> = Map<String&, String&>()
     Full Golden = Golden()
@@ -486,7 +486,7 @@ fn HashGoldenRead(base String&, target String&) HashGolden {
 }
 
 # writes a hashed golden of the files' sections; full says which sections are kept whole too
-fn HashGoldenWrite(base String&, what String&, files List<String&>&, sections Golden&, full fn(body String&) Bool) {
+fn HashGoldenWrite(base String&, what String&, files Vec<String&>&, sections Golden&, full fn(body String&) Bool) {
     table := StringBuilder()
     table.Push("# " $what " - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)\n")
     whole := StringBuilder()
@@ -500,8 +500,8 @@ fn HashGoldenWrite(base String&, what String&, files List<String&>&, sections Go
 }
 
 # the files of a list whose text is not the one the golden was captured from (new files included)
-fn HashGoldenStale(h HashGolden&, files List<String&>&) List<String&> {
-    l := List<String&>()
+fn HashGoldenStale(h HashGolden&, files Vec<String&>&) Vec<String&> {
+    l := Vec<String&>()
     for f in files {
         src := try h.Source.Get(f) catch default ""
         if src != Hash(Read(f)) { l.Push(f) }

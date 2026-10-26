@@ -62,7 +62,7 @@ fn reason(code I64) String& {
 }
 
 # one request as it arrived: its method, path, headers (names and values, in order) and body
-type Request struct(Method String&, Path String&, Names List<String&>, Values List<String&>, Body String&) {
+type Request struct(Method String&, Path String&, Names Vec<String&>, Values Vec<String&>, Body String&) {
     Method
     Path
     Names
@@ -117,8 +117,8 @@ fn parse(text String&) Request ? {
     lines := text[:end].Split("\r\n")
     parts := lines[0].Split(" ")
     if parts.Len() < 2 { error badRequest.LINE }
-    names List<String&>
-    values List<String&>
+    names Vec<String&>
+    values Vec<String&>
     for k in range 1, lines.Len() {
         at := try lines[k].FindByte(':') catch { continue }
         names.Push($lines[k][:at])
@@ -128,7 +128,7 @@ fn parse(text String&) Request ? {
 }
 
 # one response, as bytes to send
-fn response(code I64, headers List<String&>, body String&, withBody Bool) String {
+fn response(code I64, headers Vec<String&>, body String&, withBody Bool) String {
     out := StringBuilder()
     out.Push("HTTP/1.1 " $code " " $reason(code) "\r\n")
     for h in headers { out.Push($h "\r\n") }
@@ -141,16 +141,16 @@ fn response(code I64, headers List<String&>, body String&, withBody Bool) String
 fn serve(fd I32) {
     text := receive(fd)
     req := try parse(text) catch {
-        send(fd, response(400, List<String&>(), "bad request", true))
+        send(fd, response(400, Vec<String&>(), "bad request", true))
         return
     }
-    headers List<String&>
+    headers Vec<String&>
     code I64 = 200
     body := ""
     path := req.Path
     method := req.Method
     if not (method in String&["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
-        send(fd, response(501, List<String&>(), "unsupported method " $method, true))
+        send(fd, response(501, Vec<String&>(), "unsupported method " $method, true))
         return
     }
     if path == "/hello" {

@@ -5,9 +5,9 @@
 # "&l" would name the handle's own slot in the loop's block, which the note proposed and which did not compile; it names
 # the variable the handle was read from, which lives there (checks/cases/b11notehandlefix.olang builds the fix)
 fn main() ? {
-    m := Map<I64, List<String&>>()
-    m.Put(0, List<String&>())
-    m.Put(1, List<String&>())
+    m := Map<I64, Vec<String&>>()
+    m.Put(0, Vec<String&>())
+    m.Put(1, Vec<String&>())
     for i in range 3 {
         l := try m.Get(i % 2)
         t := "x" $i

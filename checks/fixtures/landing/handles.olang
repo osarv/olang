@@ -16,7 +16,7 @@ fn churn() I64 {
     t I64 = 0
     for i in range 300 {
         x := "churn " $i " " $(i * 7)
-        l := List<String&>()
+        l := Vec<String&>()
         l.Push(x)
         t += x.Len() + l.Len()
     }
@@ -24,11 +24,11 @@ fn churn() I64 {
 }
 
 # a Map of Lists grouped in a loop - the list fetched by value each turn and pushed onto (study4's r07)
-fn group(n I64) Map<I64, List<String&>> ? {
-    m := Map<I64, List<String&>>()
+fn group(n I64) Map<I64, Vec<String&>> ? {
+    m := Map<I64, Vec<String&>>()
     for i in range n {
         k := i % 3
-        if not m.Has(k) { m.Put(k, List<String&>()) }
+        if not m.Has(k) { m.Put(k, Vec<String&>()) }
         l := try m.Get(k)
         l.Push("v" $i)
         churn()
@@ -37,10 +37,10 @@ fn group(n I64) Map<I64, List<String&>> ? {
 }
 
 # a second name for a list in an inner block, and lists passed by value - the same collection (T8)
-fn addTo(l List<String&>, t String&) { l.Push(t) }
+fn addTo(l Vec<String&>, t String&) { l.Push(t) }
 fn putIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
 fn aliases() String& ? {
-    l := List<String&>()
+    l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
         l2 := l

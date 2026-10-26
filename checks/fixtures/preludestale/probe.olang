@@ -4,7 +4,7 @@
 import "std/io"
 
 fn main() ? io.Error {
-    l := List<I32>()
+    l := Vec<I32>()
     l.Push(5)
     l.Push(6)
     try io.Write(io.Stdout, $l.Probe())

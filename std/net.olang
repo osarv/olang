@@ -399,7 +399,7 @@ fn Lookup(host String&) Array<IP> ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error
     rc := getaddrinfo(host.ToC(), "0".ToC(), hints, out)
     if rc != 0 { try lookupFailed(rc) }
     head := out[0]
-    ips := List<IP>()
+    ips := Vec<IP>()
     p := head
     for p is not null {
         f := aiFields()

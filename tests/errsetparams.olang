@@ -51,7 +51,7 @@ test "QAH: the helpers take callbacks that fail" {
     assert (try a.Count(fn(x I64) Bool { return try parsePos(x) > 1 }) catch Bad default -1) == 3
     assert (try a.Map(fn(x I64) I64 { return try parsePos(x) * 10 }) catch Bad default I64[]) == I64[10, 20, 30, 40]
     assert (try b.Filter(fn(x I64) Bool { return try parsePos(x) > 0 }) catch Bad default I64[7]) == I64[7]
-    assert (try a.Iter().Map(fn(x I64) I64 { return try parsePos(x) }) catch Bad default List<I64>()).Len() == 4
+    assert (try a.Iter().Map(fn(x I64) I64 { return try parsePos(x) }) catch Bad default Vec<I64>()).Len() == 4
     assert (try a.FindIndex(fn(x I64) Bool { return try parsePos(x) == 3 }) catch Bad default -1 catch ArrayError default -2) == 2
 }
 
@@ -63,7 +63,7 @@ test "QAH: a comparator that fails stops the sort" {
     failed := false
     try b.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < try parsePos(y) }) catch Bad { failed = true }
     assert failed
-    l := List<I64>()
+    l := Vec<I64>()
     l.Push(5)
     l.Push(4)
     try l.Sort(fn(x I64, y I64) Bool { return try parsePos(x) < y }) catch Bad { unreachable }
@@ -112,9 +112,9 @@ test "QAH: an iterator's own errors reach what walks it" {
     # an iterator that cannot fail meets "Iterator<I64 ? Bad>" too: its set is held by Bad, Exhausted (T31)
     assert (try total(I64[7, 8].Iter()) catch Bad default -1) == 15
     w := Reader(I64[1, -1])
-    assert (try w.ToList() catch Bad default List<I64>()).Len() == 0
+    assert (try w.ToVec() catch Bad default Vec<I64>()).Len() == 0
     v := Reader(I64[1, 2])
-    assert (try v.ToList() catch Bad default List<I64>()).Len() == 2
+    assert (try v.ToVec() catch Bad default Vec<I64>()).Len() == 2
 }
 
 # a struct type over an error set: what it runs fails with what it holds fails with

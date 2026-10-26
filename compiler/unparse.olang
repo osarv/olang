@@ -31,7 +31,7 @@ type writer struct(names source.Names&, text String&, diags diag.Diagnostics&) {
     diags
     b StringBuilder = StringBuilder()
     ind I64 = 0
-    held List<source.Span>          # the branches written as their text
+    held Vec<source.Span>          # the branches written as their text
     item Bool = false               # writing an item of a list: a function type holding a comma is parenthesized (L18c)
     group Bool = false              # the next function type is parenthesized: a result before its signature's "?"
 }

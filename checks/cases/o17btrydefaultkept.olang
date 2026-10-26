@@ -19,10 +19,10 @@ type Bag struct() {
     s mut BagState& = BagState()
 }
 fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
-fn (b Bag&) Keep(l mut List<mut BagState&>&) { l.Push(b.s) }
+fn (b Bag&) Keep(l mut Vec<mut BagState&>&) { l.Push(b.s) }
 fn main() ? {
     a := Array<Bag>(1, Bag())
-    kept := List<mut BagState&>()
+    kept := Vec<mut BagState&>()
     for i in range 3 {
         (try a.Get(i) catch default Bag()).Sneak(i + 1)
         (try a.Get(i) catch default Bag()).Keep(kept)

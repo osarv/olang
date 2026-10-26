@@ -156,8 +156,8 @@ fn main() {
     work := toolkit.Scratch("drvdiff")
     defer toolkit.Clean(work)
     try os.MkDir($work "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " $work "/adir") }
-    keys := List<String&>()
-    got := List<String&>()
+    keys := Vec<String&>()
+    got := Vec<String&>()
     for line in Cases {
         keys.Push($"olang " $line)
         got.Push(normal(outcome(exe, line, work), work, "", here))
@@ -216,13 +216,13 @@ fn normal(t String&, work String&, dir String&, here String&) String {
 
 # what the compiler at exe writes for the command line line, and its status, as one text
 fn outcome(exe String&, line String&, work String&, std String& = "", dir String& = "") String {
-    args := List<String&>()
+    args := Vec<String&>()
     args.Push(exe)
     for w in line.Split(" ") {
         if w == "" { continue }
         args.Push(w.Replace("W/", $work "/") if w.StartsWith("W/") else $w)
     }
-    env := List<String&>()
+    env := Vec<String&>()
     if std != "" { env.Push($std) }
     o := toolkit.Run(args.ToArray(), env.ToArray(), dir)
     return $"stdout:\n" $o.Stdout "stderr:\n" $o.Stderr "status " $o.Status "\n"

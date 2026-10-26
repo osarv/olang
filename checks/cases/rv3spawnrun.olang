@@ -7,10 +7,10 @@ type N struct(v I64) {
     w I64 = v * 3
 }
 fn main() ? {
-    a mut List<N&>& = List<N&>()
-    b mut List<N&>& = List<N&>()
-    c mut List<N&>& = List<N&>()
-    d mut List<N&>& = List<N&>()
+    a mut Vec<N&>& = Vec<N&>()
+    b mut Vec<N&>& = Vec<N&>()
+    c mut Vec<N&>& = Vec<N&>()
+    d mut Vec<N&>& = Vec<N&>()
     join {
         spawn fn() { for i in range 30000 { a.Push(N(i)) } }
         spawn fn() { for i in range 30000 { b.Push(N(i + 1000000)) } }

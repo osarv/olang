@@ -25,9 +25,9 @@ fn churn() ? io.Error {
     }
 }
 fn (m mut M&) Build(v I64) { m.r.next = Node(v, null) }
-fn add(l mut List<Layer>&, v I64) { l[0].w.Build(v) }
+fn add(l mut Vec<Layer>&, v I64) { l[0].w.Build(v) }
 fn main() ? {
-    l := List<Layer>()
+    l := Vec<Layer>()
     l.Push(Layer(M(Node(1, null), 0), 0))
     add(l, 12)
     try churn()

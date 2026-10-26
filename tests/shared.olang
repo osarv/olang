@@ -2579,9 +2579,9 @@ fn g16Kinds(k I32) I64 {
     b.v = 7
     n G16Nums = G16Nums(I32[1, 2])
     arr Array<I32> = I32[3, 4, 5]
-    ro := List<G16Node&>()
+    ro := Vec<G16Node&>()
     ro.Push(G16Ro)
-    rw := List<mut G16Node&>()
+    rw := Vec<mut G16Node&>()
     rw.Push(m)
     x := rw[0]
     x.v = x.v + 1
@@ -3157,7 +3157,7 @@ fn (v e31cV) Mul(s F64) e31cV commutes { return e31cV(v.x * s, v.y * s) }
 type e31cW struct(n F32) { n }
 fn (w e31cW) Plus(s F32) e31cW commutes { return e31cW(w.n + s) }
 E31cBaked e31cV = 3.0 * e31cV(1.0, 2.0)                # K2
-E31cOrder mut List<I64>& = List<I64>()
+E31cOrder mut Vec<I64>& = Vec<I64>()
 fn e31cSide(n F64) F64 {
     E31cOrder.Push(1)
     return n
@@ -5653,7 +5653,7 @@ fn astFold(e Ast&) Ast&e {
 }
 
 # the leaves, left to right, into a list living where the tree does (G11: a List of enum references)
-fn astLeaves(e Ast&, out mut List<Ast&>&e) {
+fn astLeaves(e Ast&, out mut Vec<Ast&>&e) {
     match e {
         case Ast.Num(_), Ast.Var(_) { out.Push(e) }
         case Ast.Add(a, b), Ast.Mul(a, b) {
@@ -5690,7 +5690,7 @@ test "T17d: an expression tree of enums held by reference, folded with nested pa
     e := astBuild(3)
     f := astFold(e)
     assert $f == "Ast.Mul(Ast.Num(4), Ast.Mul(Ast.Num(3), Ast.Mul(Ast.Num(2), Ast.Var(\"x\"))))"
-    leaves := List<Ast&>()
+    leaves := Vec<Ast&>()
     astLeaves(f, leaves)
     assert leaves.Len() == 4
     n I64 = 0
@@ -5760,7 +5760,7 @@ test "T17d: a copy built in the result scope, and trees across blocks" {
         sum += astEval(t, 0)
     }
     assert sum == 33
-    l := List<Ast&>()
+    l := Vec<Ast&>()
     l.Push(Ast.Num(0))
     l.Push(Ast.Num(1))
     l.Push(Ast.Num(2))
@@ -7702,7 +7702,7 @@ fn comprNothing(n I32) String {
     m := Map<I8, U32>()
     a Array<U16> = U16[1 for x in m.Values()]
     ra Array<U16>&a = a
-    l := List<U16>()
+    l := Vec<U16>()
     e Array<U16> = U16[3 for x in l if x > 0]
     re Array<U16>&e = e
     r Array<U16> = U16[2 for x in range n]
@@ -7719,7 +7719,7 @@ test "E27/T2c: a comprehension over an empty source is an empty array" {
     n++
     n--
     assert comprNothing(n) == ComprNothingBaked
-    l := List<I64>()
+    l := Vec<I64>()
     empty := I64[x for x in l]
     er Array<I64>&empty = empty
     assert empty.Len() == 0 and er.Len() == 0
@@ -10132,7 +10132,7 @@ fn wdAll(a I32) Bool {
     g F64 = f
     m := WdMeters(3)
     n I64 = m
-    l := List<I32>()
+    l := Vec<I32>()
     l.Push(by)
     sites Bool = c == I64(a) + 3000000000 and d == I64(a) * 2 and wdWide(a) == I64(a) and wdByte(by) == 200
     ops Bool = i == 200 and a < b and by < a and g + f == 3.0 and m + a == a + 3 and m < b and n == 3
@@ -10186,7 +10186,7 @@ type ZHolds struct(o ZOne) {
     o
 }
 type ZBag struct() {
-    items mut List<I32>& = List<I32>()
+    items mut Vec<I32>& = Vec<I32>()
 }
 ZGlobal ZOne
 fn zeroAll() Bool {
@@ -11221,7 +11221,7 @@ fn obChurn() I64 {
 }
 
 test "O18b: List.Push of a temporary in a loop builds it where the list lives" {
-    l mut List<ObNode&>& = List<ObNode&>()
+    l mut Vec<ObNode&>& = Vec<ObNode&>()
     for i in range 10 {
         l.Push(ObNode(i))
         scratch mut Array<I64>& = Array<I64>(8, 999) # the loop body's arena is used, then reclaimed
@@ -11234,13 +11234,13 @@ test "O18b: List.Push of a temporary in a loop builds it where the list lives" {
 }
 
 test "O18b: a temporary pushed from a doubly nested block, and text pushed in a loop" {
-    l mut List<ObNode&>& = List<ObNode&>()
+    l mut Vec<ObNode&>& = Vec<ObNode&>()
     for i in range 4 {
         for j in range 3 {
             if j != i { l.Push(ObNode(i * 10 + j)) }
         }
     }
-    words mut List<String&>& = List<String&>()
+    words mut Vec<String&>& = Vec<String&>()
     for i in range 5 { words.Push($i "-" $(i * i)) }
     obChurn()
     s I64 = 0
@@ -11272,7 +11272,7 @@ fn obPut2(b mut ObBag&, n mut ObNode&) { b.second = n }
 
 # a generic declared after its caller, storing a temporary it is handed
 fn obKeepAll(n I64) I64 {
-    l mut List<ObNode&>& = List<ObNode&>()
+    l mut Vec<ObNode&>& = Vec<ObNode&>()
     for i in range n {
         obKeep(l, ObNode(i))
         scratch mut Array<I64>& = Array<I64>(8, 999)
@@ -11284,7 +11284,7 @@ fn obKeepAll(n I64) I64 {
     return s
 }
 
-fn obKeep<T>(l mut List<T>&, x T) { l.Push(x) }
+fn obKeep<T>(l mut Vec<T>&, x T) { l.Push(x) }
 
 # mutable, so a call given them is run - one given constants would be decided while compiling (S18c), where nothing
 # is reclaimed
@@ -11307,9 +11307,9 @@ test "StringBuilder in a loop: the text is copied in, so nothing it is given nee
 # "for w in ws" holds ws.Iter() in a hidden local: the iterator records where ws lives (O13c), its Next returns an
 # element at that scope (O23a, O14b), so each element can be pushed into another list as long-lived as ws
 test "O23a: elements of one list pushed into another, through the iterator" {
-    ws mut List<ObNode&>& = List<ObNode&>()
+    ws mut Vec<ObNode&>& = Vec<ObNode&>()
     for i in range 5 { ws.Push(ObNode(i * 2)) }
-    mine mut List<ObNode&>& = List<ObNode&>()
+    mine mut Vec<ObNode&>& = Vec<ObNode&>()
     for w in ws { mine.Push(w) }
     n := ObNode(100)
     if mine.Len() == 5 {
@@ -11355,9 +11355,9 @@ test "O13c: a hand-written iterator's elements live where its collection does" {
 
 # K2: a global computed while compiling through the same pushes - the evaluator and the run time agree
 fn obListSum(n I64) I64 {
-    l mut List<ObNode&>& = List<ObNode&>()
+    l mut Vec<ObNode&>& = Vec<ObNode&>()
     for i in range n { l.Push(ObNode(i * 3)) }
-    mine mut List<ObNode&>& = List<ObNode&>()
+    mine mut Vec<ObNode&>& = Vec<ObNode&>()
     for w in l { mine.Push(w) }
     s I64 = 0
     for m in mine { s += m.v }
@@ -11679,7 +11679,7 @@ type SfWrap struct(n SfNode&) {
     n
 }
 type SfWorld struct() {
-    items mut List<SfNode&>& = List<SfNode&>()
+    items mut Vec<SfNode&>& = Vec<SfNode&>()
 }
 fn sfShow(n SfNode&) I64 { return n.v }
 fn sfFirstTwice(w SfWorld&) I64 ? {
@@ -11690,7 +11690,7 @@ fn sfFirstTwice(w SfWorld&) I64 ? {
 
 test "C2d/E31: a constructor call pushed lands with the list, and a checked index reads through a field" {
     outer SfNode& = SfNode(sfRun)
-    l mut List<SfWrap&>& = List<SfWrap&>()
+    l mut Vec<SfWrap&>& = Vec<SfWrap&>()
     for i in range 2 {
         l.Push(SfWrap(outer))                       # outer lives where l does
         l.Push(SfWrap(SfNode(i + 50)))
@@ -11702,10 +11702,10 @@ test "C2d/E31: a constructor call pushed lands with the list, and a checked inde
 }
 
 test "O4b/G11: a list of pairs holding text references, built in a loop over another list" {
-    names mut List<String&>& = List<String&>()
+    names mut Vec<String&>& = Vec<String&>()
     names.Push("ann")
     names.Push("bobby")
-    l mut List<pair.Pair<String&, I64>>& = List<pair.Pair<String&, I64>>()
+    l mut Vec<pair.Pair<String&, I64>>& = Vec<pair.Pair<String&, I64>>()
     for n in names { l.Push(pair.Pair(n, n.Len())) }
     obChurn()
     assert l[1].First == "bobby" and l[1].Second == 5 and l[0].Second == 3
@@ -11746,16 +11746,16 @@ test "E31/O14a: an instance whose type declares Call, passed in, is returned as 
     assert g() == 44 and x == 85 and c.n == 44
 }
 
-SfGL mut List<SfWrap&>& = List<SfWrap&>()
+SfGL mut Vec<SfWrap&>& = Vec<SfWrap&>()
 SfGN mut SfNode& = SfNode(7)
-SfGR List<I64>& = sfReadOnlyList()
-fn sfReadOnlyList() List<I64>& {
-    l mut List<I64>&return = List<I64>()
+SfGR Vec<I64>& = sfReadOnlyList()
+fn sfReadOnlyList() Vec<I64>& {
+    l mut Vec<I64>&return = Vec<I64>()
     l.Push(5)
     return l
 }
 fn sfLink(a mut SfBox&, b mut SfNode&a) { a.n = b }
-fn sfCount(l List<I64>&) I64 { return l.Len() }
+fn sfCount(l Vec<I64>&) I64 { return l.Len() }
 fn sfFillGlobals(n I64) {
     for i in range n {
         SfGL.Push(SfWrap(SfNode(i + 40)))           # built in the program's scope, where SfGL lives (O18b, O1b)
@@ -11773,7 +11773,7 @@ test "O1b/O25e: a global argument binds the callee's scope to the program's, rea
 }
 
 test "T25d: constant text elements read through a for-in are static, and may be stored anywhere" {
-    l mut List<String&>& = List<String&>()
+    l mut Vec<String&>& = Vec<String&>()
     if sfRun > 0 {
         for nm in String&["x", "yy"] { l.Push(nm) }
     }
@@ -11789,9 +11789,9 @@ fn sfBakeSum(n I64) I64 {
     f SfNode& = sfMkBox(n).n
     e := sfMkNodes(n + 1)[0]
     k SfNode& = a if n > 3 else SfNode(1)
-    l mut List<String&>& = List<String&>()
+    l mut Vec<String&>& = Vec<String&>()
     for nm in String&["x", "yy"] { l.Push(nm) }
-    pl mut List<pair.Pair<String&, I64>>& = List<pair.Pair<String&, I64>>()
+    pl mut Vec<pair.Pair<String&, I64>>& = Vec<pair.Pair<String&, I64>>()
     for s in l { pl.Push(pair.Pair(s, s.Len())) }
     return a.v + b.v + f.v + e.v + k.v + pl[1].Second
 }
@@ -11923,7 +11923,7 @@ test "T7d: a copy into fixed storage of its length, while compiling and at run t
 fn evTwo(a String&, b String&) Bool { return a == b }
 fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }   # E10c: "==" on arrays compares their elements
 fn evSites(n I64) String {
-    l := List<String&>()
+    l := Vec<String&>()
     for i in range n { l.Push("hello") }
     return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(I32[1, 2], I32[1, 2])
 }
@@ -12423,7 +12423,7 @@ test "E10, T2c: a reference to an array with no storage renders as the empty arr
 # through that instantiation's elements - the instantiation held a snapshot of the type taken mid-resolution
 type cbWidget struct(id I32) {
     id
-    kids mut List<mut cbWidget&>& = List<mut cbWidget&>()
+    kids mut Vec<mut cbWidget&>& = Vec<mut cbWidget&>()
     tag I32 = 0
 }
 test "G8a: a field after a generic self-reference is reached through the instantiation's elements" {
@@ -12441,7 +12441,7 @@ type cbNode struct(v I32) {
 }
 fn cbPairOf(k String&) pair.Pair<String&, I64> { return pair.Pair(k, 7) }
 test "G10c: a generic constructor takes its expected type's arguments" {
-    l := List<pair.Pair<String&, I64>>()
+    l := Vec<pair.Pair<String&, I64>>()
     k String& = "abc"
     l.Push(pair.Pair(k, 3))
     p pair.Pair<String&, I64> = pair.Pair(k, I64(4))
@@ -12601,7 +12601,7 @@ test "S1b: one-line bodies run as the blocks they stand for, at run time and whi
     assert (try s1bCheck(n) catch S1bError default 7) == 7 and (try s1bCheck(5) catch S1bError default 7) == 5
     p := try s1bPct(n + 8) catch S1bError { unreachable "a positive percentage" }
     assert p.v == 5 and (try s1bPct(n) catch S1bError default s1bPct(1)!).v == 1
-    out List<I64>
+    out Vec<I64>
     for x in I64[4, 5, 6]: out.Push(x * 2)
     assert out.Len() == 3 and out[2] == 12
 }
@@ -12741,17 +12741,17 @@ test "T29e/G19: a type extending a number is a key through its inherited Hash, o
 
 # C2d: a value a constructor field builds from the constructor's own parameters lands in the instance, its references
 # held as the instance holds the parameter's argument - an entry holding a writable List reference, inside a slot
-type C2Ent struct(k I64, v mut List<I64>&) {
+type C2Ent struct(k I64, v mut Vec<I64>&) {
     K I64 = k
-    V mut List<I64>& = v
+    V mut Vec<I64>& = v
 }
-type C2Slot struct(k I64, v mut List<I64>&, next mut C2Slot?&) {
+type C2Slot struct(k I64, v mut Vec<I64>&, next mut C2Slot?&) {
     e C2Ent = C2Ent(k, v)
     next
 }
 
 test "C2d: a constructor field builds an entry from the constructor's parameters" {
-    l := List<I64>()
+    l := Vec<I64>()
     s mut C2Slot& = C2Slot(1, l, null)
     s = C2Slot(2, l, s)
     s.e.V.Push(7)
@@ -12801,7 +12801,7 @@ fn sbRecords(n I64) String& {
     sbSwap(a, 0, 3)
     sbSwap2(a, 1, 2)
     a.Sort(fn(x sbWC, y sbWC) Bool { return x.count < y.count })
-    odd := List<String&>()
+    odd := Vec<String&>()
     for wc in a { if wc.count % 2 == 1 { odd.Push(wc.word) } }
     m := sbMost(a)
     sbChurn()
@@ -12841,18 +12841,18 @@ test "O18c: a call with a catch block lands as a call with no clause does" {
 
 # O18c: a call's result passed on as a receiver or a loop's source lands where its obligations say - an element of a
 # list of lists, where the outer list lives - as "inner := adj[a]" does
-fn sbAdd(adj mut List<mut List<String&>&>&, a I64, v String&adj) {
+fn sbAdd(adj mut Vec<mut Vec<String&>&>&, a I64, v String&adj) {
     adj[a].Push(v)
 }
-fn sbJoin(adj List<mut List<String&>&>&, a I64) String& {
+fn sbJoin(adj Vec<mut Vec<String&>&>&, a I64) String& {
     b := StringBuilder()
     for x in adj[a] { b.Push(x) }
     return b.ToString()
 }
 test "O18c: an element of a list of lists, used as a receiver and as a loop's source" {
-    adj := List<mut List<String&>&>()
-    adj.Push(List<String&>())
-    adj.Push(List<String&>())
+    adj := Vec<mut Vec<String&>&>()
+    adj.Push(Vec<String&>())
+    adj.Push(Vec<String&>())
     for i in range 3 {
         t String&adj = $(i + sbRun) "."
         sbAdd(adj, i % 2, t)
@@ -12863,16 +12863,16 @@ test "O18c: an element of a list of lists, used as a receiver and as a loop's so
 }
 
 # a number read out of a list carries no scope: indexing with it reads the element, as with a literal
-fn sbWalk(adj List<mut List<I32>&>&, src I32) I64 {
-    queue := List<I32>()
+fn sbWalk(adj Vec<mut Vec<I32>&>&, src I32) I64 {
+    queue := Vec<I32>()
     queue.Push(src)
     v I32 = queue[0]
     out := adj[v]
     return out.Len()
 }
 test "a number read out of a list is a number" {
-    adj := List<mut List<I32>&>()
-    adj.Push(List<I32>())
+    adj := Vec<mut Vec<I32>&>()
+    adj.Push(Vec<I32>())
     adj[0].Push(4)
     assert sbWalk(adj, 0) == 1
 }
@@ -12892,7 +12892,7 @@ fn (it mut sbIt<T>&) Next() T ? Exhausted {
 test "O13c: an iterator returning its element through a local" {
     nodes := Array<mut sbNode&>(3, sbNode(0))
     for i in range 3 { nodes[i] = sbNode(I64(i) + sbRun) }
-    keep := List<mut sbNode&>()
+    keep := Vec<mut sbNode&>()
     for n in sbIt<mut sbNode&>(nodes) { keep.Push(n) }
     keep[1].next = sbNode(70)
     sbChurn()
@@ -12952,7 +12952,7 @@ fn (it mut sbTextIt&) Next() String&it ? Exhausted {
     return it.a[it.i - 1]
 }
 fn sbLongest(n I64) String& {
-    words := List<String&>()
+    words := Vec<String&>()
     arr := Array<String&>(3)
     for i in range 3 {
         full String&words = $(n * 10) "abcd"
@@ -12970,7 +12970,7 @@ test "O14b/T22a: Fold keeping one of its elements" {
     assert r == "10abc/10abc"
 }
 test "O25a: Fold with a reference accumulator" {
-    words := List<String&>()
+    words := Vec<String&>()
     for i in range 3 { words.Push($(i + sbRun) "x") }
     all := words.Iter().Fold(words[0], fn(acc String&, w String&) String& { return $acc $w })
     sbChurn()
@@ -13028,14 +13028,14 @@ test "O25h/D16d: sorted copies and a composed lambda, evaluated while compiling 
 # C2d/O10c: a Map of lists reusing a removed key's slot - the entry rebuilt whole in the slot, from the key and the list
 # it is given, which must live where the map does (an equality its callers show, as the slot the key first went into)
 fn sbRegroup(n I64) String& {
-    groups := Map<I64, mut List<String&>&>()
+    groups := Map<I64, mut Vec<String&>&>()
     for i in range 4 {
-        if i not in groups { groups.Put(i, List<String&>()) }
+        if i not in groups { groups.Put(i, Vec<String&>()) }
         g := try groups.Get(i) catch { unreachable }
         g.Push($(i + n) "g")
     }
     if not groups.Remove(1) { return "lost" }
-    fresh mut List<String&>&groups = List<String&>()
+    fresh mut Vec<String&>&groups = Vec<String&>()
     fresh.Push($n "new")
     groups.Put(9, fresh)
     sbChurn()
@@ -13096,8 +13096,8 @@ type sbJNode struct(v I64) {
     v
     next mut sbJNode?& = null
 }
-fn sbFields(n I64) List<pair.Pair<String&, sbJNode&>>& {
-    fields mut List<pair.Pair<String&, sbJNode&>>&return = List<pair.Pair<String&, sbJNode&>>()
+fn sbFields(n I64) Vec<pair.Pair<String&, sbJNode&>>& {
+    fields mut Vec<pair.Pair<String&, sbJNode&>>&return = Vec<pair.Pair<String&, sbJNode&>>()
     for i in range n {
         key String&fields = $i "k"
         value sbJNode&fields = sbJNode(I64(i) * 10)
@@ -13127,7 +13127,7 @@ type lbBox struct(k lbKey) {
     K lbKey = k
 }
 type lbTally struct() {
-    items mut List<I32>& = List<I32>()
+    items mut Vec<I32>& = Vec<I32>()
 }
 fn (t lbTally&) at(i I64) I32 { return t.items[i] }
 fn (t lbTally&) len() I64 { return t.items.Len() }
@@ -13244,15 +13244,15 @@ type lbItem struct(c mut lbCounter&) {
 }
 fn lbItems(n I64) I64 {
     c := lbCounter()
-    items := List<lbItem>()
+    items := Vec<lbItem>()
     for i in range n { items.Push(lbItem(c)) }
-    more := List<lbItem>()
+    more := Vec<lbItem>()
     a := items.ToArray()
     more.PushAll(a)
     ids := a.Map(fn(x lbItem) I64 { return x.id })
     big := a.Filter(fn(x lbItem) Bool { return x.id > n - 2 })
     none := a.Filter(fn(x lbItem) Bool { return false })
-    empty := List<lbItem>()
+    empty := Vec<lbItem>()
     more.Sort(fn(x lbItem, y lbItem) Bool { return x.id > y.id })
     return items[n - 1].id * 1000 + ids[3] * 100 + big.Len() * 10 + none.Len() + empty.ToArray().Len() + more[0].id
 }
@@ -13790,12 +13790,12 @@ test "G29: an array of arrays by value under a reference, an instance per elemen
 # O26a: a value local the function returns lives in the result scope - its storage and what is built into it - so a
 # List or Map filled here, a struct holding one filled through a method, a conditional's or a destructuring's local and
 # a value returned through a reference result all outlive the call, read back after the arena has been reused
-fn c3MkList(n I64) List<I64> {
-    l := List<I64>()
+fn c3MkList(n I64) Vec<I64> {
+    l := Vec<I64>()
     for i in range n { l.Push(i) }
     return l
 }
-fn c3Sum(l List<I64>&) I64 {
+fn c3Sum(l Vec<I64>&) I64 {
     t I64 = 0
     for v in l { t += v }
     return t
@@ -13807,7 +13807,7 @@ fn c3Table(n I64) Map<I64, String&> {
 }
 type c3Box struct(name String&) {
     name
-    items List<I64>
+    items Vec<I64>
 }
 fn (b mut c3Box&) fill(n I64) {
     for i in range n { b.items.Push(i * 2) }
@@ -13817,26 +13817,26 @@ fn c3MakeBox(name String&, n I64) c3Box {
     b.fill(n)
     return b
 }
-fn c3Pick(n I64, first Bool) List<I64> {
-    a := List<I64>()
-    b := List<I64>()
+fn c3Pick(n I64, first Bool) Vec<I64> {
+    a := Vec<I64>()
+    b := Vec<I64>()
     for i in range n {
         a.Push(i)
         b.Push(i * 10)
     }
     return a if first else b
 }
-fn c3Two(n I64) List<I64>, I64 {
+fn c3Two(n I64) Vec<I64>, I64 {
     l := c3MkList(n)
     return l, n
 }
-fn c3Destructured(n I64) List<I64> {
+fn c3Destructured(n I64) Vec<I64> {
     l, k := c3Two(n)
     l.Push(k)
     return l
 }
-fn c3RefResult(n I64) List<I64>& {
-    l := List<I64>()
+fn c3RefResult(n I64) Vec<I64>& {
+    l := Vec<I64>()
     for i in range n { l.Push(i) }
     return l
 }
@@ -13946,10 +13946,10 @@ test "S12b: text a match value's arm renders outlives the arm" {
 
 # O25e: an immutable global List or Map is read through its methods - a global is in the program's scope, its storage
 # and its references alike
-C3Words List<String&> = c3Words()
+C3Words Vec<String&> = c3Words()
 C3Counts Map<String&, I64> = c3CountMap()
-fn c3Words() List<String&> {
-    l := List<String&>()
+fn c3Words() Vec<String&> {
+    l := Vec<String&>()
     l.Push("a")
     l.Push("bc")
     return l
@@ -14061,13 +14061,13 @@ fn c3FromLocal() c3Counts {
     return c3Counts(t)
 }
 type c3Holder struct() {
-    items mut List<I64>& = List<I64>()
+    items mut Vec<I64>& = Vec<I64>()
     items.Push(6)
     for i in range 40 { items.Push(i) }
 }
 type c3Lent struct() {
-    v List<I64> = List<I64>()
-    r mut List<I64>& = v
+    v Vec<I64> = Vec<I64>()
+    r mut Vec<I64>& = v
     r.Push(5)
 }
 C3HolderLen I64 = c3Holder().items.Len() + c3FromLocal().letters
@@ -14089,7 +14089,7 @@ type c3Mod struct() {
     top Map<String&, c3Sym&>
 }
 type c3Modules struct() {
-    mods List<mut c3Mod&>
+    mods Vec<mut c3Mod&>
 }
 fn (r c3Modules&) find(n String&) c3Sym?&r {
     t := try r.mods[0].top.Get(n) catch default null
@@ -14152,13 +14152,13 @@ fn s3ArrayRefEq() I64 {
     ps Array<s3Pt&>& = s3Pt&[s3Pt(1, 5), s3Pt(2, 6)]
     qs Array<s3Pt&>& = s3Pt&[s3Pt(1, 7), s3Pt(2, 8)]
     if ps == qs { s += 64 }               # each element by its own Eq
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range 20 { l.Push(i) }
     if l.ToArray() == l.ToArray() { s += 128 }
     m := Map<Array<I64>&, I64>()
     m.Put(I64[4, 5], 9)
     k Array<I64>& = I64[4, 5]
-    if (try m.Get(k) catch default -1) == 9 and I64[4, 5] in List<Array<I64>&>() == false { s += 256 }
+    if (try m.Get(k) catch default -1) == 9 and I64[4, 5] in Vec<Array<I64>&>() == false { s += 256 }
     return s
 }
 S3ArrayRefEqBaked := s3ArrayRefEq()
@@ -14291,12 +14291,12 @@ type sc3Expr enum {
     Bin(op Char, l sc3Expr&, r sc3Expr&)
     Neg(x sc3Expr&)
 }
-type sc3Parser struct(toks List<sc3Tok>&) {
+type sc3Parser struct(toks Vec<sc3Tok>&) {
     toks
     at I64 = 0
 }
-fn sc3Lex(src String&) List<sc3Tok> {
-    out := List<sc3Tok>()
+fn sc3Lex(src String&) Vec<sc3Tok> {
+    out := Vec<sc3Tok>()
     for c in src {
         if c.IsDigit() { out.Push(sc3Tok('n', I64(c - '0'))) }
         else if c != ' ' { out.Push(sc3Tok(c, 0)) }
@@ -14387,8 +14387,8 @@ test "O26a: a Pratt parser's reference locals, rebuilt in a loop and returned, o
 
 # O17: a value local whose references live elsewhere than its storage may be lent to a callee that only reads it, or
 # writes into it without keeping anything built - decided by what the callee's body does, not by the type
-fn sc3Split(line String&) List<String&> {
-    toks := List<String&>()
+fn sc3Split(line String&) Vec<String&> {
+    toks := Vec<String&>()
     toks.Push(line[0:1])
     toks.Push(line[1:2])
     return toks
@@ -14398,7 +14398,7 @@ fn sc3Count(line String&) I64 {
     return toks.Len()
 }
 type sc3Vals struct() {
-    values List<I32>
+    values Vec<I32>
 }
 type sc3Holder struct() {
     age sc3Vals
@@ -14406,7 +14406,7 @@ type sc3Holder struct() {
 fn sc3BumpThrough(w mut sc3Holder&, i I64) { w.age.values[i] += 1 }
 fn sc3Bump(s mut sc3Vals&, i I64) { s.values[i] += 1 }
 type sc3Countdown struct(n I64) {
-    left List<I64>
+    left Vec<I64>
     for i in range n { left.Push(n - i) }
 }
 fn (c mut sc3Countdown&) Next() I64 ? Exhausted { return try c.left.Pop() catch { error Exhausted.END } }
@@ -14441,13 +14441,13 @@ type sc3QuadHolder struct() {
     v sc3Quad
 }
 fn sc3Increments() I64 {
-    l := List<I32>()
+    l := Vec<I32>()
     l.Push(1)
     l.Push(5)
     l[0]++
     l[1]--
     oob I64 = 0
-    try l.Get(7) catch ListError { oob = 1 }
+    try l.Get(7) catch VecError { oob = 1 }
     s := sc3Vals()
     s.values.Push(10)
     sc3BumpField(s, 0)
@@ -14467,11 +14467,11 @@ test "E31: x[i]++ and a compound store through a value field's SetAt" {
 fn sc3MapKeys(n I64) I64 {
     m := Map<String&, I64>()
     for i in range n { m.Put($i, i) }
-    l := List<String&>()
+    l := Vec<String&>()
     for k in m.Keys() { l.Push(k) }
     vm := Map<I64, String&>()
     vm.Put(1, "a" $n)
-    vl := List<String&>()
+    vl := Vec<String&>()
     for v in vm.Values() { vl.Push(v) }
     sbChurn()
     t I64 = 0
@@ -14487,12 +14487,12 @@ test "O23a: Map.Keys and Map.Values hand out what lives where the map's entries 
 type sc3Diag struct() {
     col I64 = 0
 }
-type sc3Ctx struct(nums List<I64>&, diag mut sc3Diag&) {
+type sc3Ctx struct(nums Vec<I64>&, diag mut sc3Diag&) {
     nums
     diag
 }
 fn sc3Check(d mut sc3Diag&, n I64) {
-    nums := List<I64>()
+    nums := Vec<I64>()
     for i in range n { nums.Push(i) }
     c := sc3Ctx(nums, d)
     c.diag.col = c.nums.Len()
@@ -14532,7 +14532,7 @@ test "G9a, T22: Fold's literal start and a read-only lambda parameter" {
     a := I32[1, 2, 3]
     total := a.Fold(0, fn(acc I64, x I32) I64 { return acc + x })
     assert total == 6
-    l := List<mut sc3Box&>()
+    l := Vec<mut sc3Box&>()
     l.Push(sc3Box(4))
     l.Push(sc3Box(I32(sbRun)))
     s := l.Iter().Fold(0, fn(acc I32, b sc3Box&) I32 { return acc + b.v })
@@ -14544,11 +14544,11 @@ test "G9a, T22: Fold's literal start and a read-only lambda parameter" {
 type sc3Bad error { NO }
 type sc3Bag struct(label String&) {
     label
-    items List<String&>
+    items Vec<String&>
 }
-fn sc3Validate(text String&) List<String&> ? sc3Bad {
+fn sc3Validate(text String&) Vec<String&> ? sc3Bad {
     if text.Len() == 0 { error sc3Bad.NO }
-    l := List<String&>()
+    l := Vec<String&>()
     l.Push(text)
     return l
 }
@@ -14558,13 +14558,13 @@ fn sc3BagOf(text String&) sc3Bag ? sc3Bad {
     b.items.Push(text)
     return b
 }
-fn sc3Keep(text String&) List<String&> {
-    l := try sc3Validate(text) catch default List<String&>()
+fn sc3Keep(text String&) Vec<String&> {
+    l := try sc3Validate(text) catch default Vec<String&>()
     for i in range 50 { l.Push("p" $i) }
     return l
 }
 fn sc3Defaults(text String&) I64 {
-    n := (try sc3Validate(text) catch default List<String&>()).Len()
+    n := (try sc3Validate(text) catch default Vec<String&>()).Len()
     b := try sc3BagOf(text) catch default sc3Bag("none")
     return n * 100 + sc3Keep(text).Len() + (1000 if b.label == "none" else 0)
 }
@@ -14583,7 +14583,7 @@ test "R11: a default List and a default struct of written text, filled afterward
 # ordinary method called by name (a graph's Mul(a, b) adding a node), beside the type's own operator of that name's
 # other spelling, and the evaluator calls it as the run time does
 type c4Graph struct() {
-    ops List<I64>
+    ops Vec<I64>
 }
 fn (g mut c4Graph&) Mul(a I64, b I64) I64 {
     g.ops.Push(a * b)
@@ -14621,7 +14621,7 @@ type c4G<T> struct(name String&, seed T) {
     name
     seed
     n I64 = 0
-    total mut List<T>& = List<T>()
+    total mut Vec<T>& = Vec<T>()
 }
 fn (g mut c4G<T>&) Param(x T) I64 {
     g.n++
@@ -14644,8 +14644,8 @@ type c4Res struct<T>(g mut c4G<T>&) {
 } destruct {
     C4Dropped++
 }
-fn c4Layers(gf mut c4G<F32>&, gi mut c4G<I64>&) List<c4Dense> {
-    l := List<c4Dense>()
+fn c4Layers(gf mut c4G<F32>&, gi mut c4G<I64>&) Vec<c4Dense> {
+    l := Vec<c4Dense>()
     l.Push(c4Dense(gf, 3, "a"))
     l.Push(c4Dense(gi, 4, "b"))
     l.Push(c4Dense(gf, 5, "c"))
@@ -14691,7 +14691,7 @@ fn (p mut c4Parser&) leaf() c4Node&p {
     return c4Node.Leaf(p.pos)
 }
 fn (p mut c4Parser&) many(n I64) c4Node&p {
-    l := List<c4Node&>()
+    l := Vec<c4Node&>()
     for i in range n { l.Push(p.leaf()) }
     return c4Node.Many(l.ToArray())
 }
@@ -14701,12 +14701,12 @@ fn (p mut c4Parser&) maybe(b Bool) c4Node&p {
     return c4Node.Many(items)
 }
 fn c4Build(n I64) c4Node {
-    l := List<c4Node&>()
+    l := Vec<c4Node&>()
     for i in range n { l.Push(c4Node.Leaf(i)) }
     return c4Node.Many(l.ToArray())
 }
 fn c4BuildRef(n I64) c4Node& {
-    l := List<c4Node&>()
+    l := Vec<c4Node&>()
     for i in range n { l.Push(c4Node.Leaf(i * 2)) }
     return c4Node.Many(l.ToArray())
 }
@@ -14893,7 +14893,7 @@ fn rvWalkCopy(src mut rvHW&) {
     for x in h.items { x!.next = rvN(x!.v + 20) }
     for p in h.pairs { p.n!.next = rvN(p.n!.v + 30) }
 }
-fn rvWalkParam(l List<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
+fn rvWalkParam(l Vec<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
 fn rvCopyOut(src mut rvHold&) {
     d rvHold = src
     d.items[0]!.next!.next = rvN(50)
@@ -14905,7 +14905,7 @@ fn rvSplitWalk(k I64, churn fn() I64) I64 {
     w.h.pairs[0] = rvBox(rvN(3))
     w.h.pairs[1] = rvBox(rvN(4))
     rvWalkCopy(w)
-    l := List<mut rvN&>()
+    l := Vec<mut rvN&>()
     l.Push(rvN(5))
     rvWalkParam(l)
     rvCopyOut(w.h)
@@ -15173,7 +15173,7 @@ test "E16: try on a constant index known to be out of range compiles, and fails 
 # reader keeping the longest one keeps that one, which does flow); read back after the arena has been churned
 type o26nSummary struct() {
     best I64 = 0
-    longest List<String&> = List<String&>()
+    longest Vec<String&> = Vec<String&>()
 }
 fn o26nLine(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
 fn o26nMeasure(t String&) I64 { return t.Len() }
@@ -15227,16 +15227,16 @@ test "O26a: a local a returned value borrows lives in the result scope" {
 # written "String&out" build there, so text read per source lives with the list it is pushed onto (study 4's r03)
 type o26xLine struct(t String&) { t }
 fn o26xText(s String&) String& { return $s }
-fn o26xByArg(srcs Array<String&>&) List<o26xLine> {
-    out := List<o26xLine>()
+fn o26xByArg(srcs Array<String&>&) Vec<o26xLine> {
+    out := Vec<o26xLine>()
     for i in range srcs.Len() {
         text := o26xText&out(srcs[i])
         for line in text.Lines() { out.Push(o26xLine(line)) }
     }
     return out
 }
-fn o26xByType(srcs Array<String&>&) List<o26xLine> {
-    out := List<o26xLine>()
+fn o26xByType(srcs Array<String&>&) Vec<o26xLine> {
+    out := Vec<o26xLine>()
     for i in range srcs.Len() {
         text String&out = o26xText(srcs[i])
         for line in text.Lines() { out.Push(o26xLine(line)) }
@@ -15284,21 +15284,21 @@ fn (h mut o17bH&) bump() { h.s.x++ }
 fn o17bBumpAll(h mut o17bH&, n I64) {
     for i in range n { h.bump() }
 }
-fn o17bGroup(n I64) Map<I64, List<String&>> ? {
-    m := Map<I64, List<String&>>()
+fn o17bGroup(n I64) Map<I64, Vec<String&>> ? {
+    m := Map<I64, Vec<String&>>()
     for i in range n {
         k := i % 3
-        if not m.Has(k) { m.Put(k, List<String&>()) }
+        if not m.Has(k) { m.Put(k, Vec<String&>()) }
         l := try m.Get(k)
         l.Push("v" $i)
         sbChurn()
     }
     return m
 }
-fn o17bAddTo(l List<String&>, t String&) { l.Push(t) }
+fn o17bAddTo(l Vec<String&>, t String&) { l.Push(t) }
 fn o17bPutIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
 fn o17bAliases() String& ? {
-    l := List<String&>()
+    l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
         l2 := l
@@ -15348,7 +15348,7 @@ test "O17b: a handle is lent as its reference" {
 
 # O20/C2d: a value read through a reference - a List the reference names - holds what lives where its referent does, so
 # a record built from it for a map of a "mut" receiver lands where the list was made (study 4's r08)
-type o20Rule struct(target String&, deps List<String&>) {
+type o20Rule struct(target String&, deps Vec<String&>) {
     target
     deps
 }
@@ -15357,7 +15357,7 @@ type o20Mk struct() {
 }
 fn (m mut o20Mk&) parse(text String&m) {
     for line in text.Lines() {
-        deps mut List<String&>&m = List<String&>()
+        deps mut Vec<String&>&m = Vec<String&>()
         for d in line.Split(" ") { deps.Push(d) }
         m.rules.Put(line, o20Rule(line, deps))
     }
@@ -15416,14 +15416,14 @@ test "L9a: a keyword names a field" {
 type qcBox struct(P mut Array<I64>&) {
     P
 }
-fn qcMake(n I64) List<I64> {
-    l := List<I64>()
+fn qcMake(n I64) Vec<I64> {
+    l := Vec<I64>()
     for i in range n { l.Push(i + 1) }
     return l
 }
-QcList List<I64> = qcMake(3)
+QcList Vec<I64> = qcMake(3)
 QcBoxG qcBox = qcBox(I64[4, 5, 6])
-fn qcTotal(l List<I64>) I64 {
+fn qcTotal(l Vec<I64>) I64 {
     t I64 = 0
     for x in l { t += x }
     return t
@@ -15434,7 +15434,7 @@ fn qcSumBoxes(bs Array<qcBox>&) I64 {
     for b in bs { t += qcFirst(b) }
     return t
 }
-fn qcGrown(l List<I64>&, n I64) I64 {
+fn qcGrown(l Vec<I64>&, n I64) I64 {
     c := l.Clone()
     for i in range n { c.Push(10) }
     return qcTotal(c)
@@ -15454,7 +15454,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     assert s == 6
     b := QcBoxG
     assert b.P[1] == 5 and qcFirst(b) == 4
-    w := List<I64>()
+    w := Vec<I64>()
     v := w
     v.Push(7 + k)
     assert w.Len() == 1 and w[0] == 7
@@ -15594,14 +15594,14 @@ test "E6d: a conditional of literals folds each value exactly and meets the othe
 
 # E11c: a Str may change what it makes for itself - a builder, a local list, a counter - and "$" calls it once per
 # rendering, while compiling as at run time
-type rv3Pt struct(xs List<I64>&, name String&) {
+type rv3Pt struct(xs Vec<I64>&, name String&) {
     xs
     name
 }
 fn (p rv3Pt&) Str() String {
     sb := StringBuilder()
     sb.Push(p.name)
-    seen := List<I64>()
+    seen := Vec<I64>()
     for x in p.xs {
         sb.Push($x)
         seen.Push(x)
@@ -15611,10 +15611,10 @@ fn (p rv3Pt&) Str() String {
     sb.Push($(n + seen.Len()))
     return sb.ToString()
 }
-fn rv3PtText(k I64) String { return $rv3Pt(I64[1, 2 + k].ToList(), "nm") }
+fn rv3PtText(k I64) String { return $rv3Pt(I64[1, 2 + k].ToVec(), "nm") }
 Rv3PtText := rv3PtText(0)
 test "E11c: a Str building only for itself renders the same while compiling as at run time" {
-    p := rv3Pt(I64[1, 2].ToList(), "nm")
+    p := rv3Pt(I64[1, 2].ToVec(), "nm")
     assert $p == "nm123" and Rv3PtText == "nm123" and rv3PtText(I64(ctRuntimeZero)) == Rv3PtText
 }
 
@@ -15695,7 +15695,7 @@ fn strOnceTrace(k I64) String {
     c := strOnceCounter()
     one := $strOnceTick("a", c)
     three := $strOnceTick("x", c) "-" $strOnceTick("y", c) "-" $strOnceTick("z", c)
-    l := List<strOnceTick>()
+    l := Vec<strOnceTick>()
     l.Push(strOnceTick("p", c))
     l.Push(strOnceTick("q", c))
     l.Push(strOnceTick("r", c))
@@ -15774,7 +15774,7 @@ test "E11c: a Str writing a global is called once per rendering - keys and value
     m := Map<strOnceKey, strOnceKey>()
     m.Put(strOnceKey(3), strOnceKey(4))
     assert $m == "Map<strOnceKey, strOnceKey>{k3: k4}" and StrOnceCalls == calls + 4
-    l := List<strOnceKey>()
+    l := Vec<strOnceKey>()
     l.Push(strOnceKey(5))
     l.Push(strOnceKey(6))
     assert $l == "List<strOnceKey>[k5, k6]" and StrOnceCalls == calls + 6
@@ -15817,7 +15817,7 @@ type strWalkIt struct(of strWalkBag&) {
 type strWalkBag struct(head mut strWalkNode&) {
     head
     m Map<String&, I64> = Map<String&, I64>()
-    l List<I64> = List<I64>()
+    l Vec<I64> = Vec<I64>()
 }
 fn (b strWalkBag&) Str() String {
     n I64 = 0
@@ -15834,8 +15834,8 @@ test "E11c: a Str walking a Map and a List of its receiver renders the same afte
     b.l.Push(10)
     b.l.Push(20)
     s := $b
-    m := Map<I64, List<I64>>()
-    m.Put(1, I64[4, 5].ToList())
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, I64[4, 5].ToVec())
     t := $m
     churnArena()
     assert s == "37/1/30" and t == "Map<I64, List<I64>>{1: List<I64>[4, 5]}"
@@ -15866,7 +15866,7 @@ test "C11/O16: a constructor call's instance is destructed once wherever it is u
         b := ctorTempBox(ctorTempWrap(local))
         n := ctorTempTake(ctorTempWrap(local))
         z := (ctorTempWrap(local) if k == 42 else ctorTempWrap(local)).a.v
-        l := List<ctorTempWrap&>()
+        l := Vec<ctorTempWrap&>()
         l.Push(ctorTempWrap(local))
         assert CtorTempDestructs == 0 and n == 42 and z == 42 and s.StartsWith("ctorTempWrap(")
     }
@@ -15877,24 +15877,24 @@ test "C11/O16: a constructor call's instance is destructed once wherever it is u
 # T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList
 # and Filter over collections of Lists work on writable ones (the copies they give are writable, and the lists inside
 # are the same lists), and on a read-only one read what they give
-fn rv3First<T>(l List<T>&) T { return l[0] }
-fn rv3ReadOnly(ls List<List<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
+fn rv3First<T>(l Vec<T>&) T { return l[0] }
+fn rv3ReadOnly(ls Vec<Vec<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
 fn rv3Handles(k I64, n I64) I64 {
-    m := Map<I64, List<I64>>()
-    m.Put(1, I64[1, 2].ToList())
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, I64[1, 2].ToVec())
     g := try m.Get(1) catch { return -1 }
     g.Push(3 + k)
     mm := try m.Get(1) catch { return -2 }
-    ll := List<List<I64>>()
-    ll.Push(List<I64>())
-    ll.Push(I64[5].ToList())
+    ll := Vec<Vec<I64>>()
+    ll.Push(Vec<I64>())
+    ll.Push(I64[5].ToVec())
     c := ll.Clone()
     c[0].Push(6)
     first := rv3First(ll)
     first.Push(8)
-    arr := Array<List<I64>>(1, I64[7].ToList())
-    t := arr.ToList()
-    f := arr.Filter(fn(x List<I64>) Bool { return x.Len() > 0 })
+    arr := Array<Vec<I64>>(1, I64[7].ToVec())
+    t := arr.ToVec()
+    f := arr.Filter(fn(x Vec<I64>) Bool { return x.Len() > 0 })
     rv3Churn(n)
     return rv3ReadOnly(ll) * 1000 + mm.Len() * 100 + t[0].Len() * 10 + f.Len()
 }
@@ -15911,10 +15911,10 @@ type rv3TN struct(v I64) {
     w I64 = v * 3
 }
 fn rv3Spawned(n I64, churns I64) I64 {
-    a mut List<rv3TN&>& = List<rv3TN&>()
-    b mut List<rv3TN&>& = List<rv3TN&>()
-    c mut List<rv3TN&>& = List<rv3TN&>()
-    d mut List<rv3TN&>& = List<rv3TN&>()
+    a mut Vec<rv3TN&>& = Vec<rv3TN&>()
+    b mut Vec<rv3TN&>& = Vec<rv3TN&>()
+    c mut Vec<rv3TN&>& = Vec<rv3TN&>()
+    d mut Vec<rv3TN&>& = Vec<rv3TN&>()
     join {
         spawn fn() { for i in range n { a.Push(rv3TN(i)) } }
         spawn fn() { for i in range n { b.Push(rv3TN(i + 1000000)) } }
@@ -15939,10 +15939,10 @@ test "P2: spawned lambdas building through what they captured each build into a 
 # block) builds into the instance's scope, as at its top level: the call's binding named the field local's depth 0,
 # which codegen read as the block the call is written in, so each chunk went with the loop body's arena
 type rv3Inner struct() {
-    xs List<I64>
+    xs Vec<I64>
 }
 type rv3Countdown struct(n I64) {
-    left List<I64>
+    left Vec<I64>
     inr rv3Inner = rv3Inner()
     for i in range n {
         if i % 2 == 0 {
@@ -15953,7 +15953,7 @@ type rv3Countdown struct(n I64) {
         }
     }
     {
-        k := List<I64>()
+        k := Vec<I64>()
         k.Push(5)
         left.Push(k[0])
     }
@@ -16026,7 +16026,7 @@ type rv5N struct(v I64) {
     next mut rv5N?& = null
 }
 fn rv5Id(f fn() I64) fn() I64 { return f }
-fn rv5Work(n mut rv5N&, fns mut List<fn() I64>&) {
+fn rv5Work(n mut rv5N&, fns mut Vec<fn() I64>&) {
     fns.Push(fn() I64 {
         n.next = rv5N(n.v + 41)
         return n.next!.v
@@ -16041,7 +16041,7 @@ fn rv5Kept(k I64, churns I64) I64 {
     }
     r fn() I64 = g
     same Bool = false
-    fns mut List<fn() I64>& = List<fn() I64>()
+    fns mut Vec<fn() I64>& = Vec<fn() I64>()
     m mut rv5N& = rv5N(2 + k)
     join {
         spawn r = rv5Id(g)
@@ -16121,7 +16121,7 @@ test "E11a: a declared type over Char renders as a character, extends or not, al
 
 fn renRows(n I64) String {
     aa Array<Array<I64>> = Array<I64>[I64[n, 2, 3], I64[4, 5, 6]]
-    l := List<Array<I64>&>()
+    l := Vec<Array<I64>&>()
     l.Push(aa[0])
     r Array<Array<I32>&> = Array<I32>&[I32[1], I32[]]
     cs Array<Array<Char>> = Array<Char>["ab", "cd"]
@@ -16155,21 +16155,21 @@ test "E11a/T25b: a rendered type writes each inner level's mut, as source writes
 # where that argument does - "bs.Push(box(t))" is "b := box(t); bs.Push(b)" - so made where the list lives it is kept
 type s5Box struct(s String&) { s }
 fn s5MkBox(s String&) s5Box { return s5Box(s) }
-fn s5One(s String&) List<String&> {
-    c := List<String&>()
+fn s5One(s String&) Vec<String&> {
+    c := Vec<String&>()
     c.Push(s)
     return c
 }
 fn s5Kept(n I64) I64 {
-    bs := List<s5Box>()
-    rows := List<List<String&>>()
+    bs := Vec<s5Box>()
+    rows := Vec<Vec<String&>>()
     outer := "outer"
     for k in range n {
         t mut String&bs = $k "-kept-text"
         bs.Push(s5MkBox(t))
         bs.Push(s5MkBox(outer))
         rows.Push(s5One(t))
-        rec mut List<String&>&rows = List<String&>()
+        rec mut Vec<String&>&rows = Vec<String&>()
         rec.Push($k "-in-rec")
         rows.Push(rec.Clone())
         sbChurn()
@@ -16186,7 +16186,7 @@ test "O18c: a call's result passed on lives where its argument does, and is kept
 
 # O18c/O20: a reference read out of a call's value result leads where that result's references are
 fn s5KeptField(n I64) I64 {
-    ss := List<String&>()
+    ss := Vec<String&>()
     outer := "outer-field"
     for k in range n {
         t mut String&ss = $k "-field"
@@ -16227,7 +16227,7 @@ type s5Row struct() {
 fn (r s5Row&) At(i I64) s5Acc { return r.cells[i] }
 fn (r mut s5Row&) SetAt(i I64, v s5Acc) { r.cells[i] = v }
 fn s5Writes(k I64) I64 {
-    l := List<s5Acc>()
+    l := Vec<s5Acc>()
     l.Push(s5Acc())
     l.Push(s5Acc())
     t := l[0]
@@ -16244,15 +16244,15 @@ fn s5Writes(k I64) I64 {
     g := v.AddGet(2)
     l[0] = v
     l[1].N++
-    rows := List<s5Row>()
+    rows := Vec<s5Row>()
     rows.Push(s5Row())
     rows[0][1].N = 9
     c := rows[0][2]
     c.Add()
     c.In.Move(5)
     rows[0][2] = c
-    ll := List<List<s5Acc>>()
-    ll.Push(List<s5Acc>())
+    ll := Vec<Vec<s5Acc>>()
+    ll.Push(Vec<s5Acc>())
     ll[0].Push(s5Acc())
     w := ll[0][0]
     w.Add()
@@ -16274,7 +16274,7 @@ type s5Rec struct(name String&) {
     n I64 = 0
 }
 fn s5RecWrites(n I64) I64 {
-    l := List<s5Rec>()
+    l := Vec<s5Rec>()
     l.Push(s5Rec("a"))
     keep := "kept-name"
     for k in range n {
@@ -16292,8 +16292,8 @@ test "E31: an element holding references, written through x[i] in a loop" {
 # O17 (study 5, r03): what a function's body does with a region is its own - one instantiation of List.At handing its
 # region out does not make another one do so, whatever order the program uses them in
 fn s5Order() I64 {
-    rows := List<List<String&>>()
-    a := List<String&>()
+    rows := Vec<Vec<String&>>()
+    a := Vec<String&>()
     a.Push("x")
     rows.Push(a)
     first := rows[0][0]
@@ -16307,11 +16307,11 @@ test "O17: a generic's instantiations each say what their own body does with a r
 
 # O26a (study 5, r05): a for-in element is an element of what it walks, so a local walked into a returned one lives where
 # the result is put, as "out.Push(all[i])" makes it
-fn s5Top(counts Map<String&, I64>&, k I64) List<pair.Pair<String&, I64>> {
-    all := List<pair.Pair<String&, I64>>()
+fn s5Top(counts Map<String&, I64>&, k I64) Vec<pair.Pair<String&, I64>> {
+    all := Vec<pair.Pair<String&, I64>>()
     for e in counts { all.Push(pair.Pair(e.Key, e.Value)) }
     all.Sort(fn(a, b) { return a.Second > b.Second })
-    out := List<pair.Pair<String&, I64>>()
+    out := Vec<pair.Pair<String&, I64>>()
     for p in all {
         if out.Len() >= k { break }
         out.Push(p)
@@ -16329,13 +16329,13 @@ test "O26a: a for-in element pushed into a returned list" {
 }
 
 # E25 (study 5, r04): a scope argument puts a call's results where it says, destructured or not
-fn s5Mk2(n I64) List<String&>, I64 {
-    l := List<String&>()
+fn s5Mk2(n I64) Vec<String&>, I64 {
+    l := Vec<String&>()
     for i in range n + 1 { l.Push($i "-made") }
     return l, n + 1
 }
 fn s5Destructured(n I64) I64 {
-    rows := List<List<String&>>()
+    rows := Vec<Vec<String&>>()
     for k in range n {
         rec, next := s5Mk2&rows(k)
         rows.Push(rec)
@@ -16363,7 +16363,7 @@ fn s5Captures(n I64) F64 {
     m := Map<String&, F64>()
     m.Put("a", 0.0)
     outer := s5Reading("outer-text", 2.0)
-    fs := List<fn() I64>()
+    fs := Vec<fn() I64>()
     for k in range n {
         t := $k "-capture-text"
         x := s5Reading(t, 1.5)
@@ -16393,19 +16393,19 @@ fn s5Next(c mut s5Ctr&) I64 {
     c.n++
     return c.n - 1
 }
-fn s5Touch(l mut List<s5Acc>&) I64 {
+fn s5Touch(l mut Vec<s5Acc>&) I64 {
     l[0].N += 100
     return 5
 }
 fn s5PlaceFirst() I64 {
-    l := List<s5Acc>()
+    l := Vec<s5Acc>()
     l.Push(s5Acc())
     l.Push(s5Acc())
     c := s5Ctr()
     l[s5Next(c)].N = 7 + s5Next(c) * 10
     l[0].N += s5Touch(l)
     l[s5Next(c) - 1].N++
-    rows := List<s5Row>()
+    rows := Vec<s5Row>()
     rows.Push(s5Row())
     rows[s5Next(c) - 3][s5Next(c) - 2].In.X += s5Next(c)
     return l[0].N * 100000 + l[1].N * 10000 + rows[0][2].In.X * 100 + c.n
@@ -16420,16 +16420,16 @@ test "E31b: a store through x[i] holds its place, evaluates the value, then read
 # is built where that state lives, so it is there after an arena churn
 type s5HBox struct(v I64) {
     v
-    items mut List<I64>& = List<I64>()
+    items mut Vec<I64>& = Vec<I64>()
 }
 fn s5Handles(n I64) I64 ? {
-    users := List<List<I64>>()
-    boxes := List<s5HBox>()
-    m := Map<I64, List<I64>>()
+    users := Vec<Vec<I64>>()
+    boxes := Vec<s5HBox>()
+    m := Map<I64, Vec<I64>>()
     for i in range n {
-        users.Push(List<I64>())
+        users.Push(Vec<I64>())
         boxes.Push(s5HBox(i))
-        m.Put(i, List<I64>())
+        m.Put(i, Vec<I64>())
     }
     for i in range n {
         for j in range 20 {
@@ -16461,7 +16461,7 @@ fn s5Pairish(s String&) s5PairT { return s5PairT(s5FBox(s), 1) }
 fn s5Boxes(s String&) Array<s5FBox> { return s5FBox[s5FBox(s)] }
 fn s5Wrap(b s5FBox) s5FBox { return b }
 fn s5Projections(n I64) I64 {
-    bs := List<s5FBox>()
+    bs := Vec<s5FBox>()
     t := "outer-text-of-moderate-length"
     for k in range n {
         bs.Push(s5Pairish(t).a)
@@ -16492,14 +16492,14 @@ type s5Bag struct() {
 fn (b mut s5Bag&) Add(v I64) { b.s.n = b.s.n + v }
 fn (b mut s5Bag&) Reset() { b.s = s5State() }
 fn (b s5Bag&) Total() I64 { return b.s.n }
-fn s5PushNested(l mut List<String&>&, s String&) { l.Push(s) }
+fn s5PushNested(l mut Vec<String&>&, s String&) { l.Push(s) }
 fn s5NestedHandles(n I64) I64 ? {
-    users := List<List<List<String&>>>()
-    users.Push(List<List<String&>>())
-    users[0].Push(List<String&>())
-    mm := Map<I64, List<List<String&>>>()
-    mm.Put(0, List<List<String&>>())
-    (try mm.Get(0)).Push(List<String&>())
+    users := Vec<Vec<Vec<String&>>>()
+    users.Push(Vec<Vec<String&>>())
+    users[0].Push(Vec<String&>())
+    mm := Map<I64, Vec<Vec<String&>>>()
+    mm.Put(0, Vec<Vec<String&>>())
+    (try mm.Get(0)).Push(Vec<String&>())
     kept := "kept-text-of-moderate-length"
     for k in range n {
         users[0][0].Push(kept)
@@ -16509,7 +16509,7 @@ fn s5NestedHandles(n I64) I64 ? {
         sbChurn()
     }
     sbChurn()
-    bags := List<s5Bag>()
+    bags := Vec<s5Bag>()
     bags.Push(s5Bag())
     bags[0].Add(5)
     t := bags[0]
@@ -16753,7 +16753,7 @@ type c5Info struct(Offset I64, Len I64) {
 }
 type c5Wrap struct(r c5Info&) { r }
 type c5Store struct() {
-    infos mut List<c5Info>& = List<c5Info>()
+    infos mut Vec<c5Info>& = Vec<c5Info>()
 }
 fn (g c5Store&) count(i c5Info&) I64 { return i.Len }
 fn (g c5Store&) pick(i c5Info&) c5Info&i { return i }
@@ -16846,7 +16846,7 @@ type c5Token struct(kind I32, text String&) {
     kind
     text
 }
-type c5Parser struct(toks List<c5Token>&) {
+type c5Parser struct(toks Vec<c5Token>&) {
     toks
     at I64 = 0
 }
@@ -16856,23 +16856,23 @@ fn (p mut c5Parser&) next() c5Token {
     return t
 }
 fn (p mut c5Parser&) names() Array<String&>& {
-    names := List<String&>()
+    names := Vec<String&>()
     for p.at < p.toks.Len() { names.Push(p.next().text) }
     return names.ToArray()
 }
 type c5Value enum {
     Nil
-    Items(l mut List<c5Value&>&)
+    Items(l mut Vec<c5Value&>&)
 }
-fn c5PushItem(args List<c5Value&>&) {
+fn c5PushItem(args Vec<c5Value&>&) {
     l := (args[0] as c5Value.Items)!
     l.Push(args[1])
 }
 type c5Module struct(name String&) {
     name
-    deps mut List<String&>& = List<String&>()
+    deps mut Vec<String&>& = Vec<String&>()
 }
-fn c5Report(mods List<c5Module>&, i I64) String {
+fn c5Report(mods Vec<c5Module>&, i I64) String {
     b := StringBuilder()
     b.Push($mods[i].name)
     for d in mods[i].deps { b.Push(" " $d) }
@@ -16881,32 +16881,32 @@ fn c5Report(mods List<c5Module>&, i I64) String {
 type c5In struct(s String&) { s }
 type c5Out struct(inner c5In) { inner }
 type c5Shelf struct() {
-    items mut List<c5Out>& = List<c5Out>()
+    items mut Vec<c5Out>& = Vec<c5Out>()
 }
 fn (st c5Shelf&) get(i I64) c5Out { return st.items[i] }
-fn c5Inners(st c5Shelf&, keep mut List<c5In>&) {
+fn c5Inners(st c5Shelf&, keep mut Vec<c5In>&) {
     for i in range st.items.Len() {
         x := st.get(i).inner
         keep.Push(x)
     }
 }
 test "O18c: a field or a payload read off a call's result, and a walk of a read-only copy's reference" {
-    toks := List<c5Token>()
+    toks := Vec<c5Token>()
     for i in range 3 { toks.Push(c5Token(I32(i), "w" $(i * sbRun))) }
     p := c5Parser(toks)
     got := p.names()
-    args := List<c5Value&>()
-    inner := List<c5Value&>()
+    args := Vec<c5Value&>()
+    inner := Vec<c5Value&>()
     args.Push(c5Value.Items(inner))
     args.Push(c5Value.Nil)
     c5PushItem(args)
-    mods := List<c5Module>()
+    mods := Vec<c5Module>()
     mods.Push(c5Module("a"))
     mods[0].deps.Push("x" $sbRun)
     mods[0].deps.Push("y")
     shelf := c5Shelf()
     for i in range 3 { shelf.items.Push(c5Out(c5In("s" $(i + sbRun)))) }
-    keep := List<c5In>()
+    keep := Vec<c5In>()
     c5Inners(shelf, keep)
     sbChurn()
     assert keep.Len() == 3 and keep[2].s == "s3"
@@ -17135,24 +17135,24 @@ fn peText(n I64) String ? peErr {
     if n < 0 { error peErr.NEG }
     return "n=" $n
 }
-fn peMany(n I64) List<I64> ? peErr {
+fn peMany(n I64) Vec<I64> ? peErr {
     if n < 0 { error peErr.NEG }
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range n { l.Push(i) }
     return l
 }
 test "P4a: defaults holding references outlive the join" {
     a, b String
     p, q peNode?&
-    l1, l2 List<I64>
+    l1, l2 Vec<I64>
     z peNode?& = peNode(5)
     join {
         spawn a = try peText(5 * sbRun) catch default "none"
         spawn b = try peText(-5 * sbRun) catch default "none"
         spawn p = try peMk(4 * sbRun) catch default peNode(-1)
         spawn q = try peMk(-4 * sbRun) catch default peNode(-1)
-        spawn l1 = try peMany(3 * sbRun) catch default List<I64>()
-        spawn l2 = try peMany(-3 * sbRun) catch default List<I64>()
+        spawn l1 = try peMany(3 * sbRun) catch default Vec<I64>()
+        spawn l2 = try peMany(-3 * sbRun) catch default Vec<I64>()
         spawn z = try peMk(-sbRun) catch default null
     }
     sbChurn()
@@ -17316,7 +17316,7 @@ type b6Cell struct() {
 # where the list lives - so a value built for it is built there, and one living there is stored; one living shorter is
 # refused (checks/cases/b6elemfield*). Read back after a churn
 test "O18c/O20: a store through an element At, Get, First or Last hands back is judged where the collection lives" {
-    cells mut List<mut b6Cell&>& = List<mut b6Cell&>()
+    cells mut Vec<mut b6Cell&>& = Vec<mut b6Cell&>()
     for i in range 3 { cells.Push(b6Cell()) }
     outer String& = "outer" $b6Run
     for i in range 3 {
@@ -17342,7 +17342,7 @@ test "O18c/O20: a store through an element At, Get, First or Last hands back is 
     }
     sbChurn()
     assert (try m.Get(2) catch { unreachable }).s == "m22"
-    rows := List<mut Array<String&>&>()
+    rows := Vec<mut Array<String&>&>()
     for i in range 2 { rows.Push(Array<String&>(2)) }
     for i in range 2 {
         rows[i][0] = "r" $i
@@ -17393,7 +17393,7 @@ type b6Res struct(k I64) {
     k
 } destruct {
     kk := k
-    keep mut List<b6Tracker&>& = List<b6Tracker&>()
+    keep mut Vec<b6Tracker&>& = Vec<b6Tracker&>()
     join {
         spawn fn() {
             for j in range 10 { keep.Push(b6Tracker(kk * 100 + j)) }
@@ -17421,7 +17421,7 @@ test "C9a/P2: what a destructor's task builds is destructed with the scope being
 B6Sum mut I64 = 0
 type b6Keeper struct(k I64) {
     k
-    l mut List<I64>& = List<I64>()
+    l mut Vec<I64>& = Vec<I64>()
 } destruct {
     l.Push(k)
     l.Push(k * 2)
@@ -17456,8 +17456,8 @@ test "S4c: several parallel assignments in one function, while compiling too" {
 test "S4c: several parallel assignments in one function" {
     k I64 = 0
     a mut b6PNode& = b6PNode(0)
-    l mut List<I64>& = List<I64>()
-    l, k = List<I64>(), 1
+    l mut Vec<I64>& = Vec<I64>()
+    l, k = Vec<I64>(), 1
     a, k = b6PMake(2), k + 1
     a, k = b6PMake(3), k + 1
     a, k = b6PMake(4), k + 1
@@ -17767,7 +17767,7 @@ fn rvUpper<T>(x T) I64 {
     return x.Len() + (1 if x[0] == 'Z' else 0)
 }
 test "E27, D9b: a grown comprehension and a written by-value String, read back after a churn" {
-    l mut List<I64>& = List<I64>()
+    l mut Vec<I64>& = Vec<I64>()
     for i in range 300 { l.Push(i) }
     t I64 = 0
     keep := I64[0]
@@ -17821,7 +17821,7 @@ fn r2Kinds(s R2Shape) String {
 }
 R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(r2Tree(4)))
 R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0))
-R2ListBaked Bool = I64[1, 2].ToList() == I64[1, 2].ToList() and I64[1, 2].ToList() != I64[1, 3].ToList()
+R2ListBaked Bool = I64[1, 2].ToVec() == I64[1, 2].ToVec() and I64[1, 2].ToVec() != I64[1, 3].ToVec()
 R2Run mut I64 = 4
 test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling" {
     s := R2Shape.Box(2.0, 3.0)
@@ -17851,8 +17851,8 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
 # by what it names
 type R2Node struct(v I64) { v }
 test "E10, E10b: List and Map compare and hash by contents; references without Eq by identity" {
-    a := List<I64>()
-    b := List<I64>()
+    a := Vec<I64>()
+    b := Vec<I64>()
     for i in range R2Run {
         a.Push(i)
         b.Push(i)
@@ -17869,9 +17869,9 @@ test "E10, E10b: List and Map compare and hash by contents; references without E
     assert m == k and m.Hash() == k.Hash()
     k.Put("x", 3)
     assert m != k
-    keys := Map<List<I64>, I64>()
+    keys := Map<Vec<I64>, I64>()
     keys.Put(a, 7)
-    c := List<I64>()
+    c := Vec<I64>()
     for i in range R2Run { c.Push(i) }
     assert (try keys.Get(c) catch default 0) == 7
     p := R2Node(1)
@@ -17973,7 +17973,7 @@ type UcKind enum {
 }
 type UcHolder struct(N I64) {
     N
-    L List<String&>
+    L Vec<String&>
 }
 fn (h mut UcHolder&) Keep(s String&) { h.L.Push(s) }
 fn ucMk(s String&) String { return $s "-made" }
@@ -18015,8 +18015,8 @@ fn ucLocal(t String&, at I64) UcPair {
     return UcPair($t, b)
 }
 fn ucKeep(h mut UcHolder&, t String&, at I64) { h.Keep(ucMk(t) if at >= 0 else "") }
-fn ucLoop(t String&) List<UcPair> {
-    l := List<UcPair>()
+fn ucLoop(t String&) Vec<UcPair> {
+    l := Vec<UcPair>()
     for i in range 4 {
         l.Push(UcPair($t, ucMk(t) if i >= 0 else ""))
         obChurn()
@@ -18025,7 +18025,7 @@ fn ucLoop(t String&) List<UcPair> {
 }
 
 test "C2d/E28: a conditional or match passed to a constructor lands with the instance" {
-    kept := List<UcPair>()
+    kept := Vec<UcPair>()
     h := UcHolder(0)
     for i in range UcRun {
         a := ucCond("x", i)
@@ -18102,7 +18102,7 @@ test "T30a, T31a, G19: an extended trait's methods, a closed trait's types, an i
 
 fn dkPercent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
 fn dkDivmod(a I64, b I64) [b > 0] I64, I64 { return a / b, a % b }
-fn (l mut List<I64>&) dkPushSmall(x I64) [x < 100] { l.Push(x) }
+fn (l mut Vec<I64>&) dkPushSmall(x I64) [x < 100] { l.Push(x) }
 # a condition may call a function, a lambda among its arguments
 fn dkSum(a Array<I64>&) [a.Every(fn(x I64) Bool { return x >= 0 })] I64 {
     t I64 = 0
@@ -18121,7 +18121,7 @@ fn dkParsed(t String&) [try t.ParseInt() > 0] I64 ? { return try t.ParseInt() }
 fn dkHalf(n I64) [n % 2 == 0] I64 ? ArgumentError { return n / 2 }
 
 fn dkPushedLen() I64 {
-    l := List<I64>()
+    l := Vec<I64>()
     l.dkPushSmall(7)!
     l.dkPushSmall(8)!
     return l.Len()
@@ -18145,7 +18145,7 @@ test "D17e: requirements hold where the evaluator computes the calls - baked and
     assert DkBaked == 50 + 2 + 6 and DkDiv == 32 and DkFailed == -1
     assert dkPushedLen() == 2 and dkPercent(1, 4)! == 25
     whole := 60
-    l := List<I64>()
+    l := Vec<I64>()
     l.dkPushSmall(1)!
     l.dkPushSmall(1)!
     assert dkPercent(30, whole)! + l.Len() + dkSum(I64[1, 2, 3])! == DkBaked
@@ -18179,7 +18179,7 @@ test "D17: requirements checked on entry, in every build, failing with ArgumentE
     b = 2
     q, r = try dkDivmod(7, b) catch ArgumentError.INVALID default -1, -1
     assert q == 3 and r == 1
-    l := List<I64>()
+    l := Vec<I64>()
     broke := false
     big := 100
     try l.dkPushSmall(3) catch ArgumentError.INVALID { broke = true }

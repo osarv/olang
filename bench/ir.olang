@@ -16,7 +16,7 @@ fn main() {
     dir := benchlib.Dir
     try os.MkDirAll($dir "/build/lto") catch os.Error { benchlib.Fail("cannot make bench/build/lto", 1) }
     others := benchlib.Objects(dir, String&[".main.ll", ".test.ll"])
-    link := List<String&>()
+    link := Vec<String&>()
     for a in String&["clang", "-O3", "-flto", "-o", "build/lto/" $prog ".olang", "build/" $prog ".main.ll"] { link.Push($a) }
     for o in others { link.Push($o) }
     for a in String&["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }

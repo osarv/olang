@@ -57,22 +57,22 @@ type context struct(at Where, text String&) {
 # the diagnostics of one compilation. color: write the terminal's colours (ColorWanted says whether to)
 type Diagnostics struct(Color Bool) {
     Color
-    paths := List<String&>()
-    texts := List<String&>()
-    library := List<Bool>()
-    starts := List<I64>()           # every file's line starts, one file's after another's, made when first needed
-    startsFrom := List<I64>()       # per file: where its line starts begin in starts, or -1 until they are made
-    startsLen := List<I64>()
-    records := List<record>()
-    notes := List<note>()
-    groupParent := List<I64>()      # per group: the group it was opened inside, or -1
-    groupState := List<I64>()       # per group: Pending, Chosen, Dropped or Cut
-    held := List<I64>()             # the groups open now, innermost last
-    contexts := List<context>()     # the contexts open now, innermost last
+    paths := Vec<String&>()
+    texts := Vec<String&>()
+    library := Vec<Bool>()
+    starts := Vec<I64>()           # every file's line starts, one file's after another's, made when first needed
+    startsFrom := Vec<I64>()       # per file: where its line starts begin in starts, or -1 until they are made
+    startsLen := Vec<I64>()
+    records := Vec<record>()
+    notes := Vec<note>()
+    groupParent := Vec<I64>()      # per group: the group it was opened inside, or -1
+    groupState := Vec<I64>()       # per group: Pending, Chosen, Dropped or Cut
+    held := Vec<I64>()             # the groups open now, innermost last
+    contexts := Vec<context>()     # the contexts open now, innermost last
     ctxFrom I64 = 0                 # the first of them in effect: those below belong to a body set aside (ContextBase)
     scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
     scopeSeen Bool = false
-    yielding := List<I64>()         # errors a later one of the same text at the same place replaces (Yield)
+    yielding := Vec<I64>()         # errors a later one of the same text at the same place replaces (Yield)
     fatalAt Where = Where.Nowhere
     fatalRule String& = ""
     fatalText String& = ""
@@ -445,7 +445,7 @@ fn (d mut Diagnostics&) written() Array<I64> {
     line := Array<I64>(n)           # the line each is on, I64's maximum where it has none
     col := Array<I64>(n)
     file := Array<I64>(n)           # the file each is about, -1 for none
-    keep List<I64>
+    keep Vec<I64>
     for r in range n {
         rec := d.records[r]
         file[r] = -1
@@ -508,8 +508,8 @@ type Said struct(Rule String&, File I64, Start I64, Text String&) {
     Text
 }
 
-fn (d mut Diagnostics&) AllSaid() List<Said> {
-    l List<Said>
+fn (d mut Diagnostics&) AllSaid() Vec<Said> {
+    l Vec<Said>
     for r in d.written() {
         rec := d.records[r]
         match rec.at {
@@ -545,8 +545,8 @@ fn item(isError Bool, rule String&, at Where, text String&) Item {
 }
 
 # every diagnostic Render writes, in its order: each error, its notes after it, then the fatal one
-fn (d mut Diagnostics&) Items() List<Item> {
-    l List<Item>
+fn (d mut Diagnostics&) Items() Vec<Item> {
+    l Vec<Item>
     for r in d.written() {
         rec := d.records[r]
         l.Push(item(true, rec.rule, rec.at, rec.text))

@@ -2,16 +2,16 @@
 # flags: -sanitize
 # E11c/O18c: a helper counting a List handed the receiver's list through 'xs.Iter().Count(f)' runs, as written in Str's body
 import "std/io"
-type Bag struct(l List<I64>) {
+type Bag struct(l Vec<I64>) {
     l
 }
-fn walk(xs List<I64>&) I64 { return xs.Iter().Count(fn(x) { return x > 3 }) }
+fn walk(xs Vec<I64>&) I64 { return xs.Iter().Count(fn(x) { return x > 3 }) }
 fn (b Bag&) Str() String {
     direct := b.l.Iter().Count(fn(x) { return x > 3 })
     return $direct " " $walk(b.l)
 }
 fn main() ? {
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range 10 { l.Push(i) }
     try io.Println($Bag(l))
 }

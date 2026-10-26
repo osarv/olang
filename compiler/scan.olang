@@ -151,9 +151,9 @@ fn Scan(text String&) Tokens {
 # the scanner's working state; its lists are flattened into arrays when it is done
 type scanner struct(text String&) {
     text
-    toks List<token.Token>
-    diags List<Diag>
-    brackets List<Char>              # L18a: the brackets open here, innermost last - '(' '[' '{'
+    toks Vec<token.Token>
+    diags Vec<Diag>
+    brackets Vec<Char>              # L18a: the brackets open here, innermost last - '(' '[' '{'
     curlies I64 = 0                  # how many of them are '{'
     reportedCR Bool = false          # L3: a carriage return is reported once per file
 }
@@ -729,7 +729,7 @@ fn unicodeEscape(t String&, j I64) I64, I64, Bool {
 # a text or character literal's bytes as its source writes them (L13-L15, L14a): its escapes decoded, raw text's lines
 # without their indentation. What the scanner refused decodes to something; it is never read
 fn LiteralBytes(t String&) Array<U8> {
-    b := List<U8>()
+    b := Vec<U8>()
     if t.Len() >= 6 and t[0] == '"' and t[1] == '"' and t[2] == '"' {
         body := t[3:t.Len() - 3]
         nl := try body.FindByte('\n') catch default -1
@@ -779,7 +779,7 @@ fn LiteralBytes(t String&) Array<U8> {
 }
 
 # a code point's UTF-8 bytes
-fn pushUtf8(b mut List<U8>&, v I64) {
+fn pushUtf8(b mut Vec<U8>&, v I64) {
     if v < 0x80 {
         b.Push(U8(v))
     } else if v < 0x800 {
@@ -802,7 +802,7 @@ fn LiteralText(t String&) String { return String(LiteralBytes(t)) }
 
 # fills the brace table: the index of every '{' token, in order, and of the '}' matching each - by braces alone (B9)
 fn matchBraces(toks Array<token.Token>&, opens mut Array<I32>&, closes mut Array<I32>&) {
-    open := List<I64>()              # positions in opens of the braces still open
+    open := Vec<I64>()              # positions in opens of the braces still open
     k I64 = 0
     for i, tk in toks {
         if tk.Kind == token.Tok.LBrace {

@@ -46,7 +46,7 @@ fn main() ? {
     s I64 = 1
     total I64 = 0
     if mode == "any" {
-        xs := List<any Shape&>()
+        xs := Vec<any Shape&>()
         for i in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             k := (s >> 33) % 3
@@ -59,7 +59,7 @@ fn main() ? {
             for x in all { total += x.Area() ^ p }
         }
     } else if mode == "enum" {
-        xs := List<Fig>()
+        xs := Vec<Fig>()
         for i in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             k := (s >> 33) % 3
@@ -72,7 +72,7 @@ fn main() ? {
             for x in all { total += area(x) ^ p }
         }
     } else if mode == "direct" {
-        xs := List<Sq>()
+        xs := Vec<Sq>()
         for i in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             xs.Push(Sq((s >> 40) % 100 + 1))

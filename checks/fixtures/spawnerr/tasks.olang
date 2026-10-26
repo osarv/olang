@@ -34,9 +34,9 @@ fn text(n I64) String ? E {
     if n < 0 { error E.NEG }
     return "n=" $n
 }
-fn many(n I64) List<I64> ? E {
+fn many(n I64) Vec<I64> ? E {
     if n < 0 { error E.NEG }
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range n { l.Push(i * i) }
     return l
 }
@@ -132,15 +132,15 @@ fn main() ? E, io.Error {
     try io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
     a, b String
     p, q Node?&
-    l1, l2 List<I64>
+    l1, l2 Vec<I64>
     d1, d2, d3, d4 I64
     join {
         spawn a = try text(5 * run) catch default "none"
         spawn b = try text(-5 * run) catch default "none"
         spawn p = try mk(4 * run) catch default Node(-1)
         spawn q = try mk(-4 * run) catch default Node(-1)
-        spawn l1 = try many(3 * run) catch default List<I64>()
-        spawn l2 = try many(-3 * run) catch default List<I64>()
+        spawn l1 = try many(3 * run) catch default Vec<I64>()
+        spawn l2 = try many(-3 * run) catch default Vec<I64>()
         spawn d1, d2 = try divmod(17, 5 * run) catch default -1, -2
         spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
     }

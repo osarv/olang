@@ -197,19 +197,19 @@ test "With hands the guarded struct over by reference" {
 }
 
 # a guarded value that is itself a handle: a copy of the Mutex value is a second name for the same lock
-fn pushAll(m mut Mutex<List<I64>>&, from I64) {
-    for i in range 100 { m.With(fn(l mut List<I64>&) { l.Push(from + i) }) }
+fn pushAll(m mut Mutex<Vec<I64>>&, from I64) {
+    for i in range 100 { m.With(fn(l mut Vec<I64>&) { l.Push(from + i) }) }
 }
 
 test "a Mutex guards a collection, and a copy of it is the same lock" {
-    m mut Mutex<List<I64>>& = Mutex(List<I64>())
-    other mut Mutex<List<I64>>& = m
+    m mut Mutex<Vec<I64>>& = Mutex(Vec<I64>())
+    other mut Mutex<Vec<I64>>& = m
     join {
         spawn pushAll(m, 0)
         spawn pushAll(other, 1000)
     }
     total mut Box& = Box()
-    m.With(fn(l mut List<I64>&) { total.n = l.Len() })
+    m.With(fn(l mut Vec<I64>&) { total.n = l.Len() })
     assert total.n == 200
 }
 

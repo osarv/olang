@@ -37,7 +37,7 @@ fn main() ? {
 
 fn run(args Array<String&>&) I32 {
     std := try os.Env("OLANG_STD") catch default "std"
-    defines List<String&>
+    defines Vec<String&>
     testBuild := false
     k I64 = 1
     for k < args.Len() and args[k].StartsWith("-") {

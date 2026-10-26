@@ -8,7 +8,7 @@ type Module struct(name String&, path String&) {
     path
 }
 fn parse(name String&, path String&) Module { return Module(name, path) }
-fn load(dir String&, keep mut List<Module>&) {
+fn load(dir String&, keep mut Vec<Module>&) {
     base := $dir "/"
     for i in range 2 {
         path := $base $i
@@ -17,7 +17,7 @@ fn load(dir String&, keep mut List<Module>&) {
     }
 }
 fn main() ? {
-    keep := List<Module>()
+    keep := Vec<Module>()
     load("src", keep)
     try io.Println($keep.Len())
 }

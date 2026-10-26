@@ -53,8 +53,8 @@ type Flags struct(program String&, about String& = "") {
 type state struct(program String&, about String&) {
     program
     about
-    all List<mut flag&> = List<mut flag&>()
-    args List<String&> = List<String&>()
+    all Vec<mut flag&> = Vec<mut flag&>()
+    args Vec<String&> = Vec<String&>()
     message mut String& = ""
 }
 
@@ -107,7 +107,7 @@ fn (p mut Flags&) Text(name String&, short Char, value String&, help String&) Te
 }
 
 # the positional arguments, in order, after Parse
-fn (p Flags&) Args() List<String&> { return p.s.args }
+fn (p Flags&) Args() Vec<String&> { return p.s.args }
 
 # what the last failing Parse failed on, as a sentence: "grep: unknown flag --colour (see --help)"
 fn (p Flags&) Message() String&p { return p.s.message }

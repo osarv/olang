@@ -25,9 +25,9 @@ type VT struct(k token.Tok, start I64, end I64) {
     end
 }
 
-fn vtokens(src String&) List<VT> {
+fn vtokens(src String&) Vec<VT> {
     ts := scan.Scan(src)
-    out List<VT>
+    out Vec<VT>
     for tk in ts.Toks {
         if tk.Kind == token.Tok.StmtEnd { continue }
         out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
@@ -39,7 +39,7 @@ type Counts struct() {
     nulls I64 = 0
     cases I64 = 0
     identities I64 = 0
-    listed List<String&>
+    listed Vec<String&>
 }
 
 # one edit: the span start..end replaced by text
@@ -50,7 +50,7 @@ type Edit struct(start I64, end I64, text String&) {
 }
 
 # where the operand after an "is" at token i ends (the index past it): a dotted name, or -1 for anything else
-fn pathEnd(v List<VT>&, i I64) I64 {
+fn pathEnd(v Vec<VT>&, i I64) I64 {
     j := i
     if j >= v.Len() or v[j].k != token.Tok.Iden { return -1 }
     j++
@@ -60,7 +60,7 @@ fn pathEnd(v List<VT>&, i I64) I64 {
 
 fn migrate(src String&, n mut Counts&, path String&) String {
     v := vtokens(src)
-    edits List<Edit>
+    edits Vec<Edit>
     for i in range v.Len() {
         t := v[i]
         if (t.k == token.Tok.EqEq or t.k == token.Tok.NotEq) and i + 1 < v.Len() and v[i + 1].k == token.Tok.NullLit {
@@ -144,7 +144,7 @@ fn migrateMarkdown(src String&, n mut Counts&, path String&) String {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -160,7 +160,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_equality_migrate [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

@@ -20,8 +20,8 @@ type golden struct(name String&, text String&) {
 }
 
 # the golden file, split into cases
-fn cases(all String&) List<golden> {
-    out List<golden>
+fn cases(all String&) Vec<golden> {
+    out Vec<golden>
     rest := all[:]
     for rest.StartsWith("=== ") {
         nl := try rest.FindByte('\n') catch default rest.Len()
@@ -70,8 +70,8 @@ fn (g mut goldenRun&) where(loc String&) diag.Where {
 # one case's rendering: the diagnostics reported from its rows, the files they are about
 type goldenRun struct() {
     d diag.Diagnostics = diag.Diagnostics(false)
-    paths List<String&>
-    texts List<String&>
+    paths Vec<String&>
+    texts Vec<String&>
 }
 
 # the file a path names - a case's own beside it, the library's under the repository - added once
@@ -177,8 +177,8 @@ test "diag renders stage 0's diagnostics on every checks/cases program byte for 
 }
 
 # every rule msgs.olang's messages name, each once
-fn rules(src String&) List<String&> {
-    out List<String&>
+fn rules(src String&) Vec<String&> {
+    out Vec<String&>
     rest := src[:]
     for {
         at := try rest.Find("Msg(Diag.") catch { break }

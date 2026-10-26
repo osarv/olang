@@ -52,8 +52,8 @@ fn angleClose(text String&, mask String&, start I64) I64 {
 }
 
 # the parts of a type-argument list's inside, split at its own commas
-fn splitArgs(t String&, mask String&) List<String&> {
-    out := List<String&>()
+fn splitArgs(t String&, mask String&) Vec<String&> {
+    out := Vec<String&>()
     depth I64 = 0
     start I64 = 0
     for i in range t.Len() {
@@ -96,7 +96,7 @@ fn bareDecl(text String&, at I64, end I64) I64, Bool {
 }
 
 # text with its written array lengths migrated; what a person must look at goes in notes, as "path:line: what"
-fn migrate(text String&, path String&, notes mut List<String&>&) String {
+fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
     mask := srcmask.Mask(text, false)
     out := StringBuilder()
     i I64 = 0
@@ -181,7 +181,7 @@ fn migrate(text String&, path String&, notes mut List<String&>&) String {
     return out.ToString()
 }
 
-fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
+fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) Bool {
     text := try srcmask.ReadText(path) catch {
         srcmask.SayErr("arrays_migrate: cannot read " $path)
         return false
@@ -201,7 +201,7 @@ fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
 fn main() ? {
     args := os.Args()
     dry := false
-    files := List<String&>()
+    files := Vec<String&>()
     for k in range 1, args.Len() {
         p := args[k]
         if p == "--dry" {
@@ -214,7 +214,7 @@ fn main() ? {
         srcmask.Say("Migrates olang sources off written array lengths (QP1-QP4, 2026-10-24).\n\n    build/tools_arrays_migrate [--dry] PATH...\n\nsee the header of tools/arrays_migrate.olang")
         os.Exit(2)
     }
-    notes := List<String&>()
+    notes := Vec<String&>()
     changed := 0
     for f in files {
         if migrateFile(f, dry, notes) { changed++ }
@@ -227,7 +227,7 @@ fn main() ? {
 }
 
 test "a declaration with no value is made by Array<T>(n), any other spelling loses its length" {
-    notes := List<String&>()
+    notes := Vec<String&>()
     assert migrate("    w Array<U32, 64>\n", "f", notes) == "    w := Array<U32>(64)\n"
     assert migrate("X mut Array<I64, 2>\n", "f", notes) == "X mut Array<I64> = Array<I64>(2)\n"
     assert migrate("type S struct() { a Array<I64, 4> }\n", "f", notes) == "type S struct() { a := Array<I64>(4) }\n"
@@ -240,7 +240,7 @@ test "a declaration with no value is made by Array<T>(n), any other spelling los
 }
 
 test "a type argument, a view and a constant type parameter are left for a person" {
-    notes := List<String&>()
+    notes := Vec<String&>()
     assert migrate("    l := List<Array<I64, 3>>()\n", "f", notes) == "    l := List<Array<I64>>()\n"
     assert migrate("    v := x as Array<I64, 3>&\n", "f", notes) == "    v := x as Array<I64, 3>&\n"
     assert migrate("type B<N I64> struct() { }\n", "f", notes) == "type B<N I64> struct() { }\n"

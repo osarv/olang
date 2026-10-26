@@ -11,8 +11,8 @@ fn work(h H&, base I64) {
     for i in range 200000 { h.f(i + base) }
 }
 fn main() ? {
-    a mut List<N&>& = List<N&>()
-    b mut List<N&>& = List<N&>()
+    a mut Vec<N&>& = Vec<N&>()
+    b mut Vec<N&>& = Vec<N&>()
     ha := H(fn(i I64) { a.Push(N(i)) })
     hb := H(fn(i I64) { b.Push(N(i)) })
     join {

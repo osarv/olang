@@ -16,7 +16,7 @@ type Iterator<T ? E> trait {
 # what a generator gives its caller (D18): a function whose result is written Iterator<T ? E> and whose body yields
 # gives a Generator<T ? E>. Each Next runs the body on from where it stopped to its next yield, whose value it gives;
 # it fails with Exhausted once the body has ended - and again whenever it is asked after - or with the error the body
-# failed with, after which the body is over. A copy is a second name for the same walk, as a List's copy is the same
+# failed with, after which the body is over. A copy is a second name for the same walk, as a Vec's copy is the same
 # list. next is the walk itself: a Generator made of any such function value walks it
 type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) {
     next
@@ -63,27 +63,27 @@ fn (it mut I&) Fold<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E)
     return acc
 }
 
-# a new List - in the caller's scope - of f applied to every element
-fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) List<U>& ? E {
-    out mut List<U>&return = List<U>()
+# a new Vec - in the caller's scope - of f applied to every element
+fn (it mut I&) Map<I Iterator<T ? E>, T, U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
+    out mut Vec<U>&return = Vec<U>()
     for x in try it {
         out.Push(try f(x))
     }
     return out
 }
 
-# a new List - in the caller's scope - of the elements keep holds for
-fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) List<T>& ? E {
-    out mut List<T>&return = List<T>()
+# a new Vec - in the caller's scope - of the elements keep holds for
+fn (it mut I&) Filter<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
+    out mut Vec<T>&return = Vec<T>()
     for x in try it {
         if try keep(x) { out.Push(x) }
     }
     return out
 }
 
-# a new List - in the caller's scope - of every value, in order: "m.Keys().ToList()"
-fn (it mut I&) ToList<I Iterator<T ? E>, T ? E>() List<T>& ? E {
-    out mut List<T>&return = List<T>()
+# a new Vec - in the caller's scope - of every value, in order: "m.Keys().ToVec()"
+fn (it mut I&) ToVec<I Iterator<T ? E>, T ? E>() Vec<T>& ? E {
+    out mut Vec<T>&return = Vec<T>()
     for x in try it {
         out.Push(x)
     }

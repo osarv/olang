@@ -14,14 +14,14 @@ type Box struct() {
     head mut Node& = Node(4)
 }
 fn idBox(seed mut Box&) Box { return seed }
-fn even(b Box&, n I64, out mut List<fn() I64>&) {
+fn even(b Box&, n I64, out mut Vec<fn() I64>&) {
     if n == 0 { out.Push(fn() I64 { return b.head.v }) }
     else { odd(b, n - 1, out) }
 }
-fn odd(b Box&, n I64, out mut List<fn() I64>&) { even(b, n - 1, out) }
+fn odd(b Box&, n I64, out mut Vec<fn() I64>&) { even(b, n - 1, out) }
 fn main() ? {
     seed := Box()
-    fs := List<fn() I64>()
+    fs := Vec<fn() I64>()
     for i in range 3 {
         even(idBox(seed), 2, fs)
         churn()

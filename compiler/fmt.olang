@@ -39,8 +39,8 @@ import "unparse"
 
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
-fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, closeAngles List<I64>&
-          held Array<source.Span>&, groups List<I64>&) String {
+fn Format(text String&, ts scan.Tokens&, argAngles Vec<I64>&, closeAngles Vec<I64>&
+          held Array<source.Span>&, groups Vec<I64>&) String {
     f := formatter(text, ts.Toks)
     for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }
     for i in groups { f.group[i] = true }
@@ -75,21 +75,21 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
-    real List<I64>
-    ended List<Bool>
+    real Vec<I64>
+    ended Vec<Bool>
     # the open brackets: 0 a block's "{", 1 a bracket; the level of their lines, and of a line closing them
-    stKind List<I64>
-    stChild List<I64>
-    stClose List<I64>
+    stKind Vec<I64>
+    stChild Vec<I64>
+    stClose Vec<I64>
     # the lines written: 0 code (with or without a comment after it), 1 blank; the level, the code as a range of
     # codes, the comment after it as a range of text (-1 when none), and whether the code spans lines (a block comment)
-    lKind List<I64>
-    lIndent List<I64>
-    lCodeS List<I64>
-    lCodeE List<I64>
-    lComS List<I64>
-    lComE List<I64>
-    lMulti List<Bool>
+    lKind Vec<I64>
+    lIndent Vec<I64>
+    lCodeS Vec<I64>
+    lCodeE Vec<I64>
+    lComS Vec<I64>
+    lComE Vec<I64>
+    lMulti Vec<Bool>
     codes StringBuilder
     # the line being written
     open Bool = false
@@ -104,8 +104,8 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     lastTok I64 = -1
     newlines I64 = 0        # line ends since the last line written
     prevLineEnd I64 = -1    # the last token of the last line holding one
-    heldS List<I64>         # the text left as written, whole lines [heldS, heldE), one range a held branch
-    heldE List<I64>
+    heldS Vec<I64>         # the text left as written, whole lines [heldS, heldE), one range a held branch
+    heldE Vec<I64>
     rawLine Bool = false    # the line being written is the file's own text
 }
 
@@ -124,7 +124,7 @@ fn (f mut formatter&) run() {
             sawEnd = false
         }
     }
-    opens List<I64>
+    opens Vec<I64>
     for j in f.real {
         k := f.kind(j)
         if k == token.Tok.LParen { opens.Push(j) }
@@ -132,7 +132,7 @@ fn (f mut formatter&) run() {
     }
     # S1b: a ":" whose innermost open bracket is a block's "{" (or none), or a "(" (a lambda's in an argument list,
     # D16), begins a one-line body; one in a "[" is a slice's
-    inner List<token.Tok>
+    inner Vec<token.Tok>
     for j in f.real {
         k := f.kind(j)
         if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace { inner.Push(k) }
@@ -696,11 +696,11 @@ fn PreludeTypes(std String&) String {
 # import's alias and the module it reaches (-1 for a remote one or a file that is not there)
 type loader struct(std String&) {
     std
-    paths List<String&>
-    types List<String&>
-    impMod List<I64>
-    impAlias List<String&>
-    impTarget List<I64>
+    paths Vec<String&>
+    types Vec<String&>
+    impMod Vec<I64>
+    impAlias Vec<String&>
+    impTarget Vec<I64>
 }
 
 # the names the prelude declares, " A B ", from every file of std/prelude
@@ -739,8 +739,8 @@ fn (l mut loader&) load(path String&) I64 {
     l.paths.Push($real)
     b := StringBuilder()
     b.PushChar(' ')
-    aliases List<String&>
-    paths List<String&>
+    aliases Vec<String&>
+    paths Vec<String&>
     toks := ts.Toks
     n := toks.Len()
     for i in range n {

@@ -131,7 +131,7 @@ fn fixedShiftRound(a mut Array<U64>&, len I64, k I64) I64 {
 
 # a's decimal digits, with no leading zero but the one zero has; a is used up
 fn fixedDecimal(a mut Array<U64>&, len I64) String {
-    pieces := List<U64>()                            # nine digits each, the lowest first
+    pieces := Vec<U64>()                            # nine digits each, the lowest first
     n I64 = len
     for n > 0 {
         rem U64 = 0

@@ -4,7 +4,7 @@
 # (study 4's r17)
 import "std/io"
 fn main() ? {
-    cols := List<String&>()
+    cols := Vec<String&>()
     cols.Push("a")
     try io.Println(cols.ToArray().Map(fn(c String&) String& { return c }).Join(",") "\n")
 }

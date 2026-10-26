@@ -6,12 +6,12 @@ Run mut I64 = 1
 type Diag struct() {
     col I64 = 0
 }
-type Ctx struct(diag mut Diag&, nums List<I64>&) {
+type Ctx struct(diag mut Diag&, nums Vec<I64>&) {
     diag
     nums
 }
 fn check() I64 {
-    nums := List<I64>()
+    nums := Vec<I64>()
     nums.Push(4)
     c := Ctx(Diag(), nums)
     if Run > 0 {

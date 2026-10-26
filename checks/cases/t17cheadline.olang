@@ -9,7 +9,7 @@ type Edit enum {
 }
 type Buffer struct(text String&) {
     text
-    undos mut List<Edit>& = List<Edit>()
+    undos mut Vec<Edit>& = Vec<Edit>()
 }
 fn (b mut Buffer&) Delete(at I64, n I64) {
     gone := $b.text[at:at + n]

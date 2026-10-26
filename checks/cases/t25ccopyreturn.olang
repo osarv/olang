@@ -5,8 +5,8 @@ type Box struct(P mut Array<I64>&) {
     P
 }
 GB Box = Box(Array<I64>(3))
-G List<I64> = List<I64>()
-fn get() List<I64> { return G }
+G Vec<I64> = Vec<I64>()
+fn get() Vec<I64> { return G }
 fn main() ? {
     get().Push(1)
 }

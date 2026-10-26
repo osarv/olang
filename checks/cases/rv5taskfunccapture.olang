@@ -4,7 +4,7 @@
 # closure builds, from the task's thread, into its own part of the scope it captured
 type H struct(f fn(i I64)) { f }
 fn main() ? {
-    a mut List<I64>& = List<I64>()
+    a mut Vec<I64>& = Vec<I64>()
     ha H& = H(fn(i I64) { a.Push(i) })
     join {
         spawn fn() { for i in range 10 { ha.f(i) } }

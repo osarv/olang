@@ -11,7 +11,7 @@ fn (b mut Bag&) Add(v I64) { b.s.n = b.s.n + v }
 fn (b mut Bag&) Reset() { b.s = State() }
 
 fn main() ? {
-    bags := List<Bag>()
+    bags := Vec<Bag>()
     bags.Push(Bag())
     bags[0].Add(5)
     bags[0].Reset()

@@ -3,18 +3,18 @@
 # callee builds text and pushes it through the copy's List, which would build it where the copy is (the statement's
 # block), not where the collection's list lives
 import "std/io"
-type R struct(l mut List<String&>&, n I64) {
+type R struct(l mut Vec<String&>&, n I64) {
     l
     n
 }
-type Rs struct(l mut List<String&>&) {
+type Rs struct(l mut Vec<String&>&) {
     l
 }
 fn (s Rs&) At(i I64) R { return R(s.l, i) }
 fn f(r mut R&) { r.l.Push($r.n) }
 
 fn main() ? {
-    s := Rs(List<String&>())
+    s := Rs(Vec<String&>())
     for k in range 3 { f(s[k]) }
     try io.Println($s.l)
 }

@@ -19,6 +19,7 @@
 
 import "std/pair"
 import "std/os"
+import "std/list"
 import "source"
 import "token"
 import "scan"
@@ -48,9 +49,9 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Errors     # the declared error set, the default error DefaultErrT among them (R15)
     Block I64 = 0
     bound Map<source.NameId, I64>
-    undo List<pair.Pair<source.NameId, I64>>
-    loops List<I64>        # the loops around, innermost last: each one's body block, what continue moves on
-    exits List<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
+    undo Vec<pair.Pair<source.NameId, I64>>
+    loops Vec<I64>        # the loops around, innermost last: each one's body block, what continue moves on
+    exits Vec<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
     InTest Bool = false
     InCtor Bool = false
     CtorOf types.TypeId = types.UnknownT   # a constructor's: the type it makes, whose fields its field declarations are
@@ -60,14 +61,14 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Gapped Bool = false    # a construct not checked yet was met: what is derived from the whole body is not said
     Parent I64 = -1        # a lambda's: the frame of the body it is written in (D16c)
     Gen Bool = false       # a generator's body, its Next's (D18): a lambda whose yields give its values (S20)
-    deferBlocks List<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
+    deferBlocks Vec<I64>  # the blocks around with deferred code registered so far, innermost last (S19, S20)
     InferResult Bool = false   # a lambda's result taken from its first return (D16b)
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
     Settles Bool = false       # a function's or constructor's body whose set is inferred (R1a)
-    leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
-    passed List<types.TypeId>  # what a try nested in another's operand lets out: it leaves the body, never seen by the
+    leaks Vec<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
+    passed Vec<types.TypeId>  # what a try nested in another's operand lets out: it leaves the body, never seen by the
                                # outer try's clauses (R13)
-    captures List<typed.Capture&>
+    captures Vec<typed.Capture&>
     Inst I64 = -1              # a destructor's: its instance parameter, whose fields it reads bare (C10)
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
     TargetFails I64 = 0        # tasks binding targets that can fail into their join (P4d)
@@ -75,9 +76,9 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     MsgLoops I64 = -1          # in an assert's or an unreachable's message: the same (S17, S16d)
     MsgOfUnreachable Bool = false  # the message is an unreachable's
     DeferJoins I64 = -1        # in deferred code: the joins around it then, none of which its spawns may join (S19b)
-    joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
-    joinMarks List<I64>        # where each one's errors start in joinErrs
-    joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
+    joins Vec<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
+    joinMarks Vec<I64>        # where each one's errors start in joinErrs
+    joinErrs Vec<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
     spawnSaid I64 = 0              # spawned calls said to need try (P4): their join is not said to need none
     DiagMark I64 = 0               # the diagnostics said before it began: what it says counts against its body (K1a)
     stored Map<source.NameId, Bool> # the names a body assigns as a whole after declaring them (T7d: such a local's
@@ -86,10 +87,10 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     fixedIn I64 = -1                # the body it was asked in
     # S8d: the locals narrowed to one case, innermost last, their payload fields' copies in narrowFields; and the
     # statements of the block being checked with the next one's index, which the narrowing after a leaving if reaches
-    narrows List<narrowed>
-    narrowFields List<I64>
+    narrows Vec<narrowed>
+    narrowFields Vec<I64>
     nonNullSet Array<source.NameId>& = Array<source.NameId>(0) # S8e: the path the statement being checked assigned a never-null value
-    nulls List<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
+    nulls Vec<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
     # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
@@ -100,9 +101,9 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     ctFrom I64 = 0          # where its statements start on the statement stack
     # R11b: the names the catch clauses around gave the errors they took, innermost last, whether each is used, and what
     # narrowing leaves of each here, innermost last
-    errBinds List<errBind>
-    errUsed List<Bool>
-    errNarrows List<errNarrow>
+    errBinds Vec<errBind>
+    errUsed Vec<Bool>
+    errNarrows Vec<errNarrow>
 }
 
 # R11b: a name a catch clause gave the error it took - its local (the error's code under Set) and the set the clause
@@ -161,15 +162,15 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     spellQualified Bool = false            # spelling a type as code in this module writes it: another module's by its alias
     spellIn I64 = -1                       # explain's module, where Ty spells types qualified from (B11b)
     spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
-    s4d List<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
+    s4d Vec<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
     placeWrite Bool = false                # S8e: the place asked for next is a target written, of its declared type
     nullDecl diag.Where = diag.Where.Nowhere  # T2c: where the type a value is fitted to is written, for the note naming "?&"
-    Bodies List<mut typed.Body&>
-    Gaps List<Gap>
-    frames List<mut frame&>
-    queue List<I64>
+    Bodies Vec<mut typed.Body&>
+    Gaps Vec<Gap>
+    frames Vec<mut frame&>
+    queue Vec<I64>
     queued I64 = 0
-    state List<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
+    state Vec<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
     capSaid Map<pair.Pair<I64, I64>, Bool> # D9c: the parameters already reported, by file and position - once each
     byValSaid Map<pair.Pair<I64, I64>, Bool>   # D9a: parameters reported as arrays by value - a pun of one adds no T7a
@@ -178,17 +179,17 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
     globalBodies Map<pair.Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
     globalTypes Map<pair.Pair<I64, I64>, types.TypeId>
-    globalDecls List<pair.Pair<I64, I64>>  # (module, name): the globals in declaration order, the branches chosen (B5a)
+    globalDecls Vec<pair.Pair<I64, I64>>  # (module, name): the globals in declaration order, the branches chosen (B5a)
     b5aSaid Map<I64, Bool>                 # the global bodies in a cycle said already (B5a)
     litLocals Map<pair.Pair<I64, I64>, Bool>  # (body, local): a number ":=" declared of its literal's own type (T6a)
     rangeEnds Map<pair.Pair<I64, I64>, source.Span>  # (body, local): a for-in's variable over literals, its range's end
     rangeExprs Map<pair.Pair<I64, I64>, Bool>        # ... whose end is a literal-only expression, not one literal
     rangeEnd source.Span = source.Span(-1, -1)       # the range being walked, while its variable is declared
     rangeEndLit Bool = false
-    exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
-    stmts List<typed.Stmt&>
-    atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
-    laneNodes List<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
+    exprs Vec<typed.Expr&>                # nodes being gathered into lists, nested lists on top
+    stmts Vec<typed.Stmt&>
+    atRecs Vec<atRec>                     # each x[i] read through At as a place: what writing back through it needs
+    laneNodes Vec<laneNode>               # E39: the lane operations not built yet, a placeholder naming each
     laneAccept Bool = false                # E39: the expression checked next may be left as lanes for its taker
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
@@ -206,7 +207,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # cycle) - its body and the set's length then - and the bodies whose set rests on such a read
     inferring Map<I64, Bool>
     inferredErrs Map<I64, types.ListId>
-    errReads List<pair.Pair<I64, I64>>
+    errReads Vec<pair.Pair<I64, I64>>
     unsettled Map<I64, Bool>
     # what each inferred set came to, by body (bodyKey) - kept from one attempt to the next, where checking starts
     errPresets Map<pair.Pair<I64, I64>, types.ListId>
@@ -224,20 +225,20 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # written through, lent writably or stored; what a parameter passed on as another's argument needs in turn; the
     # read-only copies passed as arguments and the bodies made function values, judged once every body is checked
     roNeeds Map<pair.Pair<I64, I64>, Bool>
-    roDeps List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
-    roArgs List<roArg>
-    roFns List<roFn>
+    roDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
+    roArgs Vec<roArg>
+    roFns Vec<roFn>
     # ...and through a generic instance's read-only reference parameters (roByArg): every value given a local of an
     # instance's body, by (body, local); the parameters a by-value result is copied out of, by (body, parameter)
     # (roToResult); the by-value results and the values kept writable in instance bodies, by body, settled at the
     # body's end and once every body is checked; the arguments whose parameters decide in turn; the read-only
     # references passed to such a parameter, an error where it needs a writable one
-    roVals Map<pair.Pair<I64, I64>, List<typed.Expr&>>
+    roVals Map<pair.Pair<I64, I64>, Vec<typed.Expr&>>
     roToResult Map<pair.Pair<I64, I64>, Bool>
-    roResults List<pair.Pair<I64, typed.Expr&>>
-    roDeepNeeds List<pair.Pair<I64, typed.Expr&>>
-    roDeepArgs List<roDeepArg>
-    roRefArgs List<roArg>
+    roResults Vec<pair.Pair<I64, typed.Expr&>>
+    roDeepNeeds Vec<pair.Pair<I64, typed.Expr&>>
+    roDeepArgs Vec<roDeepArg>
+    roRefArgs Vec<roArg>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
@@ -247,23 +248,23 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # start) - what the driver found in an earlier check of the program, given before this one; and the local ifs this
     # check met undecided, each with its condition's body (CondBody) for the evaluator
     Decided Map<pair.Pair<I64, I64>, Bool>
-    Asks List<Ask>
-    EmbedAsks List<EmbedAsk>
+    Asks Vec<Ask>
+    EmbedAsks Vec<EmbedAsk>
     # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
     # evaluator to decide while compiling
-    AssertAsks List<AssertAsk>
+    AssertAsks Vec<AssertAsk>
     # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
     # makes, each with a body giving that value for the evaluator to decide while compiling
-    ValueAsks List<ValueAsk>
+    ValueAsks Vec<ValueAsk>
     # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
     # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
     # requirements the evaluator decides, each a body of its own; the conversions likewise (D17g)
     Contracts Map<I64, typed.ContractInfo>
     ctDone Map<I64, Bool>
-    ContractAsks List<ContractAsk>
+    ContractAsks Vec<ContractAsk>
     # each contract ask's calling body, and the asks a try handles - its clauses taking ArgumentError (D17e: decided
     # at run time, as written)
-    contractCallers List<I64>
+    contractCallers Vec<I64>
     ContractHandled Map<I64, Bool>
     asking Bool = false         # a ValueAsk's body is being built: what it makes asks nothing again
     # G30: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
@@ -277,7 +278,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # its initializer, and is the running program's after all where the body writes the local (rewritten)
     fixedInits Map<pair.Pair<I64, I64>, fixedInit>
     writes Map<pair.Pair<I64, I64>, Bool>
-    lastFixed List<I64>         # the locals the last ExprBodyIn read as fixed, of the body it was asked in
+    lastFixed Vec<I64>         # the locals the last ExprBodyIn read as fixed, of the body it was asked in
     # S8a: the bodies reading a build constant (B10), for the evaluator's usedBuild; and the local ifs whose condition
     # evaluation decided reading none (given before this check, as Decided) - the same on every build, an error
     ReadsBuild Map<I64, Bool>
@@ -286,9 +287,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     reflTouched Bool = false    # G35: the condition being folded read a reflected member
     spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
-    typeCaseBinds List<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
+    typeCaseBinds Vec<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
     slotsCalled Map<I64, diag.Where>  # T32b: the slots (SlotKey) some call through an "any" reaches, by its first call
-    lazyThunks List<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
+    lazyThunks Vec<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
 }
 
 # T17e: an enum's raw values - its raw type (UnknownT for none), whether that is text, and each case's value: an
@@ -467,35 +468,35 @@ fn (c mut Checker&) CheckMain() {
 
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
-    c.Bodies = List<mut typed.Body&>()
-    c.Gaps = List<Gap>()
+    c.Bodies = Vec<mut typed.Body&>()
+    c.Gaps = Vec<Gap>()
     c.anyBad = Map<I64, Bool>()
     c.slotsCalled = Map<I64, diag.Where>()
-    c.lazyThunks = List<I64>()
+    c.lazyThunks = Vec<I64>()
     c.P.ResetAny()      # T32: tables name bodies of this attempt
-    c.frames = List<mut frame&>()
-    c.queue = List<I64>()
+    c.frames = Vec<mut frame&>()
+    c.queue = Vec<I64>()
     c.queued = 0
-    c.state = List<I64>()
+    c.state = Vec<I64>()
     c.fnBodies = Map<I64, I64>()
     c.ctorBodies = Map<pair.Pair<I64, I64>, I64>()
     c.instsOf = Map<I64, I64>()
     c.ctorCalled = types.UnknownT
     c.globalBodies = Map<pair.Pair<I64, I64>, I64>()
     c.globalTypes = Map<pair.Pair<I64, I64>, types.TypeId>()
-    c.globalDecls = List<pair.Pair<I64, I64>>()
+    c.globalDecls = Vec<pair.Pair<I64, I64>>()
     c.b5aSaid = Map<I64, Bool>()
     c.litLocals = Map<pair.Pair<I64, I64>, Bool>()
     c.rangeEnds = Map<pair.Pair<I64, I64>, source.Span>()
     c.rangeExprs = Map<pair.Pair<I64, I64>, Bool>()
-    c.exprs = List<typed.Expr&>()
-    c.stmts = List<typed.Stmt&>()
-    c.atRecs = List<atRec>()
-    c.laneNodes = List<laneNode>()
+    c.exprs = Vec<typed.Expr&>()
+    c.stmts = Vec<typed.Stmt&>()
+    c.atRecs = Vec<atRec>()
+    c.laneNodes = Vec<laneNode>()
     c.lastErrs = types.ListId(0)
     c.inferring = Map<I64, Bool>()
     c.inferredErrs = Map<I64, types.ListId>()
-    c.errReads = List<pair.Pair<I64, I64>>()
+    c.errReads = Vec<pair.Pair<I64, I64>>()
     c.unsettled = Map<I64, Bool>()
     c.found = Map<pair.Pair<I64, I64>, types.ListId>()
     c.boundsMet = Map<types.TypeId, Bool>()
@@ -503,30 +504,30 @@ fn (c mut Checker&) reset() {
     c.roBorrows = Map<pair.Pair<I64, I64>, Bool>()
     c.roFrom = Map<pair.Pair<I64, I64>, roOrigin>()
     c.roNeeds = Map<pair.Pair<I64, I64>, Bool>()
-    c.roDeps = List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
-    c.roArgs = List<roArg>()
-    c.roFns = List<roFn>()
-    c.roVals = Map<pair.Pair<I64, I64>, List<typed.Expr&>>()
+    c.roDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
+    c.roArgs = Vec<roArg>()
+    c.roFns = Vec<roFn>()
+    c.roVals = Map<pair.Pair<I64, I64>, Vec<typed.Expr&>>()
     c.roToResult = Map<pair.Pair<I64, I64>, Bool>()
-    c.roResults = List<pair.Pair<I64, typed.Expr&>>()
-    c.roDeepNeeds = List<pair.Pair<I64, typed.Expr&>>()
-    c.roDeepArgs = List<roDeepArg>()
-    c.roRefArgs = List<roArg>()
+    c.roResults = Vec<pair.Pair<I64, typed.Expr&>>()
+    c.roDeepNeeds = Vec<pair.Pair<I64, typed.Expr&>>()
+    c.roDeepArgs = Vec<roDeepArg>()
+    c.roRefArgs = Vec<roArg>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
-    c.Asks = List<Ask>()
-    c.EmbedAsks = List<EmbedAsk>()
-    c.AssertAsks = List<AssertAsk>()
-    c.ValueAsks = List<ValueAsk>()
+    c.Asks = Vec<Ask>()
+    c.EmbedAsks = Vec<EmbedAsk>()
+    c.AssertAsks = Vec<AssertAsk>()
+    c.ValueAsks = Vec<ValueAsk>()
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
-    c.ContractAsks = List<ContractAsk>()
-    c.contractCallers = List<I64>()
+    c.ContractAsks = Vec<ContractAsk>()
+    c.contractCallers = Vec<I64>()
     c.ContractHandled = Map<I64, Bool>()
     c.Faulty = Map<I64, Bool>()
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
-    c.lastFixed = List<I64>()
+    c.lastFixed = Vec<I64>()
 }
 
 # S8c: whether a local an asked condition or assert read as fixed is written by its body after all - the condition is
@@ -1282,7 +1283,7 @@ fn (c mut Checker&) errorDeclRules(mi I64, sp source.Span, name source.NameId, w
         }
     }
     if words.Len() == 0 { return }
-    es List<types.TypeId>
+    es Vec<types.TypeId>
     for m in members { c.P.ErrorSetEntries(ctx, m, es) }
     for w in words {
         for e in es {
@@ -1533,8 +1534,8 @@ fn (c mut Checker&) listHoldsBy(l types.ListId, d types.DeclId, depth I64) Bool 
 }
 
 # a struct's fields' names' spans, in their order (C2a)
-fn fieldSpans(sb ast.StructBody&) List<source.Span> {
-    out := List<source.Span>()
+fn fieldSpans(sb ast.StructBody&) Vec<source.Span> {
+    out := Vec<source.Span>()
     if sb.Body.Len() == 0 { return out }
     for st in sb.Body {
         match st {
@@ -1592,7 +1593,7 @@ fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
 # an array holding d in turn: said once, at the last declared of them (T29)
 fn (c mut Checker&) holdsSelf(d types.DeclId, b types.TypeId) Bool {
     e := c.deref(c.P.T.Elem(b))
-    seen := List<types.DeclId>()
+    seen := Vec<types.DeclId>()
     for k in range 16 {
         if not c.isNamed(e) or c.declKind(e) != types.DeclKind.Over { return false }
         ed := c.P.T.DeclOf(e)
@@ -1897,8 +1898,8 @@ fn (c mut Checker&) settle(fr frame&) {
 }
 
 # what an error set holds, each type once (R1c): words of one type in one entry, every word of it the type itself
-fn (c mut Checker&) merged(xs List<types.TypeId>&) List<types.TypeId> {
-    es List<types.TypeId>
+fn (c mut Checker&) merged(xs Vec<types.TypeId>&) Vec<types.TypeId> {
+    es Vec<types.TypeId>
     for e in xs {
         if e == types.DefaultErrT or e == types.UnknownT { continue }
         et := c.P.T.ErrOf(e)
@@ -1922,7 +1923,7 @@ fn (c mut Checker&) merged(xs List<types.TypeId>&) List<types.TypeId> {
     return es
 }
 
-fn (c mut Checker&) canonicalErrs(es List<types.TypeId>&) types.ListId {
+fn (c mut Checker&) canonicalErrs(es Vec<types.TypeId>&) types.ListId {
     xs := es.ToArray()
     xs.Sort(fn(a types.TypeId, b types.TypeId) Bool { return c.errBefore(a, b) })
     return c.P.T.List(xs)
@@ -1963,7 +1964,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
     nv := c.P.CtorVars(d)
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
-    argVals List<typed.Expr&>
+    argVals Vec<typed.Expr&>
     for i in range args.Len() {
         e typed.Expr?&c = null
         v := c.fold(args[i])
@@ -2111,7 +2112,7 @@ fn (c mut Checker&) RenderBody(mi I64, n source.NameId, sp source.Span) I64 {
     p mut typed.Place&c = typed.Place.Global(sp, gt, mi, n)
     seen := Map<types.TypeId, Bool>()
     c.wantStr(gt, seen, 0)
-    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
+    ps mut Vec<typed.Piece&>&c = Vec<typed.Piece&>()
     if c.P.T.KindOf(gt) == types.Kind.Array and c.P.T.Length(gt) != types.TypeId(0) {
         ps.Push(typed.Piece.Render(typed.Expr.Borrow(sp, c.P.T.Ref(gt, types.ReadOnly), p)))
     } else {
@@ -2191,8 +2192,8 @@ fn (c mut Checker&) namesLocal(sp source.Span) Bool {
 type b5aWalk struct(Mod I64) {
     Mod
     walked Map<I64, Bool>
-    named List<I64>
-    found List<I64>
+    named Vec<I64>
+    found Vec<I64>
     holders Map<I64, Bool>
     strs Map<types.TypeId, Bool>
     namesOnly Bool = false
@@ -2205,7 +2206,7 @@ type b5aWalk struct(Mod I64) {
 # are then set in that order and the rest ordered on
 fn (c mut Checker&) orderGlobals() {
     seen Map<I64, Bool>
-    mods List<I64>
+    mods Vec<I64>
     for m in range c.P.L.Mods.Len() {
         if c.P.L.Mods[m].Prelude { c.b5aModules(m, seen, mods) }
     }
@@ -2215,7 +2216,7 @@ fn (c mut Checker&) orderGlobals() {
     for m in mods { c.orderModule(m, c.P.InitOrder) }
 }
 
-fn (c mut Checker&) b5aModules(m I64, seen mut Map<I64, Bool>&, out mut List<I64>&) {
+fn (c mut Checker&) b5aModules(m I64, seen mut Map<I64, Bool>&, out mut Vec<I64>&) {
     if seen.Has(m) { return }
     seen.Put(m, true)
     for im in c.P.L.Mods[m].Imports {
@@ -2224,8 +2225,8 @@ fn (c mut Checker&) b5aModules(m I64, seen mut Map<I64, Bool>&, out mut List<I64
     out.Push(m)
 }
 
-fn (c mut Checker&) orderModule(m I64, out mut List<I64>&) {
-    gs List<I64>
+fn (c mut Checker&) orderModule(m I64, out mut Vec<I64>&) {
+    gs Vec<I64>
     pos Map<I64, I64>
     for k in c.globalDecls {
         if k.First != m { continue }
@@ -2246,8 +2247,8 @@ fn (c mut Checker&) orderModule(m I64, out mut List<I64>&) {
         }
     }
     n := gs.Len()
-    depAt List<I64>
-    depTo List<I64>
+    depAt Vec<I64>
+    depTo Vec<I64>
     for g in gs {
         depAt.Push(depTo.Len())
         for d in c.globalDeps(m, g) { depTo.Push(try pos.Get(d) catch default -1) }
@@ -2277,7 +2278,7 @@ fn (c mut Checker&) orderModule(m I64, out mut List<I64>&) {
         # a cycle: from the first global left, along the first unset global each reads, back to one on the path
         cur I64 = 0
         for placed[cur] { cur++ }
-        path List<I64>
+        path Vec<I64>
         for {
             at := try path.IndexOf(cur) catch default -1
             if at >= 0 {
@@ -2313,7 +2314,7 @@ fn (c mut Checker&) orderModule(m I64, out mut List<I64>&) {
 # a global read while its initializer is being checked: the globals being checked from it on, each reading the next,
 # the last it again - said at it, once
 fn (c mut Checker&) typeCycle(id I64) {
-    chain List<I64>
+    chain Vec<I64>
     on := false
     for fr in c.frames {
         if fr.Body == id { on = true }
@@ -2326,14 +2327,14 @@ fn (c mut Checker&) typeCycle(id I64) {
         }
     }
     if chain.Len() == 0 { return }
-    path List<I64>
+    path Vec<I64>
     for k in range chain.Len() { path.Push(k) }
     c.b5aCycle(chain, path, 0)
 }
 
 # the cycle path[at:] reported at its first global: one reading itself, or the chain back to it - not where one of its
 # globals is in a cycle said already (typeCycle)
-fn (c mut Checker&) b5aCycle(gs List<I64>&, path List<I64>&, at I64) {
+fn (c mut Checker&) b5aCycle(gs Vec<I64>&, path Vec<I64>&, at I64) {
     for p in range at, path.Len() {
         if c.b5aSaid.Has(gs[path[p]]) { return }
     }
@@ -2359,7 +2360,7 @@ fn (c mut Checker&) b5aName(b I64) String {
 }
 
 # the globals of module m that global body g's initializer reads, directly or through what it calls, at any depth
-fn (c mut Checker&) globalDeps(m I64, g I64) List<I64> {
+fn (c mut Checker&) globalDeps(m I64, g I64) Vec<I64> {
     w := b5aWalk(m)
     c.b5aInit(w, g)
     k I64 = 0
@@ -2760,7 +2761,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
 # G16b: the contexts an instance's body is checked in - where it was asked for, and where each instance asking for it
 # was in turn, the outermost first - each "instantiated here, with T = ...": how many were pushed
 fn (c mut Checker&) instContexts(inst I64) I64 {
-    chain List<pair.Pair<generic.Origin, I64>>
+    chain Vec<pair.Pair<generic.Origin, I64>>
     cur := inst
     for depth in range 32 {
         if c.P.T.Items(c.P.InstanceArgs(cur)).Len() == 0 { break }
@@ -3393,14 +3394,14 @@ fn (c mut Checker&) entryChecks() {
         case typed.BodyOf.Ctor(_, _) { }
         nomatch { return }
     }
-    params List<I64>
+    params Vec<I64>
     for l in c.cur().Params { params.Push(I64(l)) }
     c.contractChecks(b, params, false)
 }
 
 # function b's conditions checked here, each called on locals args - b's own parameters, or (gen) a generator's Next
 # beginning: its parameters' locals, its first Next failing where one is false (D18)
-fn (c mut Checker&) contractChecks(b I64, args List<I64>&, gen Bool) {
+fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
     if not c.hasContract(b) { return }
     info := try c.Contracts.Get(b) catch { return }
     if info.Reqs.Len() == 0 { return }
@@ -3434,7 +3435,7 @@ fn (c mut Checker&) contractChecks(b I64, args List<I64>&, gen Bool) {
             c.leak(errs)
             fr.Fallible++
             fr.Tries--
-            k := c.caught(mark, fr.leaks.Len(), List<typed.Clause&>())
+            k := c.caught(mark, fr.leaks.Len(), Vec<typed.Clause&>())
             c.escapes(sp, mark, k)
             x = typed.Expr.Try(csp, types.BoolT, typed.Try(x, Array<typed.Clause&>(0)))
         }
@@ -3475,8 +3476,8 @@ fn (c mut Checker&) contractChecked(b I64) {
 fn (c mut Checker&) ctBody(b I64, index I64, sig types.TypeId, sp source.Span) I64 {
     sr := c.ctSourceOf(b)!
     ps := c.P.T.Items(c.P.T.Params(sig))
-    tys List<types.TypeId>
-    shares List<I64>
+    tys Vec<types.TypeId>
+    shares Vec<I64>
     for i in range ps.Len() {
         p := ps[i]
         if c.isRef(p) { p = c.P.T.Ref(c.P.T.Referent(p), c.P.T.PermOf(p) & ~types.Writable) }
@@ -3641,7 +3642,7 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
     site typed.SiteId, info typed.ContractInfo) typed.Expr&c {
     fr := c.fr()
     sfrom := c.stmts.Len()
-    held List<I64>
+    held Vec<I64>
     for a in args {
         match a {
             case typed.Expr.Lit(_, _, _) { held.Push(-1) }
@@ -3655,7 +3656,7 @@ fn (c mut Checker&) dispatchChecks(sp source.Span, r types.TypeId, target typed.
     ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
     for i in range info.Reqs.Len() {
         q := info.Reqs[i]
-        v typed.Expr&c = c.bodyCall(sp, q, types.BoolT, args, held, List<I64>())
+        v typed.Expr&c = c.bodyCall(sp, q, types.BoolT, args, held, Vec<I64>())
         errs := c.bodyErrors(q)
         if c.P.T.Items(errs).Len() > 0 {
             c.leak(errs)
@@ -3828,7 +3829,7 @@ fn (c mut Checker&) evalOnly() Bool {
 }
 
 # argument i of a call whose arguments are held: its literal, or a read of the local holding it
-fn (c mut Checker&) heldArg(args Array<typed.Expr&>&c, held List<I64>&, i I64) typed.Expr&c {
+fn (c mut Checker&) heldArg(args Array<typed.Expr&>&c, held Vec<I64>&, i I64) typed.Expr&c {
     if held[i] < 0 { return args[i] }
     return c.readLocal(args[i].Span(), held[i])
 }
@@ -3838,8 +3839,8 @@ fn (c mut Checker&) readLocal(sp source.Span, l I64) typed.Expr&c {
     return typed.Expr.Read(sp, t, typed.Place.Local(sp, t, typed.LocalId(I32(l))), typed.SiteId(-1))
 }
 
-fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Array<typed.Expr&>&c, held List<I64>&
-    extra List<I64>&) typed.Expr&c {
+fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Array<typed.Expr&>&c, held Vec<I64>&
+    extra Vec<I64>&) typed.Expr&c {
     from := c.exprs.Len()
     for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
     for l in extra { c.exprs.Push(c.readLocal(sp, l)) }
@@ -3922,7 +3923,7 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
         fr.rest = body
         fr.restAt = i + 1
         # S8e: a statement assigning a narrowed path ends its narrowing - after its value, where it is that assignment
-        after List<I64>
+        after Vec<I64>
         for k in range fr.nulls.Len() {
             nn := fr.nulls[k]
             if nn.Dead or not stmtAssigns(body[i], nn.Path) { continue }
@@ -4154,7 +4155,7 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     return inner
 }
 
-fn gather<T>(stack mut List<T>&, from I64) Array<T>&stack {
+fn gather<T>(stack mut Vec<T>&, from I64) Array<T>&stack {
     if stack.Len() == from { return Array<T>(0) }
     a mut Array<T>&stack = Array<T>(stack.Len() - from, stack[from])     # each written below
     for i in range a.Len() { a[i] = stack[from + i] }
@@ -6310,7 +6311,7 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         return c.unaryOn(sp, op, x)
     }
     if op == token.Tok.Dollar {
-        ps List<typed.Piece&>
+        ps Vec<typed.Piece&>
         ps.Push(c.renderPiece(sp, y))
         return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
     }
@@ -7785,7 +7786,7 @@ fn (c mut Checker&) chainCmp(sp source.Span, ch ast.Chain&, i I64, x typed.Expr?
 
 # "a" $b "c": text joined from its pieces (E11b)
 fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
-    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
+    ps mut Vec<typed.Piece&>&c = Vec<typed.Piece&>()
     for p in parts {
         ok := false
         match p {
@@ -8310,7 +8311,7 @@ fn (c mut Checker&) roKeep(s typed.Stmt&) {
 fn (c mut Checker&) roKeepVal(b I64, id I64, x typed.Expr?&) {
     if x is null { return }
     key := pair.Pair(b, id)
-    if not c.roVals.Has(key) { c.roVals.Put(key, List<typed.Expr&>()) }
+    if not c.roVals.Has(key) { c.roVals.Put(key, Vec<typed.Expr&>()) }
     l := try c.roVals.Get(key) catch { return }
     l.Push(x)
 }
@@ -8318,12 +8319,12 @@ fn (c mut Checker&) roKeepVal(b I64, id I64, x typed.Expr?&) {
 # the read-only reference parameters of body b (roByArg) a value is copied out of, through any number of references
 # and of locals (by every value given them), and through calls handing back what such a parameter reaches - a by-value
 # result copied out of it (roToResult), a reference borrowed from it: their indices added to out
-fn (c mut Checker&) roDeep(b I64, x typed.Expr&, out mut List<I64>&) {
+fn (c mut Checker&) roDeep(b I64, x typed.Expr&, out mut Vec<I64>&) {
     seen := Map<I64, Bool>()
     c.roDeepIn(b, x, out, seen, 0)
 }
 
-fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut List<I64>&, seen mut Map<I64, Bool>&, depth I64) {
+fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut Vec<I64>&, seen mut Map<I64, Bool>&, depth I64) {
     if x is null or depth > 48 { return }
     match x {
         case typed.Expr.Read(_, _, p, _) { c.roDeepPlace(b, p, out, seen, depth + 1) }
@@ -8363,7 +8364,7 @@ fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut List<I64>&, seen mut
     }
 }
 
-fn (c mut Checker&) roDeepPlace(b I64, p typed.Place?&, out mut List<I64>&, seen mut Map<I64, Bool>&, depth I64) {
+fn (c mut Checker&) roDeepPlace(b I64, p typed.Place?&, out mut Vec<I64>&, seen mut Map<I64, Bool>&, depth I64) {
     if p is null or depth > 48 { return }
     match p {
         case typed.Place.Local(_, _, id) {
@@ -8480,7 +8481,7 @@ fn (c mut Checker&) roResult(x typed.Expr?&) {
 fn (c mut Checker&) roSettleResults(id I64) {
     for r in c.roResults {
         if r.First != id { continue }
-        ps := List<I64>()
+        ps := Vec<I64>()
         c.roDeep(id, r.Second, ps)
         for k in ps { c.roToResult.Put(pair.Pair(id, k), true) }
     }
@@ -8490,12 +8491,12 @@ fn (c mut Checker&) roSettleResults(id I64) {
 # and the arguments that rest on them
 fn (c mut Checker&) roSettleDeep() {
     for n in c.roDeepNeeds {
-        ps := List<I64>()
+        ps := Vec<I64>()
         c.roDeep(n.First, n.Second, ps)
         for k in ps { c.roNeeds.Put(pair.Pair(n.First, k), true) }
     }
     for a in c.roDeepArgs {
-        ps := List<I64>()
+        ps := Vec<I64>()
         c.roDeep(a.Body, a.X, ps)
         for k in ps { c.roDeps.Push(pair.Pair(pair.Pair(a.Body, k), pair.Pair(a.Callee, a.Param))) }
     }
@@ -9559,7 +9560,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
     nv := c.P.T.DeclParams(d)
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
-    argVals List<typed.Expr&>
+    argVals Vec<typed.Expr&>
     for i in range args.Len() {
         e typed.Expr?&c = null
         v := c.fold(args[i])
@@ -9722,8 +9723,8 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if ps.Len() > 0 { c.unify(ps[0], typeOf(recv), b, false, true) }
         k = 1
     }
-    vals List<typed.Expr?&>
-    lambdas List<I64>
+    vals list.List<typed.Expr?&>
+    lambdas Vec<I64>
     k0w := k
     if pre.Len() == 0 and args.Len() == 1 and ps.Len() - k > 1 and callLike(args[0]) { pre = c.spread(args[0]) }
     # pre gives the first arguments, args the rest (a checked index given, the value as written)
@@ -10135,7 +10136,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         r = c.P.T.Ref(c.P.T.Referent(r), c.P.T.PermOf(r) | types.Writable)
     } else if c.P.T.KindOf(r) == types.Kind.Tuple {
         ps0 := c.P.T.Items(c.P.T.Parts(r))
-        nps := List<types.TypeId>()
+        nps := Vec<types.TypeId>()
         changed := false
         for i in range ps0.Len() {
             q := ps0[i]
@@ -10428,8 +10429,10 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         if ds.Len() == 1 { m = ds[0] }
     }
     # T2c: what the compiler supplies, and a function value in a field, are reached through the receiver - not through
-    # one that may be null (a method fits its receiver as an argument, which says so there)
-    if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) {
+    # one that may be null (a method fits its receiver as an argument, which says so there). The prelude's vacate takes
+    # the place itself, reading nothing through it, so a place that may hold null is vacated as any other
+    vacates := m < 0 and name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude
+    if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) and not vacates {
         c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
         rt = c.P.T.NonNull(rt)
     }
@@ -11534,7 +11537,7 @@ fn (c mut Checker&) spreadArgs(args Array<ast.Expr&>&) Array<ast.Expr&>&args {
         }
     }
     if not spread { return args }
-    out List<ast.Expr&>
+    out Vec<ast.Expr&>
     for a in args {
         match a {
             case ast.Expr.Compr(csp, cm) {
@@ -11624,7 +11627,7 @@ fn (c mut Checker&) genericCase(sp source.Span, nsp source.Span, d types.DeclId,
         return c.unknown(sp)
     }
     b := generic.Binding(owner, nv)
-    argVals List<typed.Expr&>
+    argVals Vec<typed.Expr&>
     for i in range args.Len() {
         e typed.Expr?&c = null
         v := c.fold(args[i])
@@ -12185,7 +12188,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     if asValue and c.isRef(rt) and not c.P.T.IsNullable(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
         rt = c.P.T.OrNull(rt)
     }
-    cls List<typed.Clause&>
+    cls Vec<typed.Clause&>
     if clauses.Len() > 0 {
         got := c.leaksBetween(mark, end)
         for cl in clauses { cls.Push(c.clause(cl, rt, asValue, got, cls)) }
@@ -12199,7 +12202,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
 
 # D17e: the calls whose contracts were asked of the evaluator since ask, in the body being checked, are left to the run
 # time where a clause takes ArgumentError - a call whose failure is handled fails there as written (a test of it)
-fn (c mut Checker&) handlesContracts(ask I64, cls List<typed.Clause&>&) {
+fn (c mut Checker&) handlesContracts(ask I64, cls Vec<typed.Clause&>&) {
     if cls.Len() == 0 { return }
     ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
     if ae == types.UnknownT or c.left(ae, cls) == ae { return }
@@ -12325,7 +12328,7 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     end := fr.leaks.Len()
     c.produced(clauses, mark, end)
-    cls mut List<typed.Clause&>&c = List<typed.Clause&>()
+    cls mut Vec<typed.Clause&>&c = Vec<typed.Clause&>()
     if clauses.Len() > 0 {
         got := c.leaksBetween(mark, end)
         for cl in clauses { cls.Push(c.clause(cl, types.VoidT, false, got, cls)) }
@@ -12338,8 +12341,8 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
 }
 
 fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<types.TypeId>&
-                           earlier List<typed.Clause&>&) typed.Clause&c {
-    items List<typed.Item>
+                           earlier Vec<typed.Clause&>&) typed.Clause&c {
+    items Vec<typed.Item>
     lone := c.loneBinding(cl)
     if cl.Items.Len() > 0 and not lone {
         for p in cl.Items { c.catchItem(p, items) }
@@ -12479,7 +12482,7 @@ fn stmtLike(x ast.Expr&) Bool {
 
 # R11, R11a: a try's clauses in order - none after one taking every error, none whose errors an earlier one takes; as
 # a statement none with a default; as a value each leaving or giving one, not both, as many as the results
-fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls List<typed.Clause&>&, value Bool, t types.TypeId) Bool {
+fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls Vec<typed.Clause&>&, value Bool, t types.TypeId) Bool {
     if clauses.Len() == 0 { return false }
     for i in range clauses.Len() {
         cl := clauses[i]
@@ -12489,7 +12492,7 @@ fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls List<typed.Claus
             return true
         }
         if i > 0 and not k.All and k.Items.Len() > 0 {
-            earlier List<typed.Clause&>
+            earlier Vec<typed.Clause&>
             for j in range i { earlier.Push(cls[j]) }
             gone := true
             for it in k.Items {
@@ -12568,7 +12571,7 @@ fn (c mut Checker&) defaultSpan(cl ast.Catch&) source.Span {
 
 # what of error set entry e clauses leave (R11, R1c): nothing (Unknown) where an item-less clause or an item naming its
 # type takes it, else the words no item names - the type itself where that is every word
-fn (c mut Checker&) left(e types.TypeId, cls List<typed.Clause&>&) types.TypeId {
+fn (c mut Checker&) left(e types.TypeId, cls Vec<typed.Clause&>&) types.TypeId {
     et := c.P.T.ErrOf(e)
     n := c.wordCount(et)
     full := U64(0) - 1 if n >= 64 else (U64(1) << n) - 1
@@ -12608,7 +12611,7 @@ fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
     c.escapeRules(at, mark, k)
     if fr.Tries == 0 { return }
     # a try in another's operand: what it lets out leaves the body there (R13) - the outer try's clauses never see it
-    keep List<types.TypeId>
+    keep Vec<types.TypeId>
     for i in range mark + k, fr.leaks.Len() { keep.Push(fr.leaks[i]) }
     for i in range mark, mark + k { fr.passed.Push(fr.leaks[i]) }
     fr.leaks.Truncate(mark)
@@ -12616,8 +12619,8 @@ fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
 }
 
 # what a body lets out: its leftovers and what its nested tries passed out (R1a, D16b)
-fn (c mut Checker&) letOut(fr frame&) List<types.TypeId> {
-    all List<types.TypeId>
+fn (c mut Checker&) letOut(fr frame&) Vec<types.TypeId> {
+    all Vec<types.TypeId>
     for e in fr.leaks { all.Push(e) }
     for e in fr.passed { all.Push(e) }
     return all
@@ -12670,7 +12673,7 @@ fn (c mut Checker&) isGlobalBody(id I64) Bool {
 fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
     if clauses.Len() == 0 or c.inGeneric() { return }
     fr := c.fr()
-    got List<types.TypeId>
+    got Vec<types.TypeId>
     for i in range mark, end { got.Push(fr.leaks[i]) }
     have := c.merged(got)
     for cl in clauses {
@@ -12682,7 +12685,7 @@ fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
             if et == types.UnknownT { continue }
             # T19a: a named set names what the operand can fail with where one of its entries does
             if c.P.IsErrorSet(et) {
-                es List<types.TypeId>
+                es Vec<types.TypeId>
                 c.P.EntriesOf(et, es)
                 some := false
                 for e in es {
@@ -12722,10 +12725,10 @@ fn (c mut Checker&) pathPart(p ast.Path&, back I64) source.Span {
 
 # what a try's clauses take out of what its operand let out since mark: everything for an item-less one, a whole type
 # for an item naming it
-fn (c mut Checker&) caught(mark I64, end I64, cls List<typed.Clause&>&) I64 {
+fn (c mut Checker&) caught(mark I64, end I64, cls Vec<typed.Clause&>&) I64 {
     fr := c.fr()
     left I64 = 0
-    keep List<types.TypeId>
+    keep Vec<types.TypeId>
     for i in range mark, fr.leaks.Len() {
         e := fr.leaks[i]
         # what the clauses' own code lets out (after end) is no error of the operand's
@@ -12746,7 +12749,7 @@ fn (c mut Checker&) caught(mark I64, end I64, cls List<typed.Clause&>&) I64 {
 }
 
 # a catch clause's item: an error type, or one of its words (R10); a named set every entry it stands for (T19a)
-fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
+fn (c mut Checker&) catchItem(p ast.Path&, items mut Vec<typed.Item>&) {
     # QAH: an error-set parameter takes every entry of the set the instance binds it to - none, for the empty set
     if p.Parts.Len() == 1 and c.fr().Ctx.Vars.Has(p.Parts[0]) {
         v := c.P.ErrorSetItem(c.fr().Ctx, p)
@@ -12771,7 +12774,7 @@ fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
             items.Push(typed.Item(et, -1))
             return
         }
-        es List<types.TypeId>
+        es Vec<types.TypeId>
         c.P.EntriesOf(et, es)
         for e in es {
             if e == types.UnknownT { continue }
@@ -12823,7 +12826,7 @@ fn (c mut Checker&) wordIndex(d types.DeclId, w source.NameId) I64 {
 
 # what of a try's operand lets out, from mark to end
 fn (c mut Checker&) leaksBetween(mark I64, end I64) Array<types.TypeId>& {
-    xs mut List<types.TypeId>& = List<types.TypeId>()
+    xs mut Vec<types.TypeId>& = Vec<types.TypeId>()
     fr := c.fr()
     for i in range mark, end { xs.Push(fr.leaks[i]) }
     return xs.ToArray()
@@ -12838,8 +12841,8 @@ fn (c mut Checker&) loneBinding(cl ast.Catch&) Bool {
 
 # R11b: the set a clause takes of what its operand lets out (got) - the words its items name, everything for one with
 # none, less what the clauses before it take - merged, each type one entry, in the canonical order (R1a)
-fn (c mut Checker&) takenSet(got Array<types.TypeId>&, items List<typed.Item>&, all Bool, earlier List<typed.Clause&>&) types.ListId {
-    es List<types.TypeId>
+fn (c mut Checker&) takenSet(got Array<types.TypeId>&, items Vec<typed.Item>&, all Bool, earlier Vec<typed.Clause&>&) types.ListId {
+    es Vec<types.TypeId>
     for e in got {
         if e == types.DefaultErrT or e == types.UnknownT { continue }
         r := c.left(e, earlier)
@@ -12874,8 +12877,8 @@ fn (c mut Checker&) entryOf(et types.TypeId, mask U64) types.TypeId {
     return et if m == c.allWords(et) else c.P.T.ErrWords(et, m)
 }
 
-fn (c mut Checker&) normalSet(es List<types.TypeId>&) List<types.TypeId> {
-    out List<types.TypeId>
+fn (c mut Checker&) normalSet(es Vec<types.TypeId>&) Vec<types.TypeId> {
+    out Vec<types.TypeId>
     for e in es {
         n := c.entryOf(c.P.T.ErrOf(e), c.P.T.ErrMask(e))
         if n != types.UnknownT { out.Push(n) }
@@ -12884,8 +12887,8 @@ fn (c mut Checker&) normalSet(es List<types.TypeId>&) List<types.TypeId> {
 }
 
 # what two sets both hold; what a holds and b does not; what either holds
-fn (c mut Checker&) setMeet(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
-    out List<types.TypeId>
+fn (c mut Checker&) setMeet(a Vec<types.TypeId>&, b Vec<types.TypeId>&) Vec<types.TypeId> {
+    out Vec<types.TypeId>
     for x in a {
         for y in b {
             if c.P.T.ErrOf(x) != c.P.T.ErrOf(y) { continue }
@@ -12896,8 +12899,8 @@ fn (c mut Checker&) setMeet(a List<types.TypeId>&, b List<types.TypeId>&) List<t
     return c.normalSet(c.merged(out))
 }
 
-fn (c mut Checker&) setLess(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
-    out List<types.TypeId>
+fn (c mut Checker&) setLess(a Vec<types.TypeId>&, b Vec<types.TypeId>&) Vec<types.TypeId> {
+    out Vec<types.TypeId>
     for x in a {
         m := c.P.T.ErrMask(x)
         for y in b {
@@ -12909,21 +12912,21 @@ fn (c mut Checker&) setLess(a List<types.TypeId>&, b List<types.TypeId>&) List<t
     return out
 }
 
-fn (c mut Checker&) setUnion(a List<types.TypeId>&, b List<types.TypeId>&) List<types.TypeId> {
-    all List<types.TypeId>
+fn (c mut Checker&) setUnion(a Vec<types.TypeId>&, b Vec<types.TypeId>&) Vec<types.TypeId> {
+    all Vec<types.TypeId>
     for x in a { all.Push(x) }
     for y in b { all.Push(y) }
     return c.normalSet(c.merged(all))
 }
 
-fn (c mut Checker&) setItems(l types.ListId) List<types.TypeId> {
-    out List<types.TypeId>
+fn (c mut Checker&) setItems(l types.ListId) Vec<types.TypeId> {
+    out Vec<types.TypeId>
     for x in c.P.T.Items(l) { out.Push(x) }
     return out
 }
 
 # the set as messages write it: its entries, by commas (R1, QY)
-fn (c mut Checker&) setText(es List<types.TypeId>&) String {
+fn (c mut Checker&) setText(es Vec<types.TypeId>&) String {
     if es.Len() == 0 { return "nothing" }
     b := StringBuilder()
     for i in range es.Len() {
@@ -12995,7 +12998,7 @@ fn (c mut Checker&) caughtMisused(sp source.Span, n source.NameId) Bool {
 }
 
 # what narrowing leaves of caught error k here (R11b): its set, or what the tests around say
-fn (c mut Checker&) caughtNow(k I64) List<types.TypeId> {
+fn (c mut Checker&) caughtNow(k I64) Vec<types.TypeId> {
     fr := c.fr()
     for j := fr.errNarrows.Len() - 1, j >= 0, j-- {
         if fr.errNarrows[j].Bind == k { return c.setItems(fr.errNarrows[j].Now) }
@@ -13005,7 +13008,7 @@ fn (c mut Checker&) caughtNow(k I64) List<types.TypeId> {
 
 # a dotted name an expression is ("os.Error.DENIED"), null for another expression
 fn exprPath(x ast.Expr&) ast.Path?&x {
-    ps List<source.NameId>
+    ps Vec<source.NameId>
     y := x
     for {
         match y {
@@ -13026,8 +13029,8 @@ fn exprPath(x ast.Expr&) ast.Path?&x {
 
 # what an item compared with a caught error stands for (R11b): a word, an error type, a set's entries; false where it
 # names none of these
-fn (c mut Checker&) caughtItems(x ast.Expr&) List<types.TypeId>, Bool {
-    out List<types.TypeId>
+fn (c mut Checker&) caughtItems(x ast.Expr&) Vec<types.TypeId>, Bool {
+    out Vec<types.TypeId>
     p := exprPath(x)
     if p is null { return out, false }
     ctx := c.fr().Ctx
@@ -13044,7 +13047,7 @@ fn (c mut Checker&) caughtItems(x ast.Expr&) List<types.TypeId>, Bool {
 
 # whether caught error k holds one of xs: its code's type ordinal tested where xs holds the type's every word it can
 # be, its words compared one by one otherwise
-fn (c mut Checker&) caughtTest(sp source.Span, k I64, xs List<types.TypeId>&) typed.Expr&c {
+fn (c mut Checker&) caughtTest(sp source.Span, k I64, xs Vec<types.TypeId>&) typed.Expr&c {
     fr := c.fr()
     set := c.P.T.Items(fr.errBinds[k].Set)
     i32 := c.P.T.Prim("I32")
@@ -13114,8 +13117,8 @@ fn (c mut Checker&) caughtText(sp source.Span, k I64) typed.Expr&c {
     now := c.caughtNow(k)
     i32 := c.P.T.Prim("I32")
     tt := c.P.T.Ref(c.textType(), types.ReadOnly)
-    codes List<I64>
-    texts List<String&>
+    codes Vec<I64>
+    texts Vec<String&>
     for x in now {
         et := c.P.T.ErrOf(x)
         j I64 = -1
@@ -13181,7 +13184,7 @@ fn (c mut Checker&) caughtOf(op token.Tok, a ast.Expr&, b ast.Expr&) I64 {
 
 # what of now caught error k can be where condition x holds (holds) or not: a comparison of k meets or leaves out
 # what it names, "and", "or" and "not" combine, and anything else says nothing
-fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, k I64, now List<types.TypeId>&) List<types.TypeId> {
+fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, k I64, now Vec<types.TypeId>&) Vec<types.TypeId> {
     match x {
         case ast.Expr.Paren(_, y) { return c.caughtNarrow(y, holds, k, now) }
         case ast.Expr.Unary(_, op, y) {
@@ -13327,7 +13330,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
     k := c.caughtName(m.Subject)
     name := c.fr().errBinds[k].Name
     now := c.caughtNow(k)
-    covered List<types.TypeId>
+    covered Vec<types.TypeId>
     ok := true
     wild := false
     for i in range m.Cases.Len() {
@@ -13337,7 +13340,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
             ok = false
             continue
         }
-        xs List<types.TypeId>
+        xs Vec<types.TypeId>
         for p in cs.Alts {
             match p {
                 case ast.Pattern.Wild(_) {
@@ -13416,7 +13419,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
                 c.constsRead = true
                 cb := c.CondBody(fr.Mi, k)
                 c.constsRead = false
-                fixed := List<I64>()
+                fixed := Vec<I64>()
                 for id in c.lastFixed { fixed.Push(id) }
                 mb I64 = -1
                 if cb >= 0 and msg is not null {
@@ -13541,7 +13544,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     try fr.joins.Pop() catch { }
     try fr.joinMarks.Pop() catch { }
     if spawns == 0 { c.err(sp, msgs.JoinWithoutSpawn()) }
-    errs List<types.TypeId>
+    errs Vec<types.TypeId>
     for i in range em, fr.joinErrs.Len() {
         e := fr.joinErrs[i]
         dup := false
@@ -13551,7 +13554,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
         if not dup { errs.Push(e) }
     }
     fr.joinErrs.Truncate(em)
-    cls mut List<typed.Clause&>&c = List<typed.Clause&>()
+    cls mut Vec<typed.Clause&>&c = Vec<typed.Clause&>()
     if j.Clauses.Len() > 0 and not j.Tried {
         if errs.Len() == 0 { c.err(c.catchSpan(j.Clauses[0]), msgs.JoinCatchNeedsTry()) }
     }
@@ -13598,7 +13601,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     }
     fr.joins[fr.joins.Len() - 1] = fr.joins[fr.joins.Len() - 1] + 1
     # the targets' places first, left to right (P1g)
-    places mut List<typed.Place?&>&c = List<typed.Place?&>()
+    places mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
     for t in targets { places.Push(c.discardOr(t)) }
     tried := false
     inner := call
@@ -13669,8 +13672,8 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     }
     if errs.Len() == 0 and tried { c.err(call.Span(), msgs.SpawnTryInfallible()) }
     # the clauses: what each takes, and the code it runs on the task (P4a)
-    tcs mut List<typed.TaskClause&>&c = List<typed.TaskClause&>()
-    taken List<typed.Clause&>
+    tcs mut Vec<typed.TaskClause&>&c = Vec<typed.TaskClause&>()
+    taken Vec<typed.Clause&>
     if clauses.Len() > 0 {
         # T2c: a task's default goes into its target, so a target that may be null takes a null default
         crt := typeOf(task)
@@ -13679,7 +13682,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
             if c.isRef(crt) and c.isRef(pt) and c.P.T.IsNullable(pt) and c.P.T.Referent(pt) == c.P.T.Referent(crt) { crt = c.P.T.OrNull(crt) }
         }
         for cl in clauses {
-            items List<typed.Item>
+            items Vec<typed.Item>
             lone := c.loneBinding(cl)
             if cl.Items.Len() > 0 and not lone {
                 for p in cl.Items { c.catchItem(p, items) }
@@ -13791,8 +13794,8 @@ fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.
 
 # what the clauses take out of errs from mark on: everything for an item-less one, a whole type for an item naming it or
 # items naming each of its words (R14)
-fn (c mut Checker&) dropTaken(errs mut List<types.TypeId>&, mark I64, cls List<typed.Clause&>&) {
-    keep List<types.TypeId>
+fn (c mut Checker&) dropTaken(errs mut Vec<types.TypeId>&, mark I64, cls Vec<typed.Clause&>&) {
+    keep Vec<types.TypeId>
     for i in range mark, errs.Len() {
         e := errs[i]
         r := c.left(e, cls)
@@ -13986,7 +13989,7 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             }
             # x[i] read through At (E31b): this SetAt on the copy, then x[i] written back
             if c.valueTemp(base) >= 0 { return c.writeBack(sp, op, base, value, c.opAfter(target.Span(), 1), m, items) }
-            all mut List<ast.Expr&>&c = List<ast.Expr&>()
+            all mut Vec<ast.Expr&>&c = Vec<ast.Expr&>()
             for it in items { all.Push(it) }
             all.Push(value)
             c.emit(typed.Stmt.Eval(sp, c.invoke(sp, isp, m, c.read(isp, base), all.ToArray(), Array<typed.Expr&>(0))))
@@ -14044,8 +14047,8 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         return
     }
     # S4c: the targets' places, then every value held, then the stores
-    held List<I64>
-    places mut List<typed.Place?&>&c = List<typed.Place?&>()
+    held Vec<I64>
+    places mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
     for i in range n { places.Push(c.discardOr(m.Targets[i])) }
     # S4d: a borrow in any value of any target's storage takes its old value
     s4d := c.s4d.Len()
@@ -14379,8 +14382,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     if ri < 0 { return false }
     # the levels, the store's own first: x[i][j].f has two, the element of x[i] read and written back last (E31b's
     # nested collections, one level at a time)
-    recs List<I64>
-    calls mut List<Array<typed.Expr&>&>&c = List<Array<typed.Expr&>&>()
+    recs Vec<I64>
+    calls mut Vec<Array<typed.Expr&>&>&c = Vec<Array<typed.Expr&>&>()
     at := p
     for ri >= 0 {
         args := c.callArgs(c.tempValue(at))
@@ -14394,7 +14397,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         ri = c.valueTemp(at)
     }
     nl := recs.Len()
-    sms List<I64>
+    sms Vec<I64>
     for l in range nl {
         of := c.atRecs[recs[l]].Of
         n := calls[l].Len() - 1
@@ -14407,7 +14410,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         sms.Push(sm)
     }
     # the place: each level's indices held, the outermost's first, left to right
-    held mut List<Array<I64>&>&c = List<Array<I64>&>()
+    held mut Vec<Array<I64>&>&c = Vec<Array<I64>&>()
     for k in range nl { held.Push(Array<I64>(0)) }
     for kk in range nl {
         l := nl - 1 - kk
@@ -14423,7 +14426,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     # the SetAt's own indices, then its value at its parameter's type
     pt := p.Type()
-    setHeld List<I64>
+    setHeld Vec<I64>
     if setM >= 0 {
         pts := c.paramsOn(setM, pt)
         for i in range setItems.Len() {
@@ -14465,7 +14468,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     }
     # each element read by At into a local, the outermost first, the next read out of it
     temps Array<I64> = Array<I64>(nl, -1)
-    bases mut List<typed.Place?&>&c = List<typed.Place?&>()
+    bases mut list.List<typed.Place?&>&c = list.List<typed.Place?&>()
     for k in range nl { bases.Push(null) }
     for kk in range nl {
         l := nl - 1 - kk
@@ -14907,7 +14910,7 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
     # the loop: the loop a try statement's operand, its body's own calls tried where written
     c.stmts.Push(typed.Stmt.Block(sp, b))
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
-    cls mut List<typed.Clause&>&c = List<typed.Clause&>()
+    cls mut Vec<typed.Clause&>&c = Vec<typed.Clause&>()
     lend := fr.leaks.Len()
     if f.Clauses.Len() > 0 {
         # its clauses run once the loop has ended: no loop of theirs to break or continue (S9e) - a stand-in loop says so
@@ -15493,7 +15496,7 @@ type laneVals struct() {
 # every array has, each but the first checked against it once (LaneLen, a guaranteed check)
 fn (c mut Checker&) laneSetup(sp source.Span, k I64) laneVals {
     lv := laneVals()
-    order List<I64>
+    order Vec<I64>
     c.laneLeaves(k, order)
     fixed := c.laneNodes[k].Len
     n typed.Expr?&c = c.lit(sp, c.i64(), fixed) if fixed >= 0 else null
@@ -15544,7 +15547,7 @@ fn (c mut Checker&) laneSetup(sp source.Span, k I64) laneVals {
 }
 
 # the leaves under node k, left to right as written
-fn (c mut Checker&) laneLeaves(k I64, out mut List<I64>&) {
+fn (c mut Checker&) laneLeaves(k I64, out mut Vec<I64>&) {
     n := c.laneNodes[k]
     if n.Kind == LaneArr or n.Kind == LaneScalar {
         out.Push(k)
@@ -15827,7 +15830,7 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
         if c.P.T.ErrOf(e) != ex { fr.LoopFails++ }
     }
     # Exhausted ends the loop: no error of the body's
-    keep List<types.TypeId>
+    keep Vec<types.TypeId>
     for i in range mark, fr.leaks.Len() {
         if c.P.T.ErrOf(fr.leaks[i]) != ex { keep.Push(fr.leaks[i]) }
     }
@@ -15980,7 +15983,7 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
 fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&>&, cm ast.Compr?&, ce types.TypeId) typed.Expr?&c {
     # the first argument that is no literal gives the range its type; literals alone count in I64 (S9b)
     t types.TypeId = types.UnknownT
-    vs List<typed.Expr?&>          # each argument's value, null for a literal - typed once t is known
+    vs list.List<typed.Expr?&>          # each argument's value, null for a literal - typed once t is known
     for a in rargs {
         fa := c.fold(a)
         if fa.Ok and fa.IsFloat {
@@ -16112,7 +16115,7 @@ fn (c mut Checker&) nullKnown(path Array<source.NameId>&) Bool {
 # S8e: the paths a condition says are not null (positive) or are when it is false, held in block b - what a statement
 # after them in that block assigns ends one
 fn (c mut Checker&) pushNulls(guard ast.Expr&, positive Bool, b I64) {
-    paths List<Array<source.NameId>&>
+    paths Vec<Array<source.NameId>&>
     nullTests(guard, positive, paths)
     for p in paths {
         # S8e, as S8d: a local or a parameter only - a field may change under a call
@@ -16447,7 +16450,7 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId) typed.Expr&c {
     c.cur().SetVars(c.P.ScopeVarsOf(c.cur().Ty))
     from := c.stmts.Len()
     pb := c.Bodies[parent.Body]
-    args List<I64>
+    args Vec<I64>
     whole := true
     for p in pb.Params {
         pl := pb.Locals[I64(p)]
@@ -16769,7 +16772,7 @@ fn isWildType(c mut Checker&, t ast.TypeRef&) Bool {
 # generic type or trait whose arguments name variables it binds (G36) - the first that holds is chosen, its variables
 # left in typeCaseBinds for its arm; one an earlier case takes every type of is an error
 fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
-    c.typeCaseBinds = List<pair.Pair<source.NameId, types.TypeId>>()
+    c.typeCaseBinds = Vec<pair.Pair<source.NameId, types.TypeId>>()
     st := c.reflType(m.Subject)
     if st == types.UnknownT { return -2 }
     if st < types.TypeId(0) {
@@ -16781,7 +16784,7 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
         if cs.Guard is not null { c.err(c.wordBefore(cs.Guard!.Span().Start, "if"), msgs.TypeMatchGuard()) }
     }
     found I64 = -1
-    seen List<typeCase>
+    seen Vec<typeCase>
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
             if isWildType(c, tr) {
@@ -16809,8 +16812,8 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
 }
 
 # the variables the chosen type case binds, bound for its arm (G36): what they stood for before
-fn (c mut Checker&) bindCase() List<pair.Pair<source.NameId, types.TypeId>> {
-    was := List<pair.Pair<source.NameId, types.TypeId>>()
+fn (c mut Checker&) bindCase() Vec<pair.Pair<source.NameId, types.TypeId>> {
+    was := Vec<pair.Pair<source.NameId, types.TypeId>>()
     for b in c.typeCaseBinds {
         was.Push(pair.Pair(b.First, try c.fr().Ctx.Vars.Get(b.First) catch default types.TypeId(-1)))
         c.fr().Ctx.Vars.Put(b.First, b.Second)
@@ -16818,7 +16821,7 @@ fn (c mut Checker&) bindCase() List<pair.Pair<source.NameId, types.TypeId>> {
     return was
 }
 
-fn (c mut Checker&) unbindCase(was List<pair.Pair<source.NameId, types.TypeId>>) {
+fn (c mut Checker&) unbindCase(was Vec<pair.Pair<source.NameId, types.TypeId>>) {
     for b in was {
         if b.Second >= types.TypeId(0) { c.fr().Ctx.Vars.Put(b.First, b.Second) } else { c.fr().Ctx.Vars.Remove(b.First) }
     }
@@ -16833,7 +16836,7 @@ type typeCase struct(Wild Bool, Trait Bool, Pat types.TypeId, N I64) {
 
 # a case's type read as a pattern: each argument written as a name no type has a variable of the case's own (G36)
 fn (c mut Checker&) typeCaseOf(tr ast.TypeRef&) typeCase {
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     c.patternNames(tr, ns, false)
     owner := -(I64(1) << 40) - I64(tr.Span().Start)
     fr := c.fr()
@@ -16878,7 +16881,7 @@ fn (c mut Checker&) isTrait(t types.TypeId) Bool {
 }
 
 # the names of a case's type that name no type, in its arguments (G36): its variables
-fn (c mut Checker&) patternNames(tr ast.TypeRef?&, out mut List<source.NameId>&, inArgs Bool) {
+fn (c mut Checker&) patternNames(tr ast.TypeRef?&, out mut Vec<source.NameId>&, inArgs Bool) {
     if tr is null { return }
     match tr {
         case ast.TypeRef.Named(nsp, path, args) {
@@ -16925,7 +16928,7 @@ fn (c mut Checker&) typeCaseHolds(tc typeCase, st types.TypeId, tr ast.TypeRef&)
         }
         if not c.P.T.Same(c.P.Subst(tc.Pat, tc.Owner, c.P.T.List(b.Vals)), st) { return false }
     }
-    ns List<source.NameId>
+    ns Vec<source.NameId>
     c.patternNames(tr, ns, false)
     for k in range ns.Len() { c.typeCaseBinds.Push(pair.Pair(ns[k], b.Vals[k])) }
     return true
@@ -16951,7 +16954,7 @@ fn (c mut Checker&) typeCaseCovers(e typeCase, l typeCase) Bool {
     if c.P.T.DeclOf(e.Pat) != c.P.T.DeclOf(l.Pat) { return false }
     # every argument of the earlier one its own variable, each once
     xs := c.P.T.Items(c.P.T.Args(e.Pat))
-    used List<I64>
+    used Vec<I64>
     for x in xs {
         if c.P.T.KindOf(x) != types.Kind.Var or c.P.T.A(x) != e.Owner or used.Has(c.P.T.B(x)) { return false }
         used.Push(c.P.T.B(x))
@@ -16981,8 +16984,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     held := gather(c.stmts, from)
     rt := want if isValue else types.VoidT
     said := types.UnknownT   # what a mismatch names the values as: a first literal value's own type, as written (S12b)
-    arms mut List<typed.Arm&>&c = List<typed.Arm&>()
-    covered mut List<Bool>&c = List<Bool>()
+    arms mut Vec<typed.Arm&>&c = Vec<typed.Arm&>()
+    covered mut Vec<Bool>&c = Vec<Bool>()
     et := c.deref(st)
     if c.isEnum(et) {
         for k in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
@@ -16994,7 +16997,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     allSaid := false
     broken := c.caseBroken
     c.caseBroken = false
-    rows mut List<Array<ast.Pattern&>&>&m = List<Array<ast.Pattern&>&>()
+    rows mut Vec<Array<ast.Pattern&>&>&m = Vec<Array<ast.Pattern&>&>()
     subjLocal := I64(-1)
     match place {
         case typed.Place.Local(_, _, lid) { if local { subjLocal = I64(lid) } }
@@ -17008,13 +17011,13 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         }
         id, outer, mark := c.open(typed.BlockKind.Plain, cs.Sp)
         bfrom := c.stmts.Len()
-        alts mut List<typed.Alt&>&c = List<typed.Alt&>()
-        firstNames mut List<source.NameId>&c = List<source.NameId>()
+        alts mut Vec<typed.Alt&>&c = Vec<typed.Alt&>()
+        firstNames mut Vec<source.NameId>&c = Vec<source.NameId>()
         for ai in range cs.Alts.Len() {
             p := cs.Alts[ai]
             if isWild(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.WildcardNotAlone()) }
             if c.bindsType(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.AnyCaseAlone()) }
-            binds mut List<typed.Bind&>&c = List<typed.Bind&>()
+            binds mut Vec<typed.Bind&>&c = Vec<typed.Bind&>()
             tst typed.Expr?&c = null
             if c.caseName(p, subjLocal) {
                 tst = c.lit(p.Span(), types.BoolT, 1)
@@ -17153,7 +17156,7 @@ fn (c mut Checker&) bindsType(p ast.Pattern&) Bool {
 # the "any" (of type t, at place) holding an instance of the type a type case names (T34): the type identity tested,
 # the instance bound to the name - itself, or for a number its value
 fn (c mut Checker&) typeCase(sp source.Span, tyr ast.TypeRef&, n source.NameId, nsp source.Span, place typed.Place&c, t types.TypeId
-                             binds mut List<typed.Bind&>&c) typed.Expr&c {
+                             binds mut Vec<typed.Bind&>&c) typed.Expr&c {
     if t == types.UnknownT { return c.lit(sp, types.BoolT, 0) }
     mt := c.anyCaseType(sp, t, tyr)
     if mt == types.UnknownT { return c.lit(sp, types.BoolT, 0) }
@@ -17246,12 +17249,12 @@ fn (c mut Checker&) anyAs(sp source.Span, x typed.Expr&c, a ast.Expr&, tr ast.Ty
 }
 
 # the first of an enum's cases the unguarded rows do not cover (S13a), -1 for none
-fn (c mut Checker&) firstUncovered(rows List<Array<ast.Pattern&>&>&, t types.TypeId) I64 {
+fn (c mut Checker&) firstUncovered(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId) I64 {
     n := c.P.T.Items(c.P.T.Cases(t)).Len()
     for k in range n {
         sig := c.P.CaseSig(t, k)
         ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
-        sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+        sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
         for r in rows {
             p := r[0]
             if c.patWild(p) {
@@ -17300,8 +17303,8 @@ fn (c mut Checker&) caseName(p ast.Pattern&, subj I64) Bool {
 }
 
 # S13c: the alternatives of a case bind the same names, each of one type - the first alternative's names kept in first
-fn (c mut Checker&) altNames(binds List<typed.Bind&>&, first mut List<source.NameId>&, ai I64, p ast.Pattern&) {
-    ns := List<source.NameId>()
+fn (c mut Checker&) altNames(binds Vec<typed.Bind&>&, first mut Vec<source.NameId>&, ai I64, p ast.Pattern&) {
+    ns := Vec<source.NameId>()
     for b in binds { ns.Push(c.cur().Local(b.To).Name) }
     if ai == 0 {
         for n in ns { first.Push(n) }
@@ -17352,7 +17355,7 @@ fn (c mut Checker&) braceAfter(cs ast.Case&) source.Span {
 # whether rows of patterns, one per column of types ts, cover every value (Maranget's usefulness, over the patterns'
 # syntax, S13a): a Bool's true and false, an enum's cases and each case's payload positions are its constructors;
 # any other type only a wildcard or a binding covers
-fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.TypeId>&, depth I64) Bool {
+fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.TypeId>&, depth I64) Bool {
     if ts.Len() == 0 { return rows.Len() > 0 }
     if rows.Len() == 0 or depth > 16 { return false }
     t := c.deref(ts[0])
@@ -17364,14 +17367,14 @@ fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.
             if bv >= 0 { seen[bv] = 1 }
         }
         if seen[0] == 0 or seen[1] == 0 {
-            sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+            sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
             for r in rows {
                 if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
             }
             return c.coversRows(sub, rest, depth + 1)
         }
         for bv in range 2 {
-            sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+            sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
             for r in rows {
                 if c.patWild(r[0]) or c.patBool(r[0]) == bv { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
             }
@@ -17402,7 +17405,7 @@ fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.
             if not b { complete = false }
         }
         if not complete {
-            sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+            sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
             for r in rows {
                 if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
             }
@@ -17411,10 +17414,10 @@ fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.
         for k in range n {
             sig := c.P.CaseSig(t, k)
             ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
-            nts List<types.TypeId>
+            nts Vec<types.TypeId>
             for q in ps { nts.Push(q) }
             for q in rest { nts.Push(q) }
-            sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+            sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
             for r in rows {
                 p := r[0]
                 if c.patWild(p) {
@@ -17435,7 +17438,7 @@ fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.
         }
         return true
     }
-    sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+    sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
     for r in rows {
         if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
     }
@@ -17444,14 +17447,14 @@ fn (c mut Checker&) coversRows(rows List<Array<ast.Pattern&>&>&, ts Array<types.
 
 # a row of one pattern
 fn patRow(p ast.Pattern&) Array<ast.Pattern&>&p {
-    row mut List<ast.Pattern&>&p = List<ast.Pattern&>()
+    row mut Vec<ast.Pattern&>&p = Vec<ast.Pattern&>()
     row.Push(p)
     return row.ToArray()
 }
 
 # a row's first column replaced by subs, or by n wildcards where subs is null, then the rest of the row
 fn patTail(r Array<ast.Pattern&>&, subs Array<ast.Pattern&>&r, n I64) Array<ast.Pattern&>&r {
-    row mut List<ast.Pattern&>&r = List<ast.Pattern&>()
+    row mut Vec<ast.Pattern&>&r = Vec<ast.Pattern&>()
     if subs.Len() > 0 {
         for q in subs { row.Push(q) }
     } else {
@@ -17492,7 +17495,7 @@ fn isWild(p ast.Pattern&) Bool {
 }
 
 # which of an enum's cases an unguarded alternative covers whatever its payload holds (S13a)
-fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut List<Bool>&, all Bool) {
+fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut Vec<Bool>&, all Bool) {
     if covered.Len() == 0 { return }
     match p {
         case ast.Pattern.Type(sp, tyr, _, _) {
@@ -17595,7 +17598,7 @@ fn (c mut Checker&) matchValueMismatch(sp source.Span, said types.TypeId, rt typ
 
 # a pattern's test over the value at place (of type t), its bindings appended to binds (S13, S13b): a binding local of
 # the arm's block, the same one where an earlier alternative of the arm binds the name
-fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId, binds mut List<typed.Bind&>&c, arm I64) typed.Expr&c {
+fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId, binds mut Vec<typed.Bind&>&c, arm I64) typed.Expr&c {
     match p {
         case ast.Pattern.Wild(sp) { return c.lit(sp, types.BoolT, 1) }
         case ast.Pattern.Type(sp, tyr, n, nsp) { return c.typeCase(sp, tyr, n, nsp, place, t, binds) }
@@ -17659,7 +17662,7 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
                     nomatch { }
                 }
                 # no case: a call, its value compared by "==" (S13d) - Point(1, 2), Label("x")
-                xs List<ast.Expr&>
+                xs Vec<ast.Expr&>
                 for q in subs {
                     match q {
                         case ast.Pattern.Value(_, x), ast.Pattern.Path(_, x) { xs.Push(x) }
@@ -17695,7 +17698,7 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
 # an expression the parser left as a value (DESIGN.md point 13), read as the pattern it is where it names an enum case:
 # a path a case with any payload, a call a case with its payload's patterns - in a payload position a name binding,
 # "_" nothing (S13); anything else a value compared by "==" (S13d)
-fn (c mut Checker&) exprPattern(x ast.Expr&, place typed.Place&c, t types.TypeId, binds mut List<typed.Bind&>&c, arm I64, top Bool) typed.Expr&c {
+fn (c mut Checker&) exprPattern(x ast.Expr&, place typed.Place&c, t types.TypeId, binds mut Vec<typed.Bind&>&c, arm I64, top Bool) typed.Expr&c {
     et := c.deref(t)
     sp := x.Span()
     match x {
@@ -18103,7 +18106,7 @@ fn assignsWhole(st ast.Stmt&, n Array<source.NameId>&) Bool {
 
 # S8e: the paths a condition says are not null when it is positive (true) or not: "p is not null", "p is null" when
 # false, "and" when true, "or" when false, "not" turning it round
-fn nullTests(x ast.Expr?&, positive Bool, out mut List<Array<source.NameId>&>&) {
+fn nullTests(x ast.Expr?&, positive Bool, out mut Vec<Array<source.NameId>&>&) {
     if x is null { return }
     match x {
         case ast.Expr.Paren(_, y) { nullTests(y, positive, out) }

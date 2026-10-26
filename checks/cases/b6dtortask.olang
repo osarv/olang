@@ -17,8 +17,8 @@ type Res struct(k I64) {
     k
 } destruct {
     kk := k
-    keep mut List<Tracker&>& = List<Tracker&>()
-    nodes mut List<Node&>& = List<Node&>()
+    keep mut Vec<Tracker&>& = Vec<Tracker&>()
+    nodes mut Vec<Node&>& = Vec<Node&>()
     join {
         spawn fn() {
             for j in range 50 {
@@ -33,7 +33,7 @@ type Res struct(k I64) {
 }
 type Box struct(v I64) {
     node mut Node& = Node(v)
-    keep mut List<Held&>& = List<Held&>()
+    keep mut Vec<Held&>& = Vec<Held&>()
 }
 type Held struct(n Node&) {
     n

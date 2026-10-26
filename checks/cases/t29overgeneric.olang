@@ -1,7 +1,7 @@
 # check: fail error[T29]: a type is declared over a number or an array, not over List<String&>
 # T29: nor over a generic type's instance - a struct holding one as a field is the way
 # also: compilation failed with 1 error
-type Names List<String&>
+type Names Vec<String&>
 fn (n mut Names&) AddTwo() {
   n.Push("a")
 }

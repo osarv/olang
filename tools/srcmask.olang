@@ -190,9 +190,9 @@ fn AbsPath(path String&) String {
 
 # the .olang files under dir, depth first: a directory's own files in byte order, then each subdirectory, also in byte
 # order. A directory named build or .git is not entered, nor a symbolic link to one
-fn Walk(dir String&, out mut List<String&>&) {
+fn Walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
-    subs List<String&>
+    subs Vec<String&>
     for name in names {
         path := PathJoin(dir, name)
         if os.IsDir(path) {
@@ -290,7 +290,7 @@ fn Prec(op String&) I64 {
 # for each position of text, the innermost bracket open there in code: '(', '[', '{', or ' ' outside every one
 fn Brackets(text String&, mask String&) String {
     out := Array<Char>(text.Len(), ' ')
-    stack List<Char>
+    stack Vec<Char>
     for i in range text.Len() {
         c := text[i]
         if mask[i] == 'c' and (c == ')' or c == ']' or c == '}') and stack.Len() > 0 { try stack.Pop() catch { } }

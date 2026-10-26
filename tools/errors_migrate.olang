@@ -228,8 +228,8 @@ fn declareError(text String&, line I64, errType String&) String ? {
 }
 
 # the diagnostics compiling path (with -t, from its own directory) gives
-fn diagnostics(olang String&, path String&) List<diagnostic> ? {
-    out := List<diagnostic>()
+fn diagnostics(olang String&, path String&) Vec<diagnostic> ? {
+    out := Vec<diagnostic>()
     dir := filepath.Dir(path)
     r := try os.Exec(String&[olang, "test", filepath.Base(path)], "", true, dir)
     for row in r.Stdout.Lines() {
@@ -248,7 +248,7 @@ fn diagnostics(olang String&, path String&) List<diagnostic> ? {
 
 # one file's diagnostics applied, bottom to top so an edit moves nothing still to be applied; what could not be is put
 # in left. How many edits were made
-fn apply(file String&, ds mut List<diagnostic>&, left mut List<String&>&) I64 ? {
+fn apply(file String&, ds mut Vec<diagnostic>&, left mut Vec<String&>&) I64 ? {
     text := try os.ReadFile(file)
     edits I64 = 0
     ds.Sort(fn(a diagnostic, b diagnostic) { return a.Line > b.Line or (a.Line == b.Line and a.Col > b.Col) })
@@ -278,11 +278,11 @@ fn apply(file String&, ds mut List<diagnostic>&, left mut List<String&>&) I64 ? 
 }
 
 # the .olang files of the paths given, directories walked
-fn filesOf(paths Array<String&>&) List<String&> ? {
-    out := List<String&>()
+fn filesOf(paths Array<String&>&) Vec<String&> ? {
+    out := Vec<String&>()
     for p in paths {
         if os.IsDir(p) {
-            sub := List<String&>()
+            sub := Vec<String&>()
             for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
             for f in try filesOf(sub.ToArray()) { out.Push($f) }
         } else if p.EndsWith(".olang") { out.Push(p) }
@@ -303,11 +303,11 @@ fn main() ? {
         renamed := renameTryForms(text)
         if renamed != text { try os.WriteFile(f, renamed) }
     }
-    left := List<String&>()
+    left := Vec<String&>()
     for round in range 1, 21 {
         left.Clear()
-        all := List<diagnostic>()
-        names := List<String&>()
+        all := Vec<diagnostic>()
+        names := Vec<String&>()
         for f in files {
             for d in try diagnostics(olang, f) {
                 all.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg))
@@ -316,7 +316,7 @@ fn main() ? {
         }
         edits I64 = 0
         for name in names {
-            ds := List<diagnostic>()
+            ds := Vec<diagnostic>()
             for d in all {
                 if d.File == name { ds.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg)) }
             }

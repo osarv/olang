@@ -29,7 +29,7 @@ fn main() ? {
     b := Bag(Node(1))
     try io.Println($b)
     t := churn(200)
-    l := List<Node&>()
+    l := Vec<Node&>()
     for i in range 50 { l.Push(Node(i)) }
     try io.Println($b.head.next!.v " " $t)
 }

@@ -3,7 +3,7 @@
 # E31b/O17b/O18c (F2, F3): two levels, "ll[0][0].S.Push(x)" - the inner read "ll[0]" lent to the outer At as its reference
 import "std/io"
 type Blk struct() {
-    S List<I64>
+    S Vec<I64>
     t I64 = 0
 }
 fn churn() ? io.Error {
@@ -12,10 +12,10 @@ fn churn() ? io.Error {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-fn add(ll mut List<List<Blk>>&, x I64) { ll[0][0].S.Push(x) }
+fn add(ll mut Vec<Vec<Blk>>&, x I64) { ll[0][0].S.Push(x) }
 fn main() ? {
-    ll := List<List<Blk>>()
-    ll.Push(List<Blk>())
+    ll := Vec<Vec<Blk>>()
+    ll.Push(Vec<Blk>())
     ll[0].Push(Blk())
     add(ll, 7)
     try churn()

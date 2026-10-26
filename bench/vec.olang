@@ -10,6 +10,7 @@
 # (c/vec.c) computes the same over arrays.
 import "std/io"
 import "std/os"
+import "std/list"
 
 type Usage error {
     ARGS
@@ -61,7 +62,7 @@ fn walkArray(a Array<I64>&, passes I64) I64 {
     }
     return t
 }
-fn walkList(l List<I64>&, passes I64) I64 {
+fn walkList(l list.List<I64>&, passes I64) I64 {
     t I64 = 0
     for p in range passes {
         for x in l { t += x ^ p }
@@ -89,7 +90,7 @@ fn gatherArray(a Array<I64>&, idx Array<I64>&) I64 {
     for i in range idx.Len() { t += a[idx[i]] }
     return t
 }
-fn gatherList(l List<I64>&, idx Array<I64>&) I64 {
+fn gatherList(l list.List<I64>&, idx Array<I64>&) I64 {
     t I64 = 0
     for i in range idx.Len() { t += l[idx[i]] }
     return t
@@ -111,7 +112,7 @@ fn storeArray(a mut Array<I64>&, passes I64) I64 {
     for x in a { t += x }
     return t
 }
-fn storeList(l mut List<I64>&, passes I64) I64 {
+fn storeList(l mut list.List<I64>&, passes I64) I64 {
     for p in range passes {
         for i in range l.Len() { l[i] = l[i] * 2 + p }
     }
@@ -147,7 +148,7 @@ fn main() ? {
     if not (kind == "vec" or kind == "array" or kind == "list") { error Usage.KIND }
     a := values(n)
     v := Vec<I64>()
-    l := List<I64>()
+    l := list.List<I64>()
     if mode != "push" and mode != "fields" {
         if kind == "vec" { v.PushAll(a) }
         if kind == "list" { l.PushAll(a) }

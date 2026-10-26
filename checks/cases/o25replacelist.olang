@@ -5,10 +5,10 @@
 # kept in place (study 6's r10: the message said "declare it with ':='" of a ':=' local)
 import "std/io"
 type World struct() {
-    alive mut List<I64>& = List<I64>()
+    alive mut Vec<I64>& = Vec<I64>()
 }
 fn (w mut World&) age(s I64) {
-    still := List<I64>()
+    still := Vec<I64>()
     for id in w.alive {
         if (id + s) % 7 != 0 { still.Push(id) }
     }

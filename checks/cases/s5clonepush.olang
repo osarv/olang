@@ -3,9 +3,9 @@
 # the loop's block holds, and cannot be kept past it
 import "std/io"
 fn main() ? {
-    rows := List<List<String&>>()
+    rows := Vec<Vec<String&>>()
     for k in range 4 {
-        rec := List<String&>()
+        rec := Vec<String&>()
         rec.Push($k "-text")
         rows.Push(rec.Clone())
     }

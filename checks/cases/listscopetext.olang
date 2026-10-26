@@ -9,7 +9,7 @@ fn churn() I64 {
     return t
 }
 type CB struct() {
-    items mut List<String&>& = List<String&>()
+    items mut Vec<String&>& = Vec<String&>()
 }
 fn main() ? {
     c := CB()
@@ -17,7 +17,7 @@ fn main() ? {
     s mut String&l = $5 "-new-text-made-where-the-list-lives"
     l.Push(s)
     assert s == "5-new-text-made-where-the-list-lives"
-    c.items = List<String&>()
+    c.items = Vec<String&>()
     churn()
     assert c.items.Len() == 0
 }

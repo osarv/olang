@@ -10,7 +10,7 @@ type Pairish struct(a Box, n I64) {
 fn pairish(s String&) Pairish { return Pairish(Box(s), 1) }
 
 fn main() ? {
-    bs := List<Box>()
+    bs := Vec<Box>()
     for k in range 4 {
         t := $k "-text"
         bs.Push(pairish(t).a)

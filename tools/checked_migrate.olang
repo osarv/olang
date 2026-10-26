@@ -32,7 +32,7 @@ Numbers Array<String&> = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", 
 
 type Result struct() {
     changes I64 = 0
-    left List<String&>
+    left Vec<String&>
 }
 
 fn isNumber(t String&) Bool {
@@ -52,8 +52,8 @@ fn nameEnd(src String&, i I64) I64 {
 
 # a postfix chain from i - a name or a number, then ".name", "(...)" and "[...]" - as its parts' starts and the end;
 # empty where none starts at i
-fn chain(src String&, mask String&, i I64) List<I64> {
-    parts List<I64>
+fn chain(src String&, mask String&, i I64) Vec<I64> {
+    parts Vec<I64>
     j := nameEnd(src, i)
     if j == i {
         for j < src.Len() and (src[j].IsDigit() or src[j] == '_' or src[j] == '.') { j++ }
@@ -106,7 +106,7 @@ fn simple(src String&) Bool {
 
 # the operand rewritten - "try"'s, without the "try" - and what it now fails with ("ArrayError", "NumberError"); ""
 # where it is not one this tool rewrites
-fn rewrite(src String&, mask String&, parts List<I64>&) String, String {
+fn rewrite(src String&, mask String&, parts Vec<I64>&) String, String {
     n := parts.Len()
     end := parts[n - 1]
     last := parts[n - 2]
@@ -141,7 +141,7 @@ fn rewrite(src String&, mask String&, parts List<I64>&) String, String {
 
 # whether the operand src[a:b] of a checked holds an operation it checked besides its outermost one (parts' last):
 # arithmetic, a shift, a negation, a conversion, an index or an "as" - checked once, and no longer by what replaces it
-fn innerChecks(src String&, mask String&, a I64, b I64, parts List<I64>&) Bool {
+fn innerChecks(src String&, mask String&, a I64, b I64, parts Vec<I64>&) Bool {
     return checksIn(src, mask, a, b, parts[parts.Len() - 2], parts[0])
 }
 
@@ -365,7 +365,7 @@ fn lineText(src String&, i I64) String&src {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -381,7 +381,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_checked_migrate [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

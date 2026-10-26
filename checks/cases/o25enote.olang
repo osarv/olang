@@ -7,7 +7,7 @@
 # the flow is not read, and the text is made in the block. It was O10d once: a slice of "text" was taken for a call
 # still landing, and landed mk's result through the variable's read - a variable's read never lands, O18a.)
 type Store struct() {
-    keys mut List<String&>& = List<String&>()
+    keys mut Vec<String&>& = Vec<String&>()
 }
 fn put(s mut Store&, k String&s, v String&s) {
     s.keys.Push(k)

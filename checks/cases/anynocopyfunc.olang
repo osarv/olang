@@ -12,7 +12,7 @@ fn (u mut Ups&) Step() I64 {
     u.at += 1
     return u.at
 }
-type Wrap<T> struct(l List<T>&) { l }
+type Wrap<T> struct(l Vec<T>&) { l }
 fn (g mut G&) Later<G Gen>() fn() G {
     return fn() G { return g }
 }

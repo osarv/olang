@@ -39,9 +39,9 @@ type Edit struct(start I64, end I64, rep I64, seq I64) {
 }
 
 # the text's tokens, statement ends dropped and "<<"/">>" split; the last is Eof
-fn vtokens(src String&) List<VT> {
+fn vtokens(src String&) Vec<VT> {
     ts := scan.Scan(src)
-    out List<VT>
+    out Vec<VT>
     for tk in ts.Toks {
         if tk.Kind == token.Tok.StmtEnd { continue }
         s := I64(tk.Start)
@@ -62,12 +62,12 @@ fn vtokens(src String&) List<VT> {
 
 type migration struct(src String&) {
     src
-    v List<VT>
+    v Vec<VT>
     m Array<I64>& = Array<I64>(0) # each bracket's partner, -1 for none
     enc Array<I64>& = Array<I64>(0) # the innermost bracket open around each token, -1 for none
     paramsClose Map<I64, Bool> # the ")" closing a signature's parameters, by index
-    edits List<Edit>
-    reps List<String&>
+    edits Vec<Edit>
+    reps Vec<String&>
     results I64 = 0
     errors I64 = 0
     wrapped I64 = 0
@@ -91,7 +91,7 @@ fn (g mut migration&) brackets() {
     n := g.v.Len()
     m mut Array<I64>&g = Array<I64>(n, -1)
     enc mut Array<I64>&g = Array<I64>(n, -1)
-    stack List<I64>
+    stack Vec<I64>
     for i in range n {
         enc[i] = stack[stack.Len() - 1] if stack.Len() > 0 else -1
         k := g.v[i].k
@@ -163,8 +163,8 @@ fn (g migration&) declParams(i I64) I64 {
 }
 
 # the "(" of every signature's parameters: functions, function types and lambdas (after "fn"), and a trait's methods
-fn (g migration&) sigs() List<I64> {
-    out List<I64>
+fn (g migration&) sigs() Vec<I64> {
+    out Vec<I64>
     n := g.v.Len()
     for i in range n {
         k := g.v[i].k
@@ -397,7 +397,7 @@ fn migrateMarkdown(src String&, total mut Counts&) String {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -413,7 +413,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_results_migrate [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

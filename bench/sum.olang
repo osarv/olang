@@ -3,6 +3,7 @@
 # the first argument; the C version pushes onto a growable array and sums it with a hand-written loop for all of them.
 import "std/io"
 import "std/os"
+import "std/list"
 
 type Usage error {
     ARGS
@@ -15,7 +16,7 @@ fn main() ? {
     mode := args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
-    l := List<I64>()
+    l := list.List<I64>()
     s I64 = 1
     for i in range n {
         s = s * 6364136223846793005 + 1442695040888963407

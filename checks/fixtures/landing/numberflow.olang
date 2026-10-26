@@ -5,7 +5,7 @@
 import "std/io"
 type Summary struct() {
     best I64 = 0
-    names List<String&> = List<String&>()
+    names Vec<String&> = Vec<String&>()
 }
 fn line(i I64) String& { return "line " $i " took " $(i % 97) "ms" }
 fn measure(t String&) I64 { return t.Len() }

@@ -49,34 +49,34 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # sixth of the front end's work on the compiler's own build at -O3, and a seventh of it at -debug
     VerifyMir Bool = true
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
-    Gaps List<String&>              # what emission met and does not emit yet, a line each
-    queue List<mir.FnKey>           # the functions to write, in the order first referred to
+    Gaps Vec<String&>              # what emission met and does not emit yet, a line each
+    queue Vec<mir.FnKey>           # the functions to write, in the order first referred to
     queued Map<mir.FnKey, I64>      # each function's index in queue
     cur I64 = -1                    # the function being written
-    named List<types.TypeId>        # the declared structs whose types are spelled by name, to define
+    named Vec<types.TypeId>        # the declared structs whose types are spelled by name, to define
     namedSeen Map<types.TypeId, Bool>
     # what is written, one item per symbol in the order made (a function, a global, constant data, a declaration):
     # its text, where it lives in a build of one object per module (a module's index, or Home*), and how another
     # object declares it
-    itemSym List<String&>
-    itemText List<String&>
-    itemHome List<I64>
-    itemDecl List<String&>
+    itemSym Vec<String&>
+    itemText Vec<String&>
+    itemHome Vec<I64>
+    itemDecl Vec<String&>
     itemAt Map<String&, I64>
-    itemRefs List<Array<I64>&>      # each item's references (refsIn), found once when an object first needs them
+    itemRefs Vec<Array<I64>&>      # each item's references (refsIn), found once when an object first needs them
     Triple String& = "x86_64-pc-linux-gnu"    # the target written into every module (B12)
     nconst I64 = 0
     badType Bool = false            # a type met with no layout, in the function being written
     ntask I64 = 0                   # tasks' trampolines made
     dataAt Map<String&, String&>      # a Data operand's storage by its position: one instance for each (T25d)
-    thunks List<String&>            # function-value thunks to write: "SYM|key index"
+    thunks Vec<String&>            # function-value thunks to write: "SYM|key index"
     thunkFor Map<String&, Bool>
-    thunkKeys List<mir.FnKey>
-    thunkTys List<types.TypeId>
-    adaptFrom List<types.TypeId>    # function values converted between ABIs (R6): an adapter per pair, its from and to
-    adaptTo List<types.TypeId>
+    thunkKeys Vec<mir.FnKey>
+    thunkTys Vec<types.TypeId>
+    adaptFrom Vec<types.TypeId>    # function values converted between ABIs (R6): an adapter per pair, its from and to
+    adaptTo Vec<types.TypeId>
     adaptAt Map<String&, Bool>
-    dtorKeys List<mir.FnKey>        # destructor thunks to write (the runtime's fn(ptr instance, ptr scope))
+    dtorKeys Vec<mir.FnKey>        # destructor thunks to write (the runtime's fn(ptr instance, ptr scope))
     dtorSeen Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>
     dtorOf Map<types.TypeId, I64>
@@ -85,7 +85,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartLimit is cut into parts (Objects)
     PartLimit I64 = PartSize        # the IR of one part at most: PartSize, or PartSizeDev in a -quick or -debug build
     emitted Bool = false
-    tyDef List<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
+    tyDef Vec<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
     tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
     # K2: the immutable globals evaluated while compiling, by their initializer's body - each written as its value,
     # its initializer not run at startup (interp.Bake)
@@ -112,9 +112,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # B3i: the modules whose objects the caller has already, from a build with the same inputs (Reuse): not lowered or
     # written - a function of theirs another object names only declared - and the instances their objects name wanted
     # as though they were written. Made lists each module this emission wrote, for the caller to keep
-    Reuse List<Reused>
+    Reuse Vec<Reused>
     ReusedAt Map<I64, I64>          # a reused module's index in Reuse
-    Made List<Reused>
+    Made Vec<Reused>
     Redo Bool = false               # Objects found a reused module cut otherwise than it would now be: emit again without
     testSyms Map<I64, String&>      # each test's symbol, by its body (testSym)
     # B3l: a failed check's place kept out of the code naming it - each "FILE:LINE: ..." text an item HomeLoc, named by
@@ -124,7 +124,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # B3d where objects are cut: each instance's group, the module whose code first reaches it (instGroups), and the
     # groups in their modules' order
     instGroup Map<I64, I64>
-    groupOrder List<I64>
+    groupOrder Vec<I64>
     groupAt Map<I64, I64>           # each group's place in groupOrder
 }
 
@@ -134,12 +134,12 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
 # is where its parts start among the objects Objects gave
 type Reused struct(Module I64) {
     Module
-    Parts List<String&>
-    Locs List<Bool>         # B3l: whether each part is the module's Locations object
-    Hashes List<String&>    # each part's IR's SHA-256, as its record keeps it (the caller's)
+    Parts Vec<String&>
+    Locs Vec<Bool>         # B3l: whether each part is the module's Locations object
+    Hashes Vec<String&>    # each part's IR's SHA-256, as its record keeps it (the caller's)
     Size I64 = 0
     Split Bool = false
-    Inst List<String&>
+    Inst Vec<String&>
     From I64 = -1
 }
 
@@ -188,9 +188,9 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 # module (Module) gives that one object, the instances it uses in it. In a -debug build, or one whose IR is SplitFrom
 # or more (which links by ThinLTO), an object holding more than PartSize of items is cut into parts, each item in the
 # part its symbol's hash picks, so the parts compile side by side and an edit recompiles the part holding it
-fn (e mut Emitter&) Objects() List<Object> {
+fn (e mut Emitter&) Objects() Vec<Object> {
     e.emitAll()
-    out List<Object>
+    out Vec<Object>
     mods := e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
@@ -272,7 +272,7 @@ fn (e mut Emitter&) Objects() List<Object> {
 fn (e mut Emitter&) instGroups() {
     mods := e.P.L.Mods
     root := e.P.L.Root
-    order List<I64>
+    order Vec<I64>
     for m in range mods.Len() {
         if m != root { order.Push(m) }
     }
@@ -289,7 +289,7 @@ fn (e mut Emitter&) instGroups() {
         }
     }
     for m in order {
-        work List<I64>
+        work Vec<I64>
         ri := try e.ReusedAt.Get(m) catch default -1
         if ri >= 0 {
             for sym in e.Reuse[ri].Inst {
@@ -377,8 +377,8 @@ fn (e Emitter&) wrapper(i I64, into I64) String {
 
 # the objects holding home's items (and the instances', alsoInst): one, or where split and they are more than
 # PartSize, as many parts as it takes - the first named identity, the others identity-K
-fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool
-    inst mut List<String&>?& = null, ig I64 = -1) {
+fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool
+    inst mut Vec<String&>?& = null, ig I64 = -1) {
     # a test build's root cut into parts: its tests (and the harness naming them) apart from the code they call, in
     # parts of their own, a quarter the size - nothing imports a test, so an edit to one recompiles its part and
     # relinks only that part's code, where a part holding the functions tests call is imported by every part calling
@@ -411,7 +411,7 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
 
 # B3l: the Locations object of a home, defining the places its objects name, in the order of their symbols
 fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
-    its List<I64>
+    its Vec<I64>
     for l in locs { its.Push(l.Key) }
     syms := e.itemSym
     sorted := its.ToArray()
@@ -470,7 +470,7 @@ fn (e mut Emitter&) emitAll() {
     for m in inits {
         if not e.Module or m == p.L.Root { e.want(mir.FnKey.Init(m)) }
     }
-    tests List<I64>
+    tests Vec<I64>
     mainBody I64 = -1
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
@@ -554,8 +554,8 @@ fn (e mut Emitter&) emitAll() {
 
 # the reused modules taken in, and the keys of the instances their objects name: a module one of whose instances is
 # no function of this program (its record from another program's build, say) is not reused but written
-fn (e mut Emitter&) reusing() List<mir.FnKey> {
-    out List<mir.FnKey>
+fn (e mut Emitter&) reusing() Vec<mir.FnKey> {
+    out Vec<mir.FnKey>
     if e.Reuse.Len() == 0 or e.Module { return out }
     bySym Map<String&, mir.FnKey>
     for i in range e.Lw.Bodies.Len() {
@@ -568,7 +568,7 @@ fn (e mut Emitter&) reusing() List<mir.FnKey> {
     }
     for ri, r in e.Reuse {
         if r.Module == e.P.L.Root or e.ReusedAt.Has(r.Module) { continue }
-        keys List<mir.FnKey>
+        keys Vec<mir.FnKey>
         whole := true
         for sym in r.Inst {
             k := try bySym.Get(sym) catch {
@@ -611,7 +611,7 @@ fn (e mut Emitter&) mergeSame() {
     # other objects name, which a module whose object is reused (B3i) does not name in this emission at all
     root := e.P.L.Root
     reach Map<I64, Bool>
-    work List<I64>
+    work Vec<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
         if h == HomeInst or h == root {
@@ -633,7 +633,7 @@ fn (e mut Emitter&) mergeSame() {
             work.Push(j)
         }
     }
-    cand List<I64>
+    cand Vec<I64>
     at Map<I64, I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
@@ -646,7 +646,7 @@ fn (e mut Emitter&) mergeSame() {
     }
     n := cand.Len()
     if n < 2 { return }
-    callees List<Array<I64>&>   # each candidate's references to candidates, as their indexes in cand, in order
+    callees Vec<Array<I64>&>   # each candidate's references to candidates, as their indexes in cand, in order
     cls := Array<I64>(n)
     shapes Map<String&, I64>
     for c in range n {
@@ -654,7 +654,7 @@ fn (e mut Emitter&) mergeSame() {
         text := e.itemText[i]
         rs := e.refs(i)
         b := StringBuilder()
-        cs List<I64>
+        cs Vec<I64>
         from I64 = 0
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0 { continue }
@@ -726,8 +726,8 @@ fn (e mut Emitter&) mergeSame() {
 
 # the references in IR text, as positions: kind (0 a symbol after "@", 1 a type's name in %"...", 2 a metadata node
 # "!N", the "!" included), where its name starts and ends. Quoted text is skipped (a constant's bytes, an attribute's value); a quote inside is always escaped
-fn refsIn(text String&) List<I64> {
-    out List<I64>
+fn refsIn(text String&) Vec<I64> {
+    out Vec<I64>
     n := text.Len()
     i I64 = 0
     for i < n {
@@ -774,9 +774,9 @@ fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c
 # one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
-fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>?& = null
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut Vec<String&>?& = null
     group I64 = -1, locs mut Map<I64, Bool>?& = null, ig I64 = -1) String {
-    mine List<I64>
+    mine Vec<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
         if (h == home or (alsoInst and h == HomeInst)) and (group < 0 or e.groupOf(i) == group) and
@@ -787,7 +787,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     syms := e.itemSym
     sorted := mine.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
-    order List<I64>
+    order Vec<I64>
     have Map<I64, Bool>
     for i in sorted {
         order.Push(i)
@@ -795,7 +795,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     }
     decls StringBuilder
     declared Map<I64, Bool>
-    tys List<I64>
+    tys Vec<I64>
     tyHave Map<I64, Bool>
     rename Map<I64, String&>
     # the objects holding the instances: what is merged into another (mergeSame) named as that one, an instance merged
@@ -919,7 +919,7 @@ fn dbgTail(cu I64) String {
 }
 
 # a type's definition wanted in the object, and the types its body names
-fn (e mut Emitter&) wantType(t I64, tys mut List<I64>&, tyHave mut Map<I64, Bool>&) {
+fn (e mut Emitter&) wantType(t I64, tys mut Vec<I64>&, tyHave mut Map<I64, Bool>&) {
     tyHave.Put(t, true)
     tys.Push(t)
     def := e.tyDef[t]
@@ -941,23 +941,23 @@ fn prefixOf(s String&) String {
 }
 
 # the modules whose initialization runs, imports first (B5a): the prelude's, then the root's imports depth first
-fn (e mut Emitter&) initOrder() List<I64> {
+fn (e mut Emitter&) initOrder() Vec<I64> {
     with := e.Lw.InitModules()
     done Map<I64, Bool>
-    order List<I64>
+    order Vec<I64>
     mods := e.P.L.Mods
     for m in range mods.Len() {
         if mods[m].Prelude { e.visit(m, done, order) }
     }
     e.visit(e.P.L.Root, done, order)
-    out List<I64>
+    out Vec<I64>
     for m in order {
         if m in with { out.Push(m) }
     }
     return out
 }
 
-fn (e mut Emitter&) visit(m I64, done mut Map<I64, Bool>&, order mut List<I64>&) {
+fn (e mut Emitter&) visit(m I64, done mut Map<I64, Bool>&, order mut Vec<I64>&) {
     if done.Has(m) { return }
     done.Put(m, true)
     for im in e.P.L.Mods[m].Imports {
@@ -993,8 +993,8 @@ fn (e mut Emitter&) want(k mir.FnKey) {
 
 # the global bodies of the modules in inits, in the order they run: a module's after its imports' (inits' order), and
 # within a module in check's order (P.InitOrder) - each after the globals its initializer reads, else as declared
-fn (e mut Emitter&) globalOrder(inits List<I64>) List<I64> {
-    out List<I64>
+fn (e mut Emitter&) globalOrder(inits Vec<I64>) Vec<I64> {
+    out Vec<I64>
     for m in inits {
         for i in e.P.InitOrder {
             match e.Lw.Bodies[i].Of {
@@ -1821,8 +1821,8 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     # the frame, block and loop scopes nothing is built in, registered with, handed on or captured: no header is made for one
     # (a render helper's frame - a recursion through a Str keeps no header per level that it never uses, as stage 0's)
     idle Map<I64, Bool>
-    pieceKinds List<mir.WriteKind>
-    pieceOps List<mir.Operand>
+    pieceKinds Vec<mir.WriteKind>
+    pieceOps Vec<mir.Operand>
     # D18: a generator's Next, written as an LLVM coroutine (genFunction) - its promise's type: the result as the
     # function returns it, a "running" word, the result pointer, then the scopes the call passed
     gen Bool = false
@@ -2712,7 +2712,7 @@ fn (fe mut fnEm&) fillInPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool 
                 fe.label(done)
                 return true
             }
-            vs List<String&>
+            vs Vec<String&>
             for i in range n { vs.Push(fe.val(fe.arg(args, i), el)) }
             at, _ := fe.addr(p)
             for i in range n {
@@ -4683,7 +4683,7 @@ fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range) {
         a := fe.let("insertvalue " $rt " zeroinitializer, " $fe.ty(fe.res) " " $fe.val(x, fe.res) ", 1")
         fe.store(rt, a, "%rv")
     }
-    hs List<I64>
+    hs Vec<I64>
     for i in range held.N {
         match fe.F.Refs[I64(held.At) + i] {
             case mir.ScopeRef.Scope(sc) {
@@ -5072,7 +5072,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
     first := true
     regs := cabi.Regs(6, 8)
     sret := ""
-    rw := cabi.Way(cabi.Pass.Direct, List<String&>(), List<I64>(), List<I64>(), "")
+    rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
     if res != types.VoidT and res != types.NoreturnT {
         fe.E.P.Layout(res)
         rw = cabi.Result(t, fe.E.Arch, res)
@@ -5214,8 +5214,8 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
 # the export fns this build writes - each body that is one, in the order the bodies are - and the error types their
 # lists name, in order of first appearance: a library's error codes number them (X14), every entry of the program the
 # same way, so they are written in the root's object
-fn (e mut Emitter&) exportBodies() List<I64> {
-    out List<I64>
+fn (e mut Emitter&) exportBodies() Vec<I64> {
+    out Vec<I64>
     p := e.P
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
@@ -5231,9 +5231,9 @@ fn (e mut Emitter&) exportBodies() List<I64> {
 
 # the error types the export fns' lists name, in order of first appearance - the default error among them where one
 # has it (R1a): a library's codes are (position << 16) | word, as R6 encodes one function's (X14)
-fn (e mut Emitter&) ExportErrors() List<types.TypeId> {
+fn (e mut Emitter&) ExportErrors() Vec<types.TypeId> {
     t := e.T
-    out List<types.TypeId>
+    out Vec<types.TypeId>
     for i in e.exportBodies() {
         for x in t.Items(t.Errors(e.Lw.Bodies[i].Ty)) {
             et := t.ErrOf(x) if x != types.DefaultErrT else x
@@ -5269,15 +5269,15 @@ fn (e mut Emitter&) exportEntry(i I64) {
     if hasRes { p.Layout(res) }
     errs := t.Items(t.Errors(ty)).Len() > 0
     arr := hasRes and e.exportArrayResult(res)
-    rw := cabi.Way(cabi.Pass.Direct, List<String&>(), List<I64>(), List<I64>(), "")
+    rw := cabi.Way(cabi.Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), "")
     if hasRes and not errs and not arr { rw = cabi.Result(t, e.Arch, res) }
-    cps List<String&>          # C's parameters
+    cps Vec<String&>          # C's parameters
     regs := cabi.Regs(6, 8)
     if rw.Kind == cabi.Pass.Sret {
         cps.Push($"ptr sret(" $e.ty(res) ") align " $t.Align(res) " %sret")
         regs.Int--
     }
-    olang List<String&>        # the function's arguments, after its hidden ones
+    olang Vec<String&>        # the function's arguments, after its hidden ones
     ps := t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for j in range ps.Len() {
@@ -5353,7 +5353,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
     fe.code.Push("go:\n")
     sc := fe.alloca("%olang.scope", 8)
     fe.store("%olang.scope", "zeroinitializer", sc)
-    args List<String&>
+    args Vec<String&>
     out := ""
     if hasRes and t.ViaMemory(res) {
         out = fe.slot(res)
@@ -5463,7 +5463,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
 
 # X14: a library's start - run as it is loaded, before its loader goes on: the loading thread made known, each
 # module's globals initialized (B5a) as main would
-fn (e mut Emitter&) libInit(inits List<I64>) {
+fn (e mut Emitter&) libInit(inits Vec<I64>) {
     e.runtime("__olang_thread_init")
     b := StringBuilder()
     b.Push("define internal void @__olang_lib_init() #0 {\nentry:\n  call void @__olang_thread_init()\n")
@@ -5477,8 +5477,8 @@ fn (e mut Emitter&) libInit(inits List<I64>) {
 }
 
 # X14: the C names a library shows - its export fns' entries
-fn (e mut Emitter&) ExportNames() List<String&> {
-    out List<String&>
+fn (e mut Emitter&) ExportNames() Vec<String&> {
+    out Vec<String&>
     for i in e.exportBodies() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(inst) { out.Push($e.text(e.P.FnDecl(e.P.InstanceFn(inst)).Name)) }
@@ -5493,8 +5493,8 @@ fn (e mut Emitter&) ExportNames() List<String&> {
 # what a header has seen so far: its extern types and its structs (each defined once, what it holds before it), in
 # order
 type cDecls struct() {
-    Foreign List<String&>
-    Structs List<String&>
+    Foreign Vec<String&>
+    Structs Vec<String&>
     seen Map<String&, Bool>
 }
 
@@ -5547,7 +5547,7 @@ fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
     t := e.T
     fd := e.P.FnDecl(f)
     name := $e.text(fd.Name)
-    ps := List<String&>()
+    ps := Vec<String&>()
     pts := t.Items(t.Params(ty))
     for j in range pts.Len() {
         pn := $e.text(fd.S.Params[j].Name) if j < fd.S.Params.Len() else $"a" $j
@@ -5768,7 +5768,7 @@ fn (e mut Emitter&) sanInit(b mut StringBuilder&) {
     b.Push("  call void @__olang_san_init()\n")
 }
 
-fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
+fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     t := e.T
     e.define("__olang_argc", "@__olang_argc = external global i32")
     e.define("__olang_argv", "@__olang_argv = external global ptr")
@@ -5833,7 +5833,7 @@ fn (e mut Emitter&) errName(et types.TypeId) String {
 # the link inlined every test (each called once) into it: one function the size of the program, on which the
 # optimizer spent most of a large test build (tests/shared.olang's, 223 s and 2.0 GB, 93 s and 1.35 GB as tables). The
 # counters are read and written volatile: they live across the setjmp, written only on the paths it returns to (X3b)
-fn (e mut Emitter&) harness(tests List<I64>) {
+fn (e mut Emitter&) harness(tests Vec<I64>) {
     inits := e.initOrder()
     e.define("__olang_argc", "@__olang_argc = external global i32")
     e.define("__olang_argv", "@__olang_argv = external global ptr")
@@ -5847,12 +5847,12 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     e.runtime("__olang_test_failed")
     # each global's initializer behind the recovery point: one that fails a check leaves its global at its zero value
     # and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
-    gs List<String&>
+    gs Vec<String&>
     for i in e.globalOrder(inits) {
         if e.Baked.Has(i) { continue }
         gs.Push($"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))))
     }
-    ts List<String&>
+    ts Vec<String&>
     for id in tests {
         ts.Push($"{ ptr, ptr } { ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) ", ptr " $e.cstr(e.testName(id)) " }")
     }
@@ -6001,8 +6001,8 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     }
     ps := t.Items(t.Params(ty))
     # the environment's fields and their values
-    fields List<String&>
-    vals List<String&>
+    fields Vec<String&>
+    vals Vec<String&>
     if isValue {
         fields.Push("{ ptr, ptr }")
         vals.Push(fv)
@@ -6012,7 +6012,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         fields.Push(fe.ty(ps[i]))
         vals.Push("" if fe.viaMem(ps[i]) else fe.val(fe.arg(k.Args, i), ps[i]))
     }
-    subs List<String&>
+    subs Vec<String&>
     for i in range k.Scopes.N {
         r := fe.F.Refs[I64(k.Scopes.At) + i]
         fields.Push("ptr")
@@ -6105,7 +6105,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
 
 # a task's trampoline, fn(ptr env) ptr: the call made from what the environment holds, its results stored, and the
 # error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
-fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, callee String&, ty types.TypeId
+fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, callee String&, ty types.TypeId
                              nscopes I64, k mir.Task, joinErrs types.ListId, copyF Array<I64>&) String {
     e := fe.E
     t := e.T

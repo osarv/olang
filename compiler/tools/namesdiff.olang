@@ -19,14 +19,14 @@ fn main() {
         toolkit.Die("namesdiff: no working directory")
         unreachable
     }
-    cases := List<String&>()
+    cases := Vec<String&>()
     if os.Args().Len() > 1 {
         for i in range 1, os.Args().Len() { cases.Push(os.Args()[i]) }
     } else {
         for f in toolkit.Matching("checks/cases", ".olang") { cases.Push($filepath.Base(f)) }
     }
     said := StringBuilder()
-    plain := List<String&>()
+    plain := Vec<String&>()
     for c in cases {
         text := try os.ReadFile("checks/cases/" $c) catch default ""
         args := flagArgs(flagsOf(text))
@@ -42,7 +42,7 @@ fn main() {
     new := toolkit.Text(toolkit.Sorted(rows(said.ToString())))
     want := Map<String&, Bool>()
     for c in cases { want.Put(c, true) }
-    kept := List<String&>()
+    kept := Vec<String&>()
     for r in rows(toolkit.Read(golden)) {
         tab := try r.FindByte('\t') catch default -1
         if tab >= 0 and r[0:tab] in want { kept.Push($r) }
@@ -60,7 +60,7 @@ fn main() {
 
 # "dump names" over cases in checks/cases, with args
 fn names(root String&, dump String&, args Array<String&>&, cases Array<String&>&) String {
-    full := List<String&>()
+    full := Vec<String&>()
     full.Push($root "/" $dump)
     full.Push("names")
     for a in args { full.Push(a) }
@@ -78,7 +78,7 @@ fn flagsOf(text String&) String {
 
 # the arguments of "dump names" the flags stand for: -t, and -D for the word after -define
 fn flagArgs(flags String&) Array<String&>& {
-    args := List<String&>()
+    args := Vec<String&>()
     want := false
     for f in toolkit.Fields(flags) {
         if f == "-t" {
@@ -105,8 +105,8 @@ fn ownRule(rule String&) Bool {
 }
 
 # the rows of a rendering whose rule is load's or names', as "CASE<TAB>FILE:LINE:COL RULE"
-fn rows(text String&) List<String&> {
-    out := List<String&>()
+fn rows(text String&) Vec<String&> {
+    out := Vec<String&>()
     c String& = ""
     for line in toolkit.Rows(text) {
         if line.StartsWith("=== ") {

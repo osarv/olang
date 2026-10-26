@@ -19,7 +19,7 @@ type NameId extends I32
 # the names of one compilation, each spelled once. Every identifier the parser reads is interned here, so the AST
 # holds ids, never text, and outlives the tokens it was read from
 type Names struct() {
-    texts List<String&>
+    texts Vec<String&>
     ids Map<String&, NameId>
 }
 

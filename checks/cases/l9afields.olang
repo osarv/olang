@@ -7,7 +7,7 @@ type Stats struct() {
     fail := 2
     type String& = "k"
     in Bool
-    range mut List<I64>& = List<I64>()
+    range mut Vec<I64>& = Vec<I64>()
     break := 7
 }
 fn (s mut Stats&) finish() {

@@ -60,11 +60,11 @@ fn IrHash(ir String&) String {
 # what the front end made of a program: its objects' IR, the runtime's (std/runtime filled in for this build), and the
 # dynamic call's (S3) - empty where the program declares none
 type Program struct() {
-    Units List<Unit>
+    Units Vec<Unit>
     Runtime String& = ""
     Dyncall String& = ""
-    Links List<String&>      # what its modules' "link" declarations name (X9): "-lNAME", or a file's path
-    Exports List<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
+    Links Vec<String&>      # what its modules' "link" declarations name (X9): "-lNAME", or a file's path
+    Exports Vec<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
     Header String& = ""      # and its C header's text
 }
 
@@ -156,8 +156,8 @@ fn (c Config&) modeSuffix() String {
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
 # target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, -O2 under -quick (B2g), else
 # -O3 with full LTO
-fn (c Config&) ModeFlags() List<String&> {
-    out List<String&>
+fn (c Config&) ModeFlags() Vec<String&> {
+    out Vec<String&>
     if c.Target.Foreign {
         out.Push($"--target=" $c.Target.Triple)
         root := target.Sysroot() # B12a: another architecture's C library, where it is not where clang looks
@@ -188,7 +188,7 @@ fn (c Config&) ModeFlags() List<String&> {
 # the flags an object with this IR is compiled with: the mode's, and under -debug LLVM 18's -O0 instruction selector
 # (FastISel) turned off where the IR holds a bfloat, which it keeps wrongly live across a branch (B2c) - everywhere
 # else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
-fn (c Config&) CompileFlags(ir String&) List<String&> {
+fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     out := c.ModeFlags()
     if c.Debug and ir.Contains("bfloat") {
         out.Push("-mllvm")
@@ -199,8 +199,8 @@ fn (c Config&) CompileFlags(ir String&) List<String&> {
 
 # the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
 # no link optimizes and none imports, so a program linking by ThinLTO redoes no module's code when only it changed
-fn (c Config&) DataFlags() List<String&> {
-    out List<String&>
+fn (c Config&) DataFlags() Vec<String&> {
+    out Vec<String&>
     for f in c.ModeFlags() {
         if f != "-flto" and f != "-flto=thin" { out.Push($f) }
     }
@@ -321,7 +321,7 @@ fn (s mut Sha256&) Sum() String {
 }
 
 # the hash of several texts, each ended by a zero byte so no two lists of texts give one stream
-fn HashOf(parts List<String&>&) String {
+fn HashOf(parts Vec<String&>&) String {
     s := Sha256()
     for p in parts {
         s.Write(p)
@@ -353,8 +353,8 @@ fn kindSuffix(k UnitKind) String {
 # where the object made from the IR whose SHA-256 is irHash, compiled with flags, goes:
 # BASE.HASH[.main|.test|.inst][.race][.debug][.quick][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
 # flags and clang's version
-fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags List<String&>&) String {
-    parts List<String&>
+fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags Vec<String&>&) String {
+    parts Vec<String&>
     parts.Push(irHash)
     for f in flags { parts.Push(f) }
     parts.Push(c.clangVersion())
@@ -403,14 +403,14 @@ fn runner(queue mut chan.Chan<I64>&, cmds Array<Array<String&>&>&, status mut Ar
 
 # the compiles a build needs, kept by number: clang's command, the temporary it writes, the object it becomes, the IR
 type compiles struct() {
-    cmds List<Array<String&>&>
-    temps List<String&>
-    finals List<String&>
-    irs List<String&>
-    irTemps List<String&>
-    sizes List<I64>
-    locks List<String&>       # the objects this build claimed (B3k), each a directory removed once its compile ended
-    waits List<I64>           # what another build was compiling, waited for (B3k): a unit's number, the runtime's after them
+    cmds Vec<Array<String&>&>
+    temps Vec<String&>
+    finals Vec<String&>
+    irs Vec<String&>
+    irTemps Vec<String&>
+    sizes Vec<I64>
+    locks Vec<String&>       # the objects this build claimed (B3k), each a directory removed once its compile ended
+    waits Vec<I64>           # what another build was compiling, waited for (B3k): a unit's number, the runtime's after them
 }
 
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
@@ -449,7 +449,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
         error Failed.REPORTED
     }
     tmp := $path "." $getpid() ".tmp"
-    args mut List<String&>&j = List<String&>()
+    args mut Vec<String&>&j = Vec<String&>()
     args.Push($c.Clang)
     for f in flags { args.Push($f) }
     args.Push("-c")
@@ -504,12 +504,12 @@ fn fileFatal(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
 
 # every object the program's link reads, in its units' order and then the runtime's (and the dynamic call's): the ones
 # not there yet compiled, side by side, each renamed into place once clang has written it
-fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&> ? Failed {
+fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) Vec<String&> ? Failed {
     size I64 = 0
     for u in prog.Units { size += u.Ir.Len() }
     c.Thin = not c.Debug and not c.Race and not c.Quick and size >= ThinFrom
     j := compiles()
-    paths List<String&>
+    paths Vec<String&>
     for i, u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash, i)) }
     n := prog.Units.Len()
     if prog.Runtime != "" { paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d, "", n)) }
@@ -580,8 +580,8 @@ fn (c Config&) keep(obj String&) {
 # links objs into bin, unless bin is what linking them would give already: its stamp (bin.link) holds the hash of every
 # argument of the link and clang's version, with bin's size and time when it was linked. Fails, reporting nothing,
 # where clang cannot link them - what to say is the caller's (B3, B3a)
-fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links List<String&>&, exports List<String&>?& = null) ? Failed {
-    args List<String&>
+fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec<String&>&, exports Vec<String&>?& = null) ? Failed {
+    args Vec<String&>
     args.Push($c.Clang)
     for f in c.ModeFlags() { args.Push($f) }
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
@@ -610,7 +610,7 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links Li
     args.Push("-lpthread")
     args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
     if dyncall { args.Push("-lffi") }
-    parts List<String&>
+    parts Vec<String&>
     for a in args { parts.Push(a) }
     parts.Push(c.clangVersion())
     h := HashOf(parts)
@@ -719,7 +719,7 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
 
 # build -library FILE (X14): the objects linked as libNAME.so - NAME the file's base name - showing only the export
 # fns' C entries, and NAME.h beside it, its C header
-fn (c mut Config&) library(prog Program&, objs List<String&>&, file String&, d mut diag.Diagnostics&) I32 {
+fn (c mut Config&) library(prog Program&, objs Vec<String&>&, file String&, d mut diag.Diagnostics&) I32 {
     name := LibName(file)
     lib := $c.Output if c.Output != "" else $c.Dir "/lib" $name $c.modeSuffix().Replace(".lib", "") ".so"
     hdr := filepath.Join(filepath.Dir(lib), $name ".h")
@@ -753,7 +753,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     run := try c.runner(d) catch Failed { return finish(d) }
-    av List<String&>
+    av Vec<String&>
     # B12a: another architecture's program runs in an emulator, given the program's path
     for w in run { av.Push($w) }
     av.Push($file if run.Len() == 0 else Shown(c.Built))
@@ -784,7 +784,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     Phase("link")
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
     run := try c.runner(d) catch Failed { return finish(d) }
-    cmd List<String&>
+    cmd Vec<String&>
     for w in run { cmd.Push($w) }
     cmd.Push(Shown(bin))
     out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
@@ -828,7 +828,7 @@ fn (c Config&) skipped(file String&, d mut diag.Diagnostics&) I32 {
 fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&>&) I32 {
     failed := false
     for f in files {
-        args List<String&>
+        args Vec<String&>
         args.Push($exe)
         args.Push("test")
         for p in passed { args.Push($p) }
@@ -934,7 +934,7 @@ test "an object's name is its identity made readable and a hash of its IR, its f
 }
 
 test "commands run side by side, each one's status and output kept by its number" {
-    cmds List<Array<String&>&>
+    cmds Vec<Array<String&>&>
     for i in range 9 { cmds.Push(String&["/bin/sh", "-c", $"echo out" $i "; exit " $(i % 3)]) }
     cmds.Push(String&["/no/such/program"])
     status, said := RunAll(cmds.ToArray(), 4)

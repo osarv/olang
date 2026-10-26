@@ -4,7 +4,7 @@ type Cell struct() {
     s String& = ""
 }
 type Bx<T> struct() {
-    l mut List<T>& = List<T>()
+    l mut Vec<T>& = Vec<T>()
 }
 fn (c Bx<T>&) At(i I64) T {
     return c.l[i]

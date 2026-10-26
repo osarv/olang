@@ -90,9 +90,9 @@ fn (c Counts&) Describe() String {
 # ---- tokens ----
 
 # the text's tokens as VT, statement ends dropped and "<<"/">>" split; the last is Eof
-fn vtokens(src String&) List<VT> {
+fn vtokens(src String&) Vec<VT> {
     ts := scan.Scan(src)
-    out List<VT>
+    out Vec<VT>
     for tk in ts.Toks {
         if tk.Kind == token.Tok.StmtEnd { continue }
         s := I64(tk.Start)
@@ -112,9 +112,9 @@ fn vtokens(src String&) List<VT> {
 }
 
 # for every "(", "[" and "{" its closer's index, and for every closer its opener's; -1 where there is none
-fn matches(v List<VT>&) Array<I64> {
+fn matches(v Vec<VT>&) Array<I64> {
     m := Array<I64>(v.Len(), -1)
-    stack List<I64>
+    stack Vec<I64>
     for i in range v.Len() {
         k := v[i].k
         if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
@@ -133,7 +133,7 @@ fn isWord(src String&, t VT&) Bool { return t.end > t.start and srcmask.IsIdStar
 
 # whether the "(" at index i opens a list (a call's arguments, parameters, results, a payload, an error set) rather than
 # a parenthesized expression
-fn parenIsList(v List<VT>&, i I64) Bool {
+fn parenIsList(v Vec<VT>&, i I64) Bool {
     if i == 0 { return false }
     p := v[i - 1]
     adjacent := p.end == v[i].start
@@ -167,11 +167,11 @@ type migration struct(src String&, old Bool, path String&) {
     src
     old
     path
-    v List<VT>
+    v Vec<VT>
     m Array<I64>& = Array<I64>(0)
-    edits List<Edit>
-    reps List<String&>
-    report List<String&>
+    edits Vec<Edit>
+    reps Vec<String&>
+    report Vec<String&>
     c Counts
 }
 
@@ -220,7 +220,7 @@ type frame struct(open I64, list Bool, commaLines Bool) {
 # QY's first walk: which openers end a line with a comma at their own level
 fn (g migration&) commaLines() Array<Bool> {
     out := Array<Bool>(g.v.Len(), false)
-    stack List<I64>
+    stack Vec<I64>
     for i in range g.v.Len() - 1 {
         k := g.v[i].k
         if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
@@ -246,7 +246,7 @@ fn (g mut migration&) closeItem(f frame, end I64) {
 
 fn (g mut migration&) listing() {
     cl := g.commaLines()
-    stack List<frame>
+    stack Vec<frame>
     n := g.v.Len()
     for i in range n - 1 {
         t := g.v[i]
@@ -536,8 +536,8 @@ type occ struct(open I64, end I64, name I64, cs I64, ce I64, parent I64) {
 }
 
 # the type variables written from index lo to index hi, outer before inner
-fn (g migration&) occurrences(lo I64, hi I64) List<occ> {
-    out List<occ>
+fn (g migration&) occurrences(lo I64, hi I64) Vec<occ> {
+    out Vec<occ>
     for i in range lo, hi {
         e := g.typeVarEnd(i)
         if e < 0 { continue }
@@ -554,7 +554,7 @@ fn (g migration&) occurrences(lo I64, hi I64) List<occ> {
 }
 
 # the text from index lo to index hi with every occurrence inside it written as its bare name
-fn (g migration&) bareText(occs List<occ>&, lo I64, hi I64) String {
+fn (g migration&) bareText(occs Vec<occ>&, lo I64, hi I64) String {
     b := StringBuilder()
     pos := g.v[lo].start
     end := g.v[hi - 1].end
@@ -586,8 +586,8 @@ fn (g migration&) bareInPlace(o occ&) String {
 fn (g mut migration&) typeList(lo I64, hi I64, at I64, recvLo I64, recvHi I64, ctor Bool) Bool {
     occs := g.occurrences(lo, hi)
     if occs.Len() == 0 { return false }
-    names List<String&>
-    entries List<String&>
+    names Vec<String&>
+    entries Vec<String&>
     for o in occs {
         name := g.src[g.v[o.name].start:g.v[o.name].end]
         if o.parent < 0 {
@@ -679,7 +679,7 @@ fn (g migration&) applied() String {
 }
 
 # src migrated; what it took is added to total and report
-fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut List<String&>&) String {
+fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut Vec<String&>&) String {
     g := migration(src, old, path)
     g.v = vtokens(src)
     g.m = matches(g.v)
@@ -693,7 +693,7 @@ fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut Li
 }
 
 # a Markdown text with its "```olang" blocks migrated
-fn migrateMarkdown(src String&, old Bool, path String&, total mut Counts&, report mut List<String&>&) String {
+fn migrateMarkdown(src String&, old Bool, path String&, total mut Counts&, report mut Vec<String&>&) String {
     out := StringBuilder()
     lines := src.Split("\n")
     inBlock := false
@@ -723,7 +723,7 @@ fn main() ? {
     check := false
     verbose := false
     old := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -737,12 +737,12 @@ fn main() ? {
             paths.Push($a)
         }
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }
     total := Counts()
-    report List<String&>
+    report Vec<String&>
     changedFiles I64 = 0
     for path in files {
         src := try srcmask.ReadText(path) catch {
@@ -771,7 +771,7 @@ fn main() ? {
 
 fn run(src String&, old Bool) String {
     total := Counts()
-    report List<String&>
+    report Vec<String&>
     return migrate(src, old, "x.olang", total, report)
 }
 

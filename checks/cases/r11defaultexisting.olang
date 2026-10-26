@@ -3,12 +3,12 @@
 # existing storage, whose references would have to agree with every scope the result's live in
 import "std/io"
 type Bad error { NO }
-fn validate(text String&) List<String&> ? Bad {
+fn validate(text String&) Vec<String&> ? Bad {
     if text.Len() == 0 { error Bad.NO }
-    return List<String&>()
+    return Vec<String&>()
 }
 fn main() ? {
-    empty := List<String&>()
+    empty := Vec<String&>()
     n := (try validate("x") catch default empty).Len()
     try io.Println($n)
 }

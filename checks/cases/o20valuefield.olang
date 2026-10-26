@@ -4,7 +4,7 @@
 # writing it, and one building into it builds there (it was taken for this function's own, O10d)
 type In struct() {
     k I64 = 0
-    l List<I64> = List<I64>()
+    l Vec<I64> = Vec<I64>()
 }
 type Mid struct() {
     inner In = In()

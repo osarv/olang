@@ -4,7 +4,7 @@
 # where the call it is read out of lands, so the push builds where the list lives; read back after a churn
 import "std/io"
 type Blk struct() {
-    S List<I64>
+    S Vec<I64>
     t I64 = 0
 }
 fn churn() ? io.Error {
@@ -14,7 +14,7 @@ fn churn() ? io.Error {
     }
 }
 fn main() ? {
-    bs := List<Blk>()
+    bs := Vec<Blk>()
     bs.Push(Blk())
     for i in range 3 { bs[0].S.Push(i + 7) }
     try churn()

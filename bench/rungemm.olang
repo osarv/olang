@@ -98,7 +98,7 @@ fn run(bin String&, args Array<String&>&) String {
 
 # the same with OPENBLAS_NUM_THREADS set to threads when it is not ""
 fn runThreads(bin String&, threads String&, args Array<String&>&) String {
-    full := List<String&>()
+    full := Vec<String&>()
     if threads != "" {
         full.Push("env")
         full.Push("OPENBLAS_NUM_THREADS=" $threads)
@@ -112,7 +112,7 @@ fn runThreads(bin String&, threads String&, args Array<String&>&) String {
 
 # every number written just before the word GFLOPS, a row each - awk '{for (i = 1; i < NF; i++) if ($(i + 1) == "GFLOPS") print $i}'
 fn gflops(text String&) String {
-    out := List<String&>()
+    out := Vec<String&>()
     for line in text.Lines() {
         f := benchlib.Words(line.Replace("\t", " "))
         for i in range f.Len() - 1 {
@@ -124,7 +124,7 @@ fn gflops(text String&) String {
 
 # every word ending in suffix, without it, a row each
 fn suffixed(text String&, suffix String&) String {
-    out := List<String&>()
+    out := Vec<String&>()
     for line in text.Lines() {
         for w in benchlib.Words(line.Replace("\t", " ")) {
             if w.EndsWith(suffix) {

@@ -3,7 +3,7 @@
 # from text it made - the text is moved into the result scope with the local, so the instance's list refers to nothing
 # that dies at the return; read back after a churn, as is a text local assigned built text on one path (study 4's r06)
 type Words struct(text String&) {
-    items mut List<String&>& = List<String&>()
+    items mut Vec<String&>& = Vec<String&>()
     items.Push(text)
 }
 type R struct(Code I64, Note String&) {

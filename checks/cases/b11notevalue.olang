@@ -5,7 +5,7 @@
 # 5) - so the note names the scope argument to change, never a declaration (study 4's r05 had it the other way, when
 # such a local's storage was its block)
 import "std/filepath"
-fn joined(dir String&, names Array<String&>&, out mut List<String&>&) {
+fn joined(dir String&, names Array<String&>&, out mut Vec<String&>&) {
     for name in names {
         t := "x" $name
         p := filepath.Join&t(dir, name)
@@ -13,6 +13,6 @@ fn joined(dir String&, names Array<String&>&, out mut List<String&>&) {
     }
 }
 fn main() ? {
-    l := List<String&>()
+    l := Vec<String&>()
     joined("d", String&["a", "b"], l)
 }

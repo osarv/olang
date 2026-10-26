@@ -415,7 +415,7 @@ fn ioChurn() I64 {
 # a line lives where it is put: kept in a list, its copy is built in the list's scope and outlives the loop
 test "a line kept is built where it is kept" {
     fd := reading("alpha\nbeta\ngamma\n")
-    kept := List<String&>()
+    kept := Vec<String&>()
     for line in try Lines(fd, 3) {
         assert ioChurn() > 0
         kept.Push($line)

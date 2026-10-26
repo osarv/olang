@@ -106,7 +106,7 @@ fn negated(c String&) String {
 
 # one line migrated; inTest whether it is in a test body, inMain whether in main; the line unchanged when nothing
 # applies, and what is left for a person added to left
-fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut List<String&>&) String {
+fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<String&>&) String {
     out := $l
     for {
         code := codeOf(out)
@@ -171,7 +171,7 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut List
 }
 
 # one file migrated; how many lines changed
-fn migrate(file String&, left mut List<String&>&) I64 ? {
+fn migrate(file String&, left mut Vec<String&>&) I64 ? {
     text := try os.ReadFile(file)
     b := StringBuilder()
     changed I64 = 0
@@ -203,11 +203,11 @@ fn migrate(file String&, left mut List<String&>&) I64 ? {
 }
 
 # the .olang files of the paths given, directories walked
-fn filesOf(paths Array<String&>&) List<String&> ? {
-    out := List<String&>()
+fn filesOf(paths Array<String&>&) Vec<String&> ? {
+    out := Vec<String&>()
     for p in paths {
         if os.IsDir(p) {
-            sub := List<String&>()
+            sub := Vec<String&>()
             for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
             for f in try filesOf(sub.ToArray()) { out.Push($f) }
         } else if p.EndsWith(".olang") { out.Push(p) }
@@ -221,7 +221,7 @@ fn main() ? {
         try io.PrintErrln("usage: donefail_migrate PATH...")
         os.Exit(2)
     }
-    left := List<String&>()
+    left := Vec<String&>()
     total I64 = 0
     for f in try filesOf(args[1:]) {
         if f.EndsWith("donefail_migrate.olang") { continue }
@@ -232,7 +232,7 @@ fn main() ? {
 }
 
 test "a fail ending a catch becomes '!' outside a test and goes in one" {
-    left List<String&>
+    left Vec<String&>
     assert migrateLine("    try f(x) catch { fail }", false, false, "a", left) == "    f(x)!"
     assert migrateLine("    try f(x) catch { fail }", true, false, "a", left) == "    try f(x)"
     assert migrateLine("    try f(x) catch E { fail }", true, false, "a", left) == "    try f(x)"
@@ -240,7 +240,7 @@ test "a fail ending a catch becomes '!' outside a test and goes in one" {
 }
 
 test "'if C { fail }' becomes an assert of the negation" {
-    left List<String&>
+    left Vec<String&>
     assert migrateLine("    if a == b { fail }", true, false, "a", left) == "    assert a != b"
     assert migrateLine("    if not ok { fail }", true, false, "a", left) == "    assert ok"
     assert migrateLine("    if a or b { fail }", true, false, "a", left) == "    assert not (a or b)"
@@ -248,7 +248,7 @@ test "'if C { fail }' becomes an assert of the negation" {
 }
 
 test "done is return in a test or main, abort and a test's last fail unreachable" {
-    left List<String&>
+    left Vec<String&>
     assert migrateLine("    if skip { done }", true, false, "a", left) == "    if skip { return }"
     assert migrateLine("    done", false, true, "a", left) == "    return"
     assert migrateLine("    nomatch { fail }", true, false, "a", left) == "    nomatch { unreachable }"

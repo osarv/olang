@@ -7,7 +7,7 @@ fn work(h H&, n I64) {
     for i in range n { h.f(i) }
 }
 fn viaTask(n I64) I64 {
-    a mut List<I64>& = List<I64>()
+    a mut Vec<I64>& = Vec<I64>()
     h := H(fn(i I64) { a.Push(i * i) })
     join {
         spawn work(h, n)

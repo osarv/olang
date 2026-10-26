@@ -7,7 +7,7 @@ type V struct(d mut Array<I64>&, n I64) {
     d
     n
 }
-fn work(c mut V&, l mut List<V>&) I64 {
+fn work(c mut V&, l mut Vec<V>&) I64 {
     l[0] = V(Array<I64>(2), 7)
     c.d[0] = 5
     return c.n
@@ -18,7 +18,7 @@ fn workA(c mut V&, a mut Array<V>&) I64 {
     return c.n
 }
 fn main() ? {
-    l := List<V>()
+    l := Vec<V>()
     l.Push(V(Array<I64>(2), 1))
     seen := work(l[0], l)
     assert seen == 1 and l[0].d[0] == 0 and l[0].n == 7, "list " $seen " " $l[0].d[0] " " $l[0].n

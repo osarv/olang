@@ -2,8 +2,8 @@
 # B11 (G4): the note on a store into an element of a handle element names the collection as written, never the copy
 # the compiler held for it
 fn main() ? {
-    names := List<List<String&>>()
-    names.Push(List<String&>())
+    names := Vec<Vec<String&>>()
+    names.Push(Vec<String&>())
     names[0].Push("x")
     for k in range 3 {
         t := $k "-loop-text-of-moderate-length"

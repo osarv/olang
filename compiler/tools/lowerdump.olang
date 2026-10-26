@@ -48,14 +48,14 @@ type totals struct() {
     made I64 = 0
     madeClean I64 = 0
     madeGapped I64 = 0
-    whats List<String&>
-    counts List<I64>
+    whats Vec<String&>
+    counts Vec<I64>
 }
 
 fn run(args Array<String&>&) {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
-    defines List<String&>
+    defines Vec<String&>
     testBuild := false
     verbose := false
     standin := false

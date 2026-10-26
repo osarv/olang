@@ -54,8 +54,8 @@ fn main() {
 }
 
 # the files of tests emitdiff and evaldiff run by default: the corpus, std, std's prelude's tests
-fn TestFiles() List<String&> {
-    l := List<String&>()
+fn TestFiles() Vec<String&> {
+    l := Vec<String&>()
     for d in String&["tests", "std", "std/prelude/tests"] {
         for f in toolkit.Matching(d, ".olang") { l.Push($f) }
     }
@@ -63,8 +63,8 @@ fn TestFiles() List<String&> {
 }
 
 # the checks cases that must build and run
-fn RunCases() List<String&> {
-    l := List<String&>()
+fn RunCases() Vec<String&> {
+    l := Vec<String&>()
     for f in toolkit.Matching("checks/cases", ".olang") {
         if headerLine(toolkit.Read(f), "# check: ") == "run" { l.Push($f) }
     }
@@ -106,7 +106,7 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         text := read(cases[k])
         try os.WriteFile($dir "/" $name, text) catch os.Error { continue }
         flags := headerLine(text, "# flags: ")
-        args := List<String&>()
+        args := Vec<String&>()
         args.Push(olang)
         args.Push("build")
         for f in toolkit.Fields(flags) { args.Push($f) }

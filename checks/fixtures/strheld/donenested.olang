@@ -17,7 +17,7 @@ type Outer struct(a Bag, b Bag) {
     b
 }
 test "failing inside a List element's Str" {
-    l := List<Bag>()
+    l := Vec<Bag>()
     l.Push(Bag(1))
     l.Push(Bag(7))
     l.Push(Bag(3))

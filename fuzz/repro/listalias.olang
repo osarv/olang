@@ -18,17 +18,17 @@
 # anything where the copy's own storage is. The generator now makes second names only in the collection's own block
 # and passes collections by reference.
 import "std/io"
-fn byValue(l List<I64>, m Map<I32, I32>) I64 {
+fn byValue(l Vec<I64>, m Map<I32, I32>) I64 {
     l.Push(9)
     m.Put(7, 7)
     return l.Len()
 }
 fn c0(x0 I32) I64 {
-    x9 List<I64> = List<I64>()
+    x9 Vec<I64> = Vec<I64>()
     x9.Push(1)
     s I64 = 0
     for x11 in range 2 {
-        x12 List<I64> = x9
+        x12 Vec<I64> = x9
         s += x12.Len()
         s += try x12[0] catch default 5
         x12.Push(3)

@@ -100,7 +100,7 @@ fn trivial(body String&) Bool {
 }
 
 # the end of the catch clause that starts at k (just after a call), or -1; its block's text is added to bodies
-fn catchClause(text String&, mask String&, k I64, bodies mut List<String&>&) I64 {
+fn catchClause(text String&, mask String&, k I64, bodies mut Vec<String&>&) I64 {
     n := text.Len()
     p := k
     for p < n and (text[p] == ' ' or text[p] == '\t') { p++ }
@@ -148,7 +148,7 @@ fn migrateTries(text String&, mask String&, alias String&, lo I64, hi I64, out m
             i++
             continue
         }
-        bodies List<String&>
+        bodies Vec<String&>
         k := end
         for {
             bend := catchClause(text, mask, k, bodies)
@@ -180,7 +180,7 @@ fn migrateTries(text String&, mask String&, alias String&, lo I64, hi I64, out m
 
 # the line after the last "import " line - or after the leading comment lines when there is none - gets the import
 fn addImport(text String&) String {
-    starts List<I64>
+    starts Vec<I64>
     starts.Push(0)
     for i in range text.Len() {
         if text[i] == '\n' { starts.Push(i + 1) }
@@ -231,7 +231,7 @@ fn migrateFile(path String&, dry Bool) Bool {
 
 fn main() ? {
     dry := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         if args[i] == "--dry" { dry = true } else { paths.Push($args[i]) }
@@ -240,7 +240,7 @@ fn main() ? {
         srcmask.Say("Migrates olang sources to printing through std/io (M19f, 2026-10-17).\n\n    build/tools_io_print [--dry] PATH...\n\nsee the header of tools/io_print.olang")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

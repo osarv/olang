@@ -5,13 +5,13 @@
 type Acc struct() {
     N I64 = 0
 }
-fn bump(a mut Acc&, l mut List<Acc>&) {
+fn bump(a mut Acc&, l mut Vec<Acc>&) {
     l[0].N = 100
     a.N++
 }
 
 fn main() ? {
-    l := List<Acc>()
+    l := Vec<Acc>()
     l.Push(Acc())
     bump(l[0], l)
 }

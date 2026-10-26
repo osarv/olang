@@ -26,7 +26,7 @@ type Scalar struct(Off I64, Size I64, Llvm String&, IsFloat Bool) {
 # how a value crosses: Kind Direct (a scalar, Attr its extension), Parts (its bytes as Parts at Offs - a parameter
 # each; a result one value, a struct of them where several), Byval (x86-64's stack copy), Copy (AArch64's pointer to
 # a copy), Sret (a result through a pointer the caller gives, the call's first argument)
-type Way struct(Kind Pass, Parts List<String&>, Offs List<I64>, Sizes List<I64>, Attr String&) {
+type Way struct(Kind Pass, Parts Vec<String&>, Offs Vec<I64>, Sizes Vec<I64>, Attr String&) {
     Kind
     Parts
     Offs
@@ -49,7 +49,7 @@ type Regs struct(Int I64, Sse I64) {
 }
 
 # the scalars of a plain struct (or a number, a Bool, an extern type's reference) at offset base, in order
-fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut List<Scalar>&) {
+fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut Vec<Scalar>&) {
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref {
         out.Push(Scalar(base, 8, "ptr", false))
@@ -93,7 +93,7 @@ fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way 
     if not IsStruct(t, ty) {
         r := t.Repr(ty)
         if t.IsFloat(r) { regs.Sse-- } else { regs.Int-- }
-        return Way(Pass.Direct, List<String&>(), List<I64>(), List<I64>(), Ext(t, arch, ty))
+        return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty))
     }
     w := Classify(t, arch, ty, false)
     if arch == "x86_64" and w.Kind == Pass.Parts {
@@ -101,7 +101,7 @@ fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way 
         for p in w.Parts {
             if inSse(p) { ns++ } else { ni++ }
         }
-        if ni > regs.Int or ns > regs.Sse { return Way(Pass.Byval, List<String&>(), List<I64>(), List<I64>(), "") }
+        if ni > regs.Int or ns > regs.Sse { return Way(Pass.Byval, Vec<String&>(), Vec<I64>(), Vec<I64>(), "") }
         regs.Int -= ni
         regs.Sse -= ns
     }
@@ -110,7 +110,7 @@ fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way 
 
 # how a result of this type comes back from C
 fn Result(t mut types.Table&, arch String&, ty types.TypeId) Way {
-    if not IsStruct(t, ty) { return Way(Pass.Direct, List<String&>(), List<I64>(), List<I64>(), Ext(t, arch, ty)) }
+    if not IsStruct(t, ty) { return Way(Pass.Direct, Vec<String&>(), Vec<I64>(), Vec<I64>(), Ext(t, arch, ty)) }
     return Classify(t, arch, ty, true)
 }
 
@@ -120,11 +120,11 @@ fn inSse(p String&) Bool { return p.StartsWith("float") or p.StartsWith("double"
 # a struct's classification, as a parameter or (result) a result
 fn Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) Way {
     size := t.Size(ty)
-    sc List<Scalar>
+    sc Vec<Scalar>
     Flatten(t, ty, 0, sc)
-    parts List<String&>
-    offs List<I64>
-    sizes List<I64>
+    parts Vec<String&>
+    offs Vec<I64>
+    sizes Vec<I64>
     if arch == "aarch64" {
         # AAPCS64 B.4: a homogeneous floating-point aggregate
         hfa := sc.Len() >= 1 and sc.Len() <= 4
@@ -206,7 +206,7 @@ fn PartsList(w Way&) String {
 }
 
 # whether a struct's scalars hold data in [from, to)
-fn data(sc List<Scalar>&, from I64, to I64) Bool {
+fn data(sc Vec<Scalar>&, from I64, to I64) Bool {
     for s in sc {
         if s.Off < to and s.Off + s.Size > from { return true }
     }
@@ -214,7 +214,7 @@ fn data(sc List<Scalar>&, from I64, to I64) Bool {
 }
 
 # the scalar starting at offset off, -1 for none
-fn at(sc List<Scalar>&, off I64) I64 {
+fn at(sc Vec<Scalar>&, off I64) I64 {
     for i, s in sc {
         if s.Off == off { return i }
     }
@@ -223,7 +223,7 @@ fn at(sc List<Scalar>&, off I64) I64 {
 
 # an INTEGER eightbyte's type (clang's GetINTEGERTypeAtOffset): the scalar there where it is a pointer or a 64-bit
 # integer, or an integer with nothing after it in the eightbyte; else an integer of the bytes left in the struct, at most 8
-fn intAt(sc List<Scalar>&, off I64, size I64) String, I64 {
+fn intAt(sc Vec<Scalar>&, off I64, size I64) String, I64 {
     i := at(sc, off)
     if i >= 0 and not sc[i].IsFloat {
         s := sc[i]
@@ -235,7 +235,7 @@ fn intAt(sc List<Scalar>&, off I64, size I64) String, I64 {
 }
 
 # an SSE eightbyte's type (clang's GetSSETypeAtOffset): float, double, <2 x float>, a 16-bit float or a vector of them
-fn sseAt(sc List<Scalar>&, off I64) String, I64 {
+fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
     i := at(sc, off)
     t0 := sc[i].Llvm if i >= 0 else "double"
     half := ""

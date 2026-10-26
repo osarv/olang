@@ -46,8 +46,8 @@ fn run(args Array<String&>&) {
         stop(out, "checkdiff: no checks/cases")
         unreachable
     }
-    fails List<String&>
-    oks List<String&>
+    fails Vec<String&>
+    oks Vec<String&>
     for n in names {
         if not n.EndsWith(".olang") { continue }
         text := try os.ReadFile("checks/cases/" $n) catch os.Error { continue }
@@ -106,7 +106,7 @@ fn run(args Array<String&>&) {
     # ---- 2. the programs stage 0 accepts ----
     said2 := StringBuilder()
     runAll(said2, $root "/" $dump, $root "/checks/cases", oks, root)
-    tests List<String&>
+    tests Vec<String&>
     for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
         fs := try os.ReadDir(dir) catch os.Error { continue }
         for f in fs {
@@ -119,7 +119,7 @@ fn run(args Array<String&>&) {
     n I64 = 0
     ok I64 = 0
     dirty := StringBuilder()
-    all := List<String&>()
+    all := Vec<String&>()
     for c in oks { all.Push(c) }
     for c in tests { all.Push(c) }
     for c in all {
@@ -175,8 +175,8 @@ fn stop(out mut io.Writer&, why String&) {
 # ---- reading renderings ----
 
 # the error and gap rows of what checkdump or stage 0 said: "=== CASE" or "== CASE" begins a case's rows
-fn rows(text String&) List<row> {
-    rs := List<row>()
+fn rows(text String&) Vec<row> {
+    rs := Vec<row>()
     c String& = ""
     for line in text.Lines() {
         if line.StartsWith("=== ") {
@@ -225,7 +225,7 @@ fn header(text String&, key String&) String& {
 }
 
 # a case's first error row, "" for none
-fn firstRow(rs List<row>&, c String&) String& {
+fn firstRow(rs Vec<row>&, c String&) String& {
     for r in rs {
         if r.Case == c and not r.What.StartsWith("gap ") { return $r.What }
     }
@@ -233,8 +233,8 @@ fn firstRow(rs List<row>&, c String&) String& {
 }
 
 # a case's error rows, sorted
-fn errorRows(rs List<row>&, c String&) List<String&> {
-    l := List<String&>()
+fn errorRows(rs Vec<row>&, c String&) Vec<String&> {
+    l := Vec<String&>()
     for r in rs {
         if r.Case == c and not r.What.StartsWith("gap ") { l.Push(r.What) }
     }
@@ -242,7 +242,7 @@ fn errorRows(rs List<row>&, c String&) List<String&> {
     return l
 }
 
-fn sameRows(a List<String&>&, b List<String&>&) Bool {
+fn sameRows(a Vec<String&>&, b Vec<String&>&) Bool {
     if a.Len() != b.Len() { return false }
     for i in range a.Len() {
         if a[i] != b[i] { return false }
@@ -300,7 +300,7 @@ fn decidedAway(r String&) Bool {
 
 # counts, most first, one "COUNT WHAT" a line
 fn counted(m Map<String&, I64>&) String& {
-    l := m.Iter().ToList()
+    l := m.Iter().ToVec()
     l.Sort(fn(a MapEntry<String&, I64>, b MapEntry<String&, I64>) Bool { return a.Value > b.Value })
     b := StringBuilder()
     for e in l { b.Push($e.Value.PadStart(7) " " $e.Key "\n") }
@@ -310,8 +310,8 @@ fn counted(m Map<String&, I64>&) String& {
 # ---- running checkdump ----
 
 # checkdump over cases in dir: those with flags one by one (a test build, build constants), the rest in one process
-fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&>&, root String&) {
-    plain := List<String&>()
+fn runAll(said mut StringBuilder&, dump String&, dir String&, cases Vec<String&>&, root String&) {
+    plain := Vec<String&>()
     for c in cases {
         text := try os.ReadFile($dir "/" $c) catch os.Error { continue }
         flags := header(text, "# flags:")
@@ -319,7 +319,7 @@ fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&
             plain.Push(c)
             continue
         }
-        args := List<String&>()
+        args := Vec<String&>()
         words := flags.Split(" ")
         for i in range words.Len() {
             if words[i] == "-define" and i + 1 < words.Len() {
@@ -335,7 +335,7 @@ fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&
     # in batches, so one case that runs away costs only its batch
     for at in range 0, plain.Len(), 50 {
         end := at + 50 if at + 50 < plain.Len() else plain.Len()
-        args := List<String&>()
+        args := Vec<String&>()
         for k in range at, end { args.Push(plain[k]) }
         said.Push(check(dump, dir, args.ToArray(), root))
     }
@@ -343,7 +343,7 @@ fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&
 
 # what checkdump says of files, run in dir over the repository's std
 fn check(dump String&, dir String&, files Array<String&>&, root String&) String& {
-    args := List<String&>()
+    args := Vec<String&>()
     args.Push("env")
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)

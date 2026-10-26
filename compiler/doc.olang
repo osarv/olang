@@ -79,7 +79,7 @@ fn commentText(line String&) String {
 # the doc comment above whatever starts on the line holding offset at (L4b): the comment-only lines directly above that
 # line, less the leading ones continuing a line comment that ends the line above them
 fn Above(t String&, at I64) String {
-    starts List<I64>
+    starts Vec<I64>
     pos := lineStart(t, at)
     for pos > 0 {
         from := lineStart(t, pos - 1)
@@ -177,7 +177,7 @@ type Entry struct(Line String&, Doc String&, Name String&) {
     Name
     File I64 = -1
     At I64 = -1
-    Members List<Entry>
+    Members Vec<Entry>
     Builder Bool    # a function of the module that builds the type it is listed under (B14)
 }
 
@@ -186,7 +186,7 @@ type Module struct(Identity String&, Path String&, Doc String&) {
     Identity
     Path
     Doc
-    Items List<Entry>
+    Items Vec<Entry>
 }
 
 # a name exported from its module (M6, M6a)
@@ -200,7 +200,7 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
     md := Module($m.Identity, $m.Path, ModuleDoc(text))
     nm := c.P.L.Names
     tab := c.P.R.Tables[mi]
-    order List<I64>
+    order Vec<I64>
     for ei in range tab.Entries.Len() { order.Push(ei) }
     order.Sort(fn(a I64, b I64) Bool { return tab.Entries[a].Sp.Start < tab.Entries[b].Sp.Start })
     for ei in order {
@@ -272,7 +272,7 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     e.At = at
     if lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ") or lines.Len() == 1 { return e }
     d := typeDecl(c, mi, name)
-    builders List<I64>
+    builders Vec<I64>
     if d >= types.DeclId(0) { builders = explain.Builders(c, d, all) }
     pushed := false
     for k in range 1, lines.Len() {
@@ -319,7 +319,7 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
 }
 
 # the builders of a type, among its members (B14): each documented like a function
-fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, e mut Entry&, builders List<I64>, all Bool) {
+fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, e mut Entry&, builders Vec<I64>, all Bool) {
     for f in builders {
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
         bi := try item&e(c, sc, x, mi, name, all) catch explain.Missing { continue }

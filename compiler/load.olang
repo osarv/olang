@@ -53,29 +53,29 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     Src source.Source?& = null
     Toks scan.Tokens?& = null
     Decls Array<ast.Decl&>& = Array<ast.Decl&>(0)
-    Types List<String&>                # declared type and error names, in every branch
-    Generics List<String&>             # the generic functions it declares, in every branch (G12)
-    Imports List<Import>
+    Types Vec<String&>                # declared type and error names, in every branch
+    Generics Vec<String&>             # the generic functions it declares, in every branch (G12)
+    Imports Vec<Import>
     Oracle mut parse.Oracle?& = null
     parser mut parse.Parser?& = null
     # the top-level ifs: each chain's first condition (its key, an offset), the token index of every condition, the
     # branch it stands in, and what was decided
-    chainAt List<I32>
-    chainParent List<I64>
-    chainChosen List<I64>
-    chainElse List<Bool>
-    chainCondFrom List<I64>
-    conds List<I64>
-    branchChain List<I64>
-    branchIndex List<I64>
-    globalsAt List<I64>                # the token index of every global's name outside every branch
+    chainAt Vec<I32>
+    chainParent Vec<I64>
+    chainChosen Vec<I64>
+    chainElse Vec<Bool>
+    chainCondFrom Vec<I64>
+    conds Vec<I64>
+    branchChain Vec<I64>
+    branchIndex Vec<I64>
+    globalsAt Vec<I64>                # the token index of every global's name outside every branch
     Scope mut cond.Scope?& = null          # the globals a condition reads, parsed when one is first evaluated
     cparser mut parse.Parser?& = null
     cdiags mut diag.Diagnostics?& = null
     publicDone Bool = false
     publicBusy Bool = false
-    public List<I64>                   # M16, M17: the modules reached through its public aliases, itself first
-    Embeds List<String&>               # E38: the files its embeds read, by path, each once - what its object holds
+    public Vec<I64>                   # M16, M17: the modules reached through its public aliases, itself first
+    Embeds Vec<String&>               # E38: the files its embeds read, by path, each once - what its object holds
 }
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
@@ -87,8 +87,8 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Fetch
     Names
     Diags
-    Mods List<mut Module&>
-    preludeTypes List<String&>
+    Mods Vec<mut Module&>
+    preludeTypes Vec<String&>
     Root I64 = -1
     # files read from here, by real path, rather than from disk: the text an editor holds (B15)
     Overlay Map<String&, String&>
@@ -149,7 +149,7 @@ fn (l Loader&) rootIdentity(path String&) String {
 fn (l mut Loader&) LoadPrelude() {
     dir := filepath.Join(l.Std, "prelude")
     names := try os.ReadDir(dir) catch os.Error { return }
-    files List<String&>
+    files Vec<String&>
     for n in names {
         p := filepath.Join(dir, n)
         if n.EndsWith(".olang") { files.Push($p) }
@@ -171,8 +171,8 @@ fn ErrQualifier(identity String&, inRoot Bool) String {
 }
 
 # a file's type names, error types and sets included, in every branch: "type Name"
-fn typeNames(text String&, ts scan.Tokens&) List<String&>&text {
-    out mut List<String&>&text = List<String&>()
+fn typeNames(text String&, ts scan.Tokens&) Vec<String&>&text {
+    out mut Vec<String&>&text = Vec<String&>()
     toks := ts.Toks
     for i in range toks.Len() - 2 {
         k := toks[i].Kind
@@ -677,7 +677,7 @@ fn relativeIdentity(from String&, spec String&) String {
 
 # "." and ".." collapsed lexically, so one file reached by two spellings prints one way; a leading ".." stays
 fn Normalize(p String&) String {
-    parts List<String&>
+    parts Vec<String&>
     for t in p.Split("/") {
         if t == "" or t == "." { continue }
         if t == ".." and parts.Len() > 0 and parts[parts.Len() - 1] != ".." {
@@ -725,7 +725,7 @@ fn (l mut Loader&) closure(mi I64) {
 # M16: no two imports of one module reach the same file - directly, or through what they re-export
 fn (l mut Loader&) checkReach() {
     for mi in range l.Mods.Len() {
-        seen List<I64>
+        seen Vec<I64>
         m := l.Mods[mi]
         for imp in m.Imports {
             if imp.Target < 0 { continue }
@@ -808,14 +808,14 @@ fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) 
 # X9: what the program's link names besides its objects, from every module's "link" declarations in its chosen
 # branches, each once, in the modules' order - a library's name as "-lNAME", a file's path (one naming a directory, or
 # ending in .a, .o or .so) resolved from its module's directory. A name that is neither is reported
-fn (l mut Loader&) Links() List<String&> {
-    out List<String&>
+fn (l mut Loader&) Links() Vec<String&> {
+    out Vec<String&>
     seen Map<String&, Bool>
     for mi in range l.Mods.Len() { l.linksIn(mi, l.Mods[mi].Decls, out, seen) }
     return out
 }
 
-fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut List<String&>&, seen mut Map<String&, Bool>&) {
+fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
     for d in ds {
         match d {
             case ast.Decl.Link(_, path) {
@@ -840,7 +840,7 @@ fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut List<String&>&,
     }
 }
 
-fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut List<String&>&, seen mut Map<String&, Bool>&) {
+fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut Vec<String&>&, seen mut Map<String&, Bool>&) {
     if chosen == index and ti.Then!.Decls.Len() > 0 { l.linksIn(mi, ti.Then!.Decls, out, seen) }
     if ti.ElseIf is not null { l.linksIf(mi, ti.ElseIf!, chosen, index + 1, out, seen) }
     if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { l.linksIn(mi, ti.Else!.Decls, out, seen) }
@@ -876,8 +876,8 @@ fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {
 
 # the top-level ifs B9a left to compile-time evaluation (B9c) whose own branch is part of the module: each as its
 # module and the offset of its first condition
-fn (l mut Loader&) PendingIfs() List<pair.Pair<I64, I32>> {
-    out List<pair.Pair<I64, I32>>
+fn (l mut Loader&) PendingIfs() Vec<pair.Pair<I64, I32>> {
+    out Vec<pair.Pair<I64, I32>>
     for mi in range l.Mods.Len() {
         m := l.Mods[mi]
         for c in range m.chainAt.Len() {
@@ -916,7 +916,7 @@ fn (l Loader&) Graph() String {
     for i in order {
         m := l.Mods[i]
         b.Push("module " $m.Identity "\n")
-        lines List<String&>
+        lines Vec<String&>
         for imp in m.Imports {
             if imp.Target >= 0 { lines.Push("  " $imp.Alias " " $l.Mods[imp.Target].Identity "\n") }
         }

@@ -59,8 +59,8 @@ fn wantsBang(msg String&) Bool {
 
 # the edits the compiler's output asks for in the allowed paths - "nullable" ones at an "&" from notes, "bang" ones at an
 # expression from errors - and the T2c errors that ask for neither (as requests with an empty kind, the error's row in Why)
-fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&
-             unanswered mut List<diagedit.Request>&) {
+fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Request>&
+             unanswered mut Vec<diagedit.Request>&) {
     currentPath := ""
     current := ""
     currentRule := ""
@@ -107,8 +107,8 @@ fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Req
 }
 
 # the edits of one kind applied to their files; how many were made
-fn apply(requests List<diagedit.Request>&, kind String&) I64 {
-    paths List<String&>
+fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
+    paths Vec<String&>
     for r in requests {
         if r.Kind == kind and not (r.Path in paths) { paths.Push($r.Path) }
     }
@@ -119,10 +119,10 @@ fn apply(requests List<diagedit.Request>&, kind String&) I64 {
             os.Exit(1)
             unreachable
         }
-        expect List<String&>
+        expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
         lines := src.Split("\n")
-        mine List<diagedit.Request>
+        mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path and r.Kind == kind { mine.Push(r) }
         }
@@ -131,10 +131,10 @@ fn apply(requests List<diagedit.Request>&, kind String&) I64 {
             if a.Line != b.Line { return a.Line < b.Line }
             return a.Col > b.Col
         })
-        seen List<String&>
-        shLine List<I64>
-        shAt List<I64>
-        shDelta List<I64>
+        seen Vec<String&>
+        shLine Vec<I64>
+        shAt Vec<I64>
+        shDelta Vec<I64>
         for r in mine {
             key := $r.Line ":" $r.Col
             if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
@@ -229,7 +229,7 @@ fn apply(requests List<diagedit.Request>&, kind String&) I64 {
 fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     i I64 = 1
     for i < args.Len() {
@@ -262,9 +262,9 @@ fn main() ? {
         os.Exit(1)
     }
     olang = $diagedit.RealPathOf(olang)
-    files List<String&>
+    files Vec<String&>
     diagedit.OlangFiles(paths, files)
-    allowed List<String&>
+    allowed Vec<String&>
     for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
 
     tmp := try os.MkTemp("", "null_migrate") catch {
@@ -283,12 +283,12 @@ fn main() ? {
     }
     totalNullable I64 = 0
     totalBang I64 = 0
-    unanswered List<diagedit.Request>
+    unanswered Vec<diagedit.Request>
     fileArray := files.ToArray()
     for round in range 1, 25 {
         outputs := diagedit.CompileAll(olang, fileArray, work, true)
-        requests List<diagedit.Request>
-        unanswered = List<diagedit.Request>()
+        requests Vec<diagedit.Request>
+        unanswered = Vec<diagedit.Request>()
         for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
         arrays := apply(requests, "dropq") + apply(requests, "empty") + apply(requests, "isempty") + apply(requests, "dropbang")
         nullable := apply(requests, "nullable") if arrays == 0 else 0
@@ -300,9 +300,9 @@ fn main() ? {
         if arrays == 0 and nullable == 0 and bangs == 0 { break }
     }
     srcmask.Say("total: " $totalNullable " types made nullable, " $totalBang " '!' written")
-    seen List<String&>
+    seen Vec<String&>
     for u in unanswered {
-        expect List<String&>
+        expect Vec<String&>
         text := try srcmask.ReadText(u.Path) catch default ""
         diagedit.ExpectedTexts(text, expect)
         if not (u.Why in seen) and not diagedit.ContainsAny(u.Why, expect) {
@@ -315,9 +315,9 @@ fn main() ? {
 test "a note's & is made nullable, a quoted read gets a !" {
     assert quoted("'n.next' is a N?&, which may be null - read through it") == "n.next"
     assert wantsBang("'d' is a N?&, which may be null, and N& never is - test it first") and not wantsBang("N& is never null")
-    edits List<diagedit.Request>
-    left List<diagedit.Request>
-    allowed List<String&>
+    edits Vec<diagedit.Request>
+    left Vec<diagedit.Request>
+    allowed Vec<String&>
     allowed.Push("/a.olang")
     out := ("/a.olang:3:9: error[T2c]: N& is never null - a reference that may be is written N?&\n"
             "/a.olang:1:27: note: the type is written here - write '?&' for '&' where it may be null\n"

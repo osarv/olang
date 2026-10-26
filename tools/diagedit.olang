@@ -71,7 +71,7 @@ fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
 
 # what a checks/cases program must fail with, from its first twelve lines "# check: fail TEXT" and "# also: TEXT" - an edit
 # reported by a diagnostic carrying one of the texts is not applied
-fn ExpectedTexts(src String&, out mut List<String&>&) {
+fn ExpectedTexts(src String&, out mut Vec<String&>&) {
     lines := src.Split("\n")
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
         line := lines[k]
@@ -94,7 +94,7 @@ fn ExpectedTexts(src String&, out mut List<String&>&) {
 }
 
 # whether any of the texts occurs in what
-fn ContainsAny(what String&, texts List<String&>&) Bool {
+fn ContainsAny(what String&, texts Vec<String&>&) Bool {
     for t in texts {
         if what.Contains(t) { return true }
     }
@@ -132,7 +132,7 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
 # a checks/cases header (one of the first twelve lines starting "# check: fail" or "# also:") naming LINE:COL on a line an
 # edit changed follows the edit's shift of that column: shifts are (line, column index, change in length), in the order the
 # edits were made
-fn ShiftExpected(lines mut Array<String&>&, shLine List<I64>&, shAt List<I64>&, shDelta List<I64>&) {
+fn ShiftExpected(lines mut Array<String&>&, shLine Vec<I64>&, shAt Vec<I64>&, shDelta Vec<I64>&) {
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
         line := lines[k]
         if not line.StartsWith("#") { continue }
@@ -179,7 +179,7 @@ fn RealPathOf(path String&) String {
 }
 
 # whether path is one of the allowed paths or below one
-fn Allowed(path String&, allowed List<String&>&) Bool {
+fn Allowed(path String&, allowed Vec<String&>&) Bool {
     for a in allowed {
         if path == a or path.StartsWith($a "/") { return true }
     }
@@ -188,8 +188,8 @@ fn Allowed(path String&, allowed List<String&>&) Bool {
 
 # the real paths of the .olang files under the paths (a directory is searched, not entering build or .git; a path ending
 # .olang is taken as it is), sorted
-fn OlangFiles(paths List<String&>&, out mut List<String&>&) {
-    found List<String&>
+fn OlangFiles(paths Vec<String&>&, out mut Vec<String&>&) {
+    found Vec<String&>
     for p in paths {
         if os.IsDir(p) {
             srcmask.Walk(p, found)
@@ -197,7 +197,7 @@ fn OlangFiles(paths List<String&>&, out mut List<String&>&) {
             found.Push($p)
         }
     }
-    real List<String&>
+    real Vec<String&>
     for f in found { real.Push(RealPathOf(f)) }
     real.Sort(fn(a, b) { return a < b })
     for f in real { out.Push($f) }
@@ -270,7 +270,7 @@ test "ParseRow reads errors and notes" {
 }
 
 test "ExpectedTexts reads the check headers" {
-    texts List<String&>
+    texts Vec<String&>
     ExpectedTexts("# check: fail  the text \n# also: more\n# flags: -d\nfn main() ? { }\n", texts)
     assert texts.Len() == 2 and texts[0] == "the text" and texts[1] == "more"
     assert ContainsAny("an error with more in it", texts)
@@ -284,9 +284,9 @@ test "Sub clamps as a Python slice does" {
 
 test "ShiftExpected moves a header's column with the edit" {
     lines mut Array<String&>& = "# check: fail 4:27: x 9:9:\nfn f()\n".Split("\n")
-    shLine List<I64>
-    shAt List<I64>
-    shDelta List<I64>
+    shLine Vec<I64>
+    shAt Vec<I64>
+    shDelta Vec<I64>
     shLine.Push(4)
     shAt.Push(7)
     shDelta.Push(-4)

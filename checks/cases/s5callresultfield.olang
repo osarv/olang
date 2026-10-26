@@ -6,7 +6,7 @@ type Box struct(s String&) { s }
 fn box(s String&) Box { return Box(s) }
 
 fn main() ? {
-    ss := List<String&>()
+    ss := Vec<String&>()
     for k in range 4 {
         t := $k "-text"
         ss.Push(box(t).s)

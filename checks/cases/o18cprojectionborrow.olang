@@ -5,7 +5,7 @@ import "std/io"
 type Inner struct(s String&) { s }
 type Outer struct(inner Inner) { inner }
 type Store struct() {
-    items mut List<Outer>& = List<Outer>()
+    items mut Vec<Outer>& = Vec<Outer>()
 }
 fn (st Store&) get(i I64) Outer { return st.items[i] }
 fn main() ? {

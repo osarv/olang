@@ -31,7 +31,7 @@ import "srcmask"
 
 type Result struct() {
     changes I64 = 0
-    left List<String&>
+    left Vec<String&>
 }
 
 # the end of a name starting at i, i itself where none starts there
@@ -145,8 +145,8 @@ fn wordAt(src String&, mask String&, i I64, w String&) Bool {
 
 # how tightly each operator the expression goes on with after position e binds, at its own level and in order, as far
 # as the text says (the conditional's "if" ending it); false where an operand could not be read
-fn trailing(src String&, mask String&, br String&, e I64) List<I64>, Bool {
-    precs List<I64>
+fn trailing(src String&, mask String&, br String&, e I64) Vec<I64>, Bool {
+    precs Vec<I64>
     j := e
     for {
         j = srcmask.SkipGap(src, mask, br, j)
@@ -218,7 +218,7 @@ fn chainStart(text String&, mask String&, b I64) I64 {
 }
 
 # the "as"es a try's old reach [o, e) holds, each given "!" (an insertion: where, and what) or listed
-fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut List<I64>&, texts mut List<String&>&, seen mut List<I64>&, c mut Result&) {
+fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut Vec<I64>&, texts mut Vec<String&>&, seen mut Vec<I64>&, c mut Result&) {
     p := o
     for p < e {
         if not wordAt(src, mask, p, "as") or src[p - 1] != ' ' or p in seen {
@@ -257,9 +257,9 @@ fn asUnderTry(path String&, src String&, mask String&, o I64, e I64, edits mut L
 # src with every "as" a try's old reach holds given "!" where the header says (insertions applied in order)
 fn migrateAs(path String&, src String&, c mut Result&) String {
     mask := srcmask.Mask(src, true)
-    edits List<I64>
-    texts List<String&>
-    seen List<I64>
+    edits Vec<I64>
+    texts Vec<String&>
+    seen Vec<I64>
     i I64 = 0
     for i < src.Len() {
         if not wordAt(src, mask, i, "try") or not src[i:].StartsWith("try ") {
@@ -370,7 +370,7 @@ fn main() ? {
     old := false
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for k in range 1, args.Len() {
         a := args[k]
@@ -388,7 +388,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_try_migrate [--old] [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

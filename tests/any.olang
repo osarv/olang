@@ -30,7 +30,7 @@ fn (l Label&) Name() String { return "label " $String(l) }
 fn churn() I64 {
     t I64 = 0
     for i in range 300 {
-        l := List<I64>()
+        l := Vec<I64>()
         for j in range 40 { l.Push(i + j) }
         t += l.Len()
         c := Cat("junk " $i)
@@ -39,7 +39,7 @@ fn churn() I64 {
     return t
 }
 
-fn names(xs List<any Named&>&) String {
+fn names(xs Vec<any Named&>&) String {
     b := StringBuilder()
     for x in xs {
         if b.Len() > 0 { b.Push(", ") }
@@ -48,8 +48,8 @@ fn names(xs List<any Named&>&) String {
     return b.ToString()
 }
 
-fn kept() List<any Named&> {
-    xs := List<any Named&>()
+fn kept() Vec<any Named&> {
+    xs := Vec<any Named&>()
     for i in range 3 { xs.Push(Cat("c" $i)) }
     xs.Push(Count(7))
     xs.Push(Lev.Low)
@@ -57,7 +57,7 @@ fn kept() List<any Named&> {
 }
 
 test "T32a: an any holds a struct borrowed, temporaries built where it lands, numbers, enums and text copied" {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     c := Cat("tom")
     xs.Push(c)
     xs.Push(Cat("kit"))
@@ -90,7 +90,7 @@ fn (t mut Tally&) Bump() I64 {
 }
 fn (t Tally&) Seen() I64 { return t.at }
 
-fn bumpAll(xs mut List<mut any Counter&>&) I64 {
+fn bumpAll(xs mut Vec<mut any Counter&>&) I64 {
     s I64 = 0
     for x in xs { s += x.Bump() }
     return s
@@ -99,7 +99,7 @@ fn bumpAll(xs mut List<mut any Counter&>&) I64 {
 test "T32b: a mut method through a mut any writes the instance itself" {
     a := Tally(1)
     b := Tally(10)
-    xs := List<mut any Counter&>()
+    xs := Vec<mut any Counter&>()
     xs.Push(a)
     xs.Push(b)
     xs.Push(Tally(100))
@@ -118,7 +118,7 @@ fn areas(xs Array<any sh.Shape&>&) I32 {
     for x in xs { t += x.Area() }
     return t
 }
-fn describeAll<S sh.Shape>(xs List<S>&) I32 {
+fn describeAll<S sh.Shape>(xs Vec<S>&) I32 {
     t I32 = 0
     for x in xs { t += x.Describe() }
     return t
@@ -126,7 +126,7 @@ fn describeAll<S sh.Shape>(xs List<S>&) I32 {
 
 test "T32c: an any of another module's trait, its default through the table, generic code over it" {
     q := sh.Square(3)
-    xs := List<any sh.Shape&>()
+    xs := Vec<any sh.Shape&>()
     xs.Push(q)
     xs.Push(sh.Tri(4, 3))
     xs.Push(sh.Dot(1))
@@ -155,7 +155,7 @@ test "T33: == is the same instance; an any renders its instance" {
     assert $w == "Lev.High"
     v any Named& = Count(4)
     assert $v == "4"
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     xs.Push(Lev.Low)
     assert $xs == "List<any Named&>[Lev.Low]"
 }
@@ -198,7 +198,7 @@ fn labelLen(w any Widget&) I64 {
 
 test "T34: type cases bind the instance itself; as gives it, or fails under checked" {
     sl := Slider(3)
-    ws := List<mut any Widget&>()
+    ws := Vec<mut any Widget&>()
     ws.Push(Button("ok"))
     ws.Push(sl)
     ws.Push(Level(9))
@@ -248,7 +248,7 @@ fn sumIt(it mut any Iterator<I64>&) I64 {
 }
 
 test "T32b: an any Iterator walked by for-in and its defaults" {
-    l := List<I64>()
+    l := Vec<I64>()
     for i in range 5 { l.Push(i) }
     assert sumIt(l.Iter()) == 10
     a := I64[1, 2, 3]
@@ -262,14 +262,14 @@ test "T32b: an any Iterator walked by for-in and its defaults" {
 # K1, K2: the evaluator calls through tables as the program does - globals baked from calls through anys, compared
 # with the same calls made at run time on inputs it cannot know
 fn mix(n I64) String {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     xs.Push(Count(n))
     xs.Push(Lev.High if n > 2 else Lev.Low)
     xs.Push(Cat("n" $n))
     return names(xs)
 }
 fn widgets(n I64) I64 {
-    ws := List<mut any Widget&>()
+    ws := Vec<mut any Widget&>()
     ws.Push(Slider(n))
     ws.Push(Level(n))
     for w in ws { slide(w) }
@@ -305,7 +305,7 @@ fn bumped(k I64) String {
     a := I64[1, 2, k]
     c mut any Bump& = BNums(a)
     c.Bump()
-    l := List<mut any Bump&>()
+    l := Vec<mut any Bump&>()
     l.Push(BLab(s))
     l.Push(BNums(a))
     for x in l { x.Bump() }
@@ -314,7 +314,7 @@ fn bumped(k I64) String {
 BakedBumped String = bumped(3)
 
 fn labels(n I64) String {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     for i in range n {
         t := "lab" $i "-" $(i * 7)
         xs.Push(Label(t))
@@ -342,7 +342,7 @@ fn chBad(k I64) String ? ChOops {
     return "never"
 }
 fn chosen(n I64) String {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     for i in range n {
         s := "s" $i
         u := "u" $i
@@ -474,7 +474,7 @@ fn gkind(s any GShape&) String {
     }
 }
 fn gkinds(n I64) String {
-    xs := List<any GShape&>()
+    xs := Vec<any GShape&>()
     xs.Push(GBox<I64>(n, 2))
     xs.Push(GBox<String&>("t" $n, 3))
     xs.Push(GDot(4))
@@ -574,7 +574,7 @@ fn twoInstances(n I64) String {
     t := KBox<String&>("t" $n, n)
     j := JBox<I64>(7, n)
     k := JBox<Bool>(true, n)
-    xs := List<any IShape&>()
+    xs := Vec<any IShape&>()
     xs.Push(a)
     xs.Push(t)
     xs.Push(j)
@@ -607,7 +607,7 @@ fn (u mut AUps&) Next() I64 ? Exhausted {
 fn anyCount<T>(it mut any Iterator<T>&) I64 { return it.Count(fn(x T) Bool { return true }) }
 type ASrc<T> struct(it mut any Iterator<T>&) { it }
 fn (s mut ASrc<T>&) First() T ? Exhausted { return try s.it.Next() }
-fn (s mut ASrc<T>&) Rest() List<T>& { return s.it.ToList() }
+fn (s mut ASrc<T>&) Rest() Vec<T>& { return s.it.ToVec() }
 fn anyGeneric(n I64) String {
     a mut any Iterator<I64>& = AUps(n)
     s := ASrc<I64>(AUps(n + 1))
@@ -628,12 +628,12 @@ test "T32: a type variable in an any's trait, substituted and inferred; Map to a
 # T32a, E25 (the third any review, finding 1): a call given a scope argument builds its array where that says, not
 # where the box lands - so the box copies it, and a block's scope argument does not leave the box dangling
 fn sArg(i I64) String { return "text" $i "-" $(i * 7) }
-fn sArgStash(l mut List<any Named&>&, i I64) String {
+fn sArgStash(l mut Vec<any Named&>&, i I64) String {
     l.Push(Label(sArg&return(i)))
     return "r" $i
 }
 fn scopeArgs(n I64) String {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     for i in range n {
         t := "inner" $i
         xs.Push(Label(sArg&t(i)))
@@ -660,7 +660,7 @@ fn rsKeep(k mut RsH&, i I64) String {
     k.s = s
     return s
 }
-fn rsLog(log mut List<String&>&, i I64) String {
+fn rsLog(log mut Vec<String&>&, i I64) String {
     s := "item" $i
     log.Push(s)
     return s
@@ -672,7 +672,7 @@ fn retShared(i I64) String {
     h2 := RsH("y")
     b mut any Bump& = BLab(rsKeep(h2, i + 1))
     b.Bump()
-    log := List<String&>()
+    log := Vec<String&>()
     y := rsLog(log, i)
     y[0] = 'Q'
     c mut any Bump& = BLab(rsLog(log, i + 1))
@@ -736,7 +736,7 @@ fn saFail(i I64) String ? ChOops {
     return sArg(i)
 }
 fn aScoped(n I64) String {
-    xs := List<any Named&>()
+    xs := Vec<any Named&>()
     out := ""
     for i in range n {
         t := "inner" $i
@@ -767,19 +767,19 @@ test "T7b, E25: a scoped call's array of plain data is copied where it is return
 # compiler decides agrees
 type SnK struct(s String&) { s }
 fn (k mut SnK&) Set(t String&) { k.s = t }
-fn snAlias(lst mut List<String&>&, i I64) String {
+fn snAlias(lst mut Vec<String&>&, i I64) String {
     s := "abc" $i
     l := lst
     l.Push(s)
     return s
 }
-fn snHandle(lst List<String&>, i I64) String {
+fn snHandle(lst Vec<String&>, i I64) String {
     s := "hnd" $i
     l := lst
     l.Push(s)
     return s
 }
-fn snElem(ks mut List<mut SnK&>&, i I64) String {
+fn snElem(ks mut Vec<mut SnK&>&, i I64) String {
     s := "elm" $i
     ks[0].Set(s)
     return s
@@ -814,13 +814,13 @@ fn snDtor(i I64) String {
     return s
 }
 fn secondNames(i I64) String {
-    a := List<String&>()
+    a := Vec<String&>()
     x := snAlias(a, i)
     x[0] = 'Q'
-    b := List<String&>()
+    b := Vec<String&>()
     y := snHandle(b, i)
     y[0] = 'Q'
-    ks := List<mut SnK&>()
+    ks := Vec<mut SnK&>()
     ks.Push(SnK("k"))
     z := snElem(ks, i)
     z[0] = 'Q'
@@ -902,7 +902,7 @@ test "P1g, T11b: a spawn target holding an array by value is stored as its assig
 # O26a, T7b (the fifth any review, 2): a callee one of whose other parameters - its receiver too - shares a scope
 # with the returned local's borrow may keep it with no obligation, so the local is copied at its return; a slice of
 # it lent the same way; baked as at run time, and an assert the compiler decides agrees
-type ShHolder struct(l mut List<String&>&) { l }
+type ShHolder struct(l mut Vec<String&>&) { l }
 fn (h mut ShHolder&) Add(x String&h) I64 {
     h.l.Push(x)
     return 1
@@ -911,7 +911,7 @@ fn (x String&) AddTo(h mut ShHolder&x) I64 {
     h.l.Push(x)
     return 3
 }
-fn shTie(l mut List<String&>&, x String&l) I64 {
+fn shTie(l mut Vec<String&>&, x String&l) I64 {
     l.Push(x)
     return 2
 }
@@ -920,7 +920,7 @@ fn shAdd(h mut ShHolder&, i I64) String {
     h.Add(s)
     return s
 }
-fn shTieRet(keep mut List<String&>&, i I64) String {
+fn shTieRet(keep mut Vec<String&>&, i I64) String {
     s := "def" $i
     shTie(keep, s)
     return s
@@ -936,7 +936,7 @@ fn shMethod(h mut ShHolder&, i I64) String {
     return s
 }
 fn sharedKeep(i I64) String {
-    keep := List<String&>()
+    keep := Vec<String&>()
     h := ShHolder(keep)
     v := shAdd(h, i)
     v[0] = 'Q'
@@ -993,8 +993,8 @@ fn cvTup(i I64) CvLab, I64 {
 fn cvGlobal() CvPath { return CvPath(CvG) }
 fn cvWr(l mut CvLab&) { l[0] = 'W' }
 fn conversions(i I64) String {
-    cvKept := List<CvLab&>()
-    xs := List<any Named&>()
+    cvKept := Vec<CvLab&>()
+    xs := Vec<any Named&>()
     for k in range 3 {
         cvKept.Push(cvLocal(k + i))
         xs.Push(cvLocal(k + i))
@@ -1050,18 +1050,18 @@ test "T7b, K1: a returned conditional, match or catch default is copied while co
 
 # E25, O25a (the fifth any review, 5): a local a call given a scope argument declares lives where the argument puts it
 fn soMk(i I64) String { return "mk" $i }
-fn soReturn(keep mut List<String&>&, i I64) String {
+fn soReturn(keep mut Vec<String&>&, i I64) String {
     x := soMk&return(i)
     keep.Push(x)
     return x
 }
-fn soKeep(keep mut List<String&>&, i I64) String {
+fn soKeep(keep mut Vec<String&>&, i I64) String {
     x := soMk&keep(i)
     keep.Push(x)
     return x
 }
 fn scopedLocals(i I64) String {
-    keep := List<String&>()
+    keep := Vec<String&>()
     a := soReturn(keep, i)
     b := soKeep(keep, i + 1)
     a[0] = 'Q'

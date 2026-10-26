@@ -62,7 +62,7 @@ fn inBuildOrGit(path String&) Bool {
 
 fn main() ? {
     args := os.Args()
-    files List<String&>
+    files Vec<String&>
     for i in range 1, args.Len() {
         root := args[i]
         info := try os.Stat(root) catch { continue }

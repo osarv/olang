@@ -30,7 +30,7 @@ fn main() {
         toolkit.Say(o.Stderr)
         toolkit.Die("layoutdiff: " $dump " layout wrote diagnostics")
     }
-    allowed := List<String&>()
+    allowed := Vec<String&>()
     for r in toolkit.Rows(toolkit.Read(deferred)) {
         if not r.StartsWith("#") and r != "" { allowed.Push($r) }
     }
@@ -50,7 +50,7 @@ type outcome struct() {
 }
 
 # the self-hosted rows against the golden's, row by row
-fn compare(golden List<String&>&, got List<String&>&, allowed Array<String&>&) outcome {
+fn compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String&>&) outcome {
     ok := Map<String&, Bool>()
     for a in allowed { ok.Put(a, true) }
     seen := Map<String&, Bool>()
@@ -107,7 +107,7 @@ fn field(row String&, n I64) String&row {
 }
 
 # what each instance name a side spells stands for: the struct body of the row whose LLVM spelling (the third field) it is
-fn bodies(rows List<String&>&) Map<String&, String&> {
+fn bodies(rows Vec<String&>&) Map<String&, String&> {
     m := Map<String&, String&>()
     for row in rows {
         spelling := field(row, 2)

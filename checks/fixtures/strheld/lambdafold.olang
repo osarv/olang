@@ -2,7 +2,7 @@
 import "std/io"
 type Bag struct(k I64) {
     k
-    l List<I64> = List<I64>()
+    l Vec<I64> = Vec<I64>()
 }
 fn (b Bag&) Str() String {
     n := b.l.Iter().Fold(0, fn(a I64, x I64) I64 {

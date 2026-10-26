@@ -3,7 +3,7 @@
 # lives ("&s" of a local the function returns is the result scope) - read back after the arena has been churned
 type S struct() {
     best I64 = 0
-    names List<String&> = List<String&>()
+    names Vec<String&> = Vec<String&>()
 }
 fn mk(i I64) String& { return "line " $i }
 fn sneak(t String&, s mut S&) I64 {

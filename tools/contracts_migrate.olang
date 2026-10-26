@@ -16,7 +16,7 @@ import "srcmask"
 
 type Result struct() {
     changes I64 = 0
-    left List<String&>
+    left Vec<String&>
 }
 
 # where the code line starting at i ends: its "\n", or the text's end
@@ -76,8 +76,8 @@ fn closeAngle(src String&, i I64, b I64) I64 {
 
 # src[a:b] split at the commas outside every bracket - "<" and ">" counted as brackets in types (angles), never in
 # conditions, where they compare
-fn splitTop(src String&, mask String&, a I64, b I64, angles Bool) List<String&> {
-    out List<String&>
+fn splitTop(src String&, mask String&, a I64, b I64, angles Bool) Vec<String&> {
+    out Vec<String&>
     depth I64 = 0
     at := a
     for k in range a, b {
@@ -113,7 +113,7 @@ fn hasWord(text String&, name String&) Bool {
 }
 
 # a result item written "name Type": the type alone, and the name in names; as it was where it has no name
-fn unname(item String&, names mut List<String&>&) String {
+fn unname(item String&, names mut Vec<String&>&) String {
     if item.Len() == 0 or not (item[0].IsLower() or item[0] == '_') { return $item }
     j I64 = 0
     for j < item.Len() and srcmask.IsWord(item[j]) { j++ }
@@ -172,11 +172,11 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
         if src[m] == '?' and depth == 0 and qm < 0 { qm = m }
     }
     resEnd := qm if qm >= 0 else k
-    names List<String&>
-    results List<String&>
+    names Vec<String&>
+    results Vec<String&>
     for it in splitTop(src, mask, pe, resEnd, true) { results.Push(unname(it, names)) }
     errs := srcmask.Strip(src[qm:k]) if qm >= 0 else ""
-    kept List<String&>
+    kept Vec<String&>
     items := splitTop(src, mask, k + 1, ke - 1, false)
     for it in items {
         why := ""
@@ -237,7 +237,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
 fn main() ? {
     check := false
     verbose := false
-    paths List<String&>
+    paths Vec<String&>
     args := os.Args()
     for i in range 1, args.Len() {
         a := args[i]
@@ -253,7 +253,7 @@ fn main() ? {
         srcmask.SayErr("usage: tools_contracts_migrate [--check] [-v] FILE|DIR...")
         os.Exit(2)
     }
-    files List<String&>
+    files Vec<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }

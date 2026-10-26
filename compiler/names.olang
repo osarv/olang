@@ -55,7 +55,7 @@ type Entry struct(Name source.NameId, Sp source.Span, Kind What, Mut Bool, Decl 
 
 # a module's names: its entries, the first function or global and the type of each name, and its import aliases
 type Table struct() {
-    Entries List<Entry>
+    Entries Vec<Entry>
     values Map<source.NameId, I64>
     types Map<source.NameId, I64>
     aliases Map<source.NameId, I64>
@@ -78,22 +78,22 @@ fn BuiltinTypeName(t String&) Bool {
 
 type Resolver struct(L mut load.Loader&) {
     L
-    Tables List<mut Table&>
+    Tables Vec<mut Table&>
     preludeTypes Map<source.NameId, I64>   # an exported type of the prelude: the module declaring it
     preludeConsts Map<source.NameId, Ref>  # M19d: an exported immutable global of the prelude ("Pi"): where it is
     uses Map<I64, Ref>                     # by where a name is written: its file and offset
     members Map<I64, Ref>                  # by where a member's name ends: x.y through an import's alias
     # the item being resolved
     mi I64 = -1
-    locals List<local>
+    locals Vec<local>
     scope Map<source.NameId, I64>
-    undo List<pair.Pair<source.NameId, I64>>
-    itemNames List<source.NameId>
-    itemInits List<source.NameId>   # the locals of the item declared with an initializer, one value each: S8c's candidates
+    undo Vec<pair.Pair<source.NameId, I64>>
+    itemNames Vec<source.NameId>
+    itemInits Vec<source.NameId>   # the locals of the item declared with an initializer, one value each: S8c's candidates
     inCond Bool = false
     lambdaParams Bool = false   # declaring a lambda's parameters (D16c: "already declared here")
     item I64 = 0
-    unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
+    unknownSaid Vec<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
     # S8a: the local ifs whose condition B9a evaluated reading no build constant, by (file, the condition's start) - the
     # same on every build, which the checker reports once the condition checks
     Same Map<pair.Pair<I64, I64>, Bool>
@@ -737,8 +737,8 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
 }
 
 # a constructor's fields, which its destructor reads bare: its parameters and the names its body declares as fields
-fn fieldNames(s ast.StructBody&) List<source.NameId> {
-    out List<source.NameId>
+fn fieldNames(s ast.StructBody&) Vec<source.NameId> {
+    out Vec<source.NameId>
     for p in s.Params { out.Push(p.Name) }
     if s.Body.Len() == 0 { return out }
     for st in s.Body {
@@ -991,7 +991,7 @@ fn (r mut Resolver&) matchOf(mt ast.Match&) {
 fn (r mut Resolver&) caseOf(c ast.Case&) {
     m := r.mark()
     if c.Alts.Len() > 0 {
-        bound List<source.NameId>
+        bound Vec<source.NameId>
         for p in c.Alts { r.pattern(p, bound) }
     }
     if c.Types.Len() > 0 {
@@ -1004,7 +1004,7 @@ fn (r mut Resolver&) caseOf(c ast.Case&) {
 }
 
 # a case's alternative: its paths resolved, its bindings declared - once each, as alternatives bind the same names
-fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut List<source.NameId>&) {
+fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
     match p {
         case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) { r.expr(x) }
         case ast.Pattern.Case(_, path, subs) {

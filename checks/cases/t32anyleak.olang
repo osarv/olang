@@ -6,7 +6,7 @@ type aShape trait {
 type aSq struct(s I64) { s }
 fn (q aSq&) Area() I64 { return q.s * q.s }
 
-fn keep(xs mut List<any aShape&>&) {
+fn keep(xs mut Vec<any aShape&>&) {
     q := aSq(2)
     xs.Push(q)
 }

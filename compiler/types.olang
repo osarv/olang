@@ -158,39 +158,39 @@ NoLayout I64 = 3
 
 type Table struct(Names mut source.Names&) {
     Names
-    types List<data>
+    types Vec<data>
     keys Map<data, TypeId>
     canonNames Bool = false             # Canon writing function types' parameter names too (CanonNamed)
-    depths List<I32>                    # G17: how deep a type's arguments nest
-    lists List<Array<TypeId>&>
+    depths Vec<I32>                    # G17: how deep a type's arguments nest
+    lists Vec<Array<TypeId>&>
     listKeys Map<Array<TypeId>&, ListId>
-    shapes List<Array<source.NameId>&>  # an anonymous enum's case names, by AnonEnum's A; its payloads in shapeCases
-    shapeCases List<ListId>
-    shapeFields List<Array<source.NameId>&>  # its payloads' field names, case after case, as the first written gave them
+    shapes Vec<Array<source.NameId>&>  # an anonymous enum's case names, by AnonEnum's A; its payloads in shapeCases
+    shapeCases Vec<ListId>
+    shapeFields Vec<Array<source.NameId>&>  # its payloads' field names, case after case, as the first written gave them
     shapeKeys Map<String&, I64>
-    patterns List<String&>              # a constant pattern's key, by ConstExpr's A (its owner and expression)
+    patterns Vec<String&>              # a constant pattern's key, by ConstExpr's A (its owner and expression)
     patternKeys Map<String&, I64>
-    decls List<decl>
-    Modules List<String&>               # every module's identity, by index
+    decls Vec<decl>
+    Modules Vec<String&>               # every module's identity, by index
     declKeys Map<String&, DeclId>       # "IDENTITY:Name"
     bodies Map<TypeId, body>
     caseNames Map<TypeId, Array<source.NameId>&>
     # layouts, per type
-    state List<I64>
-    sizes List<I64>
-    aligns List<I64>
-    offsetsAt List<I64>                 # where a struct's or record's field offsets start in offsets, or -1
-    offsets List<I64>
-    payloads List<I64>                  # an enum's payload size in bytes, rounded to whole words; -1 for none
-    llvm List<String&>                  # the LLVM spelling, made when first asked for ("" until then)
-    plains List<TypeId>                 # each type with every function type's scopes left out (Plain)
-    scopes List<Array<I64>&>            # a function type's scopes, by ScopesId: role, how many parameters, their entries,
+    state Vec<I64>
+    sizes Vec<I64>
+    aligns Vec<I64>
+    offsetsAt Vec<I64>                 # where a struct's or record's field offsets start in offsets, or -1
+    offsets Vec<I64>
+    payloads Vec<I64>                  # an enum's payload size in bytes, rounded to whole words; -1 for none
+    llvm Vec<String&>                  # the LLVM spelling, made when first asked for ("" until then)
+    plains Vec<TypeId>                 # each type with every function type's scopes left out (Plain)
+    scopes Vec<Array<I64>&>            # a function type's scopes, by ScopesId: role, how many parameters, their entries,
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
-    nameLists List<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
+    nameLists Vec<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
     nameKeys Map<Array<I64>&, I64>
     refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
-    ints List<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
+    ints Vec<TypeId>                   # T4a: the integer type of each width, I1 .. I128 at 1 .. 128, U1 .. U128 above
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
@@ -769,7 +769,7 @@ fn (t mut Table&) listHolds(l ListId, cases Bool = false) Bool {
 fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     role := t.Role(f)
     if role == RoleDtor { return I64[ClosingVar] }
-    out List<I64>
+    out Vec<I64>
     ps := t.Items(t.Params(f))
     for i in range ps.Len() {
         if t.ShareOf(f, i) == OwnScope and t.HoldsRefs(ps[i]) { out.Push(i) }
@@ -889,7 +889,7 @@ fn (t Table&) Repr(id TypeId) TypeId {
 # the types whose layouts a type's layout is made of, which must be laid out first: a value's parts held in place. A
 # reference, a run-time-length array and a function value hold theirs elsewhere
 fn (t Table&) Embedded(id TypeId) Array<TypeId> {
-    out List<TypeId>
+    out Vec<TypeId>
     match t.KindOf(id) {
         case Kind.Named {
             match t.DeclKindOf(t.DeclOf(id)) {

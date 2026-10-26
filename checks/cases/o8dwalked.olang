@@ -7,7 +7,7 @@ import "std/io"
 
 type Holder struct() {
     buf Array<I64>& = Array<I64>(0)
-    l List<String&>
+    l Vec<String&>
     m Map<I64, String&>
 }
 

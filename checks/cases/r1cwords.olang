@@ -21,8 +21,8 @@ fn main() {
     a := try pop(N) catch LE.EMPTY default -1
     b := try two(N + 1) catch LE.EMPTY default -1 catch LE.GONE default -2
     c := try inf(N) catch LE.EMPTY default -1
-    l := List<I64>()
-    d := try l.Pop() catch ListError.EMPTY default -4
+    l := Vec<I64>()
+    d := try l.Pop() catch VecError.EMPTY default -4
     e := try "abc".Find("z") catch TextError.NOT_FOUND default -5
     assert a == -1 and b == -2 and c == -1 and d == -4 and e == -5 and run(pop) == 3 and Baked == 9
     assert $inf == "inf(n I64) I64 ? LE.EMPTY" and $two == "two(n I64) I64 ? LE"     # every word of LE: the type whole

@@ -8,7 +8,7 @@ type Cell struct() {
     w W = W("")
 }
 fn main() ? {
-    cells := List<mut Cell&>()
+    cells := Vec<mut Cell&>()
     for i in range 3 { cells.Push(Cell()) }
     for i in range 3 {
         x String& = "w" $i

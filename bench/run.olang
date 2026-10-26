@@ -88,7 +88,7 @@ type options struct() {
     reps I64 = 7
     base Bool = false
     quick Bool = false
-    names List<String&> = List<String&>()
+    names Vec<String&> = Vec<String&>()
 }
 
 # the command line as getopts "r:xq" reads it: options up to the first word that is none, or "--"; a bad option is
@@ -136,7 +136,7 @@ fn parse(args Array<String&>&) options {
 
 fn main() {
     o := parse(os.Args())
-    rows := List<String&>()
+    rows := Vec<String&>()
     for row in table() {
         name := row.Split("|")[0]
         if o.names.Len() == 0 {
@@ -166,7 +166,7 @@ fn main() {
 # ---- build ----
 
 # both versions of every selected program: olang once for each program, C once for each C program
-fn build(olang String&, rows List<String&>&, base Bool) {
+fn build(olang String&, rows Vec<String&>&, base Bool) {
     built := Map<String&, Bool>()
     for row in rows {
         f := row.Split("|")
@@ -190,7 +190,7 @@ fn build(olang String&, rows List<String&>&, base Bool) {
 }
 
 fn buildOlang(olang String&, prog String&, extra Array<String&>&) {
-    args := List<String&>()
+    args := Vec<String&>()
     args.Push(olang)
     args.Push("build")
     for e in extra { args.Push($e) }
@@ -200,7 +200,7 @@ fn buildOlang(olang String&, prog String&, extra Array<String&>&) {
 }
 
 fn clang(opts Array<String&>&, out String&, cprog String&) {
-    args := List<String&>()
+    args := Vec<String&>()
     args.Push("clang")
     for f in opts { args.Push($f) }
     for a in String&["-o", out, "c/" $cprog ".c", "-lm", "-lpthread"] { args.Push($a) }
@@ -211,20 +211,20 @@ fn clang(opts Array<String&>&, out String&, cprog String&) {
 
 # the command for a binary and the row's arguments
 fn command(bin String&, args String&) Array<String&>& {
-    l := List<String&>()
+    l := Vec<String&>()
     l.Push($bin)
     for w in benchlib.Words(args) { l.Push($w) }
     return l.ToArray()
 }
 
-fn check(rows List<String&>&, base Bool) {
+fn check(rows Vec<String&>&, base Bool) {
     for row in rows {
         f := row.Split("|")
         name := f[0]
         prog := f[1]
         cprog := f[2]
         args := f[3]
-        variants := List<String&>()
+        variants := Vec<String&>()
         variants.Push("build/" $prog "|build/" $cprog "_c")
         if base { variants.Push("build/" $prog ".base|build/" $cprog "_c.base") }
         for v in variants {
@@ -244,8 +244,8 @@ fn check(rows List<String&>&, base Bool) {
 # ---- time: every program once per repetition, interleaved, so drift hits all of them alike ----
 
 # the microseconds each run took, under "NAME|KIND" - o: olang, c: C, on, cn: the baseline x86-64 builds
-fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
-    times := Map<String&, List<I64>>()
+fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
+    times := Map<String&, Vec<I64>>()
     for r in range 1, reps + 1 {
         benchlib.Warn("repetition " $r "/" $reps "\n")
         for row in rows {
@@ -254,7 +254,7 @@ fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
             prog := f[1]
             cprog := f[2]
             args := f[3]
-            bins := List<String&>()
+            bins := Vec<String&>()
             bins.Push("o|build/" $prog)
             bins.Push("c|build/" $cprog "_c")
             if base {
@@ -268,8 +268,8 @@ fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
                 o := benchlib.Capture(command(b[bar + 1:], args), benchlib.Dir)
                 t1 := time.Now()
                 if o.Stderr.Len() > 0 { benchlib.Warn(o.Stderr) }
-                if key not in times { times.Put(key, List<I64>()) }
-                (try times.Get(key) catch default List<I64>()).Push((t1 - t0) / 1000)
+                if key not in times { times.Put(key, Vec<I64>()) }
+                (try times.Get(key) catch default Vec<I64>()).Push((t1 - t0) / 1000)
             }
         }
     }
@@ -277,7 +277,7 @@ fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
 }
 
 # the median and the minimum of a list of microsecond counts
-fn stat(us List<I64>&) I64, I64 {
+fn stat(us Vec<I64>&) I64, I64 {
     sorted := us.Clone()
     sorted.Sort(fn(a I64, b I64) Bool { return a < b })
     n := sorted.Len()
@@ -296,19 +296,19 @@ fn ratio(a I64, b I64) String { return (F64(a) / F64(b)).Fixed(2) }
 fn left(t String&, w I64) String { return t.PadEnd(w) }
 fn right(t String&, w I64) String { return t.PadStart(w) }
 
-fn report(rows List<String&>&, base Bool, reps I64, times Map<String&, List<I64>>&) {
+fn report(rows Vec<String&>&, base Bool, reps I64, times Map<String&, Vec<I64>>&) {
     out := StringBuilder()
     out.Push($left("benchmark", 26) " " $right("olang", 9) " " $right("C", 9) " " $right("olang/C", 7))
     if base { out.Push(" " $right("olang x86-64", 10) " " $right("C x86-64", 10) " " $right("ratio", 7)) }
     out.Push("     (median of " $reps "; min in parentheses)\n")
     for row in rows {
         name := row.Split("|")[0]
-        om, omin := stat(try times.Get($name "|o") catch default List<I64>())
-        cm, cmin := stat(try times.Get($name "|c") catch default List<I64>())
+        om, omin := stat(try times.Get($name "|o") catch default Vec<I64>())
+        cm, cmin := stat(try times.Get($name "|c") catch default Vec<I64>())
         out.Push($left(name, 26) " " $right(secs(om), 9) " " $right(secs(cm), 9) " " $right(ratio(om, cm), 7))
         if base {
-            onm, onmin := stat(try times.Get($name "|on") catch default List<I64>())
-            cnm, cnmin := stat(try times.Get($name "|cn") catch default List<I64>())
+            onm, onmin := stat(try times.Get($name "|on") catch default Vec<I64>())
+            cnm, cnmin := stat(try times.Get($name "|cn") catch default Vec<I64>())
             out.Push(" " $right(secs(onm), 10) " " $right(secs(cnm), 10) " " $right(ratio(onm, cnm), 7))
         }
         out.Push("     (" $secs(omin) " / " $secs(cmin) ")\n")

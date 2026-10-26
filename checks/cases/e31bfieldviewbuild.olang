@@ -23,7 +23,7 @@ fn churn() ? io.Error {
     }
 }
 fn main() ? {
-    l := List<Layer>()
+    l := Vec<Layer>()
     l.Push(Layer(M(Node(1, null), 0), 0))
     for i in range 3 { g(l[0].w, i + 10) }
     try churn()

@@ -14,7 +14,7 @@ type aLab extends String
 fn (l mut aLab&) Bump() { l[0] = 'Z' }
 type aNums extends Array<I64>
 fn main() {
-    xs := List<any aSized&>()
+    xs := Vec<any aSized&>()
     for i in range 3 {
         t := "lab" $i
         xs.Push(aLab(t))
@@ -22,7 +22,7 @@ fn main() {
         xs.Push(aNums(c[0:2]))
     }
     for k in range 200 {
-        l := List<I64>()
+        l := Vec<I64>()
         for j in range 40 { l.Push(k + j) }
         s := "junk " $k
     }

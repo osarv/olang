@@ -5,7 +5,7 @@ type V struct(d mut Array<I64>&, n I64) {
     d
     n
 }
-fn (v mut V&) Mark(l mut List<V>&) {
+fn (v mut V&) Mark(l mut Vec<V>&) {
     l[1] = l[0]
     l[0] = V(Array<I64>(1), 0)
     v.d[0] = 99
@@ -16,7 +16,7 @@ fn (v mut V&) MarkA(a mut Array<V>&) {
     v.d[0] = 99
 }
 fn main() ? {
-    l := List<V>()
+    l := Vec<V>()
     l.Push(V(Array<I64>(1), 0))
     l.Push(V(Array<I64>(1), 0))
     l[0].Mark(l)

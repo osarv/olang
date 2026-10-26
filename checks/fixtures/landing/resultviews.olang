@@ -15,7 +15,7 @@ type View struct(Data Array<F64>&, Off I64, N I64) {
 
 type G struct(n I64) {
     mem mut Array<F64>& = Array<F64>(n)
-    entries mut List<infos.Info>& = List<infos.Info>()
+    entries mut Vec<infos.Info>& = Vec<infos.Info>()
 }
 
 fn (g G&) count(i infos.Info&) I64 { return i.Len }

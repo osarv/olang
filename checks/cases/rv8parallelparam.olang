@@ -21,7 +21,7 @@ fn churn() I64 {
 fn main() ? {
     a mut Node& = Node(0)
     b mut Node& = Node(0)
-    kept := List<Node&>()
+    kept := Vec<Node&>()
     for i in range 4 {
         if i >= 0 {
             set(a, i * 10)

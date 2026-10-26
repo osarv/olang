@@ -13,14 +13,14 @@ fn churn() I64 {
     }
     return t
 }
-fn keep(l mut List<fn() I64>&, g fn() I64) { l.Push(g) }
+fn keep(l mut Vec<fn() I64>&, g fn() I64) { l.Push(g) }
 fn main() ? {
     n mut Node& = Node(1)
     g := fn() I64 {
         n.next = Node(n.v + 41)
         return n.next!.v
     }
-    fns mut List<fn() I64>& = List<fn() I64>()
+    fns mut Vec<fn() I64>& = Vec<fn() I64>()
     join {
         spawn keep(fns, g)
     }

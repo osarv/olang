@@ -75,8 +75,8 @@ fn MustInto(args Array<String&>&, dir String&, path String&) {
 
 # the names ending in .ll in dir/build that are none of the ones a link of a program leaves out, as "build/NAME" and in
 # byte order; the driver ends with status 1 when there are none (grep -v finding nothing)
-fn Objects(dir String&, leaveOut Array<String&>&) List<String&> {
-    l := List<String&>()
+fn Objects(dir String&, leaveOut Array<String&>&) Vec<String&> {
+    l := Vec<String&>()
     names := try os.ReadDir($dir "/build") catch os.Error { Fail("cannot read " $dir "/build", 2) }
     for n in names {
         if not n.EndsWith(".ll") { continue }
@@ -101,8 +101,8 @@ fn TakeLock() {
 }
 
 # the words of a text split at blanks, none of them empty
-fn Words(t String&) List<String&> {
-    l := List<String&>()
+fn Words(t String&) Vec<String&> {
+    l := Vec<String&>()
     for w in t.Split(" ") {
         if w.Len() > 0 { l.Push($w) }
     }

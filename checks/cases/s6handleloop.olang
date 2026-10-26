@@ -5,17 +5,17 @@
 # body's arena; read back after a churn
 type Box struct(v I64) {
     v
-    items mut List<I64>& = List<I64>()
+    items mut Vec<I64>& = Vec<I64>()
 }
 
 fn main() ? {
-    users := List<List<I64>>()
-    boxes := List<Box>()
-    m := Map<I64, List<I64>>()
+    users := Vec<Vec<I64>>()
+    boxes := Vec<Box>()
+    m := Map<I64, Vec<I64>>()
     for i in range 5 {
-        users.Push(List<I64>())
+        users.Push(Vec<I64>())
         boxes.Push(Box(i))
-        m.Put(i, List<I64>())
+        m.Put(i, Vec<I64>())
     }
     for i in range 5 {
         for j in range 20 {
@@ -24,9 +24,9 @@ fn main() ? {
             (try m.Get(i)).Push(i * 1000 + j)
         }
     }
-    names := List<List<String&>>()
+    names := Vec<Vec<String&>>()
     for i in range 5 {
-        names.Push(List<String&>())
+        names.Push(Vec<String&>())
         names[i].Push("init")
     }
     kept := "kept-text-of-moderate-length"
@@ -34,7 +34,7 @@ fn main() ? {
         names[i][0] = kept
         users[i][0] += 1
     }
-    churn := List<String&>()
+    churn := Vec<String&>()
     for i in range 1000 { churn.Push("x" $i) }
     assert names[4][0] == kept and users[3][0] == 31
     assert users[3].Len() == 20 and users[3][19] == 49 and boxes[3].items[19] == 319 and (try m.Get(3))[19] == 3019

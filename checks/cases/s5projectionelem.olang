@@ -4,7 +4,7 @@ type Box struct(s String&) { s }
 fn boxes(s String&) Array<Box> { return Box[Box(s)] }
 
 fn main() ? {
-    bs := List<Box>()
+    bs := Vec<Box>()
     for k in range 4 {
         t := $k "-text"
         bs.Push(boxes(t)[0])

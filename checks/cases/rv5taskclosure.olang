@@ -13,7 +13,7 @@ fn churn() I64 {
     }
     return t
 }
-fn work(n mut Node&, fns mut List<fn() I64>&) {
+fn work(n mut Node&, fns mut Vec<fn() I64>&) {
     fns.Push(fn() I64 {
         n.next = Node(n.v + 41)
         return n.next!.v
@@ -21,7 +21,7 @@ fn work(n mut Node&, fns mut List<fn() I64>&) {
 }
 fn main() ? {
     n mut Node& = Node(1)
-    fns mut List<fn() I64>& = List<fn() I64>()
+    fns mut Vec<fn() I64>& = Vec<fn() I64>()
     join {
         spawn work(n, fns)
     }

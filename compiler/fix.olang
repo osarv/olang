@@ -35,7 +35,7 @@ fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
 # the tools in the order they run: the text tools in table order, then the driven ones in table order
 fn Order() Array<I64> {
-    out List<I64>
+    out Vec<I64>
     for want in String&["text", "driven"] {
         for t in range ToolNames.Len() {
             if driven(ToolKinds[t]) == (want == "driven") { out.Push(t) }
@@ -46,7 +46,7 @@ fn Order() Array<I64> {
 
 # the arguments a tool is run with: its program, what stands before the files, and the files
 fn arguments(program String&, kind I64, exe String&, std String&, files Array<String&>&) Array<String&> {
-    out List<String&>
+    out Vec<String&>
     out.Push($program)
     if kind == StdTool {
         out.Push("--std")
@@ -62,7 +62,7 @@ fn arguments(program String&, kind I64, exe String&, std String&, files Array<St
 }
 
 # the .olang files under a directory, sorted; build/ and names beginning with "." are left out
-fn walk(dir String&, out mut List<String&>&) {
+fn walk(dir String&, out mut Vec<String&>&) {
     names := try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
         if n.StartsWith(".") or n == "build" { continue }
@@ -76,8 +76,8 @@ fn walk(dir String&, out mut List<String&>&) {
 }
 
 # the files the command line names: a directory is every .olang file under it
-fn expand(paths Array<String&>&) List<String&> {
-    out List<String&>
+fn expand(paths Array<String&>&) Vec<String&> {
+    out Vec<String&>
     for p in paths {
         if os.IsDir(p) { walk(p, out) } else { out.Push($p) }
     }
@@ -131,7 +131,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
     said := io.Writer(2)
     out := io.Writer(1)
     files := expand(paths).ToArray()
-    before List<String&>
+    before Vec<String&>
     for f in files {
         text := try os.ReadFile(f) catch os.Error {
             said.Write("olang: " $f ": cannot be read\n")

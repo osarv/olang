@@ -160,7 +160,7 @@ test "Vec: one passed by value is pushed to through its copy" {
 }
 
 test "Vec: held in a List, a Map and a Vec - a type argument like any other" {
-    l := List<Vec<I64>>()
+    l := Vec<Vec<I64>>()
     m := Map<String&, Vec<I64>>()
     vv := Vec<Vec<I64>>()
     for i in range 5 {

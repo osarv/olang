@@ -20,7 +20,7 @@ fn (b Bag&) Str() String {
 fn main() ? {
     b := Bag(Node(1, null))
     s := $b
-    keep := List<Node&>()
+    keep := Vec<Node&>()
     for i in range 2000 { keep.Push(Node(-7, null)) }
     try io.Println(s)
     try io.Println($b.head.next!.v)
