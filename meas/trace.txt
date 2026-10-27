@@ -1,0 +1,123 @@
+1792836093.400494575 1792836096.669538444 0 rm -rf build 
+1792836093.392602353 1792836096.674798312 0 make clean 
+1792836096.690168463 1792836096.695287803 0 find std -type f 
+1792836096.701815892 1792836096.785345088 0 key=$( { echo "/home/user/wt/fastverify"; sha256sum compiler/ast.olang compiler/build.olang compiler/check.olang compiler/cond.olang compiler/diag.ola
+1792836096.681471419 1792836096.789980780 0 make boot 
+1792836096.820877851 1792836096.826308733 0 nproc 
+1792836096.833608836 1792836096.838848633 0 rm -f build/failed.txt 
+1792836096.858152824 1792836135.485848596 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/linalg.olang || echo "std/linalg.olang" >> build/failed.txt 
+1792836096.857807178 1792836161.445905657 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/scope.olang || echo "compiler/scope.olang" >> build/failed.txt 
+1792836096.856326950 1792836161.505872830 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/lower.olang || echo "compiler/lower.olang" >> build/failed.txt 
+1792836161.518030724 1792836186.759248594 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/generic.olang || echo "compiler/generic.olang" >> build/failed.txt 
+1792836135.525986475 1792836186.889885173 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/load.olang || echo "compiler/load.olang" >> build/failed.txt 
+1792836161.461856153 1792836187.265886506 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/eval.olang || echo "compiler/eval.olang" >> build/failed.txt 
+1792836187.298842938 1792836196.302362388 0 build/olang build compiler/tools/tokdiff.olang 
+1792836196.333743428 1792836206.133953705 0 build/olang build compiler/tools/astdiff.olang 
+1792836186.793857938 1792836208.462126615 0 OLANG=/home/user/wt/fastverify/build/olang build/olang build tests/runner.olang || { echo "runner" >> build/failed.txt; exit 1; } 
+1792836208.487336380 1792836208.513405848 0 ./build/tests_runner || { echo "runner" >> build/failed.txt; exit 1; } 
+1792836186.906001770 1792836210.989643038 0 build/olang build compiler/tools/dump.olang 
+1792836208.545865446 1792836213.162183445 0 build/olang build compiler/tools/layoutdiff.olang 
+1792836206.166322263 1792836213.954054424 0 build/olang build compiler/tools/namesdiff.olang 
+1792836213.997777135 1792836220.757894066 0 build/olang build compiler/tools/drvdiff.olang 
+1792836220.777859207 1792836221.813919735 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/Base.olang || echo "tests/Base.olang" >> build/failed.txt 
+1792836221.833786609 1792836223.057779829 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/Lib.olang || echo "tests/Lib.olang" >> build/failed.txt 
+1792836210.998115706 1792836240.153904716 0 build/olang build compiler/tools/fmt.olang 
+1792836223.094079297 1792836245.145766313 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/runner.olang || echo "tests/runner.olang" >> build/failed.txt 
+1792836245.189803059 1792836247.013897736 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/geom/measure.olang || echo "tests/geom/measure.olang" >> build/failed.txt 
+1792836247.049410266 1792836248.737981471 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/geom/rect.olang || echo "tests/geom/rect.olang" >> build/failed.txt 
+1792836248.769879657 1792836250.113948210 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/cancel.olang || echo "std/cancel.olang" >> build/failed.txt 
+1792836240.201886696 1792836254.830139941 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/worker.olang || echo "tests/worker.olang" >> build/failed.txt 
+1792836250.136796769 1792836256.182444295 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/chan.olang || echo "std/chan.olang" >> build/failed.txt 
+1792836254.868811474 1792836258.878729546 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/csv.olang || echo "std/csv.olang" >> build/failed.txt 
+1792836256.207498230 1792836259.110335869 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/ffi.olang || echo "std/ffi.olang" >> build/failed.txt 
+1792836258.920580545 1792836262.538376437 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/filepath.olang || echo "std/filepath.olang" >> build/failed.txt 
+1792836262.581897783 1792836267.561854554 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/io.olang || echo "std/io.olang" >> build/failed.txt 
+1792836259.153554354 1792836274.885963381 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/http.olang || echo "std/http.olang" >> build/failed.txt 
+1792836267.601799821 1792836279.041982805 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/json.olang || echo "std/json.olang" >> build/failed.txt 
+1792836279.070185188 1792836280.602125372 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/pair.olang || echo "std/pair.olang" >> build/failed.txt 
+1792836280.633741790 1792836282.486917964 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/rand.olang || echo "std/rand.olang" >> build/failed.txt 
+1792836274.918256322 1792836285.550233363 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/os.olang || echo "std/os.olang" >> build/failed.txt 
+1792836282.513830582 1792836285.838100849 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/stats.olang || echo "std/stats.olang" >> build/failed.txt 
+1792836285.573747895 1792836286.949828229 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/time.olang || echo "std/time.olang" >> build/failed.txt 
+1792836286.970037083 1792836287.724917079 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/builtin.olang || echo "std/prelude/builtin.olang" >> build/failed.txt 
+1792836285.865717531 1792836288.904508414 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/array.olang || echo "std/prelude/array.olang" >> build/failed.txt 
+1792836287.732934621 1792836289.345748028 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/complex.olang || echo "std/prelude/complex.olang" >> build/failed.txt 
+1792836288.923543565 1792836290.069904436 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/f8.olang || echo "std/prelude/f8.olang" >> build/failed.txt 
+1792836289.373137268 1792836290.353830393 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/float.olang || echo "std/prelude/float.olang" >> build/failed.txt 
+1792836290.085918621 1792836290.896326807 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/hash.olang || echo "std/prelude/hash.olang" >> build/failed.txt 
+1792836290.380897597 1792836291.525756822 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/iterator.olang || echo "std/prelude/iterator.olang" >> build/failed.txt 
+1792836291.558732071 1792836292.474143367 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/map.olang || echo "std/prelude/map.olang" >> build/failed.txt 
+1792836292.509808916 1792836293.801961760 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/number.olang || echo "std/prelude/number.olang" >> build/failed.txt 
+1792836290.909862141 1792836297.473818758 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/list.olang || echo "std/prelude/list.olang" >> build/failed.txt 
+1792836293.820231985 1792836297.850701025 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/text.olang || echo "std/prelude/text.olang" >> build/failed.txt 
+1792836297.505875769 1792836298.838773432 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/vec.olang || echo "std/prelude/vec.olang" >> build/failed.txt 
+1792836298.864716920 1792836300.428897906 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/float.olang || echo "std/prelude/tests/float.olang" >> build/failed.txt 
+1792836297.870683537 1792836303.978235072 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/array.olang || echo "std/prelude/tests/array.olang" >> build/failed.txt 
+1792836213.200921995 1792836305.893860989 0 build/olang build compiler/olang.olang 
+1792836305.910054038 1792836306.958341690 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/number.olang || echo "std/prelude/tests/number.olang" >> build/failed.tx
+1792836300.463269850 1792836310.231703566 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/list.olang || echo "std/prelude/tests/list.olang" >> build/failed.txt 
+1792836306.973944918 1792836311.605724919 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/text.olang || echo "std/prelude/tests/text.olang" >> build/failed.txt 
+1792836304.001784297 1792836311.857787568 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/map.olang || echo "std/prelude/tests/map.olang" >> build/failed.txt 
+1792836311.625663633 1792836312.759545317 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/ast.olang || echo "compiler/ast.olang" >> build/failed.txt 
+1792836310.240163583 1792836315.651779222 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test std/prelude/tests/vec.olang || echo "std/prelude/tests/vec.olang" >> build/failed.txt 
+1792836312.775455877 1792836317.100151266 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/cond.olang || echo "compiler/cond.olang" >> build/failed.txt 
+1792836315.674029647 1792836320.990291414 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/diag.olang || echo "compiler/diag.olang" >> build/failed.txt 
+1792836321.004221674 1792836323.973074992 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/fmt.olang || echo "compiler/fmt.olang" >> build/failed.txt 
+1792836317.117903767 1792836323.997709599 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/fetch.olang || echo "compiler/fetch.olang" >> build/failed.txt 
+1792836324.011284446 1792836325.365782276 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/msgs.olang || echo "compiler/msgs.olang" >> build/failed.txt 
+1792836311.865090500 1792836330.765325952 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/build.olang || echo "compiler/build.olang" >> build/failed.txt 
+1792836323.987164406 1792836346.321764777 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/mir.olang || echo "compiler/mir.olang" >> build/failed.txt 
+1792836346.331307318 1792836353.621886378 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/runtime.olang || echo "compiler/runtime.olang" >> build/failed.txt 
+1792836330.782026153 1792836354.498367671 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/parse.olang || echo "compiler/parse.olang" >> build/failed.txt 
+1792836354.521881581 1792836356.322082030 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/source.olang || echo "compiler/source.olang" >> build/failed.txt 
+1792836353.643717688 1792836357.130169337 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/scan.olang || echo "compiler/scan.olang" >> build/failed.txt 
+1792836357.144270533 1792836358.469733739 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/token.olang || echo "compiler/token.olang" >> build/failed.txt 
+1792836325.391883200 1792836359.713868457 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/names.olang || echo "compiler/names.olang" >> build/failed.txt 
+1792836358.486078314 1792836366.561884285 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/typed.olang || echo "compiler/typed.olang" >> build/failed.txt 
+1792836356.339427821 1792836366.963486929 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/target.olang || echo "compiler/target.olang" >> build/failed.txt 
+1792836366.585858651 1792836368.202164012 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/unparse.olang || echo "compiler/unparse.olang" >> build/failed.txt 
+1792836359.729825153 1792836368.796269260 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/types.olang || echo "compiler/types.olang" >> build/failed.txt 
+1792836368.805469558 1792836369.490826189 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/cli_words.olang || echo "tools/cli_words.olang" >> build/failed.txt 
+1792836366.983866063 1792836369.732233797 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/arrays_migrate.olang || echo "tools/arrays_migrate.olang" >> build/failed.txt 
+1792836369.500236515 1792836371.117849649 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/diagedit.olang || echo "tools/diagedit.olang" >> build/failed.txt 
+1792836369.741061668 1792836371.310706603 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/donefail_migrate.olang || echo "tools/donefail_migrate.olang" >> build/failed.txt 
+1792836368.221947731 1792836372.190965846 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/bare_typevars.olang || echo "tools/bare_typevars.olang" >> build/failed.txt 
+1792836371.123925961 1792836372.574724846 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/errors_migrate.olang || echo "tools/errors_migrate.olang" >> build/failed.txt 
+1792836371.320326570 1792836372.797219497 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/int_literal_i64.olang || echo "tools/int_literal_i64.olang" >> build/failed.txt 
+1792836372.200095220 1792836372.798211485 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/io_fix.olang || echo "tools/io_fix.olang" >> build/failed.txt 
+1792836372.583010932 1792836373.985856373 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/io_print.olang || echo "tools/io_print.olang" >> build/failed.txt 
+1792836372.803485471 1792836374.074689209 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/io_try.olang || echo "tools/io_try.olang" >> build/failed.txt 
+1792836372.807282141 1792836374.614860512 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/math_methods.olang || echo "tools/math_methods.olang" >> build/failed.txt 
+1792836373.992310718 1792836375.282326737 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/perm_mut.olang || echo "tools/perm_mut.olang" >> build/failed.txt 
+1792836374.082726716 1792836375.418684020 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/srcmask.olang || echo "tools/srcmask.olang" >> build/failed.txt 
+1792836375.425316376 1792836376.250077714 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/tokdiff.olang || echo "compiler/tools/tokdiff.olang" >> build/failed.txt 
+1792836375.288556899 1792836377.406189346 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/toolkit.olang || echo "compiler/tools/toolkit.olang" >> build/failed.txt 
+1792836376.256245818 1792836378.488999920 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/astdiff.olang || echo "compiler/tools/astdiff.olang" >> build/failed.txt 
+1792836374.622825315 1792836378.486487219 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tools/syntax_migrate.olang || echo "tools/syntax_migrate.olang" >> build/failed.txt 
+1792836377.416381137 1792836378.772796382 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/namesdiff.olang || echo "compiler/tools/namesdiff.olang" >> build/failed.tx
+1792836378.498393145 1792836379.182053844 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/layoutgold.olang || echo "compiler/tools/layoutgold.olang" >> build/failed.
+1792836096.855445096 1792836379.278235269 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test checks/checks.olang || echo "checks/checks.olang" >> build/failed.txt 
+1792836378.779303191 1792836379.474395238 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/modgraph.olang || echo "compiler/tools/modgraph.olang" >> build/failed.txt 
+1792836379.188559754 1792836379.997963608 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/diaggold_capture.olang || echo "compiler/tools/diaggold_capture.olang" >> b
+1792836379.285722830 1792836380.102472653 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/rungold.olang || echo "compiler/tools/rungold.olang" >> build/failed.txt 
+1792836378.496876397 1792836380.107098494 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/layoutdiff.olang || echo "compiler/tools/layoutdiff.olang" >> build/failed.
+1792836379.487630685 1792836380.678210422 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test checks/fixtures/frameenv/envcheck.olang || echo "checks/fixtures/frameenv/envcheck.olang" 
+1792836380.686186628 1792836380.946336763 0 build/compiler_tools_tokdiff || { echo "tokdiff" >> build/failed.txt; exit 1; } 
+1792836380.954866924 1792836382.328754473 0 build/compiler_tools_astdiff || { echo "astdiff" >> build/failed.txt; exit 1; } 
+1792836380.005199169 1792836387.686267296 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/tools/diaggold.olang || echo "compiler/tools/diaggold.olang" >> build/failed.txt 
+1792836387.706123005 1792836396.405840371 0 build/compiler_tools_layoutdiff || { echo "layoutdiff" >> build/failed.txt; exit 1; } 
+1792836396.429730718 1792836400.098346555 0 OLANG_STD=std build/compiler_tools_fmt -v $(git ls-files '*.olang') || { echo "fmtdiff" >> build/failed.txt; exit 1; } 
+1792836382.336134447 1792836401.398055250 0 build/compiler_tools_namesdiff || { echo "namesdiff" >> build/failed.txt; exit 1; } 
+1792836400.121416918 1792836407.182170932 0 build/compiler_tools_drvdiff || { echo "drvdiff" >> build/failed.txt; exit 1; } 
+1792836380.115898704 1792836413.896792442 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/check.olang || echo "compiler/check.olang" >> build/failed.txt 
+1792836380.109212113 1792836413.983999069 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/views.olang || echo "compiler/views.olang" >> build/failed.txt 
+1792836413.903477241 1792836426.686309398 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test tests/shared.olang || echo "tests/shared.olang" >> build/failed.txt 
+1792836413.992289814 1792836430.937003550 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/olang.olang || echo "compiler/olang.olang" >> build/failed.txt 
+1792836426.705711371 1792836432.259141411 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/interp.olang || echo "compiler/interp.olang" >> build/failed.txt 
+1792836430.948175728 1792836435.414596509 0 OLANG=/home/user/wt/fastverify/build/olang build/olang test compiler/emit.olang || echo "compiler/emit.olang" >> build/failed.txt 
+1792836096.845992847 1792836435.420286061 0 make --no-print-directory -k -j4 -Otarget test@checks/checks.olang test@compiler/scope.olang test@compiler/views.olang test@compiler/olang.olang test@
+1792836435.434360000 1792836436.134139825 0 awk '\   /^define/ { fn=1; blk=0; next } \   /^\}/ { fn=0; next } \   fn && /^[A-Za-z_$][A-Za-z0-9_.$]*:/ { blk++; next } \   fn && blk>1 && /= alloca
+1792836436.140312491 1792836436.144030959 0 echo "checkir: every alloca is in its entry block" 
+1792836435.426196643 1792836436.148540617 0 make --no-print-directory checkir 
+1792836096.796867102 1792836436.153240788 0 make suite 
+1792836436.159079737 1792836436.162932972 0 echo "verify: all checks passed" 

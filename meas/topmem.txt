@@ -1,0 +1,479 @@
+T 1792836652 26
+  7 build/olang build -output build/olang.next
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+  2 make --no-print-directory quickolang 
+  2 make quick  
+T 1792836654 647
+  623 build/olang build -output build/olang.next
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+  2 make --no-print-directory quickolang 
+  2 make quick  
+T 1792836656 1385
+  1365 build/olang build -output build/olang.next
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+  2 make --no-print-directory quickolang 
+  2 make quick  
+T 1792836658 1587
+  1366 build/olang build -output build/olang.next
+  135 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto=thin
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836660 1604
+  1366 build/olang build -output build/olang.next
+  152 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto=thin
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836662 606
+  176 build/olang test checks/checks.olang 
+  154 build/olang test std/linalg.olang 
+  127 build/olang test compiler/scope.olang 
+  124 build/olang test compiler/lower.olang 
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+T 1792836664 2228
+  534 build/olang test compiler/lower.olang 
+  457 build/olang test compiler/scope.olang 
+  386 build/olang test std/linalg.olang 
+  208 build/olang test checks/checks.olang 
+  71 /usr/bin/ld -z relro --hash-style=gnu
+  68 /usr/bin/ld -z relro --hash-style=gnu
+T 1792836666 2917
+  915 build/olang test compiler/lower.olang 
+  766 build/olang test compiler/scope.olang 
+  386 build/olang test std/linalg.olang 
+  208 build/olang test checks/checks.olang 
+  81 /usr/bin/ld -z relro --hash-style=gnu
+  80 /home/user/wt/fastverify/build/olang build mapalone.olang 
+T 1792836668 3472
+  1250 build/olang test compiler/lower.olang 
+  1072 build/olang test compiler/scope.olang 
+  386 build/olang test std/linalg.olang 
+  208 build/olang test checks/checks.olang 
+  81 /usr/bin/ld -z relro --hash-style=gnu
+  80 /home/user/wt/fastverify/build/olang build -sanitize mapalone.olang
+T 1792836670 1677
+  386 build/olang test std/linalg.olang 
+  326 build/olang test compiler/load.olang 
+  208 build/olang test checks/checks.olang 
+  104 build/olang test compiler/eval.olang 
+  80 /home/user/wt/fastverify/build/olang build -sanitize mapalone.olang
+  77 /usr/bin/ld -z relro --hash-style=gnu
+T 1792836673 1851
+  481 build/olang test compiler/eval.olang 
+  386 build/olang test std/linalg.olang 
+  282 build/olang test compiler/generic.olang 
+  208 build/olang test checks/checks.olang 
+  88 /home/user/wt/fastverify/build/olang build -debug mapalone.olang
+  73 /usr/bin/ld -z relro --hash-style=gnu
+T 1792836675 1464
+  577 build/olang build tests/runner.olang 
+  386 build/olang test std/linalg.olang 
+  208 build/olang test checks/checks.olang 
+  120 build/olang build compiler/tools/dump.olang 
+  43 /home/user/wt/fastverify/build/olang build -debug condlanding.olang
+  33 /home/user/wt/fastverify/build/olang build -debug helperlambda.olang
+T 1792836677 1100
+  386 build/olang test std/linalg.olang 
+  208 build/olang test checks/checks.olang 
+  75 /usr/bin/ld -z relro --hash-style=gnu
+  72 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+T 1792836679 989
+  212 build/olang build compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  150 /home/user/wt/fastverify/build/olang build -debug fuzz.olang
+  82 clang -march=sapphirerapids -O3 -flto
+  82 clang -march=sapphirerapids -O3 -flto
+  72 clang -march=sapphirerapids -O3 -flto
+T 1792836681 2038
+  398 build/olang build compiler/olang.olang 
+  362 build/olang test tests/runner.olang 
+  289 build/olang test tests/worker.olang 
+  208 build/olang test checks/checks.olang 
+  157 /home/user/wt/fastverify/build/olang build -debug fuzz.olang
+  121 clang -march=sapphirerapids -O0 -g
+T 1792836683 3407
+  836 build/olang test tests/worker.olang 
+  779 build/olang test tests/runner.olang 
+  714 build/olang build compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  100 /home/user/wt/fastverify/build/olang compile fused.olang 
+  99 clang -march=sapphirerapids -O3 -flto
+T 1792836685 2358
+  1087 build/olang build compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  115 build/olang test std/http.olang 
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+  100 clang -march=sapphirerapids -O3 -flto
+  100 /home/user/wt/fastverify/build/olang compile fused.olang 
+T 1792836687 3320
+  1478 build/olang build compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  160 build/olang test std/stats.olang 
+  119 /home/user/wt/fastverify/build/olang build -debug p.olang
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+  100 /home/user/wt/fastverify/build/olang compile fused.olang 
+T 1792836689 3604
+  1726 build/olang build compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build -debug p.olang
+  105 /usr/bin/ld -z relro --hash-style=gnu
+  100 clang -march=sapphirerapids -O3 -flto
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+T 1792836691 2018
+  240 build/olang test compiler/build.olang 
+  208 build/olang test checks/checks.olang 
+  137 build/olang test compiler/diag.olang 
+  119 /home/user/wt/fastverify/build/olang build -debug p.olang
+  101 clang -march=sapphirerapids -O3 -flto
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+T 1792836693 1881
+  208 build/olang test checks/checks.olang 
+  144 build/olang test compiler/mir.olang 
+  119 /home/user/wt/fastverify/build/olang build -debug p.olang
+  104 clang -march=sapphirerapids -O3 -flto
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+  96 /home/user/wt/fastverify/build/olang compile gemm.olang 
+T 1792836695 1729
+  303 build/olang test compiler/parse.olang 
+  217 build/olang test compiler/runtime.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build -debug p.olang
+  100 /home/user/wt/fastverify/build/olang build -debug p.olang
+  87 clang -march=sapphirerapids -O0 -g
+T 1792836697 798
+  208 build/olang test checks/checks.olang 
+  90 clang -march=sapphirerapids -O3 -flto
+  78 clang -march=sapphirerapids -O3 -flto
+  70 /home/user/wt/fastverify/build/olang compile mlp.olang 
+  63 /home/user/wt/fastverify/build/olang build p.olang 
+  55 build/olang test tools/errors_migrate.olang 
+T 1792836699 1081
+  208 build/olang test checks/checks.olang 
+  122 build/olang test compiler/views.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  97 /home/user/wt/fastverify/build/olang build p.olang 
+  92 clang -march=sapphirerapids -O3 -flto
+  82 build/olang test compiler/tools/diaggold.olang 
+T 1792836701 2329
+  507 build/olang test compiler/views.olang 
+  314 build/olang test compiler/check.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  84 clang -march=sapphirerapids -O3 -flto
+T 1792836703 3201
+  834 build/olang test compiler/views.olang 
+  646 build/olang test compiler/check.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  85 clang -march=sapphirerapids -O0 -g
+T 1792836705 2947
+  937 build/olang test compiler/check.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  85 clang -march=sapphirerapids -O3 -flto
+  84 clang -march=sapphirerapids -O0 -g
+T 1792836707 1650
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  85 clang -march=sapphirerapids -O3 -flto
+  83 clang -march=sapphirerapids -O3 -flto
+  82 clang -march=sapphirerapids -O3 -flto
+T 1792836709 1827
+  208 build/olang test checks/checks.olang 
+  125 /home/user/wt/fastverify/build/olang test -debug -sanitize
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  94 clang -march=sapphirerapids -O0 -g
+  86 /usr/bin/ld -z relro --hash-style=gnu
+T 1792836711 1809
+  208 build/olang test checks/checks.olang 
+  130 /home/user/wt/fastverify/build/olang test -debug -sanitize
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  97 clang -march=sapphirerapids -O0 -g
+  86 clang -march=sapphirerapids -O0 -g
+T 1792836713 2183
+  208 build/olang test checks/checks.olang 
+  180 build/olang test compiler/olang.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  86 clang -march=sapphirerapids -O3 -flto
+  84 clang -march=sapphirerapids -O3 -flto
+T 1792836715 2056
+  416 build/olang test compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  86 clang -march=sapphirerapids -O3 -flto
+  84 clang -march=sapphirerapids -O3 -flto
+T 1792836717 2584
+  714 build/olang test compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  93 /home/user/wt/fastverify/build/compiler_tools_dump names 2digitname.olang arraytypemutual.olang
+  92 build/olang test tests/shared.olang 
+T 1792836719 3084
+  1049 build/olang test compiler/olang.olang 
+  556 build/olang test tests/shared.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  113 /home/user/wt/fastverify/build/compiler_tools_dump names 2digitname.olang arraytypemutual.olang
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+T 1792836721 4020
+  1348 build/olang test compiler/olang.olang 
+  915 build/olang test tests/shared.olang 
+  208 build/olang test checks/checks.olang 
+  130 /home/user/wt/fastverify/build/compiler_tools_dump names 2digitname.olang arraytypemutual.olang
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+T 1792836723 3439
+  1810 build/olang test compiler/olang.olang 
+  208 build/olang test checks/checks.olang 
+  207 build/olang test compiler/interp.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  81 clang -march=sapphirerapids -O3 -flto
+T 1792836725 3997
+  1943 build/olang test compiler/olang.olang 
+  519 build/olang test compiler/interp.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  99 clang -march=sapphirerapids -O3 -flto=thin
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+T 1792836727 4131
+  1943 build/olang test compiler/olang.olang 
+  843 build/olang test compiler/interp.olang 
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  100 clang -march=sapphirerapids -O3 -flto=thin
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+T 1792836729 1520
+  208 build/olang test checks/checks.olang 
+  119 /home/user/wt/fastverify/build/olang build p.olang 
+  98 /home/user/wt/fastverify/build/olang build p.olang 
+  87 /usr/bin/ld -z relro --hash-style=gnu
+  85 /usr/bin/ld -z relro --hash-style=gnu
+  79 clang -march=sapphirerapids -O3 -flto
+T 1792836731 1400
+  322 build/olang test compiler/emit.olang 
+  208 build/olang test checks/checks.olang 
+  81 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O0 -g
+  79 /home/user/wt/fastverify/build/olang interpret p.olang 
+  78 clang -march=sapphirerapids -O3 -flto
+T 1792836733 1570
+  637 build/olang test compiler/emit.olang 
+  208 build/olang test checks/checks.olang 
+  81 clang -march=sapphirerapids -O3 -flto
+  80 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O3 -flto
+  74 clang -march=sapphirerapids -O3 -flto
+T 1792836735 1197
+  208 build/olang test checks/checks.olang 
+  82 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O0 -g
+  79 clang -march=sapphirerapids -O0 -g
+  78 clang -march=sapphirerapids -O3 -flto
+  77 clang -march=sapphirerapids -O3 -flto
+T 1792836737 1231
+  208 build/olang test checks/checks.olang 
+  85 clang -march=sapphirerapids -O0 -g
+  81 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O0 -g
+  79 clang -march=sapphirerapids -O0 -g
+T 1792836739 1515
+  208 build/olang test checks/checks.olang 
+  82 clang -march=sapphirerapids -O3 -flto
+  81 clang -march=sapphirerapids -O3 -flto
+  80 clang -march=sapphirerapids -O3 -flto
+  79 clang -march=sapphirerapids -O3 -flto
+  78 clang -march=sapphirerapids -O3 -flto
+T 1792836741 733
+  208 build/olang test checks/checks.olang 
+  81 clang -march=sapphirerapids -O3 -flto
+  81 clang -march=sapphirerapids -O3 -flto
+  76 clang -march=sapphirerapids -O3 -flto
+  66 clang -march=sapphirerapids -O3 -flto
+  66 clang -march=sapphirerapids -O3 -flto
+T 1792836743 845
+  208 build/olang test checks/checks.olang 
+  87 /usr/bin/ld -z relro --hash-style=gnu
+  82 clang -march=sapphirerapids -O3 -flto
+  81 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  56 clang -march=sapphirerapids -O3 -flto
+T 1792836745 594
+  208 build/olang test checks/checks.olang 
+  82 clang -march=sapphirerapids -O3 -flto
+  74 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  49 /home/user/wt/fastverify/build/olang build osexit.olang 
+  42 /home/user/wt/fastverify/build/olang build use.olang 
+T 1792836748 848
+  208 build/olang test checks/checks.olang 
+  82 clang -march=sapphirerapids -O3 -flto
+  81 clang -march=sapphirerapids -O3 -flto
+  78 clang -march=sapphirerapids -O0 -g
+  78 clang -march=sapphirerapids -O0 -g
+  77 clang -march=sapphirerapids -O0 -g
+T 1792836750 294
+  208 build/olang test checks/checks.olang 
+  38 /home/user/wt/fastverify/build/olang build -debug -sanitize
+  14 /home/user/wt/fastverify/build/olang build b6elemparallel.olang 
+  5 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+T 1792836752 452
+  208 build/olang test checks/checks.olang 
+  37 /home/user/wt/fastverify/build/olang build -sanitize ctortempdestruct.olang
+  25 /home/user/wt/fastverify/build/olang build d16blambdaorder.olang 
+  5 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+T 1792836754 617
+  208 build/olang test checks/checks.olang 
+  74 /usr/bin/ld -z relro --hash-style=gnu
+  74 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  36 /home/user/wt/fastverify/build/olang build e31bviewlaterarg.olang 
+T 1792836756 713
+  208 build/olang test checks/checks.olang 
+  89 /home/user/wt/fastverify/build/olang build gemmflat.olang 
+  77 /usr/bin/ld -z relro --hash-style=gnu
+  73 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+T 1792836758 915
+  208 build/olang test checks/checks.olang 
+  91 /usr/bin/ld -z relro --hash-style=gnu
+  89 /home/user/wt/fastverify/build/olang build gemmflat.olang 
+  71 /usr/bin/ld -z relro --hash-style=gnu
+  70 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+T 1792836760 355
+  208 build/olang test checks/checks.olang 
+  41 /home/user/wt/fastverify/build/olang build -debug -sanitize
+  37 /home/user/wt/fastverify/build/olang build -debug -sanitize
+  31 /home/user/wt/fastverify/build/olang build -debug -sanitize
+  21 clang -march=sapphirerapids -O0 -g
+  6 /home/user/wt/fastverify/build/olang build o18cforinborrowed.olang 
+T 1792836762 461
+  208 build/olang test checks/checks.olang 
+  64 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  35 /home/user/wt/fastverify/build/olang build opfallible.olang 
+  21 /home/user/wt/fastverify/build/olang build -sanitize p2cycledeps.olang
+  14 /home/user/wt/fastverify/build/olang build -sanitize p2clausedefault.olang
+T 1792836764 460
+  208 build/olang test checks/checks.olang 
+  68 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  35 /home/user/wt/fastverify/build/olang build rv3strwrites.olang 
+  24 /home/user/wt/fastverify/build/olang build -debug -sanitize
+  5 ./build/checks_checks_test   
+T 1792836766 610
+  208 build/olang test checks/checks.olang 
+  68 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  54 /usr/bin/ld -z relro --hash-style=gnu
+  35 /home/user/wt/fastverify/build/olang build rv7p5blambdacount.olang 
+T 1792836768 647
+  208 build/olang test checks/checks.olang 
+  76 /usr/bin/ld -z relro --hash-style=gnu
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  39 /home/user/wt/fastverify/build/olang build -sanitize s6nestedhandlerun.olang
+T 1792836770 587
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  64 clang -march=sapphirerapids -O3 -flto
+  64 clang -march=sapphirerapids -O3 -flto
+  61 /usr/bin/ld -z relro --hash-style=gnu
+  36 /home/user/wt/fastverify/build/olang build strrenderchanges.olang 
+T 1792836772 391
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  36 /home/user/wt/fastverify/build/olang build t7aelemkept.olang 
+  31 /home/user/wt/fastverify/build/olang build t7aelemvalue.olang 
+  6 clang -march=sapphirerapids -O3 -flto
+  6 ./build/checks_checks_test   
+T 1792836774 467
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  56 clang -march=sapphirerapids -O3 -flto
+  40 /home/user/wt/fastverify/build/olang build vec20byname.olang 
+  39 /home/user/wt/fastverify/build/olang build vec22recrun.olang 
+  32 clang -march=sapphirerapids -O3 -flto
+T 1792836776 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836778 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836780 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836782 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836784 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836786 309
+  208 build/olang test checks/checks.olang 
+  66 ./build/strlambdahelper.san   
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+T 1792836788 242
+  208 build/olang test checks/checks.olang 
+  6 ./build/checks_checks_test   
+  3 /bin/bash /home/user/vlock meas/run.sh quick6
+  3 /bin/bash meas/run.sh quick6 meas/quickm.sh
+  3 /bin/bash meas/quickm.sh  
+  3 make --no-print-directory -k -j4
+T 1792836790 0
+  0 [vlock] <defunct>  
+  0 [run.sh] <defunct>  
