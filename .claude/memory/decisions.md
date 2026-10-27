@@ -1600,3 +1600,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   builds (elsewhere a compile error), so other builds' Now/Sleep are untouched. Details mine; queued after the reset.
 - Item 11 DECIDED 2026-10-27 (the user: "dont do them at all. we depend on clone and stuff for this or the user makes
   their own"): no persistent collections in std, now or later - snapshots by `Clone()`, or a program's own structure.
+- Item 12 DECIDED 2026-10-27 (the user: "since select is for channels and channels are std, that kinda makes select
+  naturally std as well no?"): no keyword - `chan.Select(a, b[, c, d])` in std/chan returning a generic enum of which
+  case fired (`Ready.First(v)` ...), matched so the arms keep return/break/error; sends through `chan.SendOf(c, v)`; a
+  timeout is a channel (`time.After`). Built when something needs it (later), unless the user asks sooner. Explained why
+  Go needed a keyword (no generics/sum types then; reflect.Select) and why `join` cannot be a library (P2, waiting on
+  every exit, spawn binding - compile-time rules on a block). Survey2's twelve items are all answered.
