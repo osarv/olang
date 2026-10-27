@@ -556,3 +556,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (1) S18c prints a decided assert's message of `"text" $x` pieces unrendered; (2) in a test, `try f() catch X { return }`
   then `assert false` is refused as decided-false while compiling although f() fails - S18c decides an assert the run
   never reaches.
+- 2026-10-27 CET: surv merged with std2 (7ba52e2, full verify on the merged tip passed): E40 `Place.Here` (prelude
+  Place(File, Line, Column); as a default the outermost call's place; compiler's typed/mir Place renamed Lvalue), S21
+  `become f(x)` (musttail; identical signature and error set, nothing pending to run, no borrow of a closing scope, not
+  in main/tests/lambdas/defer/join/try; 10M-deep mutual recursion 0.1 s), S17a top-level assert (false or undecidable a
+  compile error), B13 formatter's `fn (p T&) M<Q>(` space (std/list's seven signatures restored), B17 fix's tools cached
+  per compiler and tools tree. Left: oann's bandit_settle field named Place (D3a, at oann's migration); the two S18c
+  bugs found by std2 (above). Next: those two S18c bugs; then survey2 items 6-12 as the user answers.
