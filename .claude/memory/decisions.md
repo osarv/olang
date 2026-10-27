@@ -1578,3 +1578,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the statement does. Queued for after the weekly reset (week at 0.94).
 - Item 7 DECIDED 2026-10-27 (the user: "dont build"): no `.Case` shorthand - an enum case is always written with its
   type (`Dir.North`), one way to write it.
+- Item 8 DECIDED 2026-10-27 (the user: "nah you can add it. comptime is a good word. Its good for speed guarantees in
+  certain loops too"): a `comptime` keyword, at the use site only (no colouring of functions - K1a stays): (1) `comptime
+  e`, a prefix on any expression - computed while compiling, its value constant data, or a compile error naming why the
+  evaluator could not (K1a's refusal); so `x := comptime table(64)` inside a hot loop is never computed at run time, and
+  `Table := comptime build()` on a global must be baked (K2) instead of falling back to startup. (2) `comptime for x in
+  e { }` - the loop unrolled while compiling (e's length known then), the body checked per copy with `x` a constant (as
+  reflection's walks are, G33), so `x` may decide branches and lengths (G35) - the user's "speed guarantees in loops";
+  reading taken (stated to the user). Details mine. Queued for after the weekly reset (week at 0.94).
