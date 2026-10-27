@@ -26125,3 +26125,27 @@ does; baked globals beside the run time), std/json's, std/csv's and std/flags' n
 (every refused place, a pun, a built-in and a prelude type, two of one type, one not built, a requirement, Attr misused,
 an unhandled Attr, HasAttr deciding branches, a method descriptor called without its receiver, a module's own
 functions).
+
+
+## std/bitset and std/order (survey2 items 3 and 4, 2026-10-27)
+
+**Decided (the user, 2026-10-26):** both modules. **Decided (mine):** (1) `BitSet<T>` is a struct of one `U64` (a value; copies
+are sets of their own; `==`/Hash by the bits) over a payload-free enum of at most 64 cases; the check is `check<T>()`, three
+asserts the compiler decides per instance (G35, S18c), called from the constructor so every way to make a set meets it. (2)
+Operators: `|` union, `&` intersection, `-` difference, `^` exactly one - `+` is not defined (one way to write the union). (3)
+Bit k is the k-th case in declaration order, so `Bits()` needs no enum raw values; for C flag words `Flags()` ORs the integer raw
+values (T17e, via `c().Value()`; an enum without an integer raw type is an error at the call) and `FromFlags(w)` takes the cases
+whose nonzero raw value lies wholly in w; `FromBits(b)` fails with `bitset.Error.OUT_OF_RANGE` (std never aborts on a caller's
+value) past the last case. (4) A payload enum is refused rather than approximated. (5) `ByFields<T>` is lexicographic over
+`T.Fields` (unrolled), an enum by case position then the case's fields (both values narrowed to the case with `a == c and b ==
+c`); a field is `<` for numbers/Bool/Char, its own `Less` when the type meets a `Lesser` trait (`String`'s too), else ByFields in
+turn, so a nested type's author wins; arrays and the like fail through ByFields' assert, noting the instantiation. Only the
+fields M6a shows to std/order (public ones) take part.
+
+**Found on the way.** An assert message made of `"text" $x "text"` pieces is printed unrendered by S18c's diagnostic, so
+ByFields' error cannot name the field, only the type through the instantiation notes. `assert false` after `try f() catch X {
+return }` in a test is decided false while compiling even though it is reachable only on success (rewrote the test with a
+flag). Top-level `assert` (item 5) is not built yet, so the baked checks are globals.
+
+**Tests.** std/bitset.olang and std/order.olang (examples on BitSet, FromBits, ByFields; baked globals beside the run time) and
+checks cases bitsetpayload, bitsetnotenum, bitsettoomany, orderarrayfield, ordernotstruct.

@@ -1132,6 +1132,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/sha256` (1.1x a plain C SHA-256), `std/crc32`, `std/flags` (handles per flag, `--help` text, `flags.Error`),
   `std/regex` (RE2's syntax, linear time: a lazy forward DFA finds a match's end, a reversed one its start, the Pike
   VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
+- **`std/bitset` and `std/order` (survey2 items 3-4, the user 2026-10-26; details mine).** `bitset.BitSet<T>` holds an enum's cases
+  in one `U64` (bit k the k-th case), a plain value; the constructor asserts, decided per instance, that T is an enum of at most 64
+  cases with no payload. `x in s`, `Add`/`Remove` (say whether it changed), `Len`, `Has`, `Empty<T>()`, `Full<T>()`, `Of(array)`,
+  operators `| & - ^` (union, intersection, difference, exactly-one; no `+`: one spelling), `Complement`, `IsSubset`, `for c in s` in
+  case order, `$` as `BitSet{Color.Red}`, `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OUT_OF_RANGE`
+  past the last case), `Flags()`/`FromFlags(w)` (OR of the raw values of an integer-raw enum, T17e). `order.ByFields<T>(a, b)` is the
+  `less` an array's or Vec's `Sort` takes (`xs.Sort(order.ByFields<T>)`): a struct by its visible fields in order, an enum by case then
+  that case's fields; a field by `<` (numbers, Bool, Char) or its own `Less` (text included), else a struct or enum in turn, anything
+  else a compile-time error naming the type.
 - **The second survey's walks (M19d, docs/survey2.md 1.5, 2026-10-26).** Iterator defaults beside Take/Skip:
   `TakeWhile`, `SkipWhile` (keep not called again once it has said no), `StepBy(n)` (a `StepSize`, checked as a
   `ChunkSize` is - `StepError.BAD_STEP`), `FlatMap(f)` (f gives any iterator; the inner walk held in a `Vec` of one,

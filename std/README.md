@@ -14,6 +14,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `rand.olang` | seeded xoshiro256** generator |
 | `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.Of(a)`, `list.From(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
+| `bitset.olang` | `BitSet<T>`, the cases of a payload-free enum (at most 64) in one `U64`: `in`, `\| & - ^`, a walk in case order, `Bits`/`Flags` for C flag words |
+| `order.olang` | `ByFields<T>`, a `less` function for a struct or enum made from its fields (`xs.Sort(order.ByFields<T>)`) |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | mean, variance, percentiles, histograms (sums, minima and maxima are the arrays' own, E39) |
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error` |
