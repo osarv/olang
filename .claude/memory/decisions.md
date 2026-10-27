@@ -1771,3 +1771,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `Array<Vec<I64>>[a, b]`; `$` renders each so (E11b holds again). Asked next: no default Of - recommended none (a
   literal is a form the type opts into; a trait default for anything with Push is possible after QBT round 2).
   Migration tool for every `T[...]` in olang fix. Post-reset batch.
+- QBU literals DECIDED 2026-10-27 (the user: "dont do the collection and keyed ones then, but bind [] literals to
+  FromArray and also allow that to be a call with T.FromArray(array)"): no Collection/Keyed traits, no default literal;
+  `C[a, b]` is `C.FromArray(Array<E>[a, b])` and `C[k: v, ...]` is `C.FromArray(Array<MapEntry<K, V>>[...])`, for any C
+  declaring the type-level builder `FromArray`; `T.FromArray(a)` is an ordinary call too (QBT). Decided (mine): the
+  compiler supplies `Array<T>.FromArray(a)` and `Vec<T>.FromArray(a)` (a copy into storage of its own), their literals
+  built directly; a comprehension into such a type builds its array and calls FromArray - one protocol name, no
+  FromIter (additive later if a measurement wants it); std's Set/List/Deque/Heap(no: no zero-free form - Heap.FromArray
+  takes its less too, so no literal)/Map declare FromArray (set.Of, list.Of renamed). Post-reset batch with QBT.
