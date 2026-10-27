@@ -1764,3 +1764,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `C[k: v, ...]` calls the same `Of` with an array of the prelude's `MapEntry<K, V>` (Key, Value) - one protocol name,
   one parameter; a type declaring Of over entries gets `[k: v]`, over plain elements `[a, b]`. Recommended; asked.
   (The optimization questions are in the ledger: QBV, with my survey calls beside it.)
+- QBU DECIDED 2026-10-27 (the user: "type in front for sure. I like the Of containers too"): the type in front is the
+  type made, for literals and comprehensions alike - `Array<I64>[1, 2]`, `Array<F32>[f(x) for x in a]`, `Vec<T>[...]`
+  (built directly), any type declaring a type-level builder `Of(items Array<E>&)` (`set.Set<I64>[1, 2]`), and the keyed
+  form `C[k: v, ...]` calling `Of(items Array<MapEntry<K, V>>&)` (reading taken: entries included); an array of Vecs is
+  `Array<Vec<I64>>[a, b]`; `$` renders each so (E11b holds again). Asked next: no default Of - recommended none (a
+  literal is a form the type opts into; a trait default for anything with Push is possible after QBT round 2).
+  Migration tool for every `T[...]` in olang fix. Post-reset batch.
