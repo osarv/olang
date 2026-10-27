@@ -1653,7 +1653,7 @@ its set of types is not written down, and a method the trait lacks is what to ad
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-decl | export-func-decl | top-if
+           | extern-decl | export-func-decl | top-if | top-assert
 ```
 
 A `type-decl`, a `func-decl` and an `export-func-decl` may be preceded by attributes (§12.8 G39).
@@ -4717,6 +4717,28 @@ where the assert fails. A `return` or an `error` statement in it, a `try` an err
 in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
 deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unreachable` and a
 `noreturn` call end the test or the process and may appear.
+
+**S17a (an assert at the top level).** `top-assert ::= "assert" expr [ "," expr ] STMNT_END`, a declaration of a
+module - at its top level, or in a branch of a top-level `if` the build takes (B9) - states what must hold of the
+program as it is compiled, and is **decided while compiling** (K1), never at run time: it emits nothing. Its condition
+and its message read what a global's initializer may (they are checked as one is, in the module's context: globals,
+build constants (B10), functions, lambdas); a top-level assert names no locals. A true one is nothing more. A false one
+is a compile-time error at it - `this top-level assert is false, decided while compiling`, with its message after `: `
+when that computes too (S18c's wording) - and so is one whose evaluation reaches what aborts the program (K1) or
+reads a view of a Vec that grew (M19g). One the evaluator **cannot decide** - it reads a mutable global, calls an
+`extern fn` but C's math (X8), fails with an error nothing handles, or passes the evaluator's budgets - is a
+compile-time error too, naming what stops it: a top-level assert holds of every program the build makes, or it is
+not one; an assert to be checked at run time is written in a function or a test. Every module's top-level asserts
+are decided in every build of a program reaching it - `build`, `test`, `interpret`, a module compiled alone - and a
+branch a build leaves out is not read (B9). What is wrong with its condition (it does not check, or is no `Bool`) is
+said where it is, and it then asks nothing of the evaluator.
+
+```
+assert Table.Len() == Kinds.Len(), "a row for every kind"
+if TargetOs == "linux" {
+    assert TargetVectorBits >= 128
+}
+```
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with

@@ -1,0 +1,4 @@
+# check: fail error: a condition is a Bool, found I64
+# S17a: a top-level assert's condition is a Bool, as any assert's (S17)
+assert 1 + 2
+fn main() { }

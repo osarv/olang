@@ -15,6 +15,10 @@
   renamed Lvalue (D3a reserves prelude names), free.olang's Place fields PlaceId. tests/place.olang, checks cases
   placemember, placereserved. Records (CLAUDE/HISTORY) still to write.
 
+- Item 5 top-level assert (S17a): ast.Decl.Assert, parsed in decl(); names resolves it; check.topAssert checks
+  condition and message as bodies (BodyOf.Cond) with a frame, as a global initializer; interp.decideTopAsserts:
+  true nothing, false/aborts/stale/undecidable each an error (msgs TopAssertFalse[Message], TopAssertUndecidable).
+  tests/topassert.olang, checks cases topassert{false,msg,mut,if,bool}.
+
 ## Next
-- Item 5 top-level assert
 - Item 2 become

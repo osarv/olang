@@ -596,6 +596,16 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body, target)
         }
         case token.Tok.If { return try p.topIf() }
+        case token.Tok.Assert {
+            # S17a: a top-level assert, decided while compiling
+            p.advance()
+            cond := try p.expr()
+            msg ast.Expr?&p = null
+            if p.accept(token.Tok.Comma) { msg = try p.expr() }
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Decl.Assert(sp, cond, msg)
+        }
         case token.Tok.Iden {
             # X12: export fn - a contextual word too
             if p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn {

@@ -238,11 +238,11 @@ fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?&ti {
 # reported at the assert, with its message where that evaluates too; one the evaluator refuses stays the run time's.
 # How many were decided
 fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) I64 {
-    if c.AssertAsks.Len() == 0 and c.ContractAsks.Len() == 0 { return 0 }
+    if c.AssertAsks.Len() == 0 and c.ContractAsks.Len() == 0 and c.TopAsserts.Len() == 0 { return 0 }
     d := c.P.L.Diags
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
-    n I64 = decideContracts(c, x)
+    n I64 = decideContracts(c, x) + decideTopAsserts(c, x)
     for a in c.AssertAsks {
         key := pair.Pair(a.Body, I64(a.Sp.Start))
         if decided.Has(key) { continue }
@@ -276,6 +276,41 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
                 }
             }
             case _ { }
+        }
+    }
+    return n
+}
+
+# S17a: the top-level asserts, each decided here or an error - a false one, one that aborts, one reading a stale view,
+# and one the evaluator cannot decide, saying why. How many were decided
+fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
+    d := c.P.L.Diags
+    n I64 = 0
+    for a in c.TopAsserts {
+        k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
+        x.Need(k)
+        s := x.M.Eval(k, Array<I64>(0))
+        at := diag.Where.Span(a.File, a.At.Start, a.At.End)
+        n++
+        match s {
+            case eval.Stop.None {
+                if x.M.Int(x.M.Result, types.BoolT) != 0 { continue }
+                text, has := x.Text(a.Msg)
+                d.Error(at, msgs.TopAssertFalseMessage(text) if has else msgs.TopAssertFalse())
+            }
+            case eval.Stop.Exited(kind, file, sp, _) {
+                rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
+                d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
+            }
+            case eval.Stop.Refused(why, file, sp) {
+                if why == eval.WhyStale {
+                    rec := d.Error(at, msgs.AssertStale(why))
+                    staleNotes(x, d, rec, file, sp)
+                } else {
+                    d.Error(at, msgs.TopAssertUndecidable($why " (" $line(d, file, sp) ")"))
+                }
+            }
+            case eval.Stop.Raised(_) { d.Error(at, msgs.TopAssertUndecidable("it fails with an error no clause handles")) }
         }
     }
     return n

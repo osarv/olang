@@ -1,0 +1,5 @@
+# check: fail error[S17a]: this top-level assert is false, decided while compiling
+# S17a: a top-level assert is decided while compiling; a false one is an error at it
+Sizes Array<I64> = I64[1, 2, 3]
+assert Sizes.Len() == 4
+fn main() { }

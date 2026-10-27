@@ -158,6 +158,14 @@ fn (w mut writer&) decl(d ast.Decl&) {
             w.put(" = ")
             w.expr(value)
         }
+        case ast.Decl.Assert(_, cond, msg) {
+            w.put("assert ")
+            w.expr(cond)
+            if msg is not null {
+                w.put(", ")
+                w.expr(msg)
+            }
+        }
     }
 }
 

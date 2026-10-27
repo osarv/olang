@@ -771,6 +771,9 @@ type Diag enum {
     GlobalsCycle
     ModuleIdentityClash
     NoLimit
+    TopAssertFalse
+    TopAssertFalseMessage
+    TopAssertUndecidable
     PlaceMember
     BitOpNotInteger
     BitOpCount
@@ -2382,6 +2385,14 @@ fn MethodNotInherited(ty String&, tok String&) Msg { return Msg(Diag.MethodNotIn
 
 # a name read through a number type that is none of its limits (E36), or a limit of a type that is no number
 fn NoLimit(ty String&, name String&, tail String&) Msg { return Msg(Diag.NoLimit, "E36", $ty " has no limit '" $name "'" $tail) }
+
+# a top-level assert decided false while compiling (S17a), with its message where that computes too
+fn TopAssertFalse() Msg { return Msg(Diag.TopAssertFalse, "S17a", "this top-level assert is false, decided while compiling") }
+
+fn TopAssertFalseMessage(text String&) Msg { return Msg(Diag.TopAssertFalseMessage, "S17a", "this top-level assert is false, decided while compiling: " $text) }
+
+# a top-level assert the evaluator cannot decide (S17a): it holds of the program while compiling, or is no assert there
+fn TopAssertUndecidable(why String&) Msg { return Msg(Diag.TopAssertUndecidable, "S17a", "a top-level assert is decided while compiling, and this one cannot be: " $why " - assert it in a function or a test, where it is checked at run time") }
 
 # a name read through Place that is not Here (E40)
 fn PlaceMember(name String&) Msg { return Msg(Diag.PlaceMember, "E40", "Place gives no '" $name "' through its name - 'Place.Here' is the place where it is written") }

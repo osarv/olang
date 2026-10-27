@@ -1,0 +1,6 @@
+# check: fail error[S17a]: this top-level assert is false, decided while compiling: no such target
+# S17a, B9: a top-level assert in a branch the build takes is decided with it
+if TargetOs == TargetOs {
+    assert TargetOs == "no such os", "no such target"
+}
+fn main() { }

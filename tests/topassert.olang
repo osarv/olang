@@ -1,0 +1,30 @@
+# S17a: asserts at the top level, decided while compiling - each one here holds, so the file builds; a false one is
+# checks/cases' (topassert*.olang)
+import "std/io"
+
+Kinds Array<String&> = String&["a", "b", "c"]
+Widths Array<I64> = I64[1, 2, 4]
+
+fn total(a Array<I64>&) I64 {
+    t I64 = 0
+    for x in a: t += x
+    return t
+}
+
+assert Kinds.Len() == Widths.Len(), "a width for every kind"
+assert total(Widths) == 7
+assert Widths.Every(fn(x): return x > 0)
+assert (try total(Widths).Narrow<I8>() catch default I8(0)) == 7
+assert Place.Here.Line == 18
+assert TargetVectorBits >= 0
+
+if TargetOs == "linux" {
+    assert TargetOs.Len() == 5
+} else {
+    assert TargetOs != "linux"
+}
+
+test "a file whose top-level asserts hold builds and runs" {
+    assert total(Widths) == 7
+    io.Println($Kinds.Len())!
+}

@@ -1,0 +1,6 @@
+# check: fail error[S17a]: this top-level assert is false, decided while compiling: 3 sizes, 4 names
+# S17a: a false top-level assert says its message, computed while compiling
+Sizes Array<I64> = I64[1, 2, 3]
+Names Array<String&> = String&["a", "b", "c", "d"]
+assert Sizes.Len() == Names.Len(), $Sizes.Len() " sizes, " $Names.Len() " names"
+fn main() { }

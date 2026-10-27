@@ -364,6 +364,8 @@ type Decl enum {
     If(sp source.Span, i TopIf&)
     # NAME = value in a top-level if's branch (D13e): the value of a global declared above with none - target a Name
     Set(sp source.Span, target Expr&, value Expr&)
+    # assert cond[, message] at the top level (S17a): decided while compiling, never run
+    Assert(sp source.Span, cond Expr&, msg Expr?&)
     # extern [link "name"] { fn ... type ... } (X1, X9, X10): the declarations of what C defines - in the library the link
     # names (its span holds its quotes; (0, 0) for none, what is linked already)
     ExternBlock(sp source.Span, link source.Span, decls Array<Decl&>&)

@@ -276,6 +276,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
     # evaluator to decide while compiling
     AssertAsks Vec<AssertAsk>
+    # S17a: the top-level asserts that checked, each with its condition's body and its message's, which the evaluator
+    # must decide
+    TopAsserts Vec<TopAssertAsk>
     # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
@@ -346,6 +349,12 @@ type rawTable struct(Ty types.TypeId, Text Bool, Bits Array<I64>&, Bytes Array<A
 type fixedInit struct(Init ast.Expr&, Ty types.TypeId) {
     Init
     Ty
+}
+
+# a top-level assert (S17a): where it is - its file, its span, what a decision is reported at - and its condition's body
+# and its message's (-1 for none), each a function of no parameters the evaluator runs
+type TopAssertAsk struct(File I64, Sp source.Span, At source.Span, Cond I64, Msg I64) {
+    File, Sp, At, Cond, Msg
 }
 
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
@@ -1402,6 +1411,11 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.traitContracts(mi, td)
             }
             case ast.Decl.Fn(_) { c.declAttrs(mi, d) }
+            case ast.Decl.Assert(sp, k, msg) {
+                c.push(-1, mi, types.VoidT, types.ListId(0))
+                c.topAssert(mi, sp, k, msg)
+                c.pop()
+            }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             case ast.Decl.ExternBlock(_, _, xs) { c.decls(mi, xs) }
             case ast.Decl.Errors(esp, name, words, members) {
@@ -2378,6 +2392,42 @@ fn (c mut Checker&) RenderBody(mi I64, n source.NameId, sp source.Span) I64 {
     c.drain()
     if d.Count() > mark {
         d.Forget(mark)
+        c.Bodies[id].Root = null
+        return -1
+    }
+    return id
+}
+
+# a top-level assert (S17a): its condition and its message checked in module mi's context, each as the body of a
+# function of no parameters giving its value - as a global's initializer is, so what one may read the other may - and
+# asked of the evaluator once the program has checked; what is wrong with either is said here, and then nothing is asked
+fn (c mut Checker&) topAssert(mi I64, sp source.Span, k ast.Expr&, msg ast.Expr?&) {
+    cb := c.topBody(mi, k, types.BoolT)
+    mb I64 = -1
+    if msg is not null { mb = c.topBody(mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly)) }
+    if cb < 0 or (msg is not null and mb < 0) { return }
+    c.TopAsserts.Push(TopAssertAsk(c.P.L.Mods[mi].File, sp, c.operatorOf(k), cb, mb))
+}
+
+fn (c mut Checker&) topBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
+    d := c.P.L.Diags
+    mark := d.Count()
+    gaps := c.Gaps.Len()
+    unk := c.unknowns
+    sp := x.Span()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, ty, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    v := c.cond1(x) if ty == types.BoolT else c.fit(c.expr(x, ty), ty, sp)
+    c.stmts.Push(typed.Stmt.Return(sp, v))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    c.drain()
+    if d.Count() > mark or c.Gaps.Len() > gaps or c.unknowns > unk {
         c.Bodies[id].Root = null
         return -1
     }
