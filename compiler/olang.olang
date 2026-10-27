@@ -1019,11 +1019,16 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run\n")
+            "interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run\n")
     assert mistake(String&["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(String&["test", "-output", "x", "m.olang"]) ==
-        "olang: error[B1]: -output applies to build, compile and bindgen, not to test\n"
+        "olang: error[B1]: -output applies to build, compile, bindgen and profile, not to test\n"
+    # B20: profile takes -quick, not the builds of other programs, nor another machine's
+    assert mistake(String&["profile", "-race", "m.olang"]) ==
+        "olang: error[B1]: -race applies to running a file, build, compile and test, not to profile\n"
+    assert mistake(String&["profile", "-target", "aarch64", "m.olang"]) ==
+        "olang: error[B1]: -target applies to running a file, build, compile, test, interpret, explain, doc, lsp and mcp, not to profile\n"
     assert mistake(String&["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to running a file, build, compile and test, not to format\n"
     assert mistake(String&["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
@@ -1045,7 +1050,7 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
         "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
     assert mistake(String&["interpret", "-quick", "m.olang"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile and test, not to interpret\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to interpret\n"
     assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
 }
 
@@ -1072,6 +1077,11 @@ test "the options are recorded wherever they stand, and passed on as written" {
     c2 := build.Config()
     i := try Parse(String&["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
     assert i.Mode == Interp and i.Files.Len() == 1 and i.Args.Len() == 2 and i.Args[0] == "-sanitize" and c2.Update and not c2.San
+    # B20: profile's arguments after the file are the program's, -output its flame graph's path
+    c3 := build.Config()
+    pr := try Parse(String&["olang", "profile", "-quick", "-output", "f.html", "p.olang", "-quick", "7"], c3, d) catch Bad { unreachable }
+    assert pr.Mode == Profile and pr.Files.Len() == 1 and pr.Args.Len() == 2 and pr.Args[0] == "-quick" and c3.Quick
+    assert pr.Output == "f.html"
 }
 
 # the row Prepare reports for args, with the target given or native
@@ -1146,7 +1156,7 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
         "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
     assert prepared(String&["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
     assert mistake(String&["mcp", "-quick"]) ==
-        "olang: error[B1]: -quick applies to running a file, build, compile and test, not to mcp\n"
+        "olang: error[B1]: -quick applies to running a file, build, compile, test and profile, not to mcp\n"
     assert mistake(String&["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
     if target.FindClang() == "" { return }
     assert prepared(String&["doc", "-html", "out"]) == "no mistake: doc"

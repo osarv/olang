@@ -250,6 +250,69 @@ fn segments(path String&) Vec<I64> {
     return out
 }
 
+# the n-byte little-endian number at byte offset at of b
+fn le(b Array<U8>&, at I64, n I64) I64 {
+    v I64 = 0
+    for k in range n { v = v | (I64(b[at + k]) << (k * 8)) }
+    return v
+}
+
+# a function an ELF file's symbol table names: its address, its size and its name
+type elfFn struct(Addr I64, Size I64, Name String&) {
+    Addr
+    Size
+    Name
+}
+
+# the functions an ELF file's symbol tables name (.symtab and .dynsym), by address: what names code no debug
+# information covers - the runtime's, a C library's own - where the symbolizer, finding debug information elsewhere in
+# the file, says "??"
+fn functionSymbols(path String&) Vec<elfFn> {
+    out Vec<elfFn>
+    b := try os.ReadFile(path) catch os.Error { return out }
+    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2) { return out }
+    shoff := le(b, 0x28, 8)
+    shsize := le(b, 0x3A, 2)
+    shnum := le(b, 0x3C, 2)
+    for k in range shnum {
+        at := shoff + k * shsize
+        if at + 64 > b.Len() { break }
+        kind := le(b, at + 4, 4)
+        if kind != 2 and kind != 11 { continue }        # SHT_SYMTAB, SHT_DYNSYM
+        off := le(b, at + 0x18, 8)
+        size := le(b, at + 0x20, 8)
+        link := le(b, at + 0x28, 4)
+        ent := le(b, at + 0x38, 8)
+        strs := le(b, shoff + link * shsize + 0x18, 8)
+        if ent < 24 or off + size > b.Len() { continue }
+        for j in range size / ent {
+            e := off + j * ent
+            value := le(b, e + 8, 8)
+            if (I64(b[e + 4]) & 0xF) != 2 or value == 0 { continue }       # STT_FUNC, defined here
+            name := strs + le(b, e, 4)
+            end := name
+            for end < b.Len() and b[end] != U8(0) { end++ }
+            out.Push(elfFn(value, le(b, e + 16, 8), String(b[name:end])))
+        }
+    }
+    out.Sort(fn(x elfFn, y elfFn) Bool { return x.Addr < y.Addr })
+    return out
+}
+
+# the function of syms (by address) holding address a, "" for none
+fn symbolAt(syms Vec<elfFn>&, a I64) String {
+    lo I64 = 0
+    hi := syms.Len()
+    for lo < hi {
+        mid := (lo + hi) / 2
+        if syms[mid].Addr <= a { lo = mid + 1 } else { hi = mid }
+    }
+    for k := lo - 1, k >= 0 and k >= lo - 4, k-- {
+        if a < syms[k].Addr + (syms[k].Size if syms[k].Size > 0 else 1) { return $syms[k].Name }
+    }
+    return ""
+}
+
 # where llvm-symbolizer is: beside the clang builds use (its real directory - the release's llvm/bin, or LLVM's own
 # under a distribution's clang-N), else the newest on PATH; "" where there is none
 fn Symbolizer() String {
@@ -325,6 +388,7 @@ fn Resolve(p Profile&, tool String&) Places {
             }
         }
     }
+    syms Map<String&, Vec<elfFn>>
     at I64 = 0
     for i in range keys.Len() {
         pl.First.Push(pl.Frames.Len())
@@ -335,6 +399,12 @@ fn Resolve(p Profile&, tool String&) Places {
                 place := said[at + 1]
                 at += 2
                 file, line := fileLine(place)
+                if fun == "??" and files[i].StartsWith("/") {
+                    if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
+                    ss := try syms.Get(files[i]) catch default Vec<elfFn>()
+                    fun = symbolAt(ss, rel[i])
+                    if fun == "" { fun = "??" }
+                }
                 if fun == "??" {
                     fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
                 } else {
@@ -344,6 +414,16 @@ fn Resolve(p Profile&, tool String&) Places {
                 frames++
             }
             at++                                    # the blank line ending it
+        }
+        if frames == 0 and rel[i] >= 0 and files[i].StartsWith("/") {
+            # no symbolizer: the symbol table alone
+            if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
+            ss := try syms.Get(files[i]) catch default Vec<elfFn>()
+            fun := symbolAt(ss, rel[i])
+            if fun != "" {
+                pl.Frames.Push(Frame(pl.name(Readable(fun)), pl.name("??"), 0))
+                frames = 1
+            }
         }
         if frames == 0 {
             where := filepath.Base(files[i]) if files[i] != "" else "no file"
@@ -787,4 +867,14 @@ test fileLine "a symbolizer's place: its file and line" {
     assert f == "/a/b:c.olang" and l == 12
     g, m := fileLine("??:0:0")
     assert g == "??" and m == 0
+}
+
+test symbolAt "the function an address falls in, by the symbol table's addresses and sizes" {
+    syms Vec<elfFn>
+    syms.Push(elfFn(0x100, 0x20, "a"))
+    syms.Push(elfFn(0x200, 0x10, "b"))
+    assert symbolAt(syms, 0x100) == "a" and symbolAt(syms, 0x11f) == "a" and symbolAt(syms, 0x120) == ""
+    assert symbolAt(syms, 0x205) == "b" and symbolAt(syms, 0x50) == "" and symbolAt(syms, 0x300) == ""
+    own := functionSymbols("/proc/self/exe")
+    assert own.Len() > 0 and own.View().Some(fn(x elfFn) Bool { return x.Name == "main" })
 }

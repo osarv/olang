@@ -2329,7 +2329,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -output out prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("is a directory"), "a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build, compile and bindgen, not to test"), "test -output", dir)
+                 outOf(dir).Contains("-output applies to build, compile, bindgen and profile, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
 }

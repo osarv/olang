@@ -1502,11 +1502,19 @@ fn (e mut Emitter&) ProfName(k mir.FnKey) String {
 }
 
 fn (e mut Emitter&) instanceProfName(inst I64) String {
-    m := e.P.FnModule(e.P.InstanceFn(inst))
+    f := e.P.InstanceFn(inst)
+    m := e.P.FnModule(f)
     id := e.P.L.Mods[m].Identity
     text := e.P.InstanceText(inst)
     rest := text[id.Len() + 1:] if text.StartsWith(id) and text.Len() > id.Len() else $text
-    return $load.ErrQualifier(id, m == e.P.L.Root) $e.readableTypes(rest)
+    d := e.P.FnDecl(f)
+    if d.Recv is null { return $load.ErrQualifier(id, m == e.P.L.Root) $e.readableTypes(rest) }
+    # a method is named by its receiver's type, which names its module; its type arguments are its receiver's unless it
+    # has a list of its own
+    name := e.text(d.Name)
+    cut := try rest.FindLast($"." $name "<") catch default -1
+    if d.TypeParams.Len() == 0 and cut >= 0 and rest.EndsWith(">") { return e.readableTypes(rest[:cut + 1 + name.Len()]) }
+    return e.readableTypes(rest)
 }
 
 # a canonical text (types.Canon) with each declared type's "IDENTITY:" written as its module's qualifier: "check.Checker",
