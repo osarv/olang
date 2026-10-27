@@ -1658,3 +1658,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   brackets) or at an else/catch. A value match's `case P: v` takes the same rule, so a long value continues over lines.
 - QBR confirmed 2026-10-27 (the user: "ye, disallow {} blocks in the value matches"): a `{ }` arm in a value match is a
   compile error naming `case P: v`.
+- QBP 1 DECIDED 2026-10-27 (the user: "1 yes"): a case guard's test narrows in its clause (as an if-condition does).
+- QBP 2 DECIDED 2026-10-27 (the user: "2)yes, but isnt' divceil already the default? and mod sounds like normal mod
+  ... isn't mod overridable"): explained - `/` truncates toward zero (ceil only for negative quotients: -7/2 = -3, 7/2 =
+  3), and `%`'s operator method is `Rem` (E31), the truncated remainder (sign of the dividend), so `Mod` is free and is
+  the floored modulo's mathematical name (sign of the divisor; Haskell/Ada/Julia's rem vs mod). Built: integer methods
+  `x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` beside `Div`/`Rem`; division by zero undefined as for `/`; prelude, so the
+  evaluator computes them. Post-reset batch.
