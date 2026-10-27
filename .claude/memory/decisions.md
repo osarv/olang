@@ -1679,3 +1679,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   C++'s a bidirectional cursor (an index does that here). Recommended: not now - `Reversed()` already covers arrays, Vec
   and text, where nearly every backward walk is; additive later as `type BackIterator<T ? E> trait extends Iterator<T ?
   E> { mut NextBack() T ? E, Exhausted }` with Map/Filter/Zip/Enumerate passing it on. In effect: none.
+- QBS DECIDED 2026-10-27 (the user: "them forget about them"): no backward iterators (no Prev, no BackIterator/
+  NextBack) - Reversed() on At+Len types and indexes cover it.
