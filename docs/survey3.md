@@ -1035,8 +1035,7 @@ division up (`(n + k - 1) / k`) overflows near the top of the range.
 
 Division by zero is undefined, as for `/` (E6a); `std/arith` gets the checked forms beside its `Div` and `Rem`.
 
-**Fit.** Words, no symbols (`//` would be a comment-like symbol, and olang's comments are `#`). No per-operation cost:
-each is a named call.
+**Fit.** Words, not a new symbol (Python's `//`). No per-operation cost: each is a named call.
 
 **Cost.** Small: prelude methods over `Integer`, the evaluator computing them through the same code.
 
@@ -1084,7 +1083,7 @@ and inlined under LTO both ways. Worth one example in the docs (a `rdtsc` and an
 **From:** Mojo (imports Python modules directly), Nim's nimpy, PyO3's embedding direction, Julia's PythonCall.
 
 **In olang.** Being called *from* Python is built (`build -library`, ctypes). The other direction is reachable today
-through a C import of `Python.h` (its macros are static inline functions, which X20 wraps). A std module would make it
+through a C import of `Python.h` (its macros are static inline functions, which C imports reach through wrappers). A std module would make it
 usable:
 
 ```
@@ -1183,3 +1182,183 @@ std/prelude  String.ParseInt, String.Find ...
 
 The capability report is B1.2, the API diff B1.6, the effect line in `explain` A2.3, and the type variables'
 requirements B1.4.
+
+---
+
+## 4. Already covered
+
+Considered for this survey and dropped, because olang has it. One line each: the feature, where it comes from, and
+olang's form.
+
+**From the functional languages**
+- Algebraic data types and exhaustive matching (all of them): enums with payloads, recursive through `&`, generic
+  (T17, G6b); S13a.
+- Or-patterns, guards, nested and literal patterns (Haskell, OCaml, Rust, Elixir): S13b-S13f.
+- `Maybe`/`Option` (Haskell, Elm, OCaml): `T?&` with narrowing (T2c, S8e); values have zero values instead (D13c).
+- `Either`, monads, `do` notation, Elixir's `with`, F#'s computation expressions: error sets, `try` over a whole
+  expression, catch clauses.
+- Open tag unions (Roc, OCaml): inferred error sets (R1a, R1c).
+- Type classes, deriving, coherence, conditional instances, superclasses: section A3.1.
+- Refinement types (Liquid Haskell): constructors with contracts (T29d, D17).
+- Length-indexed vectors (Idris), size types (Futhark): inferred fixed lengths (T7c), instances per length (G29),
+  contracts over lengths.
+- Phantom types (Haskell, Rust): a generic struct may leave its parameter unused (A3.7).
+- Newtypes and opaque types (Haskell, Elm, Gleam, Scala): declared types (T29), private fields.
+- Immutability by default (Haskell, Elm, Clojure): read-only references unless `mut` (T25b).
+- Laziness and infinite streams (Haskell, OCaml `Seq`, Clojure): generators (D18).
+- Tail calls (Scheme, Erlang, Elixir): `become` (S21).
+- Property tests (QuickCheck, Hypothesis): `std/prop` (B19a).
+- Doctests (Elixir, Haskell): tests naming a target are its examples (B7a).
+- `deriving Ord`: `order.ByFields<T>`; enum sets: `std/bitset`.
+- Records of function values as modules, first-class modules (OCaml, SML): traits and `any Trait&`.
+- SML signatures (a module checked against an interface): a top-level `assert` over `alias.Functions` (S17a, G41).
+- Elixir protocols, Clojure protocols: traits, satisfied implicitly.
+- Elixir sigils, Swift's regex literals checked while compiling: `comptime regex.Compile("...")` (decided
+  2026-10-27), K1's evaluation of constant arguments.
+- Clojure atoms, `core.async`, Erlang's selective receive: atomics (P9), `std/chan`, `chan.Select` (decided).
+- Deterministic parallelism (Haskell `Par`, IVars): `spawn x = f()` in a `join`.
+- Structured concurrency (Trio, Kotlin, Swift): `join { }`.
+- Typed Racket's occurrence typing, Kotlin's smart casts: narrowing (S8d, S8e).
+- Lean's `#eval`/`#check`: `olang explain FILE NAME`, top-level asserts.
+- Racket's custodians (resources released as a group): scopes and destructors.
+- Unison's and Roc's "no runtime exceptions" story: errors in signatures; aborts only on broken guarantees.
+
+**From the languages like olang**
+- Compile-time execution (Zig `comptime`, Jai `#run`, D CTFE, Nim `static`): K1, K2, and the decided `comptime e`
+  and `comptime for`.
+- `static if`, `when`, `version`, `$if` (D, Nim, C3): a top-level `if` on build constants (B9); debug-only code is
+  `if DebugBuild { }` (B10a).
+- Error unions, `errdefer`, error return traces (Zig, C3's faults, Odin's `or_return`): R1-R8, S19e, S18d; Odin's
+  `or_else` is `catch default`.
+- Result locations (Zig): a result is built where it lands (O18a).
+- Temporary allocator scopes (C3's `@pool`, Jai's temporary storage): every block is an arena.
+- `distinct` types (Nim, Odin): declared types; `extends` for their operators.
+- `bit_set` (Odin), `set of` (Pascal): `std/bitset`.
+- Enumerated constants (Go's `iota`, Nim's ordinal enums): enum raw values (T17e).
+- Struct tags (Go), attributes read by libraries (C#, Java): typed attributes (G39-G41).
+- `#[track_caller]`, `@src()`, `source_location`: `Place.Here` (E40).
+- `Default` (Rust), zero values (Go): zero values from the constructor's defaults (D13c), definite initialisation
+  (D13d).
+- `From`/`Into` (Rust): conversions and constructors, written (`I32(x)`, `Name(x)`); no implicit conversions.
+- Wide multiplication (`mulhi`, `u128`): `U128(a) * U128(b)` (T4a).
+- `sink`/`lent` parameters (Nim), `owned`/`borrowed`/`inout` (Mojo): by-value and `mut T&` parameters, borrowed
+  results (`T&p`), moves inferred by early freeing.
+- Chapel's `config const` (settable from the command line): `flags.Read<T>` from a struct's parameters.
+- Go's `iter.Pull`: generators are pull iterators already.
+- Fortran's `where`: `mask.Select`; Futhark's `reduce`: `Sum`/`Min`/`Max` on lane expressions.
+- Inline assembly and intrinsics (Rust, Zig, D): C imports (B4.5).
+- SoA layouts, declared-layout and packed structs, thread-locals, big integers: survey 1, later (section 5).
+
+## 5. Considered in earlier surveys or the ledger, not repeated
+
+Each of these came up in the sweep and was already decided; this survey adds nothing to the decision.
+
+| Feature | Where it was settled |
+|---|---|
+| Currying, effect handlers, laziness, HKT, GADTs, row polymorphism | survey 2 section 3 (handlers and pipelines looked at again in A1.1, A2.1, with the same verdict) |
+| Pipelines, trailing lambdas, Gleam's `use`, Swift result builders | surveys 1 and 2 |
+| Macros, decorators, templates, `#insert` | settled (principle 4; compile-time evaluation and generics) |
+| Actors, supervision trees, hot code reload | survey 2 section 3 |
+| Persistent collections | the user, 2026-10-27: "dont do them at all" |
+| Tuples, anonymous records | the user, 2026-10-07 and 2026-10-25 |
+| `Option` on values, `Result` | the user, 2026-10-25 (QAZ) and 2026-10-26 (QBI) |
+| Implicit parameters and context (Scala, Odin, Jai) | survey 2 |
+| Explicit allocators (Zig, Odin) | survey 1 (principle 1) |
+| Reference counting, weak references, `Cow` | principle 1 |
+| async/await | settled (colouring, a scheduler) |
+| Multiple dispatch, overloading | the user, 2026-10-24 |
+| Extension methods, UFCS | M19, M19d |
+| Struct embedding, `using`, `alias this` | survey 2 |
+| Linear and affine types, typestate | survey 1 (`own` built and removed, QAB) |
+| Generational references | survey 1 (later as a std `Pool<T>`) |
+| Static race freedom (Pony, Rust `Send`/`Sync`) | QAC |
+| Units of measure | the user, 2026-10-18 and 2026-10-24 |
+| `.Case` shorthand (Swift, Zig, Odin) | the user, 2026-10-27: "dont build" |
+| `select` over channels | decided 2026-10-27: `chan.Select` in std |
+| Guaranteed compile-time values | decided 2026-10-27: `comptime` |
+| Cold paths | decided 2026-10-27: inferred |
+| Test clocks (Go's synctest) | decided 2026-10-27: `time.Virtual` |
+| Map and Set comprehensions, several `for` clauses | deferred by the user |
+| Struct patterns, transparent type aliases | surveys 1 and 2: later |
+| Declared-layout and packed structs, bit fields | survey 1: later, recorded future work |
+| SoA layouts | survey 1: later |
+| Thread-locals, big integers and decimals | survey 1: later |
+| Parallel loops as a std helper | survey 1: later |
+| GPU kernels | survey 1: later (B3.6 adds that the subset is shared with the FPGA work) |
+| Saturating arithmetic, fixed point | QAW item 4; deferred to the FPGA work |
+| REPL, notebooks, benchmarks, coverage, golden tests | survey 2 section 5 |
+| Embedding directories (Go's `embed.FS`) | E38: files only, "not now" |
+| Labeled break, `goto`, fallthrough | the user, 2026-10-08 |
+| The prover (Lean, Dafny, SPARK proofs) | the user, 2026-10-25: removed |
+
+## 6. Shortlist, ranked
+
+The strongest items, numbered to answer by number. "yes" items are small and need only a go; "later" items fit and
+wait for the work they belong to.
+
+1. **A guard's test narrows inside its clause** (A4.1) - yes. A gap in the one narrowing walk, checked with the
+   compiler; it also gives as-patterns.
+2. **Floored division and modulo**: `x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` (B4.1) - yes. `-7 % 3` is `-1`
+   today, and every index-wrapping loop works around it.
+3. **Typed holes** (A3.10) - yes. `_` in an expression becomes a report of the wanted type and the locals that fit;
+   a diagnostic only.
+4. **Print and return for debugging**, `io.Show(v)` (A5.5) - yes. A few lines of std now that `Place.Here` exists.
+5. **The third round of walks**: `Scan`, `GroupBy`, `ChunkBy`, `Dedup`, `Unzip`, `Product`, `Last`/`Nth`, `Cycle`,
+   `BinarySearch`/`LowerBound` (A5.1) - yes (std).
+6. **Effects inferred and shown** in `explain`, `doc` and hover (A2.3) - yes. The compiler computes them already.
+7. **One function's generated code with the optimizer's remarks**, `olang explain -asm`/`-ir` (B5.1) - yes.
+   "Vectorized or not, and why" for every hot loop.
+8. **Comprehensions over lane expressions fuse**, Fortran's elemental functions in olang's form (B3.1) - yes. No
+   syntax: `F32[relu(v) for v in a * w + b]` becomes one loop.
+9. **Function facts the program can assert** - `Allocates`, `Blocks`, `Terminates`, `Recursive`, `CallsC` - read
+   through a function's name and pinned by top-level asserts (B1.1) - later, design now. The real-time guarantee
+   Clang and Ada give, and the check the FPGA and GPU subsets need.
+10. **Array patterns in `match`**, `case String&["test", file, ..words]` (A4.3) - later, worth doing. The most-used
+    pattern form olang lacks; the rest spelling is open.
+11. **A capability report on imported packages** (B1.2) - later (tooling). Capslock for olang, on 6's summaries.
+12. **Reuse in place**, the next step of early freeing (A6.1) - later, benchmark first.
+13. **Generics' inferred requirements shown**, then checked at the definition (B1.4) - later.
+14. **The Elm architecture as the GUI library's design** (A8) - later, when GUI work starts; nothing new in the
+    language.
+15. **Library evolution**: enums that may grow, and an API diff between versions (B1.5, B1.6) - later, with a
+    registry.
+
+Smaller "later" items not ranked: method values for callbacks (A1.4), argument holes (A1.2, after a count),
+exhaustive matches over small integers (A4.6), reading back `$` (A5.3), `Memo` (A5.4), STM (A7.1), lazy globals
+(B4.2), interning (B4.3), calling Python (B4.6), search by type (B5.2).
+
+## 7. Method and sources
+
+**What was read.** PRINCIPLES.md; CLAUDE.md's settled decisions; the memory's rules, plan and decisions ledger (survey
+2's twelve answers of 2026-10-26/27 included); `docs/survey.md`, `docs/survey2.md`, `docs/ideas.md`; SPEC.md's
+contents, sections 6.4 (`match`), 10.5 (build constants) and 12.3 (generic types); the prelude's method names
+(`std/prelude/*.olang`) and `std/set.olang` for today's idiom.
+
+**What was checked with the compiler** (`build/olang` of the merge worktree at 19bd8c6, `-quick`), each claim in the
+text marked "checked":
+- `type Id<T> struct(v I64) { v }` with `Id<User>(3)` compiles (A3.7);
+- a guard `if s == Shape.Circle` does not narrow `s` in the clause body - `error[S8d]` (A4.1);
+- `f := s.Trim` is "String has no member 'Trim'" (A1.4);
+- `_` in an expression is "unknown name '_'" (A3.10);
+- `case I64[1, 2, 3]` matches an array by `==` (A4.3);
+- `-7 % 3` prints `-1` (B4.1);
+- `F32[relu(v) for v in a * b + 1.0]` runs and prints `F32[1.5, 0, 2.5]` (B3.1; whether it fuses was not checked).
+
+**What was checked on the web** (search results only):
+- Clang's function effect analysis (`nonblocking`, `nonallocating`):
+  <https://clang.llvm.org/docs/FunctionEffectAnalysis.html>, the design patch
+  <https://lists.llvm.org/pipermail/cfe-commits/Week-of-Mon-20240923/624813.html> (September 2024; its release in a
+  specific clang version was not confirmed);
+- Gleam's `echo` (1.9, 2025) and why it is a keyword: <https://gleam.run/news/hello-echo-hello-git/>;
+- Capslock: <https://pkg.go.dev/github.com/google/capslock@v0.3.1>, <https://blog.deps.dev/capslock/>, and
+  `capcheck` <https://pkg.go.dev/github.com/git-pkgs/capcheck>.
+
+**From what I know as of mid-2026, not re-checked:** the functional languages' features (stable for years in the
+respects that matter here); Koka's FBIP (Lorenzen, Leijen and Swierstra, ICFP 2023) and Perceus (PLDI 2021); Lean 4's
+reset/reuse ("Counting Immutable Beans", 2019); Ada's restriction pragmas and profiles; D's attribute inference;
+Swift's `@_noAllocation`; Go's `sync.OnceValue` (1.21) and `unique` (1.23); Fortran's `elemental` and `where`; ISPC,
+Futhark and Halide.
+
+**Counts.** Parts A and B give a verdict on 62 items: 9 yes (one of them, B1.1, yes only for its first half), 20
+later, 21 no and 12 covered. Sections 4 and 5 list about 85 more features considered and dropped as covered or
+already settled.
