@@ -1647,3 +1647,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (the line's expression is the arm's value; a block arm an error there, no value), `case P: stmt` in a statement
   match beside blocks; `=>` leaves the language (PRINCIPLES.md's `=>` example goes). `case _ if c: v` reads as `if c:
   return 0`. In effect: `=>`.
+- QBR DECIDED 2026-10-27 (the user: "Ye agree"): a value match's arm is `case P: v` (S1b's one-line body), `=>` removed
+  from the language; a statement match's arm a block or `case P: stmt`. Explained to the user: a block arm in a value
+  match is an error (no value); one-statement blocks stay valid everywhere else (S1b already lets either form stand -
+  the user's 2026-10-24 call); guards never count toward exhaustiveness (a guard may be false - Maranget, as Rust/OCaml),
+  so only-guarded arms over a non-enum need a last `case _`. Post-reset batch, with a migration tool in `olang fix`.
