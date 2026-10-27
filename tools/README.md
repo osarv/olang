@@ -39,6 +39,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `try_migrate.olang` | E24: `try` takes the whole expression after it - `try (a + b)` loses its parentheses; a `try` after an operator and before a looser one is parenthesized with `--old` (`2 * (try f()) + 1`, its old reading) and listed without it; an `as` an old `try` covered is given `!` (a plain chain) or listed. A listing makes `olang fix` end with status 1 | `build/tools_try_migrate [--old] [--check] [-v] FILE\|DIR...` |
 | `errortype_migrate.olang` | T19: error types declared as types - `error IoError { FULL }` becomes `type IoError error { FULL }`; idempotent; code and Markdown olang blocks only (programs inside strings by hand) | `build/tools_errortype_migrate [--check] [-v] FILE\|DIR...` |
 | `link_migrate.olang` | X9: the top-level `link` declaration removed - a module's `link "x"` and its `extern fn`/`extern type` lines become one block, `extern link "x" { fn ...  type ... }`, another library an empty block | `build/tools_link_migrate FILE...` |
+| `unused_migrate.olang` | D3b, M5a: a local never read and an import nothing is reached through - a loop's, a binding's or one of several results' name made `_`, a declaration left out (its value kept as a statement where it is one call, a `try`'s kept without the `try` declaration), an unused import's line removed - from the compiler's diagnostics, in rounds; what it cannot do safely (a value with a `catch ... default`, a name used again in its block) listed `by hand:`; `--bare` makes only the `_` renames and removes imports (for files that must fail as written) | `build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE\|DIR...` |
 | `list_vec.olang` | QZ2: the prelude's List moved to `std/list`, the iterator helpers and StringBuilder onto Vec, `ToList` renamed `ToVec` - by default a List is kept, qualified and imported (`list.List<T>`, `list.Error`, `list.Iter`; what `olang fix` runs), `--vec` moves it onto Vec (`Vec<T>`, `VecError`, `.ToVec()`), as this repository was; `ToList()` in the default mode, ListIter and RunFrom with `--vec`, a name `list` beside the import and text in strings listed | `build/tools_list_vec [--vec] [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -78,12 +79,14 @@ only the forms it was written for, so there is no version in a file and fixing t
 built into the cache (`fix/` in `OLANG_CACHE`) the first time, by the compiler that runs `fix`, from `tools/` beside it
 (`OLANG_TOOLS` names another place). The table is in `compiler/fix.olang`, in the order the changes were made, with the
 tools that read the text alone first and the ones driven by the compiler's diagnostics (`perm_mut`, `int_literal_i64`,
-`errors_migrate`, `null_migrate`) after them - an old file does not parse, so the compiler has nothing to say about it
-until the text tools have run:
+`errors_migrate`, `null_migrate`, `as_migrate`, `unused_migrate`) after them - an old file does not parse, so the
+compiler has nothing to say about it until the text tools have run:
 
 `bare_typevars`, `perm_mut`, `int_literal_i64`, `errors_migrate`, `cli_words`, `donefail_migrate`, `syntax_migrate`,
 `math_methods`, `arrays_migrate`, `results_migrate`, `equality_migrate`, `helper_rename`, `null_migrate`,
-`checkerror_rename`, `stutter_rename`.
+`checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
+`errortype_migrate`, `list_vec`, `link_migrate`, `unused_migrate` (last: D3b is said only of a file with no other error,
+so it runs once everything else has been fixed).
 
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
 `io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
