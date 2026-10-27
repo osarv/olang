@@ -14,4 +14,4 @@ Brief: decisions.md QBK 4, QBM, QBN, QBO, "Attribute rules settled with the user
 ## Decided (mine) - see HISTORY.md "Typed attributes, function reflection, json key policies"
 
 ## Next
-- make quick clean, then one full verify (`/home/user/vlock make verify > verify.log 2>&1`), commit, push.
+- Nothing: full verify passed on this tip. Left (recorded): converted json keys are computed per encode, not while compiling.
