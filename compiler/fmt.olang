@@ -12,8 +12,8 @@
 #   in from where it would otherwise be; the block a continued condition opens is indented from the statement, as Go
 #   writes it.
 # - one space between two tokens, except none: inside brackets and type brackets, before ",", around "." and a slice's
-#   ":", after a prefix operator ("-x", "~x", "$x", "++x"), before a postfix one, before a call's or an index's
-#   bracket, and where the file had none around a reference marker "&" (its spacing decides what it marks, T24, E25).
+#   ":", after a prefix operator ("-x", "~x", "$x", "++x", an attribute's "@x"), before a postfix one, before a call's
+#   or an index's bracket, and where the file had none around a reference marker "&" (its spacing decides what it marks, T24, E25).
 # - "{" has a space before it, a block on one line a space inside each brace ("{ }" when empty).
 # - comments stay where they are, as written; a run of lines ending in comments has them start in one column, one
 #   space past the longest code of the run. Blank lines are kept, at most one in a row, none at the start or end of
@@ -438,11 +438,12 @@ fn (f formatter&) before(r I64) I64 {
     return p
 }
 
-# whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand
+# whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand -
+# or the "@" an attribute begins with (G39), where no operand stands before it
 fn (f formatter&) prefix(j I64, r I64) Bool {
     k := f.kind(j)
     if k == token.Tok.Tilde or k == token.Tok.Dollar { return true }
-    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec { return false }
+    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec and k != token.Tok.At { return false }
     p := f.before(r)
     return p < 0 or not f.operandEnd(p)
 }

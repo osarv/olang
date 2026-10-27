@@ -13545,7 +13545,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     # R8: what this try covers is its own - an enclosing try covers something only where this one does not
     covered := fr.Fallible != before
     fr.Fallible = before
-    if not covered and typeOf(x) != types.UnknownT and not c.inGeneric() {
+    if not covered and typeOf(x) != types.UnknownT and not c.copiesDiffer() {
         c.nothingFails(sp)
         # the operand stands as written, so what follows from it is still judged (E31b's copy, section 8)
         return x if clauses.Len() == 0 else c.unknown(sp)
@@ -13597,6 +13597,10 @@ fn (c mut Checker&) curInst() I64 {
 
 fn (c mut Checker&) inGeneric() Bool { return c.fr().Ctx.Vars.Len() > 0 }
 
+# whether what can fail, or what a call does, differs between the copies of the code being checked (R8, R14, S3): a
+# generic's body, or a walk unrolled over a list known while compiling (G33), checked once per element
+fn (c mut Checker&) copiesDiffer() Bool { return c.inGeneric() or c.fr().Ctx.Refl.Len() > 0 }
+
 # x! (E35): what can fail in x ends the program - x's calls and operators handled
 fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.Expr&c {
     fr := c.fr()
@@ -13609,7 +13613,7 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     fr.Fallible = before
     # T2c: on a reference that may be null, "x!" is it known not to be - after what can fail, where something can
     nullable := c.P.T.IsNullable(typeOf(x))
-    if not covered and typeOf(x) != types.UnknownT and not c.inGeneric() {
+    if not covered and typeOf(x) != types.UnknownT and not c.copiesDiffer() {
         if nullable { return c.unwrapNull(sp, x) }
         c.err(source.Span(sp.End - 1, sp.End), msgs.BangNothingFails())
         return c.unknown(sp)
@@ -13693,7 +13697,7 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     fr.Tries--
     covered := fr.Fallible != before
     fr.Fallible = before
-    if not covered and not c.inGeneric() { c.nothingFails(sp) }
+    if not covered and not c.copiesDiffer() { c.nothingFails(sp) }
     x mut typed.Expr&c = typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
     end := fr.leaks.Len()
     c.produced(clauses, mark, end)
@@ -14042,7 +14046,7 @@ fn (c mut Checker&) isGlobalBody(id I64) Bool {
 # R14: each clause item names what the operand can fail with - an error type it can, a word it can - not in a generic's
 # body (R8), where instances differ
 fn (c mut Checker&) produced(clauses Array<ast.Catch&>&, mark I64, end I64) {
-    if clauses.Len() == 0 or c.inGeneric() { return }
+    if clauses.Len() == 0 or c.copiesDiffer() { return }
     fr := c.fr()
     got Vec<types.TypeId>
     for i in range mark, end { got.Push(fr.leaks[i]) }
@@ -15027,7 +15031,7 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             # S3: a call giving a value it drops is judged once every body is checked - one doing nothing else is an
             # error. Not in a generic's body, where what a call does differs between instances
             t := typeOf(e)
-            if t != types.VoidT and t != types.NoreturnT and t != types.UnknownT and not c.inGeneric() {
+            if t != types.VoidT and t != types.NoreturnT and t != types.UnknownT and not c.copiesDiffer() {
                 c.idle.Push(idleCall(c.fr().Body, c.fr().File, x.Span(), c.src(x.Span()), e))
             }
             c.emit(typed.Stmt.Eval(sp, e))

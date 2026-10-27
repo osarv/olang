@@ -12,10 +12,28 @@ import "diag"
 fn Unparse(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) String {
     w := writer(names, text, diags)
     for d in decls {
+        if hidden(d) { continue }
         w.decl(d)
         w.b.PushChar('\n')
     }
     return w.b.ToString()
+}
+
+# whether a declaration is the hidden global the parser declares beside an attribute (G39): written as the attribute
+fn hidden(d ast.Decl&) Bool {
+    return match d {
+        case ast.Decl.Global(_, v) => v.Hidden
+        case _ => false
+    }
+}
+
+# a declaration's attributes, each "@" and its value, then a space (G39)
+fn (w mut writer&) attrs(xs Array<ast.Attr&>&) {
+    for a in xs {
+        w.put("@")
+        w.expr(a.X)
+        w.put(" ")
+    }
 }
 
 # the branches the build may decide that met a syntax error, which Unparse writes as their text: their spans, in order
@@ -86,7 +104,9 @@ fn (w mut writer&) decl(d ast.Decl&) {
             w.put("}")
         }
         case ast.Decl.Type(_, t) { w.typeDecl(t) }
-        case ast.Decl.Global(_, v) { w.varDecl(v) }
+        case ast.Decl.Global(_, v) {
+            if not v.Hidden { w.varDecl(v) }
+        }
         case ast.Decl.Import(_, alias, path, link) {
             w.put("import ")
             if alias != source.NameId(0) {
@@ -164,6 +184,7 @@ fn (w mut writer&) topBranch(b ast.TopBranch&) {
     w.put("{")
     w.ind++
     for d in b.Decls {
+        if hidden(d) { continue }
         w.nl()
         w.decl(d)
     }
@@ -173,6 +194,7 @@ fn (w mut writer&) topBranch(b ast.TopBranch&) {
 }
 
 fn (w mut writer&) func(f ast.Func&) {
+    w.attrs(f.Attrs)
     if f.Export { w.put("export ") }
     w.put("fn ")
     if f.Recv is not null {
@@ -273,6 +295,7 @@ fn (w mut writer&) params(ps Array<ast.Param&>&) {
 }
 
 fn (w mut writer&) param(x ast.Param&) {
+    w.attrs(x.Attrs)
     if x.Name != source.NameId(0) { w.name(x.Name) }
     if x.Ty is not null {
         if x.Name != source.NameId(0) { w.put(" ") }
@@ -292,6 +315,7 @@ fn (w mut writer&) path(p ast.Path&) {
 }
 
 fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
+    w.attrs(t.Attrs)
     match t.Body {
         case ast.TypeBody.Foreign {
             w.put("extern type ")
@@ -364,6 +388,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.ind++
             for c in cases {
                 w.nl()
+                w.attrs(c.Attrs)
                 w.name(c.Name)
                 if c.Whole {
                     w.put(" ")
@@ -541,6 +566,7 @@ fn (w mut writer&) body(body Array<ast.Stmt&>&) {
 }
 
 fn (w mut writer&) varDecl(v ast.VarDecl&) {
+    w.attrs(v.Attrs)
     for i, n in v.Names {
         if i > 0 { w.put(", ") }
         w.name(n)
