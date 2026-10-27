@@ -832,6 +832,14 @@ type Diag enum {
     ReflArgCompr
     ReflNoType
     ReflMatchSubject
+    AttrPlace
+    AttrPun
+    AttrType
+    AttrTwice
+    AttrNotBuilt
+    AttrRead
+    ReflFnList
+    ReflFnCall
     LaneLengths
     LaneReferences
     LaneCompare
@@ -872,6 +880,16 @@ fn ReflCaseOther(c String&, ty String&) Msg { return Msg(Diag.ReflCaseOther, "G3
 fn ReflCaseUnreachable() Msg { return Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
 fn ReflArgCompr() Msg { return Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'") }
 fn ReflNoType(name String&, ty String&, why String&) Msg { return Msg(Diag.ReflNoType, "G38", $"'" $name "' of " $ty ": " $why) }
+
+# attributes (G39, G40) and the functions reflection reads (G41)
+fn AttrPlace() Msg { return Msg(Diag.AttrPlace, "G39", "an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one") }
+fn AttrPun(name String&) Msg { return Msg(Diag.AttrPun, "G39", $"field '" $name "' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter") }
+fn AttrType(ty String&) Msg { return Msg(Diag.AttrType, "G39", $"an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is " $ty) }
+fn AttrTwice(ty String&) Msg { return Msg(Diag.AttrTwice, "G39", $"a declaration takes one attribute of each type, and this is its second " $ty) }
+fn AttrNotBuilt(why String&) Msg { return Msg(Diag.AttrNotBuilt, "G39", $"an attribute's value is built while compiling, and this one cannot be: " $why) }
+fn AttrRead(name String&) Msg { return Msg(Diag.AttrRead, "G40", $"'" $name "' takes the attribute's type and no arguments - '" $name "<json.Key>()'") }
+fn ReflFnList(what String&) Msg { return Msg(Diag.ReflFnList, "G41", $what " - 'Functions' is read through an import's alias ('handlers.Functions'), 'Methods' through a type") }
+fn ReflFnCall(name String&, want I64, have I64) Msg { return Msg(Diag.ReflFnCall, "G41", $"'" $name "' is called with " $want " arguments (a method's receiver first), found " $have) }
 fn ReflMatchSubject() Msg { return Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names") }
 
 # ERR_USAGE

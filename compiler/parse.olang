@@ -123,6 +123,8 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17)
     TypeGroups Vec<I64>
     variadicOk Bool = false            # an extern's parameters being read: "..." may end them (X21)
+    attrGlobals Vec<ast.Decl&>        # the hidden globals holding the attributes of the item being read (G39), put
+                                       # beside it when it is done
     sawVariadic Bool = false
 }
 
@@ -515,8 +517,10 @@ fn (p mut Parser&) item() {
     p.tooDeep = false
     p.unclosed = false
     p.salvage.Truncate(0)
+    p.attrGlobals.Truncate(0)
     d := try p.decl() catch {
         p.ItemKept[k] = false
+        p.attrGlobals.Truncate(0)
         # a function or type whose body did not parse stays declared by its signature or its name, its body never
         # checked - so a use of it is not reported again (SNTX_BODY_UNPARSED)
         for x in p.salvage { p.decls.Push(x) }
@@ -533,9 +537,13 @@ fn (p mut Parser&) item() {
         return
     }
     p.decls.Push(d!)
+    # G39: the attributes' globals, declared beside what they are written on - in the same branch of a top-level if
+    for x in p.attrGlobals { p.decls.Push(x) }
+    p.attrGlobals.Truncate(0)
 }
 
 fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
+    if p.sees(token.Tok.At) { return try p.attributed() }
     at := p.here()
     match p.peek() {
         case token.Tok.Import {
@@ -611,6 +619,81 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         nomatch { try p.fail("a declaration") }
     }
     unreachable
+}
+
+# G39: a type or a function after its attributes - the attributes on lines of their own above it, or on its line
+fn (p mut Parser&) attributed() ast.Decl?&p ? Fail {
+    attrs := try p.attrs()
+    k := p.peek()
+    exported := k == token.Tok.Iden and p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn
+    if not (k == token.Tok.Fn or exported or (k == token.Tok.Type and p.look(2) != token.Tok.Error)) {
+        p.attrRefused(attrs)
+        return try p.decl()
+    }
+    d := try p.decl()
+    match d! {
+        case ast.Decl.Fn(f) {
+            p.declareAttrs(attrs)
+            return ast.Decl.Fn(ast.Func(f.Sp, f.Recv, f.Name, f.S, f.Body, f.TypeParams, f.Bodied, f.Export, attrs))
+        }
+        case ast.Decl.Type(sp, td) {
+            p.declareAttrs(attrs)
+            return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs))
+        }
+        nomatch { return d }
+    }
+}
+
+# "@" and a declared type's value, one or several, each on a line of its own or before what it is written on (G39):
+# "@json.Skip", "@json.Key("id")", "@Range<I64>(0, 9)" - a path, its type arguments and its arguments touching it
+fn (p mut Parser&) attrs() Array<ast.Attr&>&p ? Fail {
+    l mut Vec<ast.Attr&>&p = Vec<ast.Attr&>()
+    for p.sees(token.Tok.At) {
+        at := p.advance()
+        xat := p.here()
+        if not p.sees(token.Tok.Iden) or p.tk().Has(token.Space) { try p.fail("a type's name after '@' - an attribute is written '@Name' or '@Name(arguments)'") }
+        n := try p.name()
+        x ast.Expr&p = ast.Expr.Name(p.from(xat), n)
+        for p.sees(token.Tok.Dot) and not p.tk().Has(token.Space) {
+            p.advance()
+            m := try p.methodName()
+            x = ast.Expr.Member(p.from(xat), x, m)
+        }
+        if p.sees(token.Tok.Lt) and p.typeArgsCall(0) {
+            targs := try p.typeArgs()
+            x = ast.Expr.Generic(p.from(xat), x, targs)
+        }
+        if p.sees(token.Tok.LParen) and not p.tk().Has(token.Space) {
+            args := try p.args()
+            x = ast.Expr.Call(p.from(xat), x, args)
+        }
+        sp := p.from(at)
+        l.Push(ast.Attr(sp, x, p.names.Intern("@" $at)))
+        p.skipEnds()
+    }
+    return l.ToArray()
+}
+
+# the hidden globals holding attributes' values (G39): put beside the item being read once it is done
+fn (p mut Parser&) declareAttrs(attrs Array<ast.Attr&>&p) {
+    for a in attrs {
+        v mut ast.VarDecl&p = ast.VarDecl(Array<source.NameId>(1, a.Global), Array<source.Span>(1, a.X.Span()), null
+                                          Array<ast.Expr&>(1, a.X), true, false, Array<ast.Attr&>(0), true)
+        p.attrGlobals.Push(ast.Decl.Global(a.Sp, v))
+    }
+}
+
+# attributes written where nothing takes them (G39): said once, at the first
+fn (p mut Parser&) attrRefused(attrs Array<ast.Attr&>&) {
+    if attrs.Len() == 0 { return }
+    sp := attrs[0].Sp
+    p.report(sp.Start, sp.End, msgs.AttrPlace())
+}
+
+# the attributes written here, none where no "@" stands (G39)
+fn (p mut Parser&) attrsHere() Array<ast.Attr&>&p ? Fail {
+    if not p.sees(token.Tok.At) { return Array<ast.Attr&>(0) }
+    return try p.attrs()
 }
 
 # "link "name"" after an import's path or "extern" (X9): the text's span, quotes included - (0, 0) where none is written
@@ -799,6 +882,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             cases mut Vec<ast.CaseDecl&>&p = Vec<ast.CaseDecl&>()
             p.skipEnds()
             for not p.sees(token.Tok.RBrace) {
+                cattrs := try p.attrsHere()
                 cat := p.here()
                 cn := try p.name()
                 payload Array<ast.Param&>&p = Array<ast.Param&>(0)
@@ -815,7 +899,8 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
                 }
                 value ast.Expr?&p = null
                 if p.accept(token.Tok.Assign) { value = try p.expr() }   # T17e: a raw value
-                cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole, value))
+                p.declareAttrs(cattrs)
+                cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole, value, cattrs))
                 try p.entryEnd()
             }
             p.advance()
@@ -1152,6 +1237,12 @@ fn (p Parser&) ellipsis() Bool {
 }
 
 fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
+    attrs := try p.attrsHere()
+    # G39: a lambda's parameters are no declaration reflection reads
+    if lambda {
+        p.attrRefused(attrs)
+        attrs = Array<ast.Attr&>(0)
+    }
     at := p.here()
     name := try p.name()
     ty ast.TypeRef?&p = null
@@ -1160,7 +1251,8 @@ fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
     }
     dflt ast.Expr?&p = null
     if p.accept(token.Tok.Assign) { dflt = try p.expr() }
-    return ast.Param(p.from(at), name, ty, dflt)
+    p.declareAttrs(attrs)
+    return ast.Param(p.from(at), name, ty, dflt, attrs)
 }
 
 # after a list's ",": its closing bracket may follow only from a line of its own (L18a)
@@ -1505,6 +1597,19 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
         }
         marks := p.marks()
         start := p.pos
+        # G39: a constructor's field may have attributes; nothing else in a block takes them
+        fattrs Array<ast.Attr&>&p = Array<ast.Attr&>(0)
+        if p.sees(token.Tok.At) {
+            fattrs = try p.attrs() catch {
+                p.release(marks)
+                p.syncStmt(start)
+                continue
+            }
+            if not p.inCtor {
+                p.attrRefused(fattrs)
+                fattrs = Array<ast.Attr&>(0)
+            }
+        }
         s := try p.stmt() catch {
             if p.tooDeep or p.unclosed {
                 p.stmts.Truncate(from)
@@ -1515,6 +1620,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
             p.syncStmt(start)
             continue
         }
+        if fattrs.Len() > 0 { s = p.fieldAttrs(s, fattrs) }
         p.stmts.Push(s)
     }
     if not p.sees(token.Tok.RBrace) {
@@ -1523,6 +1629,27 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
     }
     p.advance()
     return gather(p.stmts, from)
+}
+
+# a constructor's field with the attributes written before it (G39): one field declared with its type or its value - a
+# pun is its parameter, whose attributes it has
+fn (p mut Parser&) fieldAttrs(s ast.Stmt&p, attrs Array<ast.Attr&>&p) ast.Stmt&p {
+    match s {
+        case ast.Stmt.Var(sp, v) {
+            if v.Field and v.Names.Len() == 1 and (v.Ty is not null or v.Values.Len() > 0) {
+                p.declareAttrs(attrs)
+                return ast.Stmt.Var(sp, ast.VarDecl(v.Names, v.NameSps, v.Ty, v.Values, v.Infer, v.Field, attrs))
+            }
+            if v.Field and v.Names.Len() == 1 {
+                a := attrs[0].Sp
+                p.report(a.Start, a.End, msgs.AttrPun(p.names.Text(v.Names[0])))
+                return s
+            }
+        }
+        nomatch { }
+    }
+    p.attrRefused(attrs)
+    return s
 }
 
 fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
@@ -2498,6 +2625,8 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
         k := p.peek()
         pr := p.prec(k)
         if pr == 0 or pr < min { return left }
+        # G39: an "@" beginning a line begins an attribute, never continues a matrix product (L18b's rule for "if")
+        if k == token.Tok.At and not p.skip and p.breakBefore() { return left }
         # "not" in infix position can only be "not in"
         if k == token.Tok.Not and p.look(1) != token.Tok.In { return left }
         # E25: f&x(...) is a call, read by postfix; an "&" there is no operator

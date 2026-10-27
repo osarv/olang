@@ -27,11 +27,21 @@ type TypeRef enum {
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
-type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&) {
+type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&
+                  Attrs Array<Attr&>& = Array<Attr&>(0)) {
     Sp
     Name
     Ty
     Dflt
+    Attrs      # the attributes written before it (G39)
+}
+
+# an attribute (G39): "@" and the value after it - a declared type's, built while compiling - and the hidden global the
+# parser declares beside the declaration to hold it (its name "@" and its offset, which no program can write)
+type Attr struct(Sp source.Span, X Expr&, Global source.NameId) {
+    Sp
+    X
+    Global
 }
 
 # a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
@@ -170,13 +180,15 @@ type Pattern enum {
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
 # "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
 type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef?&, Values Array<Expr&>&
-                    Infer Bool, Field Bool) {
+                    Infer Bool, Field Bool, Attrs Array<Attr&>& = Array<Attr&>(0), Hidden Bool = false) {
     Names
     NameSps
     Ty         # null for ":=" and for a pun
     Values
     Infer      # ":="
     Field      # a constructor's field
+    Attrs      # a field's attributes (G39)
+    Hidden     # the hidden global holding an attribute's value (G39), which no program names
 }
 
 # an if: its condition and branches. The diagnostics a branch's parse met are held in its group (diag.Hold), said only
@@ -254,7 +266,8 @@ type Stmt enum {
 # function whose body did not parse - declared by its signature alone: Bodied false), and the type variables its list
 # after the name introduces (G3, QW: "fn max<T>(...)"; empty for none); Export for "export fn" (X12): C may call it
 type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body Array<Stmt&>&
-                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true, Export Bool = false) {
+                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true, Export Bool = false
+                 Attrs Array<Attr&>& = Array<Attr&>(0)) {
     Sp
     Recv
     Name
@@ -263,17 +276,20 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
     TypeParams
     Bodied
     Export
+    Attrs      # the attributes written before it (G39)
 }
 
 # an enum case: name and payload
 # Whole for a case whose payload is one type written whole, "Round Circle": then Payload is one Param, named as the case;
 # Value its raw value written after "=" (T17e), null for none
-type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false, Value Expr?& = null) {
+type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false, Value Expr?& = null
+                     Attrs Array<Attr&>& = Array<Attr&>(0)) {
     Sp
     Name
     Payload
     Whole
     Value
+    Attrs      # the attributes written before it (G39)
 }
 
 # the body of a type declaration
@@ -310,11 +326,13 @@ type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Arr
     ErrSet
 }
 
-type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&) {
+type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&
+                     Attrs Array<Attr&>& = Array<Attr&>(0)) {
     Name
     Params
     Extends
     Body       # null for a type whose declaration did not parse past its name - declared by its name alone
+    Attrs      # the attributes written before it (G39)
 }
 
 # a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch

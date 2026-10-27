@@ -1389,12 +1389,14 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 tests++
             }
             case ast.Decl.Type(tsp, td) {
+                c.declAttrs(mi, d)
                 c.typeRules(mi, tsp, td)
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
                 c.traitHeader(mi, td)
                 c.traitContracts(mi, td)
             }
+            case ast.Decl.Fn(_) { c.declAttrs(mi, d) }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             case ast.Decl.ExternBlock(_, _, xs) { c.decls(mi, xs) }
             case ast.Decl.Errors(esp, name, words, members) {
@@ -3349,7 +3351,13 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     }
     from := c.stmts.Len()
     x typed.Expr?&c = null
-    if k < v.Values.Len() {
+    if v.Hidden and k < v.Values.Len() {
+        # G39: an attribute's value - a type written bare its constructor called with no arguments ("@json.Skip")
+        ax := c.attrCall(v.Values[k])
+        x = c.attrExpr(ax)
+        want = c.inferred(ax, x, true)
+        if want != types.UnknownT and not c.attrTypeOk(want) { c.err(ax.Span(), msgs.AttrType(c.ty(want))) }
+    } else if k < v.Values.Len() {
         x = c.exprTo(v.Values[k], want)
         if v.Ty is null { want = c.inferred(v.Values[k], x, true) }
         # B10c: a build constant's default, which -D's value replaces - fitted to its type as a literal written there
@@ -3385,6 +3393,105 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     }
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
+}
+
+# ---- attributes (G39) ----
+
+# an attribute's value as written: a type named bare is its constructor called with no arguments ("@json.Skip"), an
+# enum's case written bare its value ("@Level.High")
+fn (c mut Checker&) attrCall(x ast.Expr&c) ast.Expr&c {
+    named := false
+    match x {
+        case ast.Expr.Name(_, _), ast.Expr.Member(_, _, _) { named = c.typeNamed(x) >= types.TypeId(0) }
+        case ast.Expr.Generic(_, g, _) { named = c.genericNamed(g) >= types.DeclId(0) }
+        nomatch { }
+    }
+    if not named { return x }
+    return ast.Expr.Call(x.Span(), x, Array<ast.Expr&>(0))
+}
+
+# an attribute's value checked (G39): what it can fail with - a constructor's requirement (D17), say - ends its
+# building as "!" would, an error where it is built while compiling
+fn (c mut Checker&) attrExpr(y ast.Expr&) typed.Expr&c {
+    fr := c.fr()
+    mark := fr.leaks.Len()
+    before := fr.Fallible
+    fr.Tries++
+    x := c.expr(y, types.UnknownT)
+    fr.Tries--
+    covered := fr.Fallible != before
+    fr.Fallible = before
+    if not covered { return x }
+    fr.leaks.Truncate(mark)
+    return typed.Expr.Try(y.Span(), typeOf(x), typed.Try(x, Array<typed.Clause&>(0), true))
+}
+
+# whether a type is one an attribute may be (G39): a struct, an enum or a declared number type a program declares - a
+# built-in type, the prelude's included (String, Vec), says nothing of what the attribute means
+fn (c mut Checker&) attrTypeOk(t types.TypeId) Bool {
+    if not c.isNamed(t) { return false }
+    d := c.P.T.DeclOf(t)
+    if c.P.L.Mods[c.P.T.DeclModule(d)].Identity.StartsWith("std/prelude") { return false }
+    k := c.P.T.DeclKindOf(d)
+    if k == types.DeclKind.Struct or k == types.DeclKind.Enum { return true }
+    return k == types.DeclKind.Over and c.isNumber(t)
+}
+
+# a declaration's attributes (G39): each checked as its global is, at most one of each type
+fn (c mut Checker&) attrsChecked(mi I64, attrs Array<ast.Attr&>&) {
+    if attrs.Len() == 0 { return }
+    seen Vec<types.TypeId>
+    for a in attrs {
+        t := c.globalType(mi, a.Global)
+        if t == types.UnknownT { continue }
+        for s in seen {
+            if c.P.T.Same(s, t) {
+                c.push(-1, mi, types.VoidT, types.ListId(0))
+                c.err(a.Sp, msgs.AttrTwice(c.ty(t)))
+                c.pop()
+            }
+        }
+        seen.Push(t)
+    }
+}
+
+# every attribute a declaration's parts carry (G39): a type's, its constructor's parameters' and fields', its cases'
+# and their fields'; a function's and its parameters'
+fn (c mut Checker&) declAttrs(mi I64, d ast.Decl&) {
+    match d {
+        case ast.Decl.Type(_, td) {
+            c.attrsChecked(mi, td.Attrs)
+            if td.Body is null { return }
+            match td.Body! {
+                case ast.TypeBody.Struct(sb) {
+                    for prm in sb.Params { c.attrsChecked(mi, prm.Attrs) }
+                    for st in sb.Body {
+                        match st {
+                            case ast.Stmt.Var(_, v) { c.attrsChecked(mi, v.Attrs) }
+                            nomatch { }
+                        }
+                    }
+                }
+                case ast.TypeBody.Enum(cases, _) {
+                    for cd in cases {
+                        c.attrsChecked(mi, cd.Attrs)
+                        for prm in cd.Payload { c.attrsChecked(mi, prm.Attrs) }
+                    }
+                }
+                case ast.TypeBody.Over(_, ctor) {
+                    if ctor is not null {
+                        for prm in ctor.S.Params { c.attrsChecked(mi, prm.Attrs) }
+                    }
+                }
+                nomatch { }
+            }
+        }
+        case ast.Decl.Fn(f) {
+            c.attrsChecked(mi, f.Attrs)
+            for prm in f.S.Params { c.attrsChecked(mi, prm.Attrs) }
+        }
+        nomatch { }
+    }
 }
 
 # ---- a global's value given below it (D13e) ----

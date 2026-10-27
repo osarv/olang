@@ -447,6 +447,18 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
         match x.Bodies[i].Of {
             case typed.BodyOf.Global(m, n) {
                 img := try x.M.Image(m, n) catch eval.NotBaked {
+                    # G39: an attribute's value is built while compiling, or is an error - never set at startup
+                    av := c.P.GlobalDecl(m, n)
+                    if av is not null and av.Hidden {
+                        # one evaluated with nothing to write - of no size, or reaching storage it cannot hold - is
+                        # built all the same, and set at startup as any global
+                        b := x.Bodies[i]
+                        why, _, _ := valueWhy(x.M.Stopped, b.Sp)
+                        if not x.Faulty.Has(i) and why != "" {
+                            d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.AttrNotBuilt(why))
+                        }
+                        continue
+                    }
                     # K1/K2: an initializer reaching what aborts the program would abort it at startup - an error at
                     # the global, said once per place it is reached (a global reading another reaches the other's)
                     match x.M.Stopped {
