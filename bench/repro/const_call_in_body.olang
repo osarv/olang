@@ -1,0 +1,33 @@
+# A call whose arguments are all constants and whose body the evaluator can run (K1a) is computed at run time when it
+# stands inside a function body: primes(200) in a loop costs 255,000 instructions a turn, the same call as an
+# immutable global's initializer is baked (52 a turn for the whole loop body). Text methods on literals are not folded
+# either: "...".Find("wor") 150 a turn, "12345".ParseInt() about 50. Measured (docs/optsurvey.md, "Constant calls in
+# bodies"; callgrind, n = 10,000, x86-64-v3): local 2552M, global 0.79M, find 1.52M, parse 0.74M.
+# Run: bench/repro/const_call_in_body MODE 10000 (MODE local, global, find, parse).
+import "std/io"
+import "std/os"
+
+fn primes(n I64) Array<I64> {
+    out := Vec<I64>()
+    for k in range 2, n {
+        p := true
+        for d in range 2, k { if k % d == 0 { p = false } }
+        if p { out.Push(k) }
+    }
+    return out.ToArray()
+}
+
+Primes := primes(200)
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    s I64 = 0
+    for i in range n {
+        if args[1] == "local" { s += primes(200)[i % 10] }
+        else if args[1] == "global" { s += Primes[i % 10] }
+        else if args[1] == "find" { s += try "hello world, wonderful".Find("wor") + i }
+        else if args[1] == "parse" { s += try "12345".ParseInt() + i }
+    }
+    try io.Println($s)
+}

@@ -1,0 +1,24 @@
+# A call's returned array handed straight to a reference parameter is copied into a second allocation in the same
+# scope before the call (__olang_scope_alloc + memcpy in the caller); through a local it is not. Measured
+# (docs/optsurvey.md, "A call's result copied"; callgrind, 100,000 calls, x86-64-v3): "call" ln(mk(i)) 23.3M
+# instructions, "local" t := mk(i); ln(t) 17.2M. bench/repro/return_local_array.olang is the callee's side (fixed).
+# Run: bench/repro/call_result_copy MODE 100000 (MODE call, local).
+import "std/io"
+import "std/os"
+
+fn mk(i I64) String { return "item " $i " of many" }
+fn ln(t String&) I64 { return t.Len() + I64(t[0]) }
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    s I64 = 0
+    for i in range n {
+        if args[1] == "call" { s += ln(mk(i)) }
+        else {
+            t := mk(i)
+            s += ln(t)
+        }
+    }
+    try io.Println($s)
+}

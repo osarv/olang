@@ -1,0 +1,21 @@
+# A text local made from a literal, t := "abcdef", is copied into the loop body's arena on every turn (an allocation
+# and a copy of the literal) though nothing writes it; an I64[1, 2, 3, 4] local in the same place stays in registers.
+# Measured (docs/optsurvey.md, "Text locals"; callgrind, n = 100,000, x86-64-v3): 7.37M instructions, about 70 a
+# turn, against 0.48M for the number array (lit2's arr in the survey).
+# Run: bench/repro/text_local_copy 100000
+import "std/io"
+import "std/os"
+
+fn f(n I64) I64 {
+    s I64 = 0
+    for i in range n {
+        t := "abcdef"
+        s += t.Len() + i
+    }
+    return s
+}
+
+fn main() ? {
+    n := try os.Args()[1].ParseInt()
+    try io.Println($f(n))
+}

@@ -1,0 +1,53 @@
+# D18e's walk form needs LLVM to inline the generator's .walk ramp into the loop that walks it, so CoroElide can put
+# the frame in registers; in a large function (this main, with many branches) the inliner declines, the frame comes
+# from the arena (__olang_scope_alloc_a of 72 bytes) and each value is a resume through memory: "genfor" 28.6M
+# instructions here against 1.44M for the same walk alone in a small function (bench/gen.olang's range row).
+# Measured (docs/optsurvey.md, "Generator walks in large functions"; callgrind, 100,000 x 10, x86-64-v3).
+# Run: bench/repro/gen_big_function genfor 100000 10 (the other modes are the iterator forms measured beside it).
+import "std/io"
+import "std/os"
+
+fn gen(n I64) Iterator<I64> {
+    for i in range n { yield i }
+}
+
+fn main() ? {
+    args := os.Args()
+    mode := args[1]
+    n := try args[2].ParseInt()
+    passes := try args[3].ParseInt()
+    a := I64[(i * 7) % 1000 for i in range n]
+    b := I64[(i * 3) % 1000 for i in range n]
+    s I64 = 0
+    for p in range passes {
+        if mode == "loop" {
+            for x in a { if x % 3 == 0 { s += x * x } }
+        } else if mode == "fold" {
+            s += a.Fold(0, fn(acc I64, x I64) I64 { return acc + x * x if x % 3 == 0 else acc })
+        } else if mode == "itfold" {
+            s += a.Iter().Fold(0, fn(acc I64, x I64) I64 { return acc + x * x if x % 3 == 0 else acc })
+        } else if mode == "filtermap" {
+            for y in a.Filter(fn(x I64) Bool { return x % 3 == 0 }).Map(fn(x I64) I64 { return x * x }) { s += y }
+        } else if mode == "count" {
+            s += a.Count(fn(x I64) Bool { return x % 3 == 0 })
+        } else if mode == "countloop" {
+            for x in a { if x % 3 == 0 { s++ } }
+        } else if mode == "zip" {
+            for z in a.Iter().Zip(b.Iter()) { s += z.First * z.Second }
+        } else if mode == "ziploop" {
+            for i in range a.Len() { s += a[i] * b[i] }
+        } else if mode == "enum" {
+            for e in a.Iter().Enumerate() { s += e.Index * e.Value }
+        } else if mode == "enumloop" {
+            for i, x in a { s += i * x }
+        } else if mode == "takesum" {
+            s += a.Iter().Skip(10).Take(n - 20).Sum()
+        } else if mode == "takeloop" {
+            for i in range 10, n - 10 { s += a[i] }
+        } else if mode == "genfor" {
+            for x in gen(n) { s += x }
+        }
+        s = s ^ p
+    }
+    try io.Println($s)
+}
