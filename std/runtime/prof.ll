@@ -23,16 +23,19 @@
 ; is stored last (release), so a record is complete once its header is not zero. A full buffer drops what follows,
 ; counted. Nothing is allocated, nothing locked.
 ;
-; At exit - main returning, os.Exit, an error escaping main (all three through exit(), so atexit), or a failed check's
-; abort (runtime.ll's hook) - __olang_prof_stop writes the file with open/write/close alone (so it may run where a
-; signal arrived): a header - "OLPROF01", the period in nanoseconds, the words of records, the samples dropped, the
-; threads sampled - then the records, then /proc/self/maps as it reads at that moment, which olang profile needs to
-; find each address's file. A crash (SIGSEGV) writes nothing.
+; At exit - main returning, os.Exit, an error escaping main (all three through exit(), so atexit), a failed check's
+; abort (runtime.ll's hook), or SIGINT, SIGTERM or SIGHUP where the program has left them to end it (an interrupt typed
+; at the terminal) - __olang_prof_stop writes the file with open/write/close alone (so it may run where a signal
+; arrived): a header - "OLPROF01", the period in nanoseconds, the words of records, the samples dropped, the threads
+; sampled - then the records, then /proc/self/maps as it reads at that moment, which olang profile needs to find each
+; address's file. Only the process that started the profile writes it: a child it forks inherits the atexit, not the
+; timers. A crash (SIGSEGV) writes nothing.
 declare i32 @atexit(ptr)
 declare i32 @open(ptr, i32, ...)
 declare i64 @read(i32, ptr, i64)
 declare i32 @close(i32)
 declare i32 @gettid()
+declare i32 @getpid()
 declare i32 @timer_create(i32, ptr, ptr)
 declare i32 @timer_settime(ptr, i32, ptr, ptr)
 declare i32 @timer_delete(ptr)
@@ -45,6 +48,7 @@ declare i32 @timer_delete(ptr)
 @__olang_prof_dropped = global i64 0
 @__olang_prof_on = global i32 0
 @__olang_prof_threads = global i64 0
+@__olang_prof_pid = global i32 0
 @__olang_prof_path = global [4096 x i8] zeroinitializer
 ; this thread's top frame (the frame address of the function it started in: frames at or above it are the C library's)
 ; and its timer
@@ -88,11 +92,44 @@ mapped:
   ; SA_SIGINFO | SA_RESTART: the handler is given the context, and a system call it interrupts goes on
   store i32 268435460, ptr %flagsp
   %sr = call i32 @sigaction(i32 27, ptr %sa, ptr null) ; SIGPROF
+  %pid = call i32 @getpid()
+  store i32 %pid, ptr @__olang_prof_pid
+  call void @__olang_prof_on_end(i32 2)  ; SIGINT
+  call void @__olang_prof_on_end(i32 15) ; SIGTERM
+  call void @__olang_prof_on_end(i32 1)  ; SIGHUP
   store atomic i32 1, ptr @__olang_prof_on release, align 4
   %ar = call i32 @atexit(ptr @__olang_prof_stop)
   call void @__olang_prof_thread(ptr %top)
   ret void
 off:
+  ret void
+}
+
+; sig made to write the samples before it ends the program as it would have - where nothing else handles it: its
+; handler runs once (SA_RESETHAND), then sends the signal again, now to its default action
+define internal void @__olang_prof_on_end(i32 %sig) {
+entry:
+  %old = alloca [@@SIGACTION_BYTES@@ x i8], align 16
+  %sa = alloca [@@SIGACTION_BYTES@@ x i8], align 16
+  %got = call i32 @sigaction(i32 %sig, ptr null, ptr %old)
+  %h = load ptr, ptr %old
+  %dfl = icmp eq ptr %h, null
+  br i1 %dfl, label %take, label %out
+take:
+  call void @llvm.memset.p0.i64(ptr %sa, i8 0, i64 @@SIGACTION_BYTES@@, i1 false)
+  store ptr @__olang_prof_ended, ptr %sa
+  %flagsp = getelementptr i8, ptr %sa, i64 @@SIGACTION_FLAGS@@
+  store i32 -2147483648, ptr %flagsp ; SA_RESETHAND
+  %r = call i32 @sigaction(i32 %sig, ptr %sa, ptr null)
+  br label %out
+out:
+  ret void
+}
+
+define internal void @__olang_prof_ended(i32 %sig) {
+entry:
+  call void @__olang_prof_stop()
+  %r = call i32 @raise(i32 %sig)
   ret void
 }
 
@@ -264,6 +301,11 @@ define void @__olang_prof_stop() {
 entry:
   %hdr = alloca [5 x i64], align 8
   %chunk = alloca [4096 x i8], align 8
+  %pid = call i32 @getpid()
+  %starter = load i32, ptr @__olang_prof_pid
+  %ours = icmp eq i32 %pid, %starter
+  br i1 %ours, label %take, label %out
+take:
   %was = atomicrmw xchg ptr @__olang_prof_on, i32 0 acq_rel, align 4
   %first = icmp ne i32 %was, 0
   br i1 %first, label %open, label %out
