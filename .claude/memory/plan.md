@@ -529,3 +529,14 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   imports (tools/unused_migrate.olang, last in olang fix; 252 files migrated), B11 did-you-mean everywhere
   (msgs.Nearest), B3a filter across files (status 3), B7a targets `Array.Windows`/`Iterator.TakeWhile`; seed
   regenerated. Found: olang doc dropped other-module methods' examples (written into a copy). Left: `_ = x` to discard.
+- 2026-10-27 CET: profile merged (d80994c, verified; merge = tip + memory, PROGRESS.md untracked): B20 `olang profile
+  FILE [ARGS]` - `.prof` objects at -O3 + LTO with frame pointers and line tables, a per-thread CPU-time timer
+  (timer_create, SIGPROF) whose handler walks frame pointers into a reserved buffer, samples written at every orderly
+  end; a text report (self/total, hot lines, callers) and an HTML flame graph (build/profile/NAME.html), names as source
+  writes them (emit, types.Demangle), llvm-symbolizer shipped in the release. Overhead: sampling <= 2.5%; frame pointers
+  cost binarytrees 24% in profile builds only; plain builds byte-identical. The container restarted mid-batch; resumed
+  from a WIP commit. FOUND: .git/info/exclude had unanchored patterns (`prof*`) hiding std/runtime/prof.ll,
+  compiler/profile.olang and walks' docs/profiling.md (never committed, rewritten) in every worktree - anchored with `/`
+  by me. Left: allocation profiling, threads C starts, a clock finer than the 250 Hz tick, builds not bit-reproducible
+  (.loc objects carry the compiler's pid in temp names). Next: json key policies + typed attributes + function
+  reflection (QBN/QBO), then survey2 items 1-5.
