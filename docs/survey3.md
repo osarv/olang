@@ -35,7 +35,8 @@ The ranked shortlist is section 6.
 
 ## Contents
 
-1. Part A: functional languages
+1. What this survey adds (the summary above)
+2. Part A: functional languages
    - A1 Functions and calls
    - A2 Effects, purity and totality
    - A3 Types
@@ -45,20 +46,20 @@ The ranked shortlist is section 6.
    - A7 Concurrency
    - A8 GUIs: the Elm architecture
    - A9 The proof languages
-2. Part B: languages like olang
+3. Part B: languages like olang
    - B1 Facts the compiler can check about a function
    - B2 The region and ownership languages
    - B3 Array and data-parallel languages
    - B4 Systems-language details
    - B5 Tooling
-3. (section 4) Already covered
-4. (section 5) Considered in earlier surveys or the ledger
-5. (section 6) Shortlist, ranked
-6. (section 7) Method and sources
+4. Already covered
+5. Considered in earlier surveys or the ledger, not repeated
+6. Shortlist, ranked
+7. Method and sources
 
 ---
 
-# Part A: functional languages
+# 2. Part A: functional languages
 
 Haskell, OCaml, F#, Standard ML, Elm, Roc, Gleam, Elixir/Erlang, Clojure, Scala, Lean/Idris/Agda, Koka, Unison,
 PureScript and Racket. Grouped by theme.
@@ -74,8 +75,8 @@ text |> String.trim |> parse |> List.map double
 ```
 
 **In olang.** Methods already chain left to right: `t.Trim().Split(",")`. The pipe is wanted for *free* functions,
-which cannot chain: `json.Encode(order.Sorted(load(p)))` reads inside out. A pipe would read
-`load(p) |> order.Sorted |> json.Encode`, or in words, `load(p) then order.Sorted then json.Encode`.
+which cannot chain: `json.Encode(summarize(load(p)))` reads inside out. A pipe would read
+`load(p) |> summarize |> json.Encode`, or in words, `load(p) then summarize then json.Encode`.
 
 **Fit.** This is the call form that UFCS gave, and M19 removed UFCS on purpose: a call is written either as a method
 of the receiver's type or as a function with its arguments. A pipe is a second way to write every call (principle 4).
@@ -101,8 +102,8 @@ a call with `_` in argument slots is a lambda taking those slots in order, `xs.M
 (L9a), so `_` as an argument means nothing today.
 
 **Fit.** It is a second way to write a lambda (principle 4). It also hides when the other arguments are evaluated: in
-`scale(_, expensive())`, is `expensive()` run once, when the lambda is made, or on every call? Gleam evaluates it
-on every call, and both answers surprise someone. The capture rules (D16c) would apply unchanged, since the form
+`scale(_, expensive())`, is `expensive()` run once, when the lambda is made, or on every call? Gleam's capture is sugar
+for a lambda, so it runs on every call, and both answers surprise someone. The capture rules (D16c) would apply unchanged, since the form
 lowers to a lambda.
 
 **Cost.** Small: a desugaring in the checker.
@@ -380,7 +381,7 @@ collections were declined (2026-10-27).
 
 ### A3.10 Typed holes
 
-**From:** GHC's typed holes, Agda and Idris holes (`?goal`), Lean's `sorry`, Gleam's and Elm's `todo`.
+**From:** GHC's typed holes, Agda and Idris holes (`?goal`), Lean's `sorry`, Gleam's `todo`, Elm's `Debug.todo`.
 
 ```haskell
 area w h = w * _
@@ -392,7 +393,7 @@ area w h = w * _
 report, with no new syntax:
 
 ```
-area.olang:3:40: error: a hole - a F64 is wanted here
+area.olang:3:40: error: a hole - an F64 is wanted here
     note: locals that fit: h F64, w F64
     note: functions giving one: Pi, w.Sqrt(), w.Abs() ...
 ```
@@ -417,16 +418,24 @@ Maranget's algorithm). What the functional languages add:
 
 ### A4.1 A guard's test narrows inside its clause
 
-**From:** Scala, OCaml and Haskell, where a guard and the pattern together decide what the body may assume; Kotlin's
-`when` guards with smart casts; TypeScript's narrowing.
+**From:** Kotlin's `when` guards (2.2) with smart casts, TypeScript's narrowing in `switch`, Typed Racket's
+occurrence typing, Swift's `case let x where ...`. In the ML family a nested pattern does most of this job, and olang
+has nested patterns too; what a pattern cannot say is a test that is not a case, such as "not null".
 
 **The gap (checked with the compiler).** The narrowing walk (S8d, S8e, "one narrowing walk", 2026-10-26) covers
-`and`/`or`/`not`, conditionals, asserts and loops, but not a `case` guard:
+`and`/`or`/`not`, conditionals, asserts and loops, but not a `case` guard - neither a null test nor a case test:
 
 ```
+match s {
+    case Slot.Held(p) if p is not null {
+        io.Println($p.v)!      # error[T2c] today: 'p' is a Node?&, which may be null
+    }
+    case Slot.Held(_), Slot.Empty { }
+}
+
 match w {
-    case Wrap.One(s) if s == Shape.Circle {
-        io.Println($s.r)!      # error[S8d] today: 's' is not narrowed to Circle
+    case Wrap.One(s) if s == Shape.Circle and s.r > 1.0 {    # the guard itself narrows (checked) ...
+        io.Println($s.r)!                                       # ... the body does not: error[S8d]
     }
     case Wrap.One(_) { }
 }
@@ -741,7 +750,7 @@ Nothing else is proposed.
 
 ---
 
-# Part B: languages like olang
+# 3. Part B: languages like olang
 
 Zig, Rust, Odin, Jai, C3, Hare, Nim, D, Carbon, Mojo, V, Swift, Go, Crystal, Julia, Vale, Hylo, Austral, Cyclone,
 Pony, Lobster, Ada/SPARK, Fortran, Chapel, ISPC, Futhark, Halide, CUDA and SYCL. Most of what these languages have,
@@ -1337,7 +1346,8 @@ contents, sections 6.4 (`match`), 10.5 (build constants) and 12.3 (generic types
 **What was checked with the compiler** (`build/olang` of the merge worktree at 19bd8c6, `-quick`), each claim in the
 text marked "checked":
 - `type Id<T> struct(v I64) { v }` with `Id<User>(3)` compiles (A3.7);
-- a guard `if s == Shape.Circle` does not narrow `s` in the clause body - `error[S8d]` (A4.1);
+- a guard `if s == Shape.Circle` does not narrow `s` in the clause body - `error[S8d]` - nor a guard `if p is not
+  null` - `error[T2c]` - while `s == Shape.Circle and s.r > 1.0` inside the guard does narrow (A4.1);
 - `f := s.Trim` is "String has no member 'Trim'" (A1.4);
 - `_` in an expression is "unknown name '_'" (A3.10);
 - `case I64[1, 2, 3]` matches an array by `==` (A4.3);
