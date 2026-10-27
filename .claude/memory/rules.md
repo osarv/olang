@@ -436,6 +436,13 @@ ask is when the fix itself requires a genuine design decision (a real fork in ho
 not just an implementation gap). A "does this generalize / is this handled" question that turns up a bug is itself
 grounds to just fix it, not merely report it and wait.
 
+## Optimizations are mine to decide
+The user, 2026-10-27 (asked whether to fuse comprehensions over lane expressions): "yes of course, all these kinda
+optimization tricks, dont even bother asking me, in fact, make a through search to find all that we have missed".
+**How to apply:** an optimization that changes no meaning (no syntax, no rule a program can observe beyond speed and
+memory) is never a question: measure it, queue it, build it, report it in one line. Only an optimization that would need
+a language change, a new cost a program does not show, or a trade against another principle goes to the user.
+
 # The compilers
 
 ## The port is a redesign

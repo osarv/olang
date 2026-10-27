@@ -1688,3 +1688,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBP 7 DECIDED 2026-10-27 (the user: "build it"): `olang explain -asm FILE NAME` / `-ir` - one function's code as the
   build compiled it (-O3, LTO, from the build's objects) with LLVM's optimization remarks (vectorized or not and why,
   inlined or not) mapped to olang lines through the profiler's line tables; -target/-quick/-define apply. Post-reset batch.
+- QBP 8 DECIDED 2026-10-27 (the user: "yes of course"): a for-in or comprehension whose source is a lane expression
+  reads it lane by lane - `F32[relu(v) for v in a * w + b]` one loop, no temporary (measured before: 0.19 s / 21 MB
+  against the hand index loop's 0.13 s / 17.5 MB over 200 x 1M). Post-reset batch; the measurement becomes a bench row.
