@@ -515,3 +515,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the agent's two questions) for the checker batch: a filter fails only when no listed file has a match (the driver
   collects the children's status); test targets may name iterator defaults and array methods (`Iterator.TakeWhile`,
   `Array.Windows`).
+- 2026-10-27 CET: bfix3 merged with walks (1dd87cf, full verify on the merged tip passed): bulk review 3's findings fixed -
+  D13d do-while and hidden breaks (typed.BreaksOut), S8d/S8e assigned-in-block walk, D14d counter assignment, an
+  immutable String global refused for mut/char* parameters, a held generator walked once dropped at its block,
+  TypeKind.Error and json of error values, `e is null`, X21 promotion, qualified error types in `$`, error-value Hash by
+  type identity + word. Left (a limit): a generator local walked in two branches or twice keeps its arena frame.
+  Running: wt-checker (the checker batch, QBK 1-3 + B3a/B7a items). Next: `olang profile` (QBL), then json key policies +
+  typed attributes + function reflection (QBN/QBO), then survey2 items 1-5 (Place.Here, become, bitset, ByFields,
+  top-level assert).
