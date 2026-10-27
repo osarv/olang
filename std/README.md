@@ -70,7 +70,8 @@ every module's own. `tools/stutter_rename.olang` renames the old names in other 
   (`CaseError`, what an enum's `From` and an `as` of another case fail with, T17e, E32). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
-  `san.ll` (scope sanitizer, linked only under `-s`), `dyncall.ll` (calls by name over libffi). The compiler
+  `san.ll` (scope sanitizer, linked only under `-s`), `prof.ll` (the sampling profiler, linked only into an
+  `olang profile` build, B20), `dyncall.ll` (calls by name over libffi). The compiler
   fills it in for each build (`compiler/runtime.olang`).
 
 ## Tests

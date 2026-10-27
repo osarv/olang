@@ -91,7 +91,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   2026-10-24):** `xs.Count(fn(x): return x > 3)` - its statement also ends where the bracket around the lambda closes or
   at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
-  compile test interpret format explain help doc lsp mcp`; options `-output -debug -race -sanitize -target -define -update
+  compile test interpret format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target -define -update
   -check -quick -html -library -memory -fuzz -fuzztime`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
@@ -445,6 +445,25 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   planted 4-byte prefix bug found in under a second (`checks` scenario `testfuzz`, ~10 s with the build); a property
   over `Array<I64>` shrinks to `I64[50]` in ~2 s. Profiling is written up in docs/profiling.md (perf, a flame graph,
   callgrind - which build keeps what).
+- **`olang profile FILE [ARGS]` (B20, QBL, the user's decision 2026-10-26; built 2026-10-27, details mine).** A sampling
+  profiler built in: the program built as `build` builds it (`-O3`, LTO; `-quick` asks less) with frame pointers on every
+  path (shrink-wrapping off), line tables (`LineTablesOnly`) naming each function as source writes it outside its module
+  (`io.Println`, `Vec<I64>.Push`, `check.Checker.Expr`, the root's and the prelude's bare - emit's `ProfName`; `startup`
+  the entry, `task` a spawn's trampoline: every function the compiler writes gets a subprogram, since code inlined into
+  one without loses its lines) and the runtime's sampler (`std/runtime/prof.ll`, hooked into runtime.ll by `; @prof`
+  lines a compiler without it reads as comments) - objects `.prof`, nothing of it in any other build (their IR is the
+  same as before; checked on nbody and regex). Each runtime thread has a `CLOCK_THREAD_CPUTIME_ID` timer signalling
+  itself each ms; the handler walks frame pointers (bounded by the thread's first frame and its stack pointer, 128 deep)
+  into a reserved buffer, no allocation, no lock; a sample weighs 1 + the timer's overrun (a 250 Hz kernel: one each 4 ms
+  weighing 4 - their sum is the CPU time, 8.575 s against 8.579 s measured). Written at exit, os.Exit, an error leaving
+  main, a failed check and SIGINT/SIGTERM/SIGHUP left to end the program (never on a crash, never by a forked child) to
+  `build/profile/NAME.samples` with /proc/self/maps. The driver forks and execs the program (its stdin, output and
+  status the program's; SIGINT ignored while it waits), names addresses with llvm-symbolizer (beside the real clang, else
+  `llvm-symbolizer-20..18` on PATH; `make release` ships it) through inlined frames, and prints self/total by function,
+  the hot lines and the five hottest functions' callers, then writes a self-contained HTML flame graph (SVG, a click
+  zooms; `-output` names it). Options: -output, -quick, -define, -update. `interpret` is not profiled; allocation
+  profiling per site is future work. Measured: sampling costs ~0-2.5%; the build's frame pointers nothing on loops,
+  ~20% on binarytrees. compiler/profile.olang, docs/profiling.md.
 - **Arguments by name (E14b, QBG, 2026-10-26 - reverses the 2026-09 rejection).** A defaulted parameter only, after
   every argument by position, in any order, each once (`connect(h, retries = 5)`); naming a required parameter, a name
   given twice or also by position, an unknown name (the nearest defaulted one suggested) and a name through a function

@@ -48,6 +48,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `cabi.olang` | the C calling conventions (X11): how a plain-data struct crosses to C by value on x86-64 (System V) and AArch64 (AAPCS64), as clang passes it |
 | `bindgen.olang` | a C import translated (X17-X19: the declarations clang reads, macros, the C to compile beside), and `olang bindgen HEADER.h` (X16) writing them down |
 | `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |
+| `profile.olang` | `olang profile` (B20): the program built with the runtime's sampler (`std/runtime/prof.ll`) and run, its samples read and named by `llvm-symbolizer`, the report and the HTML flame graph |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
 | `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |

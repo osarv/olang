@@ -25938,3 +25938,103 @@ dropped the file, offset and target of every method of a type declared in anothe
 
 Also removed on the way: the unread locals the compiler itself had (eval's `ty`, scope's `loc` and `isRef`, free's
 `callOf`, check's `ctx`), each dead code. Left: `_ = x` (discarding a value) stays unknown, as it was.
+
+## `olang profile`: a sampling profiler built in (B20, B20a, B20b, QBL, 2026-10-27)
+
+The user, 2026-10-26: "We could ship with a built in profiler?" - then "Yes queue it". Built as one batch; the details
+are mine. A first agent began it and was killed by a container restart; what it had written was saved as a WIP commit
+(the Config flag, the `.prof` suffix, frame-pointer attributes, the runtime hooks, the UC_* facts) - and its runtime file
+`std/runtime/prof.ll` survived on disk but not in the commit (see "Found on the way"). Its design was kept; what is below
+is what the second agent decided, built and measured.
+
+**The mode (B20).** `olang profile FILE [ARGS]` builds as `build` does, runs, reports. Its options: `-output` (here the
+flame graph's path - the binary is always `build/NAME.prof`), `-quick` (the user's "-O3 unless asked less"), `-define`
+and `-update` (they choose what program is built). Not `-debug` (an -O0 profile measures unoptimized code), `-race` or
+`-sanitize` (another program's time), `-target` (it runs here), `-memory`. The driver forks and execs the program rather
+than spawning it through std/os (whose `Start` gives the child an in-memory standard input), so a profiled program reads
+the terminal or a pipe as a run does; it ignores SIGINT and SIGQUIT while it waits, so an interrupt typed at the
+terminal ends the program - which writes its samples on the way - and the report still comes. The mode's status is the
+program's.
+
+**The sampler (std/runtime/prof.ll).** One `timer_create(CLOCK_THREAD_CPUTIME_ID)` per thread, signalling SIGPROF to
+that thread (`SIGEV_THREAD_ID`), made where a thread starts (main through `__olang_prof_start`, a task's worker in
+`__olang_worker_loop`, an `os.RunOnStack` thread in `__olang_stack_main`) and deleted where it ends. Not `setitimer
+(ITIMER_PROF)`: its one process-wide timer sends a process-directed signal, which the kernel gives to any thread and
+merges while pending, so busy threads hide each other. The handler reads pc, frame pointer and stack pointer from the
+`ucontext_t` (offsets as facts per architecture, `UC_PC`, `UC_FP`, `UC_SP`), walks `[saved fp, return address]` records
+while the frame pointer is aligned, at or above the interrupted stack pointer, below the thread's first frame and rising
+- so it reads only the thread's own live stack whatever a C function left in the register - up to 128 frames, and
+copies the stack into a buffer of 32M words (`MAP_NORESERVE`: address space, its pages taken as written) reserved by an
+atomic add, its header word stored last with release order. Each sample weighs 1 + `si_overrun`: this machine's kernel
+ticks at 250 Hz, so the 1 ms timer fires each 4 ms with an overrun of 3 - 8.575 s of CPU reported against 8.579 s of
+user time measured on an 8.6 s run. The file is written by `atexit` (main returning, `os.Exit`, an error leaving main),
+by the hard abort a failed check takes (runtime.ll's hook), and by a handler for SIGINT, SIGTERM and SIGHUP installed
+only where their action is the default (SA_RESETHAND, then the signal raised again, so the program ends as it would
+have); only by the process that started the profile (a forked child inherits the `atexit`, not the timers). open, write
+and close alone, so it may run where a signal arrived. A crash writes nothing (decided: the samples of a crashing program
+are worth little beside the crash itself, and the handler would compete with the crash handler on the alternate
+stack).
+
+**Hooks a compiler without them reads as comments.** The previous agent put the hooks in runtime.ll under `; @if prof`
+- a condition the compiler that builds the next one (build/olang, and the seed) does not know, so it stopped reading the
+runtime ("a condition that is neither \"san\" nor an architecture") and the bootstrap would have needed a new seed.
+A hook line is now `; @prof LINE`: compiler/runtime.olang's Fill makes it LINE in a profile build, and every other build -
+and every older compiler - keeps it a comment. No seed regenerated.
+
+**Names (B20a).** Symbols are B3b's escapes (`compiler_2fcheck_2ecompiler_2fcheck_3aChecker_2ejoinStmt`), and at -O3
+most code is inlined: the names worth having are the debug information's. So a profile build's DISubprogram is named by
+emit's `ProfName` - an instance's text (generic.Program's `Text`, kept beside the symbol, which cuts and hashes a long
+one) with its module written as errors print it and its types' `IDENTITY:` likewise (`readableTypes`, against the
+program's module identities), a method by its receiver type alone. llvm-symbolizer is run once with every address,
+`--inlining --functions=short` (`linkage` would name the outermost frame by its ELF symbol), a return address less one.
+`types.Demangle` reads a B3b symbol back (a long one to its cut, then "..."); the profile applies it only to a name
+holding `_2e` - an escaped "." - which no name the debug information gives does.
+
+**Two things that took measuring.** (1) Code inlined into a function with no subprogram loses its lines: the program's
+`main` (the C entry the compiler writes) inlined the program's own main and everything under it, and the first profile
+said `main` 100%, line `??`. Every function the compiler writes itself - main, the tasks' trampolines, destructor
+trampolines, generator wrappers, thunks, the runtime bodies a module carries - is now given a subprogram in a profile
+build (`emit.dbgFunctions`, over each item as it is registered), in a file of its own (`<generated>`) so that a module's
+object never depends on which program's root it is emitted for (B3i). (2) Shrink-wrapping set a function's frame up only
+on the paths that call: a loop ran with the caller's frame pointer, and the walk lost the function's own caller. It is
+off in a profile build (`-mllvm -enable-shrink-wrap=false` where code is generated at compile time, `-plugin-opt=` at the
+LTO link - clang does not pass `-mllvm` to the linker plugin itself).
+
+**The report and the flame graph (B20b).** Functions by self time (at least half a percent, at most 25 rows) with their
+total (once a sample, so recursion counts once), lines by self time with their functions (line 0 - compiler-made code -
+left out), and for the five hottest functions their callers by share of their total. The flame graph is an SVG in one
+HTML file: the root at the bottom, frames side by side in name order (Gregg's), a hash of the name for its colour, the
+tooltip its time and share, and fifteen lines of script that zoom to a clicked frame, cutting names to fit - nothing
+loaded from elsewhere.
+
+**Nothing in other builds.** The sampler's code is in the runtime's object only when `prof` is set, the frame-pointer
+attribute and the line tables only in `.prof` objects, the `-lrt` and the shrink-wrap flags only at a profile link. The
+IR of a plain build is byte for byte what it was: built with the compiler before this batch and after, in the same
+directory, nbody's and regex's binaries are identical once their symbol tables are stripped - the symbol tables differ
+only in the compiler's process id in the `.loc` objects' temporary file names, which differ between any two builds by
+one compiler too (found, not fixed: builds are not reproducible bit for bit).
+
+**Measured** (bench/, best of five; plain / profile build, sampler off / sampling): nbody 545 / 538 / 540 ms, spectral
+507 / 521 / 510, mandelbrot 632 / 629 / 645, fannkuch 1181 / 1195 / 1199, binarytrees 414 / 513 / 512. The sampling costs
+up to ~2.5%. binarytrees' 24% is the frame pointers: the same profile IR with the attribute removed runs in 439 ms -
+short recursive calls into the arena's out-of-line allocation, each paying the push and the register. Decided: kept
+("all", not "non-leaf", which would lose a leaf's caller); it is the profile build's price, stated in docs/profiling.md.
+
+**Tests.** compiler/profile.olang's own (the report's lines from a hand-made profile, the flame graph's frames and
+escaping, the samples reader on a hand-made file with a record cut short, the names, the symbolizer's place lines),
+compiler/types.olang's Demangle (Symbol read back, a long one, symbols that are no olang's), and the checks scenario
+`profile` (checks/fixtures/profile/hot.olang): the program's own status, the hottest function first, a method by its
+type, the hottest line, the callers (a spawned call's function under `task`), the flame graph and `-output`, no sampler
+in a plain build and its `.ll` free of the frame-pointer attribute, `-target` refused, `help profile`. `make releasetest`
+profiles a program with the release's own llvm-symbolizer.
+
+**Future work, recorded.** Allocation profiling per site - the arena could count the bytes each site asks for (a site's
+id beside the call in a profile build), reported as the CPU profile is. Sampling threads C code starts. A finer clock
+than the kernel's tick (perf's hrtimer-driven cpu-clock events through `perf_event_open`, where it is allowed).
+
+**Found on the way.** (1) The shared repository's `.git/info/exclude` holds unanchored names (`prof*`, `any`, `check`,
+`emit`, `lower` ...) that hide matching files anywhere in every worktree: `std/runtime/prof.ll`, `compiler/profile.olang`
+and `checks/fixtures/profile/` had to be added with `git add -f`, and `docs/profiling.md` - written by the walks batch,
+named in CLAUDE.md and docs/README.md - was never committed and was lost; it is written again here. The patterns want a
+leading `/` (left to the coordinator: the file is the shared repository's, not this worktree's). (2) Builds are not
+reproducible bit for bit (above).

@@ -6609,7 +6609,7 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-            | "bindgen"
+            | "bindgen" | "profile"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
             | "-fuzz" NAME | "-fuzztime" SECONDS
@@ -6618,25 +6618,26 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-t
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16), `fix` (B17) and `bindgen` (§11 X16). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16) and `profile` (B20). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile, bindgen | B3h, §11 X16 |
-| `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
+| `-output PATH` | build, compile, bindgen, profile | B3h, §11 X16, B20 |
+| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
+| `-quick` | running a file, build, compile, test, profile | B2g, B20 |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp, profile | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
 
-`build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
-`-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
+`build`, `compile`, `bindgen` and `profile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
+`-html`) any number, `lsp` and `mcp` none; for running a file, for `interpret` and for `profile`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
 
@@ -6867,7 +6868,7 @@ only the text objects. What is printed is the same either way. `compile`, which 
 
 ### 10.2 Program entry
 
-**B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
+**B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
 no parameters and no success type - with no error set (`fn main() { ... }`), or one written (`fn main() ? SomeError
 [+ ...] { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
 a `ret-type`) is a compile-time error. There is no
@@ -7254,6 +7255,51 @@ bytes are shrunk - runs cut, bytes lowered - while it still fails; the smallest 
 `argument N: VALUE` line per parameter as `$` writes it, saved under `testdata/fuzz/SLUG/` (replayed first by every
 later run, as B19a's inputs are), and then run in the test itself, so the test fails as `f` does. Under `-fuzz` the
 fuzzer's input is the bytes of one case, run in the test's own process.
+
+### 10.10 Profiling
+
+**B20 (a profile build).** `profile FILE [ARGUMENT...]` builds the program FILE is the root of as `build` does (B3) - at
+`-O3` with link-time optimization, or as `-quick` says (B2g) - with three differences, which make its objects distinct
+artifacts (B4, named with `.prof`) and change nothing a program computes: every function keeps a frame pointer, set up
+on every path through it; the debug information holds each function's lines and its name (B20a), and nothing else; and
+the runtime's sampler is linked in. No other build holds any of the three - the sampler's code, its symbols, the frame
+pointers or the line tables - so a program costs nothing for being profilable. The program is then run with the
+arguments after FILE as its own (B3f), its standard streams and the status it ends with the mode's own - 128 and the
+signal for one that ends by a signal, as a shell says - and the mode writes its report (B20b). `interpret` is not
+profiled: its time is the evaluator's, not the program's.
+
+The sampler takes the CPU time of each thread the runtime runs - the program's, each task's worker (§6 P1e), each
+`os.RunOnStack` thread - in periods of one millisecond, by a timer of the thread's own CPU clock signalling that thread
+alone; at each period it records the thread's stack, walked by frame pointers from the instruction it interrupted up to
+the frame the thread started in, into a buffer reserved before the program starts, allocating and locking nothing. A
+signal the kernel delivers late stands for every period it folded in (a kernel ticking more slowly than the period
+gives fewer, heavier samples - their sum is the CPU time). A thread C code starts is not sampled, and a function C
+compiled without frame pointers (the C library) is seen but not its caller. The samples are written when the program
+ends - by returning from `main`, by `os.Exit` (B5b), by an error leaving `main`, by a failed check, or by `SIGINT`,
+`SIGTERM` or `SIGHUP` where nothing else handles it, which then ends the program as it would have - and not when it
+crashes; a process the program forks writes none.
+
+**B20a (names).** A function is named in a profile as source writes it outside its module: a module's function by the
+module's alias and its name (`io.Println`), a method by its receiver's type and its name (`check.Checker.Expr`,
+`Vec<I64>.Push` - the type written as `$` spells types), a constructor by its type, a destructor `T.destruct`, a lambda
+by the function it is written in (`main.lambda`), a global's initializer `NAME.init`; the root module's own and the
+prelude's are bare (`burn`, `Vec<I64>.Push`), as error names print (B5). A function inlined into another is still named
+for itself, at its own lines. What the compiler writes itself is named for what it is: the program's entry `startup`, a
+spawned call's trampoline `task`. A function of another language is named by its own symbol (`memcpy`); an address no
+symbol covers by the address and its file.
+
+**B20b (the report).** The report is written to the standard output after the program's own output, and holds: the
+samples, the CPU time they stand for and the threads sampled; the functions by **self** time - the samples landing in
+the function itself - with each one's **total** - the samples it is on the stack for, once each - as shares of all, the
+functions of at least half a percent of self time, at most 25; the **lines** by self time with their functions, at most
+15; and for the five hottest functions the functions they were called from, by share of their total. Then it writes a
+**flame graph** to `build/profile/NAME.html` (NAME the program's), or to `-output`'s PATH: one HTML file holding the
+stacks - the frame a thread started in at the bottom, each function over its caller, each frame as wide as its share of
+the samples, a frame's name and time its tooltip - and a script that zooms to a frame clicked, loading nothing from
+anywhere else. The samples themselves are kept in `build/profile/NAME.samples`. Names and lines are read from the
+build's debug information by `llvm-symbolizer` - beside the clang the build uses (a release's own, B12d), else on
+`PATH`; with none, functions are named by their addresses. Profiling what a program allocates, per site, is not part
+of the mode.
 
 ## 11. External Functions
 
