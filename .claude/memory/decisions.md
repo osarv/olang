@@ -1665,3 +1665,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the floored modulo's mathematical name (sign of the divisor; Haskell/Ada/Julia's rem vs mod). Built: integer methods
   `x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` beside `Div`/`Rem`; division by zero undefined as for `/`; prelude, so the
   evaluator computes them. Post-reset batch.
+- QBP 3 DECIDED 2026-10-27 (the user: "yes build it"): typed holes - `_` as an expression is a compile error naming the
+  type wanted there and the locals/globals in scope that fit (also through the LSP); a diagnostic only. Post-reset batch.
