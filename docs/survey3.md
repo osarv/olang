@@ -604,9 +604,9 @@ programs.
 
 **From:** Haskell (lazy memo tables), Python's `functools.cache`, Clojure's `memoize`.
 
-**In olang.** A `Map` is a handle, and a lambda's copy of one is a second name for the same Map (D16), so a std `Memo<K, V>` holding a Map and a
-function is a few lines: `m := memo.Of(fib)`, `try m.Get(40)`. A recursive function memoizing itself takes the memo
-as a parameter.
+**In olang.** A `Map` is a handle, and a lambda's copy of one is a second name for the same Map (D16), so a std
+`Memo<K, V>` holding a Map and a function is a few lines: `m := memo.Of(fib)`, `try m.Get(40)`. A recursive function
+memoizing itself takes the memo as a parameter.
 
 **Verdict: later** (std, small). No decorator syntax (survey 2, settled).
 
@@ -656,8 +656,7 @@ fun map(xs, f)
 
 **In olang.** Early freeing (O8d, free.olang) already releases a place's old value when the place lets go of it while
 it was its only holder. The next step is for the new value to be built *into* the storage just released when it has
-the same type: `n = rebalance(n)` on a tree node, an interpreter's `env = env.With(name, v)`, a state machine's
-`s = Step(s)`. Without it, the chunk pool reuses the memory but the program pays a release and an allocation, and
+the same type: `n = rebalance(n)` on a tree node, an interpreter's `env = env.With(name, v)`. Without it, the chunk pool reuses the memory but the program pays a release and an allocation, and
 copies the unchanged fields.
 
 **Fit.** No syntax: the compiler's optimization, unobservable but in time and memory (principle 1's "freeing early is
@@ -699,7 +698,8 @@ try stm.Atomically(fn(tx mut stm.Tx&) {
   lambda today. The facts of B1.1 could, and without them it would be a stated hole like a data race (P8b).
 - The log of reads and writes is a run-time cost, written at each use (`tx.Read`).
 
-**Cost.** Medium in std: a versioned-lock design (TL2), a retry loop, and the evaluator running tasks in sequence.
+**Cost.** Medium in std: a versioned-lock design (TL2) and a retry loop. The evaluator, which runs tasks in sequence,
+needs nothing.
 
 **Domains.** Servers, games and simulations with shared state.
 
@@ -1092,8 +1092,8 @@ and inlined under LTO both ways. Worth one example in the docs (a `rdtsc` and an
 **From:** Mojo (imports Python modules directly), Nim's nimpy, PyO3's embedding direction, Julia's PythonCall.
 
 **In olang.** Being called *from* Python is built (`build -library`, ctypes). The other direction is reachable today
-through a C import of `Python.h` (its macros are static inline functions, which C imports reach through wrappers). A std module would make it
-usable:
+through a C import of `Python.h` (its macros are static inline functions, which C imports reach through wrappers). A
+std module would make it usable:
 
 ```
 np := try py.Import("numpy")
@@ -1181,8 +1181,8 @@ clang flag plus a YAML reader.
 **From:** Haskell's Hoogle, Scala's and Rust's doc search by signature.
 
 ```
-$ olang doc -find "fn(String&) I64 ? TextError"
-std/prelude  String.ParseInt, String.Find ...
+$ olang doc -find "fn(String&) I64"
+std/prelude  String.Len, String.Hash ...
 ```
 
 **Verdict: later** (tooling, small on `doc`'s signatures).
