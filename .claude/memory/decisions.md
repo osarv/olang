@@ -1685,3 +1685,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   hover (`# effects: ...` - does nothing / writes through which parameters / allocates where / files, network, C /
   evaluable while compiling / may grow a Vec / blocks); "blocks" and "allocates" get summaries of their own (shared with
   item 9 later). Post-reset batch.
+- QBP 7 DECIDED 2026-10-27 (the user: "build it"): `olang explain -asm FILE NAME` / `-ir` - one function's code as the
+  build compiled it (-O3, LTO, from the build's objects) with LLVM's optimization remarks (vectorized or not and why,
+  inlined or not) mapped to olang lines through the profiler's line tables; -target/-quick/-define apply. Post-reset batch.
