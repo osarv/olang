@@ -27,4 +27,4 @@
 - Records: CLAUDE.md entries (Syntax and statements), PRINCIPLES.md three-way rule, HISTORY.md section, SPEC E40/S17a/S21.
 
 ## Next
-- make quick, then goldens (tokgold astgold layoutgold diaggold), then one full verify.
+- Done: goldens recaptured (fd5ca95), full verify passed on fd5ca95. Ready to merge.
