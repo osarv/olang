@@ -287,9 +287,13 @@ valid token starting at the current position):
 ++  --  !
 ==  !=  =>
 <  <=  >  >=
-&  |  ^  ~  <<  >>
+&  |  ^  ~  <<  >>  @
 (  )  [  ]  {  }
 ```
+
+`@` is the matrix product's operator (E31's `MatMul`) between two operands, and begins an attribute (G39) where no
+operand stands before it - and wherever it begins a line, as `if` does (L18b): it never continues an expression from the
+line before.
 
 `and`, `or` and `xor` (keywords, L9) are the boolean and/or/exclusive-or operators, and `not` is boolean negation
 (E7a); `&`, `|`, `^`, `~`, `<<`, `>>` are the bitwise operators. The logic words have no compound assignment. There is no ternary conditional operator, no null/optional-coalescing operator,
@@ -780,7 +784,7 @@ An enum may declare type parameters, its payloads then written over them (§12.3
 
 ```
 enum-body ::= "enum" [ type-ref ] "{" list(case-decl) "}"
-case-decl   ::= IDEN [ "(" param-list ")" | type-ref ] [ "=" expr ]
+case-decl   ::= { attribute } IDEN [ "(" param-list ")" | type-ref ] [ "=" expr ]      (attribute: G39)
 ```
 
 (The `type-ref` after `enum` and the `= expr` are T17e's.)
@@ -1652,6 +1656,8 @@ top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-
            | extern-decl | export-func-decl | top-if
 ```
 
+A `type-decl`, a `func-decl` and an `export-func-decl` may be preceded by attributes (§12.8 G39).
+
 `import-decl` is specified in §4; `test-decl` in
 §10.4; `extern-decl` and `export-func-decl` in §11 (X1, X10, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
@@ -1739,7 +1745,7 @@ a method, whatever its first parameter's type.
 
 ```
 param-list      ::= list(param)                         (L18a)
-param           ::= IDEN type-expr [ "=" expr ]
+param           ::= { attribute } IDEN type-expr [ "=" expr ]   (attribute: G39 - not on a receiver)
 ret-type        ::= result { "," result }                (on one line; several results, D8c)
 result          ::= type-expr
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
@@ -5317,7 +5323,8 @@ calls), an operator's operands (`try a.Get(k) + b.Get(k)`) - but not inside a la
 function of its own, and not what a `try` or a `!` inside it covers: **every `try` covers something no `try` within it
 covers**, so `try (try f()) + 1` is an error at the outer one. A `try` covering nothing that can fail is a compile-time
 error - except in a generic's body
-(G16), where what a call can fail with may differ between instantiations (R1a): there a `try`, and a clause naming
+(G16), or a walk unrolled over a list known while compiling (G33, checked once per element), where what a call can
+fail with may differ between instantiations (R1a) or copies: there a `try`, and a clause naming
 an error, may cover nothing in one instantiation and something in another, and covers nothing where it covers
 nothing. `try` never turns a check on:
 an index, a slice, arithmetic and a conversion under `try` behave exactly as written without it; a check is a call that
@@ -5460,7 +5467,8 @@ block and control continues after the statement; an error no clause names propag
 **R20.** The language checks nothing at run time that a program does not ask for by a call that can fail (E15a), so it
 raises no error of its own but these, each declared in the prelude as an ordinary error type: `CaseError.WRONG_CASE`
 from an `as` that does not hold (E32), `CaseError.NO_CASE` from an enum's `From` (T17e), `Exhausted.END` from an
-iterator that has run out (S9a), and `ArgumentError.INVALID` from a call whose requirement is false (D17). The methods
+iterator that has run out (S9a), `ArgumentError.INVALID` from a call whose requirement is false (D17), and
+`AttrError.MISSING` from `x.Attr<A>()` on a declaration with no attribute of type `A` (G40). The methods
 it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OUT_OF_RANGE` (E16d, E16c), an array's `Min` and `Max` with
 `ArrayError.EMPTY` (E39), and `Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
 `catch` names it, or one of its words.
@@ -6377,6 +6385,9 @@ IDEN [ "mut" ] ":=" expr           # inferred: type read from expr, as D15 reads
 IDEN type-expr [ "=" expr ]        # explicit type, optional initializer
 IDEN                               # bare pun (§9.2) — valid only when no type/initializer follows
 ```
+
+The first two may be preceded by attributes (G39); a pun has its parameter's (G34), and attributes written on one are
+a compile-time error naming the parameter.
 
 A field's declared type (explicit, or inferred by `:=`) may carry a reference marker (T24): bare, or
 naming a parameter or an earlier field of this same constructor (C2d). An inferred field's type is part of the type's
@@ -8129,6 +8140,7 @@ variable, or a type G38 names - these members are read with a `.`, alongside a n
   function type's; a function type's results. A struct, an enum and a function type have the lists that apply to
   them; asking another is an error naming what it has (`T.Fields` on an enum names `T.Cases`).
 - `T.Errors` - a function type's error set, written only where an error set is (R1b): `fn call<F>(f F) I64 ? F.Errors`.
+- `T.Methods` - a list (G33) of the type's methods (G41); `T.Attr<A>()` and `T.HasAttr<A>()` its attributes (G40).
 
 Any other name is an error listing these. Members of a generic type are read of an instance: `Tree<I64>.Cases`.
 
@@ -8166,6 +8178,11 @@ constant there. Each has its members, and asking another is an error listing the
   type's parameter has no name of its own (T22, G16a: two function types differing only in their parameters' names are
   one type), so its `p.Name` is `""`.
 - A result: `r.Type`.
+- A function (G41): `f.Name`, `f.Type` (its function type, a method's receiver first), `f.Params` and `f.Results`
+  (lists, G33 - a method's parameters past its receiver, named and defaulted as declared), `f.Errors` (an error set,
+  written where one is, as `T.Errors` is), and `f(args)`, which calls it.
+
+A field, a case, a parameter and a function also have `x.Attr<A>()` and `x.HasAttr<A>()` (G40).
 
 **Visibility.** A list holds only the members the module whose code reads it may see (M6a): a struct's private fields
 (lowercase) are in `T.Fields` only in the module declaring the type, and in a generic only where the generic is
@@ -8228,6 +8245,78 @@ fn build<T>(k I64) T { return T(arg(p, k) for p in T.Params) }
 result, a type argument, a `match`'s subject) and is a type of the instance it is read in (a result written `P.Type` is
 each instance's own). It is no value: written where a value goes it is an error naming the declaration form. One that
 does not exist (`I64.Element`) is an error where it is written, saying why.
+
+**G39 (attributes).** An **attribute** is a value of a declared type written on a declaration, data a library reads by
+reflection (G40) - the compiler gives none a meaning, and nothing compiles otherwise because of one:
+
+```
+attribute ::= "@" alias-chain IDEN [ type-args ] [ "(" arg-list ")" ]     (no space inside it)
+```
+
+It stands before a type's declaration (D4), a function or a method (D7), an enum's case (T17), a constructor's field
+(C2) or a parameter of a function, a method or a constructor (D8) - on lines of its own above the declaration, or before
+it on its line - and nowhere else (a local, a global, a lambda's parameter, a receiver: an error):
+
+```
+@json.Naming.Snake
+type User struct(@json.Key("id") UserID I64, @json.Skip Cache I64 = 0) {
+    UserID, Cache
+}
+@Route("/users") fn Users(r Request&) Response { ... }
+```
+
+- Its value is that of `T(args)` - a constructor's call (C1), a declared number type's conversion (T29a) or an enum's
+  case (`@Level.High`, `@Tag("x")`); written with no arguments, `@json.Skip` is the constructor called with none, `@Level.Low`
+  the case. Its type is a struct, an enum or a declared number type a program declares (§2.4, §2.5, T29), never a
+  built-in one nor the prelude's (`@I64(3)`, `@"x"` are errors): an attribute is found by its type, and only a library's
+  own type says what one means. A declaration has at most one attribute of each type (a second is an error).
+- It is checked where it is written as a global's initializer is, in its module's context - so it reads globals and
+  constants, never a declaration's own parameters or type variables - and **built while compiling** (K1): a value the
+  evaluator cannot build is a compile-time error saying why, and what its building can fail with (a constructor's
+  requirement, D17) ends it as `!` does (E35) - a constructor's requirement known false is D17e's error at it.
+- It costs nothing at run time: its value is constant data (K2), read only where a reflection reads it.
+
+**G40 (reading attributes).** On a type `T` (G32) or a descriptor `x` of a field, a case, a parameter or a function
+(G34, G41):
+
+- `x.Attr<A>()` is the attribute of type `A` the declaration has, as a call failing with the prelude's
+  `AttrError.MISSING` where it has none: `key := try f.Attr<json.Key>() catch default json.Key(f.Name)`. It is a call
+  that can fail as written, whichever the compiler finds, so code reading it is the same for every member it walks.
+- `x.HasAttr<A>()` is whether it has one, a `Bool` known while compiling: it decides an `if`, a conditional and an
+  `assert` per member as G35 says, so a branch reading what only some members have is checked only for them (`if
+  f.HasAttr<Route>() { r := f.Attr<Route>()! ... }`).
+
+Where they are read: a type's own attributes on `T`; a struct's field's on its descriptor, a pun field's being its
+parameter's (C2a: the pun is the parameter stored); an enum's case's, and its payload's fields' (the parameters of its
+field list); a struct's one case's are its type's; a constructor's parameter's on `T.Params`'s descriptors; a function's
+and its parameters' (G41). A function type's parameters, a result and an error value's words have none. In a walk
+unrolled over a list (G33), as in a generic's body, a `try` or a `!` covering nothing in one copy is no error (R8, E35):
+the copies differ as instances do.
+
+**G41 (functions reflected).** Two lists (G33) hold functions, each element a function's descriptor (G34):
+
+- `alias.Functions`, after an import's alias (or a chain of them, M8): the plain functions the module declares, in
+  order - not its methods, externs or generic functions (one of those has no single type) - and of another module only
+  the exported ones (M6). A module reads its own, private ones included, through an import of itself (`import me
+  "main"`, `me.Functions`). A module declaring a name `Functions` has that name there instead.
+- `T.Methods`: the methods declared with `T` as their receiver that apply to it (M21), in order - not a trait's
+  defaults nor a method with a type list of its own - another module's private ones left out; of an instance
+  (`Box<I64>.Methods`), with the instance's types.
+
+Calling a descriptor, `f(args)`, is the call its name would be - defaults, named arguments, errors and all; a
+method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A descriptor names its function by its
+module, its receiver's type and its name, so an instance a descriptor is an argument of is the same one in every
+compilation. A table collected while compiling:
+
+```
+fn routes() Map<String&, fn(r Request&) Response> {
+    m := Map<String&, fn(r Request&) Response>()
+    for f in handlers.Functions {
+        if f.HasAttr<Route>() { m.Put((f.Attr<Route>()!).Path, fn(r Request&) Response { return f(r) }) }
+    }
+    return m
+}
+```
 
 ## 13. Compile-time evaluation
 
