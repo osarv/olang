@@ -1,0 +1,7 @@
+# check: fail error[S21]: 'become' ends a function declared with fn, never a lambda or a generator's body - write 'return' and the call
+# S21: a lambda's code has an environment a named function's has not - no jump between them
+fn f(n I64) I64 { return n }
+fn main() {
+    g := fn(n I64) I64 { become f(n) }
+    assert g(1) == 1
+}

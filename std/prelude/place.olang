@@ -1,0 +1,13 @@
+# a place in the program's source (E40): its file, as the compiler's diagnostics write it, and its line and column,
+# from 1. "Place.Here" is the place where it is written; written as a parameter's default it is the place of the call
+# that leaves the argument off (D8a: a default is built per call), so a helper reports its caller's line:
+#
+#     fn expectEq(got I64, want I64, at Place = Place.Here) {
+#         if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+#     }
+type Place struct(File String&, Line I64, Column I64) {
+    File, Line, Column
+}
+
+# "FILE:LINE:COLUMN", as a diagnostic names a place
+fn (p Place) Str() String { return $p.File ":" $p.Line ":" $p.Column }

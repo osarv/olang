@@ -1,0 +1,6 @@
+# check: fail error[S21]: 'become' takes the call alone - what it fails with is the function's own, so write it without 'try'
+# S21: a become's call fails as the function does, so it takes no try
+type E error { X }
+fn g(n I64) I64 ? E { return n }
+fn f(n I64) I64 ? E { become try g(n) }
+fn main() { assert f(1)! == 1 }

@@ -1,0 +1,4 @@
+# check: fail error[S21]: 'become' takes a call of a function or a method declared with fn, and this is no call - write 'return' instead
+# S21: become takes a call
+fn f(n I64) I64 { become n + 1 }
+fn main() { assert f(1) == 2 }

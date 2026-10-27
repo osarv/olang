@@ -47,6 +47,10 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
   all errors.
 - **Nothing is uninitialized, nothing is narrowed by accident.** Every value starts as something its type allows. A
   number widens implicitly where nothing is lost and narrows only when written (`I32(x)`). There is no shadowing.
+- **Keywords are syntax; what the compiler knows is read through a name; attributes are library data.** A keyword is
+  control flow or a declaration (`become`, `yield`, `defer`); a fact the compiler supplies is read through the name it
+  belongs to - a value's supplied methods, a type's namespace (`I64.Max`, `T.Fields`, `Place.Here`); an attribute
+  (`@json.Key("id")`) means nothing to the compiler and is read only by reflection.
 - **Explicit where a cost or a hazard would otherwise be invisible; implicit where nothing is lost.** Borrowing,
   numeric widening and a literal adapting to its target are implicit. Copies of arrays, checks and synchronisation are
   written.

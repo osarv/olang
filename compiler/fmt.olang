@@ -478,7 +478,22 @@ fn (f formatter&) receiver(j I64, r I64) Bool {
     }
     if q + 2 >= f.real.Len() { return false }
     name := f.real[q + 1]
-    return (f.kind(name) == token.Tok.Iden or f.keyword(name)) and f.kind(f.real[q + 2]) == token.Tok.LParen
+    if not (f.kind(name) == token.Tok.Iden or f.keyword(name)) { return false }
+    # a method's own type parameters (QW) between its name and its parameters: "fn (p T&) Read<Q>(...)"
+    at := q + 2
+    if f.kind(f.real[at]) == token.Tok.Lt {
+        open I64 = 0
+        for at < f.real.Len() {
+            k := f.kind(f.real[at])
+            if k == token.Tok.Lt { open++ }
+            if k == token.Tok.Gt { open-- }
+            if k == token.Tok.Shr { open -= 2 }
+            at++
+            if open <= 0 { break }
+        }
+        if at >= f.real.Len() { return false }
+    }
+    return f.kind(f.real[at]) == token.Tok.LParen
 }
 
 # whether the "(" at index o opens a parameter list - one after "fn", "fn NAME" or "fn (...) NAME": 1; perhaps - a name

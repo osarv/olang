@@ -1,0 +1,6 @@
+# check: fail error[E40]: Place gives no 'There' through its name - 'Place.Here' is the place where it is written
+# E40: Place gives only Here through its name - it is no field, and nothing else is read so
+fn main() {
+    p := Place.There
+    assert p.Line > 0
+}

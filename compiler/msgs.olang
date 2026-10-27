@@ -771,6 +771,19 @@ type Diag enum {
     GlobalsCycle
     ModuleIdentityClash
     NoLimit
+    BecomeOutside
+    BecomeInside
+    BecomeTry
+    BecomeNotCall
+    BecomeSignature
+    BecomeMemory
+    BecomeErrors
+    BecomeDestructor
+    BecomeBorrows
+    TopAssertFalse
+    TopAssertFalseMessage
+    TopAssertUndecidable
+    PlaceMember
     BitOpNotInteger
     BitOpCount
     RawType
@@ -2381,6 +2394,44 @@ fn MethodNotInherited(ty String&, tok String&) Msg { return Msg(Diag.MethodNotIn
 
 # a name read through a number type that is none of its limits (E36), or a limit of a type that is no number
 fn NoLimit(ty String&, name String&, tail String&) Msg { return Msg(Diag.NoLimit, "E36", $ty " has no limit '" $name "'" $tail) }
+
+# become where no jump can stand (S21): a test, a constructor, a lambda, main ...
+fn BecomeOutside(where String&) Msg { return Msg(Diag.BecomeOutside, "S21", "'become' ends a function declared with fn, never " $where " - write 'return' and the call") }
+
+# become inside what may not be left so (S21)
+fn BecomeInside(what String&) Msg { return Msg(Diag.BecomeInside, "S21", "'become' leaves the function at once, so not from " $what " - write 'return' and the call") }
+
+# become try f(x) (S21)
+fn BecomeTry() Msg { return Msg(Diag.BecomeTry, "S21", "'become' takes the call alone - what it fails with is the function's own, so write it without 'try'") }
+
+# become given what is no call of a function (S21)
+fn BecomeNotCall(what String&) Msg { return Msg(Diag.BecomeNotCall, "S21", "'become' takes a call of a function or a method declared with fn, and this is " $what " - write 'return' instead") }
+
+# become calling a function of another signature (S21)
+fn BecomeSignature(have String&, callee String&) Msg { return Msg(Diag.BecomeSignature, "S21", "'become' calls a function of this one's own signature, and this is " $have ", the callee " $callee " - write 'return' and the call, or give them one signature") }
+
+# become with a parameter or result through memory (S21)
+fn BecomeMemory() Msg { return Msg(Diag.BecomeMemory, "S21", "'become' cannot jump where a parameter or the result is over 128 bytes, passed through memory the function's frame holds - pass a reference, or write 'return'") }
+
+# become whose callee fails otherwise (S21)
+fn BecomeErrors(have String&, callee String&) Msg { return Msg(Diag.BecomeErrors, "S21", "'become' makes the callee's failure this function's own, and this one fails with " $have ", the callee with " $callee " - give them one error set, in one order, or write 'return try' and the call") }
+
+# become in a function holding what has a destructor (S21, O16)
+fn BecomeDestructor(what String&) Msg { return Msg(Diag.BecomeDestructor, "S21", "'become' closes this function's scopes before the call, and " $what " whose destructor would run then, before the call - write 'return' and the call") }
+
+# become handing the callee storage of a scope it closes (S21, section 8)
+fn BecomeBorrows() Msg { return Msg(Diag.BecomeBorrows, "S21", "'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'") }
+
+# a top-level assert decided false while compiling (S17a), with its message where that computes too
+fn TopAssertFalse() Msg { return Msg(Diag.TopAssertFalse, "S17a", "this top-level assert is false, decided while compiling") }
+
+fn TopAssertFalseMessage(text String&) Msg { return Msg(Diag.TopAssertFalseMessage, "S17a", "this top-level assert is false, decided while compiling: " $text) }
+
+# a top-level assert the evaluator cannot decide (S17a): it holds of the program while compiling, or is no assert there
+fn TopAssertUndecidable(why String&) Msg { return Msg(Diag.TopAssertUndecidable, "S17a", "a top-level assert is decided while compiling, and this one cannot be: " $why " - assert it in a function or a test, where it is checked at run time") }
+
+# a name read through Place that is not Here (E40)
+fn PlaceMember(name String&) Msg { return Msg(Diag.PlaceMember, "E40", "Place gives no '" $name "' through its name - 'Place.Here' is the place where it is written") }
 
 # a bit operation on what is no integer (E37)
 fn BitOpNotInteger(name String&, ty String&) Msg { return Msg(Diag.BitOpNotInteger, "E37", "'" $name "' is a method of the integer types, and " $ty " is none") }

@@ -1,0 +1,64 @@
+# E40: Place.Here - the place it is written, and, as a parameter's default, the place of the call leaving it off.
+# Each test holds the run time to what the compile-time evaluator bakes (K2) and decides (S18c)
+import "std/io"
+
+fn here(at Place = Place.Here) Place { return at }
+
+# a default's own call leaving its argument off is the outer call's place
+fn outer(at Place = here()) Place { return at }
+
+# a call in a body, not in a default: the place in that body
+fn inBody() Place { return here() }
+
+type Probe struct(n I64, at Place = Place.Here) {
+    n, at
+}
+
+fn (p Probe) Seen(at Place = Place.Here) Place { return at }
+
+fn pick<T>(x T, at Place = Place.Here) Place { return at }
+
+# baked while compiling (K2): the evaluator builds the same Place the run time does
+BakedHere Place = here()
+BakedWritten Place = Place.Here
+
+test "Place.Here is where it is written" {
+    p := Place.Here
+    assert p.Line == 26 and p.Column == 10
+    assert p.File.EndsWith("place.olang")
+    assert $p == $p.File ":26:10"
+}
+
+test "a default Place.Here is the call's place" {
+    a := here()
+    assert a.Line == 33 and a.Column == 10
+    b := outer()
+    assert b.Line == 35 and b.Column == 10
+    assert inBody().Line == 11
+    assert Probe(1).at.Line == 38 and Probe(1).at.Column == 39
+    q := Probe(2)
+    assert q.at.Line == 39 and q.Seen().Line == 40 and q.Seen().Column == 58
+    assert pick(3).Line == 41 and pick("x").Line == 41 and pick(3).Column == 60
+}
+
+test "an argument given is the caller's value" {
+    assert here(Place.Here).Line == 45 and here(Place.Here).Column == 49
+    assert here(at = BakedWritten) == BakedWritten
+    assert here(default).Line == 47
+}
+
+test "baked and run time agree" {
+    assert BakedHere.Line == 22 and BakedWritten.Line == 23 and BakedWritten.Column == 22
+    now := here()
+    assert now.File == BakedHere.File
+    assert $BakedHere == $BakedHere.File ":22:19"
+}
+
+test "Place renders and compares as its fields" {
+    a := here()
+    b := here()
+    assert a != b and a.File == b.File and a.Line + 1 == b.Line
+    c := Place(a.File, a.Line, a.Column)
+    assert c == a and c.Hash() == a.Hash()
+    io.Println("place: " $a)!
+}

@@ -60,6 +60,7 @@ type Tok enum {
     Xor
     Not
     Yield
+    Become
     # operators and punctuation (L16)
     Plus
     Minus
@@ -179,6 +180,7 @@ fn (k Tok) Text() String& {
         case Tok.Xor => "xor"
         case Tok.Not => "not"
         case Tok.Yield => "yield"
+        case Tok.Become => "become"
         case Tok.NullLit => "null"
         case Tok.Plus => "+"
         case Tok.Minus => "-"
@@ -255,7 +257,10 @@ fn Keyword(t String&, at I64, n I64) Tok {
             if n == 3 and spells(t, at, "and") { return Tok.And }
             if n == 6 and spells(t, at, "assert") { return Tok.Assert }
         }
-        case 'b' { if n == 5 and spells(t, at, "break") { return Tok.Break } }
+        case 'b' {
+            if n == 5 and spells(t, at, "break") { return Tok.Break }
+            if n == 6 and spells(t, at, "become") { return Tok.Become }
+        }
         case 'c' {
             if n == 4 and spells(t, at, "case") { return Tok.Case }
             if n == 5 and spells(t, at, "catch") { return Tok.Catch }
@@ -342,7 +347,7 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
-                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.NullLit] {
+                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.NullLit] {
         w := k.Text()
         assert Keyword(w, 0, w.Len()) == k, "keyword " $w
     }

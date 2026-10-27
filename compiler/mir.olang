@@ -156,7 +156,7 @@ type VarKind enum {
 
 # ---- places ----
 
-# where a place starts: a local, or a global by its module and name, with its type; None in an unused Place
+# where a place starts: a local, or a global by its module and name, with its type; None in an unused Lvalue
 type Base enum {
     None
     Local(l LocalId)
@@ -174,12 +174,12 @@ type Proj enum {
 }
 
 # storage, named: a base and its projections, f.Projs[Proj.At ..]
-type Place struct(B Base, Path Range) {
+type Lvalue struct(B Base, Path Range) {
     B
     Path
 }
 
-NoPlace Place = Place(Base.None, Empty)
+NoPlace Lvalue = Lvalue(Base.None, Empty)
 
 # ---- operands and values ----
 
@@ -188,7 +188,7 @@ type Operand enum {
                                            # into a local (Assign(L, Use(None))), the local is set and nothing is
                                            # written - its storage left as it is, every path writing it before a read
                                            # (D13d, D14d)
-    Copy(p Place)                          # the place's value, copied
+    Copy(p Lvalue)                          # the place's value, copied
     Const(ty types.TypeId, bits I64)       # a number, Bool or Char as its bits, null all zero bits; an aggregate's
                                            # zero bits (D13c's all-zero zero value)
     # read-only constant storage (T25d): f.Consts[c], one instance for each written position, file and span (E10c,
@@ -199,14 +199,14 @@ type Operand enum {
 # a value computed, of one statement. Operands are in f.Ops[args.At ..], evaluated before the value is
 type Rvalue enum {
     Use(x Operand)
-    Ref(p Place, ty types.TypeId)                  # a reference to the place itself (E12c), of type ty
-    Take(p Place)                                  # the owner p holds, moved out, null left in p (E34)
+    Ref(p Lvalue, ty types.TypeId)                  # a reference to the place itself (E12c), of type ty
+    Take(p Lvalue)                                  # the owner p holds, moved out, null left in p (E34)
     Prim(op typed.PrimOp, ty types.TypeId, args Range)       # an operation, unchecked (E6c), of result type ty
     # whether op over args, of result type ty, has a true result that does not fit ty: integer + - * and unary -,
     # / of the most negative value by -1, a narrowing or a float-to-integer conversion (a NaN or an infinity among
     # those) - E15a's OVERFLOW, tested before the operation runs
     Overflows(op typed.PrimOp, ty types.TypeId, args Range)
-    Tag(p Place)                                   # the case an enum value holds, as an I64 (S13)
+    Tag(p Lvalue)                                   # the case an enum value holds, as an I64 (S13)
     # a value made of its parts: a struct (a constructor's assembly, C6), a tuple (D8c), a record, an enum case
     # (tag its case, args its payload's fields), a fixed array (T7c)
     Aggregate(ty types.TypeId, tag I64, args Range)
@@ -214,7 +214,7 @@ type Rvalue enum {
     # an array value of type ty - its storage n elements in s, each fill (Array<T>(n, fill), D14; an array literal's
     # storage, E19; a comprehension's, E27). n's range is checked before (D14b)
     NewArray(s ScopeRef, ty types.TypeId, n Operand, fill Operand)
-    Slice(p Place, lo Operand, hi Operand, ty types.TypeId)   # p's elements lo up to hi, a reference ty (E16a)
+    Slice(p Lvalue, lo Operand, hi Operand, ty types.TypeId)   # p's elements lo up to hi, a reference ty (E16a)
     # a function value (T21) of type ty: code with an environment in s holding args, its captures in order (D16c), or
     # an adapter's instance (E31); a named function's value has no environment (args empty, s Frame). Where ty's
     # scopes differ from code's own, the value adapts them (DESIGN.md 1.6.1, T22a). caps (in Refs) are where the
@@ -252,7 +252,7 @@ type WriteKind enum {
 type Stmt enum {
     # p's place - its projections' indices, evaluated before - is written with the value (S4): a store into an own
     # slot is preceded by its Release where the slot held one (O35)
-    Assign(sp source.Span, p Place, v Rvalue)
+    Assign(sp source.Span, p Lvalue, v Rvalue)
     Live(sp source.Span, l LocalId)    # l's storage is made: in its Home's arena where it has one; not initialized
     Dead(sp source.Span, l LocalId)    # l's storage ends; it is not read again until a Live and a store
     Open(sp source.Span, s ScopeId)    # s opens, inside the scope opened last that is still open (its Parent)
@@ -262,11 +262,11 @@ type Stmt enum {
     Give(sp source.Span, s ScopeId)    # region s now belongs to the owner just stored: no longer this function's
     RegisterDtor(sp source.Span, s ScopeRef, t types.TypeId, x Operand)   # the instance x refers to, a t, destructed
                                                                           # when s closes (O16)
-    RegisterOwner(sp source.Span, s ScopeRef, p Place)    # the owner slot p released when s closes, if it holds one:
+    RegisterOwner(sp source.Span, s ScopeRef, p Lvalue)    # the owner slot p released when s closes, if it holds one:
                                                           # an owner local (O35), a hold (F3), a result in flight (N3)
-    Release(sp source.Span, p Place)   # the object the own slot p holds, if any, released, and p left null (O35)
+    Release(sp source.Span, p Lvalue)   # the object the own slot p holds, if any, released, and p left null (O35)
     Write(sp source.Span, b ScopeRef, how WriteKind, x Operand)    # x appended to the text builder b (E11a)
-    CopyElems(sp source.Span, dst Place, src Place, n Operand)     # n elements of array src into array dst, from 0
+    CopyElems(sp source.Span, dst Lvalue, src Lvalue, n Operand)     # n elements of array src into array dst, from 0
     Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
     Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
     # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
@@ -285,6 +285,9 @@ type Term enum {
     Switch(x Operand, cases Range, otherwise BlockId)   # f.Cases[cases.At ..]: x an integer, each value distinct
     Call(sp source.Span, c I32)                 # f.Calls[c]
     Return(sp source.Span, x Operand)           # x the result (None for a function with none); every scope closed
+    # a become's call (S21): f.Calls[c], made in the function's place once every scope is closed - its result and its
+    # failure the function's own (one signature, one error set). The call has no destination and no blocks after it
+    Tail(sp source.Span, c I32)
     Raise(sp source.Span, code Operand)         # the function fails with code, under its own error list (R6)
     # join j's tasks waited for (P1b): to ok, or, where one let an error through, to failed with code holding the
     # earliest-spawned's under the join's list (P4b) - failed NoBlock for a join none of whose tasks can fail
@@ -351,7 +354,7 @@ type Callee enum {
 # (HasDest false: dropped), the block it continues at, and for a fallible callee the local its error code is put in -
 # under the callee's own error list (R6) - and the block that dispatches it (Err NoBlock for an infallible one).
 # Arguments are evaluated before the terminator, left to right (S4): an operand here is already a value
-type Call struct(Target Callee, Args Range, Scopes Range, Dest Place, HasDest Bool, Ok BlockId, Code LocalId
+type Call struct(Target Callee, Args Range, Scopes Range, Dest Lvalue, HasDest Bool, Ok BlockId, Code LocalId
                  Err BlockId) {
     Target
     Args
@@ -430,7 +433,7 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     Projs Vec<Proj>
     Ops Vec<Operand>
     Refs Vec<ScopeRef>
-    Places Vec<Place>
+    Places Vec<Lvalue>
     Calls Vec<Call>
     Cases Vec<Case>
     Tasks Vec<Task>
@@ -502,13 +505,13 @@ fn (f mut Fn&) End(b BlockId, t Term) { f.Blocks[I64(b)].T = t }
 fn (f Fn&) TermOf(b BlockId) Term { return f.Blocks[I64(b)].T }
 
 # a place: a local, or a base and its projections
-fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Place {
+fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Lvalue {
     at := f.Projs.Len()
     for p in projs { f.Projs.Push(p) }
-    return Place(base, Range(I32(at), I32(projs.Len())))
+    return Lvalue(base, Range(I32(at), I32(projs.Len())))
 }
 
-fn L(l LocalId) Place { return Place(Base.Local(l), Empty) }
+fn L(l LocalId) Lvalue { return Lvalue(Base.Local(l), Empty) }
 
 fn (f mut Fn&) Args(xs Array<Operand>&) Range {
     at := f.Ops.Len()
@@ -533,7 +536,7 @@ fn (f mut Fn&) AddCases(cs Array<Case>&) Range {
     return Range(I32(at), I32(cs.Len()))
 }
 
-fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Place>&, clauses Array<TaskClause>&
+fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Lvalue>&, clauses Array<TaskClause>&
                        ends Range = Range(0, 0), endsSp source.Span = source.Span(0, 0), copies Range = Range(0, 0)) I32 {
     at := f.Places.Len()
     for p in targets { f.Places.Push(p) }
@@ -716,7 +719,7 @@ fn (v mut verifier&) shape() Bool {
         v.ops(c.Args)
         v.refs(c.Scopes)
         if c.HasDest { v.place(c.Dest) }
-        v.block(c.Ok)
+        if c.Ok != NoBlock { v.block(c.Ok) }     # NoBlock only for a become's call (Term.Tail)
         if c.Err != NoBlock {
             v.block(c.Err)
             v.local(c.Code)
@@ -828,7 +831,7 @@ fn (v mut verifier&) refs(r Range) {
     v.within(r, v.F.Refs.Len(), "scopes")
 }
 
-fn (v mut verifier&) place(p Place) {
+fn (v mut verifier&) place(p Lvalue) {
     match p.B {
         case Base.Local(l) { v.local(l) }
         case Base.None { v.bad("a place with no base") }
@@ -943,7 +946,7 @@ fn (v mut verifier&) termShape(t Term) {
             v.within(r, v.F.Cases.Len(), "cases")
             v.block(o)
         }
-        case Term.Call(_, c) {
+        case Term.Call(_, c), Term.Tail(_, c) {
             if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " $c) }
         }
         case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { v.operand(x) }
@@ -1127,7 +1130,7 @@ fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId, Bool {
 fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l)].Ty }
 
 # a place's type, its projections followed; Unknown, said, where one does not apply
-fn (v mut verifier&) placeType(p Place) types.TypeId {
+fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
     t := v.T
     ty := match p.B {
         case Base.Local(l) => v.localType(l)
@@ -1657,6 +1660,14 @@ fn (v mut verifier&) termTypes(term Term) {
             if not fallible and c.Err != NoBlock { v.bad("an error edge for a call that cannot fail") }
             if c.Err != NoBlock { v.intOf(v.localType(c.Code), I32T, "the call's error code") }
         }
+        case Term.Tail(_, k) {
+            c := f.Calls[I64(k)]
+            ty := v.calleeType(c.Target)
+            if ty == types.UnknownT { return }
+            v.args(c.Target, ty, c.Args, c.Scopes)
+            if c.HasDest or c.Ok != NoBlock or c.Err != NoBlock { v.bad("a tail call with somewhere to go after it") }
+            if not t.Same(t.Result(ty), t.Result(f.Ty)) { v.bad("a tail call giving another result than the function's") }
+        }
         case Term.Return(_, x) {
             res := t.Result(f.Ty)
             if x == Operand.None {
@@ -1826,7 +1837,7 @@ fn (v mut verifier&) reads(x Operand) {
     }
 }
 
-fn (v mut verifier&) readPlace(p Place) {
+fn (v mut verifier&) readPlace(p Lvalue) {
     match p.B {
         case Base.Local(l) { v.used(l) }
         case _ { }
@@ -1849,7 +1860,7 @@ fn (v mut verifier&) readArgs(r Range) {
 
 # a store's place: a local is initialized by a whole store, and one stored into through a projection must hold its
 # value already; an arena local must be live
-fn (v mut verifier&) stores(p Place) {
+fn (v mut verifier&) stores(p Lvalue) {
     match p.B {
         case Base.Local(l) {
             if not v.live[I64(l)] { v.bad("L" $l " stored into with no storage: its Live not reached") }
@@ -2052,6 +2063,13 @@ fn (v mut verifier&) termFlow(term Term) {
             if c.HasDest { v.stores(c.Dest) }
             v.enter(c.Ok)
         }
+        case Term.Tail(_, k) {
+            c := f.Calls[I64(k)]
+            v.calleeReads(c.Target)
+            v.readArgs(c.Args)
+            for i in range c.Scopes.N { v.usesScope(f.Refs[I64(c.Scopes.At) + i]) }
+            if v.stack.Len() > 0 { v.bad("jumps out of the function with " $v.stackText() " open") }
+        }
         case Term.Return(_, x), Term.Raise(_, x) {
             v.reads(x)
             if v.stack.Len() > 0 { v.bad("leaves the function with " $v.stackText() " open") }
@@ -2162,7 +2180,7 @@ fn (w mut dumper&) ref(s ScopeRef) String {
     }
 }
 
-fn (w mut dumper&) place(p Place) String {
+fn (w mut dumper&) place(p Lvalue) String {
     out := StringBuilder()
     match p.B {
         case Base.None { out.Push("_") }
@@ -2300,6 +2318,7 @@ fn (w mut dumper&) term(term Term) String {
         case Term.Branch(c, y, n) => "branch " $w.operand(c) " bb" $y " bb" $n
         case Term.Switch(x, r, o) => "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
         case Term.Call(_, k) => w.call(f.Calls[I64(k)])
+        case Term.Tail(_, k) => "become " $w.call(f.Calls[I64(k)])
         case Term.Return(_, x) => "return" $(" " $w.operand(x) if x != Operand.None else "")
         case Term.Raise(_, x) => "raise " $w.operand(x)
         case Term.Suspend(_, x, b, held) => "suspend " $w.operand(x) " then bb" $b " holding " $held.N
@@ -2603,7 +2622,7 @@ test "a malformed function: every malformation is caught" {
     unit := t.Func(types.ListId(0), types.VoidT, types.ListId(0))
     f21 := addFn(t)
     j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
-    k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
+    k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
     try f21.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j21))
     try f21.Blocks[0].Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
     try f21.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, j21))
@@ -2619,7 +2638,7 @@ test "a malformed function: every malformation is caught" {
     f22.End(b22, Term.Return(Sp0, Operand.Copy(L(LocalId(2)))))
     assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
     f23 := addFn(t)
-    k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
+    k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
     try f23.Blocks[0].Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
     expect(t, f23, "a spawn into S0, which is no join")
 }

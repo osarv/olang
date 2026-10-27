@@ -141,7 +141,7 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join    defer   errdefer yield
+trait     spawn   join    defer   errdefer yield   become
 import    test    destruct embed
 unreachable
 extern    default
@@ -1653,7 +1653,7 @@ its set of types is not written down, and a method the trait lacks is what to ad
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-decl | export-func-decl | top-if
+           | extern-decl | export-func-decl | top-if | top-assert
 ```
 
 A `type-decl`, a `func-decl` and an `export-func-decl` may be preceded by attributes (§12.8 G39).
@@ -1841,7 +1841,8 @@ is then each instance's, computed with that instance's length and checked where 
 binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
 it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
 declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
-never one the calling code has in scope, so a caller's own local of that name is not the default's.
+never one the calling code has in scope, so a caller's own local of that name is not the default's. The one thing a
+default reads of the call is where it is: `Place.Here` in a default is the call's place (E40).
 A lambda in a default captures nothing (a default has no locals); the calls of one module (or of one instantiation,
 G16) share the one made for them, which is a function of that module's code wherever the default was declared.
 
@@ -2154,7 +2155,7 @@ storage reclaimed and the scopes it holds closed, their destructors run.
 the end of its body without returning. Falling off the end is a compile-time error.
 
 Whether a path leaves is decided **structurally**, with no dataflow analysis and no constant folding. A
-`return` leaves, and so does an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
+`return` leaves, and so does a `become` (S21), an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
 `noreturn` function value (D8e), written as a statement. An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
 either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
@@ -4175,6 +4176,29 @@ and elsewhere evaluation stops there.
 On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
 call fails, as a failed `assert` there does (P6); no error reaches the join.
 
+### 5.24 The source place
+
+**E40.** `Place.Here` is the place in the source where it is written, as a value of the prelude's struct
+`Place(File String&, Line I64, Column I64)`: `File` is the path of the module's file as the compiler's diagnostics write
+it (B11 - the root and relative imports as the compiler was given them, the standard library's under its directory),
+`Line` and `Column` count from 1, the column that of `Place` in `Place.Here`. It is a constant (K1): built while
+compiling, read-only text, nothing computed at run time - in an instance of a generic it is the place written in the
+generic's body, the same for every instance. **Written in a parameter's default** (D8a - one written in a function's,
+a method's or a constructor's parameter list, through an `any`'s table too), it is instead the place of the **call**
+that leaves the argument off: the call's first token, or, for a method, its name after the `.`; an argument given by
+name or by position is the caller's value as written. A default calling a function that leaves its own such argument
+off gives that function the place of the outermost call: the place is the call the program wrote. `$p` writes
+`FILE:LINE:COLUMN`, as a diagnostic names a place; `==` and `Hash` compare the three fields. `Here` is no field: it
+is read through the type's name only (as E36's limits are), and any other member read so is an error naming
+`Place.Here`.
+
+```
+fn expectEq(got I64, want I64, at Place = Place.Here) {
+    if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+}
+expectEq(f(2), 4)                       # reports this line, not expectEq's
+```
+
 ## 6. Statements
 
 ### 6.1 Blocks
@@ -4201,9 +4225,9 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| defer-stmnt | errdefer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
+| defer-stmnt | errdefer-stmnt | yield-stmnt | become-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
 `try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` and `errdefer-stmnt` in §6.9;
-`yield-stmnt` in §6.10.
+`yield-stmnt` in §6.10; `become-stmnt` in §6.11.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
 either a **call** (§5.4 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
@@ -4693,6 +4717,28 @@ where the assert fails. A `return` or an `error` statement in it, a `try` an err
 in it too), and a `break` or `continue` other than one inside a loop written in it are compile-time errors, as in
 deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unreachable` and a
 `noreturn` call end the test or the process and may appear.
+
+**S17a (an assert at the top level).** `top-assert ::= "assert" expr [ "," expr ] STMNT_END`, a declaration of a
+module - at its top level, or in a branch of a top-level `if` the build takes (B9) - states what must hold of the
+program as it is compiled, and is **decided while compiling** (K1), never at run time: it emits nothing. Its condition
+and its message read what a global's initializer may (they are checked as one is, in the module's context: globals,
+build constants (B10), functions, lambdas); a top-level assert names no locals. A true one is nothing more. A false one
+is a compile-time error at it - `this top-level assert is false, decided while compiling`, with its message after `: `
+when that computes too (S18c's wording) - and so is one whose evaluation reaches what aborts the program (K1) or
+reads a view of a Vec that grew (M19g). One the evaluator **cannot decide** - it reads a mutable global, calls an
+`extern fn` but C's math (X8), fails with an error nothing handles, or passes the evaluator's budgets - is a
+compile-time error too, naming what stops it: a top-level assert holds of every program the build makes, or it is
+not one; an assert to be checked at run time is written in a function or a test. Every module's top-level asserts
+are decided in every build of a program reaching it - `build`, `test`, `interpret`, a module compiled alone - and a
+branch a build leaves out is not read (B9). What is wrong with its condition (it does not check, or is no `Bool`) is
+said where it is, and it then asks nothing of the evaluator.
+
+```
+assert Table.Len() == Kinds.Len(), "a row for every kind"
+if TargetOs == "linux" {
+    assert TargetVectorBits >= 128
+}
+```
 
 **S18.** If `expr` evaluates to `false`:
 - **while a test is running** (§10.4): that one test is recorded as failed, and execution resumes with
@@ -5222,6 +5268,48 @@ A `Next()` asked while the generator's own walk runs - its body, or what it call
 walked as - fails a check the language guarantees (S18a): `FILE:LINE: a generator asked for its next value inside its
 own walk`, the line the generator's, in a test that test failing and the rest running. It costs one compare a `Next()`,
 as a slice's bounds check costs one a slice.
+
+### 6.11 `become`
+
+**S21.** `become-stmnt ::= "become" call STMNT_END`, with `become` a reserved word (L9), is a **guaranteed tail call**:
+the function ends - every scope it has open closed, as a `return` closes them - and the call is made **in its place**,
+its result the function's result and its failure the function's failure, with no frame of the function left while
+it runs. So a chain of becomes runs in constant stack however long it is (`become sum(n - 1, acc + n)` over ten million
+steps, two functions becoming each other, a state machine of functions), in a built program (the call is LLVM's
+`musttail`) and in the compile-time evaluator and `interpret` alike (a frame replaced, never one added). `become` is
+a statement that leaves (D10a), and may stand in a one-line body (S1b): `else: become step(s, i + 1)`.
+
+Its operand is a **call of a function or a method declared with `fn`** - a generic's instance included - written
+whole: not a function value's call, a constructor's, an `extern fn`'s, an `export fn`'s, a call through an `any`, nor a
+call given a scope argument (E25); and no `try`, since what the call fails with is the function's own. A `become`
+stands only in a function or a method declared with `fn`, never `main`, an `export fn`, a lambda, a generator's body, a
+test, a constructor or a destructor. Each of these is a compile-time error naming what to write instead (`return` and
+the call); and so is each of the following, since a jump cannot keep a promise the function's end makes:
+- the callee's **signature is not the function's own**: the same parameters in order - their types, their permissions
+  and where their references live (T22) - and the same result. Their error sets, once every inferred set is final
+  (R1a), are one set in one order: the codes a failure carries are then the same (R6);
+- a parameter or the result is passed **through memory** (over 128 bytes, an aggregate's or a bare type variable's):
+  the function's frame would hold it;
+- it is written in **deferred code**, an assert's or an `unreachable`'s message, a task's clause or a `join` block, or
+  with **deferred code pending** in a block around it - which would run before the call (S19, S19e);
+- an **argument is storage of a scope the become closes** (§8): what is handed on is a value, or lives where the
+  function was given it (its parameters' scopes, its result scope - a temporary for the callee is built there, as a
+  `return f(x)`'s would be), or in the program's. `become walk(b, i + 1)` with `b` a local array of the function is
+  the error;
+- the function holds, or builds in one of its blocks, an instance whose **destructor** would run as that block closes
+  (O16) - before the call, where a `return` would run it after; or a value that may hold one (an `any`, a type
+  variable's).
+
+```
+fn isEven(n I64) Bool {
+    if n == 0: return true
+    become isOdd(n - 1)
+}
+fn isOdd(n I64) Bool {
+    if n == 0: return false
+    become isEven(n - 1)
+}
+```
 
 ## 7. Error Handling
 
@@ -7185,8 +7273,7 @@ layout, which has no options:
 
 A file that does not parse is left as it is and its diagnostics are reported, status 1. A branch the build decides that
 does not parse (B9) - one that may be right for another build - is left as written, on every line it is on. The
-formatter is an olang program shipped beside the compiler; the first `format` after the compiler or its sources change
-builds it, once.
+formatter is part of the compiler: `format` lays files out as the compiler that runs it does.
 
 ### 10.9 Documentation and editors
 
@@ -7223,8 +7310,9 @@ on code of today changes nothing. It writes the name of each file it changed, on
 place whose meaning the text alone cannot settle, such as a `try` read in the language of today further than when it was
 written (E24) - is written to the standard error, and then a line saying to look at them, and the status is 1, with or
 without `-check`. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
-are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), and again when the compiler or their source
-is newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
+are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), a directory of their own for each compiler
+and tools directory, so no two compilers share a program; a tool is built again when the compiler that built it changed,
+or when its sources - the tools, the compiler's modules beside them, the standard library - are newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
 `precedence_migrate`) - is not run.
 
 **B18.** `-memory` prints, after a build's diagnostics, what early freeing (O8d) decided for the program: a row for

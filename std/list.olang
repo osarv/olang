@@ -335,7 +335,7 @@ fn (l mut List<T>&) Reverse() {
 
 # sorts the list in place so that less(l[i], l[i - 1]) holds nowhere - stable, as an array's Sort is: the elements are
 # copied into one contiguous array, sorted there by Array.Sort, and copied back, so it costs two copies beside the sort
-fn(l mut List<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
+fn (l mut List<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
     s := l.s
     a := l.ToArray()
     try a.Sort(less)
@@ -430,7 +430,7 @@ fn (l List<T>&) Iter() Iter<T> { return Iter<T>(l) }
 # stopped at, or at the end
 
 # true when keep holds for at least one remaining element
-fn(it mut Iter<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
+fn (it mut Iter<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -448,7 +448,7 @@ fn(it mut Iter<T>&) Some<? E>(keep fn(x T) Bool ? E) Bool ? E {
 }
 
 # true when keep holds for every remaining element - so for none, when there are none
-fn(it mut Iter<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
+fn (it mut Iter<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -466,7 +466,7 @@ fn(it mut Iter<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
 }
 
 # how many remaining elements keep holds for
-fn(it mut Iter<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
+fn (it mut Iter<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
     c I64 = 0
     for {
         try it.enter() catch Exhausted { break }
@@ -481,7 +481,7 @@ fn(it mut Iter<T>&) Count<? E>(keep fn(x T) Bool ? E) I64 ? E {
 }
 
 # every remaining element folded into one, starting from init
-fn(it mut Iter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
+fn (it mut Iter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
     acc U = init
     for {
         try it.enter() catch Exhausted { break }
@@ -496,7 +496,7 @@ fn(it mut Iter<T>&) Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E {
 }
 
 # a new Vec - in the caller's scope - of f applied to every remaining element
-fn(it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
+fn (it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
     out mut Vec<U>&return = Vec<U>()
     for {
         try it.enter() catch Exhausted { break }
@@ -511,7 +511,7 @@ fn(it mut Iter<T>&) Map<U ? E>(f fn(x T) U ? E) Vec<U>& ? E {
 }
 
 # a new Vec - in the caller's scope - of the remaining elements keep holds for
-fn(it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
+fn (it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
     out mut Vec<T>&return = Vec<T>()
     for {
         try it.enter() catch Exhausted { break }

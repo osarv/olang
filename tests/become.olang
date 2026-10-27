@@ -1,0 +1,106 @@
+# S21: become f(x) - a guaranteed tail call. Each test holds the run time to what the compile-time evaluator bakes
+# (K2) and decides (S18c); the deep ones would overflow the stack as calls
+import "std/io"
+
+fn sum(n I64, acc I64) I64 {
+    if n == 0: return acc
+    become sum(n - 1, acc + n)
+}
+
+fn isEven(n I64) Bool {
+    if n == 0: return true
+    become isOdd(n - 1)
+}
+
+fn isOdd(n I64) Bool {
+    if n == 0: return false
+    become isEven(n - 1)
+}
+
+type Odd error { NEGATIVE, TOO_DEEP }
+
+# the callee's failure is the function's own: one set, in one order
+fn steps(n I64, acc I64) I64 ? Odd {
+    if n < 0: error Odd.NEGATIVE
+    if n == 0: return acc
+    become hop(n - 1, acc + 1)
+}
+
+fn hop(n I64, acc I64) I64 ? Odd {
+    if acc > 20000000: error Odd.TOO_DEEP
+    become steps(n, acc)
+}
+
+# what the function was given is handed on - a reference parameter's scope is its caller's
+fn count(t String&, i I64, n I64) I64 {
+    if i >= t.Len(): return n
+    become count(t, i + 1, n + (1 if t[i] == 'a' else 0))
+}
+
+# a built result: an argument made for the callee lives where the result goes, which outlives every frame of the chain
+fn pad(n I64, acc String&) String {
+    if n == 0: return $acc
+    become pad(n - 1, $acc ".")
+}
+
+type Counter struct(step I64) {
+    step
+}
+
+fn (c Counter&) Run(n I64, acc I64) I64 {
+    if n == 0: return acc
+    become c.Run(n - 1, acc + c.step)
+}
+
+fn twice<T>(x T, n I64) T {
+    if n == 0: return x
+    become twice(x, n - 1)
+}
+
+# a state machine: each state a function of one signature
+fn start(t String&, i I64) I64 {
+    if i >= t.Len(): return 0
+    if t[i] == '(': become inside(t, i + 1)
+    become start(t, i + 1)
+}
+
+fn inside(t String&, i I64) I64 {
+    if i >= t.Len(): return -1
+    if t[i] == ')': return 1 + start(t, i + 1)
+    become inside(t, i + 1)
+}
+
+BakedSum I64 = sum(1000, 0)
+BakedEven Bool = isEven(1001)
+BakedPad String = pad(3, "x")
+BakedRun I64 = Counter(2).Run(100, 0)
+
+test "become runs a chain of any depth in one frame" {
+    assert sum(10000000, 0) == 50000005000000
+    assert not isEven(10000001) and isOdd(10000001)
+    assert Counter(3).Run(10000000, 0) == 30000000
+}
+
+test "a become's failure is the function's own" {
+    assert steps(1000000, 0)! == 1000000
+    try steps(-1, 0) catch Odd.NEGATIVE { } catch Odd { unreachable }
+    try steps(30000000, 0) catch Odd.TOO_DEEP { } catch Odd { unreachable }
+}
+
+test "references given are handed on, results built where they go" {
+    assert count("banana", 0, 0) == 3
+    p := pad(1000, "x")
+    assert p.Len() == 1001 and p[1000] == '.'
+    assert twice("t", 5) == "t" and twice(7, 1000000) == 7
+    assert start("a(b)c(d)", 0) == 2 and start("((", 0) == -1
+}
+
+test "the evaluator agrees" {
+    assert BakedSum == sum(1000, 0) and BakedSum == 500500
+    assert BakedEven == isEven(1001) and not BakedEven
+    assert BakedPad == "x..." and BakedPad == pad(3, "x")
+    assert BakedRun == 200
+    assert sum(100, 0) == 5050                # decided while compiling (S18c)
+    assert count("aaa", 0, 0) == 3
+    io.Println("become: " $BakedSum)!
+}

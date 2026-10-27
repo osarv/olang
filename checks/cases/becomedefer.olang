@@ -1,0 +1,9 @@
+# check: fail error[S21]: 'become' leaves the function at once, so not from a block with deferred code registered, which would run before the call - write 'return' and the call
+# S21, S19: deferred code runs as its block is left, which a become does before its call
+import "std/io"
+fn f(n I64) I64 {
+    defer io.Println("left")!
+    if n == 0: return 0
+    become f(n - 1)
+}
+fn main() { assert f(2) == 0 }

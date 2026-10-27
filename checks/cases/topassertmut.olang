@@ -1,0 +1,5 @@
+# check: fail error[S17a]: a top-level assert is decided while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's (topassertmut.olang:4) - assert it in a function or a test, where it is checked at run time
+# S17a: a top-level assert the evaluator cannot decide is an error naming why - it holds of the program, or is none
+Count mut I64 = 3
+assert Count == 3
+fn main() { Count++ }

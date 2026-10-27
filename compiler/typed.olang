@@ -189,11 +189,11 @@ type SiteInfo struct(Kind SiteKind, Sp source.Span) {
 # ---- places ----
 
 # storage, named. A place's own subexpressions (a reference, an index) are evaluated left to right before it is used
-type Place enum {
+type Lvalue enum {
     Local(sp source.Span, ty types.TypeId, id LocalId)
     Global(sp source.Span, ty types.TypeId, module I64, name source.NameId)
     Deref(sp source.Span, ty types.TypeId, ref Expr&)              # what a reference value names (S4a)
-    Field(sp source.Span, ty types.TypeId, base Place&, index I64) # a struct's, tuple's or payload's field, by position
+    Field(sp source.Span, ty types.TypeId, base Lvalue&, index I64) # a struct's, tuple's or payload's field, by position
     Elem(sp source.Span, ty types.TypeId, e Elem&)                 # an array's element
     Payload(sp source.Span, ty types.TypeId, p Payload&)           # an enum case's payload record (E32)
     Temp(sp source.Span, ty types.TypeId, value Expr&, site SiteId) # a value with no storage, given one (E16a, T7c)
@@ -204,13 +204,13 @@ type Place enum {
     Target(sp source.Span, ty types.TypeId)
 }
 
-type Elem struct(Base Place&, Index Expr&, Checked Check) {
+type Elem struct(Base Lvalue&, Index Expr&, Checked Check) {
     Base
     Index
     Checked     # None for x[i] (E16), Try for x.Get(i) (E16d)
 }
 
-type Payload struct(Base Place&, Tag I64, Checked Check) {
+type Payload struct(Base Lvalue&, Tag I64, Checked Check) {
     Base
     Tag
     Checked     # None after a test chose the case (S13b), Try for "as" (E32)
@@ -238,9 +238,9 @@ type Expr enum {
     # the value a place holds, copied - at the place's type, or one of its representation: a nominal conversion of a
     # place names its storage (T29a). A Read of an own slot at its type without "own" is a borrow of it (O32), its
     # site a Region one - the region read there, which a call passes on (O33); site -1 for any other Read
-    Read(sp source.Span, ty types.TypeId, p Place&, site SiteId)
-    Borrow(sp source.Span, ty types.TypeId, p Place&)       # a reference to the place itself (E12c); ty the reference
-    Take(sp source.Span, ty types.TypeId, p Place&)         # the owner a place holds, moved out, null left (E34)
+    Read(sp source.Span, ty types.TypeId, p Lvalue&, site SiteId)
+    Borrow(sp source.Span, ty types.TypeId, p Lvalue&)       # a reference to the place itself (E12c); ty the reference
+    Take(sp source.Span, ty types.TypeId, p Lvalue&)         # the owner a place holds, moved out, null left (E34)
     Promote(sp source.Span, ty types.TypeId, pr Promote&)   # a temporary given storage, a reference to it (E12c)
     Call(sp source.Span, ty types.TypeId, c Call&)
     Make(sp source.Span, ty types.TypeId, m Make&)          # a tuple, an enum case, an array
@@ -295,7 +295,7 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false, Tail Bool = false) {
     Target
     Args
     Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
@@ -303,6 +303,9 @@ type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Z
     # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
     # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
     Zero
+    # a become's (S21): the Return it stands in is the function's end - every scope closed, then this call made in its
+    # place, its result and its failure the function's own (its error set is the callee's)
+    Tail
 }
 
 type MakeKind enum {
@@ -476,7 +479,7 @@ type PrimOp enum {
     AnyIs
 }
 
-type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
+type Slice struct(Base Lvalue&, Lo Expr&, Hi Expr&, Checked Check) {
     Base
     Lo
     Hi         # both always present: an absent end is the base's length
@@ -589,9 +592,9 @@ type Block struct(Id BlockId, Stmts Array<Stmt&>&) {
 type Stmt enum {
     Let(sp source.Span, local LocalId, init Expr&)  # a local declared, with its first value (always one, D13c)
     # a store: Target's subexpressions are evaluated, then Value, then it is stored (S4); a compound assignment's
-    # value reads the old value through Place.Target. Storing into an own slot releases what it held (O30). Moving an
+    # value reads the old value through Lvalue.Target. Storing into an own slot releases what it held (O30). Moving an
     # owner is always a Take written in Value (E34): "x := take p", a call's owned result handed on
-    Assign(sp source.Span, target Place&, value Expr&)
+    Assign(sp source.Span, target Lvalue&, value Expr&)
     Eval(sp source.Span, x Expr&)                   # a value computed and dropped: a call, a try statement, a match
     If(sp source.Span, i If&)
     # a loop, its body run until a Jump leaves it; a continue runs Post, then the body again. "do ... for c" is a Post
@@ -639,7 +642,7 @@ type Join struct(Code Block&, Tried Bool, Clauses Array<Clause&>&) {
 # a task: Task, a call, run on a thread of its own; its results stored into Targets on that thread (P1g); an error it fails
 # with goes to the first of Clauses naming it, run on that thread (P4a), else to the join (P4b). At the spawn the
 # targets' places are evaluated first, left to right, then the task's arguments (P1g, S4)
-type Spawn struct(Targets Array<Place?&>&, Task Expr&, Clauses Array<TaskClause&>&, Site SiteId) {
+type Spawn struct(Targets Array<Lvalue?&>&, Task Expr&, Clauses Array<TaskClause&>&, Site SiteId) {
     Targets
     Task       # a Call - of a lambda's function value for "spawn fn() { ... }" (D16e)
     Clauses
@@ -843,17 +846,17 @@ fn (x Expr&) Type() types.TypeId {
     }
 }
 
-fn (p Place&) Type() types.TypeId {
+fn (p Lvalue&) Type() types.TypeId {
     return match p {
-        case Place.Local(_, ty, _), Place.Global(_, ty, _, _), Place.Deref(_, ty, _), Place.Field(_, ty, _, _) => ty
-        case Place.Elem(_, ty, _), Place.Payload(_, ty, _), Place.Temp(_, ty, _, _), Place.Target(_, ty) => ty
+        case Lvalue.Local(_, ty, _), Lvalue.Global(_, ty, _, _), Lvalue.Deref(_, ty, _), Lvalue.Field(_, ty, _, _) => ty
+        case Lvalue.Elem(_, ty, _), Lvalue.Payload(_, ty, _), Lvalue.Temp(_, ty, _, _), Lvalue.Target(_, ty) => ty
     }
 }
 
-fn (p Place&) Span() source.Span {
+fn (p Lvalue&) Span() source.Span {
     return match p {
-        case Place.Local(sp, _, _), Place.Global(sp, _, _, _), Place.Deref(sp, _, _), Place.Field(sp, _, _, _) => sp
-        case Place.Elem(sp, _, _), Place.Payload(sp, _, _), Place.Temp(sp, _, _, _), Place.Target(sp, _) => sp
+        case Lvalue.Local(sp, _, _), Lvalue.Global(sp, _, _, _), Lvalue.Deref(sp, _, _), Lvalue.Field(sp, _, _, _) => sp
+        case Lvalue.Elem(sp, _, _), Lvalue.Payload(sp, _, _), Lvalue.Temp(sp, _, _, _), Lvalue.Target(sp, _) => sp
     }
 }
 
@@ -904,7 +907,7 @@ fn stmtBreaks(s Stmt&, loop BlockId) Bool {
     }
 }
 
-fn targetsBreak(ps Array<Place?&>&, loop BlockId) Bool {
+fn targetsBreak(ps Array<Lvalue?&>&, loop BlockId) Bool {
     if ps.Len() == 0 { return false }
     for p in ps {
         if p is not null and placeBreaks(p, loop) { return true }
@@ -973,14 +976,14 @@ fn piecesBreak(ps Array<Piece&>&, loop BlockId) Bool {
     return false
 }
 
-fn placeBreaks(p Place&, loop BlockId) Bool {
+fn placeBreaks(p Lvalue&, loop BlockId) Bool {
     return match p {
-        case Place.Local(_, _, _), Place.Global(_, _, _, _), Place.Target(_, _) => false
-        case Place.Deref(_, _, r) => exprBreaks(r, loop)
-        case Place.Field(_, _, base, _) => placeBreaks(base, loop)
-        case Place.Elem(_, _, e) => placeBreaks(e.Base, loop) or exprBreaks(e.Index, loop)
-        case Place.Payload(_, _, pl) => placeBreaks(pl.Base, loop)
-        case Place.Temp(_, _, v, _) => exprBreaks(v, loop)
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) => false
+        case Lvalue.Deref(_, _, r) => exprBreaks(r, loop)
+        case Lvalue.Field(_, _, base, _) => placeBreaks(base, loop)
+        case Lvalue.Elem(_, _, e) => placeBreaks(e.Base, loop) or exprBreaks(e.Index, loop)
+        case Lvalue.Payload(_, _, pl) => placeBreaks(pl.Base, loop)
+        case Lvalue.Temp(_, _, v, _) => exprBreaks(v, loop)
     }
 }
 
@@ -1149,16 +1152,16 @@ fn (w mut printer&) callee(c Callee&) String {
     }
 }
 
-fn (w mut printer&) place(p Place&) String {
+fn (w mut printer&) place(p Lvalue&) String {
     return match p {
-        case Place.Local(_, _, id) => "L" $id
-        case Place.Global(_, _, m, n) => "G" $m ":" $n
-        case Place.Deref(_, _, r) => "*" $w.expr(r)
-        case Place.Field(_, _, base, i) => $w.place(base) "." $i
-        case Place.Elem(_, _, e) => $w.place(e.Base) "[" $w.expr(e.Index) "]"
-        case Place.Payload(_, _, pl) => $w.place(pl.Base) " as " $pl.Tag
-        case Place.Temp(_, _, v, site) => "tmp " $w.expr(v) " site " $site
-        case Place.Target(_, _) => "target"
+        case Lvalue.Local(_, _, id) => "L" $id
+        case Lvalue.Global(_, _, m, n) => "G" $m ":" $n
+        case Lvalue.Deref(_, _, r) => "*" $w.expr(r)
+        case Lvalue.Field(_, _, base, i) => $w.place(base) "." $i
+        case Lvalue.Elem(_, _, e) => $w.place(e.Base) "[" $w.expr(e.Index) "]"
+        case Lvalue.Payload(_, _, pl) => $w.place(pl.Base) " as " $pl.Tag
+        case Lvalue.Temp(_, _, v, site) => "tmp " $w.expr(v) " site " $site
+        case Lvalue.Target(_, _) => "target"
     }
 }
 
@@ -1178,9 +1181,9 @@ test "a body: locals, blocks and sites, read back and printed" {
     b.Params.Push(a)
     b.Params.Push(c)
     none := SiteId(-1)
-    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Place.Local(sp, i32, a), none)
-                                                              Expr.Read(sp, i32, Place.Local(sp, i32, c), none)])
-    b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Place.Local(sp, i32, s), none))])
+    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Lvalue.Local(sp, i32, a), none)
+                                                              Expr.Read(sp, i32, Lvalue.Local(sp, i32, c), none)])
+    b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Lvalue.Local(sp, i32, s), none))])
     assert sum.Type() == i32 and sum.Span() == sp
     assert b.Local(s).Marked == Mark.Infer and b.Encloses(root, root)
     got := b.Print(t)
@@ -1240,9 +1243,9 @@ test "a body's marks and scope variables come from its type; constants, temporar
     tmp := b.AddSite(SiteKind.Temp, sp)
     owner := t.Ref(n, types.Owning | types.Writable)
     w mut printer&t = printer(t)
-    borrow := Expr.Read(sp, roN, Place.Local(sp, owner, a), region)
+    borrow := Expr.Read(sp, roN, Lvalue.Local(sp, owner, a), region)
     assert w.expr(borrow) == "(read L0 site 0)", w.expr(borrow)
-    temp := Place.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)
+    temp := Lvalue.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)
     assert w.place(temp) == "tmp (lit I64 7) site 1" and temp.Type() == i64
     chars := t.Ref(t.Array(t.Prim("U8"), types.TypeId(0)), types.ReadOnly)
     words := Expr.Data(sp, t.Ref(t.Array(chars, types.TypeId(0)), types.ReadOnly), 3

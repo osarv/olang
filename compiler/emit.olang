@@ -1627,7 +1627,7 @@ fn stmtSpan(s mir.Stmt&) source.Span {
 fn termSpan(tm mir.Term) source.Span {
     return match tm {
         case mir.Term.Call(sp, _), mir.Term.Return(sp, _), mir.Term.Raise(sp, _) => sp
-        case mir.Term.Wait(sp, _, _, _, _), mir.Term.Exit(sp, _, _) => sp
+        case mir.Term.Wait(sp, _, _, _, _), mir.Term.Exit(sp, _, _), mir.Term.Tail(sp, _) => sp
         case _ => source.Span(I32(0), I32(0))
     }
 }
@@ -1915,6 +1915,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     via Bool = false
     env Bool = false
     big Bool = false
+    tails Bool = false   # S21: a become's call is written - each a line where %big, if made, closes before it
     tagAt String& = ""      # T36: the access tag of the place addr last found, for a scalar there (empty: untagged)
     nloc I64 = 0            # B3l: the places named so far (located), and the symbol each text was given
     locSeen Map<String&, String&>
@@ -2681,6 +2682,12 @@ fn (fe mut fnEm&) run() {
         fe.term(bb.T)
     }
     fe.walkEnds()
+    if fe.tails {
+        # S21: the frame's own arena closed before each become's jump, as at the one return - where the body made one
+        text := fe.code.ToString().Replace(BigCloseMark, "  call void @__olang_scope_close(ptr %big)\n" if fe.big else "")
+        fe.code = StringBuilder()
+        fe.code.Push(text)
+    }
     fe.label("ret")
     if fe.gen {
         # the walk over: its last result (an error, Exhausted at its end) in the promise, the coroutine at its final
@@ -2778,7 +2785,7 @@ fn (fe mut fnEm&) put(at String&, ty types.TypeId, x mir.Operand, tag String& = 
 
 # an assignment of a value moved through memory: a copy by memmove, an aggregate built where it lands - straight into
 # the place where nothing its parts read can be the place, else in a slot of its own first
-fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+fn (fe mut fnEm&) intoPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
     t := fe.E.T
     match rv {
         case mir.Rvalue.Use(x) {
@@ -2809,7 +2816,7 @@ fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
 
 # whether place p is a local of the frame no part in args can read: each a constant, constant data, or a copy of
 # another local reached without a reference
-fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
+fn (fe mut fnEm&) apart(p mir.Lvalue, args mir.Range) Bool {
     dst := mir.NoLocal
     match p.B {
         case mir.Base.Local(l) { dst = l }
@@ -2831,7 +2838,7 @@ fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
     return true
 }
 
-fn (fe mut fnEm&) derefs(p mir.Place) Bool {
+fn (fe mut fnEm&) derefs(p mir.Lvalue) Bool {
     for i in range p.Path.N {
         match fe.F.Projs[I64(p.Path.At) + i] {
             case mir.Proj.Deref { return true }
@@ -2863,7 +2870,7 @@ fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
 # an assignment written straight into its place where a value would be too large to carry: a fixed array built of one
 # repeated element as a loop, of more than 16 as a store each, and a copy of an aggregate over 128 bytes as a memcpy -
 # LLVM expands an aggregate value element by element, which for a million elements is a million instructions
-fn (fe mut fnEm&) fillInPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
     t := fe.E.T
     match rv {
         case mir.Rvalue.Aggregate(ty, _, args) {
@@ -2960,7 +2967,7 @@ fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
     return false
 }
 
-fn (fe mut fnEm&) baseIs(p mir.Place, l mir.LocalId) Bool {
+fn (fe mut fnEm&) baseIs(p mir.Lvalue, l mir.LocalId) Bool {
     return match p.B {
         case mir.Base.Local(k) => k == l
         case _ => false
@@ -3010,7 +3017,7 @@ fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
 # a place's address and type: its base's, each projection followed - and (tagAt) the access tag a scalar there is
 # loaded and stored with (T36): its type's, in the family of the path's last step, an element's for an index and a
 # field's otherwise; untagged within an enum's payload, whose bytes two cases' fields share
-fn (fe mut fnEm&) addr(p mir.Place) String, types.TypeId {
+fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
     t := fe.E.T
     at := ""
     ty := types.UnknownT
@@ -3121,7 +3128,7 @@ fn (fe mut fnEm&) casesList(r types.TypeId) types.ListId {
 }
 
 # a place's type, its projections followed, nothing emitted
-fn (fe mut fnEm&) placeType(p mir.Place) types.TypeId {
+fn (fe mut fnEm&) placeType(p mir.Lvalue) types.TypeId {
     t := fe.E.T
     ty := match p.B {
         case mir.Base.Local(l) => fe.localType(l)
@@ -3847,7 +3854,7 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
 }
 
 # where an array place's elements are
-fn (fe mut fnEm&) dataPtr(p mir.Place) String {
+fn (fe mut fnEm&) dataPtr(p mir.Lvalue) String {
     at, ty := fe.addr(p)
     a := fe.arrayOf(ty)
     if a != types.UnknownT and fe.fixed(a) { return at }
@@ -4078,7 +4085,7 @@ fn (e mut Emitter&) enumWords(ty types.TypeId) Bool {
 
 # a reference to a place (E12c): its address, or for a run-time-length array the pair its value is; a fixed array's
 # address widened to the pair where the reference is to a run-time-length one
-fn (fe mut fnEm&) ref(p mir.Place, ty types.TypeId) String {
+fn (fe mut fnEm&) ref(p mir.Lvalue, ty types.TypeId) String {
     t := fe.E.T
     at, pty := fe.addr(p)
     rt := t.Referent(t.Repr(ty))
@@ -4146,7 +4153,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     return fe.pair(cnt, p)
 }
 
-fn (fe mut fnEm&) slice(p mir.Place, lo mir.Operand, hi mir.Operand, ty types.TypeId) String {
+fn (fe mut fnEm&) slice(p mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.TypeId) String {
     t := fe.E.T
     pty := fe.placeType(p)
     a := fe.arrayOf(pty)
@@ -5018,6 +5025,10 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             fe.curCall = I64(c)
             fe.call(fe.F.Calls[I64(c)])
         }
+        case mir.Term.Tail(_, c) {
+            fe.curCall = I64(c)
+            fe.tailCall(fe.F.Calls[I64(c)])
+        }
         case mir.Term.Return(_, x) {
             rt := t.RetLlvm(fe.F.Ty)
             if fe.via {
@@ -5311,6 +5322,63 @@ fn (fe mut fnEm&) call(c mir.Call) {
         }
     }
     fe.w("br label %" $blockName(c.Ok))
+}
+
+# where %big closes before a become's jump, settled once the function is written (fe.big may be set by code after it)
+BigCloseMark String& = "  ;olang.bigclose\n"
+
+# a become's call (S21): LLVM's musttail - the call made in the function's place, its result returned as it is. Every
+# scope is closed before it (lowering's), the arguments are values and scopes the function was given (section 8's), the
+# signature is the function's own and nothing passes through memory (check's), so the frame is dead at the jump
+fn (fe mut fnEm&) tailCall(c mir.Call) {
+    t := fe.E.T
+    ty := types.UnknownT
+    target := ""
+    match c.Target {
+        case mir.Callee.Fn(k, fty) {
+            fe.E.want(k)
+            ty = fty
+            target = "@" $fe.E.sym(k)
+            if fe.E.hasEnv(k) { fe.gap("a become's call of a function with an environment") }
+        }
+        nomatch {
+            fe.gap("a become's call of anything but a function")
+            fe.w("unreachable")
+            return
+        }
+    }
+    fe.E.signature(ty)
+    args := StringBuilder()
+    first := true
+    for i in range c.Scopes.N {
+        if not first { args.Push(", ") }
+        first = false
+        args.Push("ptr " $fe.scope(fe.F.Refs[I64(c.Scopes.At) + i]))
+    }
+    ps := t.Items(t.Params(ty))
+    pass := t.Passing(ty)
+    for i in range ps.Len() {
+        if not first { args.Push(", ") }
+        first = false
+        if pass[i] == 'm' { fe.gap("a become's argument passed through memory") }
+        v := fe.val(fe.arg(c.Args, i), ps[i])
+        match pass[i] {
+            case 's' {
+                args.Push("ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 0") ", ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 1"))
+            }
+            case _ { args.Push($fe.ty(ps[i]) " " $v) }
+        }
+    }
+    fe.tails = true
+    fe.code.Push(BigCloseMark)
+    rt := t.RetLlvm(ty)
+    if rt == "void" {
+        fe.w("musttail call void " $target "(" $args.ToString() ")")
+        fe.w("ret void")
+    } else {
+        r := fe.let("musttail call " $rt " " $target "(" $args.ToString() ")")
+        fe.w("ret " $rt " " $r)
+    }
 }
 
 # a constant of this function's tables that is text, as text

@@ -107,9 +107,9 @@ fn (w mut Walker&) stmts(ss Array<typed.Stmt&>&, s State) State {
     return cur
 }
 
-fn (w mut Walker&) isL(p typed.Place&) Bool {
+fn (w mut Walker&) isL(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Local(_, _, id) => id == w.L
+        case typed.Lvalue.Local(_, _, id) => id == w.L
         case _ => false
     }
 }
@@ -302,19 +302,19 @@ fn (w mut Walker&) arm(a typed.Arm&, from State, out State) State {
     return meet(out, retag(cur, from, out, Cause.Arm, a.Sp))
 }
 
-fn (w mut Walker&) place(p typed.Place&, s State) State {
+fn (w mut Walker&) place(p typed.Lvalue&, s State) State {
     match p {
-        case typed.Place.Local(sp, _, id) {
+        case typed.Lvalue.Local(sp, _, id) {
             if id == w.L { w.read(s, sp) }
             return s
         }
-        case typed.Place.Global(_, _, _, _) { return s }
-        case typed.Place.Deref(_, _, r) { return w.expr(r, s) }
-        case typed.Place.Field(_, _, base, _) { return w.place(base, s) }
-        case typed.Place.Elem(_, _, e) { return w.expr(e.Index, w.place(e.Base, s)) }
-        case typed.Place.Payload(_, _, pl) { return w.place(pl.Base, s) }
-        case typed.Place.Temp(_, _, v, _) { return w.expr(v, s) }
-        case typed.Place.Target(sp, _) {
+        case typed.Lvalue.Global(_, _, _, _) { return s }
+        case typed.Lvalue.Deref(_, _, r) { return w.expr(r, s) }
+        case typed.Lvalue.Field(_, _, base, _) { return w.place(base, s) }
+        case typed.Lvalue.Elem(_, _, e) { return w.expr(e.Index, w.place(e.Base, s)) }
+        case typed.Lvalue.Payload(_, _, pl) { return w.place(pl.Base, s) }
+        case typed.Lvalue.Temp(_, _, v, _) { return w.expr(v, s) }
+        case typed.Lvalue.Target(sp, _) {
             # a compound assignment's old value: a read of its target
             if w.targets.Len() > 0 and w.targets[w.targets.Len() - 1] { w.read(s, sp) }
             return s
@@ -386,9 +386,9 @@ fn (w mut heldWalker&) readsG(x typed.Expr&) Bool {
     }
 }
 
-fn (w mut heldWalker&) isG(p typed.Place&) Bool {
+fn (w mut heldWalker&) isG(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Local(_, _, id) => id == w.g
+        case typed.Lvalue.Local(_, _, id) => id == w.g
         case _ => false
     }
 }
@@ -528,17 +528,17 @@ fn (w mut heldWalker&) clauses(cs Array<typed.Clause&>&, a Bool) {
     }
 }
 
-fn (w mut heldWalker&) place(p typed.Place&, a Bool) {
+fn (w mut heldWalker&) place(p typed.Lvalue&, a Bool) {
     match p {
-        case typed.Place.Local(_, _, id) { if id == w.g: w.count++ }
-        case typed.Place.Global(_, _, _, _), typed.Place.Target(_, _) { }
-        case typed.Place.Deref(_, _, r) { w.expr(r, a) }
-        case typed.Place.Field(_, _, base, _) { w.place(base, a) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Local(_, _, id) { if id == w.g: w.count++ }
+        case typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) { }
+        case typed.Lvalue.Deref(_, _, r) { w.expr(r, a) }
+        case typed.Lvalue.Field(_, _, base, _) { w.place(base, a) }
+        case typed.Lvalue.Elem(_, _, e) {
             w.place(e.Base, a)
             w.expr(e.Index, a)
         }
-        case typed.Place.Payload(_, _, pl) { w.place(pl.Base, a) }
-        case typed.Place.Temp(_, _, v, _) { w.expr(v, a) }
+        case typed.Lvalue.Payload(_, _, pl) { w.place(pl.Base, a) }
+        case typed.Lvalue.Temp(_, _, v, _) { w.expr(v, a) }
     }
 }

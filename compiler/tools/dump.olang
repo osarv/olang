@@ -473,6 +473,12 @@ fn (w mut walker&) decl(d ast.Decl&) {
             w.expr(target)
             w.expr(value)
         }
+        case ast.Decl.Assert(sp, k, msg) {
+            if w.skipped(sp.Start) { return }
+            w.line("ASSERT", sp)
+            w.expr(k)
+            if msg is not null { w.expr(msg) }
+        }
     }
 }
 
@@ -602,6 +608,10 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
         }
         case ast.Stmt.Yield(sp, x) {
             w.line("YIELD", sp)
+            w.expr(x)
+        }
+        case ast.Stmt.Become(sp, x) {
+            w.line("BECOME", sp)
             w.expr(x)
         }
         case ast.Stmt.Jump(sp, k, msg) {

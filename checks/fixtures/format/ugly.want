@@ -7,6 +7,7 @@ type Pair2 struct(a I64, b I64) {
 fn (p Pair2&) Sum() I64 { return p.a + p.b } # a trailing comment
 fn two() I64, I64 { return 1, -2 }           # aligned with the one above
 
+fn (p Pair2&) Pick<T>(x T) T { return x }
 fn opt(p Pair2?&) Pair2?&p { return p }
 fn main() ? io.Error {
     xs := I64[1, 2, 3]

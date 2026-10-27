@@ -1,0 +1,4 @@
+# check: fail error[D3a]: 'Place' is a built-in type's name - choose another
+# E40, D3a: Place is the prelude's, so a program's own type may not take its name
+type Place struct(x I64) { x }
+fn main() { }

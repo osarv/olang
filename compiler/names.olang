@@ -641,6 +641,11 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 r.expr(target)
                 r.expr(value)
             }
+            case ast.Decl.Assert(_, k, msg) {
+                r.startItem(mi)
+                r.expr(k)
+                r.expr(msg)
+            }
             case ast.Decl.Test(_, _, body, _) {
                 r.startItem(mi)
                 r.block(body)
@@ -939,7 +944,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Return(_, values) {
             for x in values { r.expr(x) }
         }
-        case ast.Stmt.Yield(_, x) { r.expr(x) }
+        case ast.Stmt.Yield(_, x), ast.Stmt.Become(_, x) { r.expr(x) }
         case ast.Stmt.Assert(_, c, msg) {
             r.expr(c)
             if msg is not null { r.expr(msg) }

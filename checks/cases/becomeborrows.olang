@@ -1,0 +1,8 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+# S21, section 8: a become's call is made once the function's scopes are closed - an argument built in them is gone
+fn walk(a Array<I64>&, i I64) I64 {
+    if i >= a.Len(): return a[0]
+    b := Array<I64>(a.Len(), 1)
+    become walk(b, i + 1)
+}
+fn main() { assert walk(I64[1, 2], 0) == 1 }

@@ -1,0 +1,13 @@
+# check: fail error[S21]: 'become' makes the callee's failure this function's own, and this one fails with A.X, B, the callee with B - give them one error set, in one order, or write 'return try' and the call
+# S21: the callee's failure is the function's own, so the two fail with one set, in one order (R6's codes)
+type A error { X }
+type B error { Y }
+fn g(n I64) I64 ? B {
+    if n < 0: error B.Y
+    return n
+}
+fn f(n I64) I64 ? {
+    if n > 9: error A.X
+    become g(n)
+}
+fn main() { assert f(1)! == 1 }

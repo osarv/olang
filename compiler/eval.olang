@@ -644,7 +644,7 @@ fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, 
     }
 }
 
-fn plainLocal(p mir.Place) I64 {
+fn plainLocal(p mir.Lvalue) I64 {
     return match p.B {
         case mir.Base.Local(l) => I64(l)
         case _ => -1
@@ -712,14 +712,14 @@ fn (m mut Machine&) writesInto(f mir.Fn&, l mir.LocalId) Bool {
     return false
 }
 
-fn baseIs(p mir.Place, l mir.LocalId) Bool {
+fn baseIs(p mir.Lvalue, l mir.LocalId) Bool {
     return match p.B {
         case mir.Base.Local(k) => k == l
         case _ => false
     }
 }
 
-fn placeNamesGlobal(p mir.Place) Bool {
+fn placeNamesGlobal(p mir.Lvalue) Bool {
     return match p.B {
         case mir.Base.Global(_, _, _) => true
         case _ => false
@@ -762,7 +762,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
         case mir.Term.Branch(c, _, _) => opNamesGlobal(c)
         case mir.Term.Switch(x, _, _) => opNamesGlobal(x)
         case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _) => opNamesGlobal(x)
-        case mir.Term.Call(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
+        case mir.Term.Call(_, k), mir.Term.Tail(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
         case _ => false
     }
 }
@@ -1790,7 +1790,7 @@ fn (m mut Machine&) ownParams(nf I64, fi I64) {
 # ---- places ----
 
 # a place's storage and its type, in frame fi
-fn (m mut Machine&) place(fi I64, p mir.Place) Ptr, types.TypeId {
+fn (m mut Machine&) place(fi I64, p mir.Lvalue) Ptr, types.TypeId {
     k := m.fs[fi].Fn
     t := m.T
     ptr := NullPtr
@@ -1885,7 +1885,7 @@ fn (m mut Machine&) opType(fi I64, x mir.Operand) types.TypeId {
 }
 
 # a place's type, its projections followed with no memory read
-fn (m mut Machine&) placeType(fi I64, p mir.Place) types.TypeId {
+fn (m mut Machine&) placeType(fi I64, p mir.Lvalue) types.TypeId {
     k := m.fs[fi].Fn
     t := m.T
     ty := match p.B {
@@ -2090,7 +2090,7 @@ fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, s
 # ---- rvalues ----
 
 # a statement's value stored into a place (S4): the place first, its index locals read, then the value, then the store
-fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
+fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
     dst, dt := m.place(fi, p)
     if m.halted { return }
     t := m.T
@@ -2245,7 +2245,7 @@ fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
 
 # a reference to a place itself (E12c): its address, or for an array the pair (length, storage) a reference to a
 # run-time-length array is (T11), a fixed array's length from its type
-fn (m mut Machine&) ref(fi I64, dst Ptr, q mir.Place, ty types.TypeId) {
+fn (m mut Machine&) ref(fi I64, dst Ptr, q mir.Lvalue, ty types.TypeId) {
     src, st := m.place(fi, q)
     if m.halted { return }
     if m.shape(ty) != vPair {
@@ -2326,7 +2326,7 @@ fn (m mut Machine&) newArray(fi I64, dst Ptr, s mir.ScopeRef, ty types.TypeId, n
     m.wrPtr(Ptr(dst.Id, dst.Off + 8), p)
 }
 
-fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Place, lo mir.Operand, hi mir.Operand, ty types.TypeId) {
+fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.TypeId) {
     src, st := m.place(fi, q)
     if m.halted { return }
     data, n := m.arrayView(src, st)
@@ -3707,7 +3707,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 # a global a statement reads is initialized first where it is not set yet - while compiling an immutable one (K2), under
 # -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
 # mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
-fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
+fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
     f := m.fns[m.fs[fi].Fn]
     if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
@@ -3736,7 +3736,7 @@ fn (m mut Machine&) operandReady(fi I64, x mir.Operand) Bool {
 }
 
 # a store into a global: refused while compiling unless it is the global being initialized
-fn (m mut Machine&) globalWritten(p mir.Place) Bool {
+fn (m mut Machine&) globalWritten(p mir.Lvalue) Bool {
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
@@ -3750,7 +3750,7 @@ fn (m mut Machine&) globalWritten(p mir.Place) Bool {
     return true
 }
 
-fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
+fn (m mut Machine&) placeReady(fi I64, p mir.Lvalue) Bool {
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
@@ -4414,6 +4414,12 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }
             m.leave(fi, false, x, 0)
         }
+        case mir.Term.Tail(sp, ci) {
+            m.atK(k, sp)
+            c := m.cf[k].Calls[I64(ci)]
+            if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
+            m.tail(fi, c)
+        }
         case mir.Term.Suspend(sp, x, resume, held) {
             m.atK(k, sp)
             if glob and not m.operandReady(fi, x) { return }
@@ -4442,6 +4448,28 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             m.halted = true
         }
     }
+}
+
+# a become's call (S21): the callee's frame made from this one's arguments, then put in this frame's place - its result
+# going where this one's would, this frame's storage closed and its words given back - so a chain of becomes runs in
+# one frame's room however long it is, as the built program's jumps do
+fn (m mut Machine&) tail(fi I64, c mir.Call) {
+    fr := m.fs[fi]
+    nf := m.enter(fi, c.Target, c.Args, c.Scopes, fr.Ret, fr.RetArg)
+    if nf < 0 { return }
+    m.dropOwnDefers(fi)
+    g := m.fs[nf]
+    delta := g.Locals - fr.Locals
+    for i in range m.nWs - g.Locals { m.ws[fr.Locals + i] = m.ws[g.Locals + i] }
+    g.Locals -= delta
+    g.Scopes -= delta
+    g.Vars -= delta
+    g.Closing = fr.Closing
+    m.fs[fi] = g
+    m.nFs--
+    m.nWs -= delta
+    if m.cf[fr.Fn].Equal { m.eqDepth-- }
+    if m.live(fr.Store) { m.closing.Push(fr.Store) }
 }
 
 fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
@@ -5437,7 +5465,7 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
                 case mir.Term.Exit(sp, kind, _) {
                     if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return $WhyEnds, f.File, sp }
                 }
-                case mir.Term.Call(sp, c) {
+                case mir.Term.Call(sp, c), mir.Term.Tail(sp, c) {
                     match f.Calls[I64(c)].Target {
                         case mir.Callee.Extern(e, ty) {
                             name := try m.externs.Get(e) catch default ""
@@ -5462,7 +5490,7 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     return "", 0, source.Span(0, 0)
 }
 
-fn (m mut Machine&) writesGlobal(p mir.Place) Bool {
+fn (m mut Machine&) writesGlobal(p mir.Lvalue) Bool {
     return match p.B {
         case mir.Base.Global(_, _, _) => true
         case _ => false
@@ -5489,7 +5517,7 @@ fn (m mut Machine&) rangeMutable(f mir.Fn&, r mir.Range) Bool {
     return false
 }
 
-fn (m mut Machine&) mutableGlobal(p mir.Place) Bool {
+fn (m mut Machine&) mutableGlobal(p mir.Lvalue) Bool {
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
@@ -5505,7 +5533,7 @@ Sp0 source.Span = source.Span(0, 0)
 B0 mir.BlockId = mir.BlockId(0)
 S0 mir.ScopeId = mir.ScopeId(0)
 
-fn tl(i I64) mir.Place { return mir.L(mir.LocalId(I32(i))) }
+fn tl(i I64) mir.Lvalue { return mir.L(mir.LocalId(I32(i))) }
 fn tcopy(i I64) mir.Operand { return mir.Operand.Copy(tl(i)) }
 
 # a test's function, keyed Body(id), of type ty: its parameters, its frame scope S0, and block 0 opening it
@@ -6242,8 +6270,8 @@ fn retFn(t mut types.Table&, id I64, x mir.Operand) mir.Fn {
     return f
 }
 
-fn gplace(t mut types.Table&, name source.NameId) mir.Place {
-    return mir.Place(mir.Base.Global(7, name, t.Prim("I64")), mir.Empty)
+fn gplace(t mut types.Table&, name source.NameId) mir.Lvalue {
+    return mir.Lvalue(mir.Base.Global(7, name, t.Prim("I64")), mir.Empty)
 }
 
 test "globals while compiling: an immutable one initialized when first read (K2), a mutable one or a write refused" {

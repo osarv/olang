@@ -5,8 +5,9 @@
 # fixed when the tools have nothing more to do, and fixing it again changes nothing.
 #
 # The tools are olang programs in tools/ beside the compiler's std/ (OLANG_TOOLS names another place). They are built
-# when first needed, by this compiler, into the cache (OLANG_CACHE, fix/ in it) and built again when the compiler or the
-# tool's source is newer than the program. Every tool is run on all the files at once, in the order of Tools below.
+# when first needed, by this compiler, into the cache (OLANG_CACHE, fix/KEY in it - KEY this compiler's path and the
+# tools') and built again when the compiler changed or the tools' sources, the compiler's modules or std are newer.
+# Every tool is run on all the files at once, in the order of Tools below.
 #
 # Not in the table, because they are not idempotent - run on code of today they would damage it - and are for one change
 # only: io_print, io_try and io_fix (M19f: they take the `try` and the `catch` off a call of io.Print and put it back
@@ -15,6 +16,7 @@ import "std/os"
 import "std/io"
 import "std/filepath"
 import "fetch"
+import "build"
 
 # how a tool is run: its name and what stands before the files. A text tool reads the files alone; a driven one
 # compiles them and applies what the compiler's diagnostics say, so it runs after every text tool - an old file does not
@@ -107,10 +109,35 @@ fn newest(dir String&) I64 {
     return n
 }
 
-# the program for a tool, built into bin when it is not there or older than the compiler or the tools' sources
-fn ensureBuilt(exe String&, tools String&, bin String&, name String&, said mut io.Writer&) Bool {
+# what a tool's program is made from, beyond its own source: the compiler that builds it (where it is, its size and when
+# it was made) - a program built by another compiler, or by this one before it was rebuilt, is built again
+fn builtBy(exe String&) String {
+    info := try os.Stat(exe) catch os.Error { return $exe }
+    return $exe " " $info.Size " " $info.ModTime "\n"
+}
+
+# where the tools' programs are kept: a directory of the cache for this compiler and these tools (B17) - two checkouts,
+# or two compilers, never share one, so a program is never one another compiler built from other sources
+fn BinDir(exe String&, tools String&) String {
+    real := try os.RealPath(exe) catch default $exe
+    rt := try os.RealPath(tools) catch default $tools
+    parts Vec<String&>
+    parts.Push($real)
+    parts.Push($rt)
+    return filepath.Join(filepath.Join(fetch.CacheDir(), "fix"), build.HashOf(parts)[0:16])
+}
+
+# the program for a tool, built into bin when it is not there, was built by another compiler (or this one before it
+# changed), or is older than the sources it is built from: the tools, the compiler's modules beside them (some tools
+# import them) and the standard library
+fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String&, said mut io.Writer&) Bool {
     program := filepath.Join(bin, "tools_" $name)
-    if mtime(program) > mtime(exe).Max(newest(tools)) { return true }
+    stamp := $program ".from"
+    from := try os.ReadFile(stamp) catch default ""
+    lib := newest(std).Max(newest(filepath.Join(std, "prelude")))
+    sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
+    if from == builtBy(exe) and mtime(program) > sources { return true }
+    try os.Remove(stamp) catch os.Error { }
     out := try os.Exec(String&[exe, "build", "-output", program, filepath.Join(tools, $name ".olang")], "", true, bin) catch os.Error {
         said.Write("olang: fix: cannot run " $exe "\n")
         return false
@@ -119,6 +146,7 @@ fn ensureBuilt(exe String&, tools String&, bin String&, name String&, said mut i
         said.Write("olang: fix: tools/" $name ".olang does not build:\n" $out.Stdout $out.Stderr)
         return false
     }
+    try os.WriteFile(stamp, builtBy(exe)) catch os.Error { }
     return true
 }
 
@@ -146,7 +174,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         try said.Flush() catch io.Error { }
         return 2
     }
-    bin := filepath.Join(fetch.CacheDir(), "fix")
+    bin := BinDir(exe, tools)
     try os.MkDirAll(bin) catch os.Error {
         said.Write("olang: fix: cannot make " $bin "\n")
         try said.Flush() catch io.Error { }
@@ -156,7 +184,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
     left I64 = 0
     for t in Order() {
         name := ToolNames[t]
-        if not ensureBuilt(exe, tools, bin, name, said) {
+        if not ensureBuilt(exe, tools, bin, name, std, said) {
             status = 2
             break
         }
