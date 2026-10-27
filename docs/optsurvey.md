@@ -15,7 +15,7 @@ of a loop body.
 | # | finding | shape | measured | where | cost | meaning |
 |---|---|---|---|---|---|---|
 | 1 | [The allocator's fast path is a call](#1-the-allocators-fast-path-is-a-call) | every allocation | binary-trees 185M -> 131M Ir, 0.43 -> 0.35 s (C arena 0.35); the compiler's front end -7.1% Ir; StringBuilder pushes -29% | runtime | an afternoon | none |
-| 2 | [Temporaries on the stack, and a loop body's scope reused](#2-temporaries-on-the-stack-and-a-loop-bodys-scope-reused) | `f(P(x))` for a `P&` parameter, `p P& = P(..)`, `mk(i).M()`, adapters built inline | ~70 Ir a turn against 0.75 for the same struct as a value | scope, lower, emit, runtime | days (a §8 argument) | none |
+| 2 | [Temporaries on the stack, and a loop body's scope reused](#2-temporaries-on-the-stack-and-a-loop-bodys-scope-reused) | `f(P(x))` for a `P&` parameter, `p P& = P(..)`, `mk(i).M()`, adapters built inline | ~70 Ir a turn against 3 for the same argument as a value local lent to it | scope, lower, emit, runtime | days (a §8 argument) | none |
 | 3 | [Vec/List Push cannot be inlined](#3-veclist-push-cannot-be-inlined) | `v.Push(x)` | Push 24 Ir an element (C's realloc loop ~10); out-of-line growth 74.5M -> 60.5M Ir; building 100k elements 5.4M Ir against C's 1.1M | prelude, emit | an hour | none |
 | 4 | [Generator walks in large functions lose their elision](#4-generator-walks-in-large-functions-lose-their-elision) | `for x in gen(n)` in a big function | 28.6M -> 2.4M Ir with `alwaysinline` on the `.walk` ramp | emit | one line | none |
 | 5 | [A call's result is copied into a reference parameter](#5-a-calls-result-is-copied-into-a-reference-parameter) | `use(make(x))`, `ln(mk(i))` with arrays or text | 233 -> 172 Ir a call (text); 3.5x for a 10,000-element array | lower / scope | a day | none |
@@ -103,7 +103,8 @@ adapters of `a.Iter().Skip(10).Take(k)`, a small Vec made and dropped each turn.
 
 **Measured** (`bench/repro/turn_temporaries.olang`, 100,000 turns, Ir): the same struct as a value local 0.34M - all
 folded - against 7.67M passed to a `P&` parameter, 7.27M as a reference local, 7.27M as a built result: about 70
-instructions a turn. A Vec made and pushed twice: 15.3M (150 a turn); a Map with one Put and Get: 21.7M. Split
+instructions a turn. The same argument written as a value local and lent to the parameter (`t := P(i, i + 1);
+norm(t)` - an `alloca`, which is what part 1 below would make of the temporary): 0.63M, 3 a turn. A Vec made and pushed twice: 15.3M (150 a turn); a Map with one Put and Get: 21.7M. Split
 (callgrind by function, `arg`): 33 a turn in the allocator's slow path, the rest the scope's header cleared on entry
 (56 bytes) and its close (`__olang_scope_close`: parts, destructors, chunks back to the pool). Section 1's prototype
 does not help here (7.67M either way): every turn's scope is new, so its first allocation always takes the slow path.
