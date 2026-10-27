@@ -7185,8 +7185,7 @@ layout, which has no options:
 
 A file that does not parse is left as it is and its diagnostics are reported, status 1. A branch the build decides that
 does not parse (B9) - one that may be right for another build - is left as written, on every line it is on. The
-formatter is an olang program shipped beside the compiler; the first `format` after the compiler or its sources change
-builds it, once.
+formatter is part of the compiler: `format` lays files out as the compiler that runs it does.
 
 ### 10.9 Documentation and editors
 
@@ -7223,8 +7222,9 @@ on code of today changes nothing. It writes the name of each file it changed, on
 place whose meaning the text alone cannot settle, such as a `try` read in the language of today further than when it was
 written (E24) - is written to the standard error, and then a line saying to look at them, and the status is 1, with or
 without `-check`. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
-are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), and again when the compiler or their source
-is newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
+are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), a directory of their own for each compiler
+and tools directory, so no two compilers share a program; a tool is built again when the compiler that built it changed,
+or when its sources - the tools, the compiler's modules beside them, the standard library - are newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
 `precedence_migrate`) - is not run.
 
 **B18.** `-memory` prints, after a build's diagnostics, what early freeing (O8d) decided for the program: a row for

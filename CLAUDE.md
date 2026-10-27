@@ -122,7 +122,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
-  (`compiler/fmt.olang`, on the port's scanner and parser) built once into the cache; only whitespace changes.
+  (`compiler/fmt.olang`, on the port's scanner and parser) linked into the compiler since stage 0 went - no cache;
+  only whitespace changes. A method's receiver keeps its space before its own type list too (`fn (p T&) Read<Q>(`,
+  2026-10-27: it was written `fn(p`, std/list's seven such methods included).
 - **The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24, found by the std breadth batch).**
   `x & 1 == 0` is `(x & 1) == 0` - Go's and Rust's order, C's mistake not copied: `| ^ &` sit between the comparisons and
   the shifts. `tools/precedence_migrate.olang` parenthesizes every comparison under `& | ^` at the old precedence (none
@@ -1348,8 +1350,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   marker").** A mode of the driver (`compiler/fix.olang`) that runs the migration tools of `tools/` over the files in
   the order the changes were made, so a file from any earlier time reads in today's language in one command; `-check`
   lists what would change and writes nothing (the files are put back as they were), the status 1 where any would, 2 where
-  a file cannot be read or a tool built or run. **Decisions (mine).** (1) The tools are *built into the cache* (`fix/` in
-  `OLANG_CACHE`) by the running compiler on first use - and again when the compiler or `tools/` is newer - rather than
+  a file cannot be read or a tool built or run. **Decisions (mine).** (1) The tools are *built into the cache* (`fix/KEY` in
+  `OLANG_CACHE`, KEY the compiler's and the tools' paths - 2026-10-27: one shared `fix/` let a checkout run tools another
+  compiler built from other sources) by the running compiler on first use - and again when the compiler that built a
+  tool changed or its sources (tools/, compiler/, std/) are newer - rather than
   linked in: they are standalone programs with their own `main`, tests and the module `srcmask` they share, and several
   call the compiler themselves; `olang format` is a linked module only because the formatter is a library of the compiler
   too. The tools sit beside the compiler's `std/` (`../tools`, `OLANG_TOOLS` names another place). (2) **Two phases:** the
