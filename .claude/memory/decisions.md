@@ -1737,3 +1737,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   type-level builder (QBT round 2), a comprehension into a Vec built by pushes (no ToVec). Cost: every array literal
   longer (`Array<I64>[1, 2]` for `I64[1, 2]`), migrated by a tool. Rec yes, both together, never comprehensions alone.
   In effect: `T[...]` element-typed.
+- QBU CORRECTED 2026-10-27 (the user: "I didnt know set could be created like an array ... {} literals are gone since
+  long no?"): I was wrong - `Map<K, V>{k: v}` is no source form, only how `$` renders a Map (a parse error as code), and
+  no Set, Vec or List literal exists; they were all part of the proposal. So `$` of Map, Vec and List writes no valid
+  source (E11b). The proposal stands as: `Array<T>[...]`, `Vec<T>[...]`, `set.Set<T>[...]` new literal forms built
+  through a trait-required type-level builder; a map one, if wanted, `Map<K, V>[k: v, ...]` (brackets, as Swift - no
+  braces, T13's removal kept); `$` renders each so.
