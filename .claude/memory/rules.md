@@ -165,6 +165,10 @@ use more tokens than necessary" - parallel work is fine as long as it does not c
 rework, no duplicated work, no agents polling or idling while they wait on a shared verify slot, no batch that must be
 redone after another lands.
 
+The user, 2026-10-27, on a batch asked at 0.94: "do it next week or right at the end of this week to consume all tokens
+before the reset" - so the last hours before a weekly reset may use what is left past 0.95 (a send_later armed for the
+Friday evening before it starts queued work); the 0.95 stop holds the rest of the week.
+
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
 out"; earlier: "So I don't have to start you manually"): whenever work is left that the window will not cover - the
