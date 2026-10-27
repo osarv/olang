@@ -400,6 +400,82 @@ baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert
     6 |     m Meters = a
       |                ^
 compilation failed with 1 error
+=== becomeborrows.olang
+becomeborrows.olang:6:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+    6 |     become walk(b, i + 1)
+      |                 ^
+compilation failed with 1 error
+=== becomedefer.olang
+becomedefer.olang:7:5: error[S21]: 'become' leaves the function at once, so not from a block with deferred code registered, which would run before the call - write 'return' and the call
+    7 |     become f(n - 1)
+      |     ^~~~~~
+compilation failed with 1 error
+=== becomedtor.olang
+becomedtor.olang:12:5: error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
+   12 |     become f(n - 1)
+      |     ^~~~~~
+becomedtor.olang:10:5: note: here
+   10 |     r := Res(n)
+      |     ^
+becomedtor.olang:12:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
+   12 |     become f(n - 1)
+      |            ^
+compilation failed with 2 errors
+=== becomedtortemp.olang
+becomedtortemp.olang:13:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
+   13 |     become f(m - 1)
+      |            ^
+compilation failed with 1 error
+=== becomeerrors.olang
+becomeerrors.olang:11:5: error[S21]: 'become' makes the callee's failure this function's own, and this one fails with A.X, B, the callee with B - give them one error set, in one order, or write 'return try' and the call
+   11 |     become g(n)
+      |     ^~~~~~
+compilation failed with 1 error
+=== becomejoin.olang
+becomejoin.olang:7:9: error[S21]: 'become' leaves the function at once, so not from a join block, whose tasks it would leave behind - write 'return' and the call
+    7 |         become f(n - 1)
+      |         ^~~~~~
+compilation failed with 1 error
+=== becomelambda.olang
+becomelambda.olang:5:26: error[S21]: 'become' ends a function declared with fn, never a lambda or a generator's body - write 'return' and the call
+    5 |     g := fn(n I64) I64 { become f(n) }
+      |                          ^~~~~~
+compilation failed with 1 error
+=== becomemain.olang
+becomemain.olang:4:13: error[S21]: 'become' ends a function declared with fn, never main - write 'return' and the call
+    4 | fn main() { become other() }
+      |             ^~~~~~
+compilation failed with 1 error
+=== becomememory.olang
+becomememory.olang:11:28: error[S21]: 'become' cannot jump where a parameter or the result is over 128 bytes, passed through memory the function's frame holds - pass a reference, or write 'return'
+   11 | fn w2(n I64) Wide { become w1(n) }
+      |                            ^~
+compilation failed with 1 error
+=== becomenotcall.olang
+becomenotcall.olang:3:26: error[S21]: 'become' takes a call of a function or a method declared with fn, and this is no call - write 'return' instead
+    3 | fn f(n I64) I64 { become n + 1 }
+      |                          ^~~~~
+compilation failed with 1 error
+=== becomesig.olang
+becomesig.olang:4:28: error[S21]: 'become' calls a function of this one's own signature, and this is fn(I64) I64, the callee fn(I64, I64) I64 - write 'return' and the call, or give them one signature
+    4 | fn one(n I64) I64 { become add(n, 1) }
+      |                            ^~~
+compilation failed with 1 error
+=== becometest.olang
+becometest.olang:4:12: error[S21]: 'become' ends a function declared with fn, never a test - write 'return' and the call
+    4 | test "t" { become f(1) }
+      |            ^~~~~~
+compilation failed with 1 error
+=== becometry.olang
+becometry.olang:5:30: error[S21]: 'become' takes the call alone - what it fails with is the function's own, so write it without 'try'
+    5 | fn f(n I64) I64 ? E { become try g(n) }
+      |                              ^~~~~~~~
+compilation failed with 1 error
+=== becomevalue.olang
+becomevalue.olang:6:12: error[S21]: 'become' takes a call of a function or a method declared with fn, and this is a call through a function value - write 'return' instead
+    6 |     become k(n)
+      |            ^~~~
+compilation failed with 1 error
 === bitsetnotenum.olang
 $ROOT/std/bitset.olang:22:5: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet is over an enum's cases"
    22 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
@@ -4389,6 +4465,16 @@ parsedropret.olang:5:1: error: expected an expression, found '}'
     5 | }
       | ^
 compilation failed with 1 error
+=== placemember.olang
+placemember.olang:4:16: error[E40]: Place gives no 'There' through its name - 'Place.Here' is the place where it is written
+    4 |     p := Place.There
+      |                ^~~~~
+compilation failed with 1 error
+=== placereserved.olang
+placereserved.olang:3:6: error[D3a]: 'Place' is a built-in type's name - choose another
+    3 | type Place struct(x I64) { x }
+      |      ^~~~~
+compilation failed with 1 error
 === preludeconst.olang
 preludeconst.olang:6:1: error[D3a]: 'Pi' is a constant of the prelude - choose another name
     6 | Pi F64 = 3.14
@@ -7081,6 +7167,31 @@ compilation failed with 2 errors
 tdscope2.olang:8:68: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
     8 | fn other(p B&, q B&) B&p { return try pick(p, false) catch default q }
       |                                                                    ^
+compilation failed with 1 error
+=== topassertbool.olang
+topassertbool.olang:3:8: error: a condition is a Bool, found I64
+    3 | assert 1 + 2
+      |        ^~~~~
+compilation failed with 1 error
+=== topassertfalse.olang
+topassertfalse.olang:4:20: error[S17a]: this top-level assert is false, decided while compiling
+    4 | assert Sizes.Len() == 4
+      |                    ^~
+compilation failed with 1 error
+=== topassertif.olang
+topassertif.olang:4:21: error[S17a]: this top-level assert is false, decided while compiling: no such target
+    4 |     assert TargetOs == "no such os", "no such target"
+      |                     ^~
+compilation failed with 1 error
+=== topassertmsg.olang
+topassertmsg.olang:5:20: error[S17a]: this top-level assert is false, decided while compiling: 3 sizes, 4 names
+    5 | assert Sizes.Len() == Names.Len(), $Sizes.Len() " sizes, " $Names.Len() " names"
+      |                    ^~
+compilation failed with 1 error
+=== topassertmut.olang
+topassertmut.olang:4:14: error[S17a]: a top-level assert is decided while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's (topassertmut.olang:4) - assert it in a function or a test, where it is checked at run time
+    4 | assert Count == 3
+      |              ^~
 compilation failed with 1 error
 === toprecover.olang
 toprecover.olang:6:7: error: expected ')', found ':='
