@@ -1639,3 +1639,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   its own - the pattern rule `_` = anything applied at the top, guarded or not; no new rule) or `default` (a word, but
   a third meaning for it and a rule forbidding unguarded `case _`). Recommended `case _`. In effect until answered: the
   previous entry's `default`.
+- QBQ DECIDED 2026-10-27 (the user: "case _ is the best I think"): nomatch removed; the catch-all is `case _` (guarded
+  or not) - no clause of its own, no `default` in matches. Migration tool rewrites `nomatch` to `case _`. Post-reset batch.
+- QBR ASKED 2026-10-27 (the user: "for value matching why dont we reuse the normal case syntax is it that ugly?"):
+  today a value match's arm is `case P => v` (S12b) - `=>` used nowhere else - and a statement match's arm is a block
+  (`=>` an error there). Proposed (rec): the one-line body S1b already gives if/for/else - `case P: v` in a value match
+  (the line's expression is the arm's value; a block arm an error there, no value), `case P: stmt` in a statement
+  match beside blocks; `=>` leaves the language (PRINCIPLES.md's `=>` example goes). `case _ if c: v` reads as `if c:
+  return 0`. In effect: `=>`.
