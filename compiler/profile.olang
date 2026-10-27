@@ -700,3 +700,91 @@ FlameScript String& = """
     })();
     </script>
     """
+
+# ---- tests ----
+
+# a profile of two stacks - main calling hot (three periods), main calling warm (one) - and its places, as Resolve
+# would make them
+fn twoStacks() Profile, Places {
+    p := Profile()
+    p.Threads = 1
+    p.Samples.Push(Sample(3, 0, 2))
+    p.Samples.Push(Sample(1, 2, 2))
+    for a in I64[100, 201, 300, 201] { p.Addrs.Push(a) }
+    pl := Places()
+    for i, a in I64[100, 200, 300] {
+        pl.Index.Put(a, i)
+        pl.First.Push(i)
+        pl.Count.Push(1)
+    }
+    pl.Frames.Push(Frame(pl.name("hot"), pl.name("hot.olang"), 6))
+    pl.Frames.Push(Frame(pl.name("main"), pl.name("hot.olang"), 20))
+    pl.Frames.Push(Frame(pl.name("Vec<I64>.Push"), pl.name("hot.olang"), 14))
+    return p, pl
+}
+
+test Report "the functions by self time, the hottest lines, the callers" {
+    p, pl := twoStacks()
+    text := Report("hot", p, pl)
+    assert text.Contains("olang profile: hot - 2 samples, 0.004 s of CPU time on 1 thread\n")
+    assert text.Contains("\n   75.0%  75.0%  hot\n   25.0%  25.0%  Vec<I64>.Push\n\n")
+    assert not text.Contains("main\n\n   self")             # main ran nothing itself
+    assert text.Contains("   75.0%  hot.olang:6   hot\n   25.0%  hot.olang:14  Vec<I64>.Push\n")
+    assert text.Contains("  hot  <-  main 100.0%\n  Vec<I64>.Push  <-  main 100.0%\n")
+}
+
+test FlameGraph "a frame for each stack's function, the root's at the bottom, names escaped" {
+    p, pl := twoStacks()
+    html := FlameGraph("hot", p, pl)
+    assert html.StartsWith("<!doctype html>")
+    assert html.Contains("<title>all - 4.0 ms, 100.0%</title>")
+    assert html.Contains("<title>main - 4.0 ms, 100.0%</title>")
+    assert html.Contains("<title>hot - 3.0 ms, 75.0%</title>")
+    assert html.Contains(">Vec&lt;I64&gt;.Push</text>")
+    assert html.Contains("data-x=\"0\" data-w=\"4\" data-d=\"0\"") and html.Contains("data-d=\"2\"")
+    assert not html.Contains("src=") and not html.Contains("href=")      # nothing loaded from elsewhere
+}
+
+# the bytes of a samples file: the header, the records, the map
+fn sampleFile(words Array<I64>&, maps String&) Array<U8> {
+    b := Vec<U8>()
+    for ch in "OLPROF01" { b.Push(U8(ch)) }
+    for w in I64[1000000, words.Len(), 2, 1] {
+        for k in range 8 { b.Push(U8((w >> (k * 8)) & 0xFF)) }
+    }
+    for w in words {
+        for k in range 8 { b.Push(U8((w >> (k * 8)) & 0xFF)) }
+    }
+    for ch in maps { b.Push(U8(ch)) }
+    return b.ToArray()
+}
+
+test Read "a samples file's header, records and map; a record cut short ends the records" {
+    maps := "5000-6000 r-xp 00001000 fe:00 7 /bin/prog\n"
+    p := try Read(sampleFile(I64[(4 << 8) | 2, 0x5010, 0x5020, (1 << 8) | 1, 0x5030, 0, 0x99], maps))
+    assert p.PeriodNs == 1000000 and p.Dropped == 2 and p.Threads == 1
+    assert p.Samples.Len() == 2 and p.Samples[0].Weight == 4 and p.Samples[0].Count == 2 and p.Samples[1].Start == 2
+    assert p.Addrs.Len() == 3 and p.Addrs[2] == 0x5030 and p.Total() == 5
+    assert p.Maps == maps
+    m := mappings(p.Maps)
+    assert m.Len() == 1 and m[0].Start == 0x5000 and m[0].End == 0x6000 and m[0].Offset == 0x1000 and m[0].Path == "/bin/prog"
+    bad := false
+    try Read(Array<U8>(8)) catch Bad { bad = true }
+    assert bad
+}
+
+test Readable "a symbol olang wrote read back as the profile names it; any other name as it is" {
+    assert Readable(types.Symbol("std/io.Println")) == "io.Println"
+    assert Readable(types.Symbol("compiler/check.compiler/check:Checker.joinStmt")) == "check.Checker.joinStmt"
+    assert Readable(types.Symbol("std/prelude/vec.std/prelude/vec:Vec<I64>.Push")) == "Vec<I64>.Push"
+    assert Readable(types.Symbol("hot.main")) == "hot.main"
+    assert Readable("Vec<I64>.Push") == "Vec<I64>.Push" and Readable("parse_ab") == "parse_ab"
+    assert Readable("__olang_scope_alloc") == "__olang_scope_alloc" and Readable("memcpy") == "memcpy"
+}
+
+test fileLine "a symbolizer's place: its file and line" {
+    f, l := fileLine("/a/b:c.olang:12:3")
+    assert f == "/a/b:c.olang" and l == 12
+    g, m := fileLine("??:0:0")
+    assert g == "??" and m == 0
+}

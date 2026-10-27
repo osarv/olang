@@ -1555,3 +1555,14 @@ test "symbols are injective and bounded" {
 # a table's words (T32): its instance's type's identity first, then $'s renderings - inside another value's (slot -2)
 # and at the top of a piece (slot -1) - then each slot's function: slot s at AnySlotBase + s
 AnySlotBase I64 = 3
+
+test Demangle "a symbol olang wrote read back as its text; any other as it is" {
+    for text in String&["std/io.Println", "compiler/check.compiler/check:Checker.joinStmt", "a_b.c<I64, Array<U8>&>", "x.$y"] {
+        assert Demangle(Symbol(text)) == text
+    }
+    xs := StringBuilder()
+    for _ in range 150 { xs.PushChar('x') }
+    long := $"m." $xs.ToString()
+    assert Symbol(long).Len() == 122 and Demangle(Symbol(long)) == $long[:86] "..."
+    for sym in String&["__olang_scope_alloc", "memcpy", "_start", "olang_lambda_3", "main"] { assert Demangle(sym) == sym }
+}
