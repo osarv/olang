@@ -1787,3 +1787,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   fallible walk's errors pass through (G1a). Cost: a builder no longer sees the length up front (a reserve) - the
   literal's and a counted comprehension's length is known to the compiler; Vec/Array built directly anyway. Not `From`
   (T17e's `Op.From(v)` means a raw value). Recommended yes, FromIter only (one way). In effect: FromArray (decided).
+- QBX ASKED 2026-10-27 (the user: "should we maybe remove the Type from array and list comprehension literals
+  completely?" - E27's required element type was the user's, and relaxing it was deferred by them earlier): proposed
+  Swift's rule - no type in front at all: `[1, 2, 3]`, `[f(x) for x in a]`, `["a": 1]`; the type is the target's (a
+  declared local/field/global, a parameter, a result, a return, `T.FromIter`'s builder for a container target), else
+  the elements' own (T6a literal types, a common type by T6b widening, else an error naming the declaration to write);
+  `[]` needs a target; `x := [1.0, 2.0]` is Array<F64> (F32 by `x Array<F32> = [...]`); generic arguments infer as
+  G9a. `$` would render every sequence as `[...]` and a map as `[k: v]` (no type, read back where a type is given -
+  the cost: a rendering no longer names Vec vs Array). Supersedes QBU's type-in-front. Recommended yes. In effect: QBU's
+  `Array<T>[...]` (decided an hour earlier), nothing built.
