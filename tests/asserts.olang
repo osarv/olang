@@ -1,0 +1,82 @@
+# S18c: an assert the evaluator decides is an error while compiling only where every run of its body reaches it -
+# where some run passes it by (a branch the build does not decide, a loop, after a statement that may leave), a false
+# one stays a check at run time; a true one needs no check wherever it is
+
+import "std/os"
+
+type Bad error { NO }
+
+fn fails() ? Bad { error Bad.NO }
+
+fn twice(n I64) I64 { return n * 2 }
+
+# a clause that returns, breaks, continues or raises: the false asserts after it are never reached
+fn afterReturn() I64 {
+    try fails() catch Bad { return 1 }
+    assert false, "after a clause that returns"
+    return 0
+}
+
+fn afterBreak(n I64) I64 {
+    count I64 = 0
+    for _ in range n {
+        count++
+        try fails() catch Bad { break }
+        assert false, "after a clause that breaks"
+    }
+    return count
+}
+
+fn afterContinue(n I64) I64 {
+    count I64 = 0
+    for _ in range n {
+        count++
+        try fails() catch Bad { continue }
+        assert false, "after a clause that continues"
+    }
+    return count
+}
+
+fn afterRaise() ? Bad {
+    try fails() catch Bad { error Bad.NO }
+    assert false, "after a clause that raises"
+}
+
+fn afterPassedOn() ? Bad {
+    try fails()
+    assert false, "after an error passed on"
+}
+
+# in a branch and a loop the program decides while it runs
+fn inBranch() I64 {
+    if os.Args().Len() > 1000 { assert false, "in a branch" }
+    for a in os.Args() {
+        if a.Len() > 100000 { assert twice(2) == 5, "in a loop" }
+    }
+    return 7
+}
+
+test "a false assert after a clause that returns is not reached" {
+    try fails() catch Bad { return }
+    assert false, "after the test's clause returns"
+}
+
+test "a false assert after what leaves a function is not reached" {
+    assert afterReturn() == 1 and afterBreak(3) == 1 and afterContinue(3) == 3
+    try afterRaise() catch Bad.NO { }
+    try afterPassedOn() catch Bad.NO { }
+    assert inBranch() == 7
+}
+
+test "a true assert is decided wherever it is" {
+    if os.Args().Len() > 0 { assert twice(3) == 6, "decided true in a branch" }
+    assert twice(4) == 8
+}
+
+# the evaluator decides these while compiling (S18c): a global it bakes reads the functions too (K2)
+Baked I64 = afterReturn() + afterBreak(5) + afterContinue(2)
+
+test "the evaluator agrees" {
+    assert Baked == 4
+    assert afterReturn() + afterBreak(5) + afterContinue(2) == 4
+}

@@ -4758,13 +4758,20 @@ value is not`, `FILE:LINE: a generator asked for its next value inside its own w
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
 values are fixed (S8c) and lengths known while compiling (T7c) - in an instance (G29), its by-value array parameters'
-lengths among them - is **checked while compiling**: a false one is a compile-time error at the assert, which
-carries its message (S17) when that can be computed while compiling too, as is one whose evaluation reaches what aborts
-the program (K1), and a true one needs, and gets, no run-time check. In an instance the error is reported at the call
-that asked for it - the program's own call, the outermost of G16b's chain - with a note at the assert, since a length
-the call gave is what made it false. This holds wherever the assert is written, reached or
-not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
-in a `test` block is judged only in a test build (B3a), the only build that runs it.
+lengths among them - is **checked while compiling**. A true one needs, and gets, no run-time check, wherever it is written. A false one,
+and one whose evaluation reaches what aborts the program (K1), is a compile-time error at the assert where every run of
+its body reaches it - every run but those a failed check, `unreachable` or `!` ends: the assert stands among its body's
+statements, or in a block, a loop's body or a join's block among them, and no statement before it at any level may
+leave the block it is in (a `return`; a `break` or `continue` of a loop it is not in; an error raised, re-raised or
+passed on by a `try` whose clauses do not take everything its operand fails with; a clause or arm doing one of these; a
+`yield`). One that some run passes by - in a branch the build does not decide (a branch it decides, B9c, S8b, G35, is
+the only one there), an arm, a clause, deferred code, a post clause, after a statement that may leave - stays a check at
+run time, failing there only where it is reached. The error carries the assert's message (S17), rendered as the run time
+renders it where that can be computed while compiling - by the evaluator, or from what reflection knows of the instance
+(`"field " $f.Name`, G33, G35) - and otherwise the message as written, saying that it reads what only the running
+program knows. In an instance the error is reported at the call that asked for it - the program's own call, the
+outermost of G16b's chain - with a note at the assert, since a length the call gave is what made it false. An assert in
+a `test` block is judged only in a test build (B3a), the only build that runs it.
 
 **S18d (the error return trace).** A test build (`test`) and a debug build (`-debug`, §10) keep, for each thread, a trace of
 where the error being returned went - its last 32 places: an `error` statement (R3), an `as` that does not hold (E32) or a

@@ -533,13 +533,14 @@ type Bind struct(To LocalId, From Expr&) {
 # a try: X is evaluated, and an error any call or checked operation in it fails with - none nested in an inner Try -
 # goes to the first clause naming it; one no clause names leaves the body, re-encoded under its own errors (R17).
 # Eval'd as a statement, a clause falls through to after it; in value position it leaves or gives its Defaults (R9b)
-type Try struct(X Expr?&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool = false) {
+type Try struct(X Expr?&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool = false, Left Bool = true) {
     X
     Clauses
     Ends       # "x!" (E35): no clauses, and an error reaching it ends the program as a failed assert does
     Passes     # what its clauses do not take goes on to the try around it, where any other try's leaves the body (R13):
                # a loop's own call taking Exhausted (S9a) - to the loop's "in try" (S9e), a comprehension's try (E27) -
                # and a clause-less checked inside a try or a "!" (E15a, E35)
+    Left       # whether its operand may fail with what no clause takes (R13) - true where check did not say (S18c)
 }
 
 type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block?&, Defaults Array<Expr&>&, Caught I64 = -1
@@ -1009,6 +1010,198 @@ fn armBreaks(a Arm&, loop BlockId) Bool {
         if exprBreaks(alt.Test, loop) { return true }
         for bd in alt.Binds {
             if exprBreaks(bd.From, loop) { return true }
+        }
+    }
+    return false
+}
+
+# ---- whether an assert is reached on every run of its body (S18c) ----
+
+# whether every run of a body (root b) reaches the assert written at sp - every run but those that end the program or
+# the test, by a failed check, "unreachable" or "!", which the evaluator rules out as failures of their own: the assert
+# is among b's statements, or a block's, a loop's body's or a join's code among them, in turn, and no statement before
+# it, at any level, may leave the block it is in - a return, a break or continue of a loop it is not in, an error raised
+# or passed on (a try with no clause taking every error), a yield. One in a branch the build does not decide, an arm, a
+# clause, deferred code, a post clause or an expression is not: some run passes it by
+fn AlwaysReached(b Block?&, sp source.Span) Bool { return reached(b, sp) == 1 }
+
+# 1 the assert is reached on every run of b, -1 some run passes it by, 0 it is not among b's statements or in a block,
+# a loop's body or a join's code among them
+fn reached(b Block?&, sp source.Span) I64 {
+    if b is null { return 0 }
+    for s in b.Stmts {
+        if isAssertAt(s, sp) { return 1 }
+        inner := within(s)
+        if inner is not null and reached(inner, sp) != 0 { return reached(inner, sp) }
+        leftBy := Vec<BlockId>()
+        if stmtLeaves(s, leftBy) { return -1 if holds(b, sp) else 0 }
+    }
+    return 0
+}
+
+fn isAssertAt(s Stmt&, sp source.Span) Bool {
+    return match s {
+        case Stmt.Assert(asp, _, _) => asp.Start == sp.Start and asp.End == sp.End
+        case _ => false
+    }
+}
+
+# the block a statement runs whenever it is reached: a block's, a loop's body (run once at least), a join's code
+fn within(s Stmt&) Block?&s {
+    return match s {
+        case Stmt.Block(_, b) => b
+        case Stmt.Loop(_, body, _) => body
+        case Stmt.Join(_, j) => j.Code
+        case _ => null
+    }
+}
+
+# whether the assert is among b's statements or within such a block of theirs
+fn holds(b Block?&, sp source.Span) Bool {
+    if b is null { return false }
+    for s in b.Stmts {
+        if isAssertAt(s, sp) or holds(within(s), sp) { return true }
+    }
+    return false
+}
+
+# whether s may leave the block it is in other than by ending: inner the blocks opened inside the walk so far, whose
+# own breaks and continues leave nothing. A lambda's body is another body
+fn stmtLeaves(s Stmt&, inner mut Vec<BlockId>&) Bool {
+    return match s {
+        case Stmt.Return(_, _), Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Suspend(_, _) => true
+        case Stmt.Jump(_, _, l) => not inner.Has(l)
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x) => exprLeaves(x, inner)
+        case Stmt.Assign(_, p, x) => placeLeaves(p, inner) or exprLeaves(x, inner)
+        case Stmt.If(_, i) => exprLeaves(i.Test, inner) or blockLeaves(i.Then, inner) or blockLeaves(i.Else, inner)
+        case Stmt.Loop(_, body, post) => loopLeaves(body, post, inner)
+        case Stmt.Exit(_, _, _), Stmt.Assert(_, _, _) => false
+        case Stmt.Block(_, b) => openLeaves(b, inner)
+        case Stmt.Defer(_, b) => blockLeaves(b, inner)
+        case Stmt.Join(_, j) => (j.Tried and not clausesTakeAll(j.Clauses)) or blockLeaves(j.Code, inner) or
+                                clausesLeave(j.Clauses, inner)
+        case Stmt.Spawn(_, sp) => exprLeaves(sp.Task, inner)
+    }
+}
+
+fn loopLeaves(body Block&, post Block?&, inner mut Vec<BlockId>&) Bool {
+    return openLeaves(body, inner) or openLeaves(post, inner)
+}
+
+# a block opened inside - a loop's body or post clause, a block statement (the block a for-in's break leaves): a jump to
+# it leaves nothing. A branch's, an arm's or a clause's block may carry the id of the block it is in (a loop's own
+# "if not c { break }"), so only these are counted
+fn openLeaves(b Block?&, inner mut Vec<BlockId>&) Bool {
+    if b is null { return false }
+    inner.Push(b.Id)
+    out := stmtsLeave(b.Stmts, inner)
+    try inner.Pop() catch { }
+    return out
+}
+
+fn blockLeaves(b Block?&, inner mut Vec<BlockId>&) Bool {
+    if b is null { return false }
+    return stmtsLeave(b.Stmts, inner)
+}
+
+fn stmtsLeave(ss Array<Stmt&>&, inner mut Vec<BlockId>&) Bool {
+    if ss.Len() == 0 { return false }
+    for s in ss {
+        if stmtLeaves(s, inner) { return true }
+    }
+    return false
+}
+
+fn exprsLeave(xs Array<Expr&>&, inner mut Vec<BlockId>&) Bool {
+    if xs.Len() == 0 { return false }
+    for x in xs {
+        if exprLeaves(x, inner) { return true }
+    }
+    return false
+}
+
+fn exprLeaves(x Expr?&, inner mut Vec<BlockId>&) Bool {
+    if x is null { return false }
+    return match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _), Expr.Fn(_, _, _) => false
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p) => placeLeaves(p, inner)
+        case Expr.Promote(_, _, pr) => exprLeaves(pr.X, inner)
+        case Expr.Call(_, _, k) => calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
+        case Expr.Make(_, _, m) => exprsLeave(m.Items, inner) or exprLeaves(m.Length, inner)
+        case Expr.Collect(_, _, c) => exprLeaves(c.Reserve, inner) or loopLeaves(c.Loop, null, inner)
+        case Expr.Prim(_, _, _, _, args) => exprsLeave(args, inner)
+        case Expr.Slice(_, _, sl) => placeLeaves(sl.Base, inner) or exprLeaves(sl.Lo, inner) or exprLeaves(sl.Hi, inner)
+        case Expr.Cond(_, _, k) => exprLeaves(k.C, inner) or exprLeaves(k.A, inner) or exprLeaves(k.B, inner)
+        case Expr.Seq(_, _, q) => stmtsLeave(q.Stmts, inner) or exprLeaves(q.X, inner)
+        case Expr.Match(_, _, m) => stmtsLeave(m.Held, inner) or armsLeave(m.Arms, inner) or
+                                    (m.NoMatch is not null and armLeaves(m.NoMatch!, inner))
+        # what no clause takes is passed on - out of the body, or to the try around it, which is in the walk too
+        case Expr.Try(_, _, t) => (not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
+                                  exprLeaves(t.X, inner) or clausesLeave(t.Clauses, inner)
+        case Expr.Text(_, _, t) => piecesLeave(t.Pieces, inner)
+        case Expr.Away(_, _, y) => exprLeaves(y, inner)
+    }
+}
+
+fn calleeLeaves(c Callee&, inner mut Vec<BlockId>&) Bool {
+    return match c {
+        case Callee.Value(x) => exprLeaves(x, inner)
+        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _) => false
+    }
+}
+
+fn piecesLeave(ps Array<Piece&>&, inner mut Vec<BlockId>&) Bool {
+    if ps.Len() == 0 { return false }
+    for p in ps {
+        match p {
+            case Piece.Render(x) { if exprLeaves(x, inner): return true }
+            case Piece.Lit(_) { }
+        }
+    }
+    return false
+}
+
+fn placeLeaves(p Lvalue&, inner mut Vec<BlockId>&) Bool {
+    return match p {
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) => false
+        case Lvalue.Deref(_, _, r) => exprLeaves(r, inner)
+        case Lvalue.Field(_, _, base, _) => placeLeaves(base, inner)
+        case Lvalue.Elem(_, _, e) => placeLeaves(e.Base, inner) or exprLeaves(e.Index, inner)
+        case Lvalue.Payload(_, _, pl) => placeLeaves(pl.Base, inner)
+        case Lvalue.Temp(_, _, v, _) => exprLeaves(v, inner)
+    }
+}
+
+fn clausesTakeAll(cs Array<Clause&>&) Bool {
+    if cs.Len() == 0 { return false }
+    for k in cs {
+        if k.All { return true }
+    }
+    return false
+}
+
+fn clausesLeave(cs Array<Clause&>&, inner mut Vec<BlockId>&) Bool {
+    if cs.Len() == 0 { return false }
+    for k in cs {
+        if blockLeaves(k.Code, inner) or exprsLeave(k.Defaults, inner) { return true }
+    }
+    return false
+}
+
+fn armsLeave(arms Array<Arm&>&, inner mut Vec<BlockId>&) Bool {
+    if arms.Len() == 0 { return false }
+    for a in arms {
+        if armLeaves(a, inner) { return true }
+    }
+    return false
+}
+
+fn armLeaves(a Arm&, inner mut Vec<BlockId>&) Bool {
+    if exprLeaves(a.Guard, inner) or blockLeaves(a.Code, inner) or exprLeaves(a.Value, inner) { return true }
+    for alt in a.Alts {
+        if exprLeaves(alt.Test, inner) { return true }
+        for bd in alt.Binds {
+            if exprLeaves(bd.From, inner) { return true }
         }
     }
     return false

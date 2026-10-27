@@ -1,0 +1,8 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: twice(2) is 4, not 5
+# also: compilation failed with 1 error
+# S18c, S17: a decided false assert's message of text and renderings is rendered by the evaluator, as the run time
+# renders it - the pieces evaluated, not written out
+fn twice(n I64) I64 { return n * 2 }
+fn main() {
+    assert twice(2) == 5, "twice(2) is " $twice(2) ", not 5"
+}

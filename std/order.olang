@@ -60,26 +60,34 @@ type Lesser<T> trait { Less(o T&) Bool }
 # x before y, both the value of the field f
 fn lessThan<F, V>(f F, x V, y V) Bool {
     if V.Kind == TypeKind.Reference {
-        return lessRef<V.Target>(x, y)
+        return lessRef<F, V.Target>(f, x, y)
     } else {
-        return lessVal(x, y)
+        return lessVal(f, x, y)
     }
 }
 
-fn lessVal<V>(x V, y V) Bool {
+fn lessVal<F, V>(f F, x V, y V) Bool {
     return match V {
         case Number, Bool, Char => x < y
         case Lesser<V> => x < y
-        case _ => ByFields<V>(x, y)
+        case _ => nested(f, x, y)
     }
 }
 
 # the same for a field held by reference (text, a struct held by &)
-fn lessRef<R>(x R&, y R&) Bool {
+fn lessRef<F, R>(f F, x R&, y R&) Bool {
     return match R {
         case Lesser<R> => x < y
-        case _ => ByFields<R>(x, y)
+        case _ => nested<F, R>(f, x, y)
     }
+}
+
+# a field of a struct or an enum with no Less of its own, ordered by its fields in turn; any other field has no order,
+# a compile-time error naming it (S18c)
+fn nested<F, V>(f F, x V, y V) Bool {
+    if V.Kind == TypeKind.Struct or V.Kind == TypeKind.Enum { return ByFields<V>(x, y) }
+    assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields"
+    return false
 }
 
 if TestBuild {

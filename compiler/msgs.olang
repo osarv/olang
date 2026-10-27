@@ -736,6 +736,7 @@ type Diag enum {
     DefaultNotComputable
     AssertFalse
     AssertFalseMessage
+    AssertFalseWritten
     AssertMsgReturns
     AssertMsgError
     AssertMsgLoopJump
@@ -2939,6 +2940,9 @@ fn AssertFalse() Msg { return Msg(Diag.AssertFalse, "S18c", "this assertion is f
 
 # ERR_ASSERT_FALSE_MESSAGE
 fn AssertFalseMessage(text String&) Msg { return Msg(Diag.AssertFalseMessage, "S18c", "this assertion is false, evaluated while compiling: " $text) }
+
+# ERR_ASSERT_FALSE_WRITTEN
+fn AssertFalseWritten(text String&) Msg { return Msg(Diag.AssertFalseWritten, "S18c", "this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: " $text) }
 
 # ERR_ASSERT_MSG_RETURNS
 fn AssertMsgReturns(text String&) Msg { return Msg(Diag.AssertMsgReturns, "S17", $text " message may not return - it is evaluated only where it is used, and gives text") }

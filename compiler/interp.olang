@@ -246,21 +246,29 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     for a in c.AssertAsks {
         key := pair.Pair(a.Body, I64(a.Sp.Start))
         if decided.Has(key) { continue }
-        k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
-        x.Need(k)
-        s := x.M.Eval(k, Array<I64>(0))
+        s := eval.Stop.None
+        holds := false
+        if a.Cond >= 0 {
+            k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
+            x.Need(k)
+            s = x.M.Eval(k, Array<I64>(0))
+            if s == eval.Stop.None { holds = x.M.Int(x.M.Result, types.BoolT) != 0 }
+        }
         at := diag.Where.Span(a.File, a.At.Start, a.At.End)
+        # a true one needs no check wherever it is; anything else is an error only where every run reaches it - where
+        # some run passes it by (a branch, a loop, after what may leave), the run time checks it
+        if s == eval.Stop.None and holds {
+            n++
+            decided.Put(key, true)
+            continue
+        }
+        if not typed.AlwaysReached(c.Bodies[a.Body].Root, a.Sp) { continue }
         match s {
             case eval.Stop.None {
                 n++
-                if x.M.Int(x.M.Result, types.BoolT) != 0 {
-                    decided.Put(key, true)
-                } else {
-                    text, has := x.Text(a.Msg)
-                    rec := d.Error(at, msgs.AssertFalseMessage(text) if has else msgs.AssertFalse())
-                    # G30/G16b: the instance it was false for
-                    if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
-                }
+                rec := d.Error(at, falseMessage(x, a))
+                # G30/G16b: the instance it was false for
+                if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 n++
@@ -279,6 +287,18 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
         }
     }
     return n
+}
+
+# a false assert's error: with its message rendered as the run time renders it - by reflection or by the evaluator -
+# else, where the message reads what only the running program knows, its text as written, saying so
+fn falseMessage(x mut Exec&, a typecheck.AssertAsk&) msgs.Msg {
+    if a.Said { return msgs.AssertFalseMessage(a.SaidText) }
+    if a.Msg >= 0 {
+        text, has := x.Text(a.Msg)
+        if has { return msgs.AssertFalseMessage(text) }
+    }
+    if a.Written != "" { return msgs.AssertFalseWritten(a.Written) }
+    return msgs.AssertFalse()
 }
 
 # S17a: the top-level asserts, each decided here or an error - a false one, one that aborts, one reading a stale view,

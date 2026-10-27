@@ -1,0 +1,16 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: reached on every run
+# also: compilation failed with 1 error
+# never: passed by
+# S18c: an assert after statements that cannot leave - a loop, an if whose branch does not leave, a clause that takes
+# the error and goes on - is reached on every run and decided; one in a branch is passed by on some run, a run-time check
+import "std/os"
+type Bad error { NO }
+fn fails() ? Bad { error Bad.NO }
+fn main() {
+    n I64 = 0
+    for a in os.Args() { n += a.Len() }
+    if n > 3 { n = 0 }
+    try fails() catch Bad { n++ }
+    if n > 1000 { assert false, "passed by" }
+    assert 1 + 1 == 3, "reached on every run"
+}

@@ -328,6 +328,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     reflTouched Bool = false    # G35: the condition being folded read a reflected member
+    reflSaid Bool = false       # G35, S18c: the message reflText last rendered read a reflected member
     spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
     testKeys StringBuilder      # B7a: the root's tests of a target, each target and description between zero bytes
     namedBad Bool = false       # E14b: arguments by name that do not give the parameters, said (the call is unknown)
@@ -361,13 +362,18 @@ type TopAssertAsk struct(File I64, Sp source.Span, At source.Span, Cond I64, Msg
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
 # (BodyOf.Cond) and its message's, -1 for none
 type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64, Fixed Array<I64>&
-    Ctx diag.Where, CtxText String&) {
+    Ctx diag.Where, CtxText String&, Said Bool = false, SaidText String& = "", Written String& = "") {
     Body
     File
     Sp
     At         # what a decision is reported at: the condition's operator, as stage 0 reports it
-    Cond
+    Cond       # -1: decided false already, by reflection (G35)
     Msg
+    Said       # its message rendered already, by reflection (G35): SaidText
+    SaidText
+    # its message as written, "" for none: what a false one's error carries where the message cannot be rendered while
+    # compiling - it reads what only the running program knows
+    Written
     Fixed      # the locals of Body it reads as fixed (S8c)
     # G30, G16b: the instance it was checked for, where its constant variables are read - where it was asked for and
     # the note naming it ("instantiated here, with a.Len() = 6"); "" for none
@@ -4215,7 +4221,7 @@ fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
             fr.Tries--
             k := c.caught(mark, fr.leaks.Len(), Vec<typed.Clause&>())
             c.escapes(sp, mark, k)
-            x = typed.Expr.Try(csp, types.BoolT, typed.Try(x, Array<typed.Clause&>(0)))
+            x = typed.Expr.Try(csp, types.BoolT, typed.Try(x, Array<typed.Clause&>(0), Left = k > 0))
         }
         bfrom := c.stmts.Len()
         id, outer, bmark := c.open(typed.BlockKind.Plain, sp)
@@ -6314,7 +6320,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             match x {
                 case typed.Expr.Try(tsp, _, t) {
                     if t.Clauses.Len() == 0 and readPlace(t.X!) is not null {
-                        return typed.Expr.Try(tsp, want, typed.Try(c.fit(t.X!, want, sp), t.Clauses, t.Ends))
+                        return typed.Expr.Try(tsp, want, typed.Try(c.fit(t.X!, want, sp), t.Clauses, t.Ends, t.Passes, t.Left))
                     }
                 }
                 nomatch { }
@@ -12513,6 +12519,56 @@ fn (c mut Checker&) reflInt(x ast.Expr&) reflVal {
     return noRefl()
 }
 
+# a message reflection renders while compiling (G35, S18c): text, or a join of text and "$" renderings of what
+# reflFold knows - a member's name, a type's size, a length ("field " $f.Name " has no order"); whether it does
+fn (c mut Checker&) reflText(x ast.Expr&) String, Bool {
+    was := c.reflTouched
+    c.reflTouched = false
+    out, ok := c.reflTextOf(x)
+    c.reflSaid = c.reflTouched
+    c.reflTouched = was
+    return out, ok
+}
+
+fn (c mut Checker&) reflTextOf(x ast.Expr&) String, Bool {
+    match x {
+        case ast.Expr.Lit(sp, kind) {
+            if kind == token.Tok.StrLit { return String(c.strBytes(sp)), true }
+        }
+        case ast.Expr.Paren(_, y) { return c.reflTextOf(y) }
+        case ast.Expr.Join(_, parts) {
+            out := ""
+            for p in parts {
+                t, ok := c.reflPiece(p)
+                if not ok { return "", false }
+                out = $out $t
+            }
+            return out, true
+        }
+        nomatch { }
+    }
+    return "", false
+}
+
+fn (c mut Checker&) reflPiece(p ast.Expr&) String, Bool {
+    match p {
+        case ast.Expr.Lit(sp, kind) {
+            if kind == token.Tok.StrLit { return String(c.strBytes(sp)), true }
+        }
+        case ast.Expr.Unary(_, op, y) {
+            if op == token.Tok.Dollar {
+                v := c.reflFold(y)
+                if not v.Ok { return "", false }
+                if v.K == RvText { return v.S, true }
+                if v.K == RvInt { return $v.I, true }
+                if v.K == RvBool { return "true" if v.I == 1 else "false", true }
+            }
+        }
+        nomatch { }
+    }
+    return "", false
+}
+
 # a condition reflection decides (G35): 1 true, 0 false, -1 where it reads no reflected member or is not decided
 fn (c mut Checker&) reflDecide(x ast.Expr?&) I64 {
     if x is null { return -1 }
@@ -13687,7 +13743,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     c.handlesContracts(asks, cls)
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + 3), mark, k)
-    return typed.Expr.Try(sp, rt, typed.Try(x, cls.ToArray()))
+    return typed.Expr.Try(sp, rt, typed.Try(x, cls.ToArray(), Left = k > 0))
 }
 
 # D17e: the calls whose contracts were asked of the evaluator since ask, in the body being checked, are left to the run
@@ -13831,7 +13887,7 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     c.handlesContracts(asks, cls)
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + 3), mark, k)
-    c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
+    c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray(), Left = k > 0))))
 }
 
 fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool, got Array<types.TypeId>&
@@ -15064,32 +15120,43 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Assert(sp, k, msg) {
             # G35, S18c: one reading a reflected member is decided for this instance
             rd := c.reflDecide(k)
-            if rd == 0 {
-                if msg is null { c.err(sp, msgs.AssertFalse()) } else { c.err(sp, msgs.AssertFalseMessage(c.src(msg.Span()))) }
-                return
-            }
             if rd == 1 { return }
-            x := c.cond1(k)
+            # decided false (rd 0): an assert of a false condition, an error only where every run reaches it (S18c)
+            x := c.cond1(k) if rd < 0 else typed.Expr.Lit(k.Span(), types.BoolT, 0)
             m := c.message(msg, false)
             c.emit(typed.Stmt.Assert(sp, x, m))
             c.pushFacts(k, true, c.fr().Block)   # S8d: past it, what it says holds
             # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
             fr := c.fr()
             if c.Tests or not fr.InTest {
-                c.constsRead = true
-                cb := c.CondBody(fr.Mi, k)
-                c.constsRead = false
+                cb I64 = -1
                 fixed := Vec<I64>()
-                for id in c.lastFixed { fixed.Push(id) }
-                mb I64 = -1
-                if cb >= 0 and msg is not null {
-                    mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+                if rd < 0 {
+                    c.constsRead = true
+                    cb = c.CondBody(fr.Mi, k)
+                    c.constsRead = false
                     for id in c.lastFixed { fixed.Push(id) }
                 }
-                if cb >= 0 and (msg is null or mb >= 0) {
+                # its message: rendered by reflection (G35), else a body the evaluator renders, else its written text
+                mb I64 = -1
+                said, saidOk := "", false
+                written := ""
+                if (cb >= 0 or rd == 0) and msg is not null {
+                    said, saidOk = c.reflText(msg)
+                    if not saidOk {
+                        c.constsRead = true
+                        mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+                        c.constsRead = false
+                        for id in c.lastFixed { fixed.Push(id) }
+                        written = c.src(msg.Span())
+                    }
+                }
+                if cb >= 0 or rd == 0 {
                     cw, ct := c.P.L.Diags.TopContext()
-                    if not c.readsConst(k) { ct = "" }
-                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray(), cw, $ct))
+                    # G30/G16b: the instance it is about, where its condition or its message reads one
+                    if not c.readsConst(k) and rd < 0 and not (saidOk and c.reflSaid) { ct = "" }
+                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray(), cw, $ct
+                                                saidOk, $said, $written))
                 }
             }
         }
@@ -16671,8 +16738,8 @@ fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
         try fr.loops.Pop() catch { }
         try fr.exits.Pop() catch { }
     }
-    c.caught(lmark, lend, cls)
-    c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))
+    lk := c.caught(lmark, lend, cls)
+    c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray(), Left = lk > 0))))
 }
 
 # what for-in walks, decided by the source's type (S9a): a range (S9b), an array, a value stored in runs (S9f), an

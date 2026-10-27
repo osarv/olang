@@ -1,0 +1,10 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+# also: compilation failed with 1 error
+# S18c: a decided false assert whose message reads what only the running program knows (a parameter) carries the
+# message as written, saying so
+fn check(n I64) {
+    assert 1 > 2, "n is " $n
+}
+fn main() {
+    check(3)
+}

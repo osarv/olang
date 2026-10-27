@@ -1,7 +1,9 @@
 # check: fail error[S18c]: this assertion is false, evaluated while compiling
-# also: ByFields orders structs and enums, and this type is neither
+# also: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
+# also: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
 # also: compilation failed with 1 error
-# std/order: a field with no order (an array) is a compile-time error
+# std/order: a field with no order (an array) is a compile-time error naming the field - S18c renders the message's
+# reflected pieces ($f.Name, $V.Name) for the instance
 import "std/order"
 type Row struct(Id I64, Cells Array<I64>&) { Id, Cells }
 fn main() {

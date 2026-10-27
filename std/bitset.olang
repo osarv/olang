@@ -199,9 +199,8 @@ test BitSet "a walk gives the cases in declaration order" {
 test FromBits "round trips Bits and fails past the last case" {
     s := Of(Color[Color.Green, Color.Blue])
     assert (try FromBits<Color>(s.Bits())) == s
-    failed := false
-    try FromBits<Color>(8) catch Error.OUT_OF_RANGE { failed = true }
-    assert failed
+    try FromBits<Color>(8) catch Error.OUT_OF_RANGE { return }
+    assert false, "FromBits(8) gave a set past the last case"
 }
 
 test BitSet "flag words from raw values" {
