@@ -123,9 +123,9 @@ af07eb58637d9844 1d619bc9d2da7da6 checks/cases/b9scanbranch.olang
 c07e9d27ea3fc562 f9af0adff7be3422 checks/cases/badform.olang
 61a2b86e6865b32e b5c05c2e37297f38 checks/cases/bareadj.olang
 fc0402fec28ae8b8 6ce0328435d3ddbc checks/cases/baseintodeclared.olang
-5708632161ebd253 6e5d0d4d55cf2cb0 checks/cases/bitsetnotenum.olang
-19573bc35bc7bac0 fcc9f8ab67f80148 checks/cases/bitsetpayload.olang
-16f007367cecdb67 09153d55854adbb6 checks/cases/bitsettoomany.olang
+b2451564d49a7c10 ba8b2331631908c1 checks/cases/bitsetnotenum.olang
+4cc299cbeb336163 f33559094a581361 checks/cases/bitsetpayload.olang
+9fa7dc10764d746a 47deaf8a745279fc checks/cases/bitsettoomany.olang
 02e34d454fc040e1 a1f6628ea778656e checks/cases/blockcomment.olang
 d81b87da62c09223 05984b3e14ff3e60 checks/cases/blockunclosed.olang
 4ea4b73da2113824 dd76b193ad60330d checks/cases/bodyunparsed.olang
@@ -822,8 +822,8 @@ abb69a3e95a6a290 e6c389f77d2a0ea0 checks/cases/oparity.olang
 9e7843e9c64d79d2 bcd1af42ce425efd checks/cases/opfallible.olang
 fe37b3da613fc2ab 15a1894bb884aeeb checks/cases/opltbool.olang
 bf8d201cb801d912 7a5bd040bf9c8c0e checks/cases/opsetat.olang
-0a3304ed6e9a9d4b 140d469eba6bc363 checks/cases/orderarrayfield.olang
-b1e91eda20fd5fc3 282218e7b34781bf checks/cases/ordernotstruct.olang
+f7d92e7786efeca6 1add8ae591efa04f checks/cases/orderarrayfield.olang
+da55a1bddd5c2dc8 ff7cf487dc357bb7 checks/cases/ordernotstruct.olang
 66a82ef8f018e048 c4723adaa623aeac checks/cases/overridesig.olang
 acd82522da151ce1 03a912992fceb579 checks/cases/p1gresultref.olang
 78087923f2e5c6f2 11f474de0bf777bc checks/cases/p1gtargetscope.olang
