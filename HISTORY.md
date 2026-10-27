@@ -26125,3 +26125,99 @@ does; baked globals beside the run time), std/json's, std/csv's and std/flags' n
 (every refused place, a pun, a built-in and a prelude type, two of one type, one not built, a requirement, Attr misused,
 an unhandled Attr, HasAttr deciding branches, a method descriptor called without its receiver, a module's own
 functions).
+
+## The second survey's section 2: `Place.Here`, `become`, a top-level `assert`; the formatter's receiver and fix's tools (E40, D8a, S21, S17a, B13, B17, 2026-10-27)
+
+The user took docs/survey2.md section 2's items 1, 2 and 5 on 2026-10-26 ("Yes do that", "Build it now", "Yes"); std's two
+(bitset, ByFields) were built beside this batch on another branch. With item 1 the user stated a rule, recorded in
+PRINCIPLES.md: keywords are syntax (control flow, declarations); facts the compiler supplies are read through a name (a
+value's supplied methods, a type's namespace: `I64.Max`, `T.Fields`, `Place.Here`); attributes are library data with
+no compiler meaning.
+
+**`Place.Here` (E40).** A prelude struct, `type Place struct(File String&, Line I64, Column I64)` in
+std/prelude/place.olang, its `Str` writing `FILE:LINE:COLUMN` as a diagnostic names a place. `Place.Here` is read
+through the type's name, as E36's limits are, and is the place it is written; in a parameter's default it is the place
+of the call that leaves the argument off - Swift's rule, which costs nothing here since a default is already built per
+call (D8a). How (mine): `check.placeHere` builds the constructor call on constant arguments - the file's path as
+`Data`, read-only constant text (T25d), and two literals - so the evaluator bakes it, `interpret` runs it, and nothing
+in lowering or emit knows it exists; `callDefault` wraps every default a call fills in (argDefault, through an any's
+table too) and records the call's place for the time its defaults are built. Decided (mine): (1) the file as
+diagnostics write it (B11 - the root and relative imports as given, std's under its directory), one rule for every
+place the compiler names; (2) the call's place is its called name - a method's name after the `.`, a plain function's
+first token - where a column points at what was called; (3) a default whose own call leaves its place off gives that
+call the outermost place (the place is what the program wrote, never the default's text); (4) in a generic's body, one
+place for every instance; (5) any other member read through `Place` is an error naming `Place.Here` (`PlaceMember`),
+and reflection's members are not reached through it (`T.Fields` of Place is never wanted by name - asked first, it
+gave G32's "no reflected member 'Here'"). **Found on the way**: D3a reserves a prelude type's name everywhere, and the
+compiler had two types named `Place` - typed's lvalue enum and MIR's place struct. Both are `Lvalue` now (a sed over
+`typed.Place`/`mir.Place` and the two modules; MIR's `Fn.Place(...)` builder method kept its name), free.olang's
+constructor parameters named `Place` are `PlaceId`. User programs lose the name `Place` the same way (a prelude name is
+everyone's; checks case placereserved). Tests: tests/place.olang (the written place, a default's call place through
+functions, methods, constructors and a generic, an argument given, `default`, baked globals beside the run time, `==`
+and Hash), checks cases placemember, placereserved.
+
+**A top-level `assert` (S17a).** `assert cond[, message]` as a declaration - at a module's top level or in a branch of a
+top-level `if` the build takes - decided while compiling and never run. `ast.Decl.Assert`, parsed by `decl()`; names
+resolves it as an item; `check.topAssert` checks condition and message each as a body of their own (`BodyOf.Cond`, a
+frame pushed - so lambdas and calls work as in a global's initializer, unlike ExprBodyIn's conditions, which may name
+nothing) and keeps the diagnostics (ExprBodyIn forgets them, its conditions being checked elsewhere too);
+`interp.decideTopAsserts` runs each: true nothing, false (with the message where it computes), aborting or reading a
+stale view are S18c's errors in S17a's words, and an evaluation that stops - a mutable global, an extern, an unhandled
+error, a budget - is `TopAssertUndecidable`, naming why: a top-level assert holds of the program while compiling, or is
+none. Decided (mine): every module's, in every build that reaches it (it is part of the module, as its globals are);
+`Place.Here` works in one. Tests: tests/topassert.olang (reflection-free tables, a lambda, a fallible call caught, a
+build constant, a branch), checks cases topassert{false,msg,mut,if,bool}.
+
+**`become f(x)` (S21).** A guaranteed tail call; `become` a keyword (L9). The function ends - every scope closed - and
+the call is made in its place, its result and failure the function's own, so no `try` is written. Built as:
+- check (`becomeStmt`): the call checked as `return f(x)` would be with the unhandled-call rule off (its errors leak into
+  the function's set, R1a), and held to the rules a jump needs. The callee is a direct call of an instance of a function
+  or method declared with `fn` (`typed.Callee.Body` of `BodyOf.Fn`, not an export fn); the caller is one too (never
+  main, an export fn, a lambda or generator body, a test, a constructor or destructor); one signature (`sameJump`:
+  parameters' types and permissions in order, result, `ScopesFit` both ways, as many scope variables); nothing via
+  memory (`viaMemoryJump`: a ViaMemory result or an 'm' parameter); not in deferred code, a message, a task clause or a
+  join, nor with deferred code pending (the frame's `deferBlocks`, as `yield`). Once every set is final (`tailSets`,
+  after failForms): one error set in one order, and no local (but parameters) of a type that may hold a destructor -
+  `holdsDtor`: a struct that destructs, through fields, cases, elements, references, an `any` or a type variable. The
+  statement is `typed.Stmt.Return` of the `Call` with `Tail` set - so D10a, definit, the scope pass, early freeing and
+  the views pass read it as the return it is.
+- section 8 (scope.olang `call`): a tail call's callee scope variables must bind only `Var` terms (the function's own:
+  its parameters' scopes, its result scope) or the program's - never a block; a temporary the callee is handed is then
+  built in the result scope, as `return f(Point(1, 2))`'s is (`BecomeBorrows` otherwise, at the first argument binding a
+  block). And an instance with a destructor built into a block of the body anywhere (a constructor's or a call's built
+  result landing in a block - the case no local shows: `Res(n).n`) is `dtorBlock`, said at the become once the body is
+  judged.
+- lowering (`tail`): the arguments evaluated and each held in a frame temporary, `leave(0)` (every scope closed, the
+  same code a return runs), then `mir.Term.Tail(sp, call)` - a call with no destination and no blocks after it, which
+  the verifier holds to that and to the function's result.
+- emit (`tailCall`): `musttail call` and `ret` of its value, arguments as values and the function's own scope pointers;
+  `%big` (storage over 64KB) closed before it - written as a mark and settled once the function is written, since a
+  later block may make `%big`.
+- the evaluator (`Machine.tail`): the callee's frame pushed with the caller's return (Ret, RetArg), moved down into the
+  caller's slot (its words, ids, relocated by the caller's base), the caller's frame storage closed: the stack never
+  grows, so `interpret` runs ten million steps (as slowly as it runs anything: ~60 s for 30M calls) and a baked global
+  computed by a become chain is the same value.
+Measured: `sum(10000000, 0)`, `isEven(10000001)` mutual recursion and a 10M-step chain through two fallible functions
+run in a built program in ~0.1 s and pass in -debug, -race, -sanitize and test builds - each would overflow an 8 MB
+stack as calls. Decided (mine), beyond the user's three conditions: (1) the signature rule is the function's own
+signature, stricter than LLVM's (which compares IR types) - so a state machine's states share one signature, which they
+do anyway; (2) the error sets compared in order, since R6's codes are positions; (3) the destructor rule judged
+conservatively by types (a local that may hold one forbids it in the whole function, as a loop may have built it in an
+earlier turn); (4) `return try f(x)` stays the way to call where these do not hold. Tests: tests/become.olang (10M-deep
+chains, mutual recursion, errors through a chain, a reference parameter handed on, a built result accumulated in the
+result scope, a method, a generic, a state machine, baked globals beside run time and S18c), checks cases become{borrows,
+sig, errors, defer, dtor, dtortemp, lambda, main, try, notcall, value, memory, join, test}.
+
+**The formatter "cache" (B13) and fix's tools (B17).** The report was that `olang format`, run from another worktree,
+gave a stale layout through a shared formatter cache. There is no formatter cache since stage 0 went - `olang format`
+is the compiler's own linked code (the cache directory `~/.cache/olang/fmt` is stage 0's, unused; CLAUDE.md and B13 said
+otherwise and were stale). Reproduced, the layout was a formatter bug, the same with today's compiler: a method whose
+receiver is followed by its own type list (`fn (p mut Flags&) Read<T>(`) was written `fn(p` - `fmt.receiver` wanted a
+`(` right after the name. Fixed (the `<...>` skipped), std/list's seven methods it had already damaged restored, and
+the format fixture holds such a method. The comment alignment the report also saw is B13's rule (consecutive commented
+lines align one past the longest code; a lone one takes one space) - std/flags.olang was written out of the layout. The
+cache that did have the flaw was fix's: tools built into one shared `~/.cache/olang/fix`, rebuilt only when the
+program was older than the compiler binary or the tools - so a checkout whose compiler was older than another's ran
+tools the other built from its own sources. Now `fix/KEY` (the compiler's real path and the tools' directory), a
+`.from` stamp per tool naming the compiler (path, size, time) that built it, rebuilt when that changed or when the
+tools, the compiler's modules beside them or std are newer.

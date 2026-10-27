@@ -184,6 +184,37 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reaches a `!`, and by `-i`. Other builds print `(build with -debug to see where it came from)` instead.
 - **`assert cond[, message]` is a statement (S17/S18, the user's call for the message).** Outside `test` a failure
   aborts; in a test it fails that test. Every failed check prints `FILE:LINE:` and what failed (S18a).
+- **A top-level `assert cond[, message]` (S17a, docs/survey2.md 2.6, the user's "Yes" 2026-10-26; built 2026-10-27).** A
+  declaration (at a module's top level or in a branch of a top-level `if` the build takes) decided while compiling and
+  never run: true emits nothing; false, aborting, a stale view or **undecidable** (a mutable global, an extern, an
+  error nothing handles, a budget) is a compile error - `this top-level assert is false, decided while compiling[:
+  MSG]`, `... cannot be: WHY - assert it in a function or a test`. Decided (mine): condition and message checked as a
+  global's initializer is, in the module's context (globals, build constants, functions, lambdas - `ast.Decl.Assert`,
+  `check.topAssert`, `interp.decideTopAsserts`), every module's in every build reaching it; the false/aborts wordings
+  are S18c's.
+- **`Place.Here` (E40, D8a, docs/survey2.md 2.2, the user's "Yes do that" 2026-10-26; built 2026-10-27).** The prelude's
+  `Place(File String&, Line I64, Column I64)` (std/prelude/place.olang), `$p` `FILE:LINE:COLUMN`; `Place.Here` is the
+  place it is written, and in a parameter's default the place of the call leaving the argument off (`fn log(m String&,
+  at Place = Place.Here)`) - no keyword, a compiler fact read through the type's name (the user's three-way rule,
+  PRINCIPLES.md). Decided (mine): File as diagnostics write it; the call's place is its called name (a method's after
+  the `.`), the outermost call's where a default's own call leaves one off; a generic's body gives one place for every
+  instance; any other member through `Place` is an error naming `Place.Here`. Built as the constructor called on
+  constant arguments (`check.placeHere`, `callDefault` setting the call's place), so the evaluator, `interpret`, named
+  arguments and `default` need nothing new. **Found on the way**: D3a reserves prelude names, so the compiler's own
+  `typed.Place` and `mir.Place` became `Lvalue` (free.olang's `Place` fields `PlaceId`).
+- **`become f(x)` (S21, docs/survey2.md 2.3, the user's "Build it now" 2026-10-26; built 2026-10-27).** A guaranteed
+  tail call, `become` a keyword: every scope closed, then the call made in the function's place - LLVM's `musttail` in
+  a build (every mode: -debug, -race, -sanitize, test), a frame replaced in the evaluator (`Machine.tail`: the callee's
+  frame pushed, moved into the caller's slot, the caller's storage closed), so ten million steps of mutual recursion
+  run in one frame, built and interpreted. Its errors are the function's own, so no `try`. Decided (mine): only a call
+  of a function or method declared with `fn` (no function value, constructor, extern, export fn, any, scope argument),
+  only in one (never main, an export fn, a lambda, a generator, a test, a constructor or destructor); one signature -
+  parameters (types, permissions, scopes, T22), result - and, once sets are final, one error set in one order (R6's
+  codes); nothing passed through memory (over 128 bytes); not in deferred code, a message, a task clause or a join, nor
+  with deferred code pending; section 8: no argument is storage of a closing scope - the callee's scope variables bind
+  only the function's own and the program's, a temporary for it built in the result scope; no destructor-bearing value
+  held (a local whose type may hold one, `any` included) or built in a block (the scope pass's `dtorBlock`). typed:
+  `Return` of a `Call` with `Tail`; MIR: `Term.Tail` after `leave(0)`, its arguments held in frame temporaries.
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
 - **`errdefer` (S19e, the user's decision 2026-10-18; built 2026-10-25).** `errdefer STATEMENT` / `errdefer { }`: deferred

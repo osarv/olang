@@ -20,5 +20,11 @@
   true nothing, false/aborts/stale/undecidable each an error (msgs TopAssertFalse[Message], TopAssertUndecidable).
   tests/topassert.olang, checks cases topassert{false,msg,mut,if,bool}.
 
+- Item 2 become (S21): token Become, ast.Stmt.Become, check.becomeStmt (+ tailSets after failForms: error sets in
+  order, locals holding destructors), typed.Call.Tail, scope pass (bindings only Var/Program; dtorBlock), lower.tail
+  (args into temps, leave(0), Term.Tail), emit.tailCall (musttail + ret, %big mark), eval Machine.tail (frame moved
+  down). tests/become.olang (passes built, -debug, -race, -sanitize, -quick), 14 checks cases become*.
+- Records: CLAUDE.md entries (Syntax and statements), PRINCIPLES.md three-way rule, HISTORY.md section, SPEC E40/S17a/S21.
+
 ## Next
-- Item 2 become
+- make quick, then goldens (tokgold astgold layoutgold diaggold), then one full verify.

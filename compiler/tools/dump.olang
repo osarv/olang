@@ -477,7 +477,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
             if w.skipped(sp.Start) { return }
             w.line("ASSERT", sp)
             w.expr(k)
-            if msg is not null { w.expr(msg!) }
+            if msg is not null { w.expr(msg) }
         }
     }
 }
