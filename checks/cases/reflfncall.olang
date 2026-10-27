@@ -1,0 +1,7 @@
+# check: fail error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
+# G41: a method's descriptor is called with its receiver first
+type Box struct(v I64) { v }
+fn (b Box&) Get() I64 { return b.v }
+fn main() {
+    for m in Box.Methods { assert m() == 1 }
+}

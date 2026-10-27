@@ -1,0 +1,26 @@
+# check: run
+# G40, G35: HasAttr decides per member, so a branch reading what only some members have is checked only for them
+type Key struct(Name String&) { Name }
+type Weight extends F64
+type P struct(@Key("a") A I64, @Weight(2.0) B F64, C I64) { A, B, C }
+fn describe<T>() String {
+    s := ""
+    for f in T.Fields {
+        if f.HasAttr<Key>() {
+            s = $s $(f.Attr<Key>()!).Name
+        } else if f.HasAttr<Weight>() {
+            w F64 = f.Attr<Weight>()!
+            s = $s $w
+        } else {
+            s = $s "-"
+        }
+    }
+    return s
+}
+Baked := describe<P>()
+fn main() {
+    assert describe<P>() == "a2-" and Baked == describe<P>()
+    missing := false
+    try P.Attr<Key>() catch AttrError.MISSING { missing = true }
+    assert missing
+}

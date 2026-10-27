@@ -1,0 +1,7 @@
+# check: fail error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
+# G39: a local is no declaration reflection reads
+type Key struct(Name String&) { Name }
+fn main() {
+    @Key("x") n := 3
+    assert n == 3
+}

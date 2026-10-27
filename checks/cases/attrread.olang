@@ -1,0 +1,9 @@
+# check: fail error[G40]: 'Attr' takes the attribute's type and no arguments - 'Attr<json.Key>()'
+# G40: an attribute is read by its type
+type Key struct(Name String&) { Name }
+@Key("p")
+type P struct(x I64) { x }
+fn main() {
+    k := try P.Attr<Key>(1) catch default Key("")
+    assert k.Name == "p"
+}

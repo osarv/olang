@@ -1,0 +1,5 @@
+# check: fail error[G39]: a declaration takes one attribute of each type, and this is its second Key
+# G39: at most one attribute of each type on a declaration
+type Key struct(Name String&) { Name }
+type P struct(@Key("a") @Key("b") x I64) { x }
+fn main() { assert P(1).x == 1 }

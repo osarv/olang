@@ -1,0 +1,9 @@
+# check: fail error[G39]: an attribute's value is built while compiling, and this one cannot be: an assertion in it fails, which aborts the program
+# G39, K1: an attribute is built while compiling, or is an error - never set at startup
+type Size struct(n I64) {
+    assert n > 0
+    n
+}
+@Size(0)
+fn f() I64 { return 1 }
+fn main() { assert f() == 1 }

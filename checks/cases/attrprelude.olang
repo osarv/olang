@@ -1,0 +1,4 @@
+# check: fail error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is Vec<I64>
+# G39: nor does a prelude type's
+type P struct(@Vec<I64>() x I64) { x }
+fn main() { assert P(1).x == 1 }

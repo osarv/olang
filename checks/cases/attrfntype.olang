@@ -1,0 +1,5 @@
+# check: fail error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
+# G39: a function type's parameters are no declaration
+type Key struct(Name String&) { Name }
+fn call(f fn(@Key("x") n I64) I64) I64 { return f(1) }
+fn main() { assert call(fn(n I64) I64 { return n }) == 1 }

@@ -1,0 +1,9 @@
+# check: fail error[E15]: this call can fail - write 'try', and catch or pass on its errors
+# G40: reading an attribute can fail as written, whether the declaration has one or not
+type Key struct(Name String&) { Name }
+@Key("p")
+type P struct(x I64) { x }
+fn main() {
+    k := P.Attr<Key>()
+    assert k.Name == "p"
+}

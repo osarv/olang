@@ -1,0 +1,6 @@
+# check: fail error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
+# G39: a method's attributes are written before the method, never on its receiver
+type Key struct(Name String&) { Name }
+type Box struct(v I64) { v }
+fn (@Key("x") b Box&) Get() I64 { return b.v }
+fn main() { assert Box(1).Get() == 1 }

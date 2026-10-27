@@ -1,0 +1,5 @@
+# check: fail error[D17e]: this call breaks Tag's requirement 'v >= 0'
+# G39, D17e: an attribute's constructor's requirement decided while compiling
+type Tag struct(v I64) [v >= 0] { v }
+type P struct(@Tag(-1) x I64) { x }
+fn main() { assert P(1).x == 1 }

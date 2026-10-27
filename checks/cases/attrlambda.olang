@@ -1,0 +1,7 @@
+# check: fail error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
+# G39: a lambda's parameter is none either
+type Key struct(Name String&) { Name }
+fn main() {
+    f := fn(@Key("x") n I64) I64 { return n }
+    assert f(1) == 1
+}

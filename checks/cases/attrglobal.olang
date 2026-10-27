@@ -1,0 +1,6 @@
+# check: fail error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter
+# G39: nor is a global
+type Key struct(Name String&) { Name }
+@Key("x")
+Limit I64 = 3
+fn main() { assert Limit == 3 }

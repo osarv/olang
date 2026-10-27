@@ -1,0 +1,5 @@
+# check: fail error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is I64
+# G39: a built-in type's value says nothing of what it means - an attribute is found by its type
+@I64(3)
+fn f() I64 { return 1 }
+fn main() { assert f() == 1 }

@@ -1,0 +1,14 @@
+# check: run
+# G41: a module's own functions through an import of itself - private ones too; a generic's walk is no function
+import me "reflfnoneself"
+type Cmd struct(Word String&) { Word }
+@Cmd("hi") fn hello() String { return "hello" }
+@Cmd("bye") fn bye() String { return "bye" }
+fn pick<T>(x T) T { return x }
+fn main() {
+    s := ""
+    for f in me.Functions {
+        if f.HasAttr<Cmd>() { s = $s $(f.Attr<Cmd>()!).Word "=" $f() " " }
+    }
+    assert s == "hi=hello bye=bye " and pick(1) == 1
+}
