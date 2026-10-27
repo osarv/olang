@@ -563,3 +563,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   compile error), B13 formatter's `fn (p T&) M<Q>(` space (std/list's seven signatures restored), B17 fix's tools cached
   per compiler and tools tree. Left: oann's bandit_settle field named Place (D3a, at oann's migration); the two S18c
   bugs found by std2 (above). Next: those two S18c bugs; then survey2 items 6-12 as the user answers.
+- 2026-10-27 CET: s18c merged (a33ee4e, verified; merge = tip + memory): S18c messages rendered (reflection's
+  check.reflText, else the evaluator, else shown as written, AssertFalseWritten); a false assert is a compile error only
+  where every run reaches it (typed.AlwaysReached, Try.Left) - SPEC's "reached or not" reversed (mine); std/order names
+  the field without an order. Left: an S18c error inside an instance points at std's assert with a note at the inner
+  call, not the user's call. CODE WORK STOPPED for the week at ~0.93-0.94 (the 0.95 rule); reset Sat 2026-10-31 06:00 CET.
+  Next week: survey2 items 6-12 as the user answers (6 unreachable as a value asked), then a bulk review 4 over
+  checker..s18c (narrowing, D3b, attributes, become, AlwaysReached).
