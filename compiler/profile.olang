@@ -45,8 +45,10 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun($"its profile's directory " $dir " cannot be made"))
         return build.Finish(d)
     }
+    # the program's name: its binary's, without the build's mode (".quick.prof")
     name := filepath.Base(c.Built)
-    if name.EndsWith(".prof") { name = name[:name.Len() - 5] }
+    dot := try name.Find(".") catch default name.Len()
+    name = name[:dot]
     samples := $dir "/" $name ".samples"
     if html == "" { html = $dir "/" $name ".html" }
     try os.Remove(samples) catch os.Error { }

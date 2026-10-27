@@ -1,16 +1,16 @@
 # B20: `olang profile` - progress (hand-off note)
 
-## Done
-- 5bc64df (previous agent, WIP): Config.Profile, `.prof` mode suffix, FnAttrs ("frame-pointer"="all"), -lrt, `prof`
-  condition in runtime.ll, prof hooks at thread start/end and the hard abort, UC_* facts, instance Text in generic.
-- std/runtime/prof.ll committed (it was hidden by the shared repo's .git/info/exclude pattern `prof*`, which also hid
-  docs/profiling.md - lost, never committed; rewrite it).
-
-## Decided (mine)
-- (see SPEC B20 once written)
+## Done (all committed on wt-profile)
+- Driver mode `profile` (olang.olang tables, -output/-quick/-define/-update), compiler/profile.olang (run by fork+exec,
+  samples reader, ELF segments and symbol tables, llvm-symbolizer, report, flame graph), build.olang (Profile flag,
+  .prof suffix, FnAttrs frame-pointer, shrink-wrap off at compile and LTO link, -lrt), emit (Prof: LineTablesOnly CU,
+  ProfName names, every generated function a subprogram in "<generated>", main starts the sampler), runtime.olang
+  (`; @prof` hook lines), std/runtime/prof.ll (sampler), types.Demangle.
+- Tests: profile.olang's, types Demangle, olang.olang's parse/mistake tests, checks scenario `profile`.
+- Records: SPEC B20-B20b (+B1 table, B4), docs/profiling.md (rewritten - was lost), CLAUDE.md, HISTORY.md, READMEs,
+  makefile release ships llvm-symbolizer and releasetest profiles.
+- Measured overhead (HISTORY/docs), byte-identical IR of plain builds.
 
 ## Next
-- emit: Prof field, line tables (LineTablesOnly), readable DISubprogram names, main calls __olang_prof_start.
-- driver: `profile` mode (olang.olang tables, build.ProfileProgram), compiler/profile.olang (samples reader,
-  symbolizer, report, flame graph, demangler).
-- tests, checks scenario, SPEC B20, docs/profiling.md, CLAUDE.md, HISTORY.md, bench overhead, byte-identical check.
+- drvgold recapture (help text, -output message), make quick, full verify, final report.
+- Not run: make release/releasetest (needs a release build).
