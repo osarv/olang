@@ -1,0 +1,43 @@
+# attributes and functions reflected across a module (G39-G41): handlers named by routes and commands, a type whose
+# attributes another module's generic reads - the importer sees the exported functions, this module all of its own
+import me "attrmod"
+
+# where a handler answers
+type Route struct(Path String&) [Path.StartsWith("/")] { Path }
+
+# a command-line word, and what it does
+type Command struct(Word String&, Help String& = "") { Word, Help }
+
+@Route("/users")
+fn Users(q String&) String { return "users:" $q }
+
+@Route("/items") fn Items(q String&) String { return "items:" $q }
+
+@Command("add", "adds two numbers")
+fn Add(a I64, b I64 = 10) I64 { return a + b }
+
+fn Plain(x I64) I64 { return x * 2 }
+
+@Command("hidden")
+fn private(x I64) I64 { return x - 1 }
+
+# a record with a renamed field: its attribute on the parameter the field puns
+type Rec struct(@Command("alpha") A I64, B I64 = 2) { A, B }
+
+fn (r Rec&) Sum() I64 { return r.A + r.B }
+
+@Command("twice")
+fn (r Rec&) Twice(k I64) I64 { return (r.A + r.B) * k }
+
+# this module's own functions, private ones included, through an import of itself
+fn OwnWords() String {
+    s := ""
+    for f in me.Functions {
+        if f.HasAttr<Command>() { s = $s $(f.Attr<Command>()!).Word " " }
+    }
+    return s
+}
+
+test "a module walks its own functions, private ones too, through an import of itself" {
+    assert OwnWords() == "add hidden "
+}

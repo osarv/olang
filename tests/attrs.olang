@@ -1,0 +1,165 @@
+# typed attributes (G39), read by reflection while compiling (G40), and functions reflected (G41): attributes on types,
+# fields, cases, parameters, functions and methods; a router and a command table collected while compiling; what the
+# evaluator bakes and decides agrees with the run time
+import "attrmod"
+
+# a key for a member, a mark that leaves one out, and a number its constructor checks - built while compiling (G39)
+type Key struct(Name String&) { Name }
+type Skip struct() { }
+type Tag struct(V I64) [V >= 0] { V }
+type Level enum { Low, High }
+type Weight extends F64
+
+@Key("user") @Level.High
+type User struct(@Key("id") Id I64, @Skip Cache I64 = 0) {
+    Id
+    Cache
+    @Key("n") Count := 3
+    @Weight(2.5) @Tag(7) Plain I64 = 4
+}
+
+type Color enum {
+    @Key("r") Red
+    Green(@Key("gg") g I64, h I64)
+    @Level.Low
+    Blue
+}
+
+# each field's key, its own or its name, and "(skip)" after one left out
+fn keys<T>() String {
+    b := StringBuilder()
+    for f in T.Fields {
+        k := try f.Attr<Key>() catch default Key(f.Name)
+        b.Push(k.Name)
+        if f.HasAttr<Skip>() { b.Push("(skip)") }
+        b.Push(" ")
+    }
+    return b.ToString()
+}
+
+# each case's key, and its fields'
+fn caseKeys<T>() String {
+    b := StringBuilder()
+    for c in T.Cases {
+        k := try c.Attr<Key>() catch default Key(c.Name)
+        b.Push(k.Name)
+        for f in c.Fields {
+            fk := try f.Attr<Key>() catch default Key(f.Name)
+            b.Push($"." $fk.Name)
+        }
+        b.Push(" ")
+    }
+    return b.ToString()
+}
+
+# a type's own attribute of type A, and whether a type has none
+fn typeKey<T>() String {
+    if T.HasAttr<Key>() { return $(T.Attr<Key>()!).Name }
+    return "-"
+}
+
+# the routes of attrmod's handlers, collected while compiling into a table read at run time
+fn routes() Map<String&, fn(q String&) String> {
+    m := Map<String&, fn(q String&) String>()
+    for f in attrmod.Functions {
+        if f.HasAttr<attrmod.Route>() { m.Put((f.Attr<attrmod.Route>()!).Path, fn(q String&) String { return f(q) }) }
+    }
+    return m
+}
+
+# attrmod's commands run with one argument: each word and what it gave, its parameters' defaults filling the rest
+fn commands(x I64) String {
+    s := ""
+    for f in attrmod.Functions {
+        if f.HasAttr<attrmod.Command>() {
+            c := f.Attr<attrmod.Command>()!
+            s = $s $c.Word "=" $f(x) " "
+        }
+    }
+    return s
+}
+
+# a function's shape as reflection reads it
+fn shapes() String {
+    s := ""
+    for f in attrmod.Functions {
+        s = $s $f.Name "(" $f.Params.Len() "):" $f.Type.Name
+        for p in f.Params {
+            s = $s " " $p.Name $("=" if p.HasDefault else "")
+        }
+        s = $s ";"
+    }
+    return s
+}
+
+# a type's methods called on a value, the receiver first
+fn methods(r attrmod.Rec) String {
+    s := ""
+    for m in attrmod.Rec.Methods {
+        if m.HasAttr<attrmod.Command>() { s = $s $m.Name "=" $m(r, 3) " " } else { s = $s $m.Name "=" $m(r) " " }
+    }
+    return s
+}
+
+# a generic taking a function's descriptor, failing as the function does
+type Odd error { ODD }
+
+fn half(x I64) I64 ? Odd {
+    if x % 2 != 0 { error Odd.ODD }
+    return x / 2
+}
+
+fn apply<F>(f F, x I64) I64 ? F.Errors { return try f(x) }
+
+KeysBaked := keys<User>()
+CasesBaked := caseKeys<Color>()
+CommandsBaked := commands(5)
+ShapesBaked := shapes()
+LevelBaked := try User.Attr<Level>() catch default Level.Low
+WeightBaked F64 = try User.Fields[3].Attr<Weight>() catch default Weight(0.0)
+TagBaked := (User.Fields[3].Attr<Tag>()!).V
+
+test Key "attributes are read on types, fields, puns, cases and their fields" {
+    assert keys<User>() == "id Cache(skip) n Plain " and KeysBaked == keys<User>()
+    assert caseKeys<Color>() == "r Green.gg.h Blue " and CasesBaked == caseKeys<Color>()
+    assert typeKey<User>() == "user" and typeKey<Color>() == "-" and typeKey<I64>() == "-"
+    assert LevelBaked == Level.High and (try User.Attr<Level>() catch default Level.Low) == Level.High
+    assert WeightBaked == 2.5 and Color.Cases[2].HasAttr<Level>() and not Color.Cases[0].HasAttr<Level>()
+    assert (User.Fields[3].Attr<Tag>()!).V == 7 and TagBaked == 7
+    assert User.HasAttr<Key>() and not User.HasAttr<Skip>()
+    # a parameter's attribute, which the field punning it has
+    for p in User.Params {
+        if p.Name == "Id" { assert (p.Attr<Key>()!).Name == "id" }
+    }
+    missing := false
+    try User.Attr<Skip>() catch AttrError.MISSING { missing = true }
+    assert missing
+}
+
+test "functions reflected: a router and a command table collected while compiling" {
+    m := routes()
+    assert m.Len() == 2 and (m.Get("/items")!)("x") == "items:x" and (m.Get("/users")!)("y") == "users:y"
+    assert commands(5) == "add=15 " and CommandsBaked == commands(5)
+    assert shapes() == "Users(1):fn(String&) String q;Items(1):fn(String&) String q;Add(2):fn(I64, I64) I64 a b=;Plain(1):fn(I64) I64 x;OwnWords(0):fn() String;"
+    assert ShapesBaked == shapes()
+    assert methods(attrmod.Rec(1)) == "Sum=3 Twice=9 "
+    assert apply(attrmod.Functions[3], 4) == 8
+    for f in attrmod.Functions {
+        if f.Name == "Plain" { assert apply(f, 21) == 42 }
+    }
+}
+
+# the module's own half and its error
+fn halves() I64 ? Odd {
+    total I64 = 0
+    for f in me2.Functions {
+        if f.Name == "half" { total += try apply(f, 8) }
+    }
+    return total
+}
+
+import me2 "attrs"
+
+test "a reflected function's errors are its descriptor's" {
+    assert (try halves()) == 4
+}
