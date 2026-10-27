@@ -1,0 +1,16 @@
+F-vecgrow: Vec push 50M: olang 326k faults/1.3GB vs C 195k/783MB; sys time dominates; retired buffers kept (retire() no-op), no mremap. -memory: nothing freed. THP madvise tested: inconclusive (noisy, compaction 7s once).
+F-genelide: for-in over generator in a big function (iter.olang main) not elided: gen.walk not inlined -> arena frame 72B, 28.6 Ir/value vs 0 (folded) in small function. Fix: alwaysinline on .walk/.wnext ramp.
+F-gensum: gen(n).Sum() 22 Ir/value vs folded for-in (known limit D18e).
+F-adapters: a.Iter().Take(k).Sum() / Skip: 9.5 Ir/elt vs 0.2 (Iter().Sum vectorized) vs hand loop range 1.4. Temporaries a.Iter().Skip().Take() allocated in arena (3 scope_alloc + scope header memset+fold per call) - viaIter 13.5 vs viaLocals 11.5.
+F-filtermap: a.Filter(f).Map(g) builds 2 arrays: 2x hand loop (22.6M vs 11.4M).
+OK: Fold, Iter().Fold, Count, Zip, Enumerate, Iter().Sum equal to hand loops.
+F-strlit: 't := "abcdef"' in a loop: copied into the loop scope's arena each turn (scope_alloc 33 Ir + memcpy; 71 Ir/iter vs ~2 for I64[1,2,3,4] local which stays stack/const). Only String (declared type over Array<Char>) locals.
+F-allocinline: __olang_scope_alloc_a (bump fast path + slow path in one fn, cost 280>250) never inlined: every allocation a call ~30 Ir. Prototype split (alwaysinline bump + noinline slow) in scratch std: binarytrees 14 185.0M -> 130.8M Ir (C arena 127.4M); native time 0.43 -> 0.35 s (C arena 0.35). txt sb 64.9->46.1M, text bench 149.5->140.8M, knucleotide 247->243M.
+F-pushinline: Vec.Push inlines room()+grown copy loop -> Push too costly to inline (cost 50 even after; before huge). noinline room: vec push 74.5M -> 60.5M. In bench main the callsite is "cold" (threshold 45) due to the if-mode chain. dispatch setup (100k pushes) 5.4M vs C 1.1M; loops equal.
+F-turnscope: allocating loop body: each turn new scope (memset 56) + first alloc slow path (take spare chunk ~33) + close give back; alloc 'arg' norm(P(i,i+1)) 74 Ir/iter vs 0.75 value form. ref local / built result same 70.
+F-emptyarr: Vec<I64>() allocates state + 8-byte empty Array(0) (E10 storage of its own); Vec+2 push 150 Ir.
+F-enumlayout: Opt{None,Some(F32)} 16 bytes (C 8), Dir 4 bytes, Small{A(U8),B(U8)} 16. Array<Opt> 20M x10: 0.86-1.19 s / 314MB vs packed struct 0.47 s / 158MB.
+CHECKED-NOGAIN: null_pointer_is_valid removed from every module: Ir identical (binarytrees, knucleotide, dispatch, text, regex, sha256). nounwind on all: Ir identical, size -4% regex.
+OK: error paths (try in loop) equal to C early-exit loop (12.4M vs 12.2M). Startup 261k Ir vs C 259k. hello 30KB vs 16KB (text 11.7K vs 1.3K).
+OK loops: spectral, mandelbrot, fannkuch, gather, walk, store equal Ir; sort vec 0.63; any dispatch 0.68; text 0.61; knucleotide 0.79; regex 0.81.
+nbody 1.19 Ir (time 1.02): C bodies static global, olang arena; advance j loop not fully unrolled. minor.
