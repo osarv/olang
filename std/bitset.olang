@@ -12,7 +12,10 @@
 
 type Error error { OUT_OF_RANGE }
 
-type BitSet<T> struct(bits U64 = 0) { bits }
+type BitSet<T> struct(bits U64 = 0) {
+    check<T>()
+    bits
+}
 
 # the check every instance makes: an enum, at most 64 cases, none with a payload
 fn check<T>() {

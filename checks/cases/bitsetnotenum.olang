@@ -1,0 +1,9 @@
+# check: fail error[S18c]: a BitSet is over an enum's cases
+# also: compilation failed with 1 error
+# std/bitset: only an enum has cases to hold
+import "std/bitset"
+type P struct(x I64) { x }
+fn main() {
+    s := bitset.Empty<P>()
+    assert s.Len() == 0
+}
