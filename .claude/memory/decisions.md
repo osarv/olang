@@ -1586,3 +1586,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   e { }` - the loop unrolled while compiling (e's length known then), the body checked per copy with `x` a constant (as
   reflection's walks are, G33), so `x` may decide branches and lengths (G35) - the user's "speed guarantees in loops";
   reading taken (stated to the user). Details mine. Queued for after the weekly reset (week at 0.94).
+- Item 9 DECIDED 2026-10-27 (the user: "build it either way no? ... it is quite guaranteed to work?"): inferred cold
+  paths, no syntax. Mine, told to the user: paths that end the program or test (a failed assert or contract check,
+  unreachable, `!`, null `!`) are always marked cold (LLVM branch weights / cold calls - layout, inlining, spills, not
+  the CPU predictor); raised-error paths get weights only if bench shows a gain AND a miss-heavy benchmark (Map.Get
+  MISSING, Find NOT_FOUND as normal control flow - errors are errors) does not lose; else LLVM's own guesses. Queued
+  for after the weekly reset.
