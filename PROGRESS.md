@@ -11,6 +11,9 @@
   makefile release ships llvm-symbolizer and releasetest profiles.
 - Measured overhead (HISTORY/docs), byte-identical IR of plain builds.
 
+- Goldens recaptured (drv, tokens, ast, layout, diag); `make verify` passed (2026-10-27); `make release` +
+  releasetest passed (57 MB tar.xz with llvm-symbolizer; profile named the hot function).
+
 ## Next
-- drvgold recapture (help text, -output message), make quick, full verify, final report.
-- Not run: make release/releasetest (needs a release build).
+- Nothing for this batch. Left (recorded in HISTORY): allocation profiling per site, threads C starts, a finer clock
+  than the kernel's tick; the shared repo's .git/info/exclude unanchored patterns (prof*, any, check, ...) want a "/".

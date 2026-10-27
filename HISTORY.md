@@ -26026,7 +26026,7 @@ compiler/types.olang's Demangle (Symbol read back, a long one, symbols that are 
 `profile` (checks/fixtures/profile/hot.olang): the program's own status, the hottest function first, a method by its
 type, the hottest line, the callers (a spawned call's function under `task`), the flame graph and `-output`, no sampler
 in a plain build and its `.ll` free of the frame-pointer attribute, `-target` refused, `help profile`. `make releasetest`
-profiles a program with the release's own llvm-symbolizer.
+profiles a program with the release's own llvm-symbolizer (the tarball 57 MB with it).
 
 **Future work, recorded.** Allocation profiling per site - the arena could count the bytes each site asks for (a site's
 id beside the call in a profile build), reported as the CPU profile is. Sampling threads C code starts. A finer clock
