@@ -1704,3 +1704,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   so as a name it would be a type-level function (QAS: none); commutes/export/extern/link/test are declarations, any a
   type form, comptime/yield/become/defer control. Decided (mine): FuncInfo's declared members gain the declaration
   keywords - `f.NoReturn`, `f.Exported` (export fn), `f.Extern`, `f.Commutes` - in the item 6/9 batch.
+- QBT ASKED 2026-10-27 (the user: "what could we gain from type level functions? ... they make very much sense as
+  extra constructors where the main constructor is Type() and the others are Type.Special()" - reopening QAS/QAT).
+  Gains: (1) builders named under their type - std/net's ParseIP/ParseAddr/ListenUDP are the type name worked into
+  function names, `net.IP.Parse(t)`; (2) prelude types get builders - `String.FromC(p, max)`, `F64.FromBits(u)`,
+  `Vec<T>.WithCapacity(n)` (today methods on the input); (3) generic code: a trait may require one (`T.Parse(t)`,
+  `T.Zero()`), which no value method can say; (4) doc grouping by declaration, not a heuristic. Costs: a type named
+  like its module reads `json.Json.Parse(t)`; where builders go. Proposed: `fn Color.FromHex(t String&) Color ? E` -
+  declared in the type's module, giving its type (bare, `&`, `?&`, errors allowed), always through the constructor
+  (T13); placement (a) every function giving a value of a type its module declares and taking none is declared on that
+  type (one place; time.Duration.Millis, list.List.Of, json.Json.Parse, net.Conn.Dial) - recommended - or (b) allowed
+  on the type, module functions giving it stay too (shorter, two places); traits listing them in a later step.
+  `embed` stays a keyword either way (it builds no type of its own). In effect: none (QAS/QAT).
