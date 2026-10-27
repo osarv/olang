@@ -274,7 +274,7 @@ fn (l mut List<T>&) TakeAt(i I64) T ? Error.OUT_OF_RANGE {
     o I64 = p - (firstChunk << k)
     c := s.chunk(k)
     x := c[o]
-    for n in range s.count - 1 - i { # each element after i moved into the place before it, chunk by chunk
+    for _ in range s.count - 1 - i { # each element after i moved into the place before it, chunk by chunk
         if o + 1 < c.Len() {
             c[o] = c[o + 1]
             o++
@@ -305,7 +305,7 @@ fn (l mut List<T>&) Insert(i I64, x T) ? Error.OUT_OF_RANGE {
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
     c := s.chunk(k)
-    for n in range s.count - 1 - i { # each element from the end down to i moved into the place after it
+    for _ in range s.count - 1 - i { # each element from the end down to i moved into the place after it
         if o > 0 {
             c[o] = c[o - 1]
             o--
@@ -766,7 +766,7 @@ if TestBuild {
         pairs I64 = 0
         for a in l { for b in l { if a == b { pairs++ } } } # nested loops keep separate positions
         assert pairs == 20
-        for x in List<I32>() { unreachable } # an empty list yields nothing
+        for _ in List<I32>() { unreachable } # an empty list yields nothing
     }
 
     # G11: a type argument may be a reference, written with a bare marker - a list of slices of one text holds
@@ -788,7 +788,7 @@ if TestBuild {
         ws := wordsOf(line)
         assert ws.Len() == 4
         n := 0
-        for w in ws { n++ }
+        for _ in ws { n++ }
         assert n == 4
         arr := ws.ToArray()
         assert arr[0].Eq("to") and arr[3].Eq("not")
@@ -1029,7 +1029,7 @@ if TestBuild {
         assert pairs == 100
         sq := I64[x * x for x in l if x < 10] # a comprehension walks it too
         assert sq.Len() == 5 and sq[4] == 64
-        for x in List<I32>() { unreachable }
+        for _ in List<I32>() { unreachable }
     }
 
     # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Some or
@@ -1097,7 +1097,7 @@ if TestBuild {
 
     test "Pop and Push back and forth at a chunk boundary, and a work list" {
         l := listUpTo(8) # the first chunk exactly full
-        for k in range 5 {
+        for _ in range 5 {
             l.Push(100) # into the second chunk
             assert (try l.Pop() catch default -1) == 100
             assert (try l.Pop() catch default -1) == 7 # back into the first
@@ -1118,7 +1118,7 @@ if TestBuild {
         l := listUpTo(100)
         l.Clear()
         assert l.Len() == 0 and listShow(l) == "[]" and l.ToArray().Len() == 0
-        for x in l { unreachable }
+        for _ in l { unreachable }
         assert (try l.Last() catch default -1) == -1
         for i in range 40 { l.Push(i + 1000) }
         assert l.Len() == 40 and l[0] == 1000 and l[8] == 1008 and l[24] == 1024 and l[39] == 1039
@@ -1139,7 +1139,7 @@ if TestBuild {
     fn listIterShrunk() I64 {
         l := listUpTo(20)
         it := l.Iter()
-        for j in range 15 { x := try it.Next() catch Exhausted { unreachable } }
+        for _ in range 15 { try it.Next() catch Exhausted { unreachable } }
         l.Clear()
         l.Push(100)
         a := try it.Next() catch default -1
@@ -1148,8 +1148,8 @@ if TestBuild {
         c := try it.Next() catch default -1
         p := listUpTo(20)
         pt := p.Iter()
-        for j in range 12 { x := try pt.Next() catch Exhausted { unreachable } }
-        for j in range 10 { x := try p.Pop() catch { unreachable } }
+        for _ in range 12 { try pt.Next() catch Exhausted { unreachable } }
+        for _ in range 10 { try p.Pop() catch { unreachable } }
         d := try pt.Next() catch default -1
         e := pt.Some(fn(x) { return true })
         return a * 1000000 + b * 10000 + c * 100 + d * 10 + (1 if e else 0)

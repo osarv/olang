@@ -1,5 +1,5 @@
 # check: fail error[D13c]: Ticket has no zero value, so this needs one
-# also: :18:12: error[D13c]
+# also: :19:12: error[D13c]
 # also: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
 # D13c/B11: a library's need for a zero value is reported at the program's type argument, naming the reference to hold
 import "std/chan"
@@ -14,6 +14,7 @@ fn next(n I64) I64 {
 fn main() ? {
     a := Ticket[Ticket(1), Ticket(2)]
     c := chan.Chan<Ticket>(4)       # a channel's ring is made as values arrive: no zero value needed
+    assert not chan.IsClosed(c)
     assert a.Len() == 2
     b := a.Repeat(2)
     assert b.Len() == 4

@@ -1,0 +1,29 @@
+# check: run
+# D3b: what counts as read - a name in a lambda, a field or element written through it, a scope marker, a branch the
+# build leaves out; "_" holds a name's place; a local whose type has a destructor is held for its scope's close
+import "std/io"
+Closed mut I64 = 0
+type Guard struct(n I64) { n } destruct { Closed++ }
+type Box struct() { v I64 = 0 }
+fn divmod(a I64, b I64) I64, I64 { return a / b, a % b }
+fn hold() {
+    g Guard& = Guard(1)
+}
+fn main() ? {
+    k := 2
+    f := fn(x I64) I64 { return x * k }
+    b := Box()
+    b.v = 5
+    a := I64[0, 0]
+    a[1] = 4
+    t := "text"
+    u String&t = t[0:2]
+    n := 0
+    for _ in range 3 { n++ }
+    for _, x in I64[5, 6] { n += x }
+    _, r := divmod(7, 2)
+    only := 9
+    if TargetOs == "no such system" { try io.Println($only) }
+    hold()
+    assert f(n) == 28 and r == 1 and u == "te" and Closed == 1
+}

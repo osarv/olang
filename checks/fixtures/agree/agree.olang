@@ -35,7 +35,7 @@ fn classify(n I64) String {
 fn two(a String&, b String&) Bool { return a == b }
 fn sites(n I64) String {
     l := Vec<String&>()
-    for i in range n { l.Push("hello") }
+    for _ in range n { l.Push("hello") }
     return $two(l[0], l[1]) " " $two("hey", "hey")
 }
 
@@ -132,6 +132,7 @@ fn main() ? io.Error {
     h := F16[1.5, 2.5, 3.5]
     k := Array<BF16>(3)
     m I64 = memset(h, 0, 2) + memcpy(k, BF16[0.5, 1.5, 2.5], 4)
+    assert m != 0
     try io.Print($h " " $k "\n")
     try io.Print($adapters(I32(run) + 1) "\n")
 }

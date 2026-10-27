@@ -24,7 +24,6 @@ import "mir"
 import typecheck "check"
 import "views"
 import "lower"
-import "scope"
 import "eval"
 import dlfcn "dlfcn.h"
 

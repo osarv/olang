@@ -66,8 +66,8 @@ fn wrap(text String&, spans Vec<source.Span>&) String {
     for i in range text.Len() + 1 {
         nc := try closes.Get(i) catch default 0
         no := try opens.Get(i) catch default 0
-        for k in range nc: out.PushChar(')')
-        for k in range no: out.PushChar('(')
+        for _ in range nc: out.PushChar(')')
+        for _ in range no: out.PushChar('(')
         if i < text.Len(): out.PushChar(text[i])
     }
     return out.ToString()

@@ -37,7 +37,7 @@ fn main() ? {
     for d in range minDepth, maxDepth + 1, 2 {
         iterations I64 = I64(1) << (maxDepth - d + minDepth)        # "1 << ..." alone shifts an I32 (E8a)
         sum I64 = 0
-        for i in range iterations {
+        for _ in range iterations {
             t := tree(d)        # lives in the loop body's block: gone at the end of each iteration
             sum += check(t)
         }

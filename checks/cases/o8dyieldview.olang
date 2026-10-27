@@ -24,7 +24,7 @@ fn churn() I64 {
 
 # a view of h.t held across a yield: the consumer lets go of h.t between Next calls
 fn walk(h Holder&) Iterator<I64> {
-    for k in range 4 {
+    for _ in range 4 {
         v := h.t
         yield 1
         yield v.Len() * 1000 + I64(v[12])

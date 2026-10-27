@@ -12,8 +12,6 @@ import "std/pair"
 import "std/filepath"
 import "std/time"
 import "source"
-import "token"
-import "scan"
 import "ast"
 import "diag"
 import "msgs"
@@ -21,7 +19,6 @@ import "load"
 import "fetch"
 import "names"
 import "types"
-import "generic"
 import "typed"
 import "scope"
 import "eval"
@@ -488,7 +485,7 @@ fn (f mut finder&) expr(x typed.Expr?&) {
                 }
             }
         }
-        case typed.Expr.Away(_, _, y) { }
+        case typed.Expr.Away(_, _, _) { }
         case _ { }
     }
 }

@@ -13,7 +13,7 @@ fn wire(b mut Button&, c mut Counter&) {
 }
 fn main() ? {
     ok mut Button& = Button("OK")
-    for i in range 2 {
+    for _ in range 2 {
         c mut Counter& = Counter()
         wire(ok, c)
     }

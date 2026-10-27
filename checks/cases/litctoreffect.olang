@@ -6,4 +6,6 @@ type Counted I32(v I32) {
 }
 fn main() ? {
     c Counted = 3
+    keep(I32(c))
 }
+fn keep(x I32) { }

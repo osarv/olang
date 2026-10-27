@@ -8,7 +8,7 @@ type aDot struct(k I64) { k }
 fn (d aDot&) Area() I64 { return 0 }
 fn kind(s any aShape&) I64 {
     match s {
-        case aBx b { return 1 }
+        case aBx _ { return 1 }
     }
 }
 fn main() { }

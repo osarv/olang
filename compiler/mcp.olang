@@ -8,7 +8,6 @@
 import "std/os"
 import "std/io"
 import "std/json"
-import "source"
 import "diag"
 import "build"
 import "explain"

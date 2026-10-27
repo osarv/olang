@@ -23,6 +23,6 @@ fn viaCompr() I64 {
 
 fn main() {
     t I64 = 0
-    for i in range 1000000 { t += viaLocal() + viaCompr() }
+    for _ in range 1000000 { t += viaLocal() + viaCompr() }
     io.Println($t)!
 }

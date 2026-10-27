@@ -21,7 +21,7 @@ fn (it mut Interp&) call(d I64) I64 {
 fn main() {
     it := Interp()
     total I64 = 0
-    for i in range 1000 { total += it.call(5) }
+    for _ in range 1000 { total += it.call(5) }
     assert total > 0
 }
 # also: frames.olang:15:5: memory: removed elements of 'it.frames' are kept until the Interp's scope closes

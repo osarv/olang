@@ -19,7 +19,7 @@ fn (lx mut Lexer&) next() Token {
 # a field read off the call's result
 fn fields(lx mut Lexer&, n I64) I64 {
     total I64 = 0
-    for k in range n {
+    for _ in range n {
         t := lx.next().text
         total += t.Len()
     }
@@ -28,7 +28,7 @@ fn fields(lx mut Lexer&, n I64) I64 {
 # the whole result, then a field of it
 fn wholes(lx mut Lexer&, n I64) I64 {
     total I64 = 0
-    for k in range n {
+    for _ in range n {
         tk := lx.next()
         t := tk.text
         total += t.Len()

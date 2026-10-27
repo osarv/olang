@@ -246,7 +246,7 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BAD_ESCAPE {
                 q.at++
                 return U32(v)
             }
-            for i in range 2 {
+            for _ in range 2 {
                 if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BAD_ESCAPE }
                 v = v * 16 + hexValue(q.peek())
                 q.at++
@@ -676,7 +676,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
             if not q.reverse: p.emit(opAssert, n.a, 0, 0)
         }
         case nRepeat {
-            for k in range n.min - 1 if n.max < 0 and n.min > 0 else n.min { try q.emitNode(n.a) }
+            for _ in range n.min - 1 if n.max < 0 and n.min > 0 else n.min { try q.emitNode(n.a) }
             if n.max < 0 {
                 if n.min > 0 {
                     # x+ : the body, then back to it or on
@@ -695,7 +695,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
                 }
             } else {
                 splits := Vec<I64>()
-                for k in range n.max - n.min {
+                for _ in range n.max - n.min {
                     split := p.emit(opSplit, 0, 0, 0)
                     splits.Push(split)
                     try q.emitNode(n.a)
@@ -1043,7 +1043,7 @@ fn (d mut dfa&) intern(f I64) I64 {
     d.count.Push(w.Len())
     d.pcs.PushAll(w.View())
     d.flags.Push(f)
-    for i in range 128 { d.trans.Push(-1) }
+    for _ in range 128 { d.trans.Push(-1) }
     d.nextSame.Push(first)
     d.byHash.Put(h, id)
     return id
@@ -1282,7 +1282,7 @@ fn (re Regex&) Find(t String&) Match ? NotFound.NOT_FOUND { return try re.FindFr
 # where the next match is looked for after one from "start" to "end": its end, or one code point on for an empty match
 fn onFrom(t String&, start I64, end I64) I64 {
     if end > start or end >= t.Len() { return end + (1 if end == start else 0) }
-    r, w := runeAt(t, end)
+    _, w := runeAt(t, end)
     return end + w
 }
 
@@ -1525,8 +1525,8 @@ test "what does not compile" {
 test "matching takes linear time where backtracking takes exponential" {
     # (a?){n}a{n} against a^n: a backtracking matcher tries 2^n ways
     p := StringBuilder()
-    for i in range 30 { p.Push("a?") }
-    for i in range 30 { p.PushChar('a') }
+    for _ in range 30 { p.Push("a?") }
+    for _ in range 30 { p.PushChar('a') }
     text := "a".Repeat(30)
     assert Compile(p.ToString())!.Matches(text)
     assert Compile("(x+x+)+y")!.Matches("x".Repeat(5000)) == false
@@ -1559,7 +1559,7 @@ test "the DFAs find the matches the Pike VM finds" {
     x U32 = 7
     for k in range 40 {
         t := StringBuilder()
-        for i in range 70 + k * 5 {
+        for _ in range 70 + k * 5 {
             x = x * 1664525 + 1013904223
             t.Push(String&["a", "b", "c", "ab", "é", "\n", "A", "x"][(x >> 16) % 8])
         }

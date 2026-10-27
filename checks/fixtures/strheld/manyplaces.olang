@@ -10,7 +10,7 @@ type Big struct(n I64) {
 }
 fn (b Big&) Str() String {
     sb := StringBuilder()
-    for i in range 10 { sb.Push("0123456789") }
+    for _ in range 10 { sb.Push("0123456789") }
     sb.Push("-" $b.n)
     return sb.ToString()
 }

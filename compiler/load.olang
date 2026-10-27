@@ -788,7 +788,7 @@ fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&l, String {
         } else {
             rest := m.Identity[root.Len() + 1:]
             dir := $m.Path
-            for i in range rest.CountOf("/") + 1 { dir = $filepath.Dir(dir) }
+            for _ in range rest.CountOf("/") + 1 { dir = $filepath.Dir(dir) }
             top = $(try os.RealPath(dir) catch default dir)
         }
         real := try os.RealPath(path) catch default ""

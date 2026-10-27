@@ -2,6 +2,6 @@
 At mut I64 = 3
 fn main() {
     a := I64[1, 2, 3]
-    x := a.Get(At)!
+    a.Get(At)!
     unreachable
 }

@@ -134,7 +134,7 @@ test "from the state 1, 2, 3, 4 xoshiro256** gives its reference outputs" {
 # into the same one after it has drawn on
 fn restoredDraws() U64 {
     r := Rand(2024)
-    for i in range 5 { r.Next() }
+    for _ in range 5 { r.Next() }
     saved := r.State()
     a := r.Next()
     b := r.Below(1000)
@@ -142,7 +142,7 @@ fn restoredDraws() U64 {
     other := Rand(1)
     try other.SetState(saved) catch { unreachable }
     assert other.Next() == a and other.Below(1000) == b and other.Float() == c
-    for i in range 100 { r.Next() }
+    for _ in range 100 { r.Next() }
     try r.SetState(saved) catch { unreachable }
     assert r.Next() == a and r.State()[0] != saved[0]
     return a
@@ -167,19 +167,19 @@ test "State and SetState put a generator back where it was, evaluated while comp
 test "Below is uniform and in range" {
     r := Rand(42)
     counts := Array<I64>(10)
-    for i in range 100000 {
+    for _ in range 100000 {
         k := r.Below(10)
         assert k >= 0 and k < 10
         counts[k]++
     }
     for c in counts { assert c > 9500 and c < 10500 }
-    for i in range 1000 { assert r.Below(1) == 0 }
+    for _ in range 1000 { assert r.Below(1) == 0 }
 }
 
 test "Float lies in [0, 1) with the mean of a uniform" {
     r := Rand(7)
     sum F64 = 0.0
-    for i in range 100000 {
+    for _ in range 100000 {
         x := r.Float()
         assert x >= 0.0 and x < 1.0
         sum += x
@@ -193,7 +193,7 @@ test "Normal has mean 0 and standard deviation 1" {
     n I64 = 200000
     sum F64 = 0.0
     sq F64 = 0.0
-    for i in range n {
+    for _ in range n {
         x := r.Normal()
         sum += x
         sq += x * x

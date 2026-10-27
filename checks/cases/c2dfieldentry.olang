@@ -6,7 +6,7 @@ type FeSlot struct(v mut Vec<I64>&) { e FeEnt = FeEnt(v) }
 
 fn main() ? {
     s FeSlot& = FeSlot(Vec<I64>())
-    for i in range 3 {
+    for _ in range 3 {
         l := Vec<I64>()
         s = FeSlot(l)
     }

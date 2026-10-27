@@ -12,7 +12,7 @@ fn main() ? {
     st := Store()
     st.items.Push(Outer(Inner("t")))
     held Inner?& = null
-    for i in range 3 {
+    for _ in range 3 {
         x := st.get(0).inner
         held = x
     }

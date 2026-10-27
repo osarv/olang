@@ -3,4 +3,5 @@
 fn g() String& ? { return "12" }
 fn main() ? {
     a := try g().ParseInt() catch default 0
+    assert a == 12
 }

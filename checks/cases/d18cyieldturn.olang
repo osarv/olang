@@ -9,5 +9,5 @@ fn texts(n I64) Iterator<String&return> {
 }
 
 fn main() {
-    for x in texts(2) { }
+    for _ in texts(2) { }
 }

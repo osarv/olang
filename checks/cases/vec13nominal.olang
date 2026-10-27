@@ -13,7 +13,7 @@ fn churn() I64 {
 fn asText(v Vec<Char>&) String&v { return String(v.View()) }
 fn grow(w mut Vec<Char>&) ? io.Error {
     t := asText(w)                        # a borrowed result; its type is String (nominal), not Array<Char>
-    for i in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
+    for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
     churn()                               # reuse what was freed
     try io.Println(t)
 }

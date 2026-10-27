@@ -1020,10 +1020,9 @@ took (R11b), and it is used in these ways and no others:
   E10c's error, naming it. Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
-- narrowing (S8d): in the block of `if e == X` (and the else of `if e != X`), and in the rest of a block after `if e
-  != X { leave }`, `e` holds what of `X` it can be; in the else of `if e == X`, and after `if e == X { leave }`, its set
-  less `X`; a test for `null` narrows as it does a reference (S8e). Only a local or a parameter not assigned in the
-  narrowed region narrows;
+- narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
+  != X { leave }` - every place S8d lists) `e` holds what of `X` it can be; where it fails, its set less `X`; a test for
+  `null` narrows as it does a reference (S8e). Only a local or a parameter narrows, until a statement assigns it;
 - `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without `_` or `nomatch`
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
@@ -1688,6 +1687,20 @@ compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
 scopes are known (S8b), and a case written be told apart from a value (E32). Names another module declares are reached only through an import alias, so they
 never collide with a local.
+
+**D3b (every local is read).** A local declared in a body - by a declaration (`x := e`, `x T = e`, `x T`), one of
+several names declared at once (`q, r := f()`), a `for` loop's or a comprehension's names, or a case's binding (S13b) -
+is read somewhere in its scope: its name written anywhere but as what an assignment, a compound assignment or an
+increment changes (`n = 1`, `n += 1` and `n++` read nothing; `n.f = 1` and `n[i] = 1` read `n`, the place written
+through it). One never read is a compile-time error naming it, saying to leave the declaration out - or, for a name that
+holds a place only (a loop's, a case's, one of several results), to write `_` there: `for _ in range n`, `for _, x in
+xs`, `_, r := divmod(a, b)`, `case Shape.Rect(w, _)`. Not judged: a parameter (a function type or a trait method may
+name what an implementation does not read), a constructor's fields (C2a), a catch clause's name (R11b), a declared
+local whose type has a destructor (C7) - the close of its scope is what it is held for - or whose declaration did not
+check (its error said already), and a local of a body nothing checks (a branch the build leaves out, a generic never
+instantiated). A name in the text of a branch the build leaves out (S8b) counts as read. These errors are said only of a
+program the checker finds no other error in: a read may be what another mistake left out, or sit in code that mistake
+keeps from being checked.
 
 ### 3.3 Type and error declarations
 
@@ -2394,6 +2407,11 @@ in either direction, so a lowercase file can still be given a re-exportable alia
 **M5.** Two imports in the same module may not use the same alias (D2). Two imports in the same
 module may not resolve to the same underlying file either, whether both are written directly or one
 is reached transitively through re-export (§4.5) — see §4.6.
+
+**M5a (every import is used).** An import whose alias nothing in its module reaches through - no name, member, type
+or error written with it, the text of a top-level or local branch the build leaves out (B9, S8b) included - is a
+compile-time error naming it, saying to remove it. An import re-exported (its alias capitalized, M14) is its importers'
+and never one. The imports of a module with a top-level condition only evaluation decides (B9c) are not judged.
 
 ### 4.3 Visibility
 
@@ -4186,6 +4204,17 @@ either a **call** (§5.4 E13 — an ordinary call, a constructor call, or one wr
 one of the four increment/decrement forms (`++x`, `--x`, `x++`, `x--`, E1), which are expressions by
 grammar but reach statement position only here. Its value, if any, is discarded.
 
+A call standing as a statement that gives a value and **does nothing else** is a compile-time error naming the call:
+`x.Len()`, `a.Abs()`, `n.Pow(2)` alone compute a value and throw it away. A call does something where what it reaches -
+its arguments, and the bodies of the functions it calls, all the way down - stores into a global or through a
+reference, calls an `extern fn` (but the C math library's functions, X8), a function value or an `any`'s method, makes
+storage (a text, an array, a temporary given a place - memory the program uses) or a value whose type has a
+destructor, spawns or joins, asserts, or ends the program or would on a failed check (`!`, `unreachable`, a slice's
+bounds, an array's length). What is left - reading, computing, writing its own locals - is no effect. A call
+that may fail is never such an error: a `try` or `!` statement may be written for the failure alone. Nor is one in a
+generic's body, where what a call does differs between instances. A call giving nothing (`fn f() { }`) is no such
+error either; it is called for what it does.
+
 **S3a.** The increment and decrement forms are **only** statements: `x++`, `x--`, `++x` and `--x` are valid as a
 statement's whole expression (here, and as a `for` loop's post clause, S9) and nowhere else - never as an operand,
 an argument, an index or an initializer. Their value is therefore never read, so the prefix and postfix forms mean
@@ -4296,33 +4325,40 @@ payloads) declared with an initializer, and nothing anywhere in its function wri
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
 
-**S8d (narrowing).** In the block of `if e == Shape.Circle { }` - `e` a local or a parameter holding an enum value or
-a reference to one, and the condition that one comparison with a case written (E32), `e` on either side - `e` is known
-to hold that case: `e.r` reads the payload field `r`. Where the case's payload is one type written whole (T17a,
-`Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The same holds in the
-`else` block of `if e != Shape.Circle { } else { }`, and after `if e != Shape.Circle { ... }` with no `else` whose block
-never reaches what follows it (it leaves, D10a, or a `break` or `continue` takes it out of a loop) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
-in that region (an assignment, a compound one, an increment, a target), and not inside a lambda written there. The
-payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they
-are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
-compile-time error naming the whole-value assignment. A field of a
-case the local is not known to hold is no member of an enum, and a compile-time error.
+**S8d (narrowing).** A condition says things of the locals and parameters it tests: `e == Shape.Circle` (a case
+written, E32, `e` on either side) that `e` holds that case; `p is not null` that `p` is not null (S8e); an error
+value compared with a word, a type or a set what of its set it holds (R11b, T20). `!=` and `is null` say the same where
+the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
+say where it fails; parentheses change nothing; anything else says nothing. One walk reads every condition for all
+three, so they hold in the same places. What a condition says holds:
+- in the block of an `if` whose condition it is, and where it fails in the `else` (an `else if` included);
+- after `if c { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a: `if n is null:
+  return 0`), or a `break` or `continue` takes it out of a loop around it - where `c` fails, to the end of the block
+  the `if` stands in;
+- after `assert c`, where it holds;
+- in the right operand of `a and b` where `a` holds, and of `a or b` where `a` fails - so in a condition built of
+  them, and in the block of an `if` or the body of a loop whose condition that is;
+- in the first value of `x if c else y` where `c` holds, the second where it fails;
+- in a loop's body when it is its condition (`for e == Tree.Node { }`, the three-clause form's condition), and in its
+  post clause where the body assigns the local nowhere;
+- after a loop whose condition it is and which holds no `break`, where it fails (`for p is null { p = next() }`): it is
+  left only by that condition failing;
+- and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
+It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
+p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
+lambda written there. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
+through a local (`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
 
-**S8e (null narrowing).** A local or a parameter holding a `T?&` is known not to be null (T2c), and reads as a `T&`:
-- in the block of `if p is not null { }`, and in the `else` of `if p is null { } else { }`;
-- after `if p is null { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a:
-  `if n is null: return 0`), or a `break` or `continue` takes it out of a loop around it - to the end of
-  the block the `if` stands in, and after `assert p is not null`;
-- in the right operand of `p is not null and ...`, and of `p is null or ...` - so in a condition built of them, and in the
-  block of an `if` or the body of a loop whose condition is `p is not null and ...`;
-- in a loop's body when its condition is `p is not null` (`for c is not null { }`, the three-clause form's condition);
-- after a loop whose condition is `p is null` and which holds no `break` (`for p is null { p = next() }`): it is left only
-  by that condition failing;
-- after a statement assigning it a value never null (`p = Node(1)`).
-It holds from there until a statement assigns it (an assignment, a compound one, a target - `p = p.next` reading
-`p.next` before the store), and inside a loop only where nothing in the loop assigns it; not inside a lambda written
-there. As for S8d, a field is never narrowed - a call may change it: a field read through is tested through a local
-(`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
+Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
+(T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
+fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they are read
+there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a compile-time
+error naming the whole-value assignment. A field of a case the local is not known to hold is no member of an enum,
+and a compile-time error.
+
+**S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c);
+besides the tests S8d reads, a statement assigning it a value never null (`p = Node(1)`) makes it known not to be null
+from there.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is
@@ -6724,7 +6760,8 @@ tests to run in each: a test runs when it names a target (B7a) a word is, or who
 tests and `Map.Get`'s), or when its description holds a word as text; with no words every test runs. Words that name
 none of a file's tests fail that file's run, its line naming the words and, where one is near (an edit distance of
 about a third of the word), the nearest target or description: `f.olang: no test is named by 'Bax' - did you mean
-'Box'?`. Each file listed is judged so on its own.
+'Box'?`, and that file's run ends with the status 3. Over several files such a file is no failure where another listed
+file has a test the words name; where none has, the run fails, its last line `no listed file has a test named by 'Bax'`.
 
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
@@ -6884,7 +6921,10 @@ decision.
 
 **B7a (a test's target).** A test may name what it is an example of, before its description: `test Twice "doubles"
 { }` - a function, a type, or `Type.Method`, of its own file (private ones included; for a method, the method's
-declaration is in the file, its type anywhere). A target naming nothing of the file, or something another file
+declaration is in the file, its type anywhere). A method's type is the receiver its declaration writes: `Array` for an
+array's method (`test Array.Windows "..."`, `fn (a Array<T>&) Windows`), and for a default over a constrained type
+variable the trait that constrains it (`test Iterator.TakeWhile "..."`, `fn (it mut I&) TakeWhile<I Iterator<T>, T>`).
+A target naming nothing of the file, or something another file
 declares, is a compile-time error, and so are two tests of one target with one description. Its run reports it by its
 target, `ok - Twice: doubles`, `FAIL - Twice: doubles`; `doc` lists it under the target as an example, its body as the
 file writes it (B14), and a hover on the target shows the first of them (B15). A target changes nothing about how the
@@ -7059,6 +7099,13 @@ the same form with `note` in place of `error[RULE]`, followed by its source. The
 name, the types, the counts involved - and says what to write instead where that is plain, in a few words; the
 explanation of the rule is the rule itself (B11a). Errors are reported in source order - by file, then line - whatever
 order they are found in, and the last line of a failed compilation is `compilation failed with N errors` (`1 error`).
+A name that names nothing - a local, global, function, type or module alias, a field or method, an enum case, an
+error type or word, a scope name, an import, a named argument, a test target, a command-line option - ends its message
+with the **nearest name** that would have been allowed there, ` - did you mean 'x'?`: the candidate fewest
+single-character edits away (insertions, deletions, substitutions; letters compared without case), counted only within
+about a third of the word (at most `(length + 2) / 3` edits, and fewer than the word's length); of two equally near,
+the one met first - a local or parameter in scope, then an import's alias, then the module's own names and the prelude's
+types and constants. No candidate that near, no suggestion.
 An error identical to one already reported - the same message about the same token, found again by another check that
 reads the same thing - is reported once, and counted once.
 A statement reports at most **one error about where something lives** - a rule of §8, C2d's or T17c's - since a scope

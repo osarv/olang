@@ -34,7 +34,7 @@ fn main() {
         }
         io.Println($t)!
     }
-    for r in range 3 {
+    for _ in range 3 {
         for k in range 5 { h.l.Push($"list text " $k " padded ............................................") }
         t I64 = 0
         for s in h.l {
@@ -44,7 +44,7 @@ fn main() {
         }
         io.Println($t)!
     }
-    for r in range 3 {
+    for _ in range 3 {
         for k in range 5 { h.m.Put(k, $"map text " $k " padded ............................................") }
         t I64 = 0
         for e in h.m {

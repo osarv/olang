@@ -6,6 +6,6 @@ fn main() ? {
     v.Push('a')
     l := Vec<String&>()
     l.Push(String(v.View()))
-    for i in range 100 { v.Push('b') }
+    for _ in range 100 { v.Push('b') }
     try io.Println(l[0])
 }

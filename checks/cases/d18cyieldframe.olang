@@ -9,5 +9,5 @@ fn heads(n I64) Iterator<Array<I64>&return> {
 }
 
 fn main() {
-    for h in heads(2) { }
+    for _ in heads(2) { }
 }

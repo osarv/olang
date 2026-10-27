@@ -8,6 +8,7 @@ fn (b Bag&) Str() String {
         s := $b.k
         return s.Len()
     }
+    assert f is not null
     return "bag " $b.k
 }
 fn main() ? {

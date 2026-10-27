@@ -20,7 +20,6 @@ import "load"
 import "fetch"
 import "source"
 import "scope"
-import "typed"
 import "types"
 import "lower"
 import "free"
@@ -206,7 +205,11 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             for k in range OptWords.Len() {
                 if OptWords[k] == a { o = k }
             }
-            if o < 0 { try usage(d, msgs.UnknownFlag(a, modeName(cl.Mode))) }
+            if o < 0 {
+                near mut msgs.Nearest& = msgs.Nearest(a)
+                for w in OptWords { near.Offer(w) }
+                try usage(d, msgs.UnknownFlag(a, modeName(cl.Mode), near.Hint()))
+            }
             if ((OptModes[o] >> cl.Mode) & 1) == 0 {
                 try usage(d, msgs.OptionNotForMode(a, modesOf(OptModes[o]), modeName(cl.Mode)))
             }

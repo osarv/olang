@@ -5,4 +5,4 @@ fn none() ? E { }
 type P struct(v I32) { v }
 fn ref(p P&) P&p ? E { return p }
 fn main() ? E { }
-fn count() { a, b := try two() catch default 1 }
+fn count() { _, _ := try two() catch default 1 }

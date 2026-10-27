@@ -39,7 +39,7 @@ fn main() ? {
     u := Array<F64>(n, 1.0)
     v := Array<F64>(n)
     tmp := Array<F64>(n)
-    for i in range 10 {
+    for _ in range 10 {
         timesAtA(u, v, tmp)
         timesAtA(v, u, tmp)
     }

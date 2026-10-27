@@ -239,7 +239,7 @@ if TestBuild {
         compiler := try os.RealPath(given) catch { return -2 }
         if os.Run($os.Quote(compiler) " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
-        for i in range 200 {
+        for _ in range 200 {
             if os.Exists("build/http_port") { break }
             os.Run("sleep 0.05")
         }

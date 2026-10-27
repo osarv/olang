@@ -376,7 +376,7 @@ test "Lines reads lines longer than its buffer" {
 test "Lines reports a read that fails, and ends the loop with it" {
     failed := false
     n I64 = 0
-    for line in try Lines(-1) {
+    for _ in try Lines(-1) {
         n++
     } catch Error { failed = true }
     assert failed and n == 0
@@ -387,7 +387,7 @@ fn afterTheEnd(fd I32) ? Error {
     l := Lines(fd, 2)
     first := l.Next()!
     assert first == "only"
-    for i in range 3 {
+    for _ in range 3 {
         try l.Next() catch Exhausted { continue }
         unreachable
     }
@@ -476,7 +476,7 @@ fn failedFlushes(fd I32) I64 {
     w.Write("more than four bytes")
     w.WriteChar('!')
     n I64 = 0
-    for i in range 3 {
+    for _ in range 3 {
         try w.Flush() catch Error.FAILED { n++ } catch Error.PARTIAL { }
     }
     return n

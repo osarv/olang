@@ -47,7 +47,7 @@ fn main() ? {
     total I64 = 0
     if mode == "any" {
         xs := Vec<any Shape&>()
-        for i in range n {
+        for _ in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             k := (s >> 33) % 3
             a := (s >> 40) % 100 + 1
@@ -60,7 +60,7 @@ fn main() ? {
         }
     } else if mode == "enum" {
         xs := Vec<Fig>()
-        for i in range n {
+        for _ in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             k := (s >> 33) % 3
             a := (s >> 40) % 100 + 1
@@ -73,7 +73,7 @@ fn main() ? {
         }
     } else if mode == "direct" {
         xs := Vec<Sq>()
-        for i in range n {
+        for _ in range n {
             s = s * 6364136223846793005 + 1442695040888963407
             xs.Push(Sq((s >> 40) % 100 + 1))
         }

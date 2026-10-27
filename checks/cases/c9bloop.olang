@@ -8,7 +8,7 @@ type Res struct(id I64) {
 Closed mut I64 = 0
 fn main() {
     x := Res(2)
-    for i in range 3 {
+    for _ in range 3 {
         x.Destroy()
     }
 }

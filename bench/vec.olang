@@ -124,7 +124,7 @@ fn storeList(l mut list.List<I64>&, passes I64) I64 {
 fn opaqueVec(v Vec<I64>&, passes I64) I64 {
     f := Opaque
     t I64 = 0
-    for p in range passes {
+    for _ in range passes {
         for i in range v.Len() { t += f(v[i]) }
     }
     return t
@@ -132,7 +132,7 @@ fn opaqueVec(v Vec<I64>&, passes I64) I64 {
 fn opaqueArray(a Array<I64>&, passes I64) I64 {
     f := Opaque
     t I64 = 0
-    for p in range passes {
+    for _ in range passes {
         for i in range a.Len() { t += f(a[i]) }
     }
     return t
@@ -166,7 +166,7 @@ fn main() ? {
             sv := SimV(n)
             sv.pos.PushAll(a)
             for i in range n { sv.vel.Push(i) }
-            for p in range passes { sv.step() }
+            for _ in range passes { sv.step() }
             for x in sv.pos { total += x }
         } else {
             sa := SimA(n)
@@ -174,7 +174,7 @@ fn main() ? {
                 sa.pos[i] = a[i]
                 sa.vel[i] = i
             }
-            for p in range passes { sa.step() }
+            for _ in range passes { sa.step() }
             for x in sa.pos { total += x }
         }
     } else if mode == "push" {

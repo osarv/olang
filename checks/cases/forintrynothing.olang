@@ -2,5 +2,5 @@
 # S9e: try on a loop that calls nothing fallible
 fn main() ? {
     a := I32[1, 2]
-    for x in try a { }
+    for _ in try a { }
 }

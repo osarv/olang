@@ -2,7 +2,6 @@
 # functions, methods, constructors, generics and a trait's methods through an any. Arguments are evaluated in the order
 # written. Each computation is done as a global the evaluator bakes and an assert it decides (K2, S18c), and on an input
 # it cannot see (Live), at run time
-import "std/io"
 
 Live mut I64 = 0
 
@@ -18,7 +17,7 @@ fn (c Conn&) Url(path String& = "/", query String& = "") String { return $c.host
 fn pad<T>(xs Array<T>&, fill T, width I64 = 4, before Bool = false) Vec<T> {
     out := Vec<T>()
     if not before { for x in xs { out.Push(x) } }
-    for _i in range xs.Len(), width { out.Push(fill) }
+    for _ in range xs.Len(), width { out.Push(fill) }
     if before { for x in xs { out.Push(x) } }
     return out
 }

@@ -11,7 +11,6 @@
 # repository is that commit; an unlocked one is its ref's current commit, which is then written in, the file kept
 # sorted. -u resolves every repository the build reaches as if unlocked, once each.
 import "std/os"
-import "std/filepath"
 import "std/io"
 
 type FetchError error {

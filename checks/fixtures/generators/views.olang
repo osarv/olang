@@ -49,6 +49,7 @@ fn labels(t String&, n I64) Iterator<String&return> {
         s String&return = $t "-" $i
         yield s
         junk := $i "junk"
+        assert junk.Len() > 4
     }
     for w in spans(t) { yield w }
 }
@@ -124,6 +125,6 @@ fn main() {
     }
     io.Println("t " $t " drops " $Drops)!
     total I64 = 0
-    for i in range 1000 { total += sum() }
+    for _ in range 1000 { total += sum() }
     io.Println("sum " $total " drops " $Drops)!
 }

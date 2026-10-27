@@ -1,0 +1,8 @@
+# check: run
+# M5a: an import reached only in a branch the build leaves out is used - its text names it
+import "std/os"
+import "std/io"
+fn main() ? {
+    if TargetOs == "no such system" { os.Exit(3) }
+    try io.Println("hi")
+}

@@ -18,7 +18,6 @@
 # above the directory it is built into or run from (tools/ or build/).
 
 import "std/os"
-import "std/filepath"
 import "srcmask"
 
 # words that are never a type variable's name
@@ -406,7 +405,7 @@ fn keepCommentColumns(src String&, mask String&, edits Vec<Edit>&, reps mut Vec<
         for k < le and not (src[k] == '#' and mask[k] != 'c') { k++ }
         if removedBy[at] > 0 and k < le and src[k - 1] == ' ' {
             spaces := StringBuilder()
-            for count in range removedBy[at] { spaces.PushChar(' ') }
+            for _ in range removedBy[at] { spaces.PushChar(' ') }
             out.Push(Edit(k, k, reps.Len()))
             reps.Push(spaces.ToString())
         }

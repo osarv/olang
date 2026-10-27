@@ -49,7 +49,11 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
-Checks Array<String&>& = withParts(Scenarios) if Target == "" else Array<String&>(0)
+Checks Array<String&>& = withParts(Scenarios) if Target == "" and Only == "" else Array<String&>(0)
+
+# CHECKS_ONLY: while developing, only the cases whose file names hold this text (or one of several, comma-separated), and no scenario - a run that passes
+# says nothing of the rest
+Only String& = try os.Env("CHECKS_ONLY") catch default ""
 
 # CHECKS_TARGET (make cross): another architecture the cases are built for (B12a) - "-target" added to each case's
 # flags, a run case run through the emulator olang finds - while the scenarios, which look at this machine's own builds,
@@ -70,7 +74,25 @@ fn withParts(names Array<String&>&) Array<String&>& {
 }
 
 # the files in checks/cases
-Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
+Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<String&>(0))
+
+# a case CHECKS_ONLY names: its file name holds one of the comma-separated texts
+fn wanted(name String&) Bool { return Only.Split(",").Some(fn(w String&) Bool { return name.Contains(w) }) }
+
+fn only(names Array<String&>&) Array<String&>&names {
+    if Only == "" { return names }
+    n := 0
+    for x in names { if wanted(x): n++ }
+    out mut Array<String&>&names = Array<String&>(n)
+    k := 0
+    for x in names {
+        if wanted(x) {
+            out[k] = x
+            k++
+        }
+    }
+    return out
+}
 
 # where the prelude's objects, and the runtime's (B3), are built once, before the cases start - as the cases did when
 # they all shared one directory. Each has a directory of its own now, since each build also writes an olang_build
@@ -105,7 +127,7 @@ fn runAll() Array<String&>& {
     kept := try os.ReadDir(Store) catch default Array<String&>(0)
     if kept.Len() > StoreMost { os.Run("rm -rf " $os.Quote(Store)) }
     join {
-        for w in range Workers { spawn worker(queue, outcomes, took) }
+        for _ in range Workers { spawn worker(queue, outcomes, took) }
         seed := fresh(Seed)
         try os.WriteFile($seed "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, $store() " \"$OLANG\" build seed.olang > out.txt 2>&1")
@@ -149,7 +171,7 @@ fn runCheck(k I64) String& {
 
 # whether the scenario named "name" passed, printing what went wrong when it did not
 fn passed(name String&) Bool {
-    if Target != "" { return true } # not run for another architecture
+    if Target != "" or Only != "" { return true } # not run for another architecture, or while developing
     found := false
     ok := true
     for i, s in Checks {
@@ -692,7 +714,7 @@ fn objnames(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build syms.olang > out.txt 2>&1 && ./build/syms > out.txt") == 0, "syms", dir)
     try r.expect(outOf(dir) == "1 2\n", "syms output", dir)
     work String& = $dir "/work"
-    for round in range 2 {
+    for _ in range 2 {
         try r.expect(sh(work, "\"$OLANG\" build ../x/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "x", work)
         try r.expect(outOf(work) == "I am X\n", "x output", work)
         try r.expect(sh(work, "\"$OLANG\" build ../y/main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "y", work)
@@ -1105,9 +1127,16 @@ fn assertloc(r mut report&) ? Failed {
     # B7a: words naming no test fail the run, the nearest target or description suggested
     ran = sh(dir, "\"$OLANG\" test targets.olang Bax > out.txt 2>&1")
     nearest := outOf(dir).Contains("targets.olang: no test is named by 'Bax' - did you mean 'Box'?")
-    try r.expect(ran == 1 and nearest, "a word naming no test, and the nearest", dir)
+    try r.expect(ran == 3 and nearest, "a word naming no test, and the nearest", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang nosuch > out.txt 2>&1")
-    try r.expect(ran == 1 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
+    try r.expect(ran == 3 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
+    # B3a: over several files the words fail the run only where no listed file has a test they name
+    ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Box > out.txt 2>&1")
+    some := outOf(dir)
+    try r.expect(ran == 0 and some.Contains("ok - Box: holds a value\n") and
+                 some.Contains("others.olang: no test is named by 'Box'\n"), "a word one listed file's tests answer", dir)
+    ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Bax > out.txt 2>&1")
+    try r.expect(ran == 1 and outOf(dir).Contains("no listed file has a test named by 'Bax'\n"), "a word no listed file answers", dir)
     try r.expect(sh(dir, "\"$OLANG\" test tested.olang > out.txt 2>&1") == 1, "the failing tests passed", dir)
     want String& = "tested.olang:5: assertion failed: Seed is 1\nFAIL - located\ntested.olang:9: assertion failed\nFAIL - plain\n"
     try r.expect(outOf(dir).Contains(want), "a test's failed asserts", dir)
@@ -1361,9 +1390,9 @@ fn preludestale(r mut report&) ? Failed {
 fn nested(head String&, open String&, middle String&, close String&, tail String&, n I64) String& {
     b := StringBuilder()
     b.Push(head)
-    for i in range n { b.Push(open) }
+    for _ in range n { b.Push(open) }
     b.Push(middle)
-    for i in range n { b.Push(close) }
+    for _ in range n { b.Push(close) }
     b.Push(tail)
     return b.ToString()
 }

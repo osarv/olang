@@ -307,8 +307,8 @@ fn report(rows Vec<String&>&, base Bool, reps I64, times Map<String&, Vec<I64>>&
         cm, cmin := stat(try times.Get($name "|c") catch default Vec<I64>())
         out.Push($left(name, 26) " " $right(secs(om), 9) " " $right(secs(cm), 9) " " $right(ratio(om, cm), 7))
         if base {
-            onm, onmin := stat(try times.Get($name "|on") catch default Vec<I64>())
-            cnm, cnmin := stat(try times.Get($name "|cn") catch default Vec<I64>())
+            onm, _ := stat(try times.Get($name "|on") catch default Vec<I64>())
+            cnm, _ := stat(try times.Get($name "|cn") catch default Vec<I64>())
             out.Push(" " $right(secs(onm), 10) " " $right(secs(cnm), 10) " " $right(ratio(onm, cnm), 7))
         }
         out.Push("     (" $secs(omin) " / " $secs(cmin) ")\n")

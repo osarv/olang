@@ -26,6 +26,52 @@ fn Tok(text String&) String {
     return b.ToString()
 }
 
+# ---- what a misspelt name most likely meant (B11) ----
+
+# the edit distance between two names, letters compared without their case (Levenshtein's); 99 past 60 characters
+fn Distance(a String&, b String&) I64 {
+    if a.Len() > 60 or b.Len() > 60 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            k := sub if sub < del else del
+            cur[j] = k if k < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
+}
+
+# whether a candidate d edits from a misspelt word is near enough to be what was meant: within about a third of the
+# word (B7a), and not every letter of it changed
+fn Near(word String&, d I64) Bool { return d <= (word.Len() + 2) / 3 and d < word.Len() }
+
+# the nearest of the names offered for a misspelt word - "" while none is near - and how far it is
+type Nearest struct(Word String&) {
+    Word
+    Best String& = ""
+    Far I64 = 1 << 30
+}
+
+# a candidate offered: kept where it is nearer than any before it (the first of two as near)
+fn (n mut Nearest&) Offer(cand String&) {
+    if cand == n.Word or cand.Len() == 0 { return }
+    d := Distance(n.Word, cand)
+    if Near(n.Word, d) and d < n.Far {
+        n.Best = $cand
+        n.Far = d
+    }
+}
+
+# " - did you mean 'x'?" for the nearest name offered, "" for none
+fn (n Nearest&) Hint() String { return $" - did you mean '" $n.Best "'?" if n.Best.Len() > 0 else "" }
+
 # the two tokens no text spells
 EndOfLine := "end of line"
 EndOfFile := "end of file"
@@ -307,6 +353,9 @@ type Diag enum {
     MethodOnBuiltinType
     MethodInUse
     UnderscoreDeclared
+    LocalUnused
+    LocalUnusedBare
+    ImportUnused
     ShadowsGlobal
     ShadowsFunction
     ShadowsBuildConst
@@ -480,6 +529,7 @@ type Diag enum {
     CaseTestOther
     NullCompared
     FieldOfEnum
+    CallDoesNothing
     NarrowedWrite
     MayBeNull
     NullToNonNull
@@ -837,7 +887,7 @@ fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " ta
 fn ModeNeedsFile(text String&) Msg { return Msg(Diag.ModeNeedsFile, "B1", $text " needs a file") }
 
 # ERR_UNKNOWN_FLAG
-fn UnknownFlag(text1 String&, text2 String&) Msg { return Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "' - 'olang help' lists the options of " $text2) }
+fn UnknownFlag(text1 String&, text2 String&, hint String&) Msg { return Msg(Diag.UnknownFlag, "B1", "unknown option '" $text1 "'" $hint " - 'olang help' lists the options of " $text2) }
 
 # ERR_OPTION_NOT_FOR_MODE
 fn OptionNotForMode(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.OptionNotForMode, "B1", $text1 " applies to " $text2 ", not to " $text3) }
@@ -1136,7 +1186,7 @@ fn ImportAliasInvalid(text String&) Msg { return Msg(Diag.ImportAliasInvalid, "M
 fn ImportAliasConflict(text String&) Msg { return Msg(Diag.ImportAliasConflict, "M5", "another import of this module is already named '" $text "' - give one an alias of its own") }
 
 # ERR_UNKNOWN_IMPORT
-fn UnknownImport(tok String&) Msg { return Msg(Diag.UnknownImport, "M10", $tok " is no import here") }
+fn UnknownImport(tok String&, hint String&) Msg { return Msg(Diag.UnknownImport, "M10", $tok " is no import here" $hint) }
 
 # ERR_UNKNOWN_IMPORT_STD
 fn UnknownImportStd(tok String&, text String&) Msg { return Msg(Diag.UnknownImportStd, "M10", $tok " is no import here - std has it: 'import \"std/" $text "\"'") }
@@ -1178,7 +1228,7 @@ fn UnknownFunction(tok String&) Msg { return Msg(Diag.UnknownFunction, "", "unkn
 fn UnknownFunctionMeant(tok String&, text String&) Msg { return Msg(Diag.UnknownFunctionMeant, "", "unknown function or type " $tok " - did you mean '" $text "'?") }
 
 # ERR_UNKNOWN_ERROR_TYPE
-fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok) }
+fn UnknownErrorType(tok String&, hint String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok $hint) }
 
 # ---- the error a clause took (R11b, R3a) ----
 
@@ -1186,7 +1236,7 @@ fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "
 fn CatchNameUnused(tok String&) Msg { return Msg(Diag.CatchNameUnused, "R11b", $tok " names the error this clause took, and nothing uses it - leave the name off") }
 
 # ERR_CATCH_LONE_UNUSED
-fn CatchLoneUnused(tok String&) Msg { return Msg(Diag.CatchLoneUnused, "R11b", $tok " names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone") }
+fn CatchLoneUnused(tok String&, hint String&) Msg { return Msg(Diag.CatchLoneUnused, "R11b", $tok " names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone" $hint) }
 
 # ERR_CATCH_NAME_IN_TASK
 fn CatchNameInTask(tok String&) Msg { return Msg(Diag.CatchNameInTask, "R11b", "a spawned call's clause runs on the task's thread and names no error - leave " $tok " off, or catch it where the join fails") }
@@ -1291,7 +1341,7 @@ fn UnknownBuildName(tok String&, text String&) Msg { return Msg(Diag.UnknownBuil
 fn NameInUse(tok String&) Msg { return Msg(Diag.NameInUse, "D2", $tok " is already declared in this module") }
 
 # ERR_UNKNOWN_SCOPE_NAME
-fn UnknownScopeName(tok String&) Msg { return Msg(Diag.UnknownScopeName, "O4a", $tok " names no variable visible here - a marker names where the reference lives, as '&x'") }
+fn UnknownScopeName(tok String&, hint String&) Msg { return Msg(Diag.UnknownScopeName, "O4a", $tok " names no variable visible here - a marker names where the reference lives, as '&x'" $hint) }
 
 # ERR_RETURN_SCOPE_NONE
 fn ReturnScopeNone() Msg { return Msg(Diag.ReturnScopeNone, "O26", "'&return' names the result scope, and this function has none") }
@@ -1461,7 +1511,7 @@ fn AnyMethodObligations(ty String&, tok String&, tr String&) Msg { return Msg(Di
 
 # ERR_ANY_NO_METHOD
 fn AnyNoCopy(tok String&, ty String&) Msg { return Msg(Diag.AnyNoCopy, "T32", $tok " keeps a copy of the value it is called on, and an " $ty " has none - call it on the instance's own type") }
-fn AnyNoMethod(ty String&, tok String&) Msg { return Msg(Diag.AnyNoMethod, "T32b", $ty " has no method " $tok " - an 'any' is used through its trait's methods alone") }
+fn AnyNoMethod(ty String&, tok String&, hint String&) Msg { return Msg(Diag.AnyNoMethod, "T32b", $ty " has no method " $tok " - an 'any' is used through its trait's methods alone" $hint) }
 
 # ERR_ANY_OPEN_INSPECTED
 fn AnyOpenInspected(ty String&, tr String&) Msg { return Msg(Diag.AnyOpenInspected, "T34", $ty "'s trait " $tr " is open, so its instance's type is never asked for - use its methods, or add the method it lacks") }
@@ -1703,6 +1753,12 @@ fn MethodOnBuiltinType(ty String&) Msg { return Msg(Diag.MethodOnBuiltinType, "M
 fn MethodInUse(ty String&, text String&) Msg { return Msg(Diag.MethodInUse, "M21", $ty " already has a method " $text " in this module") }
 
 # ERR_UNDERSCORE_DECLARED
+fn LocalUnused(name String&) Msg { return Msg(Diag.LocalUnused, "D3b", $name " is declared and never read - read it, or leave the declaration out") }
+
+fn LocalUnusedBare(name String&) Msg { return Msg(Diag.LocalUnusedBare, "D3b", $name " is never read - write '_' in its place") }
+
+fn ImportUnused(alias String&, spec String&) Msg { return Msg(Diag.ImportUnused, "M5a", "nothing here is reached through " $alias " - remove 'import \"" $spec "\"'") }
+
 fn UnderscoreDeclared() Msg { return Msg(Diag.UnderscoreDeclared, "D8c", "'_' discards a value and names nothing, so it cannot be declared") }
 
 # ERR_SHADOWS_GLOBAL
@@ -1727,7 +1783,7 @@ fn TypeHasNoConstructor(tok String&) Msg { return Msg(Diag.TypeHasNoConstructor,
 fn MethodCalledAsFunction(tok String&, text String&) Msg { return Msg(Diag.MethodCalledAsFunction, "M19", $tok " is a method - call it on its receiver: x." $text "(...)") }
 
 # ERR_NOT_IN_MODULE
-fn NotInModule(text String&, tok String&) Msg { return Msg(Diag.NotInModule, "", $text " declares no " $tok) }
+fn NotInModule(text String&, tok String&, hint String&) Msg { return Msg(Diag.NotInModule, "", $text " declares no " $tok $hint) }
 
 # ERR_VAR_IS_PRIVATE
 fn VarIsPrivate(tok String&) Msg { return Msg(Diag.VarIsPrivate, "M6", $tok " is private to its module") }
@@ -1995,7 +2051,7 @@ fn NotSliceable(ty String&) Msg { return Msg(Diag.NotSliceable, "E16a", $ty " ca
 fn SliceBoundNotInt(ty String&) Msg { return Msg(Diag.SliceBoundNotInt, "E16a", "a slice's bounds are integers, found " $ty) }
 
 # ERR_NO_SUCH_MEMBER
-fn NoSuchMember(ty String&, text String&) Msg { return Msg(Diag.NoSuchMember, "", $ty " has no member '" $text "'") }
+fn NoSuchMember(ty String&, text String&, hint String&) Msg { return Msg(Diag.NoSuchMember, "", $ty " has no member '" $text "'" $hint) }
 
 # ERR_MEMBER_IS_PRIVATE
 fn MemberIsPrivate(text String&, ty String&) Msg { return Msg(Diag.MemberIsPrivate, "M6a", "member '" $text "' of " $ty " is private to its module") }
@@ -2149,7 +2205,7 @@ fn OperandsDiffer(tok String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.O
 fn FloatLiteralRange(tok String&) Msg { return Msg(Diag.FloatLiteralRange, "L12b", $tok " is beyond F64's range") }
 
 # ERR_NO_SUCH_ERROR_WORD
-fn NoSuchErrorWord(ty String&, tok String&) Msg { return Msg(Diag.NoSuchErrorWord, "T19", $ty " has no word " $tok) }
+fn NoSuchErrorWord(ty String&, tok String&, hint String&) Msg { return Msg(Diag.NoSuchErrorWord, "T19", $ty " has no word " $tok $hint) }
 
 # ERR_NO_SUCH_CASE
 fn NoSuchCase(ty String&, tok String&) Msg { return Msg(Diag.NoSuchCase, "T17", $ty " has no case " $tok) }
@@ -2216,7 +2272,9 @@ fn ArrayNullable() Msg { return Msg(Diag.ArrayNullable, "T2c", "an array is neve
 fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array is never null - its zero value is the empty array: write '" $empty "', or no value, for an empty " $ty) }
 fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array is never null - test whether it is empty: write '" $text $empty "'") }
 fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
-fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', assigned nowhere there") }
+fn CallDoesNothing(call String&) Msg { return Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out") }
+
+fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', until it is assigned") }
 
 fn NullCompared(x String&, form String&) Msg { return Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
 
@@ -2298,7 +2356,7 @@ fn GenErrorNotDeclared(ty String&) Msg { return Msg(Diag.GenErrorNotDeclared, "R
 fn TryErrorNotDeclared(ty String&) Msg { return Msg(Diag.TryErrorNotDeclared, "R9", $ty " can escape here, and this function does not declare it - add it after '?', or catch it") }
 
 # ERR_UNKNOWN_METHOD
-fn UnknownMethod(ty String&, tok String&) Msg { return Msg(Diag.UnknownMethod, "M19", $ty " has no method " $tok) }
+fn UnknownMethod(ty String&, tok String&, hint String&) Msg { return Msg(Diag.UnknownMethod, "M19", $ty " has no method " $tok $hint) }
 
 # ERR_METHOD_NOT_INHERITED
 fn MethodNotInherited(ty String&, tok String&) Msg { return Msg(Diag.MethodNotInherited, "T29f", $ty " declares no " $tok ", and does not extend its base, which has one - declare it with 'extends'") }

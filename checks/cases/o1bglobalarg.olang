@@ -7,7 +7,7 @@ type Leaf struct(v I32) {
 GL mut Vec<Leaf&>& = Vec<Leaf&>()
 fn put(l mut Vec<Leaf&>&, n Leaf&) { l.Push(n) }
 fn main() ? {
-    for i in range 2 {
+    for _ in range 2 {
         inner Leaf& = Leaf(42)
         put(GL, inner)
     }

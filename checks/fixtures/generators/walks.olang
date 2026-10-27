@@ -9,7 +9,7 @@ type Res struct(id I64) {
 }
 
 fn repeat<T>(x T, n I64) Iterator<T> {
-    for i in range n { yield x }
+    for _ in range n { yield x }
 }
 
 fn slices(t String&) Iterator<String> {

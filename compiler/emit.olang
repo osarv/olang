@@ -2459,7 +2459,7 @@ fn (fe mut fnEm&) run() {
         fe.E.runtime("__olang_scope_alloc_a")
         pb := StringBuilder()
         pb.Push("{ " $t.RetLlvm(f.Ty) ", i32, ptr")
-        for i in range fe.passed { pb.Push(", ptr") }
+        for _ in range fe.passed { pb.Push(", ptr") }
         pb.Push(" }")
         fe.promTy = pb.ToString()
         fe.head.Push("  %prom = alloca " $fe.promTy ", align 8\n")
@@ -2889,7 +2889,7 @@ fn (fe mut fnEm&) envType() String {
         b.Push(fe.ty(f.Locals[I64(f.Captures[i])].Ty))
     }
     # then where each capture holding references lives (D16c): the closure's Capture scope variables, in order
-    for k in range fe.E.capVars(f.Of) { b.Push(", ptr") }
+    for _ in range fe.E.capVars(f.Of) { b.Push(", ptr") }
     b.Push(" }")
     return b.ToString()
 }
@@ -3148,7 +3148,6 @@ fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) String, I64 
 
 # an array constant's LLVM type, initializer and length
 fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
-    t := fe.E.T
     match fe.F.Consts[I64(c)] {
         case mir.ConstNode.Bytes(r) {
             b := StringBuilder()
@@ -3651,7 +3650,7 @@ fn (fe mut fnEm&) walkEnds() {
         args.Push("ptr " $h)
         res := t.Result(nty)
         if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr " $fe.slot(res)) }
-        for i in range mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), nty) { args.Push(", ptr null") }
+        for _ in range mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), nty) { args.Push(", ptr null") }
         if rt == "void" {
             fe.w("call void " $code "(" $args.ToString() ")")
         } else {
@@ -3913,7 +3912,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Slice(p, lo, hi, ty) { return fe.slice(p, lo, hi, ty) }
         case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
-        case mir.Rvalue.Text(b, into, ty) {
+        case mir.Rvalue.Text(b, into, _) {
             if fe.directRef(b) { return fe.directText(into) }
             bp := fe.scope(b)
             data := fe.load("ptr", bp)
@@ -4631,7 +4630,7 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             if i > 0 { b.Push(", ") }
             b.Push(fe.ty(fe.otype(fe.arg(args, i))))
         }
-        for k in range nc { b.Push(", ptr") }
+        for _ in range nc { b.Push(", ptr") }
         b.Push(" }")
         et := b.ToString()
         size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $et ", ptr null, i32 1") " to i64")
@@ -5256,7 +5255,6 @@ fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
 
 # an extern's name, declared with C's types (X1-X3)
 fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
-    t := e.T
     name := e.P.ExternSymbol(f)
     # X8: an exact C math function of its exact prototype is LLVM's intrinsic, an instruction where the target has one
     intr := e.mathIntrinsic(name, ty)
@@ -5704,7 +5702,7 @@ fn (e mut Emitter&) exportEntry(i I64) {
         out = fe.slot(res)
         args.Push($"ptr " $out)
     }
-    for q in range mir.PassedCount(t, mir.Callee.Fn(k, ty), ty) { args.Push($"ptr " $sc) }
+    for _ in range mir.PassedCount(t, mir.Callee.Fn(k, ty), ty) { args.Push($"ptr " $sc) }
     for a in olang { args.Push(a) }
     rt := t.RetLlvm(ty)
     r := ""
@@ -6021,7 +6019,7 @@ fn (e mut Emitter&) exportArrayResult(r types.TypeId) Bool {
 fn (e mut Emitter&) arrayOfE(r types.TypeId) types.TypeId {
     t := e.T
     x := t.Repr(r)
-    for depth in range 8 {
+    for _ in range 8 {
         if t.KindOf(x) == types.Kind.Array { return x }
         if t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Over {
             x = t.Repr(t.Base(x))

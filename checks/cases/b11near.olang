@@ -1,0 +1,26 @@
+# check: fail error[T19]: MyErr has no word 'FIRTS' - did you mean 'FIRST'?
+# also: error: unknown name 'cout' - did you mean 'count'?
+# also: error: Box has no member 'valeu' - did you mean 'value'?
+# also: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
+# also: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
+# also: error: module std/io declares no 'Prinln' - did you mean 'Println'?
+# B11: an unknown name ends its message with the nearest one allowed there
+import "std/io"
+
+type MyErr error { FIRST, SECOND }
+type Shape enum { Circle, Square }
+type Box struct(value I64) { value }
+fn (b Box) Area() I64 { return b.value }
+
+fn pick(count I64) I64 ? MyErr {
+    if count < 0 { error MyErr.FIRTS }
+    return cout
+}
+
+fn main() ? {
+    b := Box(2)
+    n := b.valeu + b.Aera()
+    s := Shape.Cricle
+    try io.Prinln($n $s)
+    try pick(1)
+}

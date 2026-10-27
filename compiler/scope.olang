@@ -348,7 +348,7 @@ fn (s mut Scoper&) exports() {
 
 # the function instance whose body b is, or is a lambda inside; -1 for none
 fn (s mut Scoper&) instanceOf(b I64) I64 {
-    for depth in range 64 {
+    for _ in range 64 {
         match s.Bodies[b].Of {
             case typed.BodyOf.Fn(inst) { return inst }
             case typed.BodyOf.Lambda(parent) { b = I64(parent) }
@@ -365,7 +365,7 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
     chain Vec<generic.Origin>
     insts Vec<I64>
     cur := inst
-    for depth in range 32 {
+    for _ in range 32 {
         if s.P.T.Items(s.P.InstanceArgs(cur)).Len() == 0 { break }
         o := s.P.InstanceOrigin(cur)
         if o.File < 0 { break }
@@ -469,7 +469,7 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
         # what the component's bodies may build into is a least fixed point: none at first, each round what the last
         # found (docs/scope-model.md 7.2)
         for b in comp { s.sums[b].Judging = true }
-        for round in range 20 {
+        for _ in range 20 {
             grew := false
             for b in comp {
                 before := s.sums[b].Rels.Len()
@@ -592,7 +592,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.run()
     if report and str { s.strReceiver() }
     if report {
-        for k in range pushed { s.P.L.Diags.PopContext() }
+        for _ in range pushed { s.P.L.Diags.PopContext() }
         s.P.L.Diags.ContextBase(base)
     }
     # the obligations only grow: what a round found is kept for the next
@@ -1100,7 +1100,7 @@ fn (s mut Scoper&) visit(v I64) {
 
 fn (s mut Scoper&) run() {
     b := s.B
-    for i in range b!.Locals.Len() {
+    for _ in range b!.Locals.Len() {
         s.terms.Push(Term.None)
         s.stors.Push(Term.Block(typed.BlockId(0)))
     }
@@ -2012,7 +2012,7 @@ fn (s mut Scoper&) flowStart(l typed.LocalId, mode I64) {
 }
 
 fn (s mut Scoper&) flowRun(ss Array<typed.Stmt&>&, from I64) {
-    for pass in range 6 {
+    for _ in range 6 {
         s.flGrew = false
         for i in range from, ss.Len() { s.flStmt(ss[i]) }
         if not s.flGrew or s.flKept { break }
@@ -2514,7 +2514,7 @@ fn flThroughRef(p typed.Place&) Bool {
 fn flThroughRefExpr(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        case typed.Expr.Read(_, ty, p, _) => flThroughRef(p)
+        case typed.Expr.Read(_, _, p, _) => flThroughRef(p)
         case typed.Expr.Borrow(_, _, p) => flThroughRef(p)
         case _ => false
     }
@@ -2530,13 +2530,13 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
     s.kept.Clear()
     s.keptStore.Clear()
     s.keptPut.Clear()
-    for i in range b.Locals.Len() {
+    for _ in range b.Locals.Len() {
         s.kept.Push(false)
         s.keptStore.Push(false)
         s.keptPut.Push(false)
     }
     s.aliasOf.Clear()
-    for i in range b.Locals.Len() { s.aliasOf.Push(-1) }
+    for _ in range b.Locals.Len() { s.aliasOf.Push(-1) }
     s.aliasBlock(b.Root)
     s.regionLocals(b)
     s.kwBlock(b.Root)
@@ -2714,10 +2714,10 @@ fn (s mut Scoper&) regionRead(x typed.Expr?&, r I64) Bool {
 # given a task's result; by local, the parameter, -1 for none. A fixed point: a local failing frees no other
 fn (s mut Scoper&) regionLocals(b typed.Body&) {
     s.regionOnly.Clear()
-    for i in range b.Locals.Len() { s.regionOnly.Push(-1) }
+    for _ in range b.Locals.Len() { s.regionOnly.Push(-1) }
     # a candidate: a local declared from a region read
     s.rlBlock(b.Root, 0)
-    for round in range 8 {
+    for _ in range 8 {
         s.rlChanged = false
         s.rlBlock(b.Root, 1)
         if not s.rlChanged { break }
@@ -3585,7 +3585,6 @@ fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr?&, l I64, mode I64) Bool {
                 } else if handed == 2 {
                     # a struct the parameter holds by value: a handle used only through its reference (a handle holding
                     # one, as StringBuilder holds its List, is used through that one's), a view as one
-                    ft := s.unAway(a).Type()
                     rt := s.P.T.Referent(pt) if s.isRef(pt) else pt
                     if mode == UseThru {
                         if not s.isHandle(rt) or not s.uses(callee, k, UseThru) { return false }
@@ -4148,7 +4147,6 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
             case _ { claim = s.blockTerm(typed.BlockId(0)) }
         }
     }
-    isRef := s.isRef(t) or s.isFunc(t)
     if s.isRef(t) and loc.Kind != typed.LocalKind.Hidden and loc.Kind != typed.LocalKind.Held { s.splitBorrow(x!) }
     if s.isRef(t) and loc.Kind == typed.LocalKind.Hidden {
         # the array a for-in walks, a split value borrowed: each element is given the references' scope, not the
@@ -4683,7 +4681,6 @@ fn (s mut Scoper&) slotOf(p typed.Place&) Term, Bool, I64 {
     isRef := s.isRef(t)
     match p {
         case typed.Place.Local(_, _, id) {
-            loc := s.B!.Locals[I64(id)]
             if isRef or s.isFunc(t) { return s.terms[I64(id)], s.narrowingMatters(t), FitLocal }
             return s.terms[I64(id)], s.storeThrough(t), FitValue
         }
@@ -5520,7 +5517,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     if x is null { return plain() }
     d := dest if dest.Runs() else s.here()
     match x {
-        case typed.Expr.Lit(_, ty, bits) {
+        case typed.Expr.Lit(_, ty, _) {
             if s.holds(ty) { return Val(ValKind.Null, Term.None) }
             return plain()
         }
@@ -5602,7 +5599,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             if pk >= 0 { s.partDest.Remove(pk) }
             return existing(st)
         }
-        case typed.Expr.Cond(_, ty, c) {
+        case typed.Expr.Cond(_, _, c) {
             s.val(c.C, Term.None)
             xs Vec<typed.Expr&>
             xs.Push(c.A!)
@@ -5619,7 +5616,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.atDest = ad
             return s.val(q.X, dest)
         }
-        case typed.Expr.Match(_, ty, m) { return s.match(m, dest) }
+        case typed.Expr.Match(_, _, m) { return s.match(m, dest) }
         case typed.Expr.Try(_, _, t) {
             v := s.val(t.X, dest)
             # a default is built where the value it stands for lives (R9a, R11)
@@ -5635,7 +5632,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             }
             return v
         }
-        case typed.Expr.Fn(sp, ty, f) { return s.fnVal(f, d, sp) }
+        case typed.Expr.Fn(sp, _, f) { return s.fnVal(f, d, sp) }
         case typed.Expr.Text(_, _, t) {
             s.build(t.Site, d)
             for pc in t.Pieces {
@@ -7054,7 +7051,7 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
         }
         case typed.LocalKind.Hidden, typed.LocalKind.Held {
             x := try s.inits.Get(l) catch default null
-            for guard in range 16 {
+            for _ in range 16 {
                 if x is null { return -1 }
                 x = s.unAway(x)
                 c := s.callOf(x)
@@ -7168,10 +7165,10 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
     if depth > 8 or short is null { return }
     # a call's value passed on directly (O18c): where its references come from is the argument to make elsewhere
     cx := s.unAway(short)
-    for guard in range 16 {
+    for _ in range 16 {
         match cx {
             case typed.Expr.Promote(_, _, pr) { cx = s.unAway(pr.X) }
-            case typed.Expr.Read(_, ty, p, _) {
+            case typed.Expr.Read(_, _, p, _) {
                 match p {
                     case typed.Place.Field(_, _, b, _) {
                         match b {
@@ -8071,7 +8068,7 @@ fn (s Scoper&) termName(b I64, t Term, nm source.Names&) String {
     return match t {
         case Term.Var(i) => s.varName(body, body.Vars[i], nm)
         case Term.Program => "the program"
-        case Term.Derived(p, w) => $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
+        case Term.Derived(p, _) => $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
         case _ => $t
     }
 }
@@ -8235,7 +8232,7 @@ if TestBuild {
                         "}\n"
                         "fn main() {\n"
                         "    p := P()\n"
-                        "    e := p.build(4)\n"
+                        "    assert p.build(4) == E.Leaf(4)\n"
                         "    assert shout(3).Len() == 3\n"
                         "    assert label(5).Len() == 2\n"
                         "    assert pickArm(3, true).Len() == 2\n"

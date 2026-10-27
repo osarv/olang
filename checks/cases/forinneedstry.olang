@@ -13,5 +13,5 @@ fn (t mut It&) Next() I32 ? E, Exhausted {
 }
 fn main() ? E {
     t mut It& = It()
-    for x in t { }
+    for _ in t { }
 }

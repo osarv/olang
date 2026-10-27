@@ -15,7 +15,7 @@ fn main() ? {
     for i in range n { a[i] = F32(r.Normal()) }
     b := Array<BF16>(n)
     d := Array<BF16>(n)
-    for round in range 3 {
+    for _ in range 3 {
         t0 := time.Now()
         for i in range n { b[i] = BF16(a[i]) }
         t1 := time.Now()

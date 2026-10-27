@@ -89,7 +89,7 @@ fn (s mut source&) integer() I64 {
     c := w >> 1
     n := 1 if c < 64 else (2 if c < 96 else (4 if c < 120 else 8))
     u U64 = 0
-    for i in range n { u = (u << 8) | U64(s.byte()) }
+    for _ in range n { u = (u << 8) | U64(s.byte()) }
     return -I64(u) if (w & 1) == 1 else I64(u)
 }
 

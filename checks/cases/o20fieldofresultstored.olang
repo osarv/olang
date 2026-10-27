@@ -12,7 +12,7 @@ type G struct(n I64) {
 fn (g G&) params() V { return V(g.mem) }
 fn keep(g mut G&, p mut Array<F64>&) { g.kept = p }
 fn stash(g mut G&) {
-    for i in range 3 {
+    for _ in range 3 {
         local := G(2)
         keep(g, local.params().Data)
     }

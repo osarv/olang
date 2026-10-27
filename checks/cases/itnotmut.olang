@@ -4,5 +4,5 @@ fn (c C&) Next() I32 ? Exhausted { error Exhausted.END }
 type E error { X }
 fn main() ? E {
     c C& = C(0)
-    for v in c { }
+    for _ in c { }
 }

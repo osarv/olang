@@ -1,5 +1,5 @@
 # check: fail error[S9b]: a range only counts upward, so its step is positive
 type E error { X }
 fn main() ? E {
-    for i in range 10, 0, 0 { }
+    for _ in range 10, 0, 0 { }
 }

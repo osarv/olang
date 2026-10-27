@@ -19,7 +19,7 @@ fn useNow(b Box&) I64 {
 fn main() ? {
     seed := Box()
     t := 0
-    for i in range 3 { t = t + useNow(idBox(seed)) }
+    for _ in range 3 { t = t + useNow(idBox(seed)) }
     assert t == 42, $t
     try io.Println($t)
 }

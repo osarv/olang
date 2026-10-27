@@ -105,7 +105,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
     current := ""
     answered := false
     for row in output.Split("\n") {
-        path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
+        path, line, col, isError, _, msg := try diagedit.ParseRow(row) catch { continue }
         full := diagedit.RealPathOf(path)
         if isError {
             if current.Len() > 0 and not answered and current.Contains("I64") and diagedit.Allowed(currentPath, allowed) {

@@ -22,7 +22,7 @@ fn odd(b Box&, n I64, out mut Vec<fn() I64>&) { even(b, n - 1, out) }
 fn main() ? {
     seed := Box()
     fs := Vec<fn() I64>()
-    for i in range 3 {
+    for _ in range 3 {
         even(idBox(seed), 2, fs)
         churn()
     }

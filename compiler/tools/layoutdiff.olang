@@ -97,7 +97,7 @@ fn rest(row String&) String&row { return field(row, 1) }
 # the n-th tab-separated field of a row, empty past its last
 fn field(row String&, n I64) String&row {
     at I64 = 0
-    for k in range n {
+    for _ in range n {
         tab := try row[at:].FindByte('\t') catch default -1
         if tab < 0 { return row[row.Len():] }
         at += tab + 1

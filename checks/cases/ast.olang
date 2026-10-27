@@ -36,7 +36,7 @@ fn count(e Expr&) I64 {
 fn main() {
     p := Program()
     p.root = build(4)
-    for i in range 100 {
+    for _ in range 100 {
         p.root = simplify(p.root)
     }
     assert count(p.root) == 47

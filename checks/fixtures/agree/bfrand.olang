@@ -8,7 +8,7 @@ fn next() I64 {
 }
 fn main() ? io.Error {
     b := StringBuilder()
-    for i in range 3000 {
+    for _ in range 3000 {
         x := next()
         sh := I64(U64(next()) % 64)
         y I64 = x >> sh

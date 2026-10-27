@@ -24,6 +24,7 @@ fn main() ? {
         s := $i
         k += s.Len()
     }
+    assert k > 0
     assert a == "anon/empty" and b == "x/x", "rendered"
     assert Baked and pick("x", false) == pick("y", false), "one site, one instance"
 }

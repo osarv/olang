@@ -1049,7 +1049,7 @@ if TestBuild {
     # the checks scenario "testends" shows, since such a test fails
     test "a return inside RunOnStack closes the scopes f had open" {
         RunOnStack(1 << 20, fn() {
-            r stackRes& = stackRes()
+            stackRes()
             assert stackDrops == 0
             return
         })

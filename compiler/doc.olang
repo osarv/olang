@@ -7,11 +7,8 @@
 # always have. A signature is what `explain FILE NAME` gives (B11b), so the documentation shows each item as the
 # compiler sees it - inferred error sets written out, scope obligations included.
 
-import "std/filepath"
-import "source"
 import "ast"
 import "types"
-import "generic"
 import "names"
 import "scope"
 import "interp"
@@ -233,11 +230,11 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
         if not all and not Exported(name) { continue }
         if receiverModule(c, f) == mi { continue }
         line := firstLines(explain.FnText(c, sc, f))
-        md.Items.Push(Entry(line, Above(text, I64(decl.Sp.Start)), name))
-        last := md.Items[md.Items.Len() - 1]
-        last.File = m.File
-        last.At = I64(decl.Sp.Start)
-        last.Target = $ReceiverName(c, f) "." $name
+        it := Entry(line, Above(text, I64(decl.Sp.Start)), name)
+        it.File = m.File
+        it.At = I64(decl.Sp.Start)
+        it.Target = $ReceiverName(c, f) "." $name
+        md.Items.Push(it)
     }
     for i in range md.Items.Len() { md.Items[i] = attached(c, mi, md.Items[i], "") }
     return md
@@ -248,7 +245,9 @@ fn ReceiverName(c mut typecheck.Checker&, f I64) String {
     recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
     if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
     if c.P.T.KindOf(recv) == types.Kind.Named { return $c.P.L.Names.Text(c.P.T.DeclName(c.P.T.DeclOf(recv))) }
-    return c.Ty(recv)
+    # an array's method, a trait's default over a type variable: as its declaration writes it (Array, Iterator)
+    written := ast.RecvTarget(c.P.FnDecl(f), c.P.L.Names)
+    return written if written != "" else c.Ty(recv)
 }
 
 # B7a: an entry with its examples - module mi's tests naming it - and its members' with theirs, a member named

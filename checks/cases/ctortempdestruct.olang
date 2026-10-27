@@ -28,7 +28,7 @@ fn main() ? {
         s := $Wrap(local)
         w Wrap& = Wrap(local)
         x := Wrap(local)
-        b := Box(Wrap(local))
+        Box(Wrap(local))
         n := peek(Wrap(local))
         c := k == 42
         y Wrap& = Wrap(local) if c else Wrap(local)
@@ -42,7 +42,7 @@ fn main() ? {
             case 42 => Wrap(local)
             nomatch => Wrap(local)
         }
-        t := peek(Wrap(local) if c else Wrap(local))
+        peek(Wrap(local) if c else Wrap(local))
         assert Count == 0
         assert k + n + z == 126 and s == "Wrap(Node(42))"
     }

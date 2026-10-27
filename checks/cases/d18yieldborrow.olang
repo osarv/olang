@@ -5,6 +5,6 @@ fn parts(t String&) Iterator<String&> {
 }
 
 fn main() ? {
-    for p in parts("ab") {
+    for _ in parts("ab") {
     }
 }

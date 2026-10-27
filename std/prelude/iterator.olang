@@ -346,7 +346,7 @@ type StepByIter<I, T ? E> struct(of I, n I64) {
 
 fn (s mut StepByIter<I, T ? E>&) Next() T ? E, Exhausted {
     if s.started {
-        for k in range s.step - 1 { try s.it.Next() }
+        for _ in range s.step - 1 { try s.it.Next() }
     }
     s.started = true
     return try s.it.Next()
@@ -429,29 +429,29 @@ if TestBuild {
         return x % 2 == 1
     }
 
-    # examples (B7a): what olang doc shows under each adapter's type
-    test TakeWhileIter "the leading values a test holds for" {
+    # examples (B7a): what olang doc shows under each adapter
+    test Iterator.TakeWhile "the leading values a test holds for" {
         assert I64[1, 2, 5, 3].Iter().TakeWhile(fn(x): return x < 4).ToVec().ToArray() == I64[1, 2]
     }
-    test TakeWhileIter "fails with what its test fails with" {
+    test Iterator.TakeWhile "fails with what its test fails with" {
         assert (try I64[1, 3, 4, 5].Iter().TakeWhile(walkOdd).ToVec().Len() catch walkBad default -1) == -1
         assert (try I64[1, 3, 2, 4].Iter().TakeWhile(walkOdd).ToVec().Len() catch walkBad default -1) == 2
     }
-    test SkipWhileIter "the values from the first a test does not hold for" {
+    test Iterator.SkipWhile "the values from the first a test does not hold for" {
         assert I64[1, 2, 5, 3].Iter().SkipWhile(fn(x): return x < 4).ToVec().ToArray() == I64[5, 3]
         assert I64[1, 2].Iter().SkipWhile(fn(x): return x < 4).ToVec().Len() == 0
     }
-    test StepByIter "the first value and every n-th after it" {
+    test Iterator.StepBy "the first value and every n-th after it" {
         assert I64[0, 1, 2, 3, 4, 5, 6].Iter().StepBy(3).ToVec().ToArray() == I64[0, 3, 6]
         assert I64[0, 1].Iter().StepBy(1).ToVec().ToArray() == I64[0, 1]
         n := 0
         assert (try StepSize(n) catch StepError default StepSize(9)) == StepSize(9)
     }
-    test FlatMapIter "the values of each value's walk, one walk after another" {
+    test Iterator.FlatMap "the values of each value's walk, one walk after another" {
         a := I64[1, 2, 3]
         assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[x - 1:].Iter() }).ToVec().ToArray() == I64[1, 2, 3, 2, 3, 3]
     }
-    test ReversedIndexIter "a Vec from its last element to its first" {
+    test Indexable.Reversed "a Vec from its last element to its first" {
         v := Vec<I64>()
         for i in range 4 { v.Push(i) }
         s := 0

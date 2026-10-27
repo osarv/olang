@@ -42,7 +42,7 @@ fn (x F64) Fixed(n I64) String {
         left -= 9
     }
     p10 U64 = 1
-    for i in range left { p10 = p10 * 10 }
+    for _ in range left { p10 = p10 * 10 }
     len = fixedMul(big, len, p10)
     if e2 >= 0 {
         s I64 = e2
@@ -66,7 +66,7 @@ fn (x F64) Fixed(n I64) String {
         out.Push(text[whole:])
     } else {
         out.Push("0.")
-        for i in range -whole { out.PushChar('0') }
+        for _ in range -whole { out.PushChar('0') }
         out.Push(text)
     }
     return out.ToString()
@@ -149,7 +149,7 @@ fn fixedDecimal(a mut Array<U64>&, len I64) String {
     out.Push($pieces[pieces.Len() - 1])
     for j in range pieces.Len() - 1 {
         piece := $pieces[pieces.Len() - 2 - j]
-        for k in range 9 - piece.Len() { out.PushChar('0') }
+        for _ in range 9 - piece.Len() { out.PushChar('0') }
         out.Push(piece)
     }
     return out.ToString()

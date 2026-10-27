@@ -1,5 +1,5 @@
 # check: fail are integers
 type E error { X }
 fn main() ? E {
-    for i in range 2.5 { }
+    for _ in range 2.5 { }
 }

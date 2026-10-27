@@ -39,6 +39,7 @@ make test                              # runs it with the rest of the suite
 build/olang test checks/checks.olang       # only this
 CHECKS_TIMES=t.txt build/olang test checks/checks.olang   # and write how long each check took, longest first
 CHECKS_WORKERS=8 build/olang test checks/checks.olang      # eight checks at a time (four by default)
+CHECKS_ONLY=s8d build/olang test checks/checks.olang     # only the cases whose names hold "s8d", no scenario
 ```
 
 Every check works in its own directory under `build/checks/`, so nothing touches the tree. The cases' builds, and the

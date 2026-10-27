@@ -12,6 +12,6 @@ fn main() ? {
         b := $a "x"
         g = both(a, b)
     }
-    for x in g {
+    for _ in g {
     }
 }

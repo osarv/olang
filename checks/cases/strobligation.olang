@@ -22,7 +22,7 @@ type Junk struct(a I64, b I64) {
 }
 fn churn() I64 {
     t I64 = 0
-    for i in range 300 {
+    for _ in range 300 {
         j Junk& = Junk(-7, -7)
         a := Array<I64>(64, -7)
         t += a[3] + j.a
@@ -33,7 +33,7 @@ fn main() ? {
     b := Bag(Node(1, null))
     s := $b
     keep := Vec<Junk&>()
-    for i in range 2000 { keep.Push(Junk(-7, -7)) }
+    for _ in range 2000 { keep.Push(Junk(-7, -7)) }
     churn()
     try io.Println(s)
     try io.Println($b.head.next!.v)

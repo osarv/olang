@@ -11,5 +11,5 @@ fn (r mut Rec&) Tag(t String&) { r.tags.Push(t) }
 fn main() ? {
     l := Vec<Rec>()
     l.Push(Rec("a"))
-    for k in range 3 { l[0].Tag("lit") }
+    for _ in range 3 { l[0].Tag("lit") }
 }

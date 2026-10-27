@@ -16,7 +16,7 @@ fn (b Bag&) Str() String {
 }
 fn churn() I64 {
     t I64 = 0
-    for i in range 300 {
+    for _ in range 300 {
         a := Array<I64>(64, -7)
         t += a[3]
     }

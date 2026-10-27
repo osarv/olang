@@ -1,0 +1,7 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# S8d: the right of "or" runs where the left fails - "s == Ring" there says s is no ring
+type Shape enum { Dot, Ring(r I64) }
+fn wide(s Shape) Bool { return s == Shape.Ring or s.r > 2 }
+fn main() {
+    assert wide(Shape.Ring(2))
+}

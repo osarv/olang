@@ -21,7 +21,7 @@ fn main() ? {
     b := Bag(Node(1, null))
     s := $b
     keep := Vec<Node&>()
-    for i in range 2000 { keep.Push(Node(-7, null)) }
+    for _ in range 2000 { keep.Push(Node(-7, null)) }
     try io.Println(s)
     try io.Println($b.head.next!.v)
 }

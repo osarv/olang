@@ -49,7 +49,7 @@ MaxIndent I64 = 64
 
 fn (w mut writer&) nl() {
     w.b.PushChar('\n')
-    for i in range w.ind.Min(MaxIndent) { w.b.Push("    ") }
+    for _ in range w.ind.Min(MaxIndent) { w.b.Push("    ") }
 }
 
 # ---- declarations ----

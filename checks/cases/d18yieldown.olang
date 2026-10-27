@@ -9,6 +9,6 @@ fn lists(n I64) Iterator<Vec<I64>> {
 }
 
 fn main() ? {
-    for l in lists(3) {
+    for _ in lists(3) {
     }
 }

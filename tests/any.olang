@@ -638,7 +638,7 @@ fn scopeArgs(n I64) String {
         t := "inner" $i
         xs.Push(Label(sArg&t(i)))
         xs.Push(Label(sArg&t(i) if i >= 0 else "x" $i))
-        r := sArgStash(xs, i)
+        sArgStash(xs, i)
     }
     churn()
     return names(xs)
@@ -794,7 +794,7 @@ fn snChain(k mut SnK&, i I64) String {
     r6 String&s = ""
     r7 String&s = ""
     r8 String&s = ""
-    for j in range 10 {
+    for _ in range 10 {
         k.s = r8
         r8 = r7
         r7 = r6

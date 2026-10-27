@@ -14,7 +14,7 @@ fn main() ? {
     v := Vec<String&>()
     v.Push("a")
     a := v.ToArray()
-    for i in range 100 { v.Push("b") }
+    for _ in range 100 { v.Push("b") }
     churn()
     try io.Println($a[0] " " $a.Len() " " $v.Len())
 }

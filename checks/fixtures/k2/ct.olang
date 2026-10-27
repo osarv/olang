@@ -41,7 +41,7 @@ Dropped I32 = loudOnce()
 fn deferred(n I32) I32 {
     t I32 = n
     defer t = 0                         # S19: after the result is computed
-    for i in range 3 {
+    for _ in range 3 {
         defer t += 1
     }
     return t

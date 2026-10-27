@@ -31,7 +31,7 @@ fn countdown(n I64) Iterator<I64 ? Bad> {
 }
 
 fn repeat<T>(x T, n I64) Iterator<T> {
-    for i in range n { yield x }
+    for _ in range n { yield x }
 }
 
 fn (l Vec<T>&) Twice() Iterator<T> {
@@ -168,7 +168,7 @@ test "D18b: a walk stopped part way closes its scopes with the scope the generat
         if x == 1 { break }
     }
     assert Dropped == d + 4
-    for x in guarded(2) { }
+    for _ in guarded(2) { }
     assert Dropped == d + 6
 }
 
@@ -272,7 +272,7 @@ test "D18: a generator's contract, failing its first Next" {
 test "D18b: walks holding no scope and walks holding one, stopped part way, side by side" {
     d := Dropped
     t I64 = 0
-    for k in range 1000 {
+    for _ in range 1000 {
         for x in evens(Ten) {
             if x == 4 { break }
             t += x
@@ -436,7 +436,7 @@ fn holding(t String&) Iterator<I64> {
 
 test "D18e: a walk a for-in makes is dropped as the loop's block is left, whatever it was given" {
     d := Dropped
-    for x in holding("constant") { break }
+    for _ in holding("constant") { break }
     assert Dropped == d + 1
     n I64 = 0
     for x in holding("eight ch") { n += x }
@@ -471,7 +471,7 @@ fn heldTwice() I64 {
 fn heldInLoop() I64 {
     t I64 = 0
     g := heldEach(HeldData)
-    for k in range 2 {
+    for _ in range 2 {
         for x in g {
             t += x
             if x == 1 { break }
@@ -512,5 +512,5 @@ test "D18e: a generator held in a local and walked once there is dropped as the 
     assert HeldBaked == 506 * 1000000 + 2308 * 100 + 9
     d := Dropped
     assert heldDropped("constant") == 8 and Dropped == d + 1
-    for i in range 1000 { assert heldCompr() == 506 }
+    for _ in range 1000 { assert heldCompr() == 506 }
 }

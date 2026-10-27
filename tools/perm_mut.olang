@@ -137,7 +137,7 @@ fn dropPunMut(src String&) String, I64 {
         w := e
         for w < n and (src[w] == ' ' or src[w] == '\t') { w++ }
         if w < n and src[w] == '#' and w - e + 1 > 2 {
-            for k in range e - ne { out.PushChar(' ') }
+            for _ in range e - ne { out.PushChar(' ') }
         }
         last = e
         count++

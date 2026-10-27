@@ -7,5 +7,5 @@ type Shape enum {
     Empty
 }
 fn main() {
-    for f in try Point.Fields { }
+    for _ in try Point.Fields { }
 }

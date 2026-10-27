@@ -28,7 +28,7 @@ fn main() ? {
     seed := Box()
     seed.head.next = Node(7, null)
     t := 0
-    for i in range 3 {
+    for _ in range 3 {
         t += sum(idBox(seed))
         bumpHead(idBox(seed))
         try churn()

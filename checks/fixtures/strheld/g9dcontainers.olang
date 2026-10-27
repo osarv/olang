@@ -21,6 +21,7 @@ fn main() ? {
         m := mk(i, Res(i))
         l := lst(Res(i))
         x := try m.Get(i) catch { unreachable }
+        assert l.Len() == 1 and x.k == i
     }
     try io.Println("made " $Made " gone " $Gone)
 }

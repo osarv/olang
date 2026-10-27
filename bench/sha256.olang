@@ -19,6 +19,6 @@ fn main() ? {
         data[i] = U8(x >> 24)
     }
     d := sha256.Sum(data)
-    for r in range 1, rounds { d = sha256.Sum(data) }
+    for _ in range 1, rounds { d = sha256.Sum(data) }
     try io.Println(hex.Encode(d))
 }

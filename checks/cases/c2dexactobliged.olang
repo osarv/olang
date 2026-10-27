@@ -19,7 +19,7 @@ fn (m mut MM<K, V>&) set(key K, value V) {
 }
 fn main() ? {
     m := MM<I32, mut Vec<I32>&>()
-    for i in range 2 {
+    for _ in range 2 {
         l mut Vec<I32>& = Vec<I32>()
         m.set(1, l)
     }

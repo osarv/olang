@@ -31,7 +31,7 @@ fn main() ? {
     g[1] = 2
     e := g[1:2]
     f := 3 in g
-    for z in g { }
+    for _ in g { }
     g++
     k := g < h
     assert g == h

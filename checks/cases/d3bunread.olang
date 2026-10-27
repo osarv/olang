@@ -1,0 +1,24 @@
+# check: fail error[D3b]: 'x' is declared and never read - read it, or leave the declaration out
+# also: error[D3b]: 'i' is never read - write '_' in its place
+# also: error[D3b]: 'h' is never read - write '_' in its place
+# also: error[D3b]: 'q' is never read - write '_' in its place
+# also: error[D3b]: 'n' is declared and never read
+# D3b: a local declared and never read - a declaration, a for-in's name, a case's binding, one of several results; one
+# only assigned, compounded or incremented is never read either
+type Shape enum { Dot, Rect(w I64, h I64) }
+fn divmod(a I64, b I64) I64, I64 { return a / b, a % b }
+fn main() {
+    x := 3
+    total := 0
+    for i in range 3 { total++ }
+    s := Shape.Rect(1, 2)
+    match s {
+        case Shape.Rect(w, h) { total += w }
+        case _ { }
+    }
+    q, r := divmod(7, 2)
+    n := 0
+    n += 1
+    n++
+    assert total + r > 0
+}

@@ -11,6 +11,6 @@ fn middle(n I64) I64 ? {
     return try inner(n)
 }
 fn main() ? {
-    if Depth > 100 { x := middle(Depth)! }
-    x := try middle(Depth)
+    if Depth > 100 { middle(Depth)! }
+    try middle(Depth)
 }

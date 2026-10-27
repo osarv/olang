@@ -12,12 +12,8 @@
 # Positions are UTF-8 bytes where the editor offers that encoding, else UTF-16 units, as the protocol's default.
 
 import "std/os"
-import "std/io"
 import "std/json"
 import "std/time"
-import "std/filepath"
-import "source"
-import "ast"
 import "diag"
 import "build"
 import "session"

@@ -8,7 +8,7 @@ import "std/list"
 Run I64 = Count(1)                                      # a run-time 1: computations given it are not folded
 fn Count(k I64) I64 {
     c := 0
-    for i in range k { c++ }
+    for _ in range k { c++ }
     return c
 }
 # churn the arena: a block that allocates and closes, many times, so storage freed early would be reused
@@ -354,7 +354,7 @@ test "Vec: elements that are values holding references, kept across growth and r
 # T29a (vec6 x1): a conversion of the view a call gives names the Vec's buffer, while compiling and at run time alike
 fn vecViewNamed(n I64) I64 {
     v := Vec<Char>()
-    for i in range n { v.Push('a') }
+    for _ in range n { v.Push('a') }
     w String&v = String(v.View())
     v[0] = 'z'
     return 1 if w[0] == 'z' and w.Len() == n else 0

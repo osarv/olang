@@ -10,7 +10,6 @@
 # Run from the repository root after "make build/compiler_tools_dump" (make layoutgold), after a change to a layout.
 # LAYOUTGOLD_OUT names another file to write than the golden (to compare a capture without replacing it).
 
-import "std/os"
 import "toolkit"
 
 fn main() {

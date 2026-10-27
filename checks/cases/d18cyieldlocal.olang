@@ -17,5 +17,5 @@ fn initials(t String&) Iterator<String&t> {
 }
 
 fn main() {
-    for x in initials("ab") { }
+    for _ in initials("ab") { }
 }
