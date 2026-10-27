@@ -26038,3 +26038,90 @@ and `checks/fixtures/profile/` had to be added with `git add -f`, and `docs/prof
 named in CLAUDE.md and docs/README.md - was never committed and was lost; it is written again here. The patterns want a
 leading `/` (left to the coordinator: the file is the shared repository's, not this worktree's). (2) Builds are not
 reproducible bit for bit (above).
+
+## Typed attributes, function reflection, json key policies (G39, G40, G41, R8, QBK 4, QBM, QBN, QBO, 2026-10-27)
+
+**What the user decided** (decisions.md QBK 4, QBM, QBN, QBO and "Attribute rules settled with the user 2026-10-26"):
+std/json gets key naming policies; visibility stays capitalization (QBM), so a field cannot simply be named as its
+key; typed `@` attributes instead of a `JsonKey` method; on fields, cases, types, functions and methods, with
+function reflection to read the last two; the compiler gives no attribute a meaning ("It's more a tag on how to use
+something rather than something that actually uses it, that is what keywords are for"); any declared type whose value
+is built while compiling may be an attribute, no marker; built-in types may not; at most one of each type per
+declaration; `@Name` without parentheses for a constructor of no arguments; the reader decides where it looks.
+
+**The grammar (mine).** `attribute ::= "@" alias-chain IDEN [ type-args ] [ "(" arg-list ")" ]`, nothing spaced inside
+it, before a type's or a function's declaration (on lines of their own above it, or on its line), an enum's case, a
+constructor's field or a parameter of a function, a method or a constructor. Refused - one error, AttrPlace - before a
+local, a global, a lambda's parameter, a function type's parameter or a receiver. `@` was already a token (the matrix
+product, E31's MatMul); where no operand stands before it, it begins an attribute, and an `@` beginning a line never
+continues the line before (L18b's rule for `if`) - no existing line began with one. The formatter treats it as a prefix
+operator (`@json.Key("id") Id`), and unparse writes attributes back where they stood (the dump's roundtrip holds).
+
+**How it is built (mine): an attribute is a hidden global.** The parser declares, beside the item it is written in (in
+the same branch of a top-level `if`), an immutable global named `@` and the attribute's offset - a name no program can
+write - whose initializer is the attribute (`VarDecl.Hidden`). So names resolves it in the module's context, the checker
+checks it as a global's initializer, B5a orders it, K2 bakes it into constant data and the evaluator reads it - nothing
+new in lowering, emission, `interpret` or the evaluator. The checker gives a hidden global three rules of its own: a
+type written bare (`@json.Skip`) is its constructor called with no arguments, an enum's case written bare its value;
+what the value can fail with ends its building as `!` does (attrExpr), so a constructor's requirement decided false is
+D17e's error at the attribute and one failing while compiling is AttrNotBuilt; its type is a struct, an enum or a
+declared number type not of the prelude's (AttrType - `@I64(3)`, `@Vec<I64>()`). One per type per declaration
+(AttrTwice). interp.Bake reports a hidden global the evaluator refuses as AttrNotBuilt, with why; one evaluated with
+nothing to write (a struct of no fields is of size 0 and has no image) is built all the same. doc, explain and the
+language server write attributes with what they are on and never list their globals.
+
+**Reading them (G40).** `x.Attr<A>()` on a type or a descriptor elaborates to a call of the prelude's `attrGot<A>(a)`
+(the global read) or `attrMissing<A>()` (failing with the new prelude `AttrError.MISSING`), both written `? AttrError.MISSING`
+- so it fails as written whichever the compiler finds, and try, R8 and the evaluator need nothing new (enumFrom's
+pattern). `x.HasAttr<A>()` is a Bool known while compiling (reflFold), deciding branches per member (G35). Decided
+(mine): both - one to read with a fallback, one to decide code only some members can check (a router's handlers of
+another signature beside them); the pair mirrors `p.HasDefault`/`p.Default`. Where they read (Program.AttrsOf): a
+type's own; a field's - a pun's being its parameter's, since the pun is the parameter stored (C2a), and attributes
+written on a pun are AttrPun's error, one place for them; a case's and its payload's fields'; a struct's one case its
+type's; a constructor's parameter's; a function's and its parameters'. A function type's parameters, results and error
+words have none.
+
+**R8 and E35 in unrolled walks (mine).** A walk unrolled over a list is checked once per element, as a generic's body
+once per instance: `try f(x)` over `handlers.Functions` covers something for one handler and nothing for another. The
+generic body's exemption from "a try covering nothing" (R8, R14's clause items, E35's `!`, S3's idle calls) now holds in
+such a walk too (`copiesDiffer`); D9b's read-only reasoning (roRead) keeps the generic-only test.
+
+**Functions reflected (G41).** `alias.Functions` - an import's plain functions in order, not methods, externs or
+generics (no single type), another module's exported ones only - and `T.Methods`, a type's own methods that apply to it
+(M21), with an instance's types for an instance (MethodSig). Their elements are `FuncInfo<F, K>` descriptors: F the
+function's type, K a key - FNV-1a of the module's identity, the receiver's type's name and the function's name - so the
+same function is the same descriptor type in every compilation and an instance a descriptor is an argument of is named
+alike in any object that makes it (B3i reuses objects across compilations, and a function's index in the program is not
+stable). Members: Name, Type, Params (ParamInfo<FuncInfo<..>, I>: names, defaults through defaultArg, attributes),
+Results, Errors (where an error set is written; Project reads it off the descriptor type too, so `fn apply<F>(f F, x
+I64) I64 ? F.Errors` works), Attr, HasAttr; `f(args)` is invoke, a method's `m(v, args)` the method call `v.Name(args)`
+(methodCall on the AST, so generic instances bind as written calls do). A module walks its own functions, private ones
+too, through an import of itself (`import me "main"`, decided (mine): no new name for "this module" - an import of
+oneself already worked and reads all by M6a's own-module rule). A module declaring a name `Functions` keeps it.
+Measured: a router collected while compiling (`for f in handlers.Functions { if f.HasAttr<Route>() { m.Put(path,
+fn(q String&) String { return f(q) }) } }`) - the lambda capturing the descriptor works as any capture of a value of no
+fields.
+
+**std.** json: `json.Naming` (`Exact Camel Snake Kebab`), `Encode(v, keys = json.Naming.Snake)`, `Decode<T>(text, keys =
+...)`, `From<T>(j, keys)`; `@json.Key("id")` on a field, a parameter or a case; `@json.Skip` on a field (its parameter
+takes its default on reading - a parameter with none is a compile-time error by a decided assert); a type's own
+`@json.Naming.Camel`. Decided (mine): (1) the policy type is `Naming`, not the brief's `Keys` - `json.Object` has a
+field `Keys`, and D3a forbids a parameter named like a type; (2) a type's own policy wins over the call's (it is the
+type's wire form; the call's applies to types naming none), a member's own key over both; (3) a policy names fields and
+cases alike, and a nested value's type is judged by its own; (4) `@json.Naming.Snake` - the enum's case is the attribute,
+not `@json.Keys(json.Keys.Snake)`; (5) applied as a name is written or compared, byte by byte into the output: no
+per-instance constant exists to compute the converted names into while compiling, and the cost is the name's length per
+member. Words: a capital after a small letter or a digit, the last capital of a run before a small letter (HTTPServer is
+HTTP Server), `_`. csv had no struct mapping: added a small one - `Header<T>()`, `RecordOf(v)`, `Encode(xs)`,
+`Decode<T>(text)` by the header's names, `@csv.Column("name")`, `@csv.Skip`, errors NO_COLUMN and BAD_VALUE. flags:
+`p.Read<T>(args)` declares a flag per constructor parameter (`MaxLen` as `--max-len`, its type's kind, its default; one
+with none REQUIRED), `@flags.Help("...")`, `@flags.Short('n')`; Help() trims trailing spaces and writes "(default x)"
+alone where a flag has no help.
+
+**Tests.** tests/attrs.olang and tests/attrmod.olang (attributes on every declaration they take, puns, cases and
+their fields, a declared number type's and an enum case's values, a constructor's requirement checked; a router and a
+command table collected while compiling; a type's methods called; a generic over a descriptor failing as its function
+does; baked globals beside the run time), std/json's, std/csv's and std/flags' new tests (baked), and 16 checks cases
+(every refused place, a pun, a built-in and a prelude type, two of one type, one not built, a requirement, Attr misused,
+an unhandled Attr, HasAttr deciding branches, a method descriptor called without its receiver, a module's own
+functions).

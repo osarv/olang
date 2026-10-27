@@ -719,6 +719,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   everywhere); `T.Name` without the module's alias; a function type's parameters unnamed (names are no part of it).
   `json.Encode(v)` and `json.Decode<T>(text)` take any value (structs as objects, enums externally tagged as serde,
   decoding through constructors). The evaluator sees only unrolled, decided code, so it agrees by construction.
+- **Typed attributes and function reflection (G39-G41, R8, QBN, QBO, the user's decisions 2026-10-26; built
+  2026-10-27, details mine).** `@Type(args)` / `@Type` (a constructor of no arguments, or an enum's case `@Level.High`)
+  before a type, a function or method, an enum's case, a constructor's field or a parameter - on lines above or on its
+  line; anywhere else an error. A value of a struct, an enum or a declared number type a program declares (not a
+  built-in's, not the prelude's), one per type per declaration, built while compiling (an error otherwise; what it can
+  fail with ends it as `!` does); the compiler gives none a meaning. Built as a hidden immutable global beside the item
+  (`VarDecl.Hidden`, named `@` and its offset), so names, check, K2 and the evaluator do it all. Read by reflection:
+  `try x.Attr<A>()` (fails with the prelude's `AttrError.MISSING`; elaborates to the prelude's `attrGot`/`attrMissing`)
+  and `x.HasAttr<A>()` (a Bool decided while compiling, G35) on a type or a field/case/parameter/function descriptor; a
+  pun field has its parameter's attributes (written on a pun: an error). `alias.Functions` (an import's plain, non-generic
+  functions; another module's exported ones - a module walks its own through an import of itself, `import me "main"`) and
+  `T.Methods` give `FuncInfo<F, K>` descriptors (K a hash of module, receiver type and name: stable across compilations)
+  with Name, Type, Params, Results, Errors, Attr, HasAttr, and `f(args)` calls it (a method's receiver first). A `try`/`!`
+  covering nothing in one copy of an unrolled walk is no error, as in a generic's body (R8). doc/explain/lsp show
+  attributes with what they are on. std: `json.Naming` (Exact, Camel, Snake, Kebab - not `Keys`, which `json.Object`'s
+  field holds) via `keys = ...` on Encode/Decode/From, `@json.Key`, `@json.Skip`, a type's `@json.Naming.X` winning over
+  the call's; std/csv records as structs (`Header`, `RecordOf`, `Encode`, `Decode`, `@csv.Column`, `@csv.Skip`);
+  std/flags `p.Read<T>(args)` from a struct's parameters with `@flags.Help`, `@flags.Short`.
 
 ### Errors
 
