@@ -50,7 +50,7 @@ coordinator's to queue (rules.md, "Optimizations are mine to decide").
   throwaway (scratch only); what each one did is written in its section, so a fix can be redone from the text.
 - **Reproducers** for the new findings are in `bench/repro/` (header: what to look for, what was measured, how to run):
   `turn_temporaries`, `adapter_reduce`, `call_result_copy`, `text_local_copy`, `const_call_in_body`, `enum_layout`,
-  `filtered_comprehension`, `gen_big_function`. Raw notes: the branch's `optlog/notes.txt`.
+  `filtered_comprehension`, `gen_big_function`. Raw notes: the branch's `docs/optlog/notes.txt`.
 
 The benchmark table this started from (`build/bench_run -r 3`, native, medians of 3, olang/C): nbody 1.02,
 spectral-norm 1.09, mandelbrot 0.96, fannkuch 1.08, binary-trees 0.33 (C arena 1.19), k-nucleotide 1.10, matmul 1.00,

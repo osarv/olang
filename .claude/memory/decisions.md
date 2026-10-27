@@ -1750,3 +1750,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Array<K>&, values Array<V>&) C`; Array the built-in base case, Vec built by the compiler with no temporary; std's
   Set/List/Map declare their Of like any program's type; nothing special to std. A comprehension into such a type
   builds its array then calls Of (a local temporary), Vec and Array none. Trait spelling for generic code in QBT round 2.
+- QBV ASKED 2026-10-27 (from docs/optsurvey.md): `x.Pow(2.0)` costs 137 instructions against 3 for `x * x` (X8 calls
+  libm's pow, `nobuiltin`); folding a constant exponent of 2 or 3 into multiplies can change the last bit in rare cases
+  (pow is correctly rounded more often than x*x*x). Recommended: yes for 2 (x*x is exact-rounded, same as pow's result
+  for every finite x - check) and 3 only. In effect: libm pow. Decided by me from the same survey (meaning unchanged):
+  enum layout tightened (T.Size/T.Align/f.Offset report the new numbers - layout was never promised), Vec grows in place
+  only while no View() was taken, everything else in the ranked table queued.
