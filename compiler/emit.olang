@@ -43,6 +43,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
+    # B20: a build olang profile makes - line tables and each function's readable name in its debug information, and
+    # main starting the runtime's sampler
+    Prof Bool = false
     Library Bool = false            # a shared library (X14): its globals set as it loads, no main
     # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
     # in test builds, where the compiler is tested; any other build trusts lowering, the verifier's walk having been a
@@ -154,6 +157,9 @@ type Reused struct(Module I64) {
 # whether the error return trace is kept (S18d): test and -debug builds
 fn (e Emitter&) traced() Bool { return e.Tests or e.Debug }
 
+# whether functions carry debug information: all of it under -debug (B2e), their lines and names in a profile build (B20)
+fn (e Emitter&) dbg() Bool { return e.Debug or e.Prof }
+
 fn (e mut Emitter&) gap(what String&) {
     if what not in e.Gaps { e.Gaps.Push($what) }
 }
@@ -202,7 +208,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
     mods := e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
-        if not e.Debug { e.mergeSame() }
+        if not e.dbg() { e.mergeSame() }
         out.Push(Object($mods[root].Identity, ObjectKind.Module, e.assemble(root, true)))
         return out
     }
@@ -228,7 +234,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
     }
     inst := split and used.Has(HomeInst)
     if inst { e.instGroups() }
-    if not e.Debug { e.mergeSame() }
+    if not e.dbg() { e.mergeSame() }
     for m in range mods.Len() {
         if m == root { continue }
         ri := try e.ReusedAt.Get(m) catch default -1
@@ -885,7 +891,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             continue
         }
         text := e.itemText[it]
-        if rename.Len() == 0 and not e.Debug {
+        if rename.Len() == 0 and not e.dbg() {
             out.Push(text)
             continue
         }
@@ -1238,8 +1244,9 @@ fn (e mut Emitter&) dbgCu() I64 {
     if e.dbgCuN >= 0 { return e.dbgCuN }
     e.dbgCuN = e.dbgNew()
     f := e.dbgFile(e.P.L.Mods[e.P.L.Root].File)
-    e.dbgShared(e.dbgCuN, $"distinct !DICompileUnit(language: DW_LANG_C, file: !" $f ", producer: \"olang\", " $
-                "isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)")
+    # B20: a profile build's is its lines alone, of optimized code
+    kind := "isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug" if e.Debug else "isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly"
+    e.dbgShared(e.dbgCuN, $"distinct !DICompileUnit(language: DW_LANG_C, file: !" $f ", producer: \"olang\", " $kind ")")
     return e.dbgCuN
 }
 
@@ -1460,6 +1467,67 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
     }
 }
 
+# the name a profile shows a function by (B20): as source writes it outside its module - "io.Println",
+# "Vec<I64>.Push", "parse.Parser.Expr" - the program's own and the prelude's bare, as errors print (load.ErrQualifier);
+# a lambda by the function it is written in, a constructor by its type
+fn (e mut Emitter&) ProfName(k mir.FnKey) String {
+    t := e.T
+    match k {
+        case mir.FnKey.Body(id) {
+            return match e.Lw.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) => e.instanceProfName(inst)
+                case typed.BodyOf.Ctor(ty, _) => e.readableTypes(t.Canon(ty))
+                case typed.BodyOf.Dtor(ty) => $e.readableTypes(t.Canon(ty)) ".destruct"
+                case typed.BodyOf.Lambda(parent) => $e.ProfName(mir.FnKey.Body(parent)) ".lambda"
+                case typed.BodyOf.Test(_) => "test"
+                case typed.BodyOf.Global(m, n) => $load.ErrQualifier(e.P.L.Mods[m].Identity, m == e.P.L.Root) $e.text(n) ".init"
+                case typed.BodyOf.Contract(of, _, _) => $e.ProfName(mir.FnKey.Body(of)) ".contract"
+                case _ => e.sym(k)
+            }
+        }
+        case mir.FnKey.Adapter(call) { return $e.ProfName(mir.FnKey.Body(call)) ".adapter" }
+        case _ { return e.sym(k) }
+    }
+}
+
+fn (e mut Emitter&) instanceProfName(inst I64) String {
+    m := e.P.FnModule(e.P.InstanceFn(inst))
+    id := e.P.L.Mods[m].Identity
+    text := e.P.InstanceText(inst)
+    rest := text[id.Len() + 1:] if text.StartsWith(id) and text.Len() > id.Len() else $text
+    return $load.ErrQualifier(id, m == e.P.L.Root) $e.readableTypes(rest)
+}
+
+# a canonical text (types.Canon) with each declared type's "IDENTITY:" written as its module's qualifier: "check.Checker",
+# "Vec<I64>" (B20)
+fn (e mut Emitter&) readableTypes(text String&) String {
+    if not text.Contains(":") { return $text }
+    b := StringBuilder()
+    at I64 = 0                          # the text up to here is copied
+    for i, ch in text {
+        if ch != ':' { continue }
+        best I64 = -1
+        q := ""
+        for m in range e.P.L.Mods.Len() {
+            id := e.P.L.Mods[m].Identity
+            s := i - id.Len()
+            if id.Len() <= best or s < at or text[s:i] != id { continue }
+            if s > 0 and not typeDelim(text[s - 1]) { continue }
+            best = id.Len()
+            q = load.ErrQualifier(id, m == e.P.L.Root)
+        }
+        if best < 0 { continue }
+        b.Push(text[at:i - best])
+        b.Push(q)
+        at = i + 1
+    }
+    b.Push(text[at:])
+    return b.ToString()
+}
+
+# what may stand before a type in a canonical text
+fn typeDelim(ch Char) Bool { return ch == '<' or ch == ',' or ch == ' ' or ch == '(' or ch == '[' or ch == '&' or ch == '?' }
+
 # the function's subprogram, where it has source to point at
 fn (fe mut fnEm&) subprogram() {
     f := fe.F
@@ -1468,7 +1536,8 @@ fn (fe mut fnEm&) subprogram() {
     file := e.dbgFile(f.File)
     line := e.D.LineAt(f.File, I64(f.Sp.Start))
     fe.dbgSp = e.dbgNew()
-    fe.dbgMeta.Push($"!" $fe.dbgSp " = distinct !DISubprogram(name: \"" $escape(e.dbgName(f.Of)) "\", scope: !" $file $
+    name := e.ProfName(f.Of) if e.Prof and not e.Debug else e.dbgName(f.Of)
+    fe.dbgMeta.Push($"!" $fe.dbgSp " = distinct !DISubprogram(name: \"" $escape(name) "\", scope: !" $file $
                     ", file: !" $file ", line: " $line ", type: !" $e.dbgSubTy() ", scopeLine: " $line $
                     ", spFlags: DISPFlagDefinition, unit: !" $e.dbgCu() ")\n")
 }
@@ -2141,7 +2210,7 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     fe.gen = f.Gen
     fe.walkForm = walkForm
     e.badType = false
-    if e.Debug { fe.subprogram() }
+    if e.dbg() { fe.subprogram() }
     fe.run()
     if e.badType {
         # a type the program's layouts do not settle (a length a call computes, T7c, is the evaluator's, M8)
@@ -2165,7 +2234,7 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     b.Push("entry:\n")
     b.Push(fe.head.ToString())
     b.Push(fe.pro.ToString())
-    if fe.dbgSp >= 0 { fe.declareVars(b) }
+    if fe.dbgSp >= 0 and e.Debug { fe.declareVars(b) }
     b.Push("  br label %start\n")
     b.Push(fe.code.ToString())
     b.Push("}\n")
@@ -6040,7 +6109,7 @@ fn (e mut Emitter&) arrayOfE(r types.TypeId) types.TypeId {
 fn (e mut Emitter&) runtimeItems() {
     if e.rtRead { return }
     e.rtRead = true
-    text := try olrt.Text(e.Arch, e.San, false) catch olrt.Bad {
+    text := try olrt.Text(e.Arch, e.San, false, e.Prof) catch olrt.Bad {
         e.gap("the runtime's text (std/runtime/runtime.ll could not be filled in)")
         return
     }
@@ -6121,6 +6190,13 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
     e.sanInit(b)
+    if e.Prof {
+        # B20: the sampler started, before anything else of the program runs: main's frame the top of this thread's
+        # stack as the sampler walks it
+        e.runtime("__olang_prof_start")
+        e.declare("llvm.frameaddress.p0", "ptr @llvm.frameaddress.p0(i32)")
+        b.Push("  %proftop = call ptr @llvm.frameaddress.p0(i32 0)\n  call void @__olang_prof_start(ptr %proftop)\n")
+    }
     for i in e.globalOrder(inits) {
         if not e.Baked.Has(i) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
     }

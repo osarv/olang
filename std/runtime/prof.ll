@@ -28,7 +28,6 @@
 ; signal arrived): a header - "OLPROF01", the period in nanoseconds, the words of records, the samples dropped, the
 ; threads sampled - then the records, then /proc/self/maps as it reads at that moment, which olang profile needs to
 ; find each address's file. A crash (SIGSEGV) writes nothing.
-declare ptr @getenv(ptr)
 declare i32 @atexit(ptr)
 declare i32 @open(ptr, i32, ...)
 declare i64 @read(i32, ptr, i64)

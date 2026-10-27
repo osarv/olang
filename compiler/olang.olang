@@ -31,6 +31,7 @@ import "eval"
 import "interp"
 import "explain"
 import "bindgen"
+import "profile"
 import "session"
 import "lsp"
 import "mcp"
@@ -63,7 +64,8 @@ fn roomFor(bytes I64) Bool {
 ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
     "mcp"
     "fix"
-    "bindgen"]
+    "bindgen"
+    "profile"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -77,6 +79,7 @@ Lsp I64 = 9
 Mcp I64 = 10
 Fix I64 = 11
 Bindgen I64 = 12
+Profile I64 = 13
 
 # what each mode is, for help
 ModeUsage Array<String&> = String&[
@@ -93,6 +96,7 @@ ModeUsage Array<String&> = String&[
     "olang mcp [OPTION...]"
     "olang fix [OPTION...] FILE.olang|DIR..."
     "olang bindgen [OPTION...] HEADER.h"
+    "olang profile [OPTION...] FILE.olang [ARGUMENT...]"
 ]
 ModeWhat Array<String&> = String&[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
@@ -108,6 +112,7 @@ ModeWhat Array<String&> = String&[
     "serves the Model Context Protocol on the standard input and output, for agents (B16)"
     "rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)"
     "writes a C header's declarations as olang declares them, read by clang (X16)"
+    "builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20; interpret's runs are not profiled)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
@@ -115,9 +120,9 @@ ModeWhat Array<String&> = String&[
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
     "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime"]
 OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS"]
-OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2, 11, 8, 8]
+OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8207, 256, 2, 11, 8, 8]
 OptWhat Array<String&> = String&[
-    "writes the executable, the object or bindgen's declarations to PATH (B3h, X16)"
+    "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
     "builds with the data race detector (B2b)"
     "builds with the scope sanitizer (B2f)"
@@ -275,7 +280,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             continue
         }
         cl.Files.Push($a)
-        if cl.Mode == Run or cl.Mode == Interp {
+        if cl.Mode == Run or cl.Mode == Interp or cl.Mode == Profile {
             for i < args.Len() {
                 cl.Args.Push($args[i])
                 i++
@@ -324,7 +329,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
         try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
-    if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen) and cl.Files.Len() != 1 {
+    if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen or cl.Mode == Profile) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
     # B19: one test of one file fuzzed, for as long as -fuzztime says
@@ -346,6 +351,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     foreignOk := cl.Mode == Compile or cl.Mode == Build or cl.Mode == Test or cl.Mode == Run
     if c.Target.Foreign and not foreignOk { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
+    c.Profile = cl.Mode == Profile
     # an editor's and an agent's files are checked as "olang test" checks them, their tests included (B15, B16)
     try builtins(c, c.Tests or cl.Mode == Lsp or cl.Mode == Mcp, d)
     return cl
@@ -423,6 +429,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
     if cl.Mode == Run { return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d) }
+    if cl.Mode == Profile { return profile.Run(fe, c, files[0], cl.Args.ToArray(), d) }
     if cl.Mode == Interp {
         # the program's command line is the file, then what follows it (B3f)
         pargs Vec<String&>
@@ -620,8 +627,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
-    e.Prof = cfg.Profile and kind == build.Kind.Program
-    e.Lines = cfg.Profile
+    e.Prof = cfg.Profile
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.Library = cfg.Library and kind == build.Kind.Program

@@ -673,6 +673,9 @@ fn finish(d mut diag.Diagnostics&) I32 {
     return 1
 }
 
+# finish, for a mode beside build's (B20)
+fn Finish(d mut diag.Diagnostics&) I32 { return finish(d) }
+
 # what a front end that cannot make code for a program yet says, a line for each thing it cannot (UNBUILT), on the
 # standard output where diagnostics go: what the self-hosted back end does not do yet, not a mistake in the program
 fn Unbuildable(why String&) { sayln($"olang: error: the self-hosted compiler cannot build this yet: " $why) }

@@ -2804,7 +2804,7 @@ fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
         b.PushChar('>')
     }
     i = p.instances.Len()
-    text := b.ToString()
+    text String&p = b.ToString()
     p.instances.Push(instance(f, args, sig, types.Symbol(text), text, p.Asking))
     p.instanceOf.Put(key, i)
     return i

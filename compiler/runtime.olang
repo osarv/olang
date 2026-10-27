@@ -61,7 +61,7 @@ fn directive(line String&) I64 {
 }
 
 # the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not, and
-# with the profiler's hooks or not (B20)
+# with the profiler's hooks ("; @prof" lines) or not (B20)
 fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
     path := $load.StdDir() "/runtime/" $file
     bytes := try os.ReadFile(path) catch os.Error {
@@ -76,8 +76,11 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
     inElse := false
     keep := true
     ifLine I64 = 0
-    for line in text.Lines() {
+    for written in text.Lines() {
         n++
+        # B20: a line of the profiler's hooks, code in a profile build and a comment in every other - so a compiler that
+        # knows nothing of them reads the file as it always has
+        line := written[8:] if prof and written.StartsWith("; @prof ") else written
         d := directive(line)
         if d == 0 {
             if inIf { try malformed(path, n, "\"; @if\" inside another") }
@@ -86,10 +89,10 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
             if neg { c = c[1:] }
             sp := try c.Find(" ") catch default -1
             if sp >= 0 { c = c[:sp] }
-            if c != "san" and c != "prof" and c not in Archs {
-                try malformed(path, n, "a condition that is neither \"san\", \"prof\" nor an architecture")
+            if c != "san" and c not in Archs {
+                try malformed(path, n, "a condition that is neither \"san\" nor an architecture")
             }
-            holds := san if c == "san" else (prof if c == "prof" else c == arch)
+            holds := san if c == "san" else c == arch
             keep = holds != neg
             inIf = true
             inElse = false
