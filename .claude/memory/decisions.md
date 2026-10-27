@@ -1779,3 +1779,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   built directly; a comprehension into such a type builds its array and calls FromArray - one protocol name, no
   FromIter (additive later if a measurement wants it); std's Set/List/Deque/Heap(no: no zero-free form - Heap.FromArray
   takes its less too, so no literal)/Map declare FromArray (set.Of, list.Of renamed). Post-reset batch with QBT.
+- QBU follow-up 2026-10-27 (the user: "supply the FromArray to all std collection types" - DECIDED, std's every
+  collection gets one, Heap's taking its less too, so Heap has no literal; and "is there a way we do this without the
+  FromArray method and just use iterators for the same effect?") - QBW ASKED: one protocol `FromIter(it)` instead of
+  FromArray - `C[a, b]` is `C.FromIter(Array<E>[a, b].Iter())`, a comprehension hands its walk straight in (no array
+  made, a generator's walk fused), `C.FromIter(anyIterator)` converts anything; generic over `Iterator<T ? E>` so a
+  fallible walk's errors pass through (G1a). Cost: a builder no longer sees the length up front (a reserve) - the
+  literal's and a counted comprehension's length is known to the compiler; Vec/Array built directly anyway. Not `From`
+  (T17e's `Op.From(v)` means a raw value). Recommended yes, FromIter only (one way). In effect: FromArray (decided).
