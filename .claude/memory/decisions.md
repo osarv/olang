@@ -1576,3 +1576,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   to the user): `unreachable ["why"]` is also an expression wherever a value of any type is expected
   (`d := table[k] if k in table else unreachable "checked above"`), as a noreturn call fits (D8e); reached, it stops as
   the statement does. Queued for after the weekly reset (week at 0.94).
+- Item 7 DECIDED 2026-10-27 (the user: "dont build"): no `.Case` shorthand - an enum case is always written with its
+  type (`Dir.North`), one way to write it.
