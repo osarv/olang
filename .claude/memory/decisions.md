@@ -1726,3 +1726,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   ...) by a migration tool in `olang fix`; doc groups builders by declaration; reflection gains `T.Functions` beside
   `T.Methods`. Second round of the same batch: traits may require one (`T.Parse(t)`, `T.Zero()`), and then
   `t.ParseAs<T>()` becomes `T.Parse(t)` (one way). Post-reset batch.
+- QBP 10 LAID OUT 2026-10-27 (array patterns): asked 1 build now (rec yes), 2 `..words` (rec), 3 a name always binds,
+  a local's name a D3a error, compare by guard (rec), 4 exhaustiveness over lengths (rec yes). Unanswered.
+- QBU ASKED 2026-10-27 (the user: "for list comprehension, should the type before the comprehension be Array<T>
+  rather than T?"): found - `$v` of a Vec renders `Vec<I64>[1, 2, 3]`, which as source is an array of Vecs (an error),
+  so E11b's "renders as source writes it" fails for Vec/List. Proposed: one rule for literals and comprehensions
+  together - the type in front is the type of the value made: `Array<I64>[1, 2]`, `Array<F32>[relu(v) for v in a]`,
+  `Vec<I64>[1, 2]`, `Vec<String&>[w for w in words(t)]`, `list.List<I64>[...]`, `set.Set<I64>[...]`, beside
+  `Map<K, V>{k: v}` already so; an array of Vecs is `Array<Vec<I64>>[a, b]`; containers through a trait-required
+  type-level builder (QBT round 2), a comprehension into a Vec built by pushes (no ToVec). Cost: every array literal
+  longer (`Array<I64>[1, 2]` for `I64[1, 2]`), migrated by a tool. Rec yes, both together, never comprehensions alone.
+  In effect: `T[...]` element-typed.
