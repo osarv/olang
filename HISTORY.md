@@ -26244,3 +26244,38 @@ program was older than the compiler binary or the tools - so a checkout whose co
 tools the other built from its own sources. Now `fix/KEY` (the compiler's real path and the tools' directory), a
 `.from` stamp per tool naming the compiler (path, size, time) that built it, rebuilt when that changed or when the
 tools, the compiler's modules beside them or std are newer.
+## S18c: a decided assert's message rendered, and a false one an error only where every run reaches it (2026-10-27)
+
+The std2 batch (bitset, order) found two faults in S18c, the asserts decided while compiling.
+
+**The message.** An assert's message was given to the evaluator only where it read no local but a fixed one (S8c), and
+the assert was then not asked at all; and an assert reflection decides (G35: `assert T.Kind == TypeKind.Struct`) was an
+error at once with its message's source text - `"field " $f.Name " has no <"` printed as written. So std/order's
+ByFields could only say "this type is neither" through the instantiation notes. Now (mine): a message whose pieces are
+text and renderings of what reflection knows for the instance - a member's or descriptor's name, a size, a length,
+a Bool - is rendered by the checker (`reflText`, over `reflFold`); else it is a body the evaluator renders, as before;
+else the assert is still asked, and a false one's error gives the message as written, saying it reads what only the
+running program knows (a new wording, `AssertFalseWritten`). A reflection-decided false assert goes the same way (an
+ask with no condition body, `Cond` -1) and is emitted as an assert of `false`, so the run time checks it where the next
+rule leaves it. An error whose message read reflection keeps the instance's note. std/order: a field of a type with no
+`<`, no `Less` and no fields (an array) is `field Cells (Array<I64>) has no order - ...` (`nested`, decided per
+instance), the check case orderarrayfield expecting it.
+
+**Reachability.** SPEC said the decision held "wherever the assert is written, reached or not", and the code asked
+nothing about where it was: in a test, `try f() catch X { return }` then `assert false` was refused, though `f()` fails
+and the assert is never reached (std/bitset's test had been rewritten with a flag). Decided (mine): a true assert loses
+its check anywhere (nothing observable changes); a false or aborting one is an error only where every run of its body
+reaches it, failures aside (a failed check, `unreachable`, `!` - the evaluator rules those runs out). Structurally, as
+D10a judges leaving: the assert is among the body's statements or inside a block, a loop's body (run once at least - a
+condition's `if not c { break }` is a statement before it that leaves) or a join's code, and no statement before it, at
+any level, may leave its block - a return, raise, re-raise or yield, a jump to a block not opened inside it, a try whose
+operand may fail with what its clauses do not take (check now records it: `Try.Left`, from `caught`'s count; a try built
+elsewhere keeps the conservative true), or a clause, arm or branch holding one. Anything else - a branch the build does
+not decide (a decided one is a plain block), an arm, a clause, deferred code, a post clause, inside an expression -
+leaves the assert to the run time. `typed.AlwaysReached` (with `holds`/`within` finding the assert through plain
+containers and `stmtLeaves` walking every statement and expression kind, as `BreaksOut` does); the jump test counts
+only loop bodies, post clauses and block statements as opened inside, since a branch's block may carry its enclosing
+block's id (`breakUnless`). Conservative where unsure: a missed decision is a run-time check, never a wrong error.
+Checked in functions (return, break, continue, error, a try passing on), tests, branches and loops: tests/asserts.olang
+(run time and a baked global agreeing), checks cases assertfalsepieces, assertfalsewritten, assertreachedfalse; the
+bitset test back to `catch ... { return }` then `assert false`.

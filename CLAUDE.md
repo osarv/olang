@@ -1068,6 +1068,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   no value to anything reading it, so one mistake is one error (2026-10-26). It must handle everything it can (the user's rule).
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
   can decide is checked while compiling (S18c); a condition the build decides (B9c, S8b); fixed locals (S8c).
+- **Decided asserts (S18c, 2026-10-27, mine; fixing two bugs std2 found).** A true one loses its run-time check
+  anywhere; a false (or aborting) one is a compile error only where every run of its body reaches it - in its body's
+  statements or a block, loop body or join block among them, with nothing before it that may leave (return, a break or
+  continue out, an error raised or passed on by a try whose clauses leave some of it, a clause or arm doing so, a
+  yield); in a branch the build does not decide, an arm, a clause, deferred code or after such a statement it stays a
+  run-time check (`try f() catch X { return }` then `assert false` in a test was refused). It had been decided wherever
+  written. `typed.AlwaysReached`, check recording a try's leftovers (`Try.Left`). The error's message is rendered as the
+  run time would: by reflection for the instance (`"field " $f.Name`, `check.reflText`) - a reflection-decided assert
+  (G35) used to print its message's source - else by the evaluator, else written out, saying it reads what only the
+  running program knows (an assert whose message read a plain local was not decided at all). std/order names the
+  field with no order.
 - **Tests the evaluator runs** sit beside run-time tests for every language change (the checklist above).
 - **Refusals and agreements.** Refused: mutable-global reads, global writes, externs (but known libm, X8), tasks run
   in sequence at the join (allowed), atomics on non-global places (allowed), process endings, undefined behaviour,
