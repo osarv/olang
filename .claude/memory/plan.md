@@ -540,3 +540,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   by me. Left: allocation profiling, threads C starts, a clock finer than the 250 Hz tick, builds not bit-reproducible
   (.loc objects carry the compiler's pid in temp names). Next: json key policies + typed attributes + function
   reflection (QBN/QBO), then survey2 items 1-5.
+- 2026-10-27 CET: attrs merged (8a602e0, verified; merge = tip + memory, PROGRESS.md untracked): G39 typed attributes
+  `@Type(args)` / `@Type` / `@Enum.Case` on types, functions, methods, cases, fields and parameters (a hidden immutable
+  global per attribute, baked by K2 - nothing new in lowering/emit/interpret), G40 `try x.Attr<A>()`
+  (AttrError.MISSING) and `x.HasAttr<A>()` (decided per member), G41 `alias.Functions` and `T.Methods` (FuncInfo
+  descriptors, callable); std: `json.Naming` (Exact/Camel/Snake/Kebab; not `json.Keys` - clashes with Object.Keys),
+  `@json.Key/Skip`, a type's `@json.Naming.X` wins over the call's; csv struct mapping (Header/RecordOf/Encode/Decode,
+  `@csv.Column/Skip`); `flags.Read<T>` from a constructor (`@flags.Help/Short`). Left: json key names converted per
+  encode, not precomputed. FOUND (unfixed, small): `olang format` through the shared formatter cache gave a stale layout
+  in another worktree (cache key misses the formatter's source) - queue it.
