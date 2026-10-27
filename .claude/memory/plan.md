@@ -523,3 +523,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   Running: wt-checker (the checker batch, QBK 1-3 + B3a/B7a items). Next: `olang profile` (QBL), then json key policies +
   typed attributes + function reflection (QBN/QBO), then survey2 items 1-5 (Place.Here, become, bitset, ByFields,
   top-level assert).
+- 2026-10-27 CET: checker merged (9e3b27f, verified; merge = tip + memory): S8d/S8e one narrowing walk (and/or/not,
+  assert, loops; a narrowing ends at an assignment), S3 calls doing nothing an error (settleIdle; allocation counts as an
+  effect), D3b unused locals (reported only when nothing else is wrong; `for _`, `_` in comprehensions) and M5a unused
+  imports (tools/unused_migrate.olang, last in olang fix; 252 files migrated), B11 did-you-mean everywhere
+  (msgs.Nearest), B3a filter across files (status 3), B7a targets `Array.Windows`/`Iterator.TakeWhile`; seed
+  regenerated. Found: olang doc dropped other-module methods' examples (written into a copy). Left: `_ = x` to discard.
