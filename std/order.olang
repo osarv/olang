@@ -1,0 +1,137 @@
+# order - ordering by fields: ByFields<T>, a "less" function for any struct or enum, built from T's fields while compiling
+# (reflection, G32-G34). It is the comparator an array's or a Vec's Sort takes: `people.Sort(order.ByFields<Person>)`.
+# Imported with `import "std/order"`.
+#
+# A struct is ordered lexicographically by its fields in declaration order (only the fields the module reading
+# T.Fields may see, M6a: the public ones, unless T is declared in this module - which it never is, so a struct's
+# private fields take no part). An enum is ordered by its cases in declaration order, and two values of one case by
+# that case's fields in order. A field is compared by "<": a number, Bool, Char or text, or a type declaring `Less`;
+# a field that is a struct or an enum without a `Less` is ordered by ByFields in turn (a type's own Less always wins,
+# so a nested type is ordered the way its author said). Any other field type (an array, a reference, a function) is a
+# compile-time error naming the field and its type: it has no order to take.
+
+# whether a is ordered before b: the first field in which they differ decides, a smaller one meaning before
+fn ByFields<T>(a T, b T) Bool {
+    if T.Kind == TypeKind.Struct {
+        return fieldsLess(a, b)
+    } else if T.Kind == TypeKind.Enum {
+        return casesLess(a, b)
+    } else {
+        assert false, "ByFields orders structs and enums, and this type is neither"
+        return false
+    }
+}
+
+# a struct: the first of its fields in which a and b differ
+fn fieldsLess<T>(a T, b T) Bool {
+    for f in T.Fields {
+        if lessThan(f, f.Of(a), f.Of(b)) { return true }
+        if lessThan(f, f.Of(b), f.Of(a)) { return false }
+    }
+    return false
+}
+
+# an enum: by the position of the case, then by the case's fields
+fn casesLess<T>(a T, b T) Bool {
+    ia := caseIndex(a)
+    ib := caseIndex(b)
+    if ia != ib { return ia < ib }
+    for c in T.Cases {
+        if a == c and b == c {
+            for f in c.Fields {
+                if lessThan(f, f.Of(a), f.Of(b)) { return true }
+                if lessThan(f, f.Of(b), f.Of(a)) { return false }
+            }
+        }
+    }
+    return false
+}
+
+# the position of v's case among T's cases
+fn caseIndex<T>(v T) I64 {
+    for i, c in T.Cases {
+        if v == c { return i }
+    }
+    unreachable
+}
+
+type Lesser<T> trait { Less(o T&) Bool }
+
+# x before y, both the value of the field f
+fn lessThan<F, V>(f F, x V, y V) Bool {
+    if V.Kind == TypeKind.Reference {
+        return lessRef<V.Target>(x, y)
+    } else {
+        return lessVal(x, y)
+    }
+}
+
+fn lessVal<V>(x V, y V) Bool {
+    return match V {
+        case Number, Bool, Char => x < y
+        case Lesser<V> => x < y
+        case _ => ByFields<V>(x, y)
+    }
+}
+
+# the same for a field held by reference (text, a struct held by &)
+fn lessRef<R>(x R&, y R&) Bool {
+    return match R {
+        case Lesser<R> => x < y
+        case _ => ByFields<R>(x, y)
+    }
+}
+
+if TestBuild {
+
+type Version struct(Major I64, Minor I64, Tag String&) { Major, Minor, Tag }
+
+test ByFields "orders a struct by its fields in order" {
+    a := Version(1, 2, "b")
+    assert ByFields<Version>(a, Version(1, 3, "a")) and ByFields<Version>(a, Version(2, 0, "")) and ByFields<Version>(a, Version(1, 2, "c"))
+    assert not ByFields<Version>(a, a) and not ByFields<Version>(Version(1, 3, "a"), a)
+}
+
+test ByFields "is the comparator Sort takes" {
+    v := Version[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a"), Version(1, 0, "q")]
+    v.Sort(ByFields<Version>)
+    assert v[0] == Version(1, 0, "q") and v[1] == Version(1, 5, "a") and v[2] == Version(1, 5, "z") and v[3] == Version(2, 0, "x")
+}
+
+type Level enum { Low, High(n I64), Mid(a I64, b I64) }
+type Job struct(Rank Level, Ver Version, Name String&) { Rank, Ver, Name }
+type Rev struct(v I64) { v }
+fn (a Rev&) Less(b Rev&) Bool { return a.v > b.v }
+type Wrap struct(R Rev, N I64) { R, N }
+
+test ByFields "orders an enum by case, then by the case's fields" {
+    assert ByFields<Level>(Level.Low, Level.High(0)) and ByFields<Level>(Level.High(9), Level.Mid(0, 0))
+    assert ByFields<Level>(Level.High(1), Level.High(2)) and ByFields<Level>(Level.Mid(1, 5), Level.Mid(1, 6))
+    assert not ByFields<Level>(Level.Mid(2, 0), Level.Mid(1, 9)) and not ByFields<Level>(Level.Low, Level.Low)
+}
+
+test ByFields "recurses into nested structs and enums, text included" {
+    a := Job(Level.High(1), Version(1, 0, "x"), "m")
+    assert ByFields<Job>(a, Job(Level.Mid(0, 0), Version(0, 0, ""), "a"))
+    assert ByFields<Job>(a, Job(Level.High(1), Version(1, 0, "x"), "n")) and not ByFields<Job>(a, a)
+    assert ByFields<Job>(a, Job(Level.High(1), Version(1, 1, ""), "a"))
+}
+
+test ByFields "a field's own Less wins over its fields" {
+    assert ByFields<Wrap>(Wrap(Rev(5), 0), Wrap(Rev(3), 0)) and not ByFields<Wrap>(Wrap(Rev(3), 0), Wrap(Rev(5), 0))
+    assert ByFields<Wrap>(Wrap(Rev(3), 1), Wrap(Rev(3), 2))
+}
+
+# decided while compiling (K2): the evaluator orders as the run time does
+fn evalSorted() Array<Version> {
+    v := Version[Version(2, 0, "x"), Version(1, 5, "z"), Version(1, 5, "a")]
+    v.Sort(ByFields<Version>)
+    return v
+}
+BakedSorted := evalSorted()
+
+test "the compile-time evaluator sorts by fields" {
+    assert BakedSorted[0] == Version(1, 5, "a") and BakedSorted[2] == Version(2, 0, "x")
+}
+
+}

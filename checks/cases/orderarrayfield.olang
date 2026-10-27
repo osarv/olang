@@ -1,0 +1,10 @@
+# check: fail error[S18c]: ByFields orders structs and enums, and this type is neither
+# also: compilation failed with 1 error
+# std/order: a field with no order (an array) is a compile-time error
+import "std/order"
+type Row struct(Id I64, Cells Array<I64>&) { Id, Cells }
+fn main() {
+    a := Row(1, I64[1])
+    b := Row(1, I64[2])
+    assert not order.ByFields<Row>(a, b)
+}
