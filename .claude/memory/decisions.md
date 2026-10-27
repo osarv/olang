@@ -1656,3 +1656,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   only start - as S1b already is (checked: `if x < 0: return x +` / `100` and a call whose arguments run over lines
   compile and run); the statement ends where L18 ends any statement (a line break not after an operator or inside
   brackets) or at an else/catch. A value match's `case P: v` takes the same rule, so a long value continues over lines.
+- QBR confirmed 2026-10-27 (the user: "ye, disallow {} blocks in the value matches"): a `{ }` arm in a value match is a
+  compile error naming `case P: v`.
