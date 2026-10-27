@@ -1796,3 +1796,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   G9a. `$` would render every sequence as `[...]` and a map as `[k: v]` (no type, read back where a type is given -
   the cost: a rendering no longer names Vec vs Array). Supersedes QBU's type-in-front. Recommended yes. In effect: QBU's
   `Array<T>[...]` (decided an hour earlier), nothing built.
+- QBW + QBX ANSWERED 2026-10-27 (the user: "no do only fromIter"; reading taken, stated to the user: "no" to QBX,
+  FromIter for QBW): QBX declined - literals and comprehensions keep the type in front (QBU, `Array<I64>[1, 2]`,
+  `set.Set<I64>[...]`). QBW DECIDED: one protocol, the type-level builder `FromIter(it)` (generic over `Iterator<T ?
+  E>`, its errors passing through), no FromArray: `C[a, b]` is `C.FromIter(Array<E>[a, b].Iter())`, `C[k: v]` an
+  iterator of MapEntry<K, V>, a comprehension hands its walk straight in (no array made), `T.FromIter(it)` an ordinary
+  call; every std collection declares one (Heap's takes its less, so no literal); the compiler supplies
+  Array/Vec.FromIter, their literals built directly. Post-reset batch with QBT.
