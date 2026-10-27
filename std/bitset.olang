@@ -1,0 +1,224 @@
+# bitset - BitSet<T>: a set of the cases of an enum, held in one U64, bit k standing for the enum's k-th case (declaration
+# order). T is an enum of at most 64 cases, none carrying a payload; either is a compile-time error naming the limit (the
+# check is an assert on T.Cases, decided per instance, G35). Imported with `import "std/bitset"`; the type is bitset.BitSet<T>.
+#
+# A BitSet is a plain VALUE (a struct of one U64): a copy is a set of its own, "==" and Hash are by the bits, and nothing
+# is allocated. Operators (mine): "|" the union, "&" the intersection, "-" the difference and "^" the elements in exactly
+# one - each one spelling, so "+" is not defined. "x in s" asks Has, "for c in s" walks the cases in declaration order.
+#
+# For C flag words: Bits() is the set as case-index bits (round trip with FromBits), Flags() the OR of the raw values
+# (T17e) of an enum whose raw type is an integer (`type Perm enum U32 { READ = 1, WRITE = 2 }`), FromFlags the cases
+# whose nonzero raw value lies wholly in a word.
+
+type Error error { OUT_OF_RANGE }
+
+type BitSet<T> struct(bits U64 = 0) { bits }
+
+# the check every instance makes: an enum, at most 64 cases, none with a payload
+fn check<T>() {
+    assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
+    assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+    for c in T.Cases {
+        assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
+    }
+}
+
+# the position of x's case among T's cases
+fn index<T>(x T) I64 {
+    check<T>()
+    for k, c in T.Cases {
+        if x == c { return k }
+    }
+    unreachable
+}
+
+# the case at position k, k below the number of cases
+fn caseAt<T>(k I64) T {
+    for i, c in T.Cases {
+        if i == k { return c() }
+    }
+    unreachable
+}
+
+# the bits of every case
+fn mask<T>() U64 {
+    check<T>()
+    n := T.Cases.Len()
+    if n == 64 { return U64.Max }
+    return (U64(1) << n) - 1
+}
+
+# the empty set
+fn Empty<T>() BitSet<T> { return BitSet<T>(0) }
+
+# every case
+fn Full<T>() BitSet<T> { return BitSet<T>(mask<T>()) }
+
+# the set of the cases in a
+fn Of<T>(a Array<T>&) BitSet<T> {
+    s := BitSet<T>(0)
+    for x in a { s.bits |= U64(1) << index(x) }
+    return s
+}
+
+# the set whose case-index bits are b; bits past the last case fail
+fn FromBits<T>(b U64) BitSet<T> ? Error.OUT_OF_RANGE {
+    if b & ~mask<T>() != 0 { error Error.OUT_OF_RANGE }
+    return BitSet<T>(b)
+}
+
+# the cases whose raw value (T17e, an integer) is not zero and lies wholly in w: a C flag word read as a set
+fn FromFlags<T>(w U64) BitSet<T> {
+    check<T>()
+    s := BitSet<T>(0)
+    for k, c in T.Cases {
+        r := U64(c().Value())
+        if r != 0 and r & w == r { s.bits |= U64(1) << k }
+    }
+    return s
+}
+
+# whether x is in the set - what "x in s" asks (E29)
+fn (s BitSet<T>&) Has(x T) Bool { return s.bits >> index(x) & 1 == 1 }
+
+# adds x, and says whether it was not there before
+fn (s mut BitSet<T>&) Add(x T) Bool {
+    was := s.Has(x)
+    s.bits |= U64(1) << index(x)
+    return not was
+}
+
+# removes x, and says whether it was there
+fn (s mut BitSet<T>&) Remove(x T) Bool {
+    was := s.Has(x)
+    s.bits &= ~(U64(1) << index(x))
+    return was
+}
+
+# removes every case
+fn (s mut BitSet<T>&) Clear() { s.bits = 0 }
+
+fn (s BitSet<T>&) Len() I64 { return s.bits.PopCount() }
+
+# the set as case-index bits: bit k is the k-th case
+fn (s BitSet<T>&) Bits() U64 { return s.bits }
+
+# the OR of the raw values (T17e) of the cases in the set: the C flag word, for an enum with an integer raw type
+fn (s BitSet<T>&) Flags() U64 {
+    check<T>()
+    w U64 = 0
+    for k, c in T.Cases {
+        if s.bits >> k & 1 == 1 { w |= U64(c().Value()) }
+    }
+    return w
+}
+
+# the cases in s or in o
+fn (s BitSet<T>&) BitOr(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits | o.bits) }
+
+# the cases in both
+fn (s BitSet<T>&) BitAnd(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits & o.bits) }
+
+# the cases in s and not in o
+fn (s BitSet<T>&) Minus(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits & ~o.bits) }
+
+# the cases in exactly one of s and o
+fn (s BitSet<T>&) BitXor(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits ^ o.bits) }
+
+# the cases not in s
+fn (s BitSet<T>&) Complement() BitSet<T> { return BitSet<T>(mask<T>() & ~s.bits) }
+
+# whether every case of s is in o
+fn (s BitSet<T>&) IsSubset(o BitSet<T>&) Bool { return s.bits & ~o.bits == 0 }
+
+# the cases of a set, one at a time in declaration order: "for c in s" walks them
+type Iter<T> struct(bits U64) {
+    rest U64 = bits
+}
+
+fn (s BitSet<T>&) Iter() Iter<T> { return Iter<T>(s.bits) }
+
+fn (it mut Iter<T>&) Next() T ? Exhausted {
+    if it.rest == 0 { error Exhausted.END }
+    k := it.rest.TrailingZeros()
+    it.rest &= it.rest - 1
+    return caseAt<T>(k)
+}
+
+# how "$" renders a BitSet: its cases in braces, in declaration order - "BitSet{Color.Red, Color.Blue}"
+fn (s BitSet<T>&) Str() String {
+    b := StringBuilder()
+    b.Push("BitSet{")
+    n I64 = 0
+    for c in T.Cases {
+        if s.Has(c()) {
+            if n > 0: b.Push(", ")
+            n++
+            b.Push($c())
+        }
+    }
+    b.PushChar('}')
+    return b.ToString()
+}
+
+if TestBuild {
+
+type Color enum { Red, Green, Blue }
+type Perm enum U32 { READ = 1, WRITE = 2, EXEC = 4 }
+
+test BitSet "holds the cases of an enum" {
+    s := Of(Color[Color.Red, Color.Blue])
+    assert Color.Red in s and Color.Green not in s and s.Len() == 2
+    assert s.Add(Color.Green) and not s.Add(Color.Green)
+    assert s.Remove(Color.Red) and not s.Remove(Color.Red)
+    assert s.Len() == 2 and s.Bits() == 6
+    s.Clear()
+    assert s.Len() == 0 and s == Empty<Color>()
+}
+
+test BitSet "set algebra by operators" {
+    a := Of(Color[Color.Red, Color.Green])
+    b := Of(Color[Color.Green, Color.Blue])
+    assert a | b == Full<Color>() and a & b == Of(Color[Color.Green])
+    assert a - b == Of(Color[Color.Red]) and a ^ b == Of(Color[Color.Red, Color.Blue])
+    assert a.Complement() == Of(Color[Color.Blue]) and (a & b).IsSubset(a) and not a.IsSubset(b)
+    assert a.Hash() == Of(Color[Color.Green, Color.Red]).Hash()
+}
+
+test BitSet "a walk gives the cases in declaration order" {
+    s := Of(Color[Color.Blue, Color.Red])
+    seen := ""
+    for c in s { seen = $seen $c " " }
+    assert seen == "Color.Red Color.Blue "
+    assert $s == "BitSet{Color.Red, Color.Blue}" and $Empty<Color>() == "BitSet{}"
+}
+
+test FromBits "round trips Bits and fails past the last case" {
+    s := Of(Color[Color.Green, Color.Blue])
+    assert (try FromBits<Color>(s.Bits())) == s
+    failed := false
+    try FromBits<Color>(8) catch Error.OUT_OF_RANGE { failed = true }
+    assert failed
+}
+
+test BitSet "flag words from raw values" {
+    s := Of(Perm[Perm.READ, Perm.EXEC])
+    assert s.Flags() == 5
+    assert FromFlags<Perm>(6) == Of(Perm[Perm.WRITE, Perm.EXEC]) and FromFlags<Perm>(0) == Empty<Perm>()
+}
+
+# computed while compiling (K2): the evaluator agrees with the run time
+fn evalSet() BitSet<Color> {
+    s := Of(Color[Color.Red])
+    s.Add(Color.Blue)
+    return s
+}
+BakedSet := evalSet()
+BakedFlags U64 = Of(Perm[Perm.WRITE, Perm.EXEC]).Flags()
+
+test "the compile-time evaluator computes a BitSet" {
+    assert BakedSet == Of(Color[Color.Red, Color.Blue]) and BakedFlags == 6
+    assert evalSet().Len() == 2
+}
+
+}
