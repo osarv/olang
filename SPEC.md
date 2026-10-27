@@ -7150,7 +7150,9 @@ conditions (D17), each a line `[cond]` as written, and its scope
 obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
 constructor's signature, its fields, its builders (B14), its methods and the traits with no type parameters it meets; an enum with its
-cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A global is printed with its type and, where it is baked
+cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A
+function's or a type's attributes (G39) are printed as written on the lines above it, a field's and a case's before
+its name (a pun's being its parameter's). A global is printed with its type and, where it is baked
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
 tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 

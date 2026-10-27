@@ -123,6 +123,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17)
     TypeGroups Vec<I64>
     variadicOk Bool = false            # an extern's parameters being read: "..." may end them (X21)
+    noAttrs Bool = false               # reading a function type's parameters or a receiver: no attribute is written there
     attrGlobals Vec<ast.Decl&>        # the hidden globals holding the attributes of the item being read (G39), put
                                        # beside it when it is done
     sawVariadic Bool = false
@@ -956,7 +957,12 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
     recv ast.Param?&p = null
     name source.NameId = source.NameId(0)
     if p.accept(token.Tok.LParen) {
-        recv = try p.param(false)
+        p.noAttrs = true
+        recv = try p.param(false) catch {
+            p.noAttrs = false
+            error Fail.SYNTAX
+        }
+        p.noAttrs = false
         try p.want(token.Tok.RParen)
         name = try p.methodName()
     } else {
@@ -1063,7 +1069,13 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
     one := value and p.item
     try p.want(token.Tok.LParen)
     p.sawVariadic = false
-    params := try p.params(lambda)
+    wasNo := p.noAttrs
+    p.noAttrs = value
+    params := try p.params(lambda) catch {
+        p.noAttrs = wasNo
+        error Fail.SYNTAX
+    }
+    p.noAttrs = wasNo
     variadic := p.sawVariadic
     p.sawVariadic = false
     k ast.ContractBlock?&p = null
@@ -1238,8 +1250,8 @@ fn (p Parser&) ellipsis() Bool {
 
 fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
     attrs := try p.attrsHere()
-    # G39: a lambda's parameters are no declaration reflection reads
-    if lambda {
+    # G39: a lambda's, a function type's parameters and a receiver are no declaration reflection reads
+    if lambda or p.noAttrs {
         p.attrRefused(attrs)
         attrs = Array<ast.Attr&>(0)
     }
