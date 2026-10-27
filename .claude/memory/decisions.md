@@ -1652,3 +1652,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   match is an error (no value); one-statement blocks stay valid everywhere else (S1b already lets either form stand -
   the user's 2026-10-24 call); guards never count toward exhaustiveness (a guard may be false - Maranget, as Rust/OCaml),
   so only-guarded arms over a non-enum need a last `case _`. Post-reset batch, with a migration tool in `olang fix`.
+- QBR detail 2026-10-27 (the user: "should the : require the statement to end on the same line too or just start?"):
+  only start - as S1b already is (checked: `if x < 0: return x +` / `100` and a call whose arguments run over lines
+  compile and run); the statement ends where L18 ends any statement (a line break not after an operator or inside
+  brackets) or at an else/catch. A value match's `case P: v` takes the same rule, so a long value continues over lines.
