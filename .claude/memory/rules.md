@@ -167,7 +167,9 @@ redone after another lands.
 
 The user, 2026-10-27, on a batch asked at 0.94: "do it next week or right at the end of this week to consume all tokens
 before the reset" - so the last hours before a weekly reset may use what is left past 0.95 (a send_later armed for the
-Friday evening before it starts queued work); the 0.95 stop holds the rest of the week.
+Friday evening before it starts queued work); the 0.95 stop holds the rest of the week. And (the same day, on the
+third feature survey): "The sweep doesn't have to care about the 95 percent rule" - a survey the user asked for runs to
+its end whatever the week reads.
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
