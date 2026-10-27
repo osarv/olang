@@ -374,7 +374,8 @@ cross@checks/checks.olang: FORCE
 # B12d: a release - build/release/olang-VERSION-ARCH-linux.tar.xz, VERSION as git describes this checkout. It holds
 # the compiler built for the architecture's baseline (bin/olang, so it runs on every machine of it, whatever this one
 # has), std/, SPEC.md (for "olang explain RULE"), editors/, tools/ (for "olang fix"), docs/install.md as its README, and
-# clang beside it (llvm/), which the compiler finds before any on PATH: RELEASE_LLVM's clang, LLVMgold.so (the LTO
+# clang beside it (llvm/), which the compiler finds before any on PATH: RELEASE_LLVM's clang, llvm-symbolizer (olang
+# profile's names and lines, B20), LLVMgold.so (the LTO
 # link through the system's ld), its resource directory without what olang never uses (i386, and every sanitizer but
 # ThreadSanitizer, -race's), and the shared libraries it needs that are not the C library, libstdc++ or libgcc_s. The
 # machine it is unpacked on needs a linker (binutils) and the C library's development files (libc6-dev, libgcc-dev)
@@ -391,8 +392,9 @@ release: $(OLANG)
 	mkdir -p $(RELEASE_DIR)/tools && cp tools/*.olang tools/README.md $(RELEASE_DIR)/tools/
 	cp docs/install.md $(RELEASE_DIR)/README.md
 	cp -L $(RELEASE_LLVM)/bin/clang $(RELEASE_DIR)/llvm/bin/clang
+	cp -L $(RELEASE_LLVM)/bin/llvm-symbolizer $(RELEASE_DIR)/llvm/bin/llvm-symbolizer
 	cp -L $(RELEASE_LLVM)/lib/LLVMgold.so $(RELEASE_DIR)/llvm/lib/
-	for lib in $$(ldd $(RELEASE_LLVM)/bin/clang $(RELEASE_LLVM)/lib/LLVMgold.so | awk '$$2 == "=>" { print $$1 " " $$3 }' | sort -u | \
+	for lib in $$(ldd $(RELEASE_LLVM)/bin/clang $(RELEASE_LLVM)/bin/llvm-symbolizer $(RELEASE_LLVM)/lib/LLVMgold.so | awk '$$2 == "=>" { print $$1 " " $$3 }' | sort -u | \
 		while read name path; do case $$name in $(RELEASE_SYSTEM_LIBS)) ;; *) echo $$path ;; esac; done); do \
 		cp -L $$lib $(RELEASE_DIR)/llvm/lib/; done
 	cp -r $(RELEASE_LLVM)/lib/clang $(RELEASE_DIR)/llvm/lib/
@@ -405,7 +407,7 @@ release: $(OLANG)
 # a release unpacked into a fresh directory builds and runs a program with nothing but its own clang: PATH holds only
 # the system's tools a build runs (the linker), never a clang. The program imports a C library header (X17) and one of
 # clang's own (stdint.h, from the resource directory shipped in llvm/lib/clang) - and "olang explain T6a" reads the
-# SPEC.md shipped beside bin/
+# SPEC.md shipped beside bin/, and "olang profile" names the program's functions by the llvm-symbolizer shipped beside clang
 releasetest:
 	@t=$$(mktemp -d) && tar -C $$t -xJf build/release/$(RELEASE_NAME).tar.xz && mkdir $$t/work $$t/path && \
 	for p in ld ld.bfd as sh cat; do ln -s $$(command -v $$p) $$t/path/$$p; done && \
@@ -414,8 +416,12 @@ releasetest:
 	st=$$?; cat $$t/work/out.txt; \
 	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang explain T6a > explain.txt 2>&1; \
 	ex=$$?; head -3 $$t/work/explain.txt; \
-	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m) 5 127" $$t/work/out.txt && [ $$ex -eq 0 ] && grep -q "T6a" $$t/work/explain.txt; \
-	then echo "releasetest: built and ran a program importing C headers, and explain read SPEC.md"; rm -rf $$t; \
+	printf 'import "std/io"\n\nfn spin(n I64) I64 {\n    s I64 = 1\n    for i in range n { s = (s * 31 + i) ^ (s >> 7) }\n    return s\n}\n\nfn main() { io.Println($$spin(300000000))! }\n' > $$t/work/spin.olang && \
+	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang profile spin.olang > profile.txt 2>&1; \
+	pr=$$?; grep -A2 "  self   total" $$t/work/profile.txt; \
+	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m) 5 127" $$t/work/out.txt && [ $$ex -eq 0 ] && grep -q "T6a" $$t/work/explain.txt && \
+		[ $$pr -eq 0 ] && grep -q "%  spin$$" $$t/work/profile.txt; \
+	then echo "releasetest: built and ran a program importing C headers, explain read SPEC.md, profile named the hot function"; rm -rf $$t; \
 	else echo "releasetest: failed ($$t)"; exit 1; fi
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one

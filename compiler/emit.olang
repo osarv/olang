@@ -111,6 +111,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dbgN I64 = 1000
     dbgCuN I64 = -1
     dbgSubN I64 = -1
+    dbgGenN I64 = -1
     dbgPtrN I64 = -1
     dbgFiles Map<I64, I64>
     dbgBasics Map<I64, I64>
@@ -1259,6 +1260,16 @@ fn (e mut Emitter&) dbgFile(file I64) I64 {
     dir := try os.Cwd() catch os.Error default "."
     e.dbgShared(n, $"!DIFile(filename: \"" $escape(path) "\", directory: \"" $escape(dir) "\")")
     return n
+}
+
+# the file a function the compiler writes itself is in (B20): one that names no source - so an object's text never
+# depends on which program's root it is emitted for (B3i)
+fn (e mut Emitter&) dbgGenFile() I64 {
+    if e.dbgGenN < 0 {
+        e.dbgGenN = e.dbgNew()
+        e.dbgShared(e.dbgGenN, "!DIFile(filename: \"<generated>\", directory: \"\")")
+    }
+    return e.dbgGenN
 }
 
 fn (e mut Emitter&) dbgSubTy() I64 {
@@ -6256,7 +6267,7 @@ fn (e mut Emitter&) dbgFunctions(text String&) String {
             if at >= 0 and open > at {
                 sym := line[at + 1:open]
                 name := "startup" if sym == "main" else ("task" if sym.StartsWith("olang_task") else e.readableTypes(types.Demangle(sym)))
-                file := e.dbgFile(e.P.L.Mods[e.P.L.Root].File)
+                file := e.dbgGenFile()
                 sp := e.dbgNew()
                 l := e.dbgNew()
                 meta.Push($"!" $sp " = distinct !DISubprogram(name: \"" $escape(name) "\", scope: !" $file ", file: !" $file $
