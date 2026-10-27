@@ -1803,3 +1803,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   iterator of MapEntry<K, V>, a comprehension hands its walk straight in (no array made), `T.FromIter(it)` an ordinary
   call; every std collection declares one (Heap's takes its less, so no literal); the compiler supplies
   Array/Vec.FromIter, their literals built directly. Post-reset batch with QBT.
+- QBX reason 2026-10-27 (the user: "The alternative to keeping the type in front is some kinda parity with
+  constructors not needing the type either, and I don't see how we do the constructor case"): agreed and kept - the
+  parity is the type in front for both (`Point(1, 2)`, `Array<I64>[1, 2]`); target-typed construction exists elsewhere
+  (C# 9 `Point p = new(1, 2)`, Zig `.{ 1, 2 }`, Swift `.init(...)`) but needs a new spelling for "the target's type", a
+  target everywhere (`:=` has none), and hides what is built where olang reads it at the use - not taken.
