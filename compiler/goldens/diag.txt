@@ -43,10 +43,25 @@ assertfalsemsg.olang:5:14: error[S18c]: this assertion is false, evaluated while
     5 |     assert x == 4, "x is " $x ", not 4"
       |              ^~
 compilation failed with 1 error
+=== assertfalsepieces.olang
+assertfalsepieces.olang:7:21: error[S18c]: this assertion is false, evaluated while compiling: twice(2) is 4, not 5
+    7 |     assert twice(2) == 5, "twice(2) is " $twice(2) ", not 5"
+      |                     ^~
+compilation failed with 1 error
+=== assertfalsewritten.olang
+assertfalsewritten.olang:6:14: error[S18c]: this assertion is false, evaluated while compiling; its message reads what only the running program knows, so it is shown as written: "n is " $n
+    6 |     assert 1 > 2, "n is " $n
+      |              ^
+compilation failed with 1 error
 === assertmsgnottext.olang
 assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " $x
     5 |     assert Seed == 0, Seed
       |                       ^~~~
+compilation failed with 1 error
+=== assertreachedfalse.olang
+assertreachedfalse.olang:15:18: error[S18c]: this assertion is false, evaluated while compiling: reached on every run
+   15 |     assert 1 + 1 == 3, "reached on every run"
+      |                  ^~
 compilation failed with 1 error
 === atnoindex.olang
 atnoindex.olang:12:11: error[E31]: Box's At takes no parameters besides its receiver - an ordinary method, not the one 'x[i]' calls, which takes at least one
@@ -477,25 +492,25 @@ becomevalue.olang:6:12: error[S21]: 'become' takes a call of a function or a met
       |            ^~~~
 compilation failed with 1 error
 === bitsetnotenum.olang
-$ROOT/std/bitset.olang:22:5: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet is over an enum's cases"
+$ROOT/std/bitset.olang:22:19: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
    22 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                   ^~
 $ROOT/std/bitset.olang:16:5: note: instantiated here, with T = P
    16 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsetpayload.olang
-$ROOT/std/bitset.olang:25:9: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet is over cases that carry no payload"
+$ROOT/std/bitset.olang:25:31: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
    25 |         assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                               ^~
 $ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Shape
    16 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsettoomany.olang
-$ROOT/std/bitset.olang:23:5: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet holds at most 64 cases"
+$ROOT/std/bitset.olang:23:26: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
    23 |     assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                          ^~
 $ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Big
    16 |     check<T>()
       |     ^~~~~~~~
@@ -4259,9 +4274,12 @@ opsetat.olang:9:10: error[E31]: R& declares At but not SetAt, which x[i] = v cal
       |          ^
 compilation failed with 1 error
 === orderarrayfield.olang
-$ROOT/std/order.olang:20:16: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
-   20 |         assert false, "ByFields orders structs and enums, and this type is neither"
-      |                ^~~~~
+$ROOT/std/order.olang:89:12: error[S18c]: this assertion is false, evaluated while compiling: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
+   89 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
+      |            ^~~~~
+$ROOT/std/order.olang:81:19: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
+   81 |         case _ => nested<F, R>(f, x, y)
+      |                   ^~~~~~~~~~~~
 compilation failed with 1 error
 === ordernotstruct.olang
 ordernotstruct.olang:6:12: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
