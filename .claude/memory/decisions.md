@@ -1622,3 +1622,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   shown, then checked at the definition (B1.4, later); 14 the Elm architecture for a GUI library (A8, later); 15 growing
   enums + an API diff (B1.5/B1.6, later, with a registry). No: effect handlers, pipelines, laziness, by-name params,
   view patterns, STM, SPMD, Halide schedules, type invariants, RTTI.
+- QBQ ASKED 2026-10-27 (the user, on survey3 item 1's `case _ if ...`: "what is the _ case? is this just a glorious
+  nomatch?"): yes when unguarded - `case _` (S13f) matches every value, exactly as `nomatch` does, so two spellings of
+  one thing; with a guard (`case _ if x != x`) it is the multiway test nomatch cannot write. Options: (a) drop the
+  `nomatch` keyword - `case _` is the one catch-all, `_` meaning "anything" at the top as it does nested
+  (`Shape.Rect(_, _)`); (b) keep `nomatch`, an unguarded `case _` an error naming it. Recommended (a): one rule for `_`,
+  one keyword fewer, every use migrated by a tool. In effect: both spellings valid.
