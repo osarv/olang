@@ -17,6 +17,14 @@
 # "--quiet", or "--quiet=false"); several one-letter Bools go together ("-qv"); "--" ends the flags, and every other
 # argument is positional, in order, in Args(). "-h" and "--help" make Parse fail with HELP, Help() being the text to
 # print. A short name of 0 means none. Imported with `import "std/flags"`.
+#
+# Or declared as a struct's constructor parameters, read by reflection while compiling (G39, G40) - each a flag named
+# by its name in lowercase words with dashes (MaxLen is --max-len), of its type (Bool, an integer, a float, text), its
+# default its default, its help and short name its attributes; one with no default must be given:
+#
+#     type Options struct(@flags.Help("stop after this many matches") @flags.Short('n') Count I64 = 10
+#                         @flags.Help("print nothing") Quiet Bool = false) { Count, Quiet }
+#     opts := try p.Read<Options>(os.Args()) catch flags.Error.HELP { ... }
 
 # why Parse failed - Message() says it in a sentence, naming the argument: HELP: "-h" or "--help" was given; UNKNOWN: a
 # flag nothing declared; MISSING: a flag that takes a value came last; BAD_VALUE: a value that is not the flag's type;
@@ -27,7 +35,14 @@ type Error error {
     MISSING
     BAD_VALUE
     DECLARED_TWICE
+    REQUIRED            # Read: a flag declared by a parameter with no default was not given
 }
+
+# a flag's help, written on a parameter Read declares it from (G39)
+type Help struct(Text String&) { Text }
+
+# a flag's one-letter name, written on a parameter Read declares it from (G39)
+type Short struct(Letter Char) [Letter != 0 and Letter != '-'] { Letter }
 
 # what a flag holds
 type Kind enum { Bool, Int, Float, Text }
@@ -237,6 +252,101 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
     }
 }
 
+# ---- flags declared by a struct (G39, G40) ----
+
+# a T built from the command line: each of its constructor's parameters a flag, declared after the ones declared
+# already, its value the flag's - the parameter's default where the line does not give it, REQUIRED (with a Message())
+# where it has none. Fails as Parse does, and with what T's constructor fails with
+fn (p mut Flags&) Read<T>(args Array<String&>&) T ? {
+    assert T.Kind == TypeKind.Struct, "flags reads a struct's constructor parameters"
+    for q in T.Params { p.declare(q) }
+    try p.Parse(args)
+    return try T(try p.s.valueOf(q) for q in T.Params)
+}
+
+# a parameter's flag, declared
+fn (p mut Flags&) declare<Q>(q Q) {
+    help String&p = $(q.Attr<Help>()!).Text if q.HasAttr<Help>() else ""
+    short := (q.Attr<Short>()!).Letter if q.HasAttr<Short>() else Char(0)
+    name := dashed&p(q.Name)
+    match Q.Type {
+        case Bool {
+            f := p.add(name, short, Kind.Bool, help)
+            if q.HasDefault { f.b = q.Default }
+        }
+        case String, String& {
+            f := p.add(name, short, Kind.Text, help)
+            if q.HasDefault {
+                f.t = $q.Default
+                f.shown = $f.t
+            }
+        }
+        case _ {
+            if Q.Type.Kind == TypeKind.Integer {
+                f := p.add(name, short, Kind.Int, help)
+                if q.HasDefault {
+                    f.i = I64(q.Default)
+                    f.shown = $q.Default
+                }
+            } else {
+                assert Q.Type.Kind == TypeKind.Float, "a flag is a Bool, an integer, a float or text"
+                f := p.add(name, short, Kind.Float, help)
+                if q.HasDefault {
+                    f.f = F64(q.Default)
+                    f.shown = $q.Default
+                }
+            }
+        }
+    }
+}
+
+# a parameter's value: its flag's, as the parameter's type - REQUIRED where a parameter with no default was not given
+fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
+    name := dashed(q.Name)
+    f := try s.byName(name) catch Error.UNKNOWN { unreachable }
+    if not q.HasDefault and not f.isSet {
+        s.say("--" $name " is required")
+        error Error.REQUIRED
+    }
+    match Q.Type {
+        case Bool { return f.b }
+        case String { return $f.t }
+        case String& {
+            t := $f.t
+            return t
+        }
+        case _ {
+            if Q.Type.Kind == TypeKind.Integer {
+                return Q.Type(try f.i.Narrow<Q.Type.Base>() catch NumberError {
+                    s.say("--" $name " takes an integer of " $Q.Type.Name)
+                    error Error.BAD_VALUE
+                })
+            } else {
+                return Q.Type(Q.Type.Base(f.f))
+            }
+        }
+    }
+}
+
+# a parameter's name as a flag's: its words in lowercase with dashes between - MaxLen as max-len
+fn dashed(name String&) String {
+    b := StringBuilder()
+    for i in range name.Len() {
+        ch := name[i]
+        if ch == '_' {
+            b.PushChar('-')
+            continue
+        }
+        if i > 0 and ch.IsUpper() {
+            prev := name[i - 1]
+            next := name[i + 1] if i + 1 < name.Len() else ' '
+            if prev.IsLower() or prev.IsDigit() or (prev.IsUpper() and next.IsLower()) { b.PushChar('-') }
+        }
+        b.PushChar(ch.ToLower())
+    }
+    return b.ToString()
+}
+
 fn kindWord(k Kind) String {
     match k {
         case Kind.Bool { return "" }
@@ -263,15 +373,17 @@ fn (p Flags&) Help() String {
     }
     heads.Push("-h, --help")
     for i in range heads.Len() {
-        b.Push("  ")
-        b.Push(heads[i].PadEnd(width + 2))
+        line := StringBuilder()
+        line.Push("  ")
+        line.Push(heads[i].PadEnd(width + 2))
         if i < s.all.Len() {
             f := s.all[i]
-            b.Push(f.help)
-            if f.shown.Len() > 0: b.Push($" (default " $f.shown ")")
+            line.Push(f.help)
+            if f.shown.Len() > 0: line.Push($(" " if f.help.Len() > 0 else "") "(default " $f.shown ")")
         } else {
-            b.Push("show this help")
+            line.Push("show this help")
         }
+        b.Push(line.ToString().TrimEnd())
         b.PushChar('\n')
     }
     return b.ToString()
@@ -309,6 +421,30 @@ test "what the declarations do not allow fails, with a message" {
     try p.Parse(String&["tool", "x", "--help"]) catch Error.HELP { } catch Error { unreachable }
     p.Bool("very", 'v', "clash")
     try p.Parse(String&["tool"]) catch Error.DECLARED_TWICE { } catch Error { unreachable }
+}
+
+# flags declared by a struct (G39)
+type options struct(@Help("how many") @Short('n') Count I64 = 10, @Help("say more") Verbose Bool = false
+                    MaxLen U8 = 8, Out String&) {
+    Count, Verbose, MaxLen, Out
+}
+
+test Flags.Read "a struct's parameters are flags, its attributes their help" {
+    p := Flags("tool", "does things")
+    o := p.Read<options>(String&["tool", "-n", "3", "--out", "x", "--max-len=9", "rest"])!
+    assert o.Count == 3 and not o.Verbose and o.MaxLen == 9 and o.Out == "x" and p.Args()[0] == "rest"
+    assert p.Help() == ("usage: tool [flags] [arguments]\ndoes things\n\nflags:\n"
+        "  -n, --count INT    how many (default 10)\n"
+        "      --verbose      say more\n"
+        "      --max-len INT  (default 8)\n"
+        "      --out TEXT\n"
+        "  -h, --help         show this help\n")
+    q := Flags("tool")
+    try q.Read<options>(String&["tool"]) catch Error.REQUIRED { } catch { unreachable }
+    assert q.Message() == "tool: --out is required (see --help)"
+    r := Flags("tool")
+    try r.Read<options>(String&["tool", "--out", "y", "--max-len", "300"]) catch Error.BAD_VALUE { } catch { unreachable }
+    assert dashed("HTTPServer") == "http-server" and dashed("max_len") == "max-len"
 }
 
 test "the help text lists every flag" {
