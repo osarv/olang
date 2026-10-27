@@ -1667,3 +1667,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   evaluator computes them. Post-reset batch.
 - QBP 3 DECIDED 2026-10-27 (the user: "yes build it"): typed holes - `_` as an expression is a compile error naming the
   type wanted there and the locals/globals in scope that fit (also through the LSP); a diagnostic only. Post-reset batch.
+- QBP 4 DECIDED 2026-10-27 (the user: "yes build it Ig, I wouldn't use it but I dont mind"): `io.Show<T>(v T, at Place
+  = Place.Here) T` - writes `FILE:LINE:COLUMN: $v` to the standard error and gives v back; a failed write ignored (the
+  one std call that swallows an error, said in its doc comment). Post-reset batch.
