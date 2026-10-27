@@ -1368,6 +1368,48 @@ fn Symbol(text String&) String {
     return $s[:88] "_H" $hex16(h1) $hex16(h2)
 }
 
+# whether ch is what a symbol olang writes (types.Symbol) holds after "_" as one of its escapes' two digits
+fn symbolHexDigit(ch Char) Bool { return (ch >= '0' and ch <= '9') or (ch >= 'a' and ch <= 'f') }
+
+fn symbolHexValue(ch Char) I64 { return I64(ch - '0') if ch <= '9' else I64(ch - 'a') + 10 }
+
+# a symbol olang wrote read back as the text it was written from (B3b: "_" is "__", any other character but a letter
+# or a digit "_HH"; a long one is its beginning, "_H" and a hash, read back as the beginning and "..."). A symbol that is
+# not one - a C function's, the runtime's - is given as it is
+fn Demangle(sym String&) String {
+    s := sym
+    cut := false
+    if s.Len() == 122 and s[88:90] == "_H" {
+        s = s[:88]
+        cut = true
+    }
+    b := StringBuilder()
+    i I64 = 0
+    for i < s.Len() {
+        ch := s[i]
+        if ch != '_' {
+            b.PushChar(ch)
+            i++
+            continue
+        }
+        if i + 1 < s.Len() and s[i + 1] == '_' {
+            b.PushChar('_')
+            i += 2
+            continue
+        }
+        if i + 2 < s.Len() and symbolHexDigit(s[i + 1]) and symbolHexDigit(s[i + 2]) {
+            b.PushChar(Char(U8(symbolHexValue(s[i + 1]) * 16 + symbolHexValue(s[i + 2]))))
+            i += 3
+            continue
+        }
+        if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
+        return $sym
+    }
+    text := b.ToString()
+    if not text.Contains(".") { return $sym }
+    return $text "..." if cut else text
+}
+
 fn hex2(v U8) String { return I64(v).Format(16).PadStart(2, '0') }
 
 fn hex16(v U64) String { return v.Format(16).PadStart(16, '0') }

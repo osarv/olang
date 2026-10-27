@@ -21,6 +21,7 @@ import "build"
 import "diag"
 import "msgs"
 import "target"
+import "types"
 import unistd "unistd.h"
 import syswait "sys/wait.h"
 import stdlib "stdlib.h"
@@ -317,7 +318,7 @@ fn Resolve(p Profile&, tool String&) Places {
             asked++
         }
         if asked > 0 {
-            out := try os.Exec(String&[$tool, "--inlining", "--functions=linkage"], ask.ToString(), true)
+            out := try os.Exec(String&[$tool, "--inlining", "--functions=short"], ask.ToString(), true)
                 catch os.Error default os.Output(1, "", "")
             if out.Status == 0 {
                 for l in out.Stdout.Lines() { said.Push($l) }
@@ -366,54 +367,14 @@ fn fileLine(place String&) String, I64 {
 
 # ---- names ----
 
-# whether ch is what a symbol olang writes (types.Symbol) holds after "_" as one of its escapes' two digits
-fn hexDigit(ch Char) Bool { return (ch >= '0' and ch <= '9') or (ch >= 'a' and ch <= 'f') }
-
-fn hexValue(ch Char) I64 { return I64(ch - '0') if ch <= '9' else I64(ch - 'a') + 10 }
-
-# a symbol olang wrote read back as the text it was written from (B3b: "_" is "__", any other character but a letter
-# or a digit "_HH"; a long one is its beginning, "_H" and a hash, read back as the beginning and "..."). A symbol that is
-# not one - a C function's, the runtime's - is given as it is
-fn Demangle(sym String&) String {
-    s := sym
-    cut := false
-    if s.Len() == 122 and s[88:90] == "_H" {
-        s = s[:88]
-        cut = true
-    }
-    b := StringBuilder()
-    i I64 = 0
-    for i < s.Len() {
-        ch := s[i]
-        if ch != '_' {
-            b.PushChar(ch)
-            i++
-            continue
-        }
-        if i + 1 < s.Len() and s[i + 1] == '_' {
-            b.PushChar('_')
-            i += 2
-            continue
-        }
-        if i + 2 < s.Len() and hexDigit(s[i + 1]) and hexDigit(s[i + 2]) {
-            b.PushChar(Char(U8(hexValue(s[i + 1]) * 16 + hexValue(s[i + 2]))))
-            i += 3
-            continue
-        }
-        if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
-        return $sym
-    }
-    text := b.ToString()
-    if not text.Contains(".") { return $sym }
-    return $text "..." if cut else text
-}
-
 # a function's name as the profile shows it: the debug information's own (emit.ProfName, as source writes it), or one
 # of the program's symbols read back (Demangle) and spelled as a profile build's names are - the module's base name
 # before what it declares, "Type.Method" for a method, the prelude's and the program's own bare where the text says so
 fn Readable(sym String&) String {
-    text := Demangle(sym)
-    if text == sym and not sym.Contains("_2e") { return $sym }
+    # only a symbol olang wrote names a module's member by "_2e", the "." escaped (a name the debug information
+    # gives is written as source writes it, and never holds one)
+    if not sym.Contains("_2e") { return $sym }
+    text := types.Demangle(sym)
     # the leading identity: to its first "." past a relative path's "./" and "../"
     from I64 = 0
     for text[from:].StartsWith("./") or text[from:].StartsWith("../") { from += 2 if text[from:].StartsWith("./") else 3 }
@@ -427,7 +388,7 @@ fn Readable(sym String&) String {
     restColon := try rest.Find(":") catch default -1
     restDot := try rest.Find(".") catch default rest.Len()
     if restColon >= 0 and restColon < restDot { q = "" }
-    return $q $types(rest)
+    return $q $typesRead(rest)
 }
 
 # a module identity's qualifier as errors print it (load.ErrQualifier) - the prelude's bare
@@ -438,7 +399,7 @@ fn qualifier(id String&) String {
 }
 
 # a canonical text's "IDENTITY:Name" types written "base.Name"
-fn types(text String&) String {
+fn typesRead(text String&) String {
     b := StringBuilder()
     at I64 = 0
     for i, ch in text {
@@ -510,6 +471,9 @@ fn Tallied(p Profile&, pl mut Places&) Tally {
     return t
 }
 
+# a weight in periods as milliseconds of CPU time, to a tenth
+fn millis(w I64, periodNs I64) String { return (F64(w) * F64(periodNs) / 1e6).Fixed(1) }
+
 fn pct(w I64, total I64) String { return $(F64(w) * 100.0 / F64(total if total > 0 else 1)).Fixed(1) "%" }
 
 # the report, as olang profile prints it: what was sampled, the functions by self time (their total beside), the
@@ -551,14 +515,23 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         if wx != wy { return wx > wy }
         return pl.Names[x] < pl.Names[y]
     })
-    b.Push("\n   self  line\n")
-    shown = 0
+    # a line is shown where it is known - code a compiler made, line 0, belongs to no line
+    hot Vec<I64>
     for l in lines {
         lw := try t.Lines.Get(l) catch default 0
-        if shown >= 15 or lw * 200 < total { break }
+        if hot.Len() >= 15 or lw * 200 < total { break }
+        if pl.Names[l].EndsWith(":0") { continue }
+        hot.Push(l)
+    }
+    width I64 = 4
+    for l in hot {
+        if shortPath(pl.Names[l]).Len() > width { width = shortPath(pl.Names[l]).Len() }
+    }
+    b.Push($"\n   self  " $"line".PadEnd(width) "  function\n")
+    for l in hot {
+        lw := try t.Lines.Get(l) catch default 0
         f := try t.LineFn.Get(l) catch default 0
-        b.Push($"  " $pct(lw, total).PadStart(6) "  " $shortPath(pl.Names[l]) "  " $pl.Names[f] "\n")
-        shown++
+        b.Push($"  " $pct(lw, total).PadStart(6) "  " $shortPath(pl.Names[l]).PadEnd(width) "  " $pl.Names[f] "\n")
     }
     b.Push("\n  called from (the five hottest functions)\n")
     shown = 0
@@ -682,7 +655,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
     for id in order {
         n := nodes[id]
         label := "all" if id == 0 else pl.Names[n.Fn]
-        tip := $label " - " $n.Weight " samples, " $pct(n.Weight, total)
+        tip := $label " - " $millis(n.Weight, p.PeriodNs) " ms, " $pct(n.Weight, total)
         hue := (label.Hash() & 0xFFFF)
         r := 205 + hue % 50
         g := 90 + (hue / 50) % 140
@@ -717,7 +690,7 @@ FlameScript String& = """
           g.style.display="";
           var px=under?0:(x-x0)/w0*W,pw=under?W:w/w0*W;
           r.setAttribute("x",px);r.setAttribute("width",Math.max(pw-1,0.5));t.setAttribute("x",px+3);
-          var full=g.querySelector("title").textContent.replace(/ - [0-9]+ samples.*$/,""),n=Math.floor((pw-6)/7);
+          var full=g.querySelector("title").textContent.replace(/ - [0-9.]+ ms, .*$/,""),n=Math.floor((pw-6)/7);
           t.textContent=n<3?"":(full.length<=n?full:full.slice(0,n-2)+"..");
         }
       }

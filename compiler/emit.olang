@@ -1663,7 +1663,7 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
     if e.itemAt.Has(symbol) { return }
     e.itemAt.Put($symbol, e.itemSym.Len())
     e.itemSym.Push($symbol)
-    e.itemText.Push($text)
+    e.itemText.Push(e.dbgFunctions(text) if e.Prof and not e.Debug else $text)
     e.itemHome.Push(home)
     e.itemDecl.Push($decl)
     e.itemRefs.Push(Array<I64>(0))
@@ -6238,6 +6238,45 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
         b.Push("  call void @__olang_ert_req_print(ptr %s)\n  ret i32 1\n}\n\n")
     }
     e.item("main", e.P.L.Root, b.ToString())
+}
+
+# B20: each function of text with no subprogram - one the compiler writes itself (main, a task's or a destructor's
+# trampoline, a generator's Next, a thunk, the runtime's bodies a module carries) - given one, named as a profile names
+# it, and each of its calls a line of it (line 0, made by the compiler): what is inlined into it keeps its own lines and
+# names, which code inlined into a function with no subprogram loses
+fn (e mut Emitter&) dbgFunctions(text String&) String {
+    if not text.Contains("define ") { return $text }
+    b := StringBuilder()
+    meta := StringBuilder()
+    loc := ""
+    for line in text.Lines() {
+        if line.StartsWith("define ") and line.EndsWith(" {") and not line.Contains("!dbg") {
+            at := try line.Find("@") catch default -1
+            open := try line.Find("(") catch default -1
+            if at >= 0 and open > at {
+                sym := line[at + 1:open]
+                name := "startup" if sym == "main" else ("task" if sym.StartsWith("olang_task") else e.readableTypes(types.Demangle(sym)))
+                file := e.dbgFile(e.P.L.Mods[e.P.L.Root].File)
+                sp := e.dbgNew()
+                l := e.dbgNew()
+                meta.Push($"!" $sp " = distinct !DISubprogram(name: \"" $escape(name) "\", scope: !" $file ", file: !" $file $
+                          ", line: 0, type: !" $e.dbgSubTy() ", scopeLine: 0, spFlags: DISPFlagDefinition, unit: !" $e.dbgCu() ")\n")
+                meta.Push($"!" $l " = !DILocation(line: 0, scope: !" $sp ")\n")
+                b.Push($line[:line.Len() - 2] " !dbg !" $sp " {\n")
+                loc = $", !dbg !" $l
+                continue
+            }
+        }
+        if line == "}" { loc = "" }
+        if loc != "" and line.Contains("call ") and not line.Contains("!dbg") {
+            b.Push($line $loc "\n")
+            continue
+        }
+        b.Push($line "\n")
+    }
+    if meta.Len() == 0 { return $text }
+    b.Push(meta.ToString())
+    return b.ToString()
 }
 
 # an error type's name as B5 says it escaping main: as source writes it outside its module ("io.Error")

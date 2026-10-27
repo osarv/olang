@@ -213,6 +213,13 @@ fn (c Config&) ModeFlags() Vec<String&> {
 # else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
 fn (c Config&) CompileFlags(ir String&) Vec<String&> {
     out := c.ModeFlags()
+    if c.Profile {
+        # B20: a frame set up for the whole of each function, so that the sampler's walk finds every caller wherever a
+        # sample lands (shrink-wrapping sets it up only on the paths that call, leaving a loop on its caller's) - here
+        # for code generated as it is compiled (-quick), and at the link for code generated there (Link)
+        out.Push("-mllvm")
+        out.Push("-enable-shrink-wrap=false")
+    }
     if c.Debug and ir.Contains("bfloat") {
         out.Push("-mllvm")
         out.Push("-fast-isel=false")
@@ -632,7 +639,10 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     args.Push("-lm")
     args.Push("-lpthread")
     args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
-    if c.Profile { args.Push("-lrt") }  # B20: the sampler's timers, in librt before glibc 2.34
+    if c.Profile {
+        args.Push("-lrt")                   # B20: the sampler's timers, in librt before glibc 2.34
+        if not c.Quick and not c.Debug { args.Push("-Wl,-plugin-opt=-enable-shrink-wrap=false") }
+    }
     if dyncall { args.Push("-lffi") }
     parts Vec<String&>
     for a in args { parts.Push(a) }
