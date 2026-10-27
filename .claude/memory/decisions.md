@@ -1670,3 +1670,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBP 4 DECIDED 2026-10-27 (the user: "yes build it Ig, I wouldn't use it but I dont mind"): `io.Show<T>(v T, at Place
   = Place.Here) T` - writes `FILE:LINE:COLUMN: $v` to the standard error and gives v back; a failed write ignored (the
   one std call that swallows an error, said in its doc comment). Post-reset batch.
+- QBP 5 DECIDED 2026-10-27 (the user: "build them any way you want"): walks round 3 - on iterators Scan GroupBy ChunkBy
+  Dedup Unzip Product Last Nth; on At+Len types (arrays, Vec, text) BinarySearch LowerBound Cycle (a generator's copy is
+  the same walk, so it cannot restart) and ChunkBy as views. Details mine. Post-reset batch.
+- QBS ASKED 2026-10-27 (the user: "maybe we should have iterators that can call prev as well?"): explained - a generator
+  can never step back (its frame only runs forward), so Prev can only be a separate trait; Rust's version is
+  DoubleEndedIterator (`NextBack`, taking from the other end, so `xs.Iter().Map(f).Reversed()` works without a copy),
+  C++'s a bidirectional cursor (an index does that here). Recommended: not now - `Reversed()` already covers arrays, Vec
+  and text, where nearly every backward walk is; additive later as `type BackIterator<T ? E> trait extends Iterator<T ?
+  E> { mut NextBack() T ? E, Exhausted }` with Map/Filter/Zip/Enumerate passing it on. In effect: none.
