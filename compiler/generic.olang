@@ -4052,6 +4052,66 @@ fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>&p {
     return none
 }
 
+# the attributes written on what a type or a descriptor names (G39, G40), and the module declaring them: a declared
+# type's own, a field's (a pun's its parameter's), a case's (a struct's one case its type's), a constructor's parameter's;
+# none for anything else - a type no program declares, a result, an error value's word, a function type's parameter
+fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>&p {
+    none Array<ast.Attr&>&p = Array<ast.Attr&>(0)
+    ds := p.DescOf(t)
+    if ds.K == DescNone {
+        if p.T.KindOf(t) != types.Kind.Named { return -1, none }
+        d := p.T.DeclOf(t)
+        td := p.typeDecl(d)
+        if td is null { return -1, none }
+        return p.declMi[I64(d)], td.Attrs
+    }
+    if ds.K == DescResult { return -1, none }
+    if ds.K == DescParam {
+        if p.T.KindOf(ds.Of) == types.Kind.Func { return -1, none }
+        ps := p.CtorParams(ds.Of)
+        if ds.At >= ps.Len() { return -1, none }
+        return p.declMi[I64(p.T.DeclOf(ds.Of))], ps[ds.At].Attrs
+    }
+    r := p.ReflUnder(ds.Of)
+    if p.T.KindOf(r) != types.Kind.Named { return -1, none }
+    d := p.T.DeclOf(r)
+    td := p.typeDecl(d)
+    if td is null or td.Body is null { return -1, none }
+    mi := p.declMi[I64(d)]
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            if ds.K == DescCase { return mi, td.Attrs }
+            k I64 = 0
+            for st in sb.Body {
+                match st {
+                    case ast.Stmt.Var(_, v) {
+                        if not v.Field { continue }
+                        for vn in v.Names {
+                            if k == ds.At {
+                                if v.Ty is not null or v.Values.Len() > 0 { return mi, v.Attrs }
+                                # a pun is its parameter (C2a), whose attributes it has
+                                for prm in sb.Params {
+                                    if prm.Name == vn { return mi, prm.Attrs }
+                                }
+                                return mi, none
+                            }
+                            k++
+                        }
+                    }
+                    nomatch { }
+                }
+            }
+        }
+        case ast.TypeBody.Enum(cases, _) {
+            if ds.Case < 0 or ds.Case >= cases.Len() { return -1, none }
+            if ds.K == DescCase { return mi, cases[ds.Case].Attrs }
+            if ds.At < cases[ds.Case].Payload.Len() { return mi, cases[ds.Case].Payload[ds.At].Attrs }
+        }
+        nomatch { }
+    }
+    return -1, none
+}
+
 # the positions of a type's members a list holds (G33), seen from module mi - a field private to another module
 # (M6a) left out; and why it has none (the list is no list of that type's), "" where it is one
 fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I64>, String {

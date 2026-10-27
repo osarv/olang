@@ -3494,6 +3494,57 @@ fn (c mut Checker&) declAttrs(mi I64, d ast.Decl&) {
     }
 }
 
+# what "x.Attr<A>()" reads the attributes of (G40): the descriptor x is, or the type it names; -1 for neither, Unknown
+# where that was said wrong
+fn (c mut Checker&) attrHolder(x ast.Expr&) types.TypeId {
+    dt := c.descTypeOf(x)
+    if dt >= types.TypeId(0) { return dt }
+    return c.reflType(x)
+}
+
+# the attribute of type a written on what holder names (G40): its module and its hidden global's name, -1 for none
+fn (c mut Checker&) attrFound(holder types.TypeId, a types.TypeId) I64, source.NameId {
+    mi, attrs := c.P.AttrsOf(holder)
+    if mi < 0 { return -1, source.NameId(0) }
+    for at in attrs {
+        t := c.globalType(mi, at.Global)
+        if c.P.T.Same(t, a) or c.P.T.Same(c.P.Held(a), t) { return mi, at.Global }
+    }
+    return -1, source.NameId(0)
+}
+
+# "x.Attr<A>()" and "x.HasAttr<A>()" (G40) - null where g reads no attribute: x is no type and no descriptor
+fn (c mut Checker&) attrRead(sp source.Span, g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&) typed.Expr?&c {
+    x, name, nsp := c.attrCallee(g)
+    if name == "" { return null }
+    holder := c.attrHolder(x)
+    if holder < types.TypeId(0) { return null }
+    if holder == types.UnknownT or targs.Len() != 1 or args.Len() != 0 {
+        if holder != types.UnknownT { c.err(nsp, msgs.AttrRead(name)) }
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    a := c.resolve(targs[0])
+    if a == types.UnknownT { return c.unknown(sp) }
+    mi, gn := c.attrFound(holder, a)
+    if name == "HasAttr" { return c.lit(sp, types.BoolT, 1 if mi >= 0 else 0) }
+    if mi < 0 { return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrMissing"), null, Array<ast.Expr&>(0), Array<typed.Expr&>(0), Array<types.TypeId>(1, a)) }
+    v := c.read(sp, typed.Place.Global(sp, c.globalType(mi, gn), mi, gn))
+    return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), typed.Expr&[v])
+}
+
+# the receiver and the name of "x.Attr" or "x.HasAttr" (G40), "" for another
+fn (c mut Checker&) attrCallee(g ast.Expr&) ast.Expr&g, String, source.Span {
+    match g {
+        case ast.Expr.Member(msp, x, n) {
+            name := c.text(n)
+            if name == "Attr" or name == "HasAttr" { return x, $name, memberSpan(msp, name.Len()) }
+            return g, "", msp
+        }
+        nomatch { return g, "", g.Span() }
+    }
+}
+
 # ---- a global's value given below it (D13e) ----
 
 # the value a top-level assignment in the branches this build takes gives global n of module mi, declared at sp - the
@@ -10195,7 +10246,12 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             }
             return c.methodCall(sp, x, n, nsp, args)
         }
-        case ast.Expr.Generic(gsp, g, targs) { return c.genericCall(sp, gsp, g, targs, args, want)! }
+        case ast.Expr.Generic(gsp, g, targs) {
+            # G40: x.Attr<A>(), x.HasAttr<A>() - a type's or a descriptor's attributes
+            ar := c.attrRead(sp, g, targs, args)
+            if ar is not null { return ar }
+            return c.genericCall(sp, gsp, g, targs, args, want)!
+        }
         nomatch { return c.callValue(sp, c.opAfter(f.Span(), 1), c.expr(f, types.UnknownT), args) }
     }
 }
@@ -12379,6 +12435,21 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
         }
         case ast.Expr.Call(_, f, args) {
             match f {
+                case ast.Expr.Generic(_, g, targs) {
+                    # G40, G35: "x.HasAttr<A>()" is known while compiling
+                    ax, name, _ := c.attrCallee(g)
+                    if name == "HasAttr" and targs.Len() == 1 and args.Len() == 0 {
+                        holder := c.attrHolder(ax)
+                        if holder >= types.TypeId(0) {
+                            c.reflTouched = true
+                            if holder == types.UnknownT { return noRefl() }
+                            a := c.resolve(targs[0])
+                            if a == types.UnknownT { return noRefl() }
+                            mi, _ := c.attrFound(holder, a)
+                            return rvBool(mi >= 0)
+                        }
+                    }
+                }
                 case ast.Expr.Member(_, y, n) {
                     if c.text(n) == "Len" and args.Len() == 0 {
                         l := c.listOf(y)

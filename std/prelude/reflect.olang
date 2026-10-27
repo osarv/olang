@@ -29,3 +29,11 @@ type ParamInfo<T, I> struct() { }
 
 # a function type's result at position I (G34)
 type ResultInfo<T, I> struct() { }
+
+# why "x.Attr<A>()" gives no value (G40): the declaration it reads has no attribute of type A
+type AttrError error { MISSING }
+
+# the call "x.Attr<A>()" is (G40): the attribute's value where the declaration has one, an AttrError.MISSING where it
+# has none - which the compiler knows, so a program asking either way is held to handling the failure
+fn attrGot<A>(a A) A ? AttrError.MISSING { return a }
+fn attrMissing<A>() A ? AttrError.MISSING { error AttrError.MISSING }
