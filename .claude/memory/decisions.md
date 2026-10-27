@@ -1756,3 +1756,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   for every finite x - check) and 3 only. In effect: libm pow. Decided by me from the same survey (meaning unchanged):
   enum layout tightened (T.Size/T.Align/f.Offset report the new numbers - layout was never promised), Vec grows in place
   only while no View() was taken, everything else in the ranked table queued.
+- QBU follow-up 2026-10-27 (the user: "the Of method becomes a builtinMethod then? why not From? we need another Of
+  for the two arrays case right? FromTwo or OfTwo?"): answered - Of is no built-in: an ordinary type-level builder the
+  type writes, which the literal calls by its name, as `for` calls Iter/Next/At/Len and `+` calls Plus (a protocol
+  name). Of over From: std's existing convention - `list.Of(a)` takes the elements, `list.From(it)` converts another
+  thing (an iterator); a literal gives elements. No second name (no overloading - the user's rule): the keyed form
+  `C[k: v, ...]` calls the same `Of` with an array of the prelude's `MapEntry<K, V>` (Key, Value) - one protocol name,
+  one parameter; a type declaring Of over entries gets `[k: v]`, over plain elements `[a, b]`. Recommended; asked.
+  (The optimization questions are in the ledger: QBV, with my survey calls beside it.)
