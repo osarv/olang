@@ -549,3 +549,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   `@csv.Column/Skip`); `flags.Read<T>` from a constructor (`@flags.Help/Short`). Left: json key names converted per
   encode, not precomputed. FOUND (unfixed, small): `olang format` through the shared formatter cache gave a stale layout
   in another worktree (cache key misses the formatter's source) - queue it.
+- 2026-10-27 CET: std2 merged (209bee7, verified; merge = tip + memory): std/bitset (`BitSet<T>` over a payload-free
+  enum of <= 64 cases in one U64; `| & - ^`, Complement, `in`, walk in case order, Bits/FromBits/Flags/FromFlags for C
+  flag words) and std/order (`order.ByFields<T>`, lexicographic over public fields, enums by case then fields, `Less`
+  where a type has one, nested types recurse; `xs.Sort(order.ByFields<T>)`). FOUND (compiler, queue for the next batch):
+  (1) S18c prints a decided assert's message of `"text" $x` pieces unrendered; (2) in a test, `try f() catch X { return }`
+  then `assert false` is refused as decided-false while compiling although f() fails - S18c decides an assert the run
+  never reaches.
