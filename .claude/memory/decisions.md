@@ -1691,3 +1691,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBP 8 DECIDED 2026-10-27 (the user: "yes of course"): a for-in or comprehension whose source is a lane expression
   reads it lane by lane - `F32[relu(v) for v in a * w + b]` one loop, no temporary (measured before: 0.19 s / 21 MB
   against the hand index loop's 0.13 s / 17.5 MB over 200 x 1M). Post-reset batch; the measurement becomes a bench row.
+- QBP 9 DECIDED 2026-10-27 (the user: "yes build with item 6"): function facts read while compiling - `mix.Allocates`
+  through a function's name and `f.Allocates` on G41's descriptors; the seven: Allocates, Blocks, WritesGlobals, CallsC,
+  Spawns, Recursive, Terminates (conservative: a call through a function value or an any counts as everything; `for
+  cond { }` never bounded); pinned by top-level asserts (S17a), decided per instance (G35). Built with item 6 on the same
+  summaries, post-reset batch. Naming (the user asked what to call them): reflection over declarations, these the
+  "inferred facts" beside the declared structure - SPEC's reflection chapter, not "object reflection" (nothing reads
+  a run-time value). Recommended; the user may rename.
