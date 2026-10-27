@@ -1,0 +1,46 @@
+# B20's scenario: a program whose time is known - burn the most of it, a method a fifth, a spawned task a little - and
+# which ends with the status its argument names
+import "std/io"
+import "std/os"
+
+fn burn(n I64) I64 {
+    s I64 = 1
+    for i in range n {
+        s = (s * 6364136223846793005 + i) ^ (s >> 17)
+    }
+    return s
+}
+
+type Counter struct(step I64) {
+    step
+}
+
+fn (c Counter&) Tick(n I64) I64 {
+    s I64 = 0
+    for i in range n {
+        s = (s ^ (i * c.step)) * 31
+    }
+    return s
+}
+
+fn spin(n I64) I64 {
+    s I64 = 7
+    for i in range n {
+        s = (s + i * i) ^ (s << 3)
+    }
+    return s
+}
+
+fn main() {
+    c := Counter(5)
+    t I64 = 0
+    for k in range 20 {
+        t = t ^ burn(9000000 + k)
+        t = t ^ c.Tick(6000000 + k)
+    }
+    out := Array<I64>(1)
+    join { spawn out[0] = spin(40000000) }
+    io.Println($(t ^ out[0]))!
+    args := os.Args()
+    if args.Len() > 1 { os.Exit(I32(try args[1].ParseInt(10) catch default 0)) }
+}

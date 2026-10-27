@@ -45,7 +45,8 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
+                     "profile"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -432,6 +433,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "retslot" { try retslot(r) }
         case "widealign" { try widealign(r) }
         case "definit" { try definit(r) }
+        case "profile" { try profiled(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1074,6 +1076,40 @@ fn testfuzz(r mut report&) ? Failed {
     ran = sh(dir, "\"$OLANG\" test planted.olang > out.txt 2>&1")
     replayed = outOf(dir).Contains("prop: replaying testdata/fuzz/every_element_below_50/input-")
     try r.expect(ran == 1 and replayed, "a property's saved case replayed", dir)
+}
+
+# B20: olang profile builds the program with the sampler, runs it with its arguments and status, and names where the time
+# went - the hottest function first, a method by its type, a spawned task's function under the task, the hot lines - and
+# writes a flame graph (where -output says); a plain build carries none of the sampler, and options that do not apply
+# are refused
+test "olang profile names the hot function, its line and its callers" { assert passed("profile") }
+
+fn profiled(r mut report&) ? Failed {
+    dir := fresh("profile")
+    os.Run("cp checks/fixtures/profile/* " $os.Quote(dir))
+    ran := sh(dir, "\"$OLANG\" profile hot.olang 7 > out.txt 2>&1")
+    out := outOf(dir)
+    try r.expect(ran == 7, "the program's own status", dir)
+    try r.expect(out.Contains("\nolang profile: hot - ") and out.Contains(" s of CPU time on 2 threads\n"), "what was sampled", dir)
+    rows := try out.Find("   self   total  function\n") catch default -1
+    first := out[rows + 26:] if rows >= 0 else ""
+    firstLine := first[:(try first.Find("\n") catch default 0)]
+    try r.expect(firstLine.EndsWith("  burn"), "the hottest function first", dir)
+    try r.expect(out.Contains("%  Counter.Tick\n"), "a method by its type", dir)
+    try r.expect(lineAfter(out, "%  hot.olang:9 ").Trim() == "burn", "the hottest line", dir)
+    try r.expect(out.Contains("  burn  <-  main 100.0%\n") and out.Contains("  spin  <-  task 100.0%\n"), "the callers", dir)
+    try r.expect(out.Contains("flame graph: ./build/profile/hot.html") and
+                 sh(dir, "grep -q '<title>burn - ' build/profile/hot.html") == 0, "the flame graph", dir)
+    try r.expect(sh(dir, "\"$OLANG\" profile -output fg.html hot.olang > out.txt 2>&1") == 0 and
+                 sh(dir, "grep -q '<title>Counter.Tick - ' fg.html") == 0, "-output names the flame graph", dir)
+    # nothing of the sampler in any other build: not its functions, not its frame pointers' attribute
+    try r.expect(sh(dir, "\"$OLANG\" build hot.olang > out.txt 2>&1") == 0 and sh(dir, "nm build/hot | grep -q __olang_prof") != 0 and
+                 sh(dir, "nm build/hot.prof | grep -q __olang_prof_handler") == 0 and
+                 sh(dir, "grep -l frame-pointer build/*.ll | grep -qv '[.]prof[.]ll$'") != 0, "a plain build carries no sampler", dir)
+    try r.expect(sh(dir, "\"$OLANG\" profile -target aarch64 hot.olang > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("-target applies to"), "-target refused", dir)
+    try r.expect(sh(dir, "\"$OLANG\" help profile > out.txt 2>&1") == 0 and outOf(dir).Contains("  -quick") and
+                 not outOf(dir).Contains("-race"), "help profile", dir)
 }
 
 # S18a: a failed assert or unreachable says where it is - and an assert the message written after it - built,
