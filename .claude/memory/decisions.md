@@ -1698,3 +1698,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   summaries, post-reset batch. Naming (the user asked what to call them): reflection over declarations, these the
   "inferred facts" beside the declared structure - SPEC's reflection chapter, not "object reflection" (nothing reads
   a run-time value). Recommended; the user may rename.
+- 2026-10-27 (the user: "any keywords we should move into reflection, like maybe noreturn?"): answered no keyword
+  moves - noreturn is a promise in a function's type (T22, function types write it) that changes what callers may write
+  (D10a, any value position), so inferring it would let a body edit break other modules' callers; embed takes a path,
+  so as a name it would be a type-level function (QAS: none); commutes/export/extern/link/test are declarations, any a
+  type form, comptime/yield/become/defer control. Decided (mine): FuncInfo's declared members gain the declaration
+  keywords - `f.NoReturn`, `f.Exported` (export fn), `f.Extern`, `f.Commutes` - in the item 6/9 batch.
