@@ -1743,3 +1743,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   source (E11b). The proposal stands as: `Array<T>[...]`, `Vec<T>[...]`, `set.Set<T>[...]` new literal forms built
   through a trait-required type-level builder; a map one, if wanted, `Map<K, V>[k: v, ...]` (brackets, as Swift - no
   braces, T13's removal kept); `$` renders each so.
+- QBU mechanism explained 2026-10-27 (the user: "what is the logic of the set.Set constructor ... how would a user
+  declare it, the same for map"): a container literal is the call of a type-level builder its type declares (Swift's
+  ExpressibleByArrayLiteral, C# 12's collection builders) - `C[a, b]` is `C.Of(Array<E>[a, b])` when C declares `fn
+  C.Of(items Array<E>&) C` (E from that parameter), `C[k: v, ...]` is `C.Of(keys, values)` when C declares `fn C.Of(keys
+  Array<K>&, values Array<V>&) C`; Array the built-in base case, Vec built by the compiler with no temporary; std's
+  Set/List/Map declare their Of like any program's type; nothing special to std. A comprehension into such a type
+  builds its array then calls Of (a local temporary), Vec and Array none. Trait spelling for generic code in QBT round 2.
