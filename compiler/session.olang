@@ -688,6 +688,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             b.Push("]}")
         }
         case ast.Decl.Global(sp, v) {
+            if v.Hidden { return }          # an attribute's (G39), shown with what it is written on
             for k in range v.Names.Len() {
                 ns := v.NameSps[k]
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
@@ -839,7 +840,7 @@ fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
             it.Add(name, CompFunction, c!.Ty(c!.P.Sig(f)))
         } else if e.Kind == names.What.Type {
             it.Add(name, CompStruct, "")
-        } else if e.Kind == names.What.Global {
+        } else if e.Kind == names.What.Global and not name.StartsWith("@") {
             it.Add(name, CompVariable if e.Mut else CompConstant, "")
         } else if e.Kind == names.What.Import {
             it.Add(name, CompModule, "")

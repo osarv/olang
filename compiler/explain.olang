@@ -54,6 +54,7 @@ fn FnText(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String { return fnI
 
 fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
     b := StringBuilder()
+    attrLines(b, c, c.P.FnModule(f), c.P.FnDecl(f).Attrs, "")
     owner := generic.FnOwner(f)
     if c.P.VarCount(owner) == 0 {
         inst := c.P.FnInstance(f, types.ListId(0))
@@ -268,6 +269,8 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
     b := StringBuilder()
     self := c.P.SelfType(d)
     c.P.Body(self)
+    td0 := c.P.TypeDecl(d)
+    if td0 is not null { attrLines(b, c, c.P.DeclModule(d), td0.Attrs, "") }
     nm := c.P.L.Names
     name := $nm.Text(c.P.T.DeclName(d)) $typeVars(c, generic.DeclOwner(d), 0)
     match c.P.T.DeclKindOf(d) {
@@ -309,7 +312,9 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             cases := c.P.T.Items(c.P.T.Cases(self))
             ns := c.P.T.CaseNames(self)
             for k in range ns.Len() {
-                b.Push($"    " $nm.Text(ns[k]))
+                b.Push("    ")
+                b.Push(attrsBefore(c, c.P.Descriptor(generic.DescCase, self, k, 0)))
+                b.Push(nm.Text(ns[k]))
                 if k < cases.Len() and cases[k] != types.TypeId(0) {
                     if caseWhole(c.P.TypeDecl(d)!, k) {
                         # T17a: a payload written whole is its one type
@@ -394,6 +399,23 @@ fn firstItemEndAll(s String&) I64 {
     return s.Len()
 }
 
+# G39: a declaration's attributes as written, a line each
+fn attrLines(b mut StringBuilder&, c mut typecheck.Checker&, mi I64, attrs Array<ast.Attr&>&, indent String&) {
+    if attrs.Len() == 0 { return }
+    src := c.P.L.Mods[mi].Src!.Text
+    for a in attrs { b.Push($indent $src[I64(a.Sp.Start):I64(a.Sp.End)] "\n") }
+}
+
+# G39: the attributes of what a descriptor names as written, each followed by a space - a field's, a case's
+fn attrsBefore(c mut typecheck.Checker&, desc types.TypeId) String {
+    mi, attrs := c.P.AttrsOf(desc)
+    if mi < 0 or attrs.Len() == 0 { return "" }
+    src := c.P.L.Mods[mi].Src!.Text
+    b := StringBuilder()
+    for a in attrs { b.Push($src[I64(a.Sp.Start):I64(a.Sp.End)] " ") }
+    return b.ToString()
+}
+
 # " ? E" of what follows a constructor's parameters, nothing where it cannot fail
 fn errorsAfter(rest String&) String {
     # outside every bracket: a result's type arguments may hold an error set of their own (QAH)
@@ -421,7 +443,7 @@ fn fields(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
                     ty := tys[k] if k < tys.Len() else loc.Ty
                     # a bare field (C2a) is named where it is written
                     n := src[I64(loc.Sp.Start):I64(loc.Sp.End)] if loc.Name == source.NameId(0) else c.P.L.Names.Text(loc.Name)
-                    b.Push($"    " $n " " $c.Ty(ty) "\n")
+                    b.Push($"    " $attrsBefore(c, c.P.Descriptor(generic.DescField, self, 0, k)) $n " " $c.Ty(ty) "\n")
                 }
                 return
             }

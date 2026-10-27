@@ -78,6 +78,12 @@ fn commentText(line String&) String {
 fn Above(t String&, at I64) String {
     starts Vec<I64>
     pos := lineStart(t, at)
+    # G39: the attributes on lines of their own above a declaration are part of it - its comment is above them
+    for pos > 0 {
+        from := lineStart(t, pos - 1)
+        if not t[from:pos - 1].TrimStart().StartsWith("@") { break }
+        pos = from
+    }
     for pos > 0 {
         from := lineStart(t, pos - 1)
         line := t[from:pos - 1]
@@ -209,6 +215,7 @@ fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, al
         e := tab.Entries[ei]
         name := $nm.Text(e.Name)
         if not all and not Exported(name) { continue }
+        if name.StartsWith("@") { continue }        # an attribute's hidden global (G39), written with what it is on
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
             if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
@@ -339,11 +346,19 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     m := c.P.L.Mods[mi]
     text := m.Src!.Text
     nm := c.P.L.Names
-    full := try explain.Item(c, sc, x, mi, name)
+    whole := try explain.Item(c, sc, x, mi, name)
+    # G39: the item's attributes, the lines explain begins with, written above it
+    attrs := StringBuilder()
+    for whole.StartsWith("@") {
+        nl := try whole.Find("\n") catch default whole.Len()
+        attrs.Push(whole[:nl + 1])
+        whole = whole[nl + 1:] if nl < whole.Len() else ""
+    }
+    full := whole
     lines := full.TrimEnd().Split("\n")
     at := declAt(c, mi, name)
     isFn := lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ")
-    e := Entry(firstLines(full) if isFn else $lines[0], "", $name)
+    e := Entry($attrs.ToString() $(firstLines(full) if isFn else $lines[0]), "", $name)
     if at >= 0 { e.Doc = Comment(text, at, true) }
     e.File = m.File
     e.At = at
@@ -414,8 +429,36 @@ fn methodName(line String&) String {
     return $rest[:i]
 }
 
-# a field's, case's, word's or trait method's name: the line's first word
-fn memberName(line String&) String {
+# what follows a line's attributes (G39): "@Key("id") Id I64" is "Id I64" - each "@" up to the first space outside its
+# brackets and quotes
+fn PastAttrs(line String&) String&line {
+    i I64 = 0
+    for i < line.Len() and line[i] == '@' {
+        depth I64 = 0
+        quoted := false
+        for i < line.Len() {
+            ch := line[i]
+            if quoted {
+                if ch == '\\' { i++ } else if ch == '"' { quoted = false }
+            } else if ch == '"' {
+                quoted = true
+            } else if ch == '(' or ch == '<' {
+                depth++
+            } else if (ch == ')' or ch == '>') and depth > 0 {
+                depth--
+            } else if ch == ' ' and depth == 0 {
+                break
+            }
+            i++
+        }
+        for i < line.Len() and line[i] == ' ' { i++ }
+    }
+    return line[i:]
+}
+
+# a field's, case's, word's or trait method's name: the line's first word, past its attributes
+fn memberName(text String&) String {
+    line := PastAttrs(text)
     i I64 = 0
     for i < line.Len() and (line[i].IsLetter() or line[i].IsDigit() or line[i] == '_') { i++ }
     return $line[:i]
