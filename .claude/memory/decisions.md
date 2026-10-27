@@ -1606,3 +1606,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   timeout is a channel (`time.After`). Built when something needs it (later), unless the user asks sooner. Explained why
   Go needed a keyword (no generics/sum types then; reflect.Select) and why `join` cannot be a library (P2, waiting on
   every exit, spawn binding - compile-time rules on a block). Survey2's twelve items are all answered.
+- Item 12 revised 2026-10-27 (the user: "build select in std/chan as well"): `chan.Select` built with the batch after
+  the weekly reset (week at 0.94, the 0.95 stop rule), not "when needed".
