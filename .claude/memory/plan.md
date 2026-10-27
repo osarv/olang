@@ -569,4 +569,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the field without an order. Left: an S18c error inside an instance points at std's assert with a note at the inner
   call, not the user's call. CODE WORK STOPPED for the week at ~0.93-0.94 (the 0.95 rule); reset Sat 2026-10-31 06:00 CET.
   Next week: survey2 items 6, 8, 9, 10 and 12 (unreachable as a value, comptime e + comptime for, cold paths, time.Virtual, chan.Select - decisions.md 2026-10-27) as one batch beside a bulk review 4 over
-  checker..s18c (narrowing, D3b, attributes, become, AlwaysReached).
+  checker..s18c (narrowing, D3b, attributes, become, AlwaysReached). ADDED 2026-10-27: QBQ/QBR (case _, `case P: v`), QBP 1-9
+  (guard narrowing, Mod/DivFloor/DivCeil, typed holes, io.Show, walks 3, effects + inferred facts, explain -asm/-ir,
+  lane comprehensions), QBT type-level builders (+ trait-required ones), and docs/optsurvey.md's findings.

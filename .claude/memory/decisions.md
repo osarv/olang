@@ -1716,3 +1716,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   type (one place; time.Duration.Millis, list.List.Of, json.Json.Parse, net.Conn.Dial) - recommended - or (b) allowed
   on the type, module functions giving it stay too (shorter, two places); traits listing them in a later step.
   `embed` stays a keyword either way (it builds no type of its own). In effect: none (QAS/QAT).
+- QBT DECIDED 2026-10-27 (the user: "I want it with a)"; reverses QAS's "no type-level functions" and QAT's module
+  builders): type-level builders `fn Color.FromHex(t String&) Color ? E`, declared in the type's module, giving its
+  type (bare, `&`, `?&`, with errors), built through the constructor (T13); placement (a) - every function giving a
+  value of a type its module declares and taking no value of it is declared on that type (an error naming `T.Name`
+  otherwise). Decided (mine): the prelude's builders move (`String.FromC(p, max)`, `F64.FromBits(u)` and the other
+  FromBits, `Vec<T>.WithCapacity(n)` if it exists); std moves (net.IP.Parse, net.Addr.Parse, net.Conn.Dial,
+  net.Listener.Listen, net.UDP.Listen, time.Duration.Millis..., time.Date.Parse/Of, list.List.Of/From, json.Json.Parse,
+  ...) by a migration tool in `olang fix`; doc groups builders by declaration; reflection gains `T.Functions` beside
+  `T.Methods`. Second round of the same batch: traits may require one (`T.Parse(t)`, `T.Zero()`), and then
+  `t.ParseAs<T>()` becomes `T.Parse(t)` (one way). Post-reset batch.
