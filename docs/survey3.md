@@ -103,8 +103,8 @@ a call with `_` in argument slots is a lambda taking those slots in order, `xs.M
 
 **Fit.** It is a second way to write a lambda (principle 4). It also hides when the other arguments are evaluated: in
 `scale(_, expensive())`, is `expensive()` run once, when the lambda is made, or on every call? Gleam's capture is sugar
-for a lambda, so it runs on every call, and both answers surprise someone. The capture rules (D16c) would apply unchanged, since the form
-lowers to a lambda.
+for a lambda, so it runs on every call, and both answers surprise someone. The capture rules (D16c) would apply
+unchanged, since the form lowers to a lambda.
 
 **Cost.** Small: a desugaring in the checker.
 
@@ -656,8 +656,8 @@ fun map(xs, f)
 
 **In olang.** Early freeing (O8d, free.olang) already releases a place's old value when the place lets go of it while
 it was its only holder. The next step is for the new value to be built *into* the storage just released when it has
-the same type: `n = rebalance(n)` on a tree node, an interpreter's `env = env.With(name, v)`. Without it, the chunk pool reuses the memory but the program pays a release and an allocation, and
-copies the unchanged fields.
+the same type: `n = rebalance(n)` on a tree node, an interpreter's `env = env.With(name, v)`. Without it, the chunk
+pool reuses the memory, but the program pays a release and an allocation and copies the unchanged fields.
 
 **Fit.** No syntax: the compiler's optimization, unobservable but in time and memory (principle 1's "freeing early is
 the compiler's"). It never runs a destructor early (O15), and keeps wherever a fact is missing, as early freeing does.
