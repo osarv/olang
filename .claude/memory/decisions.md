@@ -1608,3 +1608,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   every exit, spawn binding - compile-time rules on a block). Survey2's twelve items are all answered.
 - Item 12 revised 2026-10-27 (the user: "build select in std/chan as well"): `chan.Select` built with the batch after
   the weekly reset (week at 0.94, the 0.95 stop rule), not "when needed".
+- QBP ASKED 2026-10-27 (docs/survey3.md, the third survey - functional languages and languages like olang; the user:
+  "be thorough"): shortlist, recs: 1 a case guard's test narrows in its clause (A4.1, yes - a gap: `case _ if s ==
+  Shape.Circle` / `if p is not null` guards narrow nothing in the body; mine: treat as a narrowing fix in the next
+  batch); 2 floored `x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` (B4.1, yes); 3 typed holes - `_` in an expression
+  reports the type wanted and fitting locals (A3.10, yes, diagnostic only); 4 `io.Show(v)` print-and-return with
+  Place.Here (A5.5, yes); 5 walks round 3 - Scan GroupBy ChunkBy Dedup Unzip Product Last/Nth Cycle
+  BinarySearch/LowerBound (A5.1, yes); 6 inferred effects shown in explain/doc/hover (A2.3, yes); 7 `olang explain -asm
+  /-ir` for one function with LLVM remarks (B5.1, yes); 8 a comprehension over a lane expression fused (B3.1, yes -
+  check first); 9 function facts asserted - Allocates/Blocks/Terminates/Recursive/CallsC through the name, pinned by
+  top-level asserts (B1.1, later, design now); 10 array patterns `case String&["test", file, ..words]` (A4.3, later);
+  11 a capability report on imports (B1.2, later); 12 reuse in place (A6.1, later, benchmark first); 13 generics' needs
+  shown, then checked at the definition (B1.4, later); 14 the Elm architecture for a GUI library (A8, later); 15 growing
+  enums + an API diff (B1.5/B1.6, later, with a registry). No: effect handlers, pipelines, laziness, by-name params,
+  view patterns, STM, SPMD, Halide schedules, type invariants, RTTI.
