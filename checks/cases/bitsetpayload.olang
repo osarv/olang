@@ -1,4 +1,5 @@
-# check: fail error[S18c]: a BitSet is over cases that carry no payload
+# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# also: a BitSet is over cases that carry no payload
 # also: compilation failed with 1 error
 # std/bitset: an enum with a payload case has no BitSet
 import "std/bitset"

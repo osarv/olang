@@ -123,6 +123,9 @@ af07eb58637d9844 042ef3ffde3c191d checks/cases/b9scanbranch.olang
 c07e9d27ea3fc562 0bd5df714013514d checks/cases/badform.olang
 61a2b86e6865b32e 8ae1bd571cf4b6b1 checks/cases/bareadj.olang
 fc0402fec28ae8b8 fc4b0cbbf9614ad3 checks/cases/baseintodeclared.olang
+5708632161ebd253 90baa00a9c834047 checks/cases/bitsetnotenum.olang
+19573bc35bc7bac0 a262d31ea6a21d78 checks/cases/bitsetpayload.olang
+16f007367cecdb67 97173ca4bac6cbcb checks/cases/bitsettoomany.olang
 02e34d454fc040e1 f1a49f872a6f2e47 checks/cases/blockcomment.olang
 d81b87da62c09223 c338c08c616b48d0 checks/cases/blockunclosed.olang
 4ea4b73da2113824 22b645f7b93668ab checks/cases/bodyunparsed.olang
@@ -819,6 +822,8 @@ abb69a3e95a6a290 d0ec217c3c58cf0d checks/cases/oparity.olang
 9e7843e9c64d79d2 f35289113b3efa80 checks/cases/opfallible.olang
 fe37b3da613fc2ab f2ba3e152c072d9e checks/cases/opltbool.olang
 bf8d201cb801d912 1d61d9bbac15cfca checks/cases/opsetat.olang
+0a3304ed6e9a9d4b b252d03d446c3c18 checks/cases/orderarrayfield.olang
+b1e91eda20fd5fc3 c92956350c4aa7f9 checks/cases/ordernotstruct.olang
 66a82ef8f018e048 ac21c35d07be4eb6 checks/cases/overridesig.olang
 acd82522da151ce1 f13e27a9d8c6be9d checks/cases/p1gresultref.olang
 78087923f2e5c6f2 7f8bff20fc68933b checks/cases/p1gtargetscope.olang
@@ -1825,6 +1830,7 @@ a50a05dbfa9f2c6a fd4ecaaf9906e12f fuzz/repro/trystmtarg.olang
 81848cf3867a394f a830d9ff47296455 fuzz/scopegen.olang
 303993320c25d55e 3afe5df069864b28 std/arith.olang
 112cb47010851a96 702cd33d2ac052b8 std/base64.olang
+1d9fbae2b80236f1 c25c53c0b3669a9d std/bitset.olang
 bdfb3f217b7eadd9 d7949c4ecec653c5 std/cancel.olang
 a1ccd94995977a50 d8947a29eea0ac54 std/chan.olang
 7b719ccdc5f62afe f2d3e06880dd88f2 std/crc32.olang
@@ -1841,6 +1847,7 @@ ab889777e2713424 ced5772ecb4fd539 std/io.olang
 449d597d70f62349 c0913f18a7c8503f std/json.olang
 8d92190cc47091c5 35137d78ba44f0e9 std/list.olang
 afe9e4eb3d80bc84 295a30796f517634 std/net.olang
+6de4a0da55d1c06d 1db83279f04280df std/order.olang
 214fa4e180a27cb9 6be11b0764efd2c6 std/os.olang
 7a7267224a9ffb34 a5fb4fe13753277e std/pair.olang
 0bd2b58ca2000683 5d29be295b15f449 std/prelude/argument.olang

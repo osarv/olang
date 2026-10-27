@@ -1,4 +1,5 @@
-# check: fail error[S18c]: a BitSet holds at most 64 cases
+# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# also: a BitSet holds at most 64 cases
 # also: compilation failed with 1 error
 # std/bitset: 65 cases do not fit one U64
 import "std/bitset"

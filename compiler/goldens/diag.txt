@@ -400,6 +400,30 @@ baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert
     6 |     m Meters = a
       |                ^
 compilation failed with 1 error
+=== bitsetnotenum.olang
+$ROOT/std/bitset.olang:22:5: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet is over an enum's cases"
+   22 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = P
+   16 |     check<T>()
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== bitsetpayload.olang
+$ROOT/std/bitset.olang:25:9: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet is over cases that carry no payload"
+   25 |         assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Shape
+   16 |     check<T>()
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== bitsettoomany.olang
+$ROOT/std/bitset.olang:23:5: error[S18c]: this assertion is false, evaluated while compiling: "a BitSet holds at most 64 cases"
+   23 |     assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Big
+   16 |     check<T>()
+      |     ^~~~~~~~
+compilation failed with 1 error
 === blockcomment.olang
 blockcomment.olang:4:1: error[L4a]: unterminated block comment - '##' closes it
     4 | ## never closed
@@ -4158,6 +4182,22 @@ opsetat.olang:9:10: error[E31]: R& declares At but not SetAt, which x[i] = v cal
     9 |     r[0] = 1
       |          ^
 compilation failed with 1 error
+=== orderarrayfield.olang
+$ROOT/std/order.olang:20:16: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
+   20 |         assert false, "ByFields orders structs and enums, and this type is neither"
+      |                ^~~~~
+compilation failed with 1 error
+=== ordernotstruct.olang
+ordernotstruct.olang:6:12: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
+    6 |     assert not order.ByFields<I64>(1, 2)
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/order.olang:20:9: note: here
+   20 |         assert false, "ByFields orders structs and enums, and this type is neither"
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$ROOT/std/order.olang:20:16: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
+   20 |         assert false, "ByFields orders structs and enums, and this type is neither"
+      |                ^~~~~
+compilation failed with 2 errors
 === overridesig.olang
 overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the default it overrides - match it, or choose another name
    11 | fn (q Sq&) Twice(k I32) I32 { return k }

@@ -1,4 +1,5 @@
-# check: fail error[S18c]: ByFields orders structs and enums, and this type is neither
+# check: fail error[S18c]: this assertion is false, evaluated while compiling
+# also: ByFields orders structs and enums, and this type is neither
 # also: compilation failed with 1 error
 # std/order: a field with no order (an array) is a compile-time error
 import "std/order"
