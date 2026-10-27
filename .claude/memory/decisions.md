@@ -1681,3 +1681,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   E> { mut NextBack() T ? E, Exhausted }` with Map/Filter/Zip/Enumerate passing it on. In effect: none.
 - QBS DECIDED 2026-10-27 (the user: "them forget about them"): no backward iterators (no Prev, no BackIterator/
   NextBack) - Reversed() on At+Len types and indexes cover it.
+- QBP 6 DECIDED 2026-10-27 (the user: "build it"): inferred effects shown under each signature by explain, doc and LSP
+  hover (`# effects: ...` - does nothing / writes through which parameters / allocates where / files, network, C /
+  evaluable while compiling / may grow a Vec / blocks); "blocks" and "allocates" get summaries of their own (shared with
+  item 9 later). Post-reset batch.
