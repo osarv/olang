@@ -2,5 +2,6 @@
 # E24 (QQ1): "try" before a chain covers every call of it - the fallible call the chain starts with as well as its last
 fn g() String& ? { return "12" }
 fn main() ? {
-    try g().ParseInt() catch default 0
+    a := try g().ParseInt() catch default 0
+    assert a == 12
 }

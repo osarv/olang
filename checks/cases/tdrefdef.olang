@@ -5,4 +5,7 @@ fn none() ? E { }
 type P struct(v I32) { v }
 fn ref(p P&) P&p ? E { return p }
 fn main() ? E { }
-fn refdef(p P&, q P&p) { try ref(p) catch default q }
+fn refdef(p P&, q P&p) I32 {
+    r := try ref(p) catch default q
+    return r.v
+}

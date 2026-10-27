@@ -8,4 +8,6 @@ type Checked I32(v I32) ? RangeError {
 }
 fn main() ? {
     c Checked = -5
+    keep(I32(c))
 }
+fn keep(x I32) { }

@@ -148,6 +148,9 @@ type Gen struct(seed U64) {
     vref := Array<Bool>(4096)            # a List or Map parameter: a reference to the caller's collection
     vhome := Array<I64>(4096)            # a reference's: the block its referent lives in (O25 - a local reference's scope
                                       # is exact, so it is repointed only to what lives there too)
+    vid := Array<I64>(4096)              # a variable's own number, across the whole program: whether it is read (D3b)
+    read Vec<Bool>                       # by that number: whether the variable was read
+    named Vec<I64>                       # and the slot it had
     curBlock I64 = 0
     nblock I64 = 0
     base I64 = 0
@@ -238,6 +241,9 @@ fn (g mut Gen&) push(t I32, len I64, m Bool, d Bool) I64 {
     g.vblk[k] = g.curBlock
     g.vhome[k] = g.curBlock
     g.vref[k] = false
+    g.vid[k] = g.read.Len()
+    g.read.Push(false)
+    g.named.Push(k)
     g.nv += 1
     return k
 }
@@ -264,7 +270,47 @@ fn (g mut Gen&) declare(k I64, t I32, len I64, d Bool) {
 
 fn (g mut Gen&) use(k I64) String& {
     if g.vdep[k] { g.dep = true }
+    g.read[g.vid[k]] = true
     return "x" $k
+}
+
+# a variable written as what an assignment changes: no read of it (D3b)
+fn (g mut Gen&) target(k I64) String& {
+    if g.vdep[k] { g.dep = true }
+    return "x" $k
+}
+
+# D3b: a name that holds a place only (a loop's, a comprehension's, a binding's), written once the program is made -
+# its name where something read it, else "_" (Placed)
+fn (g Gen&) bare(k I64) String& { return "\x01" $g.vid[k] "\x02" }
+
+# the variables declared from "from" on, each read once more at the end of their block - so D3b holds for them
+# whatever the statements did with them, changing nothing
+fn (g mut Gen&) keepAll(from I64, ind String&) String& {
+    b := StringBuilder()
+    for k in range from, g.nv {
+        if g.vt[k] >= 0 { b.Push($ind "keep(" $g.use(k) ")\n") }
+    }
+    return b.ToString()
+}
+
+# the program text with each bare name written (bare)
+fn (g Gen&) Placed(text String&) String {
+    b := StringBuilder()
+    i := 0
+    for i < text.Len() {
+        if text[i] != '\x01' {
+            b.PushChar(text[i])
+            i++
+            continue
+        }
+        j := i + 1
+        for text[j] != '\x02' { j++ }
+        id := try text[i + 1:j].ParseInt() catch default 0
+        b.Push("x" $g.named[id] if g.read[id] else "_")
+        i = j + 1
+    }
+    return b.ToString()
 }
 
 # whether variable k is what "mode" asks for, given "want"
@@ -807,7 +853,7 @@ fn (g mut Gen&) piece(d I64) String& {
         c String& = ""
         if g.chance(40) { c = " if " $g.ex(TBool, d - 1) }
         g.nv = x
-        return "$(" $Prims[t] "[" $e " for x" $x " in range " $n $c "])"
+        return "$(" $Prims[t] "[" $e " for " $g.bare(x) " in range " $n $c "])"
     }
     return "$(" $g.ex(g.primT(), d) ")"
 }
@@ -873,7 +919,7 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
                         } else {
                             pt := g.ept[(et * 4 + c) * 2 + f]
                             x := g.push(pt, fixN(pt) if isFixed(pt) else -1, false, true)
-                            b.Push("x" $x)
+                            b.Push(g.bare(x))
                         }
                     }
                     b.Push(")")
@@ -1069,7 +1115,9 @@ fn (g mut Gen&) block(n I64, d I64, ind String&) String& {
 # statements whose locals stay in scope after them - a function's own top level, before its return
 fn (g mut Gen&) stmts(n I64, d I64, ind String&) String& {
     b := StringBuilder()
+    from := g.nv
     for _ in range n { b.Push(g.stmt(d, ind)) }
+    b.Push(g.keepAll(from, ind))
     return b.ToString()
 }
 
@@ -1093,7 +1141,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
     in2 := $ind "    "
     if k == 4 {
         v := g.pick(0, 7)
-        if v >= 0 { return $ind $g.use(v) " = " $g.fit(g.vt[v], 3) "\n" }
+        if v >= 0 { return $ind $g.target(v) " = " $g.fit(g.vt[v], 3) "\n" }
     }
     if k == 5 {
         v := g.pick(0, 7)
@@ -1132,7 +1180,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         x := g.push(lt, -1, false, true)
         body := g.block(1 + g.r(3), d - 1, in2)
         g.nv = save
-        return $ind "for x" $x " in range " $n " {\n" $body $ind "}\n"
+        return $ind "for " $g.bare(x) " in range " $n " {\n" $body $ind "}\n"
     }
     if k == 9 and g.ns > 0 {
         t := I32(100 + g.r(g.ns))
@@ -1189,7 +1237,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             body := g.block(1 + g.r(3), d - 1, in2)
             g.vwalk[r] = walked
             g.nv = save
-            return $ind "for x" $x " in " $arr " {\n" $body $ind "}\n"
+            return $ind "for " $g.bare(x) " in " $arr " {\n" $body $ind "}\n"
         }
     }
     if k == 16 and g.atomics {
@@ -1261,7 +1309,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             g.fallible = false
             e := g.fit(t, 2)
             g.fallible = sfal
-            if isFloat(t) or g.chance(50) { return $ind "defer " $g.use(v) " = " $e "\n" }
+            if isFloat(t) or g.chance(50) { return $ind "defer " $g.target(v) " = " $e "\n" }
             return $ind "defer { " $g.use(v) " " $IntAssigns[g.r(6)] " " $e " }\n"
         }
     }
@@ -1306,7 +1354,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
             body := g.block(1 + g.r(2), d - 1, in2)
             if r >= 0 { g.vwalk[r] = walked }
             g.nv = save
-            return $ind "for x" $i ", x" $x " in " $src " {\n" $body $ind "}\n"
+            return $ind "for " $g.bare(i) ", " $g.bare(x) " in " $src " {\n" $body $ind "}\n"
         }
         lo I64 = g.r(5) - 2
         x := g.push(3, -1, false, true)
@@ -1314,7 +1362,7 @@ fn (g mut Gen&) stmt(d I64, ind String&) String& {
         g.nv = save
         los String& = $lo
         if lo < 0 { los = "(" $lo ")" }
-        return $ind "for x" $x " in range " $los ", " $(lo + g.r(9)) ", " $(1 + g.r(3)) " {\n" $body $ind "}\n"
+        return $ind "for " $g.bare(x) " in range " $los ", " $(lo + g.r(9)) ", " $(1 + g.r(3)) " {\n" $body $ind "}\n"
     }
     if k == 19 {
         x := g.reserve()
@@ -1378,11 +1426,11 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
                 walked = g.vwalk[r]
                 g.vwalk[r] = true
             }
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for x" $y " in " $srcName)
+            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in " $srcName)
         } else {
             n = g.r(7)
             y := g.push(3, -1, false, true)
-            b.Push($Prims[t] "[" $g.fit(t, 3) " for x" $y " in range " $n)
+            b.Push($Prims[t] "[" $g.fit(t, 3) " for " $g.bare(y) " in range " $n)
         }
         if g.chance(40) {
             n = -1
@@ -1525,7 +1573,7 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if p == 5 {
         at String& = $g.plainIdx() " % " $x ".Len()"
         v := g.pick(et, 6)
-        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".TakeAt(" $at ")! }\n" }
+        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.target(v) " = " $x ".TakeAt(" $at ")! }\n" }
         return $ind "if " $x ".Len() > 0 { " $x ".RemoveAt(" $at ")! }\n"
     }
     if p == 6 {
@@ -1554,7 +1602,7 @@ fn (g mut Gen&) bulk(x String&, et I32, vty I32, ind String&) String& {
     i := g.push(3, -1, false, true)                # "range n" counts in its literal's I64 (T6a)
     n I64 = 9 + g.r(40)
     m I64 = 1 + g.r(5)
-    v String& = $Prims[et] "(x" $i " * " $m ")" if isNum(et) else "(x" $i " % " $(1 + g.r(3)) " == 0)"
+    v String& = $Prims[et] "(" $g.use(i) " * " $m ")" if isNum(et) else "(" $g.use(i) " % " $(1 + g.r(3)) " == 0)"
     if et >= 100 { v = g.construct(et, 2) }
     e String& = ""
     if vty < 0 {
@@ -1565,7 +1613,7 @@ fn (g mut Gen&) bulk(x String&, et I32, vty I32, ind String&) String& {
         e = $x ".Put(" $v ", " $g.fit(vty, 1) ")"
     }
     g.nv = save
-    return $ind "for x" $i " in range " $n " { " $e " }\n"
+    return $ind "for " $g.bare(i) " in range " $n " { " $e " }\n"
 }
 
 # a collection a loop or a comprehension may walk - an array, a List, or a Map's keys or values - as written; g.srcT is
@@ -1633,7 +1681,7 @@ fn (g mut Gen&) runWalk(l I64, d I64, ind String&) String& {
     b := StringBuilder()
     b.Push($ind "x" $at " I64 = 0\n")
     b.Push($ind "x" $run " := " $x ".View()\n")
-    b.Push($ind "for x" $v " in x" $run " {\n" $body $ind "}\n")
+    b.Push($ind "for " $g.bare(v) " in x" $run " {\n" $body $ind "}\n")
     b.Push($ind "x" $at " += x" $run ".Len()\n")
     return b.ToString()
 }
@@ -1686,16 +1734,17 @@ fn (g mut Gen&) mapWalk(m I64, how I64, d I64, ind String&) String& {
         e := g.push(-2, -1, false, true)
         k := g.push(mapK(t), -1, true, true)
         v := g.push(mapV(t), -1, true, true)
-        b.Push($ind "for x" $e " in " $x " {\n")
-        b.Push($in2 "x" $k " " $g.tn(mapK(t)) " = x" $e ".Key\n" $in2 "x" $v " " $Prims[mapV(t)] " = x" $e ".Value\n")
+        b.Push($ind "for " $g.bare(e) " in " $x " {\n")
+        b.Push($in2 "x" $k " " $g.tn(mapK(t)) " = " $g.use(e) ".Key\n" $in2 "x" $v " " $Prims[mapV(t)] " = " $g.use(e) ".Value\n")
     } else if how == 1 {
         k := g.push(mapK(t), -1, false, true)
-        b.Push($ind "for x" $k " in " $x ".Keys() {\n")
+        b.Push($ind "for " $g.bare(k) " in " $x ".Keys() {\n")
     } else {
         v := g.push(mapV(t), -1, false, true)
-        b.Push($ind "for x" $v " in " $x ".Values() {\n")
+        b.Push($ind "for " $g.bare(v) " in " $x ".Values() {\n")
     }
     b.Push(g.stmts(1 + g.r(3), d - 1, in2))
+    if how == 0 { b.Push(g.keepAll(save + 1, in2)) }     # the key and value declared from the entry
     b.Push($ind "}\n")
     g.curBlock = sb
     g.vwalk[r] = walked
@@ -1841,7 +1890,7 @@ fn (g mut Gen&) refStmt(ind String&) String& {
         if dst < 0 or g.chance(30) { dst = g.pick(0, 27) }
         if dst >= 0 {
             for k in range g.base, g.nv {
-                if g.repointable(dst, k) { return $ind $g.use(dst) " = " $g.use(k) "\n" }
+                if g.repointable(dst, k) { return $ind $g.target(dst) " = " $g.use(k) "\n" }
             }
         }
     }
@@ -1873,11 +1922,11 @@ fn (g mut Gen&) assignStmt(ind String&) String& {
                 b := g.vt[k]
                 if k != a and g.matches(k, 0, 5) and not isARef(b) and elemOf(b) == elemOf(t) and g.vlen[k] == g.vlen[a] and g.chance(50) {
                     if isFixed(t) and fixN(b) == 15 { continue }
-                    return $ind $g.use(a) " = " $g.use(k) "\n"
+                    return $ind $g.target(a) " = " $g.use(k) "\n"
                 }
             }
             if g.vlen[a] >= 0 and not isFixed(t) {
-                return $ind $g.use(a) " = Array<" $Prims[elemOf(t)] ">(" $g.vlen[a] ", " $g.fit(elemOf(t), 2) ")\n"
+                return $ind $g.target(a) " = Array<" $Prims[elemOf(t)] ">(" $g.vlen[a] ", " $g.fit(elemOf(t), 2) ")\n"
             }
         }
     }
@@ -1885,18 +1934,18 @@ fn (g mut Gen&) assignStmt(ind String&) String& {
         s := g.pick(0, 3)
         if s >= 0 and g.vt[s] < 200 {
             o := g.pick(g.vt[s], 0)
-            if o >= 0 and o != s and g.chance(50) { return $ind $g.use(s) " = " $g.use(o) "\n" }
-            return $ind $g.use(s) " = " $g.construct(g.vt[s], 3) "\n"
+            if o >= 0 and o != s and g.chance(50) { return $ind $g.target(s) " = " $g.use(o) "\n" }
+            return $ind $g.target(s) " = " $g.construct(g.vt[s], 3) "\n"
         }
     }
     if p == 2 {
         r := g.pick(0, 23)
-        if r >= 0 { return $ind $g.use(r) " = " $g.construct(I32(100 + structOf(g.vt[r])), 3) "\n" }
+        if r >= 0 { return $ind $g.target(r) " = " $g.construct(I32(100 + structOf(g.vt[r])), 3) "\n" }
     }
     r := g.pick(0, 22)
     if r >= 0 and g.vlen[r] >= 0 {
         et := elemOf(g.vt[r])
-        return $ind $g.use(r) " = Array<" $Prims[et] ">(" $g.vlen[r] ", " $g.fit(et, 2) ")\n"
+        return $ind $g.target(r) " = Array<" $Prims[et] ">(" $g.vlen[r] ", " $g.fit(et, 2) ")\n"
     }
     return g.refStmt(ind)
 }
@@ -2621,7 +2670,9 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     g := Gen(seed)
     g.atomics = atomics and not OddWidths
     b := StringBuilder()
-    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\nimport \"std/arith\"\n")
+    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\n")
+    # D3b: what keep is given is read, and nothing else is done with it
+    b.Push("fn keep<T>(x T) { }\n")
     prints := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {
@@ -2641,5 +2692,9 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     b.Push("    }\n")
     b.Push(prints.ToString())
     b.Push("}\n")
-    return b.ToString()
+    text := g.Placed(b.ToString())
+    # M5a: std/arith imported only where something is reached through it
+    if not text.Contains("arith.") { return text }
+    at := try text.Find("import \"std/os\"\n") catch default 0
+    return $text[:at] "import \"std/arith\"\n" $text[at:]
 }

@@ -20040,12 +20040,15 @@ fn pathOf(x ast.Expr&) Array<source.NameId>&x {
 
 # ---- locals never read (D3b) ----
 
-# D3b, once an attempt has checked every body: each local names found declared and never read is an error - unless its
-# type has a destructor (its scope's close is what it is held for) or its declaration did not check (said already), in
-# any instance of its body; one in no checked body (a branch evaluation left out, a generic never instantiated) is not
-# judged
+# D3b, once an attempt has checked every body without an error: each local names found declared and never read is an
+# error - one of a place only (a loop's, a binding's) always; a declared one unless its type has a destructor (its
+# scope's close is what it is held for) in any instance of its body; one in no checked body (a branch evaluation left
+# out, a generic never instantiated) is not judged
 fn (c mut Checker&) settleUnread() {
     if c.P.R.Unreads.Len() == 0 { return }
+    # said of a program with no other error: a read may be what a mistake left out, or sit in code another mistake
+    # keeps from checking - one mistake, one error
+    if c.P.L.Diags.Errors() > 0 { return }
     held Map<pair.Pair<I64, I64>, Bool>   # (file, where the name is written) -> it is to be said
     for b in c.Bodies {
         if b.Root is null { continue }
@@ -20058,9 +20061,14 @@ fn (c mut Checker&) settleUnread() {
         }
     }
     for u in c.P.R.Unreads {
+        where := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
+        if u.Bare {
+            c.P.L.Diags.Error(where, msgs.LocalUnusedBare(c.tok(u.Name)))
+            continue
+        }
         k := pair.Pair(u.File, (I64(u.Sp.Start) << 32) | I64(u.Sp.End))
         if not (try held.Get(k) catch default false) { continue }
-        c.P.L.Diags.Error(diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End)), msgs.LocalUnused(c.tok(u.Name)))
+        c.P.L.Diags.Error(where, msgs.LocalUnused(c.tok(u.Name)))
     }
 }
 

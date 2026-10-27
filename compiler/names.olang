@@ -76,10 +76,11 @@ type local struct(Name source.NameId, Sp source.Span, Kind What, Check Bool = fa
 # D3b: a local declared with a value or a type, never read: its file, where its name is written, and the name - the
 # checker says it, knowing the local's type (one whose type has a destructor is used by its scope's close, one whose
 # declaration did not check was said already)
-type Unread struct(File I64, Sp source.Span, Name source.NameId) {
+type Unread struct(File I64, Sp source.Span, Name source.NameId, Bare Bool = false) {
     File
     Sp
     Name
+    Bare
 }
 
 # T4, T7: the names every module sees as a type
@@ -520,11 +521,7 @@ fn (r mut Resolver&) judge(i I64) {
     for sp in r.skipped {
         if Mentions(r.L.Mods[r.mi].Src!.Text, sp, name) { return }
     }
-    if l.Bare {
-        r.L.Diags.Error(r.at(r.mi, l.Sp), msgs.LocalUnusedBare(r.tok(l.Name)))
-    } else {
-        r.Unreads.Push(Unread(r.L.Mods[r.mi].File, l.Sp, l.Name))
-    }
+    r.Unreads.Push(Unread(r.L.Mods[r.mi].File, l.Sp, l.Name, l.Bare))
 }
 
 # D3b: a local declared that must be read - bare where "_" may stand in its place

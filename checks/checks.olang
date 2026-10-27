@@ -51,7 +51,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
 # runs what is left of it. A scenario passes when all of it does
 Checks Array<String&>& = withParts(Scenarios) if Target == "" and Only == "" else Array<String&>(0)
 
-# CHECKS_ONLY: while developing, only the cases whose file names hold this text, and no scenario - a run that passes
+# CHECKS_ONLY: while developing, only the cases whose file names hold this text (or one of several, comma-separated), and no scenario - a run that passes
 # says nothing of the rest
 Only String& = try os.Env("CHECKS_ONLY") catch default ""
 
@@ -76,14 +76,17 @@ fn withParts(names Array<String&>&) Array<String&>& {
 # the files in checks/cases
 Cases Array<String&>& = only(try os.ReadDir("checks/cases") catch default Array<String&>(0))
 
+# a case CHECKS_ONLY names: its file name holds one of the comma-separated texts
+fn wanted(name String&) Bool { return Only.Split(",").Some(fn(w String&) Bool { return name.Contains(w) }) }
+
 fn only(names Array<String&>&) Array<String&>&names {
     if Only == "" { return names }
     n := 0
-    for x in names { if x.Contains(Only): n++ }
+    for x in names { if wanted(x): n++ }
     out mut Array<String&>&names = Array<String&>(n)
     k := 0
     for x in names {
-        if x.Contains(Only) {
+        if wanted(x) {
             out[k] = x
             k++
         }

@@ -70,7 +70,7 @@ DtorPrelude := (
     "    Dropped = Dropped + 1\n"
     "    keep mut Vec<Tracker&>& = Vec<Tracker&>()\n"
     "    kk := k\n"
-    "    join { spawn fn() { for j in range 3 { keep.Push(Tracker()) } } }\n"
+    "    join { spawn fn() { for _ in range 3 { keep.Push(Tracker()) } } }\n"
     "    t Tracker& = Tracker()\n"
     "    n.next = Node(kk + keep.Len())\n"
     "}\n"
@@ -95,7 +95,7 @@ DtorPrelude := (
 AvoidKnown mut Bool = false
 # the types and helpers every program has
 Prelude := (
-    "import \"std/time\"\nimport \"std/io\"\n"
+    "import \"std/io\"\n"
     "type SgErr error {\n    E\n}\n"
     "extern fn getpid() I32\n"
     "fn say(t String&) { try io.Println(t) catch io.Error { } }\n"
@@ -187,7 +187,7 @@ Prelude := (
     "fn chain(n Node?&) I64 {\n"
     "    t I64 = 0\n"
     "    c := n\n"
-    "    for k in range 40 {\n"
+    "    for _ in range 40 {\n"
     "        if c is null { break }\n"
     "        t = t * 31 + c.v\n"
     "        c = c.next\n"
@@ -1435,7 +1435,7 @@ FreePrelude := (
     "fn chain(n Node?&) I64 {\n"
     "    t I64 = 0\n"
     "    c := n\n"
-    "    for k in range 40 {\n"
+    "    for _ in range 40 {\n"
     "        if c is null { break }\n"
     "        t = t * 31 + c.v\n"
     "        c = c.next\n"

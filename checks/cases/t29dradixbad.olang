@@ -2,4 +2,6 @@
 # T29d: a fallible constructor written out on a literal runs while compiling, its failure an error there
 fn main() {
     r := Radix(40)
+    keep(I64(r))
 }
+fn keep(x I64) { }

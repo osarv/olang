@@ -142,7 +142,11 @@ fn declEdit(text String&, at I64) String, Bool {
     if v >= 0 {
         k := v
         for k < text.Len() and text[k] == ' ' { k++ }
-        if text[k:].StartsWith("try ") { return $text[:at] $text[k:], false }
+        # a try statement takes no default (R11): a declaration whose value has one is left for a person
+        if text[k:].StartsWith("try ") {
+            if codeOf(text[k:]).Contains(" default ") { return "", false }
+            return $text[:at] $text[k:], false
+        }
     }
     code := codeOf(text)
     if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return "", false }

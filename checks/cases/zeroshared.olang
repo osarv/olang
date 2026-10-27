@@ -5,4 +5,5 @@ type Bag struct() {
 }
 fn main() ? {
     bags := Array<Bag>(3)
+    assert bags.Len() == 3
 }
