@@ -1,0 +1,729 @@
+# profile - "olang profile FILE [ARGUMENT...]" (SPEC.md B20): where a program spends its time, measured by sampling.
+#
+# The program is built as build builds it (B3) - at -O3 with link-time optimization, -quick asking less - with two
+# things more, so its objects are apart from every other build's (".prof", B4): every function keeps a frame pointer
+# ("frame-pointer"="all"), and the debug information holds each function's lines and its name as source writes it
+# (LineTablesOnly, emit.ProfName) - the code is the same code otherwise. The runtime's sampler (std/runtime/prof.ll) is
+# linked into such a build alone: main starts it, each thread the runtime starts gives itself a timer of its own CPU
+# time, and each millisecond of CPU a thread uses it records that thread's stack, walked by its frame pointers. At the
+# program's end - its return, os.Exit, an error leaving main, a failed check, an interrupt - the samples go to the file
+# OLANG_PROFILE names, with the program's memory map as it was.
+#
+# Here: the program run with its arguments (its input, output and status its own), its samples read, each address made
+# a place by llvm-symbolizer (beside the clang the build used, else on PATH) through the frames inlining made of it,
+# and the report written - the functions by the time spent in them (self) and under them (total), the hottest lines, the
+# callers of the hottest functions - then a flame graph, one HTML file written here with nothing it loads from
+# elsewhere (build/profile/NAME.html, or -output's PATH). "interpret" is not profiled: its time is the evaluator's.
+import "std/os"
+import "std/io"
+import "std/filepath"
+import "build"
+import "diag"
+import "msgs"
+import "target"
+import unistd "unistd.h"
+import syswait "sys/wait.h"
+import stdlib "stdlib.h"
+
+# signal.h's own signal takes a handler function, and SIG_IGN is a cast of 1 to one, which olang cannot write (X19)
+extern { fn signal(sig I32, handler I64) I64 }
+
+# ---- the mode ----
+
+# profile FILE ARGS: the program built for profiling, run, and reported on - the status the program's own, or the
+# build's where it did not build
+fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+    html := $c.Output                   # -output names the flame graph here, not the program
+    c.Output = ""
+    c.Quiet = true
+    c.Profile = true
+    status := build.BuildProgram(fe, c, file, d)
+    if status != 0 { return status }
+    dir := $c.Dir "/profile"
+    try os.MkDirAll(dir) catch os.Error {
+        d.Fatal(diag.Where.Nowhere, msgs.CannotRun($"its profile's directory " $dir " cannot be made"))
+        return build.Finish(d)
+    }
+    name := filepath.Base(c.Built)
+    if name.EndsWith(".prof") { name = name[:name.Len() - 5] }
+    samples := $dir "/" $name ".samples"
+    if html == "" { html = $dir "/" $name ".html" }
+    try os.Remove(samples) catch os.Error { }
+    status = runProfiled(c.Built, file, args, samples)
+    if status < 0 {
+        d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
+        return build.Finish(d)
+    }
+    bytes := try os.ReadFile(samples) catch os.Error {
+        say($"olang profile: " $name " wrote no profile - it ended by a signal (" $build.SignalName(status - 128) ")\n")
+        return status
+    }
+    p := try Read(bytes) catch Bad {
+        say($"olang profile: " $samples " is not a profile this compiler writes\n")
+        return status
+    }
+    tool := Symbolizer()
+    places := Resolve(p, tool)
+    say(Report(name, p, places))
+    if tool == "" { say("olang profile: no llvm-symbolizer found beside clang or on PATH - functions named by their addresses\n") }
+    try os.WriteFile(html, FlameGraph(name, p, places)) catch os.Error {
+        say($"olang profile: " $html " cannot be written\n")
+        return status
+    }
+    say($"flame graph: " $build.Shown(html) "\n")
+    return status
+}
+
+fn say(text String&) { try io.Print(text) catch io.Error { } }
+
+# the program at bin run with file and args as its command line, in a process of its own that has this one's input,
+# output and error streams, and OLANG_PROFILE naming where its samples go: its status (128 and the signal for one ended
+# by a signal), -1 where it cannot be started. An interrupt typed at the terminal is the program's alone - it writes its
+# samples as it ends (prof.ll) - so this process waits on and reports what it gathered
+fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&) I32 {
+    av Vec<String&>
+    av.Push($file)
+    for a in args { av.Push($a) }
+    stdlib.setenv("OLANG_PROFILE\0", $samples "\0", 1)
+    pid := unistd.fork()
+    if pid == 0 {
+        try os.ExecInPlace(build.Shown(bin), av.ToArray()) catch os.Error { }
+        unistd._exit(127)
+    }
+    stdlib.unsetenv("OLANG_PROFILE\0")
+    if pid < 0 { return -1 }
+    oldInt := signal(2, 1)                  # SIGINT, SIGQUIT: SIG_IGN
+    oldQuit := signal(3, 1)
+    waited := Array<I32>(1)
+    for syswait.waitpid(pid, waited, 0) < 0 {
+        # EINTR alone; any other failure leaves no child to wait for
+        if not os.Exists($"/proc/" $pid) { break }
+    }
+    signal(2, oldInt)
+    signal(3, oldQuit)
+    w := waited[0]
+    if (w & 0x7F) != 0 { return 128 + (w & 0x7F) }
+    return (w >> 8) & 0xFF
+}
+
+# ---- the samples ----
+
+# a profile that is not one: no "OLPROF01" header, or records running past its end
+type Bad error { MALFORMED }
+
+# one sample: the periods of CPU time it stands for (Weight - a tick of the kernel's may fold several), and its stack,
+# Count addresses from Start in Profile.Addrs - the interrupted instruction first, then each return address up to the
+# thread's first frame
+type Sample struct(Weight I64, Start I64, Count I64) {
+    Weight
+    Start
+    Count
+}
+
+# what the program wrote (std/runtime/prof.ll): the period in nanoseconds, the samples dropped (a full buffer) and the
+# threads sampled, the samples, and its memory map as /proc/self/maps read at the end
+type Profile struct() {
+    PeriodNs I64 = 1000000
+    Dropped I64 = 0
+    Threads I64 = 0
+    Samples Vec<Sample>
+    Addrs Vec<I64>
+    Maps String& = ""
+}
+
+# the profile's whole weight: the periods every sample stands for
+fn (p Profile&) Total() I64 {
+    n I64 = 0
+    for s in p.Samples { n += s.Weight }
+    return n
+}
+
+# the little-endian word at word index i of b
+fn word(b Array<U8>&, i I64) I64 {
+    v I64 = 0
+    for k in range 8 { v = v | (I64(b[i * 8 + k]) << (k * 8)) }
+    return v
+}
+
+# a profile's bytes read: its header ("OLPROF01", the period, its words of records, the samples dropped, the threads),
+# the records - a header word (the frame count, and above bit 8 the weight) then the addresses - and the map. A record
+# whose header is still zero was being written as the program ended: it and what follows are left out
+fn Read(b Array<U8>&) Profile ? Bad {
+    p := Profile()
+    if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.MALFORMED }
+    p.PeriodNs = word(b, 1)
+    words := word(b, 2)
+    p.Dropped = word(b, 3)
+    p.Threads = word(b, 4)
+    if words < 0 or 40 + words * 8 > b.Len() { error Bad.MALFORMED }
+    i I64 = 0
+    for i < words {
+        h := word(b, 5 + i)
+        n := h & 0xFF
+        if h == 0 or n == 0 or i + 1 + n > words { break }
+        p.Samples.Push(Sample(h >> 8, p.Addrs.Len(), n))
+        for k in range n { p.Addrs.Push(word(b, 5 + i + 1 + k)) }
+        i += n + 1
+    }
+    p.Maps = String(b[40 + words * 8:])
+    return p
+}
+
+# ---- places ----
+
+# one frame of what an address is, inlining unfolded: the function (as source names it), its file and line
+type Frame struct(Fn I64, File I64, Line I64) {
+    Fn
+    File
+    Line
+}
+
+# every address of a profile made places: Names the texts frames name by number; for each address of Profile.Addrs (in
+# its order) its frames, innermost first, Count from First in Frames
+type Places struct() {
+    Names Vec<String&>
+    named Map<String&, I64>
+    Frames Vec<Frame>
+    First Vec<I64>
+    Count Vec<I64>
+    Index Map<I64, I64>         # an address of a sample (a return address less one) to its place among the distinct ones
+}
+
+fn (pl mut Places&) name(text String&) I64 {
+    n := try pl.named.Get(text) catch default -1
+    if n >= 0 { return n }
+    pl.Names.Push($text)
+    pl.named.Put($text, pl.Names.Len() - 1)
+    return pl.Names.Len() - 1
+}
+
+# a mapping of the program's memory (/proc/self/maps): its addresses, the file offset it starts at, the file
+type mapping struct(Start I64, End I64, Offset I64, Path String&) {
+    Start
+    End
+    Offset
+    Path
+}
+
+fn hex(t String&) I64 { return try t.ParseInt(16) catch default 0 }
+
+# the mappings of a file's contents, in the map's order
+fn mappings(maps String&) Vec<mapping> {
+    out Vec<mapping>
+    for line in maps.Lines() {
+        parts Vec<String&>
+        for f in line.Split(" ") {
+            if f != "" { parts.Push($f) }
+        }
+        if parts.Len() < 6 { continue }
+        dash := try parts[0].Find("-") catch default -1
+        if dash < 0 { continue }
+        path := StringBuilder()
+        for k in range 5, parts.Len() {
+            if k > 5 { path.PushChar(' ') }
+            path.Push(parts[k])
+        }
+        out.Push(mapping(hex(parts[0][:dash]), hex(parts[0][dash + 1:]), hex(parts[2]), path.ToString()))
+    }
+    return out
+}
+
+# an ELF file's loaded segments, as (file offset, size, address) triples: what turns a file offset into the address the
+# symbolizer knows - an executable's own and a shared library's alike, wherever the system put it
+fn segments(path String&) Vec<I64> {
+    out Vec<I64>
+    b := try os.ReadFile(path) catch os.Error { return out }
+    if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2) { return out }
+    phoff := word(b, 4)
+    size := I64(b[54]) | (I64(b[55]) << 8)
+    count := I64(b[56]) | (I64(b[57]) << 8)
+    for k in range count {
+        at := phoff + k * size
+        if at + 56 > b.Len() or at % 8 != 0 { break }
+        w := at / 8
+        if (word(b, w) & 0xFFFFFFFF) != 1 { continue }       # PT_LOAD
+        out.Push(word(b, w + 1))                            # p_offset
+        out.Push(word(b, w + 4))                            # p_filesz
+        out.Push(word(b, w + 2))                            # p_vaddr
+    }
+    return out
+}
+
+# where llvm-symbolizer is: beside the clang builds use (its real directory - the release's llvm/bin, or LLVM's own
+# under a distribution's clang-N), else the newest on PATH; "" where there is none
+fn Symbolizer() String {
+    clang := target.FindClang()
+    if clang != "" {
+        real := try os.RealPath(target.WhereIs(clang)) catch default ""
+        if real != "" {
+            beside := $filepath.Dir(real) "/llvm-symbolizer"
+            if target.WhereIs(beside) != "" { return beside }
+        }
+    }
+    for n in String&["llvm-symbolizer-20", "llvm-symbolizer-19", "llvm-symbolizer-18", "llvm-symbolizer"] {
+        w := target.WhereIs(n)
+        if w != "" { return w }
+    }
+    return ""
+}
+
+# each address of p made its places: its mapping's file and the address there, given to the symbolizer at tool (all at
+# once, one line each) - a return address less one, so that the call is what it names and not the line after it. An
+# address no file holds, or that the symbolizer cannot name, is named by itself and its file
+fn Resolve(p Profile&, tool String&) Places {
+    pl := Places()
+    maps := mappings(p.Maps)
+    segs Map<String&, Vec<I64>>
+    # the distinct addresses, each with the module and the address the symbolizer is asked for
+    keys Vec<I64>
+    for s in p.Samples {
+        for k in range s.Count {
+            a := p.Addrs[s.Start + k] - (0 if k == 0 else 1)
+            if not pl.Index.Has(a) {
+                pl.Index.Put(a, keys.Len())
+                keys.Push(a)
+            }
+        }
+    }
+    files Vec<String&>
+    rel Vec<I64>
+    for a in keys {
+        path := ""
+        r I64 = -1
+        for m in maps {
+            if a < m.Start or a >= m.End { continue }
+            path = $m.Path
+            off := a - m.Start + m.Offset
+            if path.StartsWith("/") {
+                if not segs.Has(path) { segs.Put($path, segments(path)) }
+                ss := try segs.Get(path) catch default Vec<I64>()
+                for j in range 0, ss.Len(), 3 {
+                    if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
+                }
+            }
+            break
+        }
+        files.Push($path)
+        rel.Push(r)
+    }
+    # what the symbolizer says, an address's frames then a blank line, for each line asked
+    said Vec<String&>
+    if tool != "" {
+        ask := StringBuilder()
+        asked I64 = 0
+        for i in range keys.Len() {
+            if rel[i] < 0 { continue }
+            ask.Push($"\"" $files[i] "\" 0x" $U64(rel[i]).Format(16) "\n")
+            asked++
+        }
+        if asked > 0 {
+            out := try os.Exec(String&[$tool, "--inlining", "--functions=linkage"], ask.ToString(), true)
+                catch os.Error default os.Output(1, "", "")
+            if out.Status == 0 {
+                for l in out.Stdout.Lines() { said.Push($l) }
+            }
+        }
+    }
+    at I64 = 0
+    for i in range keys.Len() {
+        pl.First.Push(pl.Frames.Len())
+        frames I64 = 0
+        if rel[i] >= 0 and at < said.Len() {
+            for at + 1 < said.Len() and said[at] != "" {
+                fun := said[at]
+                place := said[at + 1]
+                at += 2
+                file, line := fileLine(place)
+                if fun == "??" {
+                    fun = $"0x" $U64(keys[i]).Format(16) " (" $filepath.Base(files[i]) ")"
+                } else {
+                    fun = Readable(fun)
+                }
+                pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))
+                frames++
+            }
+            at++                                    # the blank line ending it
+        }
+        if frames == 0 {
+            where := filepath.Base(files[i]) if files[i] != "" else "no file"
+            pl.Frames.Push(Frame(pl.name($"0x" $U64(keys[i]).Format(16) " (" $where ")"), pl.name("??"), 0))
+            frames = 1
+        }
+        pl.Count.Push(frames)
+    }
+    return pl
+}
+
+# a symbolizer's place line, "FILE:LINE:COLUMN": its file ("??" for none) and line (0)
+fn fileLine(place String&) String, I64 {
+    c2 := try place.FindLast(":") catch default -1
+    if c2 < 0 { return $place, 0 }
+    head := place[:c2]
+    c1 := try head.FindLast(":") catch default -1
+    if c1 < 0 { return $head, 0 }
+    return $head[:c1], try head[c1 + 1:].ParseInt(10) catch default 0
+}
+
+# ---- names ----
+
+# whether ch is what a symbol olang writes (types.Symbol) holds after "_" as one of its escapes' two digits
+fn hexDigit(ch Char) Bool { return (ch >= '0' and ch <= '9') or (ch >= 'a' and ch <= 'f') }
+
+fn hexValue(ch Char) I64 { return I64(ch - '0') if ch <= '9' else I64(ch - 'a') + 10 }
+
+# a symbol olang wrote read back as the text it was written from (B3b: "_" is "__", any other character but a letter
+# or a digit "_HH"; a long one is its beginning, "_H" and a hash, read back as the beginning and "..."). A symbol that is
+# not one - a C function's, the runtime's - is given as it is
+fn Demangle(sym String&) String {
+    s := sym
+    cut := false
+    if s.Len() == 122 and s[88:90] == "_H" {
+        s = s[:88]
+        cut = true
+    }
+    b := StringBuilder()
+    i I64 = 0
+    for i < s.Len() {
+        ch := s[i]
+        if ch != '_' {
+            b.PushChar(ch)
+            i++
+            continue
+        }
+        if i + 1 < s.Len() and s[i + 1] == '_' {
+            b.PushChar('_')
+            i += 2
+            continue
+        }
+        if i + 2 < s.Len() and hexDigit(s[i + 1]) and hexDigit(s[i + 2]) {
+            b.PushChar(Char(U8(hexValue(s[i + 1]) * 16 + hexValue(s[i + 2]))))
+            i += 3
+            continue
+        }
+        if cut and i + 2 >= s.Len() { break }      # an escape the cut went through
+        return $sym
+    }
+    text := b.ToString()
+    if not text.Contains(".") { return $sym }
+    return $text "..." if cut else text
+}
+
+# a function's name as the profile shows it: the debug information's own (emit.ProfName, as source writes it), or one
+# of the program's symbols read back (Demangle) and spelled as a profile build's names are - the module's base name
+# before what it declares, "Type.Method" for a method, the prelude's and the program's own bare where the text says so
+fn Readable(sym String&) String {
+    text := Demangle(sym)
+    if text == sym and not sym.Contains("_2e") { return $sym }
+    # the leading identity: to its first "." past a relative path's "./" and "../"
+    from I64 = 0
+    for text[from:].StartsWith("./") or text[from:].StartsWith("../") { from += 2 if text[from:].StartsWith("./") else 3 }
+    dot := try text[from:].Find(".") catch default -1
+    if dot < 0 { return text }
+    lead := from + dot
+    rest := text[lead + 1:]
+    id := text[:lead]
+    q := qualifier(id)
+    # a method's receiver names its own module
+    restColon := try rest.Find(":") catch default -1
+    restDot := try rest.Find(".") catch default rest.Len()
+    if restColon >= 0 and restColon < restDot { q = "" }
+    return $q $types(rest)
+}
+
+# a module identity's qualifier as errors print it (load.ErrQualifier) - the prelude's bare
+fn qualifier(id String&) String {
+    if id.StartsWith("std/prelude") or id == "" { return "" }
+    k := try id.FindLast("/") catch default -1
+    return $id[k + 1:] "."
+}
+
+# a canonical text's "IDENTITY:Name" types written "base.Name"
+fn types(text String&) String {
+    b := StringBuilder()
+    at I64 = 0
+    for i, ch in text {
+        if ch != ':' { continue }
+        s := i
+        for s > at and identityChar(text[s - 1]) { s-- }
+        b.Push(text[at:s])
+        b.Push(qualifier(text[s:i]))
+        at = i + 1
+    }
+    b.Push(text[at:])
+    return b.ToString()
+}
+
+fn identityChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or ch == '/' or ch == '-' or ch == '~' }
+
+# ---- the report ----
+
+# the frames of sample s, the leaf's first, as indexes into pl.Frames: each address's, innermost first
+fn (pl Places&) stack(p Profile&, s Sample) Vec<I64> {
+    out Vec<I64>
+    for k in range s.Count {
+        a := p.Addrs[s.Start + k] - (0 if k == 0 else 1)
+        i := try pl.Index.Get(a) catch default -1
+        if i < 0 { continue }
+        for j in range pl.Count[i] { out.Push(pl.First[i] + j) }
+    }
+    return out
+}
+
+# what a report shows of a profile: each function's weight as the leaf (self) and anywhere in a stack (total, once a
+# sample), each line's as the leaf with its function, and each function's callers - the function a frame of it is
+# called from - by the samples it was called in
+type Tally struct() {
+    Self Map<I64, I64>
+    Total Map<I64, I64>
+    Lines Map<I64, I64>
+    LineFn Map<I64, I64>
+    Callers Map<I64, I64>       # function * 2^24 + caller to weight
+    Fns Vec<I64>
+    LineKeys Vec<I64>
+}
+
+fn add(m mut Map<I64, I64>&, k I64, w I64) { m.Put(k, (try m.Get(k) catch default 0) + w) }
+
+fn Tallied(p Profile&, pl mut Places&) Tally {
+    t := Tally()
+    for s in p.Samples {
+        st := pl.stack(p, s)
+        if st.Len() == 0 { continue }
+        w := s.Weight
+        leaf := pl.Frames[st[0]]
+        if not t.Total.Has(leaf.Fn) and not t.Self.Has(leaf.Fn) { t.Fns.Push(leaf.Fn) }
+        add(t.Self, leaf.Fn, w)
+        lk := pl.name($pl.Names[leaf.File] ":" $leaf.Line)
+        if not t.Lines.Has(lk) { t.LineKeys.Push(lk) }
+        add(t.Lines, lk, w)
+        t.LineFn.Put(lk, leaf.Fn)
+        seen Vec<I64>
+        for j, f in st {
+            fun := pl.Frames[f].Fn
+            if fun in seen { continue }
+            seen.Push(fun)
+            if not t.Total.Has(fun) and not t.Self.Has(fun) { t.Fns.Push(fun) }
+            add(t.Total, fun, w)
+            if j + 1 < st.Len() { add(t.Callers, fun * (1 << 24) + pl.Frames[st[j + 1]].Fn, w) }
+        }
+    }
+    return t
+}
+
+fn pct(w I64, total I64) String { return $(F64(w) * 100.0 / F64(total if total > 0 else 1)).Fixed(1) "%" }
+
+# the report, as olang profile prints it: what was sampled, the functions by self time (their total beside), the
+# hottest lines, and who calls the hottest functions
+fn Report(name String&, p Profile&, pl mut Places&) String {
+    t := Tallied(p, pl)
+    total := p.Total()
+    b := StringBuilder()
+    secs := F64(total) * F64(p.PeriodNs) / 1e9
+    b.Push($"\nolang profile: " $name " - " $p.Samples.Len() " samples, " $secs.Fixed(3) " s of CPU time on " $p.Threads $(" thread" if p.Threads == 1 else " threads") "\n")
+    if p.Dropped > 0 { b.Push($"  (" $p.Dropped " samples dropped: the buffer was full)\n") }
+    if total == 0 {
+        b.Push("  no samples: the program used less CPU time than one period\n")
+        return b.ToString()
+    }
+    fns := t.Fns.Clone()
+    fns.Sort(fn(x I64, y I64) Bool {
+        sx := try t.Self.Get(x) catch default 0
+        sy := try t.Self.Get(y) catch default 0
+        if sx != sy { return sx > sy }
+        tx := try t.Total.Get(x) catch default 0
+        ty := try t.Total.Get(y) catch default 0
+        if tx != ty { return tx > ty }
+        return pl.Names[x] < pl.Names[y]
+    })
+    b.Push("\n   self   total  function\n")
+    shown I64 = 0
+    for f in fns {
+        sw := try t.Self.Get(f) catch default 0
+        if shown >= 25 or sw * 200 < total { break }
+        tw := try t.Total.Get(f) catch default 0
+        b.Push($"  " $pct(sw, total).PadStart(6) " " $pct(tw, total).PadStart(6) "  " $pl.Names[f] "\n")
+        shown++
+    }
+    lines := t.LineKeys.Clone()
+    lines.Sort(fn(x I64, y I64) Bool {
+        wx := try t.Lines.Get(x) catch default 0
+        wy := try t.Lines.Get(y) catch default 0
+        if wx != wy { return wx > wy }
+        return pl.Names[x] < pl.Names[y]
+    })
+    b.Push("\n   self  line\n")
+    shown = 0
+    for l in lines {
+        lw := try t.Lines.Get(l) catch default 0
+        if shown >= 15 or lw * 200 < total { break }
+        f := try t.LineFn.Get(l) catch default 0
+        b.Push($"  " $pct(lw, total).PadStart(6) "  " $shortPath(pl.Names[l]) "  " $pl.Names[f] "\n")
+        shown++
+    }
+    b.Push("\n  called from (the five hottest functions)\n")
+    shown = 0
+    for f in fns {
+        if shown >= 5 { break }
+        sw := try t.Self.Get(f) catch default 0
+        if sw == 0 { break }
+        shown++
+        tw := try t.Total.Get(f) catch default 0
+        callers Vec<I64>
+        for c in t.Fns {
+            if t.Callers.Has(f * (1 << 24) + c) { callers.Push(c) }
+        }
+        callers.Sort(fn(x I64, y I64) Bool {
+            wx := try t.Callers.Get(f * (1 << 24) + x) catch default 0
+            wy := try t.Callers.Get(f * (1 << 24) + y) catch default 0
+            if wx != wy { return wx > wy }
+            return pl.Names[x] < pl.Names[y]
+        })
+        parts Vec<String&>
+        for c in callers {
+            if parts.Len() >= 4 { break }
+            parts.Push($pl.Names[c] " " $pct(try t.Callers.Get(f * (1 << 24) + c) catch default 0, tw))
+        }
+        b.Push($"  " $pl.Names[f] "  <-  " $("(the thread's first frame)" if parts.Len() == 0 else parts.Join(", ")) "\n")
+    }
+    return b.ToString()
+}
+
+# a place's file written from where olang runs, where it is under it: "src/hot.olang:12"
+fn shortPath(place String&) String {
+    cwd := try os.Cwd() catch default ""
+    if cwd != "" and place.StartsWith($cwd "/") { return $place[cwd.Len() + 1:] }
+    return $place
+}
+
+# ---- the flame graph ----
+
+# a frame of the flame graph: its function, its weight, its depth (the thread's first frame 1, under the root's 0), its
+# children by function
+type node struct(Fn I64, Depth I64) {
+    Fn
+    Depth
+    Weight I64 = 0
+    Kids Vec<I64>
+}
+
+# text as HTML and SVG hold it
+fn escapeXml(t String&) String {
+    b := StringBuilder()
+    for ch in t {
+        if ch == '<' {
+            b.Push("&lt;")
+        } else if ch == '>' {
+            b.Push("&gt;")
+        } else if ch == '&' {
+            b.Push("&amp;")
+        } else if ch == '"' {
+            b.Push("&quot;")
+        } else {
+            b.PushChar(ch)
+        }
+    }
+    return b.ToString()
+}
+
+FlameWidth I64 = 1200
+FrameHeight I64 = 18
+
+# the flame graph of a profile: one HTML file holding an SVG - the thread's first frame at the bottom, each frame over
+# the frame that called it, its width its share of the samples, frames side by side in the order of their names - and a
+# few lines of script so that a click on a frame zooms to it (a click on the bottom bar goes back). Each frame's name and
+# share are its tooltip
+fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
+    nodes Vec<node>
+    nodes.Push(node(-1, 0))
+    for s in p.Samples {
+        st := pl.stack(p, s)
+        at I64 = 0
+        nodes[0].Weight += s.Weight
+        k := st.Len() - 1
+        for k >= 0 {
+            fun := pl.Frames[st[k]].Fn
+            next I64 = -1
+            for c in nodes[at].Kids {
+                if nodes[c].Fn == fun { next = c }
+            }
+            if next < 0 {
+                next = nodes.Len()
+                nodes.Push(node(fun, nodes[at].Depth + 1))
+                nodes[at].Kids.Push(next)
+            }
+            nodes[next].Weight += s.Weight
+            at = next
+            k--
+        }
+    }
+    depth I64 = 0
+    for n in nodes {
+        if n.Depth > depth { depth = n.Depth }
+    }
+    total := nodes[0].Weight
+    height := (depth + 1) * FrameHeight + 40
+    svg := StringBuilder()
+    # the frames, each a group with its place (x and width in samples, its depth) for the script
+    order Vec<I64>
+    order.Push(0)
+    xs Vec<I64>
+    for _ in nodes { xs.Push(0) }
+    for i := 0, i < order.Len(), i++ {
+        id := order[i]
+        kids := nodes[id].Kids.Clone()
+        kids.Sort(fn(a I64, b I64) Bool { return pl.Names[nodes[a].Fn] < pl.Names[nodes[b].Fn] })
+        x := xs[id]
+        for c in kids {
+            xs[c] = x
+            x += nodes[c].Weight
+            order.Push(c)
+        }
+    }
+    for id in order {
+        n := nodes[id]
+        label := "all" if id == 0 else pl.Names[n.Fn]
+        tip := $label " - " $n.Weight " samples, " $pct(n.Weight, total)
+        hue := (label.Hash() & 0xFFFF)
+        r := 205 + hue % 50
+        g := 90 + (hue / 50) % 140
+        bl := (hue / 7000) % 55
+        y := height - 20 - (n.Depth + 1) * FrameHeight
+        svg.Push($"<g class=\"f\" data-x=\"" $xs[id] "\" data-w=\"" $n.Weight "\" data-d=\"" $n.Depth "\"><title>" $escapeXml(tip) $
+                 "</title><rect y=\"" $y "\" height=\"" $(FrameHeight - 1) "\" rx=\"2\" fill=\"rgb(" $r "," $g "," $bl ")\"/><text y=\"" $
+                 $(y + 13) "\">" $escapeXml(label) "</text></g>\n")
+    }
+    b := StringBuilder()
+    b.Push($"<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>" $escapeXml(name) " - olang profile</title>\n")
+    b.Push("<style>body{margin:0;padding:10px;font:12px monospace;background:#fff}svg text{font:11px monospace;fill:#000;pointer-events:none}g.f{cursor:pointer}g.f:hover rect{stroke:#000;stroke-width:.5}</style></head><body>\n")
+    secs := F64(p.Total()) * F64(p.PeriodNs) / 1e9
+    b.Push($"<div>" $escapeXml(name) ": " $p.Samples.Len() " samples, " $secs.Fixed(3) " s of CPU time - a click on a frame zooms to it, on the bottom bar back</div>\n")
+    b.Push($"<svg id=\"fg\" width=\"" $FlameWidth "\" height=\"" $height "\" data-total=\"" $total "\">\n" $svg.ToString() "</svg>\n")
+    b.Push(FlameScript)
+    b.Push("</body></html>\n")
+    return b.ToString()
+}
+
+# the flame graph's script: lays the frames out for the frame zoomed to (at first the root), cutting each name to its
+# frame's width
+FlameScript String& = """
+    <script>
+    (function(){
+      var svg=document.getElementById("fg"),W=svg.getAttribute("width")*1,gs=svg.querySelectorAll("g.f");
+      function show(x0,w0,d0){
+        for(var i=0;i<gs.length;i++){
+          var g=gs[i],x=g.dataset.x*1,w=g.dataset.w*1,d=g.dataset.d*1,r=g.querySelector("rect"),t=g.querySelector("text");
+          var inside=x>=x0&&x+w<=x0+w0,under=d<d0&&x<=x0&&x+w>=x0+w0;
+          if(!(inside&&d>=d0)&&!under){g.style.display="none";continue}
+          g.style.display="";
+          var px=under?0:(x-x0)/w0*W,pw=under?W:w/w0*W;
+          r.setAttribute("x",px);r.setAttribute("width",Math.max(pw-1,0.5));t.setAttribute("x",px+3);
+          var full=g.querySelector("title").textContent.replace(/ - [0-9]+ samples.*$/,""),n=Math.floor((pw-6)/7);
+          t.textContent=n<3?"":(full.length<=n?full:full.slice(0,n-2)+"..");
+        }
+      }
+      for(var i=0;i<gs.length;i++){gs[i].addEventListener("click",function(){
+        var d=this.dataset.d*1;show(this.dataset.x*1,Math.max(this.dataset.w*1,1),d==0?0:d)})}
+      show(0,Math.max(svg.dataset.total*1,1),0);
+    })();
+    </script>
+    """
