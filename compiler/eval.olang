@@ -762,7 +762,7 @@ fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
         case mir.Term.Branch(c, _, _) => opNamesGlobal(c)
         case mir.Term.Switch(x, _, _) => opNamesGlobal(x)
         case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _) => opNamesGlobal(x)
-        case mir.Term.Call(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
+        case mir.Term.Call(_, k), mir.Term.Tail(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
         case _ => false
     }
 }
@@ -4414,6 +4414,12 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }
             m.leave(fi, false, x, 0)
         }
+        case mir.Term.Tail(sp, ci) {
+            m.atK(k, sp)
+            c := m.cf[k].Calls[I64(ci)]
+            if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
+            m.tail(fi, c)
+        }
         case mir.Term.Suspend(sp, x, resume, held) {
             m.atK(k, sp)
             if glob and not m.operandReady(fi, x) { return }
@@ -4442,6 +4448,28 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             m.halted = true
         }
     }
+}
+
+# a become's call (S21): the callee's frame made from this one's arguments, then put in this frame's place - its result
+# going where this one's would, this frame's storage closed and its words given back - so a chain of becomes runs in
+# one frame's room however long it is, as the built program's jumps do
+fn (m mut Machine&) tail(fi I64, c mir.Call) {
+    fr := m.fs[fi]
+    nf := m.enter(fi, c.Target, c.Args, c.Scopes, fr.Ret, fr.RetArg)
+    if nf < 0 { return }
+    m.dropOwnDefers(fi)
+    g := m.fs[nf]
+    delta := g.Locals - fr.Locals
+    for i in range m.nWs - g.Locals { m.ws[fr.Locals + i] = m.ws[g.Locals + i] }
+    g.Locals -= delta
+    g.Scopes -= delta
+    g.Vars -= delta
+    g.Closing = fr.Closing
+    m.fs[fi] = g
+    m.nFs--
+    m.nWs -= delta
+    if m.cf[fr.Fn].Equal { m.eqDepth-- }
+    if m.live(fr.Store) { m.closing.Push(fr.Store) }
 }
 
 fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
@@ -5437,7 +5465,7 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
                 case mir.Term.Exit(sp, kind, _) {
                     if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { return $WhyEnds, f.File, sp }
                 }
-                case mir.Term.Call(sp, c) {
+                case mir.Term.Call(sp, c), mir.Term.Tail(sp, c) {
                     match f.Calls[I64(c)].Target {
                         case mir.Callee.Extern(e, ty) {
                             name := try m.externs.Get(e) catch default ""

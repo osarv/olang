@@ -285,6 +285,9 @@ type Term enum {
     Switch(x Operand, cases Range, otherwise BlockId)   # f.Cases[cases.At ..]: x an integer, each value distinct
     Call(sp source.Span, c I32)                 # f.Calls[c]
     Return(sp source.Span, x Operand)           # x the result (None for a function with none); every scope closed
+    # a become's call (S21): f.Calls[c], made in the function's place once every scope is closed - its result and its
+    # failure the function's own (one signature, one error set). The call has no destination and no blocks after it
+    Tail(sp source.Span, c I32)
     Raise(sp source.Span, code Operand)         # the function fails with code, under its own error list (R6)
     # join j's tasks waited for (P1b): to ok, or, where one let an error through, to failed with code holding the
     # earliest-spawned's under the join's list (P4b) - failed NoBlock for a join none of whose tasks can fail
@@ -716,7 +719,7 @@ fn (v mut verifier&) shape() Bool {
         v.ops(c.Args)
         v.refs(c.Scopes)
         if c.HasDest { v.place(c.Dest) }
-        v.block(c.Ok)
+        if c.Ok != NoBlock { v.block(c.Ok) }     # NoBlock only for a become's call (Term.Tail)
         if c.Err != NoBlock {
             v.block(c.Err)
             v.local(c.Code)
@@ -943,7 +946,7 @@ fn (v mut verifier&) termShape(t Term) {
             v.within(r, v.F.Cases.Len(), "cases")
             v.block(o)
         }
-        case Term.Call(_, c) {
+        case Term.Call(_, c), Term.Tail(_, c) {
             if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " $c) }
         }
         case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { v.operand(x) }
@@ -1657,6 +1660,14 @@ fn (v mut verifier&) termTypes(term Term) {
             if not fallible and c.Err != NoBlock { v.bad("an error edge for a call that cannot fail") }
             if c.Err != NoBlock { v.intOf(v.localType(c.Code), I32T, "the call's error code") }
         }
+        case Term.Tail(_, k) {
+            c := f.Calls[I64(k)]
+            ty := v.calleeType(c.Target)
+            if ty == types.UnknownT { return }
+            v.args(c.Target, ty, c.Args, c.Scopes)
+            if c.HasDest or c.Ok != NoBlock or c.Err != NoBlock { v.bad("a tail call with somewhere to go after it") }
+            if not t.Same(t.Result(ty), t.Result(f.Ty)) { v.bad("a tail call giving another result than the function's") }
+        }
         case Term.Return(_, x) {
             res := t.Result(f.Ty)
             if x == Operand.None {
@@ -2052,6 +2063,13 @@ fn (v mut verifier&) termFlow(term Term) {
             if c.HasDest { v.stores(c.Dest) }
             v.enter(c.Ok)
         }
+        case Term.Tail(_, k) {
+            c := f.Calls[I64(k)]
+            v.calleeReads(c.Target)
+            v.readArgs(c.Args)
+            for i in range c.Scopes.N { v.usesScope(f.Refs[I64(c.Scopes.At) + i]) }
+            if v.stack.Len() > 0 { v.bad("jumps out of the function with " $v.stackText() " open") }
+        }
         case Term.Return(_, x), Term.Raise(_, x) {
             v.reads(x)
             if v.stack.Len() > 0 { v.bad("leaves the function with " $v.stackText() " open") }
@@ -2300,6 +2318,7 @@ fn (w mut dumper&) term(term Term) String {
         case Term.Branch(c, y, n) => "branch " $w.operand(c) " bb" $y " bb" $n
         case Term.Switch(x, r, o) => "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
         case Term.Call(_, k) => w.call(f.Calls[I64(k)])
+        case Term.Tail(_, k) => "become " $w.call(f.Calls[I64(k)])
         case Term.Return(_, x) => "return" $(" " $w.operand(x) if x != Operand.None else "")
         case Term.Raise(_, x) => "raise " $w.operand(x)
         case Term.Suspend(_, x, b, held) => "suspend " $w.operand(x) " then bb" $b " holding " $held.N

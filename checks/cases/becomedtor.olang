@@ -1,0 +1,14 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and it holds a value of Res&, which may hold an instance whose destructor would run then, before the call - write 'return' and the call
+# S21, O16: a destructor runs as its instance's scope closes - a become closes them before its call, too early
+import "std/io"
+type Res struct(n I64) {
+    n
+} destruct {
+    io.Println("closed")!
+}
+fn f(n I64) I64 {
+    r := Res(n)
+    if n == 0: return r.n
+    become f(n - 1)
+}
+fn main() { assert f(2) == 0 }

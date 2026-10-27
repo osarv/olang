@@ -253,6 +253,8 @@ type Stmt enum {
     Return(sp source.Span, values Array<Expr&>&)
     Jump(sp source.Span, kind token.Tok, msg Expr?&)    # break continue unreachable; an unreachable's message (S16d)
     Assert(sp source.Span, cond Expr&, msg Expr?&)
+    # become f(x) (S21): the function becomes the call - its scopes closed, then the call made in its place
+    Become(sp source.Span, x Expr&)
     Raise(sp source.Span, word Path?&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
@@ -399,7 +401,7 @@ fn (s Stmt&) Span() source.Span {
         case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
         case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _) => sp
         case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _) => sp
-        case Stmt.Block(sp, _), Stmt.Yield(sp, _) => sp
+        case Stmt.Block(sp, _), Stmt.Yield(sp, _), Stmt.Become(sp, _) => sp
     }
 }
 
@@ -435,6 +437,7 @@ fn yieldIn(st Stmt?&) source.Span {
         case Stmt.ForIn(_, f) => yieldOr(yieldOr(yieldInExpr(f.Source), FirstYield(f.Body)), yieldInCatches(f.Clauses))
         case Stmt.MatchS(_, m) => yieldInMatch(m)
         case Stmt.Return(_, xs) => yieldInExprs(xs)
+        case Stmt.Become(_, x) => yieldInExpr(x)
         case Stmt.Assert(_, k, msg) => yieldOr(yieldInExpr(k), yieldInExpr(msg))
         case Stmt.Jump(_, _, msg) => yieldInExpr(msg)
         case Stmt.Spawn(_, _, call) => yieldInExpr(call)

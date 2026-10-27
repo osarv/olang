@@ -279,6 +279,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # S17a: the top-level asserts that checked, each with its condition's body and its message's, which the evaluator
     # must decide
     TopAsserts Vec<TopAssertAsk>
+    tails Vec<tailAsk>          # S21: the become statements met, their error sets compared once every set is final
     # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks Vec<ValueAsk>
@@ -606,6 +607,8 @@ fn (c mut Checker&) reset() {
     c.Asks = Vec<Ask>()
     c.EmbedAsks = Vec<EmbedAsk>()
     c.AssertAsks = Vec<AssertAsk>()
+    c.TopAsserts = Vec<TopAssertAsk>()
+    c.tails = Vec<tailAsk>()
     c.ValueAsks = Vec<ValueAsk>()
     c.unsets = Vec<unsetCand>()
     c.heldWalks = Vec<heldCand>()
@@ -843,6 +846,7 @@ fn (c mut Checker&) attempt() {
     }
     c.drain()
     c.failForms()
+    c.tailSets()
     c.roSettle()
 }
 
@@ -3966,6 +3970,7 @@ fn storedStmt(st ast.Stmt?&, out mut Map<source.NameId, Bool>&) {
         }
         case ast.Stmt.MatchS(_, m) { storedMatch(m, out) }
         case ast.Stmt.Return(_, xs) { storedExprs(xs, out) }
+        case ast.Stmt.Become(_, x) { storedExpr(x, out) }
         case ast.Stmt.Assert(_, k, msg) {
             storedExpr(k, out)
             storedExpr(msg, out)
@@ -15051,6 +15056,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.ForIn(sp, f) { c.forIn(sp, f) }
         case ast.Stmt.DoFor(sp, body, k) { c.doFor(sp, body, k) }
         case ast.Stmt.Return(sp, values) { c.returnStmt(sp, values) }
+        case ast.Stmt.Become(sp, x) { c.becomeStmt(sp, x) }
         case ast.Stmt.Yield(sp, x) { c.yieldStmt(sp, x) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
@@ -18467,6 +18473,238 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
                                                                    typed.Check.None))))
 }
 
+# ---- tail calls (S21) ----
+
+# a become statement: the body it is in, the callee's body, where it is
+type tailAsk struct(Caller I64, Callee I64, Sp source.Span, Mi I64) {
+    Caller, Callee, Sp, Mi
+}
+
+# "become f(x)" (S21): the function becomes the call - its scopes are closed, then the call made in its place, its result
+# and its failure the function's own (so no try is written, nor allowed). Checked as "return f(x)" would be - its
+# argument judged by section 8 as no storage of a scope it closes (scope.olang), its error set beside the callee's once
+# every set is final (tailSets) - and held to what a guaranteed jump needs: a named function's or method's call, in
+# one, of the same signature
+fn (c mut Checker&) becomeStmt(sp source.Span, x ast.Expr&) {
+    fr := c.fr()
+    bsp := source.Span(sp.Start, sp.Start + 6)
+    where := c.becomeWhere()
+    if where != "" {
+        c.err(bsp, msgs.BecomeOutside(where))
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    inner := ""
+    if fr.DeferLoops >= 0 {
+        inner = "deferred code, which runs while its block is left"
+    } else if fr.MsgLoops >= 0 {
+        inner = "an assert's or an unreachable's message"
+    } else if fr.InTaskClause {
+        inner = "a task's clause"
+    } else if fr.joins.Len() > 0 {
+        inner = "a join block, whose tasks it would leave behind"
+    } else if fr.deferBlocks.Len() > 0 {
+        inner = "a block with deferred code registered, which would run before the call"
+    }
+    if inner != "" {
+        c.err(bsp, msgs.BecomeInside(inner))
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    shape := match x {
+        case ast.Expr.Call(_, _, _) => ""
+        case ast.Expr.Try(_, _, _) => "try"
+        case ast.Expr.ScopeCall(_, _, _, _) => "a call given a scope argument (E25), whose result lives where that says"
+        case _ => "no call"
+    }
+    if shape == "try" {
+        c.err(x.Span(), msgs.BecomeTry())
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    if shape != "" {
+        c.err(x.Span(), msgs.BecomeNotCall(shape))
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    rt := fr.Result
+    c.fr().Tries++
+    v := c.expr(x, rt)
+    c.fr().Tries--
+    callee I64 = -1
+    sig := c.Bodies[fr.Body].Ty
+    what := "no call of a function"
+    match v {
+        case typed.Expr.Call(_, _, cl) {
+            match cl.Target {
+                case typed.Callee.Body(id) {
+                    match c.Bodies[I64(id)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            if not c.P.FnDecl(c.P.InstanceFn(inst)).Export { callee = I64(id) } else { what = "an export fn's call" }
+                        }
+                        case typed.BodyOf.Ctor(_, _), typed.BodyOf.Case(_, _) { what = "a constructor's call" }
+                        nomatch { what = "a lambda's call" }
+                    }
+                }
+                case typed.Callee.Extern(_) { what = "an extern fn's call" }
+                case typed.Callee.Value(_) { what = "a call through a function value" }
+                case typed.Callee.Dispatch(_, _, _) { what = "a call through an any" }
+                case typed.Callee.Helper(_, _) { what = "a call of what the compiler supplies" }
+            }
+        }
+        nomatch { }
+    }
+    if typeOf(v) == types.UnknownT { return }
+    if callee < 0 {
+        c.err(x.Span(), msgs.BecomeNotCall(what))
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    csig := c.Bodies[callee].Ty
+    if not c.sameJump(sig, csig) {
+        c.err(c.calleeSpan(x), msgs.BecomeSignature(c.jumpText(sig), c.jumpText(csig)))
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    if c.viaMemoryJump(sig) {
+        c.err(c.calleeSpan(x), msgs.BecomeMemory())
+        c.emit(typed.Stmt.Return(sp, null))
+        return
+    }
+    c.tails.Push(tailAsk(fr.Body, callee, sp, fr.Mi))
+    match v {
+        case typed.Expr.Call(csp, ty, cl) {
+            c.emit(typed.Stmt.Return(sp, typed.Expr.Call(csp, ty, typed.Call(cl.Target, cl.Args, cl.Scoped, cl.Site, cl.Zero, true))))
+        }
+        nomatch { }
+    }
+}
+
+# where a become cannot stand, as its error names it: "" in a function or a method declared with fn
+fn (c mut Checker&) becomeWhere() String {
+    fr := c.fr()
+    if fr.InTest { return "a test" }
+    if fr.InCtor { return "a constructor" }
+    if fr.Inst >= 0 { return "a destructor" }
+    if fr.Parent >= 0 or fr.Gen { return "a lambda or a generator's body" }
+    if fr.Body < 0 { return "here" }
+    match c.Bodies[fr.Body].Of {
+        case typed.BodyOf.Fn(inst) {
+            f := c.P.InstanceFn(inst)
+            fd := c.P.FnDecl(f)
+            if fd.Export { return "an export fn, which C calls" }
+            if fd.Recv is null and c.text(fd.Name) == "main" and c.P.FnModule(f) == c.P.L.Root { return "main" }
+            return ""
+        }
+        nomatch { return "here" }
+    }
+}
+
+# whether two functions' signatures are one jump's (S21): the same parameters in order - types, permissions and where
+# their references live - and the same result, so that the call is made with what the function was given
+fn (c mut Checker&) sameJump(a types.TypeId, b types.TypeId) Bool {
+    t := c.P.T
+    pa := t.Items(t.Params(a))
+    pb := t.Items(t.Params(b))
+    if pa.Len() != pb.Len() { return false }
+    for i in range pa.Len() {
+        if not t.Same(pa[i], pb[i]) or t.PermOf(pa[i]) != t.PermOf(pb[i]) { return false }
+    }
+    if not t.Same(t.Result(a), t.Result(b)) { return false }
+    if not t.ScopesFit(a, b) or not t.ScopesFit(b, a) { return false }
+    return c.P.T.ScopeVarsOf(a).Len() == c.P.T.ScopeVarsOf(b).Len()
+}
+
+# a signature as a become's error writes it, its error set left out (that is compared once it is final)
+fn (c mut Checker&) jumpText(sig types.TypeId) String {
+    return c.ty(c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), types.ListId(0)))
+}
+
+# whether a function passes a parameter, or gives its result, through memory (types.ViaMemory, over 128 bytes): the
+# caller's frame would hold it, which a jump leaves
+fn (c mut Checker&) viaMemoryJump(sig types.TypeId) Bool {
+    for p in c.P.T.Items(c.P.T.Params(sig)) { c.P.Layout(p) }
+    r := c.P.T.Result(sig)
+    if r != types.VoidT and r != types.NoreturnT {
+        c.P.Layout(r)
+        if c.P.T.ViaMemory(r) { return true }
+    }
+    for ch in c.P.T.Passing(sig) {
+        if ch == 'm' { return true }
+    }
+    return false
+}
+
+# S21, once every set is final: a become's function fails with what its callee does, in one order - the callee's failure
+# is the function's own; and nothing the function holds runs a destructor when its scopes close (O16), which would run
+# before the call
+fn (c mut Checker&) tailSets() {
+    for a in c.tails {
+        ea := c.bodyErrors(a.Caller)
+        eb := c.bodyErrors(a.Callee)
+        c.push(-1, a.Mi, types.VoidT, types.ListId(0))
+        c.fr().File = c.Bodies[a.Caller].File
+        xs := c.P.T.Items(ea)
+        ys := c.P.T.Items(eb)
+        same := xs.Len() == ys.Len()
+        if same {
+            for i in range xs.Len() {
+                if not c.P.T.Same(xs[i], ys[i]) { same = false }
+            }
+        }
+        bsp := source.Span(a.Sp.Start, a.Sp.Start + 6)
+        if not same { c.err(bsp, msgs.BecomeErrors(c.errsText(ea), c.errsText(eb))) }
+        b := c.Bodies[a.Caller]
+        seen Map<types.TypeId, Bool>
+        for l in b.Locals {
+            if l.Kind == typed.LocalKind.Param { continue }
+            if c.holdsDtor(l.Ty, seen) {
+                rec := c.err(bsp, msgs.BecomeDestructor($"it holds a value of " $c.ty(l.Ty) ", which may hold an instance"))
+                c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteHere())
+                break
+            }
+        }
+        c.pop()
+    }
+}
+
+# whether a value of a type may hold an instance whose destructor is to run (C11, O16) - or a value of a type not known
+# here: an any's instance, a type variable's
+fn (c mut Checker&) holdsDtor(ty types.TypeId, seen mut Map<types.TypeId, Bool>&) Bool {
+    t := c.P.T
+    r := t.Repr(ty)
+    if seen.Has(r) { return try seen.Get(r) catch default false }
+    seen.Put(r, false)
+    k := t.KindOf(r)
+    out := false
+    if k == types.Kind.Ref {
+        out = c.holdsDtor(t.Referent(r), seen)
+    } else if k == types.Kind.Any or k == types.Kind.Var {
+        out = true
+    } else if k == types.Kind.Array {
+        out = c.holdsDtor(t.Elem(r), seen)
+    } else if k == types.Kind.Tuple or k == types.Kind.Record {
+        for p in t.Items(t.Parts(r)) {
+            if c.holdsDtor(p, seen) { out = true }
+        }
+    } else if k == types.Kind.Named {
+        if not t.HasBody(r) {
+            out = true
+        } else if t.Destructs(r) {
+            out = true
+        } else {
+            for f in t.Items(t.Fields(r)) {
+                if c.holdsDtor(f, seen) { out = true }
+            }
+            for cs in t.Items(t.Cases(r)) {
+                if cs != types.TypeId(0) and c.holdsDtor(cs, seen) { out = true }
+            }
+        }
+    }
+    seen.Put(r, out)
+    return out
+}
+
 # ---- generators (D18, S20) ----
 
 # "yield v" (S20): v given to the Next that asked, the generator's body going on from here at the next one - checked as
@@ -20238,6 +20476,7 @@ fn stmtAssigns(st ast.Stmt?&, n Array<source.NameId>&) Bool {
         }
         case ast.Stmt.MatchS(_, m) { return matchAssigns(m, n) }
         case ast.Stmt.Return(_, xs) { return exprsAssign(xs, n) }
+        case ast.Stmt.Become(_, x) { return exprAssigns(x, n) }
         case ast.Stmt.Jump(_, _, msg) { return exprAssigns(msg, n) }
         case ast.Stmt.Assert(_, c, msg) { return exprAssigns(c, n) or exprAssigns(msg, n) }
         case ast.Stmt.Raise(_, _) { return false }

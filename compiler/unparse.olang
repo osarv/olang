@@ -690,6 +690,10 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put("yield ")
             w.expr(x)
         }
+        case ast.Stmt.Become(_, x) {
+            w.put("become ")
+            w.expr(x)
+        }
         case ast.Stmt.Jump(_, kind, msg) {
             w.put(kind.Text())
             if msg is not null {

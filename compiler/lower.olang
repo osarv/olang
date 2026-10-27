@@ -1055,6 +1055,15 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
         ln.end(mir.Term.Return(sp, mir.Operand.None))
         return
     }
+    match value {
+        case typed.Expr.Call(csp, ty, c) {
+            if c.Tail {
+                ln.tail(csp, c, ty)
+                return
+            }
+        }
+        nomatch { }
+    }
     res := ln.T.Result(ln.B.Ty)
     # a fixed array widened is made in the result scope, the result as it is (T7b, T7c)
     v := ln.fitAt(value, res, sp, ln.resultScope())
@@ -1063,6 +1072,29 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     if not ln.fits(value, res) and not ln.widens(value, res) { ln.retArrays(l, res, value, sp) }
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# a become's call (S21): its arguments evaluated, each held in a temporary of the frame, then every scope closed (the
+# deferred code a become may not have around it none), then the call made in the function's place (Term.Tail) - with
+# the scopes the scope pass bound it to, which are the function's own scope variables and the program's
+fn (ln mut lowering&) tail(sp source.Span, c typed.Call&, ty types.TypeId) {
+    t := ln.T
+    callee, fty := ln.callee(c.Target, sp)
+    if ln.dead { return }
+    raw := ln.args(c, callee, fty)
+    if ln.dead { return }
+    ps := t.Items(t.Params(fty))
+    n := I64(raw.N)
+    ops := Array<mir.Operand>(n)
+    for i in range n {
+        op := ln.F.Ops[I64(raw.At) + i]
+        ops[i] = ln.into(ps[i], mir.Rvalue.Use(op), sp) if i < ps.Len() else op
+    }
+    args := ln.F.Args(ops)
+    scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
+    ln.leave(0)
+    k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.NoPlace, false, mir.NoBlock, mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Tail(sp, k))
 }
 
 # a generator's value (S20): computed as a return's is, an array value among it copied into the result scope (T7b), then

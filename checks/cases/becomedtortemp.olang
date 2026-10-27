@@ -1,0 +1,15 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
+# S21, O16, section 8: an instance with a destructor built in a block of the function - held by no local - is still
+# destroyed as its scope closes, before a become's call
+import "std/io"
+type Res struct(n I64) {
+    n
+} destruct {
+    io.Println("closed")!
+}
+fn f(n I64) I64 {
+    if n == 0: return 0
+    m := Res(n).n
+    become f(m - 1)
+}
+fn main() { assert f(2) == 0 }

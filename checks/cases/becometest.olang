@@ -1,0 +1,5 @@
+# check: fail error[S21]: 'become' ends a function declared with fn, never a test - write 'return' and the call
+# S21: a test is run by the harness, which a jump cannot leave
+fn f(n I64) I64 { return n }
+test "t" { become f(1) }
+fn main() { }

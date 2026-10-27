@@ -42,6 +42,20 @@ type Term enum {
     Untraced               # not traced (O11)
 }
 
+# whether a type is a struct with a destructor (C11) - what a constructor's instance held by reference is (S21)
+fn (s mut Scoper&) destructsAt(t types.TypeId) Bool {
+    r := s.P.T.Repr(t)
+    return s.P.T.KindOf(r) == types.Kind.Named and s.P.T.HasBody(r) and s.P.T.Destructs(r)
+}
+
+# whether a term is a block's scope - the frame's or one nested in it (S21)
+fn isBlockTerm(t Term) Bool {
+    return match t {
+        case Term.Block(_) => true
+        case _ => false
+    }
+}
+
 # whether a term exists at run time, so that something can be built in it (2.3)
 fn (t Term) Runs() Bool {
     return match t {
@@ -188,6 +202,10 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     B typed.Body?& = null
     Id I64 = -1
     report Bool = false
+    # S21: the first become's call in the body being judged (Start -1 for none), and whether the body builds an instance
+    # with a destructor in one of its own blocks - which closing its scopes before the call would run early (O16)
+    tailSp source.Span = source.Span(-1, -1)
+    dtorBlock Bool = false
     plan typed.Plan = typed.Plan(0, 0, 0)
     terms Vec<Term>           # by local: where its referent lives (a reference) or its references (a value holding them)
     stors Vec<Term>           # by local: where its own storage is
@@ -589,8 +607,11 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         base = s.P.L.Diags.ContextBase(s.P.L.Diags.ContextDepth())
         pushed = s.instContexts(s.instanceOf(b))
     }
+    s.tailSp = source.Span(-1, -1)
+    s.dtorBlock = false
     s.run()
     if report and str { s.strReceiver() }
+    if report and s.tailSp.Start >= I32(0) and s.dtorBlock { s.err(s.tailSp, msgs.BecomeDestructor("an instance is built in one of them")) }
     if report {
         for _ in range pushed { s.P.L.Diags.PopContext() }
         s.P.L.Diags.ContextBase(base)
@@ -6451,6 +6472,25 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             }
         }
     }
+    # S21: a become's call is made once every scope of the function is closed - it binds none of them, only what the
+    # function was given (its scope variables) and the program's
+    if c.Tail {
+        if s.tailSp.Start < I32(0) { s.tailSp = s.nameSpan(sp) }
+        if s.report {
+            for v in range vars.Len() {
+                if beta[v] == Term.Program { continue }
+                match beta[v] {
+                    case Term.Var(_) { continue }
+                    case _ { }
+                }
+                at := s.argAt(c.Args[firstArg[v]]) if firstArg[v] >= 0 else s.nameSpan(sp)
+                s.err(at, msgs.BecomeBorrows())
+                break
+            }
+        }
+    }
+    # ... and an instance with a destructor built in a block of the function would have it run early (O16)
+    if rv >= 0 and isBlockTerm(beta[rv]) and s.isRef(ty) and s.destructsAt(s.P.T.Referent(ty)) { s.dtorBlock = true }
     scopes := Array<typed.Scope>(vars.Len())
     for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
     s.plan.Pass(c.Site, scopes)

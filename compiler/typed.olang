@@ -295,7 +295,7 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false, Tail Bool = false) {
     Target
     Args
     Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
@@ -303,6 +303,9 @@ type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Z
     # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
     # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
     Zero
+    # a become's (S21): the Return it stands in is the function's end - every scope closed, then this call made in its
+    # place, its result and its failure the function's own (its error set is the callee's)
+    Tail
 }
 
 type MakeKind enum {

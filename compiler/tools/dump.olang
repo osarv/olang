@@ -610,6 +610,10 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.line("YIELD", sp)
             w.expr(x)
         }
+        case ast.Stmt.Become(sp, x) {
+            w.line("BECOME", sp)
+            w.expr(x)
+        }
         case ast.Stmt.Jump(sp, k, msg) {
             kind := match k {
                 case token.Tok.Break => "BREAK"

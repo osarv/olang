@@ -1,0 +1,8 @@
+# check: fail error[S21]: 'become' takes a call of a function or a method declared with fn, and this is a call through a function value - write 'return' instead
+# S21: a function value's code takes an environment a named function's does not - a jump needs one signature
+fn g(n I64) I64 { return n }
+fn h(n I64) I64 {
+    k := g
+    become k(n)
+}
+fn main() { assert h(1) == 1 }

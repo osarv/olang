@@ -1,0 +1,12 @@
+# check: fail error[S21]: 'become' cannot jump where a parameter or the result is over 128 bytes, passed through memory the function's frame holds - pass a reference, or write 'return'
+# S21: a result over 128 bytes is passed through memory, which a musttail jump cannot hand on
+fn big(n I64) Array<I64> {
+    a := Array<I64>(20, n)
+    return a
+}
+type Wide struct(a I64, b I64, c I64, d I64, e I64, f I64, g I64, h I64, i I64, j I64, k I64, l I64, m I64, n I64, o I64, p I64, q I64, r I64) {
+    a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r
+}
+fn w1(n I64) Wide { return Wide(n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n) }
+fn w2(n I64) Wide { become w1(n) }
+fn main() { assert w2(1).a == 1 and big(1).Len() == 20 }

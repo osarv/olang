@@ -1,0 +1,4 @@
+# check: fail error[S21]: 'become' ends a function declared with fn, never main - write 'return' and the call
+# S21: main is the program's entry, which a jump cannot leave
+fn other() { }
+fn main() { become other() }

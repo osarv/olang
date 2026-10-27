@@ -1,0 +1,5 @@
+# check: fail error[S21]: 'become' calls a function of this one's own signature, and this is fn(I64) I64, the callee fn(I64, I64) I64 - write 'return' and the call, or give them one signature
+# S21: a become jumps to its callee with what the function was given, so the two have one signature
+fn add(n I64, acc I64) I64 { return n + acc }
+fn one(n I64) I64 { become add(n, 1) }
+fn main() { assert one(2) == 3 }

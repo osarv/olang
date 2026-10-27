@@ -1715,6 +1715,14 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             try p.endStmt()
             return ast.Stmt.Return(sp, values)
         }
+        case token.Tok.Become {
+            # S21: a guaranteed tail call
+            p.advance()
+            x := try p.expr()
+            sp := p.from(at)
+            try p.endStmt()
+            return ast.Stmt.Become(sp, x)
+        }
         case token.Tok.Yield {
             # QAG: a generator's value, handed to the Next that asked for it
             p.advance()
@@ -3636,6 +3644,7 @@ fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
     return match s {
         case ast.Stmt.ExprS(_, x) => shapeExpr(x, names, text)
         case ast.Stmt.Return(_, vs) => "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
+        case ast.Stmt.Become(_, x) => "become " $shapeExpr(x, names, text)
         case ast.Stmt.Var(_, v) => "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty is not null else "")
         case ast.Stmt.Multi(_, m) => "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
         case ast.Stmt.If(_, i) => "if" $(" else" if i.Else is not null else "")
