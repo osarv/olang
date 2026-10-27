@@ -771,6 +771,7 @@ type Diag enum {
     GlobalsCycle
     ModuleIdentityClash
     NoLimit
+    PlaceMember
     BitOpNotInteger
     BitOpCount
     RawType
@@ -2381,6 +2382,9 @@ fn MethodNotInherited(ty String&, tok String&) Msg { return Msg(Diag.MethodNotIn
 
 # a name read through a number type that is none of its limits (E36), or a limit of a type that is no number
 fn NoLimit(ty String&, name String&, tail String&) Msg { return Msg(Diag.NoLimit, "E36", $ty " has no limit '" $name "'" $tail) }
+
+# a name read through Place that is not Here (E40)
+fn PlaceMember(name String&) Msg { return Msg(Diag.PlaceMember, "E40", "Place gives no '" $name "' through its name - 'Place.Here' is the place where it is written") }
 
 # a bit operation on what is no integer (E37)
 fn BitOpNotInteger(name String&, ty String&) Msg { return Msg(Diag.BitOpNotInteger, "E37", "'" $name "' is a method of the integer types, and " $ty " is none") }

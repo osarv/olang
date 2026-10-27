@@ -219,7 +219,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ctorFrom I64 = 0
     resBind Vec<Term>         # the returns' instance bindings so far (O13c), resBound once one is seen
     resBound Bool = false
-    targets Vec<typed.Place&>             # the places of the Assigns being judged, innermost last (Place.Target)
+    targets Vec<typed.Lvalue&>             # the places of the Assigns being judged, innermost last (Lvalue.Target)
     buildsVar Vec<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
     realVar Vec<Bool>                     # ... a value, not only a task's stand-in
     standIn Bool = false                   # the build buildsInto records next is a task's stand-in (P2)
@@ -853,9 +853,9 @@ fn walkBody(s mut Scoper&, b I64) walked {
 }
 
 # a local a place is, the whole of it: -1 for any other place
-fn wholeLocal(p typed.Place&) I64 {
+fn wholeLocal(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Local(_, _, id) => I64(id)
+        case typed.Lvalue.Local(_, _, id) => I64(id)
         case _ => -1
     }
 }
@@ -915,13 +915,13 @@ fn collectStmt(st typed.Stmt?&, out mut walked&) {
 }
 
 # a store into a field, or into all a reference names (O23a: the instance a field holds is no longer its constructor's)
-fn collectField(p typed.Place&, out mut walked&) {
+fn collectField(p typed.Lvalue&, out mut walked&) {
     match p {
-        case typed.Place.Field(_, _, b, i) {
+        case typed.Lvalue.Field(_, _, b, i) {
             out.FieldTypes.Push(b.Type())
             out.FieldIdx.Push(i)
         }
-        case typed.Place.Deref(_, ty, _) {
+        case typed.Lvalue.Deref(_, ty, _) {
             out.FieldTypes.Push(ty)
             out.FieldIdx.Push(-1)
         }
@@ -929,17 +929,17 @@ fn collectField(p typed.Place&, out mut walked&) {
     }
 }
 
-fn collectPlace(p typed.Place?&, out mut walked&) {
+fn collectPlace(p typed.Lvalue?&, out mut walked&) {
     if p is null { return }
     match p {
-        case typed.Place.Deref(_, _, r) { collectExpr(r, out) }
-        case typed.Place.Field(_, _, b, _) { collectPlace(b, out) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Deref(_, _, r) { collectExpr(r, out) }
+        case typed.Lvalue.Field(_, _, b, _) { collectPlace(b, out) }
+        case typed.Lvalue.Elem(_, _, e) {
             collectPlace(e.Base, out)
             collectExpr(e.Index, out)
         }
-        case typed.Place.Payload(_, _, pl) { collectPlace(pl.Base, out) }
-        case typed.Place.Temp(_, _, v, _) { collectExpr(v, out) }
+        case typed.Lvalue.Payload(_, _, pl) { collectPlace(pl.Base, out) }
+        case typed.Lvalue.Temp(_, _, v, _) { collectExpr(v, out) }
         case _ { }
     }
 }
@@ -1307,7 +1307,7 @@ fn (s mut Scoper&) lentLoopCopy(a typed.Expr&) Bool {
     match s.unAway(a) {
         case typed.Expr.Borrow(_, _, p) {
             match p {
-                case typed.Place.Local(_, _, id) { return s.loopElement(I64(id)) and not s.isRef(s.B!.Locals[I64(id)].Ty) }
+                case typed.Lvalue.Local(_, _, id) { return s.loopElement(I64(id)) and not s.isRef(s.B!.Locals[I64(id)].Ty) }
                 case _ { }
             }
         }
@@ -1409,10 +1409,10 @@ fn (s mut Scoper&) madeHere(x typed.Expr?&) Bool {
 }
 
 # whether a read of p is a copy of constant data into new storage: an array value read out of a literal (T25d)
-fn (s mut Scoper&) constCopy(p typed.Place&, ty types.TypeId) Bool {
+fn (s mut Scoper&) constCopy(p typed.Lvalue&, ty types.TypeId) Bool {
     if not s.arenaValue(ty) { return false }
     match p {
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Deref(_, _, r) {
             return match s.unAway(r) {
                 case typed.Expr.Data(_, _, _, _) => true
                 case _ => false
@@ -1432,9 +1432,9 @@ fn (s mut Scoper&) matchMadeHere(m typed.Match&) Bool {
 }
 
 # whether a place is a part of a held local whose initializer makes new storage: a destructured result (S4b)
-fn (s mut Scoper&) heldPart(p typed.Place&) Bool {
+fn (s mut Scoper&) heldPart(p typed.Lvalue&) Bool {
     match p {
-        case typed.Place.Field(_, _, _, _) { }
+        case typed.Lvalue.Field(_, _, _, _) { }
         case _ { return false }
     }
     r := flRoot(p)
@@ -1464,12 +1464,12 @@ fn (s mut Scoper&) partCallOf(x typed.Expr?&) typed.Call?&x {
     }
 }
 
-fn (s mut Scoper&) placeCallOf(p typed.Place&) typed.Call?&p {
+fn (s mut Scoper&) placeCallOf(p typed.Lvalue&) typed.Call?&p {
     return match p {
-        case typed.Place.Field(_, _, b, _) => s.placeCallOf(b)
-        case typed.Place.Elem(_, _, e) => s.placeCallOf(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.placeCallOf(pl.Base)
-        case typed.Place.Temp(_, _, v, _) => s.callOf(v) if s.isFresh(v) else null
+        case typed.Lvalue.Field(_, _, b, _) => s.placeCallOf(b)
+        case typed.Lvalue.Elem(_, _, e) => s.placeCallOf(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.placeCallOf(pl.Base)
+        case typed.Lvalue.Temp(_, _, v, _) => s.callOf(v) if s.isFresh(v) else null
         case _ => null
     }
 }
@@ -1586,11 +1586,11 @@ fn (s mut Scoper&) argPartOK(a typed.Expr&, t Term) Bool {
 }
 
 # the place an argument borrows when it is a part of x[i]'s copy - a field of an element At gave - else null
-fn (s mut Scoper&) atPart(a typed.Expr&) typed.Place?&a {
+fn (s mut Scoper&) atPart(a typed.Expr&) typed.Lvalue?&a {
     match s.unAway(a) {
         case typed.Expr.Borrow(_, _, p) {
             match p {
-                case typed.Place.Temp(_, _, _, _) { return null }
+                case typed.Lvalue.Temp(_, _, _, _) { return null }
                 case _ { }
             }
             v := tempOf(p)
@@ -1661,9 +1661,9 @@ fn (s mut Scoper&) peekTerm(a typed.Expr?&) Term {
 
 # a borrow's term read off its shape: its place's storage - a temporary's (a handle a call gives, lent as its reference,
 # O17b) where its value's references are, which its call's landing says before it is judged (O18c)
-fn (s mut Scoper&) peekBorrow(p typed.Place&) Term {
+fn (s mut Scoper&) peekBorrow(p typed.Lvalue&) Term {
     match p {
-        case typed.Place.Temp(_, _, v, site) {
+        case typed.Lvalue.Temp(_, _, v, site) {
             t := try s.temps.Get(I64(site)) catch default Term.None
             if t != Term.None { return t }
             if s.isHandle(v.Type()) { return s.landTerm(v) }
@@ -1674,16 +1674,16 @@ fn (s mut Scoper&) peekBorrow(p typed.Place&) Term {
 }
 
 # a place's parts' term (parts) or its storage's, as partsTerm and storOf give them, where that needs no judging
-fn (s mut Scoper&) peekPlace(p typed.Place&, parts Bool) Term {
+fn (s mut Scoper&) peekPlace(p typed.Lvalue&, parts Bool) Term {
     return match p {
-        case typed.Place.Local(_, _, id) => s.whereLives(id) if parts else s.stors[I64(id)]
-        case typed.Place.Global(_, _, _, _) => Term.Program
-        case typed.Place.Field(_, _, base, _) => s.peekPlace(base, parts)
-        case typed.Place.Payload(_, _, pl) => s.peekPlace(pl.Base, parts)
-        case typed.Place.Elem(_, _, e) => s.peekPlace(e.Base, parts or s.runLength(e.Base.Type()))
-        case typed.Place.Deref(_, _, r) => s.peekTerm(r)
+        case typed.Lvalue.Local(_, _, id) => s.whereLives(id) if parts else s.stors[I64(id)]
+        case typed.Lvalue.Global(_, _, _, _) => Term.Program
+        case typed.Lvalue.Field(_, _, base, _) => s.peekPlace(base, parts)
+        case typed.Lvalue.Payload(_, _, pl) => s.peekPlace(pl.Base, parts)
+        case typed.Lvalue.Elem(_, _, e) => s.peekPlace(e.Base, parts or s.runLength(e.Base.Type()))
+        case typed.Lvalue.Deref(_, _, r) => s.peekTerm(r)
         # a temporary judged already: where its value's references are (tempTerm)
-        case typed.Place.Temp(_, _, _, site) => (try s.temps.Get(I64(site)) catch default Term.None) if parts else Term.None
+        case typed.Lvalue.Temp(_, _, _, site) => (try s.temps.Get(I64(site)) catch default Term.None) if parts else Term.None
         case _ => Term.None
     }
 }
@@ -1776,29 +1776,29 @@ fn (s mut Scoper&) soleStmt(st typed.Stmt?&) {
 }
 
 # whether a place is the local's own storage, or a part of it held in place
-fn (s mut Scoper&) soleRooted(p typed.Place&) Bool {
+fn (s mut Scoper&) soleRooted(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Local(_, _, id) => I64(id) == s.soleOf
-        case typed.Place.Field(_, _, b, _) => s.soleRooted(b)
-        case typed.Place.Elem(_, _, e) => s.soleRooted(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.soleRooted(pl.Base)
+        case typed.Lvalue.Local(_, _, id) => I64(id) == s.soleOf
+        case typed.Lvalue.Field(_, _, b, _) => s.soleRooted(b)
+        case typed.Lvalue.Elem(_, _, e) => s.soleRooted(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.soleRooted(pl.Base)
         case _ => false
     }
 }
 
-fn (s mut Scoper&) solePlace(p typed.Place&, strict Bool) {
+fn (s mut Scoper&) solePlace(p typed.Lvalue&, strict Bool) {
     match p {
-        case typed.Place.Local(_, _, id) {
+        case typed.Lvalue.Local(_, _, id) {
             if strict and I64(id) == s.soleOf { s.soleBad = true }
         }
-        case typed.Place.Deref(_, _, r) { s.soleExpr(r, strict) }
-        case typed.Place.Field(_, _, b, _) { s.solePlace(b, strict) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Deref(_, _, r) { s.soleExpr(r, strict) }
+        case typed.Lvalue.Field(_, _, b, _) { s.solePlace(b, strict) }
+        case typed.Lvalue.Elem(_, _, e) {
             s.solePlace(e.Base, strict)
             s.soleExpr(e.Index, strict)
         }
-        case typed.Place.Payload(_, _, pl) { s.solePlace(pl.Base, strict) }
-        case typed.Place.Temp(_, _, v, _) { s.soleExpr(v, strict) }
+        case typed.Lvalue.Payload(_, _, pl) { s.solePlace(pl.Base, strict) }
+        case typed.Lvalue.Temp(_, _, v, _) { s.soleExpr(v, strict) }
         case _ { }
     }
 }
@@ -2039,7 +2039,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
             # (O25h), so the source flows too: "p.Lengths = lengths" then "return Checker(p)"; only a copy taking a
             # local's whole place is the copy's own
             whole := match p {
-                case typed.Place.Local(_, _, _) => true
+                case typed.Lvalue.Local(_, _, _) => true
                 case _ => false
             }
             s.flInto(r, p.Type(), x, flThroughRef(p) or r < 0 or s.outside(r), whole)
@@ -2126,7 +2126,7 @@ fn (s mut Scoper&) plainCopyOf(x typed.Expr&, ty types.TypeId) Bool {
         case typed.Expr.Read(_, rt, p, _) {
             if s.isRef(rt) { return false }
             match p {
-                case typed.Place.Local(_, _, _) { return true }
+                case typed.Lvalue.Local(_, _, _) { return true }
                 case _ { }
             }
         }
@@ -2142,16 +2142,16 @@ fn (s mut Scoper&) outside(r I64) Bool {
     return not s.B!.Encloses(s.flBlock, loc.In)
 }
 
-fn (s mut Scoper&) flPlace(p typed.Place&) {
+fn (s mut Scoper&) flPlace(p typed.Lvalue&) {
     match p {
-        case typed.Place.Deref(_, _, r) { s.flExpr(r) }
-        case typed.Place.Field(_, _, b, _) { s.flPlace(b) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Deref(_, _, r) { s.flExpr(r) }
+        case typed.Lvalue.Field(_, _, b, _) { s.flPlace(b) }
+        case typed.Lvalue.Elem(_, _, e) {
             s.flPlace(e.Base)
             s.flExpr(e.Index)
         }
-        case typed.Place.Payload(_, _, pl) { s.flPlace(pl.Base) }
-        case typed.Place.Temp(_, _, v, _) { s.flExpr(v) }
+        case typed.Lvalue.Payload(_, _, pl) { s.flPlace(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { s.flExpr(v) }
         case _ { }
     }
 }
@@ -2443,11 +2443,11 @@ fn (s mut Scoper&) carried(x typed.Expr?&, out mut Vec<I64>&) {
     }
 }
 
-fn (s mut Scoper&) carriedPlace(p typed.Place&, out mut Vec<I64>&) {
+fn (s mut Scoper&) carriedPlace(p typed.Lvalue&, out mut Vec<I64>&) {
     r := flRoot(p)
     if r >= 0 and not flHas(out, r) { out.Push(r) }
     match p {
-        case typed.Place.Deref(_, _, e) { s.carried(e, out) }
+        case typed.Lvalue.Deref(_, _, e) { s.carried(e, out) }
         case _ { }
     }
 }
@@ -2455,13 +2455,13 @@ fn (s mut Scoper&) carriedPlace(p typed.Place&, out mut Vec<I64>&) {
 # the local a place is rooted at - through a reference read out of one too - else -1
 # the local a place is rooted at, through a call's result borrowed from an argument too (O13): storing into what
 # c.cur() names stores into what c reaches
-fn (s mut Scoper&) flPlaceRoot(p typed.Place&) I64 {
+fn (s mut Scoper&) flPlaceRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Field(_, _, b, _) => s.flPlaceRoot(b)
-        case typed.Place.Elem(_, _, e) => s.flPlaceRoot(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.flPlaceRoot(pl.Base)
-        case typed.Place.Deref(_, _, r) => s.flExprRoot(r)
-        case typed.Place.Temp(_, _, v, _) => s.flExprRoot(v)
+        case typed.Lvalue.Field(_, _, b, _) => s.flPlaceRoot(b)
+        case typed.Lvalue.Elem(_, _, e) => s.flPlaceRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.flPlaceRoot(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => s.flExprRoot(r)
+        case typed.Lvalue.Temp(_, _, v, _) => s.flExprRoot(v)
         case _ => flRoot(p)
     }
 }
@@ -2480,13 +2480,13 @@ fn (s mut Scoper&) flExprRoot(x typed.Expr?&) I64 {
     return -1
 }
 
-fn flRoot(p typed.Place&) I64 {
+fn flRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Local(_, _, id) => I64(id)
-        case typed.Place.Field(_, _, b, _) => flRoot(b)
-        case typed.Place.Elem(_, _, e) => flRoot(e.Base)
-        case typed.Place.Payload(_, _, pl) => flRoot(pl.Base)
-        case typed.Place.Deref(_, _, r) => flRootExpr(r)
+        case typed.Lvalue.Local(_, _, id) => I64(id)
+        case typed.Lvalue.Field(_, _, b, _) => flRoot(b)
+        case typed.Lvalue.Elem(_, _, e) => flRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => flRoot(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => flRootExpr(r)
         case _ => -1
     }
 }
@@ -2501,12 +2501,12 @@ fn flRootExpr(x typed.Expr?&) I64 {
 }
 
 # whether a place goes through a reference: what it names is not its root's own storage
-fn flThroughRef(p typed.Place&) Bool {
+fn flThroughRef(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Deref(_, _, _) => true
-        case typed.Place.Field(_, _, b, _) => flThroughRef(b)
-        case typed.Place.Elem(_, _, e) => flThroughRef(e.Base)
-        case typed.Place.Payload(_, _, pl) => flThroughRef(pl.Base)
+        case typed.Lvalue.Deref(_, _, _) => true
+        case typed.Lvalue.Field(_, _, b, _) => flThroughRef(b)
+        case typed.Lvalue.Elem(_, _, e) => flThroughRef(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => flThroughRef(pl.Base)
         case _ => false
     }
 }
@@ -2575,7 +2575,7 @@ fn (s mut Scoper&) regionKind(l I64) Bool {
 
 # the region a place is in (O17): the reference parameter it is reached from through a reference - what that parameter
 # names, or storage reached from there - else -1
-fn (s mut Scoper&) regionOf(p typed.Place&) I64 {
+fn (s mut Scoper&) regionOf(p typed.Lvalue&) I64 {
     if not flThroughRef(p) { return -1 }
     r := s.regionParam(flRoot(p))
     if r < 0 or not s.regionKind(r) or not s.isRef(s.B!.Locals[r].Ty) { return -1 }
@@ -2584,12 +2584,12 @@ fn (s mut Scoper&) regionOf(p typed.Place&) I64 {
 
 # whether a place reaches what it names through a "&q" field of a struct (C2d): it is then where q's argument lived -
 # the instance's binding, a derived scope (O23a) - never the storage or the references of the value it starts from
-fn (s mut Scoper&) throughDerived(p typed.Place&) Bool {
+fn (s mut Scoper&) throughDerived(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Deref(_, _, r) => s.throughDerivedExpr(r) or s.derivedRead(r)
-        case typed.Place.Field(_, _, b, _) => s.throughDerived(b)
-        case typed.Place.Elem(_, _, e) => s.throughDerived(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.throughDerived(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => s.throughDerivedExpr(r) or s.derivedRead(r)
+        case typed.Lvalue.Field(_, _, b, _) => s.throughDerived(b)
+        case typed.Lvalue.Elem(_, _, e) => s.throughDerived(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.throughDerived(pl.Base)
         case _ => false
     }
 }
@@ -2606,7 +2606,7 @@ fn (s mut Scoper&) derivedRead(x typed.Expr&) Bool {
     match s.unAway(x) {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Field(_, _, b, i) {
+                case typed.Lvalue.Field(_, _, b, i) {
                     if not s.isStruct(b.Type()) { return false }
                     return match s.fieldMark(b.Type(), i) {
                         case typed.Mark.Of(_) => true
@@ -2961,7 +2961,7 @@ fn (s mut Scoper&) kwExpr(x typed.Expr?&, inert Bool) {
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p) {
             match p {
-                case typed.Place.Local(_, _, id) {
+                case typed.Lvalue.Local(_, _, id) {
                     if not inert { s.keepParam(I64(id)) }
                     return
                 }
@@ -3065,16 +3065,16 @@ fn (s mut Scoper&) kwArm(a typed.Arm?&, inert Bool) {
 }
 
 # a place's subexpressions: the reference it goes through only navigated, its indices looked at
-fn (s mut Scoper&) kwPlace(p typed.Place&) {
+fn (s mut Scoper&) kwPlace(p typed.Lvalue&) {
     match p {
-        case typed.Place.Deref(_, _, r) { s.kwExpr(r, true) }
-        case typed.Place.Field(_, _, b, _) { s.kwPlace(b) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Deref(_, _, r) { s.kwExpr(r, true) }
+        case typed.Lvalue.Field(_, _, b, _) { s.kwPlace(b) }
+        case typed.Lvalue.Elem(_, _, e) {
             s.kwPlace(e.Base)
             s.kwExpr(e.Index, true)
         }
-        case typed.Place.Payload(_, _, pl) { s.kwPlace(pl.Base) }
-        case typed.Place.Temp(_, _, v, _) { s.kwExpr(v, false) }
+        case typed.Lvalue.Payload(_, _, pl) { s.kwPlace(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { s.kwExpr(v, false) }
         case _ { }
     }
 }
@@ -3172,7 +3172,7 @@ fn (s mut Scoper&) handedRegion(a typed.Expr&) I64 {
     match a {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, id) { return I64(id) }
+                case typed.Lvalue.Local(_, _, id) { return I64(id) }
                 case _ { }
             }
         }
@@ -3231,12 +3231,12 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
 
 # the local whose referent a place is part of, reached through its reference and then only fields, payloads and the
 # elements of fixed arrays (parts of that storage, not of another); -1 for none
-fn regionRoot(p typed.Place&) I64 {
+fn regionRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Deref(_, _, r) => regionLocal(r)
-        case typed.Place.Field(_, _, b, _) => regionRoot(b)
-        case typed.Place.Payload(_, _, pl) => regionRoot(pl.Base)
-        case typed.Place.Elem(_, _, e) => regionRoot(e.Base)
+        case typed.Lvalue.Deref(_, _, r) => regionLocal(r)
+        case typed.Lvalue.Field(_, _, b, _) => regionRoot(b)
+        case typed.Lvalue.Payload(_, _, pl) => regionRoot(pl.Base)
+        case typed.Lvalue.Elem(_, _, e) => regionRoot(e.Base)
         case _ => -1
     }
 }
@@ -3245,7 +3245,7 @@ fn regionLocal(r typed.Expr&) I64 {
     match r {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, id) { return I64(id) }
+                case typed.Lvalue.Local(_, _, id) { return I64(id) }
                 case _ { }
             }
         }
@@ -3288,7 +3288,7 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
             }
             et = p.Type()
             match p {
-                case typed.Place.Temp(_, _, _, _) { at = s.elemAt(v) }
+                case typed.Lvalue.Temp(_, _, _, _) { at = s.elemAt(v) }
                 case _ { at = s.lastName(p.Span()) }
             }
         }
@@ -3348,12 +3348,12 @@ fn (s mut Scoper&) unAway(x typed.Expr?&) typed.Expr&x {
 }
 
 # the value a place is part of, held in a temporary place - reached through fields, elements and payloads, no reference
-fn tempOf(p typed.Place&) typed.Expr?&p {
+fn tempOf(p typed.Lvalue&) typed.Expr?&p {
     return match p {
-        case typed.Place.Temp(_, _, v, _) => v
-        case typed.Place.Field(_, _, b, _) => tempOf(b)
-        case typed.Place.Elem(_, _, e) => tempOf(e.Base)
-        case typed.Place.Payload(_, _, pl) => tempOf(pl.Base)
+        case typed.Lvalue.Temp(_, _, v, _) => v
+        case typed.Lvalue.Field(_, _, b, _) => tempOf(b)
+        case typed.Lvalue.Elem(_, _, e) => tempOf(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => tempOf(pl.Base)
         case _ => null
     }
 }
@@ -3513,7 +3513,7 @@ fn isParamRead(r typed.Expr&, l I64) Bool {
     match r {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, id) { return I64(id) == l }
+                case typed.Lvalue.Local(_, _, id) { return I64(id) == l }
                 case _ { }
             }
         }
@@ -3524,11 +3524,11 @@ fn isParamRead(r typed.Expr&, l I64) Bool {
 }
 
 # a field place read straight through the parameter: p.f, its index; -1 for none
-fn ownField(p typed.Place&, l I64) I64 {
+fn ownField(p typed.Lvalue&, l I64) I64 {
     match p {
-        case typed.Place.Field(_, _, base, i) {
+        case typed.Lvalue.Field(_, _, base, i) {
             match base {
-                case typed.Place.Deref(_, _, r) {
+                case typed.Lvalue.Deref(_, _, r) {
                     if isParamRead(r, l) { return i }
                 }
                 case _ { }
@@ -3675,7 +3675,7 @@ fn (s mut Scoper&) handedOn(a typed.Expr&, l I64) I64 {
         }
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Deref(_, _, r) {
+                case typed.Lvalue.Deref(_, _, r) {
                     if isParamRead(r, l) { return 3 }
                 }
                 case _ { }
@@ -3699,17 +3699,17 @@ fn (s mut Scoper&) ueArm(b typed.Body&, a typed.Arm?&, l I64, mode I64) Bool {
 
 # a place's uses of the parameter: through a reference read out of one of its fields, anything; the parameter itself, its
 # own storage (a field of it written, borrowed, the instance copied), none
-fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Place&, l I64, mode I64) Bool {
+fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Lvalue&, l I64, mode I64) Bool {
     match p {
-        case typed.Place.Local(_, _, id) { return I64(id) != l }
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Local(_, _, id) { return I64(id) != l }
+        case typed.Lvalue.Deref(_, _, r) {
             if isParamRead(r, l) { return false }
             return s.ueExpr(b, r, l, mode)
         }
-        case typed.Place.Field(_, _, base, _) { return s.uePlace(b, base, l, mode) }
-        case typed.Place.Elem(_, _, e) { return s.uePlace(b, e.Base, l, mode) and s.ueExpr(b, e.Index, l, mode) }
-        case typed.Place.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
-        case typed.Place.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
+        case typed.Lvalue.Field(_, _, base, _) { return s.uePlace(b, base, l, mode) }
+        case typed.Lvalue.Elem(_, _, e) { return s.uePlace(b, e.Base, l, mode) and s.ueExpr(b, e.Index, l, mode) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
         case _ { return true }
     }
 }
@@ -3983,14 +3983,14 @@ fn (s mut Scoper&) ocArm(a typed.Arm?&, l I64, passOn Bool) Bool {
 }
 
 # a place's uses of l: a place rooted at it is a use as a value
-fn (s mut Scoper&) ocPlace(p typed.Place&, l I64, passOn Bool) Bool {
+fn (s mut Scoper&) ocPlace(p typed.Lvalue&, l I64, passOn Bool) Bool {
     match p {
-        case typed.Place.Local(_, _, id) { return I64(id) != l }
-        case typed.Place.Deref(_, _, r) { return s.ocExpr(r, l, passOn) }
-        case typed.Place.Field(_, _, b, _) { return s.ocPlace(b, l, passOn) }
-        case typed.Place.Elem(_, _, e) { return s.ocPlace(e.Base, l, passOn) and s.ocExpr(e.Index, l, passOn) }
-        case typed.Place.Payload(_, _, pl) { return s.ocPlace(pl.Base, l, passOn) }
-        case typed.Place.Temp(_, _, v, _) { return s.ocExpr(v, l, passOn) }
+        case typed.Lvalue.Local(_, _, id) { return I64(id) != l }
+        case typed.Lvalue.Deref(_, _, r) { return s.ocExpr(r, l, passOn) }
+        case typed.Lvalue.Field(_, _, b, _) { return s.ocPlace(b, l, passOn) }
+        case typed.Lvalue.Elem(_, _, e) { return s.ocPlace(e.Base, l, passOn) and s.ocExpr(e.Index, l, passOn) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.ocPlace(pl.Base, l, passOn) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.ocExpr(v, l, passOn) }
         case _ { return true }
     }
 }
@@ -4380,25 +4380,25 @@ fn (s mut Scoper&) argRec(a typed.Expr&) I64 {
 # the record of the instance a place holds or refers to (O23a): a local's; through a reference a local holds, its
 # instance's; a field's, where the record of the instance holding it knows it - a "&q" field the argument's own record,
 # a bare field the one its constructor gave it (FieldFrom); -1 where not known
-fn (s mut Scoper&) recOf(p typed.Place&) I64 {
+fn (s mut Scoper&) recOf(p typed.Lvalue&) I64 {
     match p {
-        case typed.Place.Local(_, _, id) { return try s.bindFrom.Get(I64(id)) catch default -1 }
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Local(_, _, id) { return try s.bindFrom.Get(I64(id)) catch default -1 }
+        case typed.Lvalue.Deref(_, _, r) {
             match s.unAway(r) {
                 case typed.Expr.Read(_, _, q, _) {
                     match q {
-                        case typed.Place.Local(_, _, id) {
+                        case typed.Lvalue.Local(_, _, id) {
                             if s.B!.Locals[I64(id)].Kind == typed.LocalKind.Param { return -1 }
                             return try s.bindFrom.Get(I64(id)) catch default -1
                         }
-                        case typed.Place.Field(_, _, b, i) { return s.fieldRec(b, i) }
+                        case typed.Lvalue.Field(_, _, b, i) { return s.fieldRec(b, i) }
                         case _ { return -1 }
                     }
                 }
                 case _ { return -1 }
             }
         }
-        case typed.Place.Field(_, _, b, i) { return s.fieldRec(b, i) }
+        case typed.Lvalue.Field(_, _, b, i) { return s.fieldRec(b, i) }
         case _ { return -1 }
     }
 }
@@ -4406,7 +4406,7 @@ fn (s mut Scoper&) recOf(p typed.Place&) I64 {
 # the record of the instance field i of the struct at base holds or refers to - where no body assigns that field, or
 # all of such a struct through a reference, after construction: a store judged against the field's own binding says
 # nothing of the bindings of the instance it puts there
-fn (s mut Scoper&) fieldRec(base typed.Place&, i I64) I64 {
+fn (s mut Scoper&) fieldRec(base typed.Lvalue&, i I64) I64 {
     bt := base.Type()
     if not s.isStruct(bt) { return -1 }
     r := I64(s.P.T.Repr(bt))
@@ -4539,7 +4539,7 @@ fn (s mut Scoper&) blockTerm(bl typed.BlockId) Term {
 }
 
 # a store (S4, O25b, O25c, O20): the slot's term from the target place, the value judged against it
-fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
+fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     t := p.Type()
     s.targets.Push(p)
     s.placeOperands(p)
@@ -4617,9 +4617,9 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
 # whether a place is a "&p" field of an instance whose construction binding is not known here - reached through an
 # element or another instance's field, or a local whose binding is not tracked: its slot only its container's scope,
 # an underestimate (fieldTerm, O23)
-fn (s mut Scoper&) bindingUnknown(p typed.Place&, slot Term) Bool {
+fn (s mut Scoper&) bindingUnknown(p typed.Lvalue&, slot Term) Bool {
     match p {
-        case typed.Place.Field(_, _, base, i) {
+        case typed.Lvalue.Field(_, _, base, i) {
             if not s.isStruct(base.Type()) { return false }
             match s.fieldMark(base.Type(), i) {
                 case typed.Mark.Of(_) { }
@@ -4646,7 +4646,7 @@ fn (s mut Scoper&) unknownBinding(t Term) Bool {
 # a temporary stored where its slot's scope is not known here, said at the "=": through a "&p" field of a parameter, or
 # one reached through an element (C2d, O23a); into a place whose references live in one of several scopes (O12) - in
 # neither is there a run-time scope to build it in
-fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Place&, slot Term) {
+fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Lvalue&, slot Term) {
     match slot {
         case Term.Derived(_, _) {
             if s.unknownBinding(slot) {
@@ -4676,16 +4676,16 @@ FitElem I64 = 8   # an array literal's element or an array's fill (O25c)
 FitAnyCopy I64 = 9 # an array copied into an "any", its elements' references kept (T32a)
 
 # a place's slot: its term, whether a value put there must be exactly in it, and its kind
-fn (s mut Scoper&) slotOf(p typed.Place&) Term, Bool, I64 {
+fn (s mut Scoper&) slotOf(p typed.Lvalue&) Term, Bool, I64 {
     t := p.Type()
     isRef := s.isRef(t)
     match p {
-        case typed.Place.Local(_, _, id) {
+        case typed.Lvalue.Local(_, _, id) {
             if isRef or s.isFunc(t) { return s.terms[I64(id)], s.narrowingMatters(t), FitLocal }
             return s.terms[I64(id)], s.storeThrough(t), FitValue
         }
-        case typed.Place.Global(_, _, _, _) { return Term.Program, isRef and s.storeThrough(t), FitGlobal }
-        case typed.Place.Field(_, _, base, i) {
+        case typed.Lvalue.Global(_, _, _, _) { return Term.Program, isRef and s.storeThrough(t), FitGlobal }
+        case typed.Lvalue.Field(_, _, base, i) {
             bt := base.Type()
             mark := typed.Mark.None
             if s.P.T.KindOf(bt) == types.Kind.Named and s.isStruct(bt) { mark = s.fieldMark(bt, i) }
@@ -4701,27 +4701,27 @@ fn (s mut Scoper&) slotOf(p typed.Place&) Term, Bool, I64 {
             }
             return s.partsTerm(base), s.storeThrough(t), s.slotKind(base)
         }
-        case typed.Place.Elem(_, _, e) { return s.partsTerm(e.Base), s.storeThrough(t), s.slotKind(e.Base) }
-        case typed.Place.Payload(_, _, pl) { return s.partsTerm(pl.Base), s.storeThrough(t), s.slotKind(pl.Base) }
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Elem(_, _, e) { return s.partsTerm(e.Base), s.storeThrough(t), s.slotKind(e.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.partsTerm(pl.Base), s.storeThrough(t), s.slotKind(pl.Base) }
+        case typed.Lvalue.Deref(_, _, r) {
             # the whole referent written over: its references are where it lives
             return s.val(r, Term.None).T, s.storeThrough(t), FitField
         }
-        case typed.Place.Temp(_, _, _, _) { return s.here(), false, FitValue }
-        case typed.Place.Target(_, _) {
+        case typed.Lvalue.Temp(_, _, _, _) { return s.here(), false, FitValue }
+        case typed.Lvalue.Target(_, _) {
             if s.targets.Len() >= 2 { return s.slotOf(s.targets[s.targets.Len() - 2]) }
             return Term.Untraced, false, FitValue
         }
     }
 }
 
-fn (s mut Scoper&) slotKind(base typed.Place&) I64 {
+fn (s mut Scoper&) slotKind(base typed.Lvalue&) I64 {
     return match base {
-        case typed.Place.Global(_, _, _, _) => FitGlobal
-        case typed.Place.Field(_, _, b, _) => s.slotKind(b)
-        case typed.Place.Elem(_, _, e) => s.slotKind(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.slotKind(pl.Base)
-        case typed.Place.Local(_, _, _) => FitValue
+        case typed.Lvalue.Global(_, _, _, _) => FitGlobal
+        case typed.Lvalue.Field(_, _, b, _) => s.slotKind(b)
+        case typed.Lvalue.Elem(_, _, e) => s.slotKind(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.slotKind(pl.Base)
+        case typed.Lvalue.Local(_, _, _) => FitValue
         case _ => FitField
     }
 }
@@ -4732,20 +4732,20 @@ fn (s mut Scoper&) isStruct(t types.TypeId) Bool {
 
 # where the references a place's parts hold live (O20, O25h, O5): through a reference, where it leads; a value local's
 # references; a global's, the program's; a field written "&q" where its binding says (C2d, O23a), else its container's
-fn (s mut Scoper&) partsTerm(p typed.Place&) Term {
+fn (s mut Scoper&) partsTerm(p typed.Lvalue&) Term {
     match p {
-        case typed.Place.Local(_, _, id) {
+        case typed.Lvalue.Local(_, _, id) {
             if s.copied.Has(I64(id)) { return Term.Block(typed.BlockId(0)) }   # D9b: its own copy's elements
             t := s.terms[I64(id)]
             return t if t != Term.None else s.stors[I64(id)]
         }
-        case typed.Place.Global(_, _, _, _) { return Term.Program }
-        case typed.Place.Deref(_, _, r) { return s.val(r, Term.None).T }
-        case typed.Place.Field(_, _, base, i) { return s.fieldTerm(base, i) }
-        case typed.Place.Elem(_, _, e) { return s.partsTerm(e.Base) }
-        case typed.Place.Payload(_, _, pl) { return s.partsTerm(pl.Base) }
-        case typed.Place.Temp(_, _, v, site) { return s.tempTerm(v, site) }
-        case typed.Place.Target(_, _) {
+        case typed.Lvalue.Global(_, _, _, _) { return Term.Program }
+        case typed.Lvalue.Deref(_, _, r) { return s.val(r, Term.None).T }
+        case typed.Lvalue.Field(_, _, base, i) { return s.fieldTerm(base, i) }
+        case typed.Lvalue.Elem(_, _, e) { return s.partsTerm(e.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.partsTerm(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, site) { return s.tempTerm(v, site) }
+        case typed.Lvalue.Target(_, _) {
             if s.targets.Len() >= 2 { return s.partsTerm(s.targets[s.targets.Len() - 2]) }
             return Term.Untraced
         }
@@ -4755,14 +4755,14 @@ fn (s mut Scoper&) partsTerm(p typed.Place&) Term {
 # what field i of the struct at base holds lives in: a bare field where the instance's references are; one written
 # "&q" where q's argument lived (C2d, O23a) - read through a reference parameter p, the derived scope D(p, q); else
 # where the instance is, an underestimate (O23) that is read but never built into nor shown to be outlived
-fn (s mut Scoper&) fieldTerm(base typed.Place&, i I64) Term {
+fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     bt := base.Type()
     if s.isStruct(bt) {
         match s.fieldMark(bt, i) {
             case typed.Mark.Of(q) {
                 w := s.ctorParamIndex(bt, q)
                 match base {
-                    case typed.Place.Deref(_, _, r) {
+                    case typed.Lvalue.Deref(_, _, r) {
                         y := regionLocal(r)
                         if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param { return Term.Derived(s.paramIndex(y), w) }
                     }
@@ -4789,13 +4789,13 @@ fn (s mut Scoper&) derivedThroughElem(t Term, c typed.Call&) Bool {
     }
 }
 
-fn throughElem(p typed.Place&) Bool {
+fn throughElem(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Elem(_, _, _) => true
-        case typed.Place.Field(_, _, b, _) => throughElem(b)
-        case typed.Place.Payload(_, _, pl) => throughElem(pl.Base)
-        case typed.Place.Deref(_, _, r) => throughElemExpr(r)
-        case typed.Place.Temp(_, _, _, _) => true
+        case typed.Lvalue.Elem(_, _, _) => true
+        case typed.Lvalue.Field(_, _, b, _) => throughElem(b)
+        case typed.Lvalue.Payload(_, _, pl) => throughElem(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => throughElemExpr(r)
+        case typed.Lvalue.Temp(_, _, _, _) => true
         case _ => false
     }
 }
@@ -4861,23 +4861,23 @@ fn (s mut Scoper&) tempVal(v typed.Expr&) Val {
 
 # where a place's own storage is (E12c): a local's block, what a reference names, a part of a value where the value's
 # storage is - an element of a run-time-length array where its elements were built
-fn (s mut Scoper&) storOf(p typed.Place&) Term {
+fn (s mut Scoper&) storOf(p typed.Lvalue&) Term {
     match p {
-        case typed.Place.Local(_, _, id) { return s.stors[I64(id)] }
-        case typed.Place.Global(_, _, _, _) { return Term.Program }
-        case typed.Place.Deref(_, _, r) { return s.val(r, Term.None).T }
-        case typed.Place.Field(_, _, base, _) { return s.storOf(base) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Local(_, _, id) { return s.stors[I64(id)] }
+        case typed.Lvalue.Global(_, _, _, _) { return Term.Program }
+        case typed.Lvalue.Deref(_, _, r) { return s.val(r, Term.None).T }
+        case typed.Lvalue.Field(_, _, base, _) { return s.storOf(base) }
+        case typed.Lvalue.Elem(_, _, e) {
             bt := e.Base.Type()
             if s.P.T.KindOf(bt) == types.Kind.Array and s.P.T.Length(bt) == types.TypeId(0) { return s.partsTerm(e.Base) }
             return s.storOf(e.Base)
         }
-        case typed.Place.Payload(_, _, pl) { return s.storOf(pl.Base) }
-        case typed.Place.Temp(_, _, v, site) {
+        case typed.Lvalue.Payload(_, _, pl) { return s.storOf(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, site) {
             s.tempTerm(v, site)
             return s.frameHere()
         }
-        case typed.Place.Target(_, _) {
+        case typed.Lvalue.Target(_, _) {
             if s.targets.Len() >= 2 { return s.storOf(s.targets[s.targets.Len() - 2]) }
             return Term.Untraced
         }
@@ -4895,16 +4895,16 @@ fn (s mut Scoper&) frameHere() Term {
 }
 
 # a place's own subexpressions judged as operands: a reference it goes through, an index
-fn (s mut Scoper&) placeOperands(p typed.Place&) {
+fn (s mut Scoper&) placeOperands(p typed.Lvalue&) {
     match p {
-        case typed.Place.Deref(_, _, r) { s.val(r, Term.None) }
-        case typed.Place.Field(_, _, b, _) { s.placeOperands(b) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Deref(_, _, r) { s.val(r, Term.None) }
+        case typed.Lvalue.Field(_, _, b, _) { s.placeOperands(b) }
+        case typed.Lvalue.Elem(_, _, e) {
             s.placeOperands(e.Base)
             s.val(e.Index, Term.None)
         }
-        case typed.Place.Payload(_, _, pl) { s.placeOperands(pl.Base) }
-        case typed.Place.Temp(_, _, v, site) { s.tempTerm(v, site) }
+        case typed.Lvalue.Payload(_, _, pl) { s.placeOperands(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, site) { s.tempTerm(v, site) }
         case _ { }
     }
 }
@@ -5289,7 +5289,7 @@ fn (s mut Scoper&) splitBorrow(x typed.Expr&) {
 
 # whether a place, not reached through a reference, is (part of) a value whose references live where its own storage
 # does not, something being storable through them (O17a)
-fn (s mut Scoper&) splitPlace(p typed.Place&) Bool {
+fn (s mut Scoper&) splitPlace(p typed.Lvalue&) Bool {
     if flThroughRef(p) or not s.valueAdmits(p.Type()) { return false }
     refs := s.peekPlace(p, true)
     stor := s.peekPlace(p, false)
@@ -5342,10 +5342,10 @@ fn (s mut Scoper&) opTok(x typed.Expr&) source.Span {
         case typed.Expr.Cond(sp, _, c) { return s.wordAt(source.Span(c.A!.Span().End, sp.End), "if") }
         case typed.Expr.Read(sp, _, p, _), typed.Expr.Borrow(sp, _, p) {
             match p {
-                case typed.Place.Field(_, _, _, _) { return s.lastName(sp) }
-                case typed.Place.Elem(_, _, _) { return s.lastBracket(sp) }
+                case typed.Lvalue.Field(_, _, _, _) { return s.lastName(sp) }
+                case typed.Lvalue.Elem(_, _, _) { return s.lastBracket(sp) }
                 # a slice's elements copied out, said at the slice
-                case typed.Place.Deref(_, _, r) {
+                case typed.Lvalue.Deref(_, _, r) {
                     match s.unAway(r) {
                         case typed.Expr.Slice(_, _, _) { return s.opTok(r) }
                         case _ { }
@@ -5663,7 +5663,7 @@ fn (s mut Scoper&) defaultFits(cv Val, dv Val) Bool {
 
 # the place a conversion to a declared array type reads (T29a): an array value read, not through a reference - null
 # for anything else
-fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Place?&x {
+fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Lvalue?&x {
     match s.unAway(x) {
         case typed.Expr.Prim(_, ty, op, _, args) {
             if op != typed.PrimOp.Convert or args.Len() != 1 or s.P.T.KindOf(s.P.T.Plain(ty)) != types.Kind.Named { return null }
@@ -5672,7 +5672,7 @@ fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Place?&x {
                     k := s.P.T.KindOf(at)
                     if k != types.Kind.Array and k != types.Kind.Named { return null }
                     match p {
-                        case typed.Place.Temp(_, _, _, _) { return null }
+                        case typed.Lvalue.Temp(_, _, _, _) { return null }
                         case _ { return p }
                     }
                 }
@@ -5703,7 +5703,7 @@ fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
 # what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
 # temporary built where this one use puts it; a part of a call's built result read where it is put elsewhere than here
 # has its call land there (O18a: "f = mkBox(i).n" with f outside the loop)
-fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
+fn (s mut Scoper&) read(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
     k := s.partLand(p, ty, dest)
     saved := s.plainRead
     s.plainRead = saved or not s.holds(ty)
@@ -5715,7 +5715,7 @@ fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
 
 # where a part of a call's built result is put elsewhere than the block it stands in: that call's site, its landing
 # noted for the call (O18a); -1 for none
-fn (s mut Scoper&) partLand(p typed.Place&, ty types.TypeId, dest Term) I64 {
+fn (s mut Scoper&) partLand(p typed.Lvalue&, ty types.TypeId, dest Term) I64 {
     if not dest.Runs() or dest == s.here() or not s.holds(ty) { return -1 }
     k := s.partCall(p)
     if k < 0 or (try s.partDest.Get(k) catch default Term.None) != Term.None or not s.partOK(p, dest) { return -1 }
@@ -5725,28 +5725,28 @@ fn (s mut Scoper&) partLand(p typed.Place&, ty types.TypeId, dest Term) I64 {
 
 # the site of the call whose built result a place is a part of - a field, an element or a payload of it, through what it
 # holds, or of a held local it initializes (D8d) - -1 for none
-fn (s mut Scoper&) partCall(p typed.Place&) I64 {
+fn (s mut Scoper&) partCall(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Field(_, _, b, _) => s.partCall(b)
-        case typed.Place.Elem(_, _, e) => s.partCall(e.Base)
-        case typed.Place.Payload(_, _, pl) => s.partCall(pl.Base)
-        case typed.Place.Deref(_, _, r) => s.builtCall(r)
-        case typed.Place.Temp(_, _, v, _) => s.builtCall(v)
-        case typed.Place.Local(_, _, id) => s.builtCall(try s.held.Get(I64(id)) catch default null)
+        case typed.Lvalue.Field(_, _, b, _) => s.partCall(b)
+        case typed.Lvalue.Elem(_, _, e) => s.partCall(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.partCall(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => s.builtCall(r)
+        case typed.Lvalue.Temp(_, _, v, _) => s.builtCall(v)
+        case typed.Lvalue.Local(_, _, id) => s.builtCall(try s.held.Get(I64(id)) catch default null)
         case _ => -1
     }
 }
 
 # whether the call partCall finds can land in t: what its callee's obligations need its result scope to be outlived by
 # - read off its arguments without judging them - outlives t (as stage 0 lands it only there)
-fn (s mut Scoper&) partOK(p typed.Place&, t Term) Bool {
+fn (s mut Scoper&) partOK(p typed.Lvalue&, t Term) Bool {
     return match p {
-        case typed.Place.Field(_, _, b, _) => s.partOK(b, t)
-        case typed.Place.Elem(_, _, e) => s.partOK(e.Base, t)
-        case typed.Place.Payload(_, _, pl) => s.partOK(pl.Base, t)
-        case typed.Place.Deref(_, _, r) => s.builtOK(r, t)
-        case typed.Place.Temp(_, _, v, _) => s.builtOK(v, t)
-        case typed.Place.Local(_, _, id) => s.builtOK(try s.held.Get(I64(id)) catch default null, t)
+        case typed.Lvalue.Field(_, _, b, _) => s.partOK(b, t)
+        case typed.Lvalue.Elem(_, _, e) => s.partOK(e.Base, t)
+        case typed.Lvalue.Payload(_, _, pl) => s.partOK(pl.Base, t)
+        case typed.Lvalue.Deref(_, _, r) => s.builtOK(r, t)
+        case typed.Lvalue.Temp(_, _, v, _) => s.builtOK(v, t)
+        case typed.Lvalue.Local(_, _, id) => s.builtOK(try s.held.Get(I64(id)) catch default null, t)
         case _ => false
     }
 }
@@ -5807,11 +5807,11 @@ fn (s mut Scoper&) builtCall(x typed.Expr?&) I64 {
     return I64(c.Site) if c is not null else -1
 }
 
-fn (s mut Scoper&) readPart(p typed.Place&, ty types.TypeId, dest Term) Val {
+fn (s mut Scoper&) readPart(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
     # an array value read out of a call's built result shares that result's storage - nothing is copied - so the result is
     # built where the value goes (T7b)
     match p {
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Deref(_, _, r) {
             if dest != Term.None and s.arenaValue(ty) and s.isFresh(r) {
                 v := s.val(r, dest)
                 if not s.holds(ty) { return plain() }
@@ -5822,7 +5822,7 @@ fn (s mut Scoper&) readPart(p typed.Place&, ty types.TypeId, dest Term) Val {
     }
     s.placeOperands(p)
     match p {
-        case typed.Place.Local(_, _, id) {
+        case typed.Lvalue.Local(_, _, id) {
             x typed.Expr?&s = try s.held.Get(I64(id)) catch default null
             if x is not null {
                 s.held.Remove(I64(id))
@@ -5847,14 +5847,14 @@ fn (s mut Scoper&) readPart(p typed.Place&, ty types.TypeId, dest Term) Val {
     }
     if not s.holds(ty) { return plain() }
     match p {
-        case typed.Place.Local(_, _, id) { return existing(s.whereLives(id)) }
-        case typed.Place.Deref(_, _, r) { return existing(s.val(r, Term.None).T) }
+        case typed.Lvalue.Local(_, _, id) { return existing(s.whereLives(id)) }
+        case typed.Lvalue.Deref(_, _, r) { return existing(s.val(r, Term.None).T) }
         case _ { return existing(s.partsTerm(p)) }
     }
 }
 
 # a slice's term (E16a): where its base's elements are - of a temporary, the block it is written in
-fn (s mut Scoper&) sliceTerm(base typed.Place&) Term {
+fn (s mut Scoper&) sliceTerm(base typed.Lvalue&) Term {
     bt := base.Type()
     if s.P.T.KindOf(bt) == types.Kind.Ref { return s.storOf(base) }
     if s.P.T.KindOf(bt) == types.Kind.Array and s.P.T.Length(bt) == types.TypeId(0) { return s.partsTerm(base) }
@@ -6607,13 +6607,13 @@ fn (s mut Scoper&) handleLent(c typed.Call&, i I64, a typed.Expr&) Bool {
     }
 }
 
-# whether x reads an Assign's target's old value (S4d's copy, Place.Target)
+# whether x reads an Assign's target's old value (S4d's copy, Lvalue.Target)
 fn (s mut Scoper&) oldValue(x typed.Expr&) Bool {
     if s.targets.Len() == 0 { return false }
     match s.unAway(x) {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Target(_, _) { return true }
+                case typed.Lvalue.Target(_, _) { return true }
                 # a borrow of the place written over, or of storage within it (S4d: "y = wrap(y)")
                 case _ { return not s.isRef(s.targets[s.targets.Len() - 1].Type()) and within(p, s.targets[s.targets.Len() - 1]) }
             }
@@ -6625,45 +6625,45 @@ fn (s mut Scoper&) oldValue(x typed.Expr&) Bool {
 
 # whether place p is place q or storage within it - a field, payload or element of it (any element standing for any
 # other), reached through no reference (S4d)
-fn within(p typed.Place&, q typed.Place&) Bool {
+fn within(p typed.Lvalue&, q typed.Lvalue&) Bool {
     if samePlace(p, q) { return true }
     return match p {
-        case typed.Place.Field(_, _, b, _) => within(b, q)
-        case typed.Place.Elem(_, _, e) => within(e.Base, q)
-        case typed.Place.Payload(_, _, pl) => within(pl.Base, q)
+        case typed.Lvalue.Field(_, _, b, _) => within(b, q)
+        case typed.Lvalue.Elem(_, _, e) => within(e.Base, q)
+        case typed.Lvalue.Payload(_, _, pl) => within(pl.Base, q)
         case _ => false
     }
 }
 
-fn samePlace(p typed.Place&, q typed.Place&) Bool {
+fn samePlace(p typed.Lvalue&, q typed.Lvalue&) Bool {
     match p {
-        case typed.Place.Local(_, _, a) {
+        case typed.Lvalue.Local(_, _, a) {
             match q {
-                case typed.Place.Local(_, _, b) { return a == b }
+                case typed.Lvalue.Local(_, _, b) { return a == b }
                 case _ { return false }
             }
         }
-        case typed.Place.Global(_, _, m, n) {
+        case typed.Lvalue.Global(_, _, m, n) {
             match q {
-                case typed.Place.Global(_, _, m2, n2) { return m == m2 and n == n2 }
+                case typed.Lvalue.Global(_, _, m2, n2) { return m == m2 and n == n2 }
                 case _ { return false }
             }
         }
-        case typed.Place.Field(_, _, b, i) {
+        case typed.Lvalue.Field(_, _, b, i) {
             match q {
-                case typed.Place.Field(_, _, b2, i2) { return i == i2 and samePlace(b, b2) }
+                case typed.Lvalue.Field(_, _, b2, i2) { return i == i2 and samePlace(b, b2) }
                 case _ { return false }
             }
         }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Elem(_, _, e) {
             match q {
-                case typed.Place.Elem(_, _, e2) { return samePlace(e.Base, e2.Base) }
+                case typed.Lvalue.Elem(_, _, e2) { return samePlace(e.Base, e2.Base) }
                 case _ { return false }
             }
         }
-        case typed.Place.Payload(_, _, pl) {
+        case typed.Lvalue.Payload(_, _, pl) {
             match q {
-                case typed.Place.Payload(_, _, pl2) { return samePlace(pl.Base, pl2.Base) }
+                case typed.Lvalue.Payload(_, _, pl2) { return samePlace(pl.Base, pl2.Base) }
                 case _ { return false }
             }
         }
@@ -6732,7 +6732,7 @@ fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
     match x {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, id) { return s.held.Has(I64(id)) }
+                case typed.Lvalue.Local(_, _, id) { return s.held.Has(I64(id)) }
                 case _ { }
             }
         }
@@ -6957,7 +6957,7 @@ fn (s mut Scoper&) noteLoopCopy(rec I64, a typed.Expr&) {
         match x {
             case typed.Expr.Read(_, _, p, _) {
                 match p {
-                    case typed.Place.Elem(_, _, e) {
+                    case typed.Lvalue.Elem(_, _, e) {
                         h := flRoot(e.Base)
                         src typed.Expr?&x = null
                         if h >= 0 and s.B!.Locals[h].Kind == typed.LocalKind.Hidden { src = try s.inits.Get(h) catch default null }
@@ -7124,15 +7124,15 @@ fn (s mut Scoper&) madeLocal(x typed.Expr?&, depth I64) I64 {
     return -1
 }
 
-fn (s mut Scoper&) madePlace(p typed.Place&, depth I64) I64 {
+fn (s mut Scoper&) madePlace(p typed.Lvalue&, depth I64) I64 {
     if depth > 32 { return -1 }
     match p {
-        case typed.Place.Field(_, _, b, _) { return s.madePlace(b, depth + 1) }
-        case typed.Place.Elem(_, _, e) { return s.madePlace(e.Base, depth + 1) }
-        case typed.Place.Payload(_, _, pl) { return s.madePlace(pl.Base, depth + 1) }
-        case typed.Place.Deref(_, _, r) { return s.madeLocal(r, depth + 1) }
-        case typed.Place.Temp(_, _, v, _) { return s.madeLocal(v, depth + 1) }
-        case typed.Place.Local(_, _, id) {
+        case typed.Lvalue.Field(_, _, b, _) { return s.madePlace(b, depth + 1) }
+        case typed.Lvalue.Elem(_, _, e) { return s.madePlace(e.Base, depth + 1) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.madePlace(pl.Base, depth + 1) }
+        case typed.Lvalue.Deref(_, _, r) { return s.madeLocal(r, depth + 1) }
+        case typed.Lvalue.Temp(_, _, v, _) { return s.madeLocal(v, depth + 1) }
+        case typed.Lvalue.Local(_, _, id) {
             l := I64(id)
             loc := s.B!.Locals[l]
             init := try s.inits.Get(l) catch default null
@@ -7170,9 +7170,9 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
             case typed.Expr.Promote(_, _, pr) { cx = s.unAway(pr.X) }
             case typed.Expr.Read(_, _, p, _) {
                 match p {
-                    case typed.Place.Field(_, _, b, _) {
+                    case typed.Lvalue.Field(_, _, b, _) {
                         match b {
-                            case typed.Place.Temp(_, _, v, _) { cx = s.unAway(v) }
+                            case typed.Lvalue.Temp(_, _, v, _) { cx = s.unAway(v) }
                             case _ { break }
                         }
                     }
@@ -7236,7 +7236,7 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
 # B11/O25: a collection made in this block put in place of one kept longer ("still := List<I64>(); ... w.alive = still"):
 # where to make it, and - a type with a Clear - refilling the one kept instead, since every one made where it is kept
 # stays until that scope closes (stage 0's noteRefillKept)
-fn (s mut Scoper&) noteRefill(rec I64, p typed.Place&, x typed.Expr&) {
+fn (s mut Scoper&) noteRefill(rec I64, p typed.Lvalue&, x typed.Expr&) {
     w := s.shownLocal(flRoot(p), 0)
     if w < 0 { return }
     wname := s.P.L.Names.Text(s.B!.Locals[w].Name)
@@ -7683,7 +7683,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     match s.unAway(x) {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) {
             match p {
-                case typed.Place.Local(_, _, _) { s.fitLocalRead = true }
+                case typed.Lvalue.Local(_, _, _) { s.fitLocalRead = true }
                 case _ { }
             }
         }
@@ -7757,12 +7757,12 @@ fn unWidened(x typed.Expr&) typed.Expr&x {
     return x
 }
 
-fn throughTemp(p typed.Place&) Bool {
+fn throughTemp(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Temp(_, _, _, _) => true
-        case typed.Place.Field(_, _, b, _) => throughTemp(b)
-        case typed.Place.Elem(_, _, e) => throughTemp(e.Base)
-        case typed.Place.Payload(_, _, pl) => throughTemp(pl.Base)
+        case typed.Lvalue.Temp(_, _, _, _) => true
+        case typed.Lvalue.Field(_, _, b, _) => throughTemp(b)
+        case typed.Lvalue.Elem(_, _, e) => throughTemp(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => throughTemp(pl.Base)
         case _ => false
     }
 }

@@ -1841,7 +1841,8 @@ is then each instance's, computed with that instance's length and checked where 
 binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
 it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
 declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
-never one the calling code has in scope, so a caller's own local of that name is not the default's.
+never one the calling code has in scope, so a caller's own local of that name is not the default's. The one thing a
+default reads of the call is where it is: `Place.Here` in a default is the call's place (E40).
 A lambda in a default captures nothing (a default has no locals); the calls of one module (or of one instantiation,
 G16) share the one made for them, which is a function of that module's code wherever the default was declared.
 
@@ -4174,6 +4175,29 @@ and elsewhere evaluation stops there.
 
 On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
 call fails, as a failed `assert` there does (P6); no error reaches the join.
+
+### 5.24 The source place
+
+**E40.** `Place.Here` is the place in the source where it is written, as a value of the prelude's struct
+`Place(File String&, Line I64, Column I64)`: `File` is the path of the module's file as the compiler's diagnostics write
+it (B11 - the root and relative imports as the compiler was given them, the standard library's under its directory),
+`Line` and `Column` count from 1, the column that of `Place` in `Place.Here`. It is a constant (K1): built while
+compiling, read-only text, nothing computed at run time - in an instance of a generic it is the place written in the
+generic's body, the same for every instance. **Written in a parameter's default** (D8a - one written in a function's,
+a method's or a constructor's parameter list, through an `any`'s table too), it is instead the place of the **call**
+that leaves the argument off: the call's first token, or, for a method, its name after the `.`; an argument given by
+name or by position is the caller's value as written. A default calling a function that leaves its own such argument
+off gives that function the place of the outermost call: the place is the call the program wrote. `$p` writes
+`FILE:LINE:COLUMN`, as a diagnostic names a place; `==` and `Hash` compare the three fields. `Here` is no field: it
+is read through the type's name only (as E36's limits are), and any other member read so is an error naming
+`Place.Here`.
+
+```
+fn expectEq(got I64, want I64, at Place = Place.Here) {
+    if got != want: io.PrintErrln($at ": got " $got ", want " $want)!
+}
+expectEq(f(2), 4)                       # reports this line, not expectEq's
+```
 
 ## 6. Statements
 

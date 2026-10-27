@@ -294,7 +294,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     loops Vec<loopCtx>
     tries Vec<tryCtx>
     collects Vec<collectCtx>
-    targets Vec<pl>    # the places of the Assigns being lowered, innermost last (Place.Target)
+    targets Vec<pl>    # the places of the Assigns being lowered, innermost last (Lvalue.Target)
     joins Vec<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
     joinS Vec<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
@@ -600,14 +600,14 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # the sole places a place's let-go releases: the place itself, or the leaves of a struct held in it - each by the
 # fields that reach it from the place, and a handle's reference, field 0
-fn (ln mut lowering&) releases(p typed.Place&, assign Bool = false) Vec<Array<I64>&> {
+fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I64>&> {
     out Vec<Array<I64>&>
     if not ln.freeing { return out }
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
     if assign {
         match p {
-            case typed.Place.Elem(_, _, _) { return out }
+            case typed.Lvalue.Elem(_, _, _) { return out }
             case _ { }
         }
     }
@@ -618,7 +618,7 @@ fn (ln mut lowering&) releases(p typed.Place&, assign Bool = false) Vec<Array<I6
         return out
     }
     for lf in fr.SoleLeaves(p.Type()) {
-        if fr.IsHandle(lf.Place) {
+        if fr.IsHandle(lf.PlaceId) {
             path := Array<I64>(lf.Path.Len() + 1)
             for i in range lf.Path.Len() { path[i] = lf.Path[i] }
             path[lf.Path.Len()] = 0
@@ -937,7 +937,7 @@ fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr&x {
 fn derefOf(x typed.Expr&) typed.Expr?&x {
     return match x {
         case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Place.Deref(_, _, r) => r
+            case typed.Lvalue.Deref(_, _, r) => r
             case _ => null
         }
         case _ => null
@@ -966,9 +966,9 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
 
 # where the storage of an array value place is: a local's, a global's in the program's scope (a value array is held
 # by value only there, T7b)
-fn (ln mut lowering&) placeStorage(p typed.Place&) mir.ScopeRef {
+fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
     return match p {
-        case typed.Place.Local(_, _, id) => ln.storageOf(id)
+        case typed.Lvalue.Local(_, _, id) => ln.storageOf(id)
         case _ => mir.ScopeRef.Program
     }
 }
@@ -984,7 +984,7 @@ fn (ln mut lowering&) resultScope() mir.ScopeRef {
 
 # v stored into the value array at dst (T11b): written into the storage dst holds where the length is unchanged, else
 # dst given v's storage - a copy of it where v is existing storage
-fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span
+fn (ln mut lowering&) arrayStore(dst mir.Lvalue, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span
     at mir.ScopeRef) {
     src := ln.local(v, ty, sp)
     old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
@@ -1148,7 +1148,7 @@ fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
             match p {
                 # a local living in the result scope is the result as it is only where nothing else can name it
                 # (O26a: Plan.RetSole); every other one is copied
-                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or not ln.plan.RetSole[I64(id)] }
+                case typed.Lvalue.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() or not ln.plan.RetSole[I64(id)] }
                 case _ { }
             }
         }
@@ -1311,7 +1311,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
     }
     # the targets' places, a discarded one ("_") a temporary of its result's type, given its zero
     rs := ln.T.Results(fty)
-    places := Array<mir.Place>(sw.Targets.Len())
+    places := Array<mir.Lvalue>(sw.Targets.Len())
     for i in range sw.Targets.Len() {
         if sw.Targets[i] is null {
             dt := rs[i] if i < rs.Len() else types.UnknownT
@@ -1374,7 +1374,7 @@ fn (ln mut lowering&) valueTargets(sw typed.Spawn&) Bool {
 
 # ---- places ----
 
-fn (ln mut lowering&) mk(p pl) mir.Place { return ln.F.Place(p.B, p.Ps.ToArray()) }
+fn (ln mut lowering&) mk(p pl) mir.Lvalue { return ln.F.Place(p.B, p.Ps.ToArray()) }
 
 fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
     q := pl(p.B)
@@ -1384,21 +1384,21 @@ fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
 }
 
 # a place's base and projections, its references and indices computed before
-fn (ln mut lowering&) place(p typed.Place?&) pl {
+fn (ln mut lowering&) place(p typed.Lvalue?&) pl {
     if ln.dead { return pl(mir.Base.None) }
     if p is null {
         ln.gap(ln.B.Sp, "a place that is none")
         return pl(mir.Base.None)
     }
     return match p {
-        case typed.Place.Local(_, _, id) => pl(mir.Base.Local(mir.LocalId(I32(id))))
-        case typed.Place.Global(_, ty, m, n) => pl(mir.Base.Global(m, n, ty))
-        case typed.Place.Deref(sp, _, r) => ln.deref(r, sp)
-        case typed.Place.Field(_, _, base, i) => ln.with(ln.place(base), mir.Proj.Field(i))
-        case typed.Place.Elem(sp, _, e) => ln.elem(e, sp)
-        case typed.Place.Payload(sp, _, py) => ln.payload(py, sp)
-        case typed.Place.Temp(sp, ty, v, _) => pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
-        case typed.Place.Target(sp, _) => ln.target(sp)
+        case typed.Lvalue.Local(_, _, id) => pl(mir.Base.Local(mir.LocalId(I32(id))))
+        case typed.Lvalue.Global(_, ty, m, n) => pl(mir.Base.Global(m, n, ty))
+        case typed.Lvalue.Deref(sp, _, r) => ln.deref(r, sp)
+        case typed.Lvalue.Field(_, _, base, i) => ln.with(ln.place(base), mir.Proj.Field(i))
+        case typed.Lvalue.Elem(sp, _, e) => ln.elem(e, sp)
+        case typed.Lvalue.Payload(sp, _, py) => ln.payload(py, sp)
+        case typed.Lvalue.Temp(sp, ty, v, _) => pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
+        case typed.Lvalue.Target(sp, _) => ln.target(sp)
     }
 }
 
@@ -1811,7 +1811,7 @@ fn (ln mut lowering&) away(file I64, y typed.Expr&) mir.Operand {
     return v
 }
 
-fn (ln mut lowering&) read(p typed.Place&, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir.Operand {
     q := ln.place(p)
     if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
@@ -1820,7 +1820,7 @@ fn (ln mut lowering&) read(p typed.Place&, ty types.TypeId, sp source.Span) mir.
 # the prelude's p.vacate() (docs/memory.md 3.4): what the place holds, read. The slot keeps its bits, which nothing
 # reads again - the prelude vacates only positions it no longer uses - so a loop of vacates over numbers is deleted by
 # the optimizer and costs nothing
-fn (ln mut lowering&) take(p typed.Place&, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) take(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir.Operand {
     # O8d: where what the place holds is a sole place's, it is moved out, the place left empty - so the next let-go of
     # it releases nothing twice
     if ln.releases(p).Len() > 0 {

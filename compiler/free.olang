@@ -98,8 +98,8 @@ RTask I64 = 4     # the program has tasks (condition 3)
 RDtor I64 = 5     # a destructor (condition 4)
 
 # a store into a candidate place: the value's classification, and where it is built if made for the place
-type store struct(Place I64, Body I64, File I64, Sp source.Span, Kind I64, Of I64, Site I64, X typed.Expr?&, Root typed.Expr?&) {
-    Place
+type store struct(PlaceId I64, Body I64, File I64, Sp source.Span, Kind I64, Of I64, Site I64, X typed.Expr?&, Root typed.Expr?&) {
+    PlaceId
     Body
     File
     Sp
@@ -117,9 +117,9 @@ SFail I64 = 3
 
 # a let-go of a place: a place given another value (direct), a vacate statement, a moved value dropped, or a call that
 # may do one of those
-type letGo struct(Place I64, Body I64, File I64, At source.Span, Sp source.Span, Kind I64, RecvSp source.Span
+type letGo struct(PlaceId I64, Body I64, File I64, At source.Span, Sp source.Span, Kind I64, RecvSp source.Span
                   Callee I64, Again Bool) {
-    Place    # AnyPlace for a call that may let go of any
+    PlaceId    # AnyPlace for a call that may let go of any
     Body
     File
     At       # the statement
@@ -133,7 +133,7 @@ type letGo struct(Place I64, Body I64, File I64, At source.Span, Sp source.Span,
 AnyPlace I64 = -1      # a let-go's place: any (a call whose callee may let go of anything)
 
 # whether a let-go is one of place k's
-fn (g letGo) Of(k I64) Bool { return g.Place == k or g.Place == AnyPlace }
+fn (g letGo) Of(k I64) Bool { return g.PlaceId == k or g.PlaceId == AnyPlace }
 
 LAssign I64 = 1
 LLeaf I64 = 5      # a struct held in place given another value: its candidate leaves let go
@@ -145,28 +145,28 @@ LYield I64 = 7     # a generator's yield: its consumer may let go of any place b
 
 # a call given a value of a sole place as the root of an argument: what the callee builds there is built in that
 # value's region (RegionOr)
-type orCall struct(Body I64, Site I64, Callee I64, Param I64, Place I64, Root typed.Expr&, Arg typed.Expr&) {
+type orCall struct(Body I64, Site I64, Callee I64, Param I64, PlaceId I64, Root typed.Expr&, Arg typed.Expr&) {
     Body
     Site
     Callee
     Param
-    Place
+    PlaceId
     Root
     Arg
 }
 
 # a store through a value of a sole place (f.x = V, f a view): V's parts built where that value is
-type orStore struct(Body I64, Place I64, X typed.Expr&, Root typed.Expr&) {
+type orStore struct(Body I64, PlaceId I64, X typed.Expr&, Root typed.Expr&) {
     Body
-    Place
+    PlaceId
     X
     Root
 }
 
 # a leaf of a value held in place: a candidate place inside it, by the fields that reach it
-type leaf struct(Path Array<I64>&, Place I64) {
+type leaf struct(Path Array<I64>&, PlaceId I64) {
     Path
-    Place
+    PlaceId
 }
 
 # ---- the analysis ----
@@ -426,10 +426,10 @@ fn (f mut Free&) dtorCand(ty types.TypeId) Bool {
 
 # the candidate place a typed place is, -1 for none: a field of a struct (through a reference or held in place), an
 # element of an array
-fn (f mut Free&) placeOfPlace(p typed.Place&) I64 {
+fn (f mut Free&) placeOfPlace(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Field(_, _, base, i) => f.placeKey(base.Type(), i)
-        case typed.Place.Elem(_, _, e) => f.placeKey(f.arrayOf(e.Base.Type()), -1)
+        case typed.Lvalue.Field(_, _, base, i) => f.placeKey(base.Type(), i)
+        case typed.Lvalue.Elem(_, _, e) => f.placeKey(f.arrayOf(e.Base.Type()), -1)
         case _ => -1
     }
 }
@@ -467,7 +467,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
                 path := Array<I64>(l.Path.Len() + 1)
                 path[0] = i
                 for j in range l.Path.Len() { path[j + 1] = l.Path[j] }
-                out.Push(leaf(path, l.Place))
+                out.Push(leaf(path, l.PlaceId))
             }
         }
     }
@@ -713,7 +713,7 @@ fn (f mut Free&) findDestroy(sp source.Span, x typed.Expr&) {
             match args[0] {
                 case typed.Expr.Read(_, ty, p, _) {
                     match p {
-                        case typed.Place.Local(_, _, l) {
+                        case typed.Lvalue.Local(_, _, l) {
                             key := pair.Pair(f.curBody, I64(l))
                             if f.destroyOf.Has(key) { return }
                             d := f.newPlace(ty, -2, false, ty, false)
@@ -735,9 +735,9 @@ fn (f mut Free&) findDestroy(sp source.Span, x typed.Expr&) {
 }
 
 # an assignment's target: a field place let go of, or the candidate leaves of a struct held in place
-fn (f mut Free&) candTarget(p typed.Place&) {
+fn (f mut Free&) candTarget(p typed.Lvalue&) {
     match p {
-        case typed.Place.Field(_, ty, _, _) {
+        case typed.Lvalue.Field(_, ty, _, _) {
             if f.placeOfPlace(p) < 0 { f.leaves(ty) }
         }
         case _ { }
@@ -791,7 +791,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     params Map<I64, I64>       # a parameter's local: its index in Params
     fields Map<I64, I64>       # a constructor's field local: its field's position
     ctorTy types.TypeId = types.UnknownT
-    targets Vec<typed.Place&>
+    targets Vec<typed.Lvalue&>
     yieldTo Vec<I64>          # the element place of each Collect being walked, -1 for none
     # statements numbered in walk order, for views and for stores on one path
     no I64 = 0
@@ -1184,12 +1184,12 @@ fn (w mut walker&) result(o Vec<I64>&) {
     }
 }
 
-fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
+fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.targets.Push(p)
     o := w.expr(x)
     try w.targets.Pop() catch { }
     match p {
-        case typed.Place.Local(_, _, l) {
+        case typed.Lvalue.Local(_, _, l) {
             w.give(I64(l), o)
             k := try w.fields.Get(I64(l)) catch default -1
             if k >= 0 { w.storeField(k, x, o, sp) }
@@ -1209,7 +1209,7 @@ fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
     fr := w.freshRoot(p)
     if fr >= 0 { w.give(fr, o) }
     match p {
-        case typed.Place.Field(_, _, _, _) {
+        case typed.Lvalue.Field(_, _, _, _) {
             if k >= 0 {
                 w.store(k, x, o, sp, w.text(p.Span()), fr >= 0)
                 w.storeWithin = -1
@@ -1220,10 +1220,10 @@ fn (w mut walker&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
             # a struct held in place given another value: its candidate leaves let go of theirs, and are given the
             # value's - which a constructor's own stores account for, and a copy stores elsewhere
             lvs := w.F.leaves(p.Type())
-            for lf in lvs { w.go(lf.Place, LLeaf, p.Span(), source.Span(0, 0), -1) }
+            for lf in lvs { w.go(lf.PlaceId, LLeaf, p.Span(), source.Span(0, 0), -1) }
             if lvs.Len() > 0 { o = w.copyInto(lvs, p.Type(), x, o, sp) }
         }
-        case typed.Place.Elem(_, _, _) {
+        case typed.Lvalue.Elem(_, _, _) {
             # an element given a value: never a let-go - the program's own copies between elements are not known
             # positions (2.6 item 7) - but a store into the element place
             if k >= 0 {
@@ -1271,8 +1271,8 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     }
     if w.Final and w.quiet == 0 {
         for lf in lvs {
-            f.stores.Push(store(lf.Place, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
-            f.keep(lf.Place, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'")
+            f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SFail, -1, -1, x, null))
+            f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'")
         }
     }
     return o.Clone()
@@ -1280,18 +1280,18 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
 
 # the local holding the object a place is part of, where every value it holds is an object this body made - -1 for
 # none
-fn (w mut walker&) freshRoot(p typed.Place&) I64 {
+fn (w mut walker&) freshRoot(p typed.Lvalue&) I64 {
     l := -1
     match p {
-        case typed.Place.Local(_, _, id) { l = I64(id) }
-        case typed.Place.Field(_, _, b, _) { return w.freshRoot(b) }
-        case typed.Place.Elem(_, _, e) { return w.freshRoot(e.Base) }
-        case typed.Place.Payload(_, _, pl) { return w.freshRoot(pl.Base) }
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Local(_, _, id) { l = I64(id) }
+        case typed.Lvalue.Field(_, _, b, _) { return w.freshRoot(b) }
+        case typed.Lvalue.Elem(_, _, e) { return w.freshRoot(e.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { return w.freshRoot(pl.Base) }
+        case typed.Lvalue.Deref(_, _, r) {
             match r {
                 case typed.Expr.Read(_, _, q, _) {
                     match q {
-                        case typed.Place.Local(_, _, id) { l = I64(id) }
+                        case typed.Lvalue.Local(_, _, id) { l = I64(id) }
                         case _ { return -1 }
                     }
                 }
@@ -1306,7 +1306,7 @@ fn (w mut walker&) freshRoot(p typed.Place&) I64 {
 }
 
 # the parameter every storage a place's container is reached through is reached from, -1 for none (a must-fact)
-fn (w mut walker&) withinOf(p typed.Place&) I64 {
+fn (w mut walker&) withinOf(p typed.Lvalue&) I64 {
     b := baseOf(p)
     if b is null { return -1 }
     v := w.F.withinPlace(w.Id, b)
@@ -1314,7 +1314,7 @@ fn (w mut walker&) withinOf(p typed.Place&) I64 {
 }
 
 # the place every value a place's container is reached through is a value of, -1 for none (a must-fact)
-fn (w mut walker&) insidePlace(p typed.Place&) I64 {
+fn (w mut walker&) insidePlace(p typed.Lvalue&) I64 {
     r := derefRoot(p)
     if r is null { return -1 }
     return w.rootPlace(r)
@@ -1322,7 +1322,7 @@ fn (w mut walker&) insidePlace(p typed.Place&) I64 {
 
 # whether a value stored into place p is reached through the reference p's container is reached through - the same
 # value, read in one statement with nothing evaluated on the way that could change either (pure paths)
-fn (w mut walker&) sameValue(x typed.Expr&, p typed.Place&) Bool {
+fn (w mut walker&) sameValue(x typed.Expr&, p typed.Lvalue&) Bool {
     r := derefRoot(p)
     if r is null { return false }
     return reachedThrough(x, r)
@@ -1340,12 +1340,12 @@ fn reachedThrough(x typed.Expr&, r typed.Expr&) Bool {
     }
 }
 
-fn placeThrough(p typed.Place&, r typed.Expr&) Bool {
+fn placeThrough(p typed.Lvalue&, r typed.Expr&) Bool {
     return match p {
-        case typed.Place.Deref(_, _, e) => reachedThrough(e, r)
-        case typed.Place.Field(_, _, b, _) => placeThrough(b, r)
-        case typed.Place.Elem(_, _, e) => pureIndex(e.Index) and placeThrough(e.Base, r)
-        case typed.Place.Payload(_, _, pl) => placeThrough(pl.Base, r)
+        case typed.Lvalue.Deref(_, _, e) => reachedThrough(e, r)
+        case typed.Lvalue.Field(_, _, b, _) => placeThrough(b, r)
+        case typed.Lvalue.Elem(_, _, e) => pureIndex(e.Index) and placeThrough(e.Base, r)
+        case typed.Lvalue.Payload(_, _, pl) => placeThrough(pl.Base, r)
         case _ => false
     }
 }
@@ -1361,23 +1361,23 @@ fn samePure(a typed.Expr&, b typed.Expr&) Bool {
     }
 }
 
-fn samePurePlace(p typed.Place&, q typed.Place&) Bool {
+fn samePurePlace(p typed.Lvalue&, q typed.Lvalue&) Bool {
     match p {
-        case typed.Place.Local(_, _, l) {
+        case typed.Lvalue.Local(_, _, l) {
             match q {
-                case typed.Place.Local(_, _, m) { return l == m }
+                case typed.Lvalue.Local(_, _, m) { return l == m }
                 case _ { return false }
             }
         }
-        case typed.Place.Field(_, _, b, i) {
+        case typed.Lvalue.Field(_, _, b, i) {
             match q {
-                case typed.Place.Field(_, _, c, j) { return i == j and samePurePlace(b, c) }
+                case typed.Lvalue.Field(_, _, c, j) { return i == j and samePurePlace(b, c) }
                 case _ { return false }
             }
         }
-        case typed.Place.Deref(_, _, r) {
+        case typed.Lvalue.Deref(_, _, r) {
             match q {
-                case typed.Place.Deref(_, _, s) { return samePure(r, s) }
+                case typed.Lvalue.Deref(_, _, s) { return samePure(r, s) }
                 case _ { return false }
             }
         }
@@ -1390,7 +1390,7 @@ fn pureIndex(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Lit(_, _, _) => true
         case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Place.Local(_, _, _) => true
+            case typed.Lvalue.Local(_, _, _) => true
             case _ => false
         }
         case typed.Expr.Away(_, _, y) => pureIndex(y)
@@ -1399,11 +1399,11 @@ fn pureIndex(x typed.Expr&) Bool {
 }
 
 # the place holding a field or an element: its container
-fn baseOf(p typed.Place&) typed.Place?&p {
+fn baseOf(p typed.Lvalue&) typed.Lvalue?&p {
     return match p {
-        case typed.Place.Field(_, _, b, _) => b
-        case typed.Place.Elem(_, _, e) => e.Base
-        case typed.Place.Payload(_, _, pl) => pl.Base
+        case typed.Lvalue.Field(_, _, b, _) => b
+        case typed.Lvalue.Elem(_, _, e) => e.Base
+        case typed.Lvalue.Payload(_, _, pl) => pl.Base
         case _ => null
     }
 }
@@ -1437,7 +1437,7 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
             if k >= 0 {
                 w.go(k, LVacate, p.Span(), source.Span(0, 0), -1)
             } else {
-                for lf in w.F.leaves(ty) { w.go(lf.Place, LVacate, p.Span(), source.Span(0, 0), -1) }
+                for lf in w.F.leaves(ty) { w.go(lf.PlaceId, LVacate, p.Span(), source.Span(0, 0), -1) }
             }
             return
         }
@@ -1550,7 +1550,7 @@ fn (w mut walker&) store(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wher
 fn (w mut walker&) paramOf(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Place.Local(_, _, l) => try w.params.Get(I64(l)) catch default -1
+            case typed.Lvalue.Local(_, _, l) => try w.params.Get(I64(l)) catch default -1
             case _ => -1
         }
         case typed.Expr.Away(_, _, y) => w.paramOf(y)
@@ -1584,10 +1584,10 @@ fn (w mut walker&) viewRead(o Vec<I64>&) {
 
 # what the storage of a place is part of: the origins of the value or reference it is reached through, and - where a
 # candidate place is passed through on the way - that place's own value (a field of what it holds is a view of it)
-fn (w mut walker&) reach(p typed.Place&) Vec<I64> {
+fn (w mut walker&) reach(p typed.Lvalue&) Vec<I64> {
     f := w.F
     match p {
-        case typed.Place.Local(lsp, _, l) {
+        case typed.Lvalue.Local(lsp, _, l) {
             w.use(I64(l), lsp)
             o Vec<I64>
             addAllTo(o, w.origins[I64(l)])
@@ -1599,23 +1599,23 @@ fn (w mut walker&) reach(p typed.Place&) Vec<I64> {
             }
             return o
         }
-        case typed.Place.Deref(_, _, r) { return w.expr(r) }
-        case typed.Place.Field(_, _, base, i) {
+        case typed.Lvalue.Deref(_, _, r) { return w.expr(r) }
+        case typed.Lvalue.Field(_, _, base, i) {
             o := w.reach(base)
             k := f.placeKey(base.Type(), i)
             if k >= 0: addTo(o, orig(OPl, k))
             return o
         }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Elem(_, _, e) {
             o := w.reach(e.Base)
             w.expr(e.Index)
             k := f.placeKey(f.arrayOf(e.Base.Type()), -1)
             if k >= 0: addTo(o, orig(OPl, k))
             return o
         }
-        case typed.Place.Payload(_, _, pl) { return w.reach(pl.Base) }
-        case typed.Place.Temp(_, _, v, _) { return w.expr(v) }
-        case typed.Place.Target(_, _) {
+        case typed.Lvalue.Payload(_, _, pl) { return w.reach(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { return w.expr(v) }
+        case typed.Lvalue.Target(_, _) {
             o Vec<I64>
             if w.targets.Len() > 0 {
                 w.quiet++
@@ -1630,10 +1630,10 @@ fn (w mut walker&) reach(p typed.Place&) Vec<I64> {
 
 # what the storage holding a place is part of - its container's reach, without the place itself: what is moved out of
 # a place is no longer a value of it
-fn (w mut walker&) reachTo(p typed.Place&) Vec<I64> {
+fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
     match p {
-        case typed.Place.Field(_, _, base, _) { return w.reach(base) }
-        case typed.Place.Elem(_, _, e) {
+        case typed.Lvalue.Field(_, _, base, _) { return w.reach(base) }
+        case typed.Lvalue.Elem(_, _, e) {
             o := w.reach(e.Base)
             w.expr(e.Index)
             return o
@@ -1644,14 +1644,14 @@ fn (w mut walker&) reachTo(p typed.Place&) Vec<I64> {
 
 # a place's value read: what its storage is part of, its own value a view of the place, and the candidate places a
 # struct held in place copies with it
-fn (w mut walker&) readOf(p typed.Place&, ty types.TypeId) Vec<I64> {
+fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reach(p)
     k := f.placeOfPlace(p)
     if k >= 0 {
         addTo(o, orig(OPl, k))
     } else {
-        for lf in f.leaves(ty) { addTo(o, orig(OPl, lf.Place)) }
+        for lf in f.leaves(ty) { addTo(o, orig(OPl, lf.PlaceId)) }
     }
     if w.holds(ty) { w.viewRead(o) }
     return o
@@ -1659,7 +1659,7 @@ fn (w mut walker&) readOf(p typed.Place&, ty types.TypeId) Vec<I64> {
 
 # a place's storage borrowed: what it is part of - the places passed through on the way, read - but not the places a
 # struct held there holds: a reference to the container reaches their current values, never an old one
-fn (w mut walker&) borrowOf(p typed.Place&) Vec<I64> {
+fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
     f := w.F
     k := f.placeOfPlace(p)
     if k >= 0 { return w.readOf(p, p.Type()) }
@@ -1669,7 +1669,7 @@ fn (w mut walker&) borrowOf(p typed.Place&) Vec<I64> {
 }
 
 # a place vacated: its value moved out - no longer a view of the place, a value moved out of it
-fn (w mut walker&) takeOf(p typed.Place&, ty types.TypeId) Vec<I64> {
+fn (w mut walker&) takeOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
     f := w.F
     o := w.reachTo(p)
     k := f.placeOfPlace(p)
@@ -1679,8 +1679,8 @@ fn (w mut walker&) takeOf(p typed.Place&, ty types.TypeId) Vec<I64> {
         if lib: f.libTaken[k] = true
     } else {
         for lf in f.leaves(ty) {
-            addTo(o, orig(OMov, lf.Place))
-            if lib: f.libTaken[lf.Place] = true
+            addTo(o, orig(OMov, lf.PlaceId))
+            if lib: f.libTaken[lf.PlaceId] = true
         }
     }
     return o
@@ -2069,14 +2069,14 @@ fn (f mut Free&) stmtsMayRegister(sts Array<typed.Stmt&>&) Bool {
 
 # whether evaluating a store's place may register a destructor: a local's and a global's not, the expressions in it
 # walked, a value given storage (Temp) walked as the value
-fn (f mut Free&) placeMayRegister(p typed.Place&) Bool {
+fn (f mut Free&) placeMayRegister(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Local(_, _, _), typed.Place.Global(_, _, _, _), typed.Place.Target(_, _) => false
-        case typed.Place.Deref(_, _, x) => f.mayRegister(x)
-        case typed.Place.Field(_, _, b, _) => f.placeMayRegister(b)
-        case typed.Place.Elem(_, _, e) => f.placeMayRegister(e.Base) or f.mayRegister(e.Index)
-        case typed.Place.Payload(_, _, pl) => f.placeMayRegister(pl.Base)
-        case typed.Place.Temp(_, _, x, _) => f.mayRegister(x)
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _) => false
+        case typed.Lvalue.Deref(_, _, x) => f.mayRegister(x)
+        case typed.Lvalue.Field(_, _, b, _) => f.placeMayRegister(b)
+        case typed.Lvalue.Elem(_, _, e) => f.placeMayRegister(e.Base) or f.mayRegister(e.Index)
+        case typed.Lvalue.Payload(_, _, pl) => f.placeMayRegister(pl.Base)
+        case typed.Lvalue.Temp(_, _, x, _) => f.mayRegister(x)
     }
 }
 
@@ -2463,7 +2463,7 @@ fn (w mut walker&) views() {
 fn readLocalOf(x typed.Expr&) I64 {
     return match x {
         case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Place.Local(_, _, l) => I64(l)
+            case typed.Lvalue.Local(_, _, l) => I64(l)
             case _ => -1
         }
         case _ => -1
@@ -2811,7 +2811,7 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Assign(_, p, x) {
             match p {
-                case typed.Place.Local(_, _, l) {
+                case typed.Lvalue.Local(_, _, l) {
                     m.assigned.Push(I64(l))
                     m.values.Push(x)
                 }
@@ -2900,9 +2900,9 @@ fn (m mut mustW&) exprMust(x typed.Expr&) I64 {
 # a conversion of one value: a reference made nullable, a nominal type's - the value it converts, as it is
 fn isConversion(op typed.PrimOp, args Array<typed.Expr&>&) Bool { return op == typed.PrimOp.Convert and args.Len() == 1 }
 
-fn (m mut mustW&) placeMust(p typed.Place&) I64 {
+fn (m mut mustW&) placeMust(p typed.Lvalue&) I64 {
     match p {
-        case typed.Place.Local(_, _, l) { return m.must[I64(l)] }
+        case typed.Lvalue.Local(_, _, l) { return m.must[I64(l)] }
         case _ { }
     }
     k := m.F.placeOfPlace(p)
@@ -2947,7 +2947,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
         }
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, l) {
+                case typed.Lvalue.Local(_, _, l) {
                     if m.isParam(I64(l)) { return false }
                     for a in range m.assigned.Len() {
                         if m.assigned[a] == I64(l) and not m.fresh(m.values[a], depth + 1): return false
@@ -2976,12 +2976,12 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
 
 # the reference whose referent holds an argument's storage: a reference read whole, or the reference a borrowed place
 # is reached through - null for none (a local's own storage, a global's)
-fn derefRoot(p typed.Place&) typed.Expr?&p {
+fn derefRoot(p typed.Lvalue&) typed.Expr?&p {
     return match p {
-        case typed.Place.Deref(_, _, r) => r
-        case typed.Place.Field(_, _, b, _) => derefRoot(b)
-        case typed.Place.Elem(_, _, e) => derefRoot(e.Base)
-        case typed.Place.Payload(_, _, pl) => derefRoot(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => r
+        case typed.Lvalue.Field(_, _, b, _) => derefRoot(b)
+        case typed.Lvalue.Elem(_, _, e) => derefRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => derefRoot(pl.Base)
         case _ => null
     }
 }
@@ -2991,7 +2991,7 @@ fn (w mut walker&) rootOf(x typed.Expr&) typed.Expr?&x {
     match x {
         case typed.Expr.Read(_, ty, p, _) {
             match p {
-                case typed.Place.Local(_, _, _) { if t.IsRef(ty) and not t.ArrayRef(ty): return x }
+                case typed.Lvalue.Local(_, _, _) { if t.IsRef(ty) and not t.ArrayRef(ty): return x }
                 case _ { }
             }
             return null
@@ -3011,8 +3011,8 @@ fn (w mut walker&) rootPlace(r typed.Expr&) I64 {
     match r {
         case typed.Expr.Read(_, _, p, _) {
             match p {
-                case typed.Place.Local(_, _, l) { v = f.mustLocals[w.Id][I64(l)] if I64(l) < f.mustLocals[w.Id].Len() else MustNone }
-                case typed.Place.Field(_, _, b, _) {
+                case typed.Lvalue.Local(_, _, l) { v = f.mustLocals[w.Id][I64(l)] if I64(l) < f.mustLocals[w.Id].Len() else MustNone }
+                case typed.Lvalue.Field(_, _, b, _) {
                     if not pureBase(b): return -1
                     v = f.placeOfPlace(p)
                 }
@@ -3027,11 +3027,11 @@ fn (w mut walker&) rootPlace(r typed.Expr&) I64 {
 
 # whether a place's base evaluates nothing that could change what it reads: locals and fields reached through
 # reference locals
-fn pureBase(p typed.Place&) Bool {
+fn pureBase(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Place.Local(_, _, _) => true
-        case typed.Place.Field(_, _, b, _) => pureBase(b)
-        case typed.Place.Deref(_, _, r) => match r {
+        case typed.Lvalue.Local(_, _, _) => true
+        case typed.Lvalue.Field(_, _, b, _) => pureBase(b)
+        case typed.Lvalue.Deref(_, _, r) => match r {
             case typed.Expr.Read(_, _, q, _) => pureBase(q)
             case _ => false
         }
@@ -3054,7 +3054,7 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
 }
 
 # a store into a field reached through a value of a sole place: the value's parts built where that value is
-fn (w mut walker&) orStoreOf(p typed.Place&, x typed.Expr&) {
+fn (w mut walker&) orStoreOf(p typed.Lvalue&, x typed.Expr&) {
     if not w.F.rootEmitted[w.Id] { return }
     r := derefRoot(p)
     if r is null { return }
@@ -3073,7 +3073,7 @@ fn (f mut Free&) decide() {
     # a struct overwritten in the prelude's collections overwrites a slot its removals vacated first (add's reuse of a
     # removed key's slot): no let-go that frees anything, so not one a region is made for
     for g in f.goes {
-        if g.Kind != LCall and g.Place >= 0 and f.rootEmitted[g.Body] and not (g.Kind == LLeaf and f.prelude[g.Body]) { letsHere[g.Place] = true }
+        if g.Kind != LCall and g.PlaceId >= 0 and f.rootEmitted[g.Body] and not (g.Kind == LLeaf and f.prelude[g.Body]) { letsHere[g.PlaceId] = true }
     }
     for k in range n {
         # a destroy target is a local: a task reaches it only as it is handed one (handedToTask), and no implicit call
@@ -3089,24 +3089,24 @@ fn (f mut Free&) decide() {
     # built result - keeps, so that destructor runs when its scope closes, never at a let-go. A destroy target and a
     # dtor place are ended by a Destroy(), which runs them
     for st in f.stores {
-        if st.Kind == SFresh and not f.isDestroy(st.Place) and not f.dtorVal[st.Place] and f.mayRegister(st.X!) {
-            f.keep(st.Place, RDtor, st.File, st.Sp, "its new value may hold an instance whose destructor is still to run (O16), which a let-go would run early: build that instance outside the value")
+        if st.Kind == SFresh and not f.isDestroy(st.PlaceId) and not f.dtorVal[st.PlaceId] and f.mayRegister(st.X!) {
+            f.keep(st.PlaceId, RDtor, st.File, st.Sp, "its new value may hold an instance whose destructor is still to run (O16), which a let-go would run early: build that instance outside the value")
         }
     }
     for os in f.orStores {
-        if not f.isDestroy(os.Place) and not f.dtorVal[os.Place] and f.mayRegister(os.X) {
-            f.keep(os.Place, RDtor, -1, source.Span(0, 0), "a value built into what it holds may hold an instance whose destructor is still to run (O16)")
+        if not f.isDestroy(os.PlaceId) and not f.dtorVal[os.PlaceId] and f.mayRegister(os.X) {
+            f.keep(os.PlaceId, RDtor, -1, source.Span(0, 0), "a value built into what it holds may hold an instance whose destructor is still to run (O16)")
         }
     }
     for oc in f.ors {
-        if not f.isDestroy(oc.Place) and not f.dtorVal[oc.Place] and (f.Bodies[oc.Callee].Root is null or f.regOut[oc.Callee]) {
-            f.keep(oc.Place, RDtor, -1, source.Span(0, 0), "a call building into what it holds may register an instance whose destructor is still to run (O16)")
+        if not f.isDestroy(oc.PlaceId) and not f.dtorVal[oc.PlaceId] and (f.Bodies[oc.Callee].Root is null or f.regOut[oc.Callee]) {
+            f.keep(oc.PlaceId, RDtor, -1, source.Span(0, 0), "a call building into what it holds may register an instance whose destructor is still to run (O16)")
         }
     }
     # condition 1's stores that cannot be built where they are
     for st in f.stores {
         if st.Kind == SFresh and (not f.placeable(st) or f.topSite(st.X!) < 0) {
-            f.keep(st.Place, RMade, st.File, st.Sp, "its new value cannot be built in a region of its own here")
+            f.keep(st.PlaceId, RMade, st.File, st.Sp, "its new value cannot be built in a region of its own here")
         }
     }
     # C9b: a dtor place sole but for its values' destructors - one a Destroy() may take a value out of; a move into it
@@ -3116,8 +3116,8 @@ fn (f mut Free&) decide() {
     for {
         any := false
         for st in f.stores {
-            if st.Kind == SMove and f.dtorVal[st.Place] and f.destroySole[st.Place] and st.Of != st.Place and not f.destroySole[st.Of] {
-                f.destroySole[st.Place] = false
+            if st.Kind == SMove and f.dtorVal[st.PlaceId] and f.destroySole[st.PlaceId] and st.Of != st.PlaceId and not f.destroySole[st.Of] {
+                f.destroySole[st.PlaceId] = false
                 any = true
             }
         }
@@ -3133,9 +3133,9 @@ fn (f mut Free&) decide() {
     for {
         any := false
         for st in f.stores {
-            if st.Kind == SMove and f.Sole[st.Place] and not f.Sole[st.Of] {
-                f.Sole[st.Place] = false
-                f.keep(st.Place, RMade, st.File, st.Sp, "its new value is moved out of a place that keeps")
+            if st.Kind == SMove and f.Sole[st.PlaceId] and not f.Sole[st.Of] {
+                f.Sole[st.PlaceId] = false
+                f.keep(st.PlaceId, RMade, st.File, st.Sp, "its new value is moved out of a place that keeps")
                 any = true
             }
         }
@@ -3149,7 +3149,7 @@ fn (f mut Free&) decide() {
         ok := f.whyKind[d] == RNone and not f.dUsed[d]
         given := false
         for st in f.stores {
-            if st.Place != d: continue
+            if st.PlaceId != d: continue
             given = true
             if st.Kind == SMove {
                 q := st.Of
@@ -3169,7 +3169,7 @@ fn (f mut Free&) decide() {
         f.dOk[d] = ok and f.whyKind[d] == RNone
         if not f.dOk[d]: continue
         for st in f.stores {
-            if st.Place == d and st.Kind == SMove: f.destroyUse[st.Of] = true
+            if st.PlaceId == d and st.Kind == SMove: f.destroyUse[st.Of] = true
         }
     }
 }
@@ -3266,7 +3266,7 @@ fn (f mut Free&) placeable(st store) Bool {
     c := callOf(x)
     match x {
         case typed.Expr.Promote(_, _, pr) { c = ctorCall(pr.X) }
-        case typed.Expr.Away(_, _, y) { return f.placeable(store(st.Place, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, y, null)) }
+        case typed.Expr.Away(_, _, y) { return f.placeable(store(st.PlaceId, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, y, null)) }
         case typed.Expr.Call(_, _, _) { }
         case _ { return true }
     }
@@ -3319,7 +3319,7 @@ fn (f mut Free&) writePlans() {
     # each value made for a sole place: a region of its own at its site, its parts built with it
     for st in f.stores {
         if st.Kind != SFresh: continue
-        k := st.Place
+        k := st.PlaceId
         # a sole place's values; a dtor place's when a Destroy() takes one out; a Destroy()'s target's (C9b)
         if not ((f.Sole[k] or (f.dtorVal[k] and f.destroyUse[k])) and f.rootEmitted[st.Body]) and not (f.isDestroy(k) and f.dOk[k]): continue
         x := st.X!
@@ -3334,17 +3334,17 @@ fn (f mut Free&) writePlans() {
     }
     # C9b: a Destroy() compiles only where every value its target can hold is in a region of its own
     for st in f.stores {
-        if st.Kind != SFresh or not f.isDestroy(st.Place) or not f.dOk[st.Place]: continue
+        if st.Kind != SFresh or not f.isDestroy(st.PlaceId) or not f.dOk[st.PlaceId]: continue
         top := f.topSite(st.X!)
         if top < 0 or f.Plans[st.Body].RegionKind[top] != 1 {
-            f.dOk[st.Place] = false
-            f.keep(st.Place, RMade, st.File, st.Sp, "its value cannot be built in a region of its own here")
+            f.dOk[st.PlaceId] = false
+            f.keep(st.PlaceId, RMade, st.File, st.Sp, "its value cannot be built in a region of its own here")
         }
     }
     # a store through a value of a sole place: a region made there has that value's region for its parent; parts not
     # made for a sole place are built in that region
     for os in f.orStores {
-        if not f.Sole[os.Place]: continue
+        if not f.Sole[os.PlaceId]: continue
         top := f.topSite(os.X)
         if top < 0: continue
         pl := f.Plans[os.Body]
@@ -3362,7 +3362,7 @@ fn (f mut Free&) writePlans() {
     }
     # a call given a value of a sole place: what it builds where that value lives is built in its region
     for oc in f.ors {
-        if not f.Sole[oc.Place]: continue
+        if not f.Sole[oc.PlaceId]: continue
         pl := f.Plans[oc.Body]
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
@@ -3450,11 +3450,11 @@ fn findIf(i typed.If&, site I64) typed.Call?&i {
     return null
 }
 
-fn findCallPlace(p typed.Place&, site I64) typed.Call?&p {
+fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?&p {
     return match p {
-        case typed.Place.Deref(_, _, r) => findCall(r, site)
-        case typed.Place.Field(_, _, b, _) => findCallPlace(b, site)
-        case typed.Place.Elem(_, _, e) => findCallPlace(e.Base, site) if findCallPlace(e.Base, site) is not null else findCall(e.Index, site)
+        case typed.Lvalue.Deref(_, _, r) => findCall(r, site)
+        case typed.Lvalue.Field(_, _, b, _) => findCallPlace(b, site)
+        case typed.Lvalue.Elem(_, _, e) => findCallPlace(e.Base, site) if findCallPlace(e.Base, site) is not null else findCall(e.Index, site)
         case _ => null
     }
 }
@@ -3589,7 +3589,7 @@ fn (f Free&) IsSole(k I64) Bool { return f.Done and k >= 0 and k < f.Sole.Len() 
 fn (f Free&) Frees(b I64) Bool { return f.Done and b >= 0 and b < f.rootEmitted.Len() and f.rootEmitted[b] }
 
 # the sole place a place is, -1 for none
-fn (f mut Free&) SolePlace(p typed.Place&) I64 {
+fn (f mut Free&) SolePlace(p typed.Lvalue&) I64 {
     if not f.Done { return -1 }
     k := f.placeOfPlace(p)
     return k if f.IsSole(k) else -1
@@ -3601,7 +3601,7 @@ fn (f mut Free&) SoleLeaves(ty types.TypeId) Vec<leaf> {
     out Vec<leaf>
     if not f.Done { return out }
     for l in f.leaves(ty) {
-        if f.IsSole(l.Place) { out.Push(l) }
+        if f.IsSole(l.PlaceId) { out.Push(l) }
     }
     return out
 }
@@ -3654,7 +3654,7 @@ fn (f mut Free&) Report() String {
         first := -1
         # ...its own: a call that may let go of anything names no place (its row, a view's, is said below)
         for g in range f.goes.Len() {
-            if f.goes[g].Place != k or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
+            if f.goes[g].PlaceId != k or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
             if first < 0 or f.rowBefore(f.goes[g], f.goes[first]): first = g
         }
         if first < 0: continue
@@ -3697,7 +3697,7 @@ fn (f mut Free&) Report() String {
 fn (f mut Free&) isContents(k I64) Bool {
     if f.libTaken[k] { return true }
     for g in f.goes {
-        if g.Place == k and g.Kind == LVacate and not f.programCode[g.Body]: return true
+        if g.PlaceId == k and g.Kind == LVacate and not f.programCode[g.Body]: return true
     }
     return false
 }
@@ -3708,7 +3708,7 @@ fn (f mut Free&) reported(k I64) Bool {
     if f.isDestroy(k) { return false }
     owns := false
     for st in f.stores {
-        if st.Place == k and f.rootEmitted[st.Body] and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
+        if st.PlaceId == k and f.rootEmitted[st.Body] and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove): owns = true
     }
     if not owns { return false }
     if f.isContents(k) { return true }
@@ -3749,7 +3749,7 @@ fn (f mut Free&) recvOf(g letGo) String { return f.textOf(g.File, g.RecvSp) }
 # row's own call
 fn (f mut Free&) collection(k I64, b I64, row letGo) String {
     for g in f.goes {
-        if g.Place == k and g.Body == b and g.Kind != LAssign and g.Callee >= 0 and not f.programCode[g.Callee] {
+        if g.PlaceId == k and g.Body == b and g.Kind != LAssign and g.Callee >= 0 and not f.programCode[g.Callee] {
             r := f.recvOf(g)
             if r != "": return r
         }
@@ -3765,7 +3765,7 @@ fn (f mut Free&) scopeName(g letGo, k I64) String {
     text := rv if f.keyField[k] < 0 and rv != "" else f.placeName(g)
     if f.keyField[k] < 0 {
         for g2 in f.goes {
-            if g2.Place == k and g2.Body == g.Body {
+            if g2.PlaceId == k and g2.Body == g.Body {
                 r2 := f.recvOf(g2)
                 if r2 != "": text = r2
             }
@@ -3799,20 +3799,20 @@ fn (f mut Free&) Dump() String {
     for k in range f.keyTy.Len() {
         lets I64 = 0
         for g in f.goes {
-            if g.Place == k: lets++
+            if g.PlaceId == k: lets++
         }
         sto I64 = 0
         for st in f.stores {
-            if st.Place == k: sto++
+            if st.PlaceId == k: sto++
         }
         nm := f.Sc.Spell(f.keyTy[k]) if f.Sc.Spell is not null else $t.Canon(f.keyTy[k])
         b.Push($"place " $k " " $nm "." $f.keyField[k] $(" handle" if f.handle[k] else "") " sole " $f.IsSole(k) " lets " $lets " stores " $sto " why " $f.whyKind[k] " " $f.why[k].Text "\n")
     }
     for st in f.stores {
-        b.Push($"store place " $st.Place " body " $st.Body " kind " $st.Kind " site " $st.Site " at " $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) "\n")
+        b.Push($"store place " $st.PlaceId " body " $st.Body " kind " $st.Kind " site " $st.Site " at " $f.P.L.Diags.Locate(st.File, I64(st.Sp.Start)) "\n")
     }
     for g in f.goes {
-        b.Push($"letgo place " $g.Place " body " $g.Body " kind " $g.Kind " at " $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) " " $f.placeName(g) "\n")
+        b.Push($"letgo place " $g.PlaceId " body " $g.Body " kind " $g.Kind " at " $f.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) " " $f.placeName(g) "\n")
     }
     for i in range f.Bodies.Len() {
         if f.parStored[i].Len() == 0 and f.parEsc[i].Len() == 0 and f.parMulti[i].Len() == 0: continue
@@ -3850,16 +3850,16 @@ fn (f mut Free&) withinExpr(locals Vec<I64>&, x typed.Expr&) I64 {
     }
 }
 
-fn (f mut Free&) withinPl(locals Vec<I64>&, p typed.Place&) I64 {
+fn (f mut Free&) withinPl(locals Vec<I64>&, p typed.Lvalue&) I64 {
     return match p {
-        case typed.Place.Local(_, _, l) => locals[I64(l)] if I64(l) < locals.Len() else MustNone
-        case typed.Place.Field(_, _, b, _) => f.withinPl(locals, b)
-        case typed.Place.Elem(_, _, e) => f.withinPl(locals, e.Base)
-        case typed.Place.Payload(_, _, pl) => f.withinPl(locals, pl.Base)
-        case typed.Place.Deref(_, _, r) => f.withinExpr(locals, r)
+        case typed.Lvalue.Local(_, _, l) => locals[I64(l)] if I64(l) < locals.Len() else MustNone
+        case typed.Lvalue.Field(_, _, b, _) => f.withinPl(locals, b)
+        case typed.Lvalue.Elem(_, _, e) => f.withinPl(locals, e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => f.withinPl(locals, pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => f.withinExpr(locals, r)
         case _ => MustNone
     }
 }
 
 # the parameter every storage of a place of body b is reached from, after the must-summaries
-fn (f mut Free&) withinPlace(b I64, p typed.Place&) I64 { return f.withinPl(f.withinLocals[b], p) }
+fn (f mut Free&) withinPlace(b I64, p typed.Lvalue&) I64 { return f.withinPl(f.withinLocals[b], p) }

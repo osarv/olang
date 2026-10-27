@@ -2778,7 +2778,7 @@ fn (fe mut fnEm&) put(at String&, ty types.TypeId, x mir.Operand, tag String& = 
 
 # an assignment of a value moved through memory: a copy by memmove, an aggregate built where it lands - straight into
 # the place where nothing its parts read can be the place, else in a slot of its own first
-fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+fn (fe mut fnEm&) intoPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
     t := fe.E.T
     match rv {
         case mir.Rvalue.Use(x) {
@@ -2809,7 +2809,7 @@ fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
 
 # whether place p is a local of the frame no part in args can read: each a constant, constant data, or a copy of
 # another local reached without a reference
-fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
+fn (fe mut fnEm&) apart(p mir.Lvalue, args mir.Range) Bool {
     dst := mir.NoLocal
     match p.B {
         case mir.Base.Local(l) { dst = l }
@@ -2831,7 +2831,7 @@ fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
     return true
 }
 
-fn (fe mut fnEm&) derefs(p mir.Place) Bool {
+fn (fe mut fnEm&) derefs(p mir.Lvalue) Bool {
     for i in range p.Path.N {
         match fe.F.Projs[I64(p.Path.At) + i] {
             case mir.Proj.Deref { return true }
@@ -2863,7 +2863,7 @@ fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
 # an assignment written straight into its place where a value would be too large to carry: a fixed array built of one
 # repeated element as a loop, of more than 16 as a store each, and a copy of an aggregate over 128 bytes as a memcpy -
 # LLVM expands an aggregate value element by element, which for a million elements is a million instructions
-fn (fe mut fnEm&) fillInPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
     t := fe.E.T
     match rv {
         case mir.Rvalue.Aggregate(ty, _, args) {
@@ -2960,7 +2960,7 @@ fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
     return false
 }
 
-fn (fe mut fnEm&) baseIs(p mir.Place, l mir.LocalId) Bool {
+fn (fe mut fnEm&) baseIs(p mir.Lvalue, l mir.LocalId) Bool {
     return match p.B {
         case mir.Base.Local(k) => k == l
         case _ => false
@@ -3010,7 +3010,7 @@ fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
 # a place's address and type: its base's, each projection followed - and (tagAt) the access tag a scalar there is
 # loaded and stored with (T36): its type's, in the family of the path's last step, an element's for an index and a
 # field's otherwise; untagged within an enum's payload, whose bytes two cases' fields share
-fn (fe mut fnEm&) addr(p mir.Place) String, types.TypeId {
+fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
     t := fe.E.T
     at := ""
     ty := types.UnknownT
@@ -3121,7 +3121,7 @@ fn (fe mut fnEm&) casesList(r types.TypeId) types.ListId {
 }
 
 # a place's type, its projections followed, nothing emitted
-fn (fe mut fnEm&) placeType(p mir.Place) types.TypeId {
+fn (fe mut fnEm&) placeType(p mir.Lvalue) types.TypeId {
     t := fe.E.T
     ty := match p.B {
         case mir.Base.Local(l) => fe.localType(l)
@@ -3847,7 +3847,7 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
 }
 
 # where an array place's elements are
-fn (fe mut fnEm&) dataPtr(p mir.Place) String {
+fn (fe mut fnEm&) dataPtr(p mir.Lvalue) String {
     at, ty := fe.addr(p)
     a := fe.arrayOf(ty)
     if a != types.UnknownT and fe.fixed(a) { return at }
@@ -4078,7 +4078,7 @@ fn (e mut Emitter&) enumWords(ty types.TypeId) Bool {
 
 # a reference to a place (E12c): its address, or for a run-time-length array the pair its value is; a fixed array's
 # address widened to the pair where the reference is to a run-time-length one
-fn (fe mut fnEm&) ref(p mir.Place, ty types.TypeId) String {
+fn (fe mut fnEm&) ref(p mir.Lvalue, ty types.TypeId) String {
     t := fe.E.T
     at, pty := fe.addr(p)
     rt := t.Referent(t.Repr(ty))
@@ -4146,7 +4146,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     return fe.pair(cnt, p)
 }
 
-fn (fe mut fnEm&) slice(p mir.Place, lo mir.Operand, hi mir.Operand, ty types.TypeId) String {
+fn (fe mut fnEm&) slice(p mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.TypeId) String {
     t := fe.E.T
     pty := fe.placeType(p)
     a := fe.arrayOf(pty)

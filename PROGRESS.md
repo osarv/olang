@@ -9,7 +9,12 @@
   tools path, a `.from` stamp per tool naming the compiler that built it, rebuilt when sources (tools, compiler/, std)
   are newer.
 
+- Item 1 Place.Here (E40, D8a): std/prelude/place.olang (Place(File String&, Line I64, Column I64), Str
+  FILE:LINE:COLUMN); check.placeHere builds Place(...) by constructor with constant args; callDefault sets the call's
+  place (the called name's span, the outermost call's) while a call's defaults are built. typed.Place and mir.Place
+  renamed Lvalue (D3a reserves prelude names), free.olang's Place fields PlaceId. tests/place.olang, checks cases
+  placemember, placereserved. Records (CLAUDE/HISTORY) still to write.
+
 ## Next
-- Item 1 Place.Here (prelude struct Place; needs typed.Place/mir.Place renamed to Lvalue - D3a reserves prelude names)
 - Item 5 top-level assert
 - Item 2 become

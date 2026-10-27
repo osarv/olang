@@ -706,7 +706,7 @@ fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
 fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
     for s in b.Root!.Stmts {
         match s {
-            case typed.Stmt.Assign(_, typed.Place.Global(_, ty, gm, gn), _) {
+            case typed.Stmt.Assign(_, typed.Lvalue.Global(_, ty, gm, gn), _) {
                 if gm == m and gn == n { return ty }
             }
             case _ { }

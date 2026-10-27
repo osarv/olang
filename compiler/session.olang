@@ -391,23 +391,23 @@ fn (f mut finder&) stmt(s typed.Stmt?&) {
     }
 }
 
-fn (f mut finder&) place(p typed.Place?&) {
+fn (f mut finder&) place(p typed.Lvalue?&) {
     if p is null { return }
     match p {
-        case typed.Place.Global(sp, _, mi, n) {
+        case typed.Lvalue.Global(sp, _, mi, n) {
             if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, $f.name)) }
         }
-        case typed.Place.Deref(_, _, r) { f.expr(r) }
-        case typed.Place.Field(sp, _, base, index) {
+        case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
+        case typed.Lvalue.Field(sp, _, base, index) {
             if I64(sp.End) == f.e { f.take(sp, Target.Field(base.Type(), index)) }
             f.place(base)
         }
-        case typed.Place.Elem(_, _, el) {
+        case typed.Lvalue.Elem(_, _, el) {
             f.place(el.Base)
             f.expr(el.Index)
         }
-        case typed.Place.Payload(_, _, pl) { f.place(pl.Base) }
-        case typed.Place.Temp(_, _, v, _) { f.expr(v) }
+        case typed.Lvalue.Payload(_, _, pl) { f.place(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { f.expr(v) }
         case _ { }
     }
 }
@@ -972,18 +972,18 @@ fn (f mut typeFinder&) stmt(s typed.Stmt?&) {
     }
 }
 
-fn (f mut typeFinder&) place(p typed.Place?&) {
+fn (f mut typeFinder&) place(p typed.Lvalue?&) {
     if p is null { return }
     f.take(p.Span(), p.Type())
     match p {
-        case typed.Place.Deref(_, _, r) { f.expr(r) }
-        case typed.Place.Field(_, _, base, _) { f.place(base) }
-        case typed.Place.Elem(_, _, el) {
+        case typed.Lvalue.Deref(_, _, r) { f.expr(r) }
+        case typed.Lvalue.Field(_, _, base, _) { f.place(base) }
+        case typed.Lvalue.Elem(_, _, el) {
             f.place(el.Base)
             f.expr(el.Index)
         }
-        case typed.Place.Payload(_, _, pl) { f.place(pl.Base) }
-        case typed.Place.Temp(_, _, v, _) { f.expr(v) }
+        case typed.Lvalue.Payload(_, _, pl) { f.place(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { f.expr(v) }
         case _ { }
     }
 }
