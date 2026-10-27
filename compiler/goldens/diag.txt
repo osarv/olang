@@ -29,7 +29,7 @@ arraytypeself.olang:7:6: error[T29]: Nest holds itself through the array it is d
       |      ^~~~
 compilation failed with 1 error
 === asenumcase.olang
-asenumcase.olang:7:32: error[T17]: T has no case 'C' - did you mean 'A'?
+asenumcase.olang:7:32: error[T17]: T has no case 'C'
     7 | fn f(t T) Bool { return t == T.C }
       |                                ^
 compilation failed with 1 error
@@ -135,6 +135,26 @@ b10undefined.olang:12:8: error: unknown name 'Mode'
    12 |     if Mode == "fast" { }
       |        ^~~~
 compilation failed with 3 errors
+=== b11near.olang
+b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'FIRST'?
+   16 |     if count < 0 { error MyErr.FIRTS }
+      |                          ^~~~~~~~~~~
+b11near.olang:17:12: error: unknown name 'cout' - did you mean 'count'?
+   17 |     return cout
+      |            ^~~~
+b11near.olang:22:12: error: Box has no member 'valeu' - did you mean 'value'?
+   22 |     n := b.valeu + b.Aera()
+      |            ^~~~~
+b11near.olang:22:22: error[M19]: Box has no method 'Aera' - did you mean 'Area'?
+   22 |     n := b.valeu + b.Aera()
+      |                      ^~~~
+b11near.olang:23:16: error[T17]: Shape has no case 'Cricle' - did you mean 'Circle'?
+   23 |     s := Shape.Cricle
+      |                ^~~~~~
+b11near.olang:24:12: error: module std/io declares no 'Prinln' - did you mean 'Println'?
+   24 |     try io.Prinln($n $s)
+      |            ^~~~~~
+compilation failed with 6 errors
 === b11notehandle.olang
 b11notehandle.olang:14:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         l.Push(t)
@@ -234,10 +254,13 @@ b6elemgeneric.olang:17:20: error[O20]: the container outlives what this refers t
       |                    ^
 compilation failed with 1 error
 === b6elemparallel.olang
+b6elemparallel.olang:11:9: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
+   11 |         k I64 = 0
+      |         ^
 b6elemparallel.olang:12:23: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
    12 |         cells[i].s, k = x, 1
       |                       ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === b6elemrows.olang
 b6elemrows.olang:8:20: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
     8 |         rows[i][0] = x
@@ -424,20 +447,29 @@ c2dexactobliged.olang:23:9: note: 'l' is declared here, in a block that closes f
       |         ^
 compilation failed with 1 error
 === c2dfieldentry.olang
+c2dfieldentry.olang:8:5: error[D3b]: 's' is declared and never read - read it, or leave the declaration out
+    8 |     s FeSlot& = FeSlot(Vec<I64>())
+      |     ^
 c2dfieldentry.olang:11:20: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    11 |         s = FeSlot(l)
       |                    ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === c2dfieldoutlives.olang
+c2dfieldoutlives.olang:12:5: error[D3b]: 'bi' is declared and never read - read it, or leave the declaration out
+   12 |     bi View& = View(base)
+      |     ^~
 c2dfieldoutlives.olang:15:19: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
    15 |         bi = View(inner)
       |                   ^~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === c2dheldpush.olang
 c2dheldpush.olang:13:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
    13 |     return Words(t)
       |            ^~~~~
-compilation failed with 1 error
+c2dheldpush.olang:16:5: error[D3b]: 'w' is declared and never read - read it, or leave the declaration out
+   16 |     w := fromLocal()
+      |     ^
+compilation failed with 2 errors
 === c2dmatchfield.olang
 c2dmatchfield.olang:18:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    18 |         ms.Push(M(2, d))
@@ -703,7 +735,7 @@ comprnotype.olang:4:10: error: expected an element type before the [, as in I32[
 compilation failed with 1 error
 === comprref.olang
 comprref.olang:5:17: error[E27]: a comprehension's elements may not be or hold references yet - build the array with a loop
-    5 |     a := String&[t for c in t]
+    5 |     a := String&[t for _ in t]
       |                 ^
 compilation failed with 1 error
 === condcycle.olang
@@ -788,7 +820,10 @@ compilation failed with 1 error
 d10adowhile.olang:4:4: error[D10a]: the end can be reached without returning I64 - return on every path, or end it with 'unreachable'
     4 | fn f() I64 {
       |    ^
-compilation failed with 1 error
+d10adowhile.olang:8:13: error[S3]: 'f()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+    8 | fn main() { f() }
+      |             ^~~
+compilation failed with 2 errors
 === d10adroppedbranch.olang
 d10adroppedbranch.olang:6:4: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
     6 | fn pick() I32 {
@@ -818,8 +853,8 @@ d11amutvaluelocal.olang:4:7: error[D11a]: a local is always writable - 'mut' is 
       |       ^~~
 compilation failed with 1 error
 === d13czeroref.olang
-d13czeroref.olang:18:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
-   18 |     b := a.Repeat(2)
+d13czeroref.olang:19:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
+   19 |     b := a.Repeat(2)
       |            ^~~~~~
 $ROOT/std/prelude/array.olang:182:12: note: in the standard library's code, here
   182 |     out := Array<T>(a.Len() * k)
@@ -827,8 +862,8 @@ $ROOT/std/prelude/array.olang:182:12: note: in the standard library's code, here
 d13czeroref.olang:11:5: note: here
    11 |     Counter++
       |     ^~~~~~~~~
-d13czeroref.olang:18:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
-   18 |     b := a.Repeat(2)
+d13czeroref.olang:19:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
+   19 |     b := a.Repeat(2)
       |            ^~~~~~
 compilation failed with 1 error
 === d15forwardcycle.olang
@@ -945,15 +980,21 @@ d17condfails.olang:3:25: error[R9]: ParseError can escape here, and this functio
       |                         ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === d17convfit.olang
+d17convfit.olang:4:5: error[D3b]: 'b' is declared and never read - read it, or leave the declaration out
+    4 |     b := U8(300)
+      |     ^
 d17convfit.olang:4:10: error[D17g]: 300 does not fit U8 - write a value that fits, or 'try x.Narrow<U8>()' to fail with an error
     4 |     b := U8(300)
       |          ^~~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === d17convglobal.olang
+d17convglobal.olang:6:5: error[D3b]: 'n' is declared and never read - read it, or leave the declaration out
+    6 |     n := I32(Big)
+      |     ^
 d17convglobal.olang:6:10: error[D17g]: Big does not fit I32 - write a value that fits, or 'try x.Narrow<I32>()' to fail with an error
     6 |     n := I32(Big)
       |          ^~~~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === d17fnvalue.olang
 d17fnvalue.olang:10:10: error[T22a]: 'keep' relates its arguments' scopes, which a call through a function value cannot check - call it directly
    10 |     f := keep
@@ -994,13 +1035,16 @@ d17outlivesnotparam.olang:8:43: error[D17d]: 'q' is no parameter of this functio
       |                                           ^
 compilation failed with 1 error
 === d17reqfalse.olang
+d17reqfalse.olang:10:5: error[D3b]: 'p' is declared and never read - read it, or leave the declaration out
+   10 |     p := percent(5, Whole)!
+      |     ^
 d17reqfalse.olang:10:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
    10 |     p := percent(5, Whole)!
       |          ^~~~~~~
 d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
       |                                  ^~~~~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === d18argoutlived.olang
 d18argoutlived.olang:11:11: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    11 |         g = chars(s)
@@ -1228,6 +1272,23 @@ d3aparam.olang:4:4: note: 'helper' is declared here
     4 | fn helper() { }
       |    ^~~~~~
 compilation failed with 1 error
+=== d3bunread.olang
+d3bunread.olang:11:5: error[D3b]: 'x' is declared and never read - read it, or leave the declaration out
+   11 |     x := 3
+      |     ^
+d3bunread.olang:13:9: error[D3b]: 'i' is never read - write '_' in its place
+   13 |     for i in range 3 { total++ }
+      |         ^
+d3bunread.olang:16:28: error[D3b]: 'h' is never read - write '_' in its place
+   16 |         case Shape.Rect(w, h) { total += w }
+      |                            ^
+d3bunread.olang:19:5: error[D3b]: 'q' is never read - write '_' in its place
+   19 |     q, r := divmod(7, 2)
+      |     ^
+d3bunread.olang:20:5: error[D3b]: 'n' is declared and never read - read it, or leave the declaration out
+   20 |     n := 0
+      |     ^
+compilation failed with 5 errors
 === d8adefault.olang
 d8adefault.olang:5:14: error[D8a]: a default is computed while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's
     5 | fn f(n I32 = counter) I32 { return n }
@@ -1235,10 +1296,13 @@ d8adefault.olang:5:14: error[D8a]: a default is computed while compiling, and th
 d8adefault.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === d8cdestructinner.olang
+d8cdestructinner.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   13 |     keep Node& = outer
+      |     ^~~~
 d8cdestructinner.olang:16:14: error[O10]: this reference lives in a scope that may not outlive where it is put
    16 |         keep = a
       |              ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === d8dcount.olang
 d8dcount.olang:6:15: error[D8d]: these results are passed as the arguments, so there must be as many - destructure them first: 'a, b := g()'
     6 |     n := sum3(qr(7, 2))
@@ -1366,7 +1430,10 @@ definitdowhile.olang:9:12: error[D13d]: 'n' is read here before it is assigned o
 definitdowhile.olang:6:5: note: declared here with no value
     6 |     n Node&
       |     ^
-compilation failed with 1 error
+definitdowhile.olang:11:13: error[S3]: 'probe()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+   11 | fn main() { probe() }
+      |             ^~~~~~~
+compilation failed with 2 errors
 === definiteffect.olang
 definiteffect.olang:11:5: error[D13c]: Eff has no zero value, so this needs one - its constructor does not run on zeros while compiling: it reads a mutable global, whose value is the running program's
    11 |     e Eff
@@ -1668,15 +1735,21 @@ compilation failed with 1 error
 e25scopeargreturn.olang:8:16: error[O10d]: this value lives in this function's own scope, which closes first
     8 |     return mkp&t(i)
       |                ^
-compilation failed with 1 error
+e25scopeargreturn.olang:11:5: error[D3b]: 'p' is declared and never read - read it, or leave the declaration out
+   11 |     p := leak(3)
+      |     ^
+compilation failed with 2 errors
 === e25scopeargreturnstore.olang
+e25scopeargreturnstore.olang:14:9: error[D3b]: 'r' is declared and never read - read it, or leave the declaration out
+   14 |         r := put(h, i)
+      |         ^
 e25scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         r := put(h, i)
       |              ^~~
 e25scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
     8 |     h.p = mkp&return(i)
       |     ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === e25spawninner.olang
 e25spawninner.olang:11:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    11 |             spawn x = mkp&t(i * 11 + 1)
@@ -1954,7 +2027,10 @@ compilation failed with 1 error
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
    13 |     return c
       |            ^
-compilation failed with 1 error
+e31calllocal.olang:16:5: error[D3b]: 'g' is declared and never read - read it, or leave the declaration out
+   16 |     g := mkF(Counter(41))
+      |     ^
+compilation failed with 2 errors
 === e31ccommutesbothways.olang
 e31ccommutesbothways.olang:6:10: error[E31c]: with 'commutes' here, '+' between B and A would call this method or A.Plus - remove 'commutes'
     6 | fn (b B) Plus(a A) B commutes { return b }
@@ -2017,7 +2093,7 @@ e31opshapeuse.olang:20:1: note: 'Has' is declared here
    20 | fn (g Graph&) Has(a I64, b I64) Bool { return true }
       | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 e31opshapeuse.olang:34:5: error[E31]: Graph's Next takes one parameter besides its receiver - an ordinary method, not the one 'for ... in' calls, which takes none
-   34 |     for z in g { }
+   34 |     for _ in g { }
       |     ^~~~~~~~~~~~~~
 e31opshapeuse.olang:21:1: note: 'Next' is declared here
    21 | fn (g Graph&) Next(k I64) I64 { return 6 }
@@ -2238,7 +2314,7 @@ externfnvalue.olang:9:12: error[X13]: a C function is given a function by the na
 compilation failed with 1 error
 === forinclausebreak.olang
 forinclausebreak.olang:15:36: error[S9e]: a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag
-   15 |         for x in try t { } catch { break }
+   15 |         for _ in try t { } catch { break }
       |                                    ^~~~~
 compilation failed with 1 error
 === forinexists.olang
@@ -2248,12 +2324,12 @@ forinexists.olang:6:9: error[D3a, E29]: 'x' is already declared, and a for-in de
 compilation failed with 1 error
 === forinint.olang
 forinint.olang:4:14: error[S9a]: I64 cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()
-    4 |     for x in 5 { }
+    4 |     for _ in 5 { }
       |              ^
 compilation failed with 1 error
 === forinneedstry.olang
 forinneedstry.olang:16:5: error[S9e]: this loop's own calls can fail - write 'for x in try c', with catch clauses after the body
-   16 |     for x in t { }
+   16 |     for _ in t { }
       |     ^~~
 compilation failed with 1 error
 === forinshadowparam.olang
@@ -2263,7 +2339,7 @@ forinshadowparam.olang:6:9: error[D3a, E29]: 's' is already declared, and a for-
 compilation failed with 1 error
 === forintrynothing.olang
 forintrynothing.olang:5:5: error[S9e]: nothing this loop calls by itself can fail - drop the 'try'
-    5 |     for x in try a { }
+    5 |     for _ in try a { }
       |     ^~~
 compilation failed with 1 error
 === functypename.olang
@@ -2517,7 +2593,10 @@ g1atypevarerrs.olang:3:21: error[G1a]: 'T' is a type variable, not an error set 
 g1atypevarerrs.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
     6 |     keep(1)
       |     ^~~~
-compilation failed with 2 errors
+g1atypevarerrs.olang:6:5: error[S3]: 'keep(1)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+    6 |     keep(1)
+      |     ^~~~~~~
+compilation failed with 3 errors
 === g1auntried.olang
 g1auntried.olang:12:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
    12 |     n := a.Fold(0, fn(acc I64, x I64) I64 { return acc + try pos(x) })
@@ -2701,7 +2780,7 @@ istwotypes.olang:8:14: error[E10c]: 'is' tests for null and nothing else - compa
 compilation failed with 1 error
 === itnotmut.olang
 itnotmut.olang:7:14: error[S9a]: C& cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()
-    7 |     for v in c { }
+    7 |     for _ in c { }
       |              ^
 compilation failed with 1 error
 === itredecl.olang
@@ -3123,7 +3202,7 @@ m19g13kept.olang:10:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' ma
    10 |     try io.Println(l[0])
       |                    ^
 m19g13kept.olang:9:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
-    9 |     for i in range 100 { v.Push('b') }
+    9 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
 === m19g14byvalue.olang
@@ -3207,6 +3286,11 @@ m23remoteref.olang:3:8: error[M23a]: a remote import's host, owner, repository a
     3 | import "example.com/me/tools@--upload-pack=touch/x"
       |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== m5aunused.olang
+m5aunused.olang:3:8: error[M5a]: nothing here is reached through 'os' - remove 'import "std/os"'
+    3 | import "std/os"
+      |        ^~~~~~~~
+compilation failed with 1 error
 === m6bonce.olang
 m6bonce.olang:14:7: error[M6b]: '==' needs K's eq, which is private to its module - declare it Eq to use it here
    14 |     m.Put(P(K(1), K(2)), 5)
@@ -3243,7 +3327,7 @@ narrowimplicit.olang:5:13: error[T6b]: I64 does not flow into I32 - convert it, 
 compilation failed with 1 error
 === nextflag.olang
 nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()
-    9 |     for x in t { }
+    9 |     for _ in t { }
       |              ^
 compilation failed with 1 error
 === noextendsmethod.olang
@@ -3419,29 +3503,38 @@ o13acopywrap.olang:14:12: error[O26]: this value refers to this function's own s
       |            ^
 compilation failed with 1 error
 === o14afn.olang
+o14afn.olang:6:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+    6 |     keep := fn() I32 { return 0 }
+      |     ^~~~
 o14afn.olang:10:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         keep = id(y)
       |                ^~
 o14afn.olang:3:30: note: the callee requires it because of this statement
     3 | fn id(f fn() I32) fn() I32 { return f }
       |                              ^~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === o14bfoldshort.olang
+o14bfoldshort.olang:7:5: error[D3b]: 'longest' is declared and never read - read it, or leave the declaration out
+    7 |     longest String&keep = keep[0]
+      |     ^~~~~~~
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
 $ROOT/std/prelude/iterator.olang:73:5: note: the callee requires it because of this statement
    73 |     return acc
       |     ^~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === o14btypevar.olang
+o14btypevar.olang:10:5: error[D3b]: 'y' is declared and never read - read it, or leave the declaration out
+   10 |     y Node& = Node(0)
+      |     ^
 o14btypevar.olang:13:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |         y = id(n)
       |             ^~
 o14btypevar.olang:8:19: note: the callee requires it because of this statement
     8 | fn id<T>(x T) T { return x }
       |                   ^~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === o14byvalborrow.olang
 o14byvalborrow.olang:9:30: error[O10d]: this value lives in this function's own scope, which closes first
     9 | fn bor(p aPt) aPt&p { return p }
@@ -3449,7 +3542,10 @@ o14byvalborrow.olang:9:30: error[O10d]: this value lives in this function's own 
 o14byvalborrow.olang:9:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
     9 | fn bor(p aPt) aPt&p { return p }
       |        ^
-compilation failed with 1 error
+o14byvalborrow.olang:12:5: error[D3b]: 'w' is declared and never read - read it, or leave the declaration out
+   12 |     w := bor(q)
+      |     ^
+compilation failed with 2 errors
 === o14byvalborrowany.olang
 o14byvalborrowany.olang:12:37: error[O10d]: this value lives in this function's own scope, which closes first
    12 | fn bor(p aPt) any aNamed&p { return p }
@@ -3591,10 +3687,13 @@ o17settlestale.olang:31:8: error[O17]: this value's references live where its ow
       |        ^
 compilation failed with 1 error
 === o17spawntargets.olang
+o17spawntargets.olang:21:5: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
+   21 |     k I64 = 0
+      |     ^
 o17spawntargets.olang:26:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    26 |     grow(b)
       |          ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === o17tempcallresult.olang
 o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    25 |         addRef(idBox(seed), i + 1)
@@ -3664,7 +3763,10 @@ compilation failed with 1 error
 o18cstorage.olang:7:25: error[O10d]: this value lives in this function's own scope, which closes first
     7 |     for e in m { return e }
       |                         ^
-compilation failed with 1 error
+o18cstorage.olang:14:5: error[D3b]: 'k' is declared and never read - read it, or leave the declaration out
+   14 |     k := keep(m)
+      |     ^
+compilation failed with 2 errors
 === o1bglobalarg.olang
 o1bglobalarg.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         put(GL, inner)
@@ -3710,23 +3812,32 @@ o23abuild.olang:12:16: error[C2d]: this builds through a '&p' field whose scope 
       |                ^~~~
 compilation failed with 1 error
 === o23adepth.olang
+o23adepth.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   13 |     keep Node&base = Node(0)
+      |     ^~~~
 o23adepth.olang:17:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    17 |         keep = v.n
       |              ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === o23aliasmethod.olang
+o23aliasmethod.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   12 |     keep N& = outer
+      |     ^~~~
 o23aliasmethod.olang:17:16: error[O23, O11]: this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance
    17 |         arr[0].Set(x)
       |                ^~~
 o23aliasmethod.olang:9:33: note: the callee requires it because of this statement
     9 | fn (c mut Cur&) Set(x mut N&) { c.at = x }
       |                                 ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === o23aliaswrite.olang
+o23aliaswrite.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   12 |     keep N& = outer
+      |     ^~~~
 o23aliaswrite.olang:17:19: error[O23, O11]: this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance
    17 |         arr[0].at = x
       |                   ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === o23awrite.olang
 o23awrite.olang:21:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    21 |         bi.Set(n)
@@ -3794,10 +3905,13 @@ o25hcopyelem.olang:12:13: error[O26]: this value refers to this function's own s
       |             ^
 compilation failed with 1 error
 === o25hcopyout.olang
+o25hcopyout.olang:11:5: error[D3b]: 'o' is declared and never read - read it, or leave the declaration out
+   11 |     o := Link(0, null)
+      |     ^
 o25hcopyout.olang:14:11: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    14 |         o = m
       |           ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === o25hcopyouter.olang
 o25hcopyouter.olang:14:18: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    14 |         outer[0] = t
@@ -3924,21 +4038,27 @@ o4bmapvalueblock.olang:15:37: error[T17c]: this value's payload refers to storag
       |                                     ^~~~~
 compilation failed with 1 error
 === o4bvalueparam.olang
+o4bvalueparam.olang:13:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   13 |     keep Holder = Holder(outer)
+      |     ^~~~
 o4bvalueparam.olang:17:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    17 |         keep = idh(h2)
       |                ^~~
 o4bvalueparam.olang:10:27: note: the callee requires it because of this statement
    10 | fn idh(x Holder) Holder { return x }
       |                           ^~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === o4bvalueparamgeneric.olang
+o4bvalueparamgeneric.olang:12:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   12 |     keep Holder = Holder(outer)
+      |     ^~~~
 o4bvalueparamgeneric.olang:16:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         keep = id(h2)
       |                ^~
 o4bvalueparamgeneric.olang:9:19: note: the callee requires it because of this statement
     9 | fn id<T>(x T) T { return x }
       |                   ^~~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
     9 |     t := V(1) + V(2)
@@ -3978,10 +4098,13 @@ p1gresultref.olang:13:39: error[P1g]: a spawn target has exactly the call's type
       |                                       ^
 compilation failed with 1 error
 === p1gtargetscope.olang
+p1gtargetscope.olang:10:5: error[D3b]: 'r' is declared and never read - read it, or leave the declaration out
+   10 |     r Node?& = null
+      |     ^
 p1gtargetscope.olang:14:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    14 |             spawn r = keepOf(l)
       |             ^~~~~
-compilation failed with 1 error
+compilation failed with 2 errors
 === p1gtargetsnarrow.olang
 p1gtargetsnarrow.olang:15:9: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    15 |         spawn x, k = pick(m)
@@ -4232,7 +4355,7 @@ r11bcomparewhat.olang:6:28: error[T20]: 'e' is compared with an error word, an e
       |                            ^~
 compilation failed with 1 error
 === r11blonetypo.olang
-r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
+r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone - did you mean 'PEr'?
     6 |     try f() catch PErr { }
       |                   ^~~~
 compilation failed with 1 error
@@ -4376,13 +4499,16 @@ r8trynothing.olang:4:20: error[R8]: nothing here can fail - write it without 'tr
       |                    ^~~
 compilation failed with 1 error
 === r9adefaultinner.olang
+r9adefaultinner.olang:16:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   16 |     keep Node& = outer
+      |     ^~~~
 r9adefaultinner.olang:19:40: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
    19 |         keep = try mk(i) catch default inner
       |                                        ^~~~~
 r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    19 |         keep = try mk(i) catch default inner
       |              ^
-compilation failed with 2 errors
+compilation failed with 3 errors
 === r9adefaultlocal.olang
 r9adefaultlocal.olang:15:36: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
    15 |     return try mk(1) catch default seed
@@ -4390,7 +4516,10 @@ r9adefaultlocal.olang:15:36: error[R11, O25]: a reference default lives where th
 r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
    15 |     return try mk(1) catch default seed
       |            ^~~
-compilation failed with 2 errors
+r9adefaultlocal.olang:18:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   18 |     keep := get(Node(42))
+      |     ^~~~
+compilation failed with 3 errors
 === r9arithpartial.olang
 r9arithpartial.olang:5:13: error[R9]: arith.Error.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
     5 |     r I32 = try arith.Div(a, b) catch arith.Error.DIVIDE_BY_ZERO default 0
@@ -4441,12 +4570,12 @@ r9qualified.olang:7:5: error[R9]: io.Error can escape here, and this function do
 compilation failed with 1 error
 === rangefloat.olang
 rangefloat.olang:4:20: error[S9b]: a range's bounds and step are integers, found F64
-    4 |     for i in range 2.5 { }
+    4 |     for _ in range 2.5 { }
       |                    ^~~
 compilation failed with 1 error
 === rangezero.olang
 rangezero.olang:4:27: error[S9b]: a range only counts upward, so its step is positive
-    4 |     for i in range 10, 0, 0 { }
+    4 |     for _ in range 10, 0, 0 { }
       |                           ^
 compilation failed with 1 error
 === redefbuiltin.olang
@@ -4481,7 +4610,7 @@ refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members ar
 compilation failed with 1 error
 === reflfilterargs.olang
 reflfilterargs.olang:5:61: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
-    5 | fn g(k I64) Point { return Point(k for p in Point.Params if k > 0) }
+    5 | fn g(k I64) Point { return Point(k for _ in Point.Params if k > 0) }
       |                                                             ^~~~~
 compilation failed with 1 error
 === reflfilterundecided.olang
@@ -4551,7 +4680,7 @@ reflofttype.olang:11:29: error[G34]: this field is Point's, and the value is Sha
 compilation failed with 1 error
 === refltrylist.olang
 refltrylist.olang:10:5: error[G33]: a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'
-   10 |     for f in try Point.Fields { }
+   10 |     for _ in try Point.Fields { }
       |     ^~~
 compilation failed with 1 error
 === refltypenotvalue.olang
@@ -4577,7 +4706,7 @@ retire01assert.olang:13:12: note: here
    13 |     return head[0]
       |            ^~~~~~~
 retire01assert.olang:9:43: note: the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'
-    9 | fn add(j mut Job&) { for i in range 100 { j.items.Push(9) } }
+    9 | fn add(j mut Job&) { for _ in range 100 { j.items.Push(9) } }
       |                                           ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === retire02global.olang
@@ -4608,10 +4737,13 @@ roglobaltext.olang:14:14: error[S6]: V cannot be written - only a local, a param
       |              ^
 compilation failed with 3 errors
 === rv3assigncopy.olang
+rv3assigncopy.olang:12:5: error[D3b]: 'd' is declared and never read - read it, or leave the declaration out
+   12 |     d := Box()
+      |     ^
 rv3assigncopy.olang:13:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    13 |     d = pick(r)
       |       ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === rv3condstore.olang
 rv3condstore.olang:13:12: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
    13 |     d.head = Node()
@@ -4628,10 +4760,13 @@ rv3globalcopy.olang:5:18: error[T25c]: a mutable global holds no copy of a read-
       |                  ^
 compilation failed with 1 error
 === rv3payloadcopy.olang
+rv3payloadcopy.olang:15:5: error[D3b]: 'e' is declared and never read - read it, or leave the declaration out
+   15 |     e := E.A(r)
+      |     ^
 rv3payloadcopy.olang:15:14: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    15 |     e := E.A(r)
       |              ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === rv3roat.olang
 rv3roat.olang:5:7: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
     5 |     ls[0].Push(9)
@@ -4846,10 +4981,13 @@ s13caltperm.olang:13:37: error[T25b]: this writes through a read-only reference 
       |                                     ^
 compilation failed with 1 error
 === s13caltscope.olang
+s13caltscope.olang:15:5: error[D3b]: 'keep' is declared and never read - read it, or leave the declaration out
+   15 |     keep := ro(outer)
+      |     ^~~~
 s13caltscope.olang:21:51: error[O10]: this reference lives in a scope that may not outlive where it is put
    21 |             case Box.Two(x, _), Box.Has(x) { keep = x }
       |                                                   ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === s13calttype.olang
 s13calttype.olang:9:26: error[S13c]: 'x' is bound as I32 by an earlier alternative - split the case
     9 |         case S.A(x), S.B(x) { return 1 }
@@ -5027,6 +5165,20 @@ s1bsameline.olang:5:10: error[S8a]: this condition is the same on every build, s
     5 |     if x > 0:
       |          ^
 compilation failed with 2 errors
+=== s3idle.olang
+s3idle.olang:11:5: error[S3]: 'x.Abs()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+   11 |     x.Abs()
+      |     ^~~~~~~
+s3idle.olang:13:5: error[S3]: 'a.Len()' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+   13 |     a.Len()
+      |     ^~~~~~~
+s3idle.olang:14:5: error[S3]: 'twice(x)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+   14 |     twice(x)
+      |     ^~~~~~~~
+s3idle.olang:15:5: error[S3]: 'deep(3)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+   15 |     deep(3)
+      |     ^~~~~~~
+compilation failed with 4 errors
 === s3joinnextline.olang
 s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothing - a join continues onto the next line only inside parentheses
     6 |         " more"
@@ -5034,7 +5186,7 @@ s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothin
 compilation failed with 1 error
 === s5atbuilds.olang
 s5atbuilds.olang:14:25: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
-   14 |     for k in range 3 { l[0].Tag("lit") }
+   14 |     for _ in range 3 { l[0].Tag("lit") }
       |                         ^
 compilation failed with 1 error
 === s5atnosetat.olang
@@ -5294,7 +5446,7 @@ s8bother.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
       |             ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === s8dassignclause.olang
-s8dassignclause.olang:15:18: error[S8d]: Shape is an enum - its payload's 'p' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.p }', assigned nowhere there
+s8dassignclause.olang:15:18: error[S8d]: Shape is an enum - its payload's 'p' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.p }', until it is assigned
    15 |         return e.p.v + x
       |                  ^
 s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'q!'
@@ -5302,9 +5454,9 @@ s8dassignclause.olang:22:16: error[T2c]: 'q' is a N?&, which may be null - read 
       |                ^
 compilation failed with 2 errors
 === s8dassigned.olang
-s8dassigned.olang:7:16: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
-    7 |         t := s.r
-      |                ^
+s8dassigned.olang:9:22: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+    9 |         assert t + s.r == 4
+      |                      ^
 compilation failed with 1 error
 === s8dnarrowwrite.olang
 s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)
@@ -5312,9 +5464,24 @@ s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never w
       |                              ^
 compilation failed with 1 error
 === s8dunnarrowed.olang
-s8dunnarrowed.olang:4:35: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
+s8dunnarrowed.olang:4:35: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
     4 | fn radius(s Shape) I64 { return s.r }
       |                                   ^
+compilation failed with 1 error
+=== s8dwidecond.olang
+s8dwidecond.olang:4:56: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+    4 | fn r(s Shape) I64 { return 0 if s == Shape.Ring else s.r }
+      |                                                        ^
+compilation failed with 1 error
+=== s8dwidekill.olang
+s8dwidekill.olang:7:14: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+    7 |     return s.r
+      |              ^
+compilation failed with 1 error
+=== s8dwideor.olang
+s8dwideor.olang:4:53: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+    4 | fn wide(s Shape) Bool { return s == Shape.Ring or s.r > 2 }
+      |                                                     ^
 compilation failed with 1 error
 === samevalue.olang
 samevalue.olang:6:14: error[E10c]: 'is' tests for null and nothing else - compare with '=='
@@ -5698,7 +5865,10 @@ strstoresreceiver.olang:13:5: error[E11c, O12]: '$' does not say where a value i
 strstoresreceiver.olang:8:33: note: built here, where the receiver's part it was handed lives
     8 | fn grow(n mut Node&) { n.next = Node(6, null) }
       |                                 ^~~~~~~~~~~~~
-compilation failed with 1 error
+strstoresreceiver.olang:18:5: error[D3b]: 's' is declared and never read - read it, or leave the declaration out
+   18 |     s := $b
+      |     ^
+compilation failed with 2 errors
 === strtransientadapter.olang
 strtransientadapter.olang:13:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    13 | fn (b Bag&) Str() String { return "b" $apply(b.c) }
@@ -5882,10 +6052,13 @@ t17payloadoutlived.olang:12:31: error[T17c]: this value's payload refers to stor
       |                               ^
 compilation failed with 1 error
 === t17payloadscopes.olang
+t17payloadscopes.olang:15:9: error[D3b]: 'l' is declared and never read - read it, or leave the declaration out
+   15 |         l Link& = Link.Two(x, y)
+      |         ^
 t17payloadscopes.olang:15:31: error[T17c]: this payload holds references into two scopes, and it lives in one - build what it holds in one scope
    15 |         l Link& = Link.Two(x, y)
       |                               ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === t17payloadwrite.olang
 t17payloadwrite.olang:16:29: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    16 |         s Slot& = Slot.Held(outer)
@@ -6479,7 +6652,7 @@ t32anycasenotany.olang:13:14: error[T34]: a type case matches an 'any' of a clos
 compilation failed with 1 error
 === t32anycasetwice.olang
 t32anycasetwice.olang:15:14: error[T34]: aButton is matched by an earlier clause - this one is never reached
-   15 |         case aButton c { return 0 }
+   15 |         case aButton _ { return 0 }
       |              ^~~~~~~~~
 compilation failed with 1 error
 === t32anyconvert.olang
@@ -6610,7 +6783,7 @@ t34casegenericbare.olang:17:14: error[G7]: type arguments for aBox: expected 1, 
 compilation failed with 1 error
 === t34caseunknown.olang
 t34caseunknown.olang:11:14: error: unknown type 'aBx'
-   11 |         case aBx b { return 1 }
+   11 |         case aBx _ { return 1 }
       |              ^~~
 compilation failed with 1 error
 === t4aatomic.olang
@@ -6665,7 +6838,10 @@ t6alocalnote.olang:8:16: error[T6b]: I64 does not flow into I32 - convert it, as
 t6alocalnote.olang:7:5: note: 'n' is I64, its literal's own type - declare the type it should have, 'n I32 = ...'
     7 |     n := 0
       |     ^
-compilation failed with 1 error
+t6alocalnote.olang:8:5: error[S3]: 'give(n * 2 + 1)' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out
+    8 |     give(n * 2 + 1)
+      |     ^~~~~~~~~~~~~~~
+compilation failed with 2 errors
 === t6arangenote.olang
 t6arangenote.olang:7:35: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
     7 |     for i in range 1, 10 { l.Push(i) }
@@ -6769,7 +6945,7 @@ tagunknownscope.olang:14:16: error[O12]: where 'l' lives is not known here, so n
 compilation failed with 1 error
 === tdcount.olang
 tdcount.olang:8:38: error[R11]: expected 2 defaults, one per result, found 1
-    8 | fn count() { a, b := try two() catch default 1 }
+    8 | fn count() { _, _ := try two() catch default 1 }
       |                                      ^~~~~~~
 compilation failed with 1 error
 === tdnovalue.olang
@@ -7008,7 +7184,7 @@ vec13nominal.olang:18:20: error[M19g]: 't' holds a view of 'w' taken before 'w' 
    18 |     try io.Println(t)
       |                    ^
 vec13nominal.olang:16:29: note: 'w' may grow here, in 'Push' - take the view after it, or copy the elements first: 'w.ToArray()'
-   16 |     for i in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
+   16 |     for _ in range 1000 { w.Push('b') }   # may grow the Vec, replacing its buffer
       |                             ^~~~
 compilation failed with 1 error
 === vec14nominalconv.olang
@@ -7032,7 +7208,7 @@ vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v'
    12 |     try io.Println(l[0])
       |                    ^
 vec19listconv.olang:11:28: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
-   11 |     for i in range 100 { v.Push('b') }
+   11 |     for _ in range 100 { v.Push('b') }
       |                            ^~~~
 compilation failed with 1 error
 === vec27cloneshort.olang
