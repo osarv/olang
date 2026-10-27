@@ -141,7 +141,7 @@ for       do      in      range   match   case    nomatch break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
-trait     spawn   join    defer   errdefer yield
+trait     spawn   join    defer   errdefer yield   become
 import    test    destruct embed
 unreachable
 extern    default
@@ -2155,7 +2155,7 @@ storage reclaimed and the scopes it holds closed, their destructors run.
 the end of its body without returning. Falling off the end is a compile-time error.
 
 Whether a path leaves is decided **structurally**, with no dataflow analysis and no constant folding. A
-`return` leaves, and so does an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
+`return` leaves, and so does a `become` (S21), an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
 `noreturn` function value (D8e), written as a statement. An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
 either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
@@ -4225,9 +4225,9 @@ ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a b
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
-| defer-stmnt | errdefer-stmnt | yield-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
+| defer-stmnt | errdefer-stmnt | yield-stmnt | become-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`,
 `try-catch-stmnt` and `try-store-stmnt` in §7; `spawn-stmnt` and `join-stmnt` in §6.8; `defer-stmnt` and `errdefer-stmnt` in §6.9;
-`yield-stmnt` in §6.10.
+`yield-stmnt` in §6.10; `become-stmnt` in §6.11.
 
 **S3.** `expr-stmnt ::= expr STMNT_END`, where `expr` must be one that can actually *do* something:
 either a **call** (§5.4 E13 — an ordinary call, a constructor call, or one wrapped in `try`, §7.4),
@@ -5268,6 +5268,48 @@ A `Next()` asked while the generator's own walk runs - its body, or what it call
 walked as - fails a check the language guarantees (S18a): `FILE:LINE: a generator asked for its next value inside its
 own walk`, the line the generator's, in a test that test failing and the rest running. It costs one compare a `Next()`,
 as a slice's bounds check costs one a slice.
+
+### 6.11 `become`
+
+**S21.** `become-stmnt ::= "become" call STMNT_END`, with `become` a reserved word (L9), is a **guaranteed tail call**:
+the function ends - every scope it has open closed, as a `return` closes them - and the call is made **in its place**,
+its result the function's result and its failure the function's failure, with no frame of the function left while
+it runs. So a chain of becomes runs in constant stack however long it is (`become sum(n - 1, acc + n)` over ten million
+steps, two functions becoming each other, a state machine of functions), in a built program (the call is LLVM's
+`musttail`) and in the compile-time evaluator and `interpret` alike (a frame replaced, never one added). `become` is
+a statement that leaves (D10a), and may stand in a one-line body (S1b): `else: become step(s, i + 1)`.
+
+Its operand is a **call of a function or a method declared with `fn`** - a generic's instance included - written
+whole: not a function value's call, a constructor's, an `extern fn`'s, an `export fn`'s, a call through an `any`, nor a
+call given a scope argument (E25); and no `try`, since what the call fails with is the function's own. A `become`
+stands only in a function or a method declared with `fn`, never `main`, an `export fn`, a lambda, a generator's body, a
+test, a constructor or a destructor. Each of these is a compile-time error naming what to write instead (`return` and
+the call); and so is each of the following, since a jump cannot keep a promise the function's end makes:
+- the callee's **signature is not the function's own**: the same parameters in order - their types, their permissions
+  and where their references live (T22) - and the same result. Their error sets, once every inferred set is final
+  (R1a), are one set in one order: the codes a failure carries are then the same (R6);
+- a parameter or the result is passed **through memory** (over 128 bytes, an aggregate's or a bare type variable's):
+  the function's frame would hold it;
+- it is written in **deferred code**, an assert's or an `unreachable`'s message, a task's clause or a `join` block, or
+  with **deferred code pending** in a block around it - which would run before the call (S19, S19e);
+- an **argument is storage of a scope the become closes** (§8): what is handed on is a value, or lives where the
+  function was given it (its parameters' scopes, its result scope - a temporary for the callee is built there, as a
+  `return f(x)`'s would be), or in the program's. `become walk(b, i + 1)` with `b` a local array of the function is
+  the error;
+- the function holds, or builds in one of its blocks, an instance whose **destructor** would run as that block closes
+  (O16) - before the call, where a `return` would run it after; or a value that may hold one (an `any`, a type
+  variable's).
+
+```
+fn isEven(n I64) Bool {
+    if n == 0: return true
+    become isOdd(n - 1)
+}
+fn isOdd(n I64) Bool {
+    if n == 0: return false
+    become isEven(n - 1)
+}
+```
 
 ## 7. Error Handling
 

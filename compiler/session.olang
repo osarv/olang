@@ -1052,8 +1052,8 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
 
 Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
     "else", "for", "in", "range", "match", "case", "nomatch", "return", "break", "continue", "error", "try", "catch"
-    "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "assert", "unreachable", "noreturn", "mut", "and", "or", "not"
-    "xor", "is", "as", "null", "true", "false", "destruct"]
+    "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "become", "assert", "unreachable", "noreturn", "mut"
+    "and", "or", "not", "xor", "is", "as", "null", "true", "false", "destruct"]
 
 # ---- formatting ----
 
