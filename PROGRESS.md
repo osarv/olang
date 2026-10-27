@@ -2,22 +2,16 @@
 
 Brief: decisions.md QBK 4, QBM, QBN, QBO, "Attribute rules settled with the user 2026-10-26".
 
-## Done
-- AST: `ast.Attr(Sp, X, Global)`; `Attrs` on Param, Func, CaseDecl, TypeDecl, VarDecl (fields); VarDecl.Hidden marks
-  the hidden global holding an attribute's value (name "@<offset>").
-- Parser: `@Path[<T>][(args)]` before type/fn decls (lines above or same line), enum cases, parameters (not a
-  lambda's), constructor fields (not a pun: AttrPun); elsewhere AttrPlace. An `@` beginning a line is never matmul.
-  Hidden globals pushed beside the item (same top-level-if branch).
-- Checker: hidden global's value: a bare type path called with no args, failures end it as `!` (attrExpr); type must
-  be a declared struct/enum/declared number type not of the prelude (AttrType); one per type per declaration
-  (AttrTwice). interp.Bake: a hidden global the evaluator refuses is AttrNotBuilt.
+## Done (all committed)
+- SPEC G39 (attributes), G40 (Attr/HasAttr), G41 (Functions/Methods), R8 in unrolled walks, R20 AttrError, L16 `@`,
+  D1/D8/T17/C2 grammar, B11b.
+- Parser/AST (Attr, hidden globals), checker (attrCall/attrExpr/attrTypeOk/attrsChecked/attrRead/reflFnCall,
+  copiesDiffer), generic (AttrsOf, FuncDescriptor, FnKey, ModuleFns, TypeMethods), interp.Bake AttrNotBuilt,
+  prelude reflect (AttrError, attrGot/attrMissing, FuncInfo), fmt, unparse, explain, doc, session.
+- std/json Naming + Key + Skip; std/csv struct records; std/flags Read<T> + Help + Short.
+- tests/attrs.olang, tests/attrmod.olang; 16 checks cases; goldens recaptured; CLAUDE.md, HISTORY.md, READMEs.
 
-## Decided (mine)
-1. Grammar: `@` + path, type args and args touching; on lines above or before the declaration on its line.
-2. A pun field has its parameter's attributes; attributes written on a pun are an error.
+## Decided (mine) - see HISTORY.md "Typed attributes, function reflection, json key policies"
 
 ## Next
-- Attr<A>() / HasAttr<A>() on descriptors and types (G40), prelude AttrError.
-- Function reflection (G41): api.Functions, T.Methods, descriptors, calls.
-- std/json key policies + Key/Skip/Keys; std/csv struct mapping; std/flags.
-- fmt (prefix @), unparse/doc/explain/lsp, SPEC G39-G41, tests, checks cases, CLAUDE.md, HISTORY.md.
+- make quick clean, then one full verify (`/home/user/vlock make verify > verify.log 2>&1`), commit, push.
