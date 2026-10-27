@@ -1,0 +1,53 @@
+fn main()   # its error set inferred
+
+olang profile: compiler_olang - 1282 samples, 5.121 s of CPU time on 2 threads
+
+   self   total  function
+   47.3%  47.3%  sysmalloc
+    2.1%   2.4%  scope.collectExpr
+    2.0%   2.0%  __GI_mprotect
+    1.9%  52.3%  __olang_scope_alloc_a
+    1.6%   1.7%  vecState<token.Token>.room
+    1.3%   2.1%  views.Viewer.factPut
+    1.2%   1.2%  __memcpy_avx512_unaligned_erms
+    1.1%   2.7%  Vec<token.Token>.Push
+    1.1%  16.2%  views.Viewer.expr
+    1.0%   1.0%  String.Hash
+    0.9%   0.9%  __memset_avx512_unaligned_erms
+    0.9%  50.5%  __olang_new_chunk
+    0.9%   0.9%  Map<I64, names.Ref>.Get
+    0.9%   0.9%  Vec<token.Token>.ToArray
+    0.9%   0.9%  Vec<types.data>.At
+    0.7%   5.6%  scope.Scoper.call
+    0.7%   1.1%  __olang_pool_give_list
+    0.7%   0.7%  String.Eq
+    0.7%   0.7%  mapState<I64, names.Ref>.grow
+    0.5%   0.5%  Map<types.data, types.TypeId>.Get
+
+   self  line                                                                  function
+   47.3%  ./malloc/malloc.c:2936                                                sysmalloc
+    3.5%  std/prelude/vec.olang:52                                              vecState<I64>.room
+    2.7%  std/prelude/vec.olang:60                                              Vec<typed.Expr&>.Push
+    2.6%  std/prelude/map.olang:115                                             Map<I64, scope.Term>.Get
+    2.1%  std/prelude/vec.olang:98                                              Vec<types.data>.At
+    2.0%  ./misc/../sysdeps/unix/syscall-template.S:117                         __GI_mprotect
+    1.2%  compiler/scope.olang:971                                              scope.collectExpr
+    1.1%  std/prelude/vec.olang:238                                             Vec<I64>.ToArray
+    1.0%  std/prelude/map.olang:91                                              mapState<String&, I64>.grow
+    0.8%  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:228  __memset_avx512_unaligned_erms
+    0.7%  compiler/views.olang:834                                              views.Viewer.factPut
+    0.7%  std/prelude/text.olang:49                                             String.Hash
+    0.5%  compiler/scope.olang:983                                              scope.collectExpr
+    0.5%  compiler/views.olang:1153                                             views.Viewer.expr
+
+  called from (the five hottest functions)
+  sysmalloc  <-  _int_malloc 100.0%
+  scope.collectExpr  <-  scope.collectExpr 54.8%, scope.collectBlock 38.7%, scope.collectArm 3.2%, scope.collectStmt 3.2%
+  __GI_mprotect  <-  _int_memalign 100.0%
+  __olang_scope_alloc_a  <-  __olang_scope_alloc 30.9%, vecState<views.view>.ctor 12.2%, generic.Program.instanceArgs 8.5%, Vec<mir.Proj>.ToArray 6.0%
+  vecState<token.Token>.room  <-  Vec<token.Token>.Push 100.0%
+flame graph: /tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/front.html
+
+real	0m9.634s
+user	0m5.117s
+sys	0m4.213s

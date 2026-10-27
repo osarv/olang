@@ -1,0 +1,37 @@
+# A lazy adapter over an array's iterator keeps a reduction from vectorizing and costs a scalar walk of two counters
+# and an error code per element: a.Iter().Take(k).Sum() and a.Iter().Skip(10).Sum() about 9.5 instructions an element,
+# a.Iter().Sum() 0.2 (vectorized), the counted loop over the same range 1.4. Built inline (viaIter) the three adapters
+# are also allocated in the statement's arena (three scope allocations and a scope header per call); as locals
+# (viaLocals) they are allocas. Measured (docs/optsurvey.md, "Adapters"; callgrind, 100,000 x 10, x86-64-v3): iter
+# 15.4M, locals 13.4M, take 11.4M, skip 11.4M, sum 1.9M, loop 1.9M.
+# Run: bench/repro/adapter_reduce MODE 100000 10 (MODE iter, locals, take, skip, sum, loop).
+import "std/io"
+import "std/os"
+
+fn viaIter(a Array<I64>&, n I64) I64 { return a.Iter().Skip(10).Take(n - 20).Sum() }
+fn viaSum(a Array<I64>&) I64 { return a.Iter().Sum() }
+fn viaTake(a Array<I64>&, n I64) I64 { return a.Iter().Take(n - 20).Sum() }
+fn viaSkip(a Array<I64>&) I64 { return a.Iter().Skip(10).Sum() }
+fn viaLocals(a Array<I64>&, n I64) I64 {
+    it := a.Iter()
+    sk := it.Skip(10)
+    tk := sk.Take(n - 20)
+    return tk.Sum()
+}
+fn viaLoop(a Array<I64>&, n I64) I64 {
+    s I64 = 0
+    for i in range 10, n - 10 { s += a[i] }
+    return s
+}
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    passes := try args[3].ParseInt()
+    a := I64[(i * 7) % 1000 for i in range n]
+    s I64 = 0
+    for p in range passes {
+        if args[1] == "iter" { s += viaIter(a, n) ^ p } else if args[1] == "locals" { s += viaLocals(a, n) ^ p } else if args[1] == "take" { s += viaTake(a, n) ^ p } else if args[1] == "skip" { s += viaSkip(a) ^ p } else if args[1] == "sum" { s += viaSum(a) ^ p } else { s += viaLoop(a, n) ^ p }
+    }
+    try io.Println($s)
+}

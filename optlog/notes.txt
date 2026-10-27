@@ -14,3 +14,12 @@ CHECKED-NOGAIN: null_pointer_is_valid removed from every module: Ir identical (b
 OK: error paths (try in loop) equal to C early-exit loop (12.4M vs 12.2M). Startup 261k Ir vs C 259k. hello 30KB vs 16KB (text 11.7K vs 1.3K).
 OK loops: spectral, mandelbrot, fannkuch, gather, walk, store equal Ir; sort vec 0.63; any dispatch 0.68; text 0.61; knucleotide 0.79; regex 0.81.
 nbody 1.19 Ir (time 1.02): C bodies static global, olang arena; advance j loop not fully unrolled. minor.
+F-constcall: primes(200) (constant args, evaluable) inside a loop: 255k Ir/iter vs baked global 52 Ir/iter. "hello...".Find("wor") 150 Ir, "12345".ParseInt() ~50 Ir not folded.
+F-compif: I64[x for x in a if p] 15.3 Ir/elt vs Vec push loop 10.2; 45% of Ir in memcpy (doubling copies + final exact-size copy). Arena grow/shrink in place at chunk top would remove both.
+F-fmt: $i measured then written: __olang_fmt_u64 called twice per rendering (52 Ir per number of 6 digits).
+F-isqrt: integer Sqrt correction uses two divisions (n / r): 47 Ir/elt vs F64 sqrt 3.6; r*r with r capped at 2^32-1 avoids them.
+F-match: 8-case payload-less enum match 13.7M vs C switch 11.1M (1.24x), if-chain on I64 11.5M.
+F-fpow: x.Pow(2.0) calls libm pow (nobuiltin by X8): 137 Ir vs x*x 3.1. Changing it changes results possibly -> language question.
+F-i128div: I128 x*x/7 27.5 Ir vs I64 10.3 (__divti3 for constant divisor).
+OK: spawn/join 4 tasks x 20000: 1.15 s vs C pthread_create/join 2.3-2.9 s (thread cache). Pow integer folds to mul. comparison chains == and. Narrow/contract cost = their early-exit check, as C.
+OK: baked globals: init functions fold under LTO; -quick runs them (6k Ir).

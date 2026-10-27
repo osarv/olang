@@ -1,0 +1,35 @@
+# An enum's tag is an I32 and every payload a whole word, so Opt { None, Some(v F32) } is 16 bytes where C's tagged
+# union and the packed struct below are 8: an array of 20M is 314 MB against 158 MB, and a walk over it about twice
+# as long. Measured (docs/optsurvey.md, "Enum layout"; native, 20,000,000 x 10): enum 0.86-1.19 s, packed 0.47-0.49 s.
+# Sizes: Dir (four cases) 4, Small { A(x U8), B(y U8) } 16, Opt 16 (T.Size).
+# Run: bench/repro/enum_layout MODE 20000000 10 (MODE enum, packed).
+import "std/io"
+import "std/os"
+
+type Opt enum { None, Some(v F32) }
+type Packed struct(has Bool, v F32) { has, v }
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    passes := try args[3].ParseInt()
+    s F64 = 0.0
+    if args[1] == "enum" {
+        a := Array<Opt>(n)
+        for i in range n { if i % 3 != 0 { a[i] = Opt.Some(F32(i % 7)) } }
+        for _ in range passes {
+            for x in a {
+                match x {
+                    case Opt.Some(v) { s += v }
+                    case Opt.None { }
+                }
+            }
+        }
+    } else {
+        a := Packed[Packed(i % 3 != 0, F32(i % 7)) for i in range n]
+        for _ in range passes {
+            for x in a { if x.has { s += x.v } }
+        }
+    }
+    try io.Println($s)
+}

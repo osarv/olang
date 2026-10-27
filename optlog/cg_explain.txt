@@ -1,0 +1,73 @@
+--------------------------------------------------------------------------------
+Ir                     
+--------------------------------------------------------------------------------
+9,878,897,807 (100.0%)  PROGRAM TOTALS
+
+--------------------------------------------------------------------------------
+Ir                      file:function
+--------------------------------------------------------------------------------
+1,469,113,578 (14.87%)  ???:__olang_scope_alloc_a [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  605,128,522 ( 6.13%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2efactPut [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3
+  286,402,503 ( 2.90%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2ecall [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  257,275,437 ( 2.60%)  ???:compiler_2ftypes_2ecompiler_2ftypes_3aTable_2eHoldsRefs [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+  255,633,340 ( 2.59%)  ???:__olang_new_chunk [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  237,595,499 ( 2.41%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2estr [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  235,186,399 ( 2.38%)  ???:std_2fjson_2eParse [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  227,424,161 ( 2.30%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2egrow [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  196,137,079 ( 1.99%)  ???:std_2fjson_2estd_2fjson_3areader_2estring [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  189,048,428 ( 1.91%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eexpr'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  178,281,911 ( 1.80%)  ???:std_2fjson_2estd_2fjson_3areader_2ename [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  161,500,539 ( 1.63%)  ???:compiler_2fscan_2eScan [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  154,517,913 ( 1.56%)  ???:__olang_pool_keep [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  149,894,159 ( 1.52%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2ebelow [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  130,786,233 ( 1.32%)  ???:__olang_pool_give_list [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  123,045,911 ( 1.25%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ecall [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+  122,065,195 ( 1.24%)  ???:compiler_2ftypes_2ecompiler_2ftypes_3aTable_2eScopeVarsOf [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang
+  121,690,722 ( 1.23%)  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+  119,816,070 ( 1.21%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2enameSpan [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+  104,610,039 ( 1.06%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ecanKeep [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3
+  101,438,803 ( 1.03%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2eval'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   88,155,905 ( 0.89%)  ???:compiler_2fviews_2eplaceAdd [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   82,989,130 ( 0.84%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eplacePlaces [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olan
+   79,609,763 ( 0.81%)  ???:std_2fjson_2estd_2fjson_3areader_2eclose [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   68,260,426 ( 0.69%)  ./string/../sysdeps/x86_64/multiarch/memset-vec-unaligned-erms.S:__memset_avx2_unaligned_erms [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   64,475,764 ( 0.65%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ejudge [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   64,328,041 ( 0.65%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2ecall'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   56,530,041 ( 0.57%)  ???:compiler_2fscope_2ecollectExpr'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   52,772,700 ( 0.53%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2eflExpr'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   52,304,450 ( 0.53%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2enameFrom [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   48,909,163 ( 0.50%)  ???:compiler_2finterp_2ecompiler_2finterp_3aExec_2estart [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   47,332,882 ( 0.48%)  ???:compiler_2fviews_2eviewAdd [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   47,005,780 ( 0.48%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eplaceRefs [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.
+   46,043,969 ( 0.47%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fviews_3aholding_3e_2ePushAl_H3e931f87d496bf3811462ea008e23f54 [/tmp/claude-0/-hom
+   42,104,167 ( 0.43%)  ???:compiler_2fsource_2ecompiler_2fsource_3aNames_2eIntern [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3
+   41,177,791 ( 0.42%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eexprPlaces [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang
+   39,541,582 ( 0.40%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2ebind [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   39,301,321 ( 0.40%)  ???:std_2fprelude_2fmap_2estd_2fprelude_2fmap_3amapState_3cstd_2fprelude_2ftext_3aString_26__Hafef1728718cb3638c490cd1711bc438 [/tmp/claude-0/-hom
+   38,486,640 ( 0.39%)  ???:compiler_2fcheck_2ecompiler_2fcheck_3aChecker_2eholdsWritableAt'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/pr
+   38,158,354 ( 0.39%)  ???:compiler_2fbindgen_2ecompiler_2fbindgen_3agen_2etrack'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   38,051,815 ( 0.39%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eexpr [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   37,478,019 ( 0.38%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ecall'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   35,683,276 ( 0.36%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ereadPart [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   35,254,924 ( 0.36%)  ???:std_2fprelude_2fmap_2estd_2fprelude_2fmap_3aMap_3cstd_2fprelude_2ftext_3aString_26_2c_20_H2b85ceff512af6e6ca26c554a1c16247 [/tmp/claude-0/-hom
+   33,466,069 ( 0.34%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eClone_3cI64_3e [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scrat
+   32,449,904 ( 0.33%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3cI64_3e_2eToArray_3cI64_3e [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scr
+   32,367,831 ( 0.33%)  ???:compiler_2ftypes_2ecompiler_2ftypes_3aTable_2eResults [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   32,240,447 ( 0.33%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2estmt'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   31,567,196 ( 0.32%)  ???:compiler_2fviews_2ecompiler_2fviews_3astate_2ecopy [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   29,314,606 ( 0.30%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2eread [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   29,228,651 ( 0.30%)  ???:compiler_2fviews_2emerge [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   28,987,501 ( 0.29%)  ???:compiler_2fcheck_2ecompiler_2fcheck_3aChecker_2ecallBody [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.
+   28,683,151 ( 0.29%)  ???:compiler_2feval_2ecompiler_2feval_3aMachine_2eloop [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   28,012,051 ( 0.28%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2eflCall [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   27,993,271 ( 0.28%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ekwExpr'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   25,209,481 ( 0.26%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fviews_3anaming_3e_2eClone_3ccompiler_2fviews_3anaming_3e [/tmp/claude-0/-home-use
+   25,175,597 ( 0.25%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fviews_3aholding_3e_2eClone_3ccompiler_2fviews_3aholding_3e [/tmp/claude-0/-home-u
+   24,779,814 ( 0.25%)  ???:compiler_2fcheck_2ecompiler_2fcheck_3aChecker_2efold [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]
+   24,499,274 ( 0.25%)  ???:compiler_2fparse_2ecompiler_2fparse_3aParser_2eprimary [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3
+   23,977,165 ( 0.24%)  ???:compiler_2fviews_2ecompiler_2fviews_3aViewer_2eplaceRefs'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olan
+   23,202,785 ( 0.23%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fviews_3anaming_3e_2ePushAll_3ccompiler_2fviews_3anaming_3e [/tmp/claude-0/-home-u
+   22,797,942 ( 0.23%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2erlExpr'2 [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v
+   22,706,376 ( 0.23%)  ???:std_2fprelude_2fvec_2estd_2fprelude_2fvec_3aVec_3ccompiler_2fcond_3aGlobal_26_3e_2ePush_3ccompiler_2fcond_3aGlobal_26_3e [/tmp/claude-0/-home-
+   22,448,608 ( 0.23%)  ./malloc/./malloc/malloc.c:_int_malloc [/usr/lib/x86_64-linux-gnu/libc.so.6]
+   21,505,001 ( 0.22%)  ???:compiler_2fscope_2ecompiler_2fscope_3aScoper_2ekwCall [/tmp/claude-0/-home-user/6ca8065a-e812-5852-abb7-f4f9afea01cb/scratchpad/prof/olang.v3]

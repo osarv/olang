@@ -1,0 +1,49 @@
+# A temporary built for a reference parameter, a reference local and a built result each go to the loop body's arena:
+# every turn opens a scope (its 56-byte header cleared), takes the pool's spare chunk on the first allocation (the
+# allocator's slow path, a call) and gives it back as the turn's scope closes. The same struct as a value local folds
+# away. Measured (docs/optsurvey.md, "Temporaries on the stack"; callgrind, 100,000 turns, x86-64-v3): value 0.34M
+# instructions, "arg" norm(P(i, i + 1)) 7.67M, "ref" 7.27M, "built" 7.27M - about 70 instructions a turn.
+# Run: build/olang build -target x86-64-v3 bench/repro/turn_temporaries.olang, then valgrind --tool=callgrind on
+# bench/repro/turn_temporaries MODE 100000 (MODE value, ref, built, arg, vec, map).
+import "std/io"
+import "std/os"
+
+type P struct(x I64, y I64) { x, y }
+fn (p P&) Sum() I64 { return p.x + p.y }
+fn mk(i I64) P& { return P(i, i + 1) }
+fn norm(p P&) I64 { return p.x * p.x + p.y * p.y }
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    s I64 = 0
+    if args[1] == "value" {
+        for i in range n {
+            p := P(i, i + 1)
+            s += p.Sum()
+        }
+    } else if args[1] == "ref" {
+        for i in range n {
+            p P& = P(i, i + 1)
+            s += p.Sum()
+        }
+    } else if args[1] == "built" {
+        for i in range n { s += mk(i).Sum() }
+    } else if args[1] == "arg" {
+        for i in range n { s += norm(P(i, i + 1)) }
+    } else if args[1] == "vec" {
+        for i in range n {
+            v := Vec<I64>()
+            v.Push(i)
+            v.Push(i + 1)
+            s += v[0] + v[1]
+        }
+    } else if args[1] == "map" {
+        for i in range n {
+            m := Map<I64, I64>()
+            m.Put(i, i + 1)
+            s += try m.Get(i)
+        }
+    }
+    try io.Println($s)
+}

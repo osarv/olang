@@ -1,0 +1,38 @@
+# A comprehension with an "if" grows its storage by doubling and copies the result once more to its exact length at
+# the end: 45% of its instructions are memcpy, and it is slower than a Vec filled by Push (15.3 against 10.2
+# instructions an element). An arena allocation at the top of its chunk could grow and shrink in place. sq: a
+# function returning a comprehension, summed by its caller - the array is made once a pass (not fused across the call).
+# Measured (docs/optsurvey.md, "Filtered comprehensions"; callgrind, 100,000 x 10, x86-64-v3): sq 11.8M, sqloop 3.4M,
+# if 17.7M, vec 12.6M, ifloop 2.9M.
+# Run: bench/repro/filtered_comprehension MODE 100000 (MODE sq, sqloop, if, vec, ifloop).
+import "std/io"
+import "std/os"
+
+fn squares(a Array<I64>&) Array<I64> { return I64[x * x for x in a] }
+fn evensIf(a Array<I64>&) Array<I64> { return I64[x for x in a if x % 2 == 0] }
+fn evensVec(a Array<I64>&) Vec<I64>& {
+    v := Vec<I64>()
+    for x in a { if x % 2 == 0 { v.Push(x) } }
+    return v
+}
+fn sum(a Array<I64>&) I64 {
+    s I64 = 0
+    for x in a { s += x }
+    return s
+}
+
+fn main() ? {
+    args := os.Args()
+    n := try args[2].ParseInt()
+    a := I64[(i * 7) % 1000 for i in range n]
+    s I64 = 0
+    for p in range 10 {
+        if args[1] == "sq" { s += sum(squares(a)) }
+        else if args[1] == "sqloop" { for x in a { s += x * x } }
+        else if args[1] == "if" { s += sum(evensIf(a)) }
+        else if args[1] == "vec" { s += sum(evensVec(a).View()) }
+        else if args[1] == "ifloop" { for x in a { if x % 2 == 0 { s += x } } }
+        s = s ^ p
+    }
+    try io.Println($s)
+}
