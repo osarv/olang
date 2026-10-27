@@ -1592,3 +1592,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the CPU predictor); raised-error paths get weights only if bench shows a gain AND a miss-heavy benchmark (Map.Get
   MISSING, Find NOT_FOUND as normal control flow - errors are errors) does not lose; else LLVM's own guesses. Queued
   for after the weekly reset.
+- Item 9 confirmed 2026-10-27 (the user: "ye do the cold paths work the way you want").
+- Item 10 DECIDED 2026-10-27 (the user: "build it", then "maybe dont need the trait for it? its not like we are gonna be
+  mixing testclocks and normal clocks?"): no trait, no clock parameter - in a test, `time.Virtual(fn() { ... })` runs its
+  body on a virtual clock (Go's synctest): `time.Now()` starts at a fixed date, `time.Sleep(d)` returns at once advancing
+  it, std/cancel's timeouts fire on it, tasks spawned inside share it; the code under test is unchanged. Only in test
+  builds (elsewhere a compile error), so other builds' Now/Sleep are untouched. Details mine; queued after the reset.
