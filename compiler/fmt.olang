@@ -70,7 +70,8 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
-    # a "(" grouping a function type in a list (L18c), a contract's "[" and an item's ":" (D17): spaced as written below
+    # a "(" grouping a function type in a list (L18c), a contract's "[" and an item's ":" (D17), an attribute's "@"
+    # (G39): spaced as written below
     group mut Array<Bool>& = Array<Bool>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
@@ -439,11 +440,12 @@ fn (f formatter&) before(r I64) I64 {
 }
 
 # whether the token at index j (real index r) is a prefix operator: "-", "~", "$", or "++"/"--" before its operand -
-# or the "@" an attribute begins with (G39), where no operand stands before it
+# or the "@" an attribute begins with (G39), which the parser marks
 fn (f formatter&) prefix(j I64, r I64) Bool {
     k := f.kind(j)
     if k == token.Tok.Tilde or k == token.Tok.Dollar { return true }
-    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec and k != token.Tok.At { return false }
+    if k == token.Tok.At { return f.group[j] }
+    if k != token.Tok.Minus and k != token.Tok.Inc and k != token.Tok.Dec { return false }
     p := f.before(r)
     return p < 0 or not f.operandEnd(p)
 }

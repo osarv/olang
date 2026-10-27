@@ -120,7 +120,8 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     RecordOperators Bool = false
     Operators Vec<source.Span>
     # the tokens the formatter spaces as the grammar places them, by token index: each "(" grouping a function type in a
-    # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17)
+    # list (L18c), each "[" opening a contract and each ":" before a contract item's body (D17), each "@" beginning an
+    # attribute (G39)
     TypeGroups Vec<I64>
     variadicOk Bool = false            # an extern's parameters being read: "..." may end them (X21)
     noAttrs Bool = false               # reading a function type's parameters or a receiver: no attribute is written there
@@ -650,6 +651,7 @@ fn (p mut Parser&) attributed() ast.Decl?&p ? Fail {
 fn (p mut Parser&) attrs() Array<ast.Attr&>&p ? Fail {
     l mut Vec<ast.Attr&>&p = Vec<ast.Attr&>()
     for p.sees(token.Tok.At) {
+        p.TypeGroups.Push(p.skipFrom(p.pos))     # the formatter writes nothing after an attribute's "@"
         at := p.advance()
         xat := p.here()
         if not p.sees(token.Tok.Iden) or p.tk().Has(token.Space) { try p.fail("a type's name after '@' - an attribute is written '@Name' or '@Name(arguments)'") }

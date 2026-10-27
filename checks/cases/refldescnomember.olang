@@ -1,4 +1,4 @@
-# check: fail error[G34]: a field has no 'Width' - its members are Name, Type, Offset and Of
+# check: fail error[G34]: a field has no 'Width' - its members are Name, Type, Offset, Of, Attr and HasAttr
 # also: compilation failed with 1 error
 # G34: a descriptor's members are a fixed set
 type Point struct(x I64, y I64 = 2) { x, y }

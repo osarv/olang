@@ -4579,7 +4579,7 @@ std/json:Position	24 8	%"std/json:Position"	{ i64, i64, i64 }	fields 0,8,16
 std/json:Position&	8 8	ptr	-	-
 std/json:reader	112 8	%"std/json:reader"	{ { i64, ptr }, i64, { i64, ptr }, i64, { i64, ptr }, i64, { i64, ptr }, { i64, ptr }, i64 }	fields 0,16,24,40,48,64,72,88,104
 std/json:reader&	8 8	ptr	-	-
-std/json:writer	24 8	%"std/json:writer"	{ { i64, ptr }, %"std/prelude/text:StringBuilder" }	fields 0,16
+std/json:writer	32 8	%"std/json:writer"	{ { i64, ptr }, i32, %"std/prelude/text:StringBuilder" }	fields 0,16,24
 == std/stats.olang
 Array<F16, 2>	4 2	[2 x half]	-	-
 Array<F16>&	16 8	{ i64, ptr }	-	-
@@ -4650,7 +4650,7 @@ compiler/ast:Branch	32 8	%"compiler/ast:Branch"	{ %"compiler/source:Span", { i64
 compiler/ast:Branch&	8 8	ptr	-	-
 compiler/ast:Case	72 8	%"compiler/ast:Case"	{ %"compiler/source:Span", { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, ptr }	fields 0,8,24,40,48,64
 compiler/ast:Case&	8 8	ptr	-	-
-compiler/ast:CaseDecl	48 8	%"compiler/ast:CaseDecl"	{ %"compiler/source:Span", i32, { i64, ptr }, i1, ptr }	fields 0,8,16,32,40
+compiler/ast:CaseDecl	64 8	%"compiler/ast:CaseDecl"	{ %"compiler/source:Span", i32, { i64, ptr }, i1, ptr, { i64, ptr } }	fields 0,8,16,32,40,48
 compiler/ast:CaseDecl&	8 8	ptr	-	-
 compiler/ast:Catch	72 8	%"compiler/ast:Catch"	{ %"compiler/source:Span", { i64, ptr }, { i64, ptr }, { i64, ptr }, i1, i32, %"compiler/source:Span" }	fields 0,8,24,40,56,60,64
 compiler/ast:Catch&	8 8	ptr	-	-
@@ -4666,7 +4666,7 @@ compiler/ast:For3	40 8	%"compiler/ast:For3"	{ ptr, ptr, ptr, { i64, ptr } }	fiel
 compiler/ast:For3&	8 8	ptr	-	-
 compiler/ast:ForIn	56 8	%"compiler/ast:ForIn"	{ i32, i32, ptr, i1, { i64, ptr }, { i64, ptr } }	fields 0,4,8,16,24,40
 compiler/ast:ForIn&	8 8	ptr	-	-
-compiler/ast:Func	72 8	%"compiler/ast:Func"	{ %"compiler/source:Span", ptr, i32, ptr, { i64, ptr }, { i64, ptr }, i1, i1 }	fields 0,8,16,24,32,48,64,65
+compiler/ast:Func	88 8	%"compiler/ast:Func"	{ %"compiler/source:Span", ptr, i32, ptr, { i64, ptr }, { i64, ptr }, i1, i1, { i64, ptr } }	fields 0,8,16,24,32,48,64,65,72
 compiler/ast:Func&	8 8	ptr	-	-
 compiler/ast:If	24 8	%"compiler/ast:If"	{ ptr, ptr, ptr }	fields 0,8,16
 compiler/ast:If&	8 8	ptr	-	-
@@ -4676,7 +4676,7 @@ compiler/ast:Match	48 8	%"compiler/ast:Match"	{ %"compiler/source:Span", ptr, i1
 compiler/ast:Match&	8 8	ptr	-	-
 compiler/ast:Multi	40 8	%"compiler/ast:Multi"	{ { i64, ptr }, i1, { i64, ptr } }	fields 0,16,24
 compiler/ast:Multi&	8 8	ptr	-	-
-compiler/ast:Param	32 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, ptr, ptr }	fields 0,8,16,24
+compiler/ast:Param	48 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, ptr, ptr, { i64, ptr } }	fields 0,8,16,24,32
 compiler/ast:Param&	8 8	ptr	-	-
 compiler/ast:Path	24 8	%"compiler/ast:Path"	{ %"compiler/source:Span", { i64, ptr } }	fields 0,8
 compiler/ast:Path&	8 8	ptr	-	-
@@ -4694,13 +4694,13 @@ compiler/ast:TopIf	32 8	%"compiler/ast:TopIf"	{ ptr, ptr, ptr, ptr }	fields 0,8,
 compiler/ast:TopIf&	8 8	ptr	-	-
 compiler/ast:TypeBody	56 8	{ i64, [6 x i64] }	-	cases 0;0,16;0,16,32;0,8;
 compiler/ast:TypeBody&	8 8	ptr	-	-
-compiler/ast:TypeDecl	40 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr }	fields 0,8,24,32
+compiler/ast:TypeDecl	56 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr, { i64, ptr } }	fields 0,8,24,32,40
 compiler/ast:TypeDecl&	8 8	ptr	-	-
 compiler/ast:TypeParam	48 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span", i32, ptr, { i64, ptr }, i1 }	fields 0,8,16,24,40
 compiler/ast:TypeParam&	8 8	ptr	-	-
 compiler/ast:TypeRef	48 8	{ i64, [5 x i64] }	-	cases 0,8,24;0,8;0,8;0,8,16,20;0,8,16,17;0,8;0,8
 compiler/ast:TypeRef&	8 8	ptr	-	-
-compiler/ast:VarDecl	64 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1 }	fields 0,16,32,40,56,57
+compiler/ast:VarDecl	88 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1, { i64, ptr }, i1 }	fields 0,16,32,40,56,57,64,80
 compiler/ast:VarDecl&	8 8	ptr	-	-
 compiler/source:NameId	4 4	i32	-	-
 compiler/source:Names	16 8	%"compiler/source:Names"	{ %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8
@@ -5554,7 +5554,7 @@ compiler/generic:ConstAsk	80 8	%"compiler/generic:ConstAsk"	{ i64, ptr, i32, i64
 compiler/generic:Context	32 8	%"compiler/generic:Context"	{ i64, i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,24
 compiler/generic:Context&	8 8	ptr	-	-
 compiler/generic:Origin	24 8	%"compiler/generic:Origin"	{ i64, %"compiler/source:Span", i64 }	fields 0,8,16
-compiler/generic:Program	656 8	%"compiler/generic:Program"	{ ptr, ptr, %"compiler/types:Table", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"compiler/generic:Origin", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,520,528,536,544,552,576,584,592,600,608,616,624,632,640,648
+compiler/generic:Program	664 8	%"compiler/generic:Program"	{ ptr, ptr, %"compiler/types:Table", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"compiler/generic:Origin", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,520,528,536,544,552,560,584,592,600,608,616,624,632,640,648,656
 compiler/generic:Program&	8 8	ptr	-	-
 compiler/generic:Undeclared	4 4	i32	-	-
 compiler/generic:Unmet	24 8	%"compiler/generic:Unmet"	{ i64, i32, i32, i1, i1, i1 }	fields 0,8,12,16,17,18
@@ -5583,7 +5583,7 @@ compiler/parse:NameList	32 8	%"compiler/parse:NameList"	{ { i64, ptr }, { i64, p
 compiler/parse:NameList&	8 8	ptr	-	-
 compiler/parse:Oracle	32 8	%"compiler/parse:Oracle"	{ %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,24
 compiler/parse:Oracle&	8 8	ptr	-	-
-compiler/parse:Parser	320 8	%"compiler/parse:Parser"	{ ptr, ptr, ptr, ptr, ptr, i64, i64, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i64, i1, i1, i64, i1, i64, i1, i32, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1 }	fields 0,8,16,24,32,40,48,56,60,64,68,72,73,74,75,76,77,80,88,89,96,104,112,120,124,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,256,264,272,280,288,289,296,304,312,313
+compiler/parse:Parser	336 8	%"compiler/parse:Parser"	{ ptr, ptr, ptr, ptr, ptr, i64, i64, i32, i32, i32, i32, i1, i1, i1, i1, i1, i1, i64, i1, i1, i64, i1, i64, i1, i32, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", i1, i1, %"std/prelude/vec:Vec.6ce2052386e1f5dfc75915f9e44d8f1b", i1 }	fields 0,8,16,24,32,40,48,56,60,64,68,72,73,74,75,76,77,80,88,89,96,104,112,120,124,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,256,264,272,280,288,289,296,304,312,313,320,328
 compiler/parse:Parser&	8 8	ptr	-	-
 compiler/parse:stackMarks	56 8	%"compiler/parse:stackMarks"	{ i64, i64, i64, i64, i64, i64, i64 }	fields 0,8,16,24,32,40,48
 compiler/typed:Alt	24 8	%"compiler/typed:Alt"	{ ptr, { i64, ptr } }	fields 0,8

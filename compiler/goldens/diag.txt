@@ -91,6 +91,77 @@ atomicvalue.olang:6:17: error[T6b]: I64 does not flow into I32 - convert it, as 
     6 |     x.AtomicAdd(y)
       |                 ^
 compilation failed with 1 error
+=== attrbuiltin.olang
+attrbuiltin.olang:3:2: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is I64
+    3 | @I64(3)
+      |  ^~~~~~
+compilation failed with 1 error
+=== attrfntype.olang
+attrfntype.olang:4:14: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    4 | fn call(f fn(@Key("x") n I64) I64) I64 { return f(1) }
+      |              ^~~~~~~~~
+compilation failed with 1 error
+=== attrglobal.olang
+attrglobal.olang:4:1: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    4 | @Key("x")
+      | ^~~~~~~~~
+compilation failed with 1 error
+=== attrlambda.olang
+attrlambda.olang:5:13: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    5 |     f := fn(@Key("x") n I64) I64 { return n }
+      |             ^~~~~~~~~
+compilation failed with 1 error
+=== attrlocal.olang
+attrlocal.olang:5:5: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    5 |     @Key("x") n := 3
+      |     ^~~~~~~~~
+compilation failed with 1 error
+=== attrmissing.olang
+attrmissing.olang:7:12: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    7 |     k := P.Attr<Key>()
+      |            ^~~~
+compilation failed with 1 error
+=== attrnotbuilt.olang
+attrnotbuilt.olang:7:2: error[G39]: an attribute's value is built while compiling, and this one cannot be: an assertion in it fails, which aborts the program
+    7 | @Size(0)
+      |  ^~~~~~~
+compilation failed with 1 error
+=== attrprelude.olang
+attrprelude.olang:3:16: error[G39]: an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is Vec<I64>
+    3 | type P struct(@Vec<I64>() x I64) { x }
+      |                ^~~~~~~~~~
+compilation failed with 1 error
+=== attrpun.olang
+attrpun.olang:5:5: error[G39]: field 'x' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter
+    5 |     @Key("x") x
+      |     ^~~~~~~~~
+compilation failed with 1 error
+=== attrread.olang
+attrread.olang:7:16: error[G40]: 'Attr' takes the attribute's type and no arguments - 'Attr<json.Key>()'
+    7 |     k := try P.Attr<Key>(1) catch default Key("")
+      |                ^~~~
+compilation failed with 1 error
+=== attrreceiver.olang
+attrreceiver.olang:5:5: error[G39]: an attribute is written before a type, a function or a method, an enum's case, a constructor's field or a parameter - nothing here takes one
+    5 | fn (@Key("x") b Box&) Get() I64 { return b.v }
+      |     ^~~~~~~~~
+compilation failed with 1 error
+=== attrrequire.olang
+attrrequire.olang:4:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
+    4 | type P struct(@Tag(-1) x I64) { x }
+      |                ^~~
+attrrequire.olang:3:25: note: the condition
+    3 | type Tag struct(v I64) [v >= 0] { v }
+      |                         ^~~~~~
+attrrequire.olang:4:16: error[G39]: an attribute's value is built while compiling, and this one cannot be: an error reaches '!', which ends the program
+    4 | type P struct(@Tag(-1) x I64) { x }
+      |                ^~~~~~~
+compilation failed with 2 errors
+=== attrtwice.olang
+attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type, and this is its second Key
+    4 | type P struct(@Key("a") @Key("b") x I64) { x }
+      |                         ^~~~~~~~~
+compilation failed with 1 error
 === atundeclared.olang
 atundeclared.olang:8:11: error[E31]: Bag& declares SetAt but not At, which reading x[i] calls
     8 |     y := b[0]
@@ -4604,7 +4675,7 @@ reflcaseunreachable.olang:15:18: note: instantiated here, with T = I64
       |                  ^~~~~~
 compilation failed with 1 error
 === refldescnomember.olang
-refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset and Of
+refldescnomember.olang:9:34: error[G34]: a field has no 'Width' - its members are Name, Type, Offset, Of, Attr and HasAttr
     9 | fn main() { n := Point.Fields[0].Width }
       |                                  ^~~~~
 compilation failed with 1 error
@@ -4617,6 +4688,11 @@ compilation failed with 1 error
 reflfilterundecided.olang:9:77: error[G33]: a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time
     9 | fn g(k I64) Array<String&> { return String&[f.Name for f in Point.Fields if k > 0] }
       |                                                                             ^~~~~
+compilation failed with 1 error
+=== reflfncall.olang
+reflfncall.olang:6:35: error[G41]: 'Get' is called with 1 arguments (a method's receiver first), found 0
+    6 |     for m in Box.Methods { assert m() == 1 }
+      |                                   ^~~
 compilation failed with 1 error
 === reflindexnotconst.olang
 reflindexnotconst.olang:9:42: error[G33]: a list known while compiling is indexed by a constant - this index is known only at run time
