@@ -105,6 +105,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns Vec<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
+    fnByKey Map<I64, I64>              # G41: a function by the key its descriptor is named by (FnKey)
     fnsAll I64 = -1                    # how many modules there were when allFns last added every one's
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
@@ -3791,12 +3792,15 @@ DescField I64 = 1
 DescCase I64 = 2
 DescParam I64 = 3
 DescResult I64 = 4
+DescFunc I64 = 5
 
 # the lists a type has (G33): its fields (a struct's, or one case's), its cases, its parameters, its results
 ListFields I64 = 0
 ListCases I64 = 1
 ListParams I64 = 2
 ListResults I64 = 3
+ListFunctions I64 = 4
+ListMethods I64 = 5
 
 # what a descriptor's type says: its kind, the type it describes a member of, the case (a field's, a case's), the
 # position
@@ -3810,6 +3814,7 @@ fn descName(k I64) String {
         case 2 => "CaseInfo"
         case 3 => "ParamInfo"
         case 4 => "ResultInfo"
+        case 5 => "FuncInfo"
         case _ => ""
     }
 }
@@ -3830,6 +3835,68 @@ fn (p mut Program&) Descriptor(k I64, t types.TypeId, cs I64, i I64) types.TypeI
     return p.Instance(d, p.T.List(args.ToArray()))
 }
 
+# a function's descriptor (G41): FuncInfo<F, K> - F its type (a method's for receiver recv, its receiver first), K its
+# key: a hash of its module's identity, its receiver's type's name and its own, the same in every compilation, so an
+# instance a descriptor names is named alike wherever it is made (B3i)
+fn (p mut Program&) FuncDescriptor(f I64, recv types.TypeId) types.TypeId {
+    d := p.descDecl(DescFunc)
+    if d < types.DeclId(0) { return types.UnknownT }
+    sig := p.Sig(f) if recv == types.UnknownT else p.MethodSig(f, recv)
+    if sig == types.UnknownT { return types.UnknownT }
+    key := p.FnKey(f)
+    p.fnByKey.Put(key, f)
+    return p.Instance(d, p.T.List(types.TypeId[sig, p.T.Const(p.T.Prim("I64"), key)]))
+}
+
+# a function's key (G41): FNV-1a over "identity:Receiver.name", made positive
+fn (p mut Program&) FnKey(f I64) I64 {
+    row := p.fns[f]
+    b := StringBuilder()
+    b.Push(p.L.Mods[row.Mi].Identity)
+    b.PushChar(':')
+    if row.F.Recv is not null {
+        r := p.recvOf(f)
+        if p.T.KindOf(r) == types.Kind.Named { b.Push(p.text(p.T.DeclName(p.T.DeclOf(r)))) }
+        b.PushChar('.')
+    }
+    b.Push(p.text(row.F.Name))
+    h I64 = -3750763034362895579
+    for ch in b.ToString() { h = (h ^ I64(ch)) * 1099511628211 }
+    return h & 0x3FFFFFFFFFFFFFFF
+}
+
+# the functions a module's walk holds (G41), seen from module mi: its plain functions in the order they are declared -
+# no method, no extern, no generic (it has no one type to describe) - another module's exported ones alone
+fn (p mut Program&) ModuleFns(m I64, mi I64) Array<I64> {
+    p.fnsIn(m)
+    out Vec<I64>
+    for i in range p.fns.Len() {
+        row := p.fns[i]
+        if row.Mi != m or row.Extern or row.F.Recv is not null or row.F.TypeParams.Len() > 0 { continue }
+        if m != mi and not p.text(row.F.Name)[0].IsUpper() { continue }
+        out.Push(i)
+    }
+    return out.ToArray()
+}
+
+# a type's methods (G41), seen from module mi: those declared with it as their receiver that apply to it (M21), in
+# the order they are declared - no default of a trait's, none of a type list of its own - another module's private
+# ones left out
+fn (p mut Program&) TypeMethods(t types.TypeId, mi I64) Array<I64> {
+    p.allFns()
+    out Vec<I64>
+    key := p.typeKey(t)
+    if key < 0 { return out.ToArray() }
+    for i in range p.fns.Len() {
+        row := p.fns[i]
+        if row.F.Recv is null or row.Extern or row.F.TypeParams.Len() > 0 { continue }
+        if p.recvKey(row.Mi, row.F.Recv!.Ty, row.F.TypeParams) != key or not p.recvApplies(i, t) { continue }
+        if row.Mi != mi and not p.text(row.F.Name)[0].IsUpper() { continue }
+        out.Push(i)
+    }
+    return out.ToArray()
+}
+
 # what a type describes where it is a descriptor whose arguments are known: DescNone where it is none
 fn (p mut Program&) DescOf(t types.TypeId) Desc {
     none := Desc(DescNone, types.UnknownT, 0, 0)
@@ -3838,10 +3905,16 @@ fn (p mut Program&) DescOf(t types.TypeId) Desc {
     if p.L.Mods[p.T.DeclModule(d)].Identity != "std/prelude/reflect" { return none }
     xs := p.T.Items(p.T.Args(t))
     if xs.Len() < 2 { return none }
-    for k in range 1, 5 {
+    for k in range 1, 6 {
         if d != p.descDecl(k) { continue }
         for j in range 1, xs.Len() {
             if p.T.KindOf(xs[j]) != types.Kind.Const { return none }
+        }
+        if k == DescFunc {
+            key := p.T.ConstValue(xs[1])
+            f := try p.fnByKey.Get(key) catch default -1
+            if f < 0 { return none }
+            return Desc(k, xs[0], f, key)
         }
         cs := p.T.ConstValue(xs[1]) if k == DescField or k == DescCase else 0
         at := p.T.ConstValue(xs[xs.Len() - 1])
@@ -4066,8 +4139,15 @@ fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>&p {
         return p.declMi[I64(d)], td.Attrs
     }
     if ds.K == DescResult { return -1, none }
+    if ds.K == DescFunc { return p.fns[ds.Case].Mi, p.fns[ds.Case].F.Attrs }
     if ds.K == DescParam {
         if p.T.KindOf(ds.Of) == types.Kind.Func { return -1, none }
+        fd := p.DescOf(ds.Of)
+        if fd.K == DescFunc {
+            ps := p.fns[fd.Case].F.S.Params
+            if ds.At >= ps.Len() { return -1, none }
+            return p.fns[fd.Case].Mi, ps[ds.At].Attrs
+        }
         ps := p.CtorParams(ds.Of)
         if ds.At >= ps.Len() { return -1, none }
         return p.declMi[I64(p.T.DeclOf(ds.Of))], ps[ds.At].Attrs
@@ -4122,7 +4202,17 @@ fn (p mut Program&) ReflItems(t types.TypeId, list I64, cs I64, mi I64) Array<I6
         for i in range p.T.Results(t).Len() { out.Push(i) }
         return out.ToArray(), ""
     }
+    if list == ListFunctions { return p.ModuleFns(cs, mi), "" }
+    if list == ListMethods {
+        if p.T.KindOf(t) != types.Kind.Named or not p.Body(t) { return none, "only a type a program declares has methods to walk" }
+        return p.TypeMethods(t, mi), ""
+    }
     if list == ListParams {
+        fd := p.DescOf(t)
+        if fd.K == DescFunc {
+            for i in range p.fns[fd.Case].F.S.Params.Len() { out.Push(i) }
+            return out.ToArray(), ""
+        }
         if p.T.KindOf(t) == types.Kind.Func {
             for i in range p.T.Items(p.T.Params(t)).Len() { out.Push(i) }
             return out.ToArray(), ""
@@ -4185,11 +4275,19 @@ fn (p mut Program&) DescType(ds Desc) types.TypeId, String {
         return types.UnknownT, ""
     }
     if ds.K == DescParam {
+        # a function's parameter (G41): of its type, past a method's receiver
+        fd := p.DescOf(of)
+        skip I64 = 0
+        if fd.K == DescFunc {
+            of = fd.Of
+            if p.fns[fd.Case].F.Recv is not null { skip = 1 }
+        }
         sig := of if p.T.KindOf(of) == types.Kind.Func else p.CtorSig(of)
         if sig == types.UnknownT { return types.UnknownT, "" }
         ps := p.T.Items(p.T.Params(sig))
-        return (ps[ds.At] if ds.At < ps.Len() else types.UnknownT), ""
+        return (ps[ds.At + skip] if ds.At + skip < ps.Len() else types.UnknownT), ""
     }
+    if ds.K == DescFunc { return of, "" }
     if ds.K == DescResult {
         rs := p.T.Results(of)
         return (rs[ds.At] if ds.At < rs.Len() else types.UnknownT), ""
@@ -4202,7 +4300,7 @@ fn (p mut Program&) DescType(ds Desc) types.TypeId, String {
 fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
     if name == "Type" {
         ds := p.DescOf(t)
-        if ds.K == DescNone { return types.UnknownT, "only a field, a parameter or a result has a Type" }
+        if ds.K == DescNone { return types.UnknownT, "only a field, a parameter, a result or a function has a Type" }
         return p.DescType(ds)
     }
     if name == "Base" {
@@ -4220,6 +4318,8 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
     }
     if name == "Errors" {
         if p.T.KindOf(t) == types.Kind.Func { return p.ErrSetOf(p.T.Errors(t)), "" }
+        fd := p.DescOf(t)
+        if fd.K == DescFunc { return p.ErrSetOf(p.T.Errors(fd.Of)), "" }
         return types.UnknownT, "only a function type has Errors"
     }
     return types.UnknownT, "a type's reflected types are Base, Element and Target, a field's, a parameter's and a result's Type"

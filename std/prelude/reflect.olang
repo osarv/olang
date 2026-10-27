@@ -37,3 +37,7 @@ type AttrError error { MISSING }
 # has none - which the compiler knows, so a program asking either way is held to handling the failure
 fn attrGot<A>(a A) A ? AttrError.MISSING { return a }
 fn attrMissing<A>() A ? AttrError.MISSING { error AttrError.MISSING }
+
+# a function, or a method (G41): F its type (a method's receiver first), K a key naming which - the compiler writes
+# both. "f(args)" calls it, a method's receiver first
+type FuncInfo<F, K> struct() { }

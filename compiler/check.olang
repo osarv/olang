@@ -10142,6 +10142,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                     c.dropArgs(args)
                     return c.unknown(sp)
                 }
+                if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescFunc { return c.reflFnCall(sp, nsp, c.P.DescOf(dt), args) }
                 if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescCase {
                     ds := c.P.DescOf(dt)
                     r := c.P.ReflUnder(ds.Of)
@@ -12206,11 +12207,22 @@ fn listIndex(name String&) I64 {
         case "Cases" => generic.ListCases
         case "Params" => generic.ListParams
         case "Results" => generic.ListResults
+        case "Methods" => generic.ListMethods
         case _ => -1
     }
 }
 
-fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results"][k] }
+fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results", "Functions", "Methods"][k] }
+
+# the module an import's alias - or an alias chain - names, -1 where x is none (G41)
+fn (c mut Checker&) aliasModule(x ast.Expr&) I64 {
+    if not c.importPath(x) { return -1 }
+    return match x {
+        case ast.Expr.Name(xsp, _) => c.P.R.Use(c.fr().File, xsp.Start).Module
+        case ast.Expr.Member(xsp, _, _) => c.P.R.Member(c.fr().File, xsp.End).Module
+        case _ => -1
+    }
+}
 
 # whether a type is named through a type variable here - reflection's then, never one of an enum's cases (G32)
 fn (c mut Checker&) viaTypeVar(x ast.Expr&) Bool {
@@ -12293,12 +12305,21 @@ fn (c mut Checker&) descTypeOf(x ast.Expr&) types.TypeId {
 fn (c mut Checker&) listOf(x ast.Expr&) reflList {
     match x {
         case ast.Expr.Member(_, b, n) {
+            # G41: an import's functions, "handlers.Functions" - a name the module declares stays its own
+            if c.text(n) == "Functions" {
+                m := c.aliasModule(b)
+                if m >= 0 and not c.declaresName(m, n) { return reflList(true, types.VoidT, generic.ListFunctions, m) }
+                return noList()
+            }
             k := listIndex(c.text(n))
             if k < 0 { return noList() }
             ds := c.descTypeOf(b)
             if ds >= types.TypeId(0) {
                 d := c.P.DescOf(ds)
                 if d.K == generic.DescCase and k == generic.ListFields { return reflList(true, d.Of, k, d.Case) }
+                # G41: a function's parameters and results
+                if d.K == generic.DescFunc and k == generic.ListParams { return reflList(true, ds, k, -1) }
+                if d.K == generic.DescFunc and k == generic.ListResults { return reflList(true, d.Of, k, -1) }
                 return noList()
             }
             t := c.reflType(b)
@@ -12336,6 +12357,8 @@ fn (c mut Checker&) listItem(sp source.Span, l reflList, k I64) types.TypeId {
 }
 
 fn (c mut Checker&) descriptor(l reflList, at I64) types.TypeId {
+    if l.Which == generic.ListFunctions { return c.P.FuncDescriptor(at, types.UnknownT) }
+    if l.Which == generic.ListMethods { return c.P.FuncDescriptor(at, l.Of) }
     kind := match l.Which {
         case generic.ListFields => generic.DescField
         case generic.ListCases => generic.DescCase
@@ -12556,9 +12579,15 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
         cn := c.P.T.CaseNames(r)
         return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
     }
+    if ds.K == generic.DescFunc { return $c.text(c.P.FnDecl(ds.Case).Name) }
     if ds.K == generic.DescParam {
         # a function type's parameter names are no part of its type (T22, G16a), so an instance cannot say them
         if c.P.T.KindOf(ds.Of) == types.Kind.Func { return "" }
+        fd := c.P.DescOf(ds.Of)
+        if fd.K == generic.DescFunc {
+            fps := c.P.FnDecl(fd.Case).S.Params
+            return $c.text(fps[ds.At].Name) if ds.At < fps.Len() else ""
+        }
         ps := c.P.CtorParams(ds.Of)
         return $c.text(ps[ds.At].Name) if ds.At < ps.Len() else ""
     }
@@ -12568,6 +12597,11 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
 # a parameter's default as written (D8a), null for none - a function type's parameters have none
 fn (c mut Checker&) paramDefault(ds generic.Desc) ast.Expr?&c {
     if c.P.T.KindOf(ds.Of) == types.Kind.Func { return null }
+    fd := c.P.DescOf(ds.Of)
+    if fd.K == generic.DescFunc {
+        fps := c.P.FnDecl(fd.Case).S.Params
+        return fps[ds.At].Dflt if ds.At < fps.Len() else null
+    }
     ps := c.P.CtorParams(ds.Of)
     if ds.At >= ps.Len() { return null }
     return ps[ds.At].Dflt
@@ -12647,15 +12681,17 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
     v := c.reflConst(x, n)
     if v.Ok { return c.reflExpr(sp, v) }
     have := match ds.K {
-        case generic.DescField => "Name, Type, Offset and Of"
-        case generic.DescCase => "Name and Fields"
-        case generic.DescParam => "Name, Type, HasDefault and Default"
+        case generic.DescField => "Name, Type, Offset, Of, Attr and HasAttr"
+        case generic.DescCase => "Name, Fields, Attr and HasAttr"
+        case generic.DescParam => "Name, Type, HasDefault, Default, Attr and HasAttr"
+        case generic.DescFunc => "Name, Type, Params, Results, Errors, Attr and HasAttr - and it is called"
         case _ => "Type"
     }
     what := match ds.K {
         case generic.DescField => "field"
         case generic.DescCase => "case"
         case generic.DescParam => "parameter"
+        case generic.DescFunc => "function"
         case _ => "result"
     }
     c.err(nsp, msgs.ReflDescNoMember(what, name, have))
@@ -12670,6 +12706,12 @@ fn (c mut Checker&) reflDefault(sp source.Span, ds generic.Desc) typed.Expr&c {
         return c.unknown(sp)
     }
     pt, _ := c.P.DescType(ds)
+    # G41: a function's parameter's default, as a call leaving it off builds it - a method's counted past its receiver
+    fd := c.P.DescOf(ds.Of)
+    if fd.K == generic.DescFunc {
+        recv := c.P.FnDecl(fd.Case).Recv is not null
+        return c.defaultArg(sp, fd.Case, ds.At + (1 if recv else 0), false, pt, types.ListId(0))
+    }
     was := c.ctorCalled
     c.ctorCalled = ds.Of
     x := c.ctorDefault(sp, ds.At, pt)
@@ -12731,6 +12773,17 @@ fn (c mut Checker&) narrowLocal(x ast.Expr&) I64 {
         case ast.Expr.Paren(_, y) { return c.narrowLocal(y) }
         nomatch { return -1 }
     }
+}
+
+# f(args) with f a function's descriptor (G41): the call its name would be - a method's on its first argument
+fn (c mut Checker&) reflFnCall(sp source.Span, nsp source.Span, ds generic.Desc, args Array<ast.Expr&>&) typed.Expr&c {
+    fd := c.P.FnDecl(ds.Case)
+    if fd.Recv is null { return c.invoke(sp, nsp, ds.Case, null, args, Array<typed.Expr&>(0)) }
+    if args.Len() == 0 {
+        c.err(sp, msgs.ReflFnCall(c.text(fd.Name), fd.S.Params.Len() + 1, 0))
+        return c.unknown(sp)
+    }
+    return c.methodCall(sp, args[0], fd.Name, nsp, args[1:args.Len()])
 }
 
 # a name bound to a reflected member while a body is checked (G33), and what it stood for before
