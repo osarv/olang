@@ -33,6 +33,8 @@ type Error error {
     TEXT_AFTER_QUOTE    # something other than a separator or a line break after a field's closing quote: "a"b
     BAD_SEPARATOR       # a separator that is a quote or a line break, which could never be told apart from the text
     UNCLOSED_QUOTE      # the text ends inside a quoted field
+    NO_COLUMN           # Decode: the header names no column for a parameter with no default
+    BAD_VALUE           # Decode: a field that is no value of its column's type (a number, a Bool, a Char)
 }
 
 # a text's records, one at a time: "for row in try csv.Rows(text) { ... } catch csv.Error { ... }". Each is an
@@ -178,6 +180,133 @@ fn Record(fields Array<String&>&, sep Char = ',') String ? Error {
     return out
 }
 
+# ---- records as structs (G39, G40) ----
+#
+# A struct's fields are columns, by reflection while compiling: each of text (String, String&), a Char, a Bool or a
+# number, written as "$" writes it. A column is named by its field's or its constructor parameter's name (a field
+# punning one has its attributes), or by "@csv.Column("name")" written on it; "@csv.Skip" leaves a field out.
+#
+#     type Item struct(Name String&, @csv.Column("price") Cost F64, @csv.Skip Note String& = "") { Name, Cost, Note }
+#     text := try csv.Encode(items)                 # Name,price\npen,1.5\n - Header, then a RecordOf each
+#     items := try csv.Decode<Item>(text)           # a Vec<Item>, by the header's names
+
+# a column's name, written on a field or a constructor's parameter (G39)
+type Column struct(Name String&) [Name.Len() > 0] { Name }
+
+# a field that is no column (G39): never written, and read back its parameter takes its default
+type Skip struct() { }
+
+# the column a field or a parameter is: its own "@csv.Column", else its name
+fn columnOf<F>(f F) String& {
+    if f.HasAttr<Column>() { return $(f.Attr<Column>()!).Name }
+    return $f.Name
+}
+
+# T's columns as a record: the header a text of T's records begins with
+fn Header<T>(sep Char = ',') String ? Error {
+    assert T.Kind == TypeKind.Struct, "csv writes a struct's fields as columns"
+    names Vec<String&>
+    for f in T.Fields {
+        if not f.HasAttr<Skip>() { names.Push(columnOf(f)) }
+    }
+    return try Record(names.ToArray(), sep)
+}
+
+# the records of xs, after their header: a text Decode reads back
+fn Encode<T>(xs Array<T>&, sep Char = ',') String ? Error {
+    b := StringBuilder()
+    b.Push(try Header<T>(sep))
+    for x in xs { b.Push(try RecordOf(x, sep)) }
+    return b.ToString()
+}
+
+# v's fields as a record, in Header's columns
+fn RecordOf<T>(v T, sep Char = ',') String ? Error {
+    assert T.Kind == TypeKind.Struct, "csv writes a struct's fields as columns"
+    fs Vec<String&>
+    for f in T.Fields {
+        if not f.HasAttr<Skip>() { fs.Push(cell(f.Of(v))) }
+    }
+    return try Record(fs.ToArray(), sep)
+}
+
+# a field's text: text as it is, a number, a Bool or a Char as "$" writes it
+fn cell<V>(x V) String {
+    match V {
+        case String, String& { return $x }
+        case Char, Bool { return $x }
+        case _ {
+            assert V.Kind == TypeKind.Integer or V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
+            return $x
+        }
+    }
+}
+
+# the records of a text whose first is its header, each built as a T through its constructor (G37): a parameter from
+# the column its name (or "@csv.Column") names, read as its type; a column missing, or a parameter "@csv.Skip" leaves out,
+# its default. Fails with what Rows fails with, NO_COLUMN where a parameter with no default has no column and BAD_VALUE
+# where a field is no value of its type - and with what the constructor fails with
+fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
+    assert T.Kind == TypeKind.Struct, "csv reads a struct's fields as columns"
+    out Vec<T>
+    rows := Rows(text, sep)
+    header := try rows.Next() catch Exhausted { return out }
+    for {
+        row := try rows.Next() catch Exhausted { break }
+        out.Push(try T(try argument(header, row, p) for p in T.Params))
+    }
+    return out
+}
+
+# a constructor parameter's argument from a record: its column's field, read as its type, else its default
+fn argument<P>(header Array<String&>&, row Array<String&>&, p P) P.Type ? Error {
+    if p.HasAttr<Skip>() {
+        assert p.HasDefault, "a parameter csv.Skip leaves out takes its default, and this one has none"
+        return p.Default
+    } else {
+        name := columnOf(p)
+        at I64 = -1
+        for i, h in header {
+            if h == name and at < 0 { at = i }
+        }
+        if at < 0 or at >= row.Len() {
+            if p.HasDefault { return p.Default }
+            error Error.NO_COLUMN
+        }
+        if P.Type.Kind == TypeKind.Reference {
+            # text read as new text and moved where the argument lands (O26a), as json's member does
+            v := try value<P.Type.Target>(row[at])
+            return v
+        } else {
+            return try value<P.Type>(row[at])
+        }
+    }
+}
+
+# a field read as a value of type V
+fn value<V>(f String&) V ? Error {
+    match V {
+        case String { return $f }
+        case Bool {
+            if f == "true" { return true }
+            if f == "false" { return false }
+            error Error.BAD_VALUE
+        }
+        case Char {
+            if f.Len() != 1 { error Error.BAD_VALUE }
+            return f[0]
+        }
+        case _ {
+            if V.Kind == TypeKind.Integer {
+                return V(try f.ParseAs<V.Base>() catch ParseError { error Error.BAD_VALUE })
+            } else {
+                assert V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
+                return V(V.Base(try f.ParseFloat() catch ParseError { error Error.BAD_VALUE }))
+            }
+        }
+    }
+}
+
 # whether a field must be quoted to be read back as itself
 fn quoted(f String&, sep Char) Bool {
     for c in f {
@@ -282,4 +411,30 @@ csvTotalBaked I64 = try csvTotal("a,1\n\"b,\"\"c\"\"\",2\nd,3") catch default -1
 
 test "Rows read while compiling as at run time" {
     assert csvTotalBaked == 123 and (try csvTotal("a,1\n\"b,\"\"c\"\"\",2\nd,3") catch default -1) == csvTotalBaked
+}
+
+# a struct of columns (G39): one renamed, one left out, a pun having its parameter's attributes
+type item struct(Name String&, @Column("price") Cost F64, Count I64 = 1, @Skip Note String& = "-", Fresh Bool = true) {
+    Name
+    Cost
+    Count
+    Note
+    Fresh
+}
+
+itemsBaked String = try Encode(item[item("pen", 1.5, 3, "x")]) catch default ""
+
+test Decode "records read as structs by their header's names, written back by Encode" {
+    assert itemsBaked == "Name,price,Count,Fresh\npen,1.5,3,true\n"
+    assert $(try Header<item>()) $(try RecordOf(item("pen", 1.5, 3, "x"))) == itemsBaked
+    xs := try Decode<item>("price,Name,Fresh\n2.25,ink,false\n0.5,\"a, b\",true\n")
+    assert xs.Len() == 2 and xs[0].Name == "ink" and xs[0].Cost == 2.25 and not xs[0].Fresh and xs[0].Count == 1
+    assert xs[1].Name == "a, b" and xs[1].Note == "-"
+    assert (try RecordOf(xs[1])) == "\"a, b\",0.5,1,true\n"
+    assert (try Encode(xs.View())) == "Name,price,Count,Fresh\nink,2.25,1,false\n\"a, b\",0.5,1,true\n"
+    bad := ""
+    try Decode<item>("price,Name\nlots,ink\n") catch Error.BAD_VALUE { bad = "value" }
+    try Decode<item>("Name\nink\n") catch Error.NO_COLUMN { bad = $bad " column" }
+    assert bad == "value column"
+    assert (try Decode<item>("")).Len() == 0
 }
