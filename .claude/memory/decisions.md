@@ -1598,3 +1598,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   body on a virtual clock (Go's synctest): `time.Now()` starts at a fixed date, `time.Sleep(d)` returns at once advancing
   it, std/cancel's timeouts fire on it, tasks spawned inside share it; the code under test is unchanged. Only in test
   builds (elsewhere a compile error), so other builds' Now/Sleep are untouched. Details mine; queued after the reset.
+- Item 11 DECIDED 2026-10-27 (the user: "dont do them at all. we depend on clone and stuff for this or the user makes
+  their own"): no persistent collections in std, now or later - snapshots by `Clone()`, or a program's own structure.
