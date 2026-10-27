@@ -139,7 +139,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reclaimed each turn (2026-10-18, E31b's M1 - the block around the loop kept every evaluation's: 745MB for 5,000 reads
   of a 72KB element); stage 0 lowers `do { } for c` to the three-clause form, its condition read from the second turn.
 - **An expression statement must do something (S3):** a call or an increment. `++`/`--` are statements only, never
-  operands (S3a, the user's call). A bare `{ }` is a scope (S1a).
+  operands (S3a, the user's call). A bare `{ }` is a scope (S1a). **A call statement giving a value that does nothing
+  else is an error (2026-10-26, the user's yes to docs/survey2.md's nodiscard replacement)** - read off the bodies it
+  reaches (`settleIdle`, a least fixed point): a store to a global or through a reference, an extern but C's math, a
+  function value or an `any`, storage made, a destructor value, spawn/join, assert or an end count as doing something.
+  Mine: a call giving nothing, a fallible call and a generic's body are never judged.
+- **Every local is read and every import used (D3b, M5a, 2026-10-26, the user: "extend this to unused variables
+  too").** A read is any appearance but as what an assignment, compound assignment or increment changes (Go's rule); a
+  name holding a place only (a loop's, a binding's, one of several results) is written `_` (`for _ in range n` now
+  allowed). Exempt: parameters, constructor fields, catch names, destructor-typed locals, a name in a branch the build
+  leaves out (by text). Decided (mine): D3b is said only of a program with no other error (one mistake, one error - an
+  unread local is most often what the mistake left out); an import nothing is reached through is said at once, never of
+  a C import or a re-exporting alias. `tools/unused_migrate.olang` (driven; `--bare` for must-fail files) migrated the
+  repository and is `olang fix`'s last tool.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints, in every position (S4a). Parallel assignment `a, b = b, a` evaluates every
   value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call). An assigned value
@@ -191,9 +203,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload too, `_`
   matches any part, nested cases test through references (a null holds no case). After `if e == C { }` - and in the else
-  of `if e != C`, and after an `if e != C { leave }` - a local or parameter nothing assigns in the block is narrowed to C,
-  so `e.r` reads the payload field (mine: only locals and parameters, never fields - a field may change under a call);
-  a field read where nothing narrows is S8d's error.
+  of `if e != C`, and after an `if e != C { leave }` - a local or parameter is narrowed to C, so `e.r` reads the payload
+  field (mine: only locals and parameters, never fields - a field may change under a call); a field read where nothing
+  narrows is S8d's error. **One narrowing walk (2026-10-26, the user's "Do narrowing")**: case tests, null tests and
+  error-value tests narrow in the same places - `and`/`or`/`not`, a conditional, after an assert, in a loop on the test,
+  after a loop with no break (check's `pushFacts`); a narrowing holds until a statement assigns the local (mine; it had
+  needed nothing to assign it in the whole block), assigning a case value narrows nothing, and a whole-payload narrowing
+  reads as the enum where the enum is wanted (an argument of its type, a case test's or a match's subject).
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
@@ -402,9 +418,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   examples with their bodies (collapsible in HTML), a hover shows the first and `+N more tests`. `olang test FILE
   WORD...` runs the tests a word names - a target, its type (`Map` runs `Map.Get`'s), or text of a description (decided,
   mine: a word that names no file and ends in no `.olang`, matched by the test binary's harness, so nothing rebuilds). Words
-  naming none of a file's tests fail its run, the nearest target or description suggested (`did you mean 'Box'?`) -
-  the coordinator's decision 2026-10-26, from a review; mine: each listed file judged on its own, nearness an edit
-  distance of about a third of the word against a stretch of the text, the harness's status 3 read by the driver.
+  naming none of a file's tests say so, the nearest target or description suggested (`did you mean 'Box'?`), and that
+  file's run ends with the status 3 - the coordinator's decision 2026-10-26, from a review; over several files such a
+  file fails nothing where another listed file has a test the words name, else the run fails (`no listed file has a
+  test named by 'Box'`; the coordinator's decision, built 2026-10-26). A method's type is the receiver its declaration
+  writes, so an array's methods and a trait's defaults are targets too (`test Array.Windows`, `test
+  Iterator.TakeWhile`; built 2026-10-26).
   std: examples on `String.Trim`, `Map.Get`, `Vec.Push`.
 - **Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).** `olang test -fuzz NAME FILE
   [-fuzztime SECONDS]` builds the file's tests with libFuzzer (`-fsanitize=fuzzer`, objects apart as `.fuzz`) and runs
@@ -954,7 +973,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compilation too (S8b, the user's call); a constant condition not depending on the build is a dead-branch error
   (S8a).
 - **Diagnostics are one row each (B11/B11a, the user's design).** `path:line:col: error[RULE]: message`, the source
-  line and a caret, `note:` rows; source order, one error per cause; `olang explain RULE` prints the spec rule.
+  line and a caret, `note:` rows; source order, one error per cause; `olang explain RULE` prints the spec rule. **Did you
+  mean (2026-10-26, the user's request):** every name that names nothing - a local, global, function, type, alias,
+  field, method, case, error type or word, scope name, import, named argument, test target, option - ends its message
+  with the nearest allowed name, ` - did you mean 'x'?`, within about a third of the word (case-insensitive edit
+  distance); one helper, `msgs.Nearest` (mine: of two equally near, locals first, then aliases, then the module's and
+  the prelude's names).
 - **Build details.** Objects for a different mode are different artifacts (`.main.o`, `.test.o`, `.tmod.o`, `.race.o`,
   `.debug.o`, `.san.o`, a `-define` hash, B4/B10b); the target is in the object hash (B12b); symbols are mangled from
   module identity with every character but letters and digits escaped (B3b); two modules of one base name are fine
@@ -1080,8 +1104,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (views) and `Partition` (two arrays). Each fails with what its iterator and callbacks fail with (`<T ? E>`), is
   evaluated while compiling (a baked global in std/prelude/tests/iterator.olang) and has B7a examples on its iterator
   type. Decided (mine): the struct adapters copy their iterator as the others do; FlatMap a struct, not a generator (a
-  generator cannot yield references its inner walks hold); an array method or an Iterator default cannot be a B7a
-  target (only a named type's method can), so the examples name the adapter types.
+  generator cannot yield references its inner walks hold); an array method or an Iterator default could not be a B7a
+  target (only a named type's method could then), so the examples named the adapter types - they name the methods since
+  the checker batch (`Iterator.TakeWhile`, `Array.Reversed`).
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.

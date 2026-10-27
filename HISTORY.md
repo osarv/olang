@@ -25859,3 +25859,82 @@ word; null as the number 0. Maps were already right (they recode to the key type
 one set and probed through another, baked too.
 
 Also: std/README's naming rule read "`io.Error`, not `io.Error`" since the stutter rename - now "not `io.IoError`".
+
+## The checker batch: narrowing everywhere, calls that do nothing, every local and import used, did-you-mean (S8d, S8e, S3, D3b, M5a, B11, B3a, B7a, docs/survey2.md, 2026-10-26)
+
+From the second survey's strong recommendations (the user: 1 "Do narrowing", 2 yes, 3 yes "and extend this to unused
+variables too. Also add 'did you mean' errors for invalid names"), with the two questions the walks batch left for the
+checker (a filter word across several files, targets on an array's methods and a trait's defaults).
+
+**Narrowing in one walk (S8d, S8e).** A case test had narrowed only as an `if`'s whole condition, where a null test
+narrowed through `and`/`or`, `not`, a conditional, after an assert, in a loop on the test and after a loop with no break.
+The three kinds of fact - a reference not null, a value of one case, an error value of one type - are now pushed by one
+function (`pushFacts`, check.olang) wherever any of them was, and dropped by one (`factsDrop`). What changed with it
+(mine): a narrowing no longer needs "nothing assigns it in the block" - it holds until a statement assigns the local
+(the fact is marked dead from there, `narrowed.Dead`), so `if e == C { e.r; e = other; }` reads the payload before the
+assignment and is S8d's error after it; no fact comes from assigning a case value (a whole payload would change what
+the name means in the middle of a block); a whole-payload narrowing (`Round Circle`) reads as the enum again where the
+enum is what is wanted - an argument or a target of its type, a case test's, an `as`'s or a match's subject
+(`enumWanted`), which shared.olang's `r == R2Shape.Round and r == ...` needed.
+
+**Calls that do nothing (S3).** A call statement whose value is dropped and that does nothing else is an error, read off
+the bodies it reaches - a least fixed point over the call graph from the candidates (`settleIdle`). Something done is a
+store to a global or through a reference, an extern (C's math functions excepted, X8 - their table moved from
+eval.olang to `typed.MathExtern` so both ask one list), a call through a function value or an `any`, a body unchecked,
+storage made (a text, an array, a temporary given a place), a value with a destructor, spawn or join, an assert, an end
+of the program or a check that would end it. Decided (mine): only calls giving a value are judged (a call giving nothing
+that does nothing is a different mistake, rarely made, and judging it would refuse every empty stub); a fallible call is
+never judged (its failure is something it does, and `try f()` as a statement is how a check is written); a generic's
+body is not judged (instances differ); allocation counts as an effect, since the corpus's arena-churn helpers exist to
+allocate - three of them that built only by-value arrays were made to allocate.
+
+**Every local and every import is used (D3b, M5a).** Go's rule, in names.olang: a read is any appearance of the name but
+as what an assignment, a compound assignment or an increment changes (`n.f = 1` reads `n`). A declared local never read
+is said by the checker, which knows its type (a destructor-typed local is held for its close, C7, and is exempt, as is a
+local whose type did not check); a name that holds a place only (a for-in's, a comprehension's, a case binding, one of
+several results) says to write `_` there, and `for _ in range n` / `[e for _ in xs]` were allowed for it (they had been
+refused). Parameters are exempt (a function type or a trait names what an implementation may not read), and so are
+constructor fields and catch names. A name in the text of a branch the build leaves out counts as read (names.Mentions),
+as does an import alias mentioned there; a C import and a capitalized (re-exported) alias are never unused.
+**Decided (mine) after the first suite run: D3b is said only of a program with no other error.** Reported beside the
+mistakes, an unread local was most often what the mistake left out (`x := bad(...)` unread because the line that read it
+was the one that failed), or sat in code a mistake kept from being checked - some two dozen checks cases gained an extra error, which
+"one mistake, one error" says to avoid; the bare names wait too (names hands them to the checker, `Unread.Bare`).
+Imports stay judged at once (nothing else hides them). **Migration:** `tools/unused_migrate.olang`, driven by the
+compiler's diagnostics in rounds - `_` for bare names, a declaration left out (its value kept as a statement where it is
+one call, a `try` value's `try` kept), an import line removed; `--bare` for files that must fail as written (it only
+renames and removes imports). It ran over std, compiler/, tools, tests, bench, fuzz and checks (252 files); the fixtures
+whose locals are what they test were given reads by hand. `olang fix` runs it last. **Found in the tool, fixed:** it had
+made `a := try f() catch default 0` a statement, which R11 refuses (a try statement takes no default) - two build cases
+broke; such a declaration is listed for a person now. The fuzzers write what D3b and M5a ask: gen.olang reads every
+declared local at its block's end through a `keep<T>` it declares, writes a bare name as `_` unless something read it
+(placeholders resolved once the program is made), counts an assignment's target as no read, and imports std/arith only
+where something uses it; scopegen.olang lost an unused `std/time` import and three unread loop names. CHECKS_ONLY takes
+several comma-separated names.
+
+**Did you mean (B11).** One nearness rule for every name that names nothing - locals, globals, functions, types, module
+aliases, fields, methods, enum cases, error types and words, scope names, imports, named arguments, test targets, the
+command line's options: the candidate fewest single-character edits away (letters compared without case), within about
+a third of the word (`(length + 2) / 3` edits, fewer than its length), ` - did you mean 'x'?` ending the message.
+`msgs.Distance`, `msgs.Near` and `msgs.Nearest` (in msgs.olang, which imports nothing, so names, generic, check, build
+and the driver all reach it) replace the three edit-distance functions there were (names, check and build had one each).
+Of two equally near, the one offered first wins, and the order is the reader's (mine): a local or parameter in scope,
+then an import's alias, then the module's own names, then the prelude's types and constants (its functions are methods,
+reached through a receiver) - `cout` is `count`, `lob` is `lib`. A member's hint offers the type's fields and methods
+(those another module may see), a module's offers what it exports, an error type's its words.
+
+**A filter word across several files (B3a).** `olang test a.olang b.olang Box` failed when one file had no test `Box`
+names, though the other did. Each file's run is still judged on its own, but a file whose tests the words name none of
+ends with the status 3 (its line saying so, as before); `TestFiles` fails the run for it only where no listed file has a
+test the words name, ending with `no listed file has a test named by 'Box'`.
+
+**Targets on an array's methods and a trait's defaults (B7a).** A method's type is now the receiver its declaration
+writes (`ast.RecvTarget`): `Array` for `fn (a Array<T>&) Windows`, and for a default over a constrained type variable
+the trait constraining it - `Iterator` for `fn (it mut I&) TakeWhile<I Iterator<T>, T>`, `Indexable` for `Reversed`.
+The prelude's examples that had to name adapter types (`TakeWhileIter`, `ReversedIter`, ...) name the methods now
+(`Iterator.TakeWhile`, `Array.Reversed`), and `Array.Windows` has one. **Found on the way (pre-existing):** `olang doc`
+dropped the file, offset and target of every method of a type declared in another module - it wrote them into a copy
+(`last := md.Items[...]`, a value struct) - so such methods never showed their examples.
+
+Also removed on the way: the unread locals the compiler itself had (eval's `ty`, scope's `loc` and `isRef`, free's
+`callOf`, check's `ctx`), each dead code. Left: `_ = x` (discarding a value) stays unknown, as it was.
