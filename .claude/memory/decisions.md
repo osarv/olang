@@ -1572,3 +1572,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   order (reflection, unrolled); each field must have `<`.
 - Item 5 DECIDED 2026-10-26 (the user: "Yes"): a top-level `assert cond[, message]`, decided while compiling (true:
   nothing emitted; false or undecidable: a compile error).
+- Item 6 DECIDED 2026-10-27 (the user: "Yes that structure is okay" - read as the answer to item 6, asked last; stated
+  to the user): `unreachable ["why"]` is also an expression wherever a value of any type is expected
+  (`d := table[k] if k in table else unreachable "checked above"`), as a noreturn call fits (D8e); reached, it stops as
+  the statement does. Queued for after the weekly reset (week at 0.94).

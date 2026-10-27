@@ -568,5 +568,5 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   where every run reaches it (typed.AlwaysReached, Try.Left) - SPEC's "reached or not" reversed (mine); std/order names
   the field without an order. Left: an S18c error inside an instance points at std's assert with a note at the inner
   call, not the user's call. CODE WORK STOPPED for the week at ~0.93-0.94 (the 0.95 rule); reset Sat 2026-10-31 06:00 CET.
-  Next week: survey2 items 6-12 as the user answers (6 unreachable as a value asked), then a bulk review 4 over
+  Next week: item 6 (unreachable as a value, decided 2026-10-27) with any of items 7-12 the user answers, then a bulk review 4 over
   checker..s18c (narrowing, D3b, attributes, become, AlwaysReached).
