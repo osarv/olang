@@ -1628,3 +1628,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `nomatch` keyword - `case _` is the one catch-all, `_` meaning "anything" at the top as it does nested
   (`Shape.Rect(_, _)`); (b) keep `nomatch`, an unguarded `case _` an error naming it. Recommended (a): one rule for `_`,
   one keyword fewer, every use migrated by a tool. In effect: both spellings valid.
+- QBQ DECIDED 2026-10-27 (the user: "actually nomatch should be replaced with default"): `nomatch` is gone - a match's
+  catch-all clause is `default` (`default { }`, `default => v` in a value match), reusing the keyword `catch default d`
+  and the argument slot already spend (Swift's/Go's word); everywhere nomatch stood (S12, S12b, S13a's opt-out, G15's
+  `match T`, a closed trait's any cases, error-value matches). Mine: an unguarded `case _` becomes an error naming
+  `default` (one catch-all); `case _ if cond` stays (the multiway test); a migration tool in `olang fix` rewrites
+  `nomatch` and unguarded `case _`. Queued with the post-reset batch.
