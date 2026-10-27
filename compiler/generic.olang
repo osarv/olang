@@ -51,11 +51,12 @@ type fnRow struct(Mi I64, F ast.Func&, Extern Bool) {
 }
 
 # a function's instance: the function, its arguments, its signature, its name (G16a) and where it was first asked for
-type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&, From Origin) {
+type instance struct(Fn I64, Args types.ListId, Sig types.TypeId, Name String&, Text String&, From Origin) {
     Fn
     Args
     Sig
     Name
+    Text    # the name as written, before types.Symbol (the symbol of a long one is cut and hashed): B20's names
     From
 }
 
@@ -2803,7 +2804,8 @@ fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
         b.PushChar('>')
     }
     i = p.instances.Len()
-    p.instances.Push(instance(f, args, sig, types.Symbol(b.ToString()), p.Asking))
+    text := b.ToString()
+    p.instances.Push(instance(f, args, sig, types.Symbol(text), text, p.Asking))
     p.instanceOf.Put(key, i)
     return i
 }
@@ -2976,6 +2978,7 @@ fn (p mut Program&) ModuleIndex(identity String&) I64 {
     return try p.identity.Get(identity) catch default -1
 }
 fn (p Program&) InstanceName(i I64) String&p { return p.instances[i].Name }
+fn (p Program&) InstanceText(i I64) String&p { return p.instances[i].Text }
 fn (p Program&) InstanceOrigin(i I64) Origin { return p.instances[i].From }
 
 # the scope variables a call of a function of this type passes (types.ScopeVarsOf), the bodies of the declared types

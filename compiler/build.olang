@@ -100,6 +100,7 @@ type Config struct() {
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Fuzz String& = ""   # -fuzz NAME: the test fuzzed, built with libFuzzer (B19); "" for none
     FuzzTime I64 = 0    # -fuzztime SECONDS: how long it runs, 0 until a failure is found or it is stopped
+    Profile Bool = false    # olang profile: frame pointers, line tables and the runtime's sampler (B20)
     Update Bool = false
     Tests Bool = false
     Jobs I64 = 0
@@ -151,7 +152,13 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "") $(".fuzz" if c.Fuzz != "" else "") $(".prof" if c.Profile else "")
+}
+
+# what every function of the build carries (B12): the target's CPU and features, and in a profile build (B20) a frame
+# pointer kept in every function - the sampler's walk up the stack follows them
+fn (c Config&) FnAttrs() String {
+    return $c.Target.Attrs $(" \"frame-pointer\"=\"all\"" if c.Profile else "")
 }
 
 # what a C import is translated and its C compiled with (X18, X20): the target's triple and C library for another
@@ -625,6 +632,7 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     args.Push("-lm")
     args.Push("-lpthread")
     args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
+    if c.Profile { args.Push("-lrt") }  # B20: the sampler's timers, in librt before glibc 2.34
     if dyncall { args.Push("-lffi") }
     parts Vec<String&>
     for a in args { parts.Push(a) }

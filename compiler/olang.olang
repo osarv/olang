@@ -591,10 +591,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         for x in e.ExportNames() { prog.Exports.Push($x) }
         prog.Header = e.Header(build.LibName(root), root)
     }
-    prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
+        error build.Failed.REPORTED
+    }
     if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
-        prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {
+        prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
             error build.Failed.REPORTED
         }
         if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
@@ -612,12 +614,14 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
-    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
+    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.FnAttrs()
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
+    e.Prof = cfg.Profile and kind == build.Kind.Program
+    e.Lines = cfg.Profile
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.Library = cfg.Library and kind == build.Kind.Program
@@ -649,7 +653,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 
@@ -889,6 +893,11 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     for f in cfg.CFlags() { args.Push($f) }
     if cfg.Debug { args.Push("-g") }
     if cfg.Race { args.Push("-fsanitize=thread") }
+    if cfg.Profile {
+        # B20: the sampler walks C's frames too, and names its lines
+        args.Push("-fno-omit-frame-pointer")
+        args.Push("-gline-tables-only")
+    }
     for a in String&["-O2", "-Xclang", "-disable-llvm-passes", "-w", "-x", "c", "-S", "-emit-llvm", "-o", "-", "-"] { args.Push($a) }
     kb := StringBuilder()
     for a in args { kb.Push($a "\n") }

@@ -2,16 +2,17 @@
 ; arena allocator and its chunk pool (O2, O8b), regions (docs/memory.md 3.4), the worker cache behind spawn and join (P1e), the
 ; checks' failure paths and the test unwinding (S18, P1d), text rendering (E11a, E11c), and what std reaches through
 ; "extern fn": the process, the file system and processes (X6), a call on a stack of its own and crash messages (S1,
-; S2). Two parts beside it: san.ll, the scope sanitizer (B2f), compiled into the same object under -s; and dyncall.ll,
-; the dynamic call over libffi (S3), an object of its own linked only into a program declaring it.
+; S2). Three parts beside it: san.ll, the scope sanitizer (B2f), compiled into the same object under -s; prof.ll, the
+; sampling profiler (B20), compiled into it in a build olang profile makes; and dyncall.ll, the dynamic call over libffi
+; (S3), an object of its own linked only into a program declaring it.
 ;
 ; The compiler reads these files when it builds - found as std is, under OLANG_STD or <compiler>/../std - and fills
 ; in two things before clang compiles them (compiler/runtime.olang):
 ;   @@NAME@@         a fact about the target's C library, the size of a structure or where a field of it is (STAT_BYTES,
 ;                    JMP_BUF_BYTES, ...) - the row for the target's architecture, the host's checked against its headers;
 ;   ; @if COND       the lines up to "; @else" or "; @end" are kept only where COND holds, and those after "; @else"
-;   ; @else          only where it does not. COND is "san" (a -s build) or an architecture ("x86_64", "aarch64"),
-;   ; @end           or either after "!". Not nested.
+;   ; @else          only where it does not. COND is "san" (a -s build), "prof" (a build olang profile makes)
+;   ; @end           or an architecture ("x86_64", "aarch64"), or either after "!". Not nested.
 ; Each function is then given the build's attributes - the target's CPU and features, and sanitize_thread under -r -
 ; as each function the compiler generates is (B12, P7). The constants the kernel and the C library define alike on
 ; every architecture here - errno values, signal numbers, the S_IF* kinds, mmap's, sigaction's and sigaltstack's flags,
@@ -297,6 +298,9 @@ entry:
   %isnull = icmp eq ptr %tgt, null
   br i1 %isnull, label %hard, label %soft
 hard:
+; @if prof
+  call void @__olang_prof_stop()
+; @end
   call void @abort()
   unreachable
 soft:
@@ -1472,6 +1476,10 @@ done:
 define internal ptr @__olang_worker_loop(ptr %w) {
 entry:
   call void @__olang_thread_init()
+; @if prof
+  %proftop = call ptr @llvm.frameaddress.p0(i32 0)
+  call void @__olang_prof_thread(ptr %proftop)
+; @end
   ; O1b/P2: this worker's part of the program's scope - every task it runs builds there, and it outlives the worker
   %prog = call ptr @malloc(i64 56)
   call void @__olang_alloc_check(ptr %prog)
@@ -1545,6 +1553,9 @@ retire:
   call void @__olang_pool_drain()
   call void @__olang_alt_stack_free()
   call void @free(ptr %w)
+; @if prof
+  call void @__olang_prof_thread_end()
+; @end
   ret ptr null
 stay:
   %oldf = load ptr, ptr @__olang_worker_free
@@ -3031,6 +3042,10 @@ define ptr @__olang_stack_main(ptr %run) {
 entry:
   %jb = alloca [@@JMP_BUF_BYTES@@ x i8], align 16
   call void @__olang_alt_stack()
+; @if prof
+  %proftop = call ptr @llvm.frameaddress.p0(i32 0)
+  call void @__olang_prof_thread(ptr %proftop)
+; @end
   ; the program's scope is reached as the caller reaches it - through a worker's part of it when a task called (O1b):
   ; this thread starts with the real one, which another task, or the thread the join lets go on, may be using - and
   ; every scope as the caller would (P2): the caller is parked until this thread is done
@@ -3070,6 +3085,9 @@ out:
   call void @__olang_pool_share()
   call void @__olang_pool_drain()
   call void @__olang_alt_stack_free()
+; @if prof
+  call void @__olang_prof_thread_end()
+; @end
   ret ptr null
 }
 

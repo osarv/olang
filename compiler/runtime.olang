@@ -17,9 +17,11 @@ import "load"
 Archs Array<String&> = String&["x86_64", "aarch64"]
 FactNames Array<String&> = String&["STAT_BYTES", "STAT_MODE", "STAT_SIZE", "STAT_MTIM_SEC", "STAT_MTIM_NSEC"
     "DIRENT_NAME", "SPAWN_FILE_ACTIONS_BYTES", "PTHREAD_ATTR_BYTES", "JMP_BUF_BYTES", "SIGACTION_BYTES"
-    "SIGACTION_FLAGS", "FFI_DEFAULT_ABI"]
-FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2]
-FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1]
+    "SIGACTION_FLAGS", "FFI_DEFAULT_ABI", "UC_PC", "UC_FP", "UC_SP"]
+# UC_PC, UC_FP, UC_SP (B20): where a signal's ucontext_t holds the interrupted pc, frame pointer and stack pointer -
+# x86-64's uc_mcontext.gregs[REG_RIP], [REG_RBP], [REG_RSP]; AArch64's uc_mcontext.pc, regs[29], sp
+FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2, 168, 120, 160]
+FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1, 440, 416, 432]
 
 # a runtime file that is not there or cannot be read as a runtime file: said already
 type Bad error { UNREADABLE }
@@ -58,8 +60,9 @@ fn directive(line String&) I64 {
     return -1
 }
 
-# the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not
-fn Fill(file String&, arch String&, san Bool) String ? Bad {
+# the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not, and
+# with the profiler's hooks or not (B20)
+fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
     path := $load.StdDir() "/runtime/" $file
     bytes := try os.ReadFile(path) catch os.Error {
         try io.PrintErrln($"olang: " $path ": cannot open this file") catch io.Error { }
@@ -83,10 +86,10 @@ fn Fill(file String&, arch String&, san Bool) String ? Bad {
             if neg { c = c[1:] }
             sp := try c.Find(" ") catch default -1
             if sp >= 0 { c = c[:sp] }
-            if c != "san" and c not in Archs {
-                try malformed(path, n, "a condition that is neither \"san\" nor an architecture")
+            if c != "san" and c != "prof" and c not in Archs {
+                try malformed(path, n, "a condition that is neither \"san\", \"prof\" nor an architecture")
             }
-            holds := san if c == "san" else c == arch
+            holds := san if c == "san" else (prof if c == "prof" else c == arch)
             keep = holds != neg
             inIf = true
             inElse = false
@@ -136,13 +139,14 @@ fn Fill(file String&, arch String&, san Bool) String ? Bad {
     return out.ToString()
 }
 
-# the runtime's own part (runtime.ll, and san.ll under -sanitize) filled in, or the dynamic call's (dyncall.ll)
-fn Text(arch String&, san Bool, dyncall Bool) String ? Bad {
-    if dyncall { return try Fill("dyncall.ll", arch, san) }
-    core := try Fill("runtime.ll", arch, san)
-    if not san { return core }
-    s := try Fill("san.ll", arch, san)
-    return $core "\n" $s
+# the runtime's own part (runtime.ll, san.ll under -sanitize, prof.ll in a profile build - B20) filled in, or the
+# dynamic call's (dyncall.ll)
+fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false) String ? Bad {
+    if dyncall { return try Fill("dyncall.ll", arch, san, prof) }
+    text := try Fill("runtime.ll", arch, san, prof)
+    if san { text = $text "\n" $(try Fill("san.ll", arch, san, prof)) }
+    if prof { text = $text "\n" $(try Fill("prof.ll", arch, san, prof)) }
+    return text
 }
 
 # ir with the build's attributes, as stage 0 writes every object's: a linkonce_odr global in a comdat of its own, every
@@ -186,8 +190,8 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
 
 # the runtime's IR for a build for triple and arch, with attrs on its functions: what build compiles into the
 # runtime's object
-fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool) String ? Bad {
-    body := try Text(arch, san, false)
+fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false) String ? Bad {
+    body := try Text(arch, san, false, prof)
     return WithAttributes($"target triple = \"" $triple "\"\n\n" $body, attrs, race)
 }
 
@@ -307,9 +311,9 @@ HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\"
 
 # the dynamic call's IR (S3), an object of its own linked only into a program declaring it: it reaches the rest of the
 # runtime as any module does, through what Decls derives
-fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool) String ? Bad {
-    core := try Text(arch, san, false)
-    dc := try Text(arch, san, true)
+fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool, prof Bool = false) String ? Bad {
+    core := try Text(arch, san, false, prof)
+    dc := try Text(arch, san, true, prof)
     body := $"target triple = \"" $triple "\"\n\n" $Decls(core) $dc "\n!20 = !{!\"olang\"}\n" $HeaderTbaa
     return WithAttributes(body, attrs, race)
 }
