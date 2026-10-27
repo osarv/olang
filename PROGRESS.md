@@ -3,13 +3,18 @@
 Task: survey missed optimizations in the olang compiler, measured; output docs/optsurvey.md. No compiler changes.
 
 ## Done
-- build/olang built; bench baseline run (`build/bench_run -r 3`, log optlog/bench1.txt, not committed).
+- docs/optsurvey.md written: ranked table, 15 findings + a decision section + checked-as-good list + compile-time note.
+- bench/repro/: turn_temporaries, adapter_reduce, call_result_copy, text_local_copy, const_call_in_body, enum_layout,
+  filtered_comprehension, gen_big_function (all build).
+- optlog/: notes.txt (raw measurements), bench1.txt (bench_run -r 3), cg_explain.txt (callgrind of the compiler's front
+  end), profile_front.txt (olang profile - distorted by kernel page-fault time, see notes).
 
-## Measured so far
-- Vec push 50M: 1.2-5 s vs C 0.5 s; almost all of it is kernel time (page faults): olang 326k faults / 1.3 GB vs C 195k / 783 MB.
+## Method (to redo a measurement)
+- callgrind on -target x86-64-v3 builds (no PMU in the VM; valgrind lacks AVX-512); C with -march=x86-64-v3 -O3 -flto.
+- runtime/prelude prototypes: copy std/ to a scratch dir, edit, build with OLANG_STD=that dir.
+- IR patches: OLANG_CLANG=a wrapper that seds each .ll before compiling (build in a fresh dir so objects do not mix),
+  or relink one patched module from the logged link command; -Wl,-plugin-opt=save-temps for final IR.
 
-## Notes
-Running notes (raw, measured) are in optlog/notes.txt, committed with -f.
-
-## Next
-- the remaining areas of the brief.
+## Next (if resumed)
+- Nothing required. Possible extras: prototype section 2 part 2 (loop-scope reset) to replace its estimate; measure
+  section 11's fusion; map E10's remaining observers for section 14.
