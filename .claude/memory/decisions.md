@@ -1634,3 +1634,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `match T`, a closed trait's any cases, error-value matches). Mine: an unguarded `case _` becomes an error naming
   `default` (one catch-all); `case _ if cond` stays (the multiway test); a migration tool in `olang fix` rewrites
   `nomatch` and unguarded `case _`. Queued with the post-reset batch.
+- QBQ REVISED 2026-10-27 (the user: "remove nomatch from the language completely. would you rather have case _ for
+  default than default?"): nomatch removed completely (decided). ASKED: the catch-all spelled `case _` (no clause of
+  its own - the pattern rule `_` = anything applied at the top, guarded or not; no new rule) or `default` (a word, but
+  a third meaning for it and a rule forbidding unguarded `case _`). Recommended `case _`. In effect until answered: the
+  previous entry's `default`.
