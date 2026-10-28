@@ -37,6 +37,12 @@ the matrix library to be efficient. It should work as the base for all operation
 in olang (the C version is only a rough reference); std/linalg's Tensor is the operand of every numeric/NN operation,
 and efficiency comes first: zero-allocation in-place forms, transposed matmul without copies, fused elementwise.
 
+**Settling networks are the main experiment (the user, 2026-10-28, after a walkthrough of the basic function -
+the artifact "How a Network Settles", https://claude.ai/artifact/Hwn2xBvjNSsEHVYVTPFwk2): "This is what we are going to
+be experimenting with primarily btw".** So olang's work is weighed by what the settle needs: many small cache-resident
+GEMVs in an allocation-free loop, symmetric reciprocal blocks, low precision and the FPGA path (oann/docs/settling.md
+sections 1.10, 3, 4). When experiments start is the user's to say (asked 2026-10-28, decisions.md QBY).
+
 **Settling networks research (the user, 2026-10-11):** "When you are done with the compiler I want you to start playing
 around with the settling networks to extract functional structures for various tasks. Be it MNIST initially, but NLP
 and robotics later on. You may use genetic algorithms if you want." This starts once the self-hosted compiler is

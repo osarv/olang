@@ -1808,3 +1808,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   parity is the type in front for both (`Point(1, 2)`, `Array<I64>[1, 2]`); target-typed construction exists elsewhere
   (C# 9 `Point p = new(1, 2)`, Zig `.{ 1, 2 }`, Swift `.init(...)`) but needs a new spelling for "the target's type", a
   target everywhere (`:=` has none), and hides what is built where olang reads it at the use - not taken.
+- QBY ASKED 2026-10-28 (the user, after the settling-network walkthrough: "This is what we are going to be
+  experimenting with primarily btw"): when do experiments start - (1) now, alongside the language batches (oann's port
+  of the settle on today's olang, migrated with `olang fix` as the language moves), or (2) after the queued language
+  and optimization batches settle the language (the 2026-10-17 rule "oann waits until the compiler is mostly done").
+  Recommended (2) for oann's port, but (1) for small measured experiments in oagent written against today's olang
+  (the settle alone, ~200 lines), so the compiler work is steered by a real workload. In effect: oann waits.
