@@ -171,10 +171,11 @@ Friday evening before it starts queued work); the 0.95 stop holds the rest of th
 third feature survey): "The sweep doesn't have to care about the 95 percent rule" - a survey the user asked for runs to
 its end whatever the week reads.
 
-**Week of 2026-10-31 to 2026-11-07 (the user, 2026-10-28: "Set the stopping percentage at 92% for next week").** Code
-work stops at ~0.92 weekly that week (nothing new starts near it; running agents finish and merge), the 0.95 rule
-returning the week after unless the user says otherwise. Read as a hard stop: the last-hours burn before that week's
-reset is not taken unless the user says so.
+**Standing rule from the week starting 2026-10-31, every week until the user changes it (the user, 2026-10-28: "Set
+the stopping percentage at 92% for next week", then "with for next week, I mean every week from next week").** Code
+work stops at ~0.92 weekly (nothing new starts near it; running agents finish and merge). Supersedes the 0.95 stop from
+that week on. Read as a hard stop: the last-hours burn before a reset is not taken unless the user says so. The week
+ending Sat 2026-10-31 keeps the 0.95 rule and its queued end-of-week batch.
 
 ## Waking up after a reset, and never losing work to a limit
 **Standing rule** (the user 2026-10-08: "Always schedule yourself to resume when tokens are back as your usage runs
