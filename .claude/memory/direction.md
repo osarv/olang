@@ -41,7 +41,8 @@ and efficiency comes first: zero-allocation in-place forms, transposed matmul wi
 the artifact "How a Network Settles", https://claude.ai/artifact/Hwn2xBvjNSsEHVYVTPFwk2): "This is what we are going to
 be experimenting with primarily btw".** So olang's work is weighed by what the settle needs: many small cache-resident
 GEMVs in an allocation-free loop, symmetric reciprocal blocks, low precision and the FPGA path (oann/docs/settling.md
-sections 1.10, 3, 4). When experiments start is the user's to say (asked 2026-10-28, decisions.md QBY).
+sections 1.10, 3, 4). When experiments start is the user's to say (asked 2026-10-28, decisions.md QBY). The experiments they asked for are kept in oagent's EXPERIMENTS.md (2026-10-29: sleep replayed into the circuit
+itself; other activation functions - sigmoid, SwiGLU and the like).
 
 **Settling networks research (the user, 2026-10-11):** "When you are done with the compiler I want you to start playing
 around with the settling networks to extract functional structures for various tasks. Be it MNIST initially, but NLP
