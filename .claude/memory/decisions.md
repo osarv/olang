@@ -1868,3 +1868,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   would be summaries per function, built callee first (regions as hidden parameters, so a caller never changes a
   callee's code), cycles by a fixed point as error sets are. Cost: an edit that changes a callee's inferred summary
   rebuilds its callers' objects, as an inferred error set does today. Still asked; to discuss 2026-10-31.
+- QCB follow-up 2 2026-10-30 (the user: "Is there any way we never need to assign the scope manually and just do it
+  by the compiler and without extra memory cost?"): answered yes, with one rule. Every marker written today is a choice
+  among the same scopes inference sees, and inference takes the shortest every use allows - what a correct marker
+  says; a value kept in a longer-lived structure is built directly where it is kept (as a call's result already lands
+  where it is put, O18a), so its temporaries stay in the turn and nothing is copied. The only case where inference
+  could hold more than a hand-written program is a VIEW into short-lived storage kept long (a slice of a turn's buffer
+  pushed into a list held across turns): lifting would keep the whole buffer per turn, where a person copies the
+  slice. Rule proposed (rec): inference never extends storage past the loop turn or block that made it; such a kept view
+  is an error naming `.Clone()`/`$x` (the occasional "weird error at assigning" the user expected) - never a hidden
+  copy (principle 2: a copy is written). The other errors inference keeps: a function made a value whose inferred
+  obligations its function type cannot carry (T22a), and an `any` (T32). With that, memory is never above today's best
+  hand-placed program, and the markers (`&x`, `&return`, `f&x()`, `outlives`) all go. To be measured by the staged
+  plan. Still asked; to discuss 2026-10-31 with QBZ.
