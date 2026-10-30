@@ -401,6 +401,18 @@ that's still supposed to work, even if it feels redundant next to a newer test.
 an old test's syntax was superseded by a real language change (e.g. old literal-restated-array-size syntax after struct
 array literals simplified it), updating that one test is fine - deleting or shrinking others "for tidiness" is not.
 
+## Nesting depth: three blocks, four at most
+The user, 2026-10-30: "your code has like 10 nested indented blocks. That is disastrous design. You should limit
+yourself to around 3, 4 on special occasions etc and break things up more."
+**How to apply:** at most three blocks nested inside a function's body, four on a special occasion; reach for guard
+clauses (`if bad: return`, `continue`), `:` one-line bodies and a helper function when a block is a thing of its own.
+Every agent brief says so. compiler/ is far over it (QCA, decisions.md) - a refactor batch is queued.
+
+## Flags beside values are errors, in my code too
+The user, 2026-10-30, seeing compiler/ return `value, Bool` and success Bools with out-parameters: the rule "errors are
+errors" (Language rules) holds for the compiler's own code, not only for std's API. New code declares an error; the
+~60 existing sites move with QBZ's decision.
+
 ## Style, form and conciseness
 Be diligent about style, form, and conciseness in this project - both in code and in how work is presented.
 

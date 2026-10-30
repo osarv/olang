@@ -1814,3 +1814,38 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and optimization batches settle the language (the 2026-10-17 rule "oann waits until the compiler is mostly done").
   Recommended (2) for oann's port, but (1) for small measured experiments in oagent written against today's olang
   (the settle alone, ~200 lines), so the compiler work is steered by a real workload. In effect: oann waits.
+- QBZ ASKED 2026-10-30 (the user: "I can see from your code you use bool returns instead of errors, we should consider
+  doing something about this language-wise. Either we remove errors or we force error handling with maybe single
+  returns etc. ... an error rework could be good where booleans take a more central role?"). Measured in compiler/
+  (96k lines, 4,963 functions): 851 return a Bool, nearly all real predicates (`isNumber`, `Has...`), but 29 return a
+  value beside a Bool (`String, Bool`, `Outcome, Bool`) and ~30 return a success Bool with a `mut` out-parameter -
+  exactly what the "errors are errors" rule forbids; only 509 functions declare `?`. The cause is that the "found or
+  not" case is cheaper to write as a flag than as an error type plus `try ... catch E default x` or a catch block.
+  Proposed (rec): keep errors (R8's forced handling is what a flag lacks - an unread flag is silent); (1) a Bool among
+  several results becomes an error naming `? E` (as an error type among several results already is, T20); (2) a
+  fallible call may be tested where a Bool is - `if x := find(k) { use x } else { ... }` binds the value when the call
+  succeeds, the else taking the failure (`else catch NotFound { }` where it must say which), so found/missing costs
+  what a flag costs and stays checked; (3) the compiler's ~60 flag sites migrated by it. Not proposed: removing errors,
+  or single results only (several results stay for value pairs like divmod). In effect: today's rules.
+- QCA RECORDED 2026-10-30 (the user: "your code has like 10 nested indented blocks. That is disastrous design. You
+  should limit yourself to around 3, 4 on special occasions etc and break things up more"). A standing code rule
+  (rules.md, Code rules). Measured in compiler/: ~1,000 lines nest more than 4 blocks inside their function's body
+  (581 at 5, 269 at 6, the deepest past 10 in mir, eval, check, lower), 242 functions reach 5+. Planned (mine): a
+  refactor batch of compiler/ (guard clauses with early `return`/`continue`, `:` one-line bodies, helpers split out
+  where a block is a thing of its own), and `olang format -check` reporting a function nesting deeper than 4. ASKED:
+  should the depth limit also be a language/formatter rule for every olang program (a warning, or an error past 5),
+  or only my own code's discipline? Recommended: a report in `olang format -check` and the LSP, not a compile error.
+- QCB ASKED 2026-10-30 (the user: "Is there a way we remove the manual scoping completely and instead let the compiler
+  infer any scope it uses? ... a more GC-like language but without the overhead. Then every once in a while the
+  compiler gives a weird error at assigning and you have to understand the memory model"). Measured, what is written
+  by hand today: in compiler/ 748 `T&x` markers (335 of them `&c`, the checker's arena), 24 `&return`, 18 scope
+  arguments `f&x()`, 52 `outlives`, against 9,065 bare `&` (a bare `&` says "a reference", a type decision that would
+  stay); std 80/33/2/7. Obligations and a returned local's home (O10b, O26a) are already inferred. Proposed (rec yes):
+  every scope marker inferred, none written - the compiler places each value in the shortest-lived scope every use
+  allows (region inference, the ML Kit's approach, over the whole program as obligations already are), field and
+  result scopes as hidden parameters of the type or function; `explain`/hover show the inferred scopes; an error at
+  an assignment says where each side was found to live and which use forced it. The costs stated: an error points at
+  a use away from its cause (the user's own point); where a loop stores into a long-lived structure the value is placed
+  there and memory is held until it closes (early freeing and `-memory` are the answer, as today); function types and
+  `any` values must carry inferred scopes. Staged: make markers optional first, delete them from std and compiler/ to
+  measure what inference cannot place, then remove the spellings. In effect: written markers.
