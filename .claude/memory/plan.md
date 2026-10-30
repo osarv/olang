@@ -582,5 +582,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   section-8 design): the small formal model first (docs/scope-infer.md: the inference, the no-extension rule, why it is
   sound, the errors left), then markers optional in the port's scope pass, then every marker deleted from std and
   compiler/ to measure (what inference cannot place, peak memory of the self-build and bench against today). Round 2:
-  the spellings removed (SPEC section 8, a migration tool in `olang fix`, checks cases), with a bulk review after. Runs
+  the spellings removed outright (the user: "make manual scopes impossible" - no marker syntax left, never an
+  optional form on master) (SPEC section 8, a migration tool in `olang fix`, checks cases), with a bulk review after. Runs
   beside the language batch only where files allow (scope.olang is its own; check.olang's marker parsing waits).

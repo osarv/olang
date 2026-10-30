@@ -887,7 +887,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   are; field and result scopes hidden parameters), a value kept longer built directly where it is kept. One rule keeps
   memory at today's best hand placement: no storage is extended past the loop turn or block that made it - a view of such
   storage kept longer is an error naming `.Clone()`/`$x`, never a hidden copy. A bare `&` (a reference) stays.
-  Staged: markers optional, deleted from std and compiler/ to measure, then the spellings removed. The rules below are
+  **No manual scopes at all (the user, 2026-10-30: "make manual scopes impossible")**: there is no way to write a
+  scope - no marker, scope argument or relation in the grammar; a removed spelling is simply gone (principle 4), so `&x`
+  after a type is a syntax error like any unknown form, not a diagnostic about scopes. Markers are optional only inside
+  the rework's branch, as its measuring step; master goes from today's markers straight to none. The rules below are
   today's until it lands.
 - **No scope names (O3, O4a, O13, O14, O26, the user's design 2026-10-05).** A marker is bare `&`, `&x` (lives where
   `x` does) or `&return`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding

@@ -1885,3 +1885,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   follow-up 2's rule (no storage extended past the turn or block that made it; a kept view of it an error naming
   `.Clone()`/`$x`). Recorded in CLAUDE.md/HISTORY.md; queued in plan.md. The user will answer the rest of the ledger
   on 2026-10-31.
+- QCB, 2026-10-30 (the user: "Then, also make manual scopes impossible"): no scope syntax at all in the end state -
+  markers, scope arguments and `outlives` gone from the grammar (a removed spelling simply gone); optional markers only
+  on the rework's branch while measuring. ASKED (for 2026-10-31): a bare block `{ }` (S1a) still reclaims what it built
+  at its close, the one structural way left to bound memory - keep it (rec: yes; blocks are needed for grouping and
+  `defer` anyway, and it names no scope) or make blocks reclaim nothing special (everything inferred to the function)?
+  `x.Destroy()` is about destructors, not scopes, and stays.

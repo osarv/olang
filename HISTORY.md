@@ -26301,3 +26301,10 @@ carry (T22a, T32). The user: "Yes, do this scoping rework." Against reference co
 count per object, no increment and decrement on every copy (atomic across threads), no leaked cycles, a whole scope
 reclaimed in one step; reference counting's one advantage, freeing at the last use, is what early freeing (O8d) already
 recovers where it can prove it.
+
+Then the user: "Then, also make manual scopes impossible." So the rework's end state has no scope syntax at all - not
+optional markers kept beside inference, which would be two ways to say one thing and a way to hand-place what the
+compiler places. Markers stay optional only on the rework's branch, while it measures what inference cannot place;
+master never carries them as an option. Left for the user (decisions.md): a bare block `{ }` (S1a) still reclaims what
+it built when it closes - a way to bound memory by structure rather than by naming a scope - which I recommend keeping,
+as grouping and `defer` need the block anyway.
