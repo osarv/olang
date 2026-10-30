@@ -585,7 +585,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the spellings removed outright (the user: "make manual scopes impossible" - no marker syntax left, never an
   optional form on master) (SPEC section 8, a migration tool in `olang fix`, checks cases), with a bulk review after. Runs
   beside the language batch only where files allow (scope.olang is its own; check.olang's marker parsing waits).
-- QUEUED 2026-10-30 (QCC B, the user's yes): no `&` in signatures - parameters borrowed read-only by default, `mut x T`
-  in-out, pointer or copy chosen by size, `&` only where stored shared, recursive payloads boxed by the compiler. Built
-  together with the scoping rework (QCB) - both rewrite section 8 and the same signatures; a migration tool in `olang
-  fix` drops `&` from parameters and results. Option C (no references) studied on the compiler and a GUI sketch first.
+- HELD 2026-10-30 (the user: "hold off on the refactor until we have decided all things about how the language is to
+  work"): the scoping rework (QCB), `mut`'s removal (decided) and the nesting refactor (QCA) wait until QCC (references
+  in signatures), the `mut` follow-ups and the rest of the ledger are answered - one rework of section 8 and the
+  signatures then, not two; the nesting refactor after it. The decided features batch and bulk review 4 run meanwhile.

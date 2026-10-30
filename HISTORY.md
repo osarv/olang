@@ -26308,3 +26308,15 @@ compiler places. Markers stay optional only on the rework's branch, while it mea
 master never carries them as an option. Left for the user (decisions.md): a bare block `{ }` (S1a) still reclaims what
 it built when it closes - a way to bound memory by structure rather than by naming a scope - which I recommend keeping,
 as grouping and `defer` need the block anyway.
+
+## `mut` removed: the decision (2026-10-30)
+
+Asked whether `mut` does anything today (answered: it is a reference's write permission, checked at every level, a
+global's binding and a method's written receiver - 4,464 uses in compiler/ and std, 3,792 in signatures - but a
+permission, not immutability, so it buys checking and no optimizer facts), the user decided: "Let's remove mut
+completely." Not built: the user then held every rework "until we have decided all things about how the language is to
+work", so `mut`'s removal waits with the scoping rework and the question of references in signatures (QCC), to be
+built as one rework of section 8. Left open (decisions.md): whether the read-only check is replaced by nothing or by
+an inferred "writes these parameters" shown in explain and hover; globals immutable by inference where never assigned;
+trait receivers always writable. An earlier note in the ledger had recorded QCC's option B as decided; the user's "yes"
+meant "ask me again tomorrow", and the note was corrected.

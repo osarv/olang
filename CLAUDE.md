@@ -320,6 +320,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (E12c), a temporary is built in the target's scope. No primitive references (the user's call: assignment to a
   reference repoints, and a number has no field to write through). Write-through assignment was rejected: `x = y` must
   imply `x == y`.
+- **`mut` is removed (the user's decision 2026-10-30: "Let's remove mut completely"; not built yet).** No `mut` on
+  references, parameters, receivers, trait methods, `any` or globals; what replaces the read-only check and the
+  immutable global is being settled with QCC (decisions.md). The entry below is today's rule until it lands.
 - **Permission is part of a reference's type (T25b/T25c, the user's design).** `mut T&` writable, `T&` read-only, at
   every level, shallow. `mut` speaks only about what a reference reaches: locals and parameters are always assignable
   (`mut` before a local's or parameter's value type is an error, D11a/D9), a field is assignable through a writable
