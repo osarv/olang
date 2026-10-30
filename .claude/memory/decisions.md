@@ -1904,3 +1904,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   objects (widget trees, doubly linked lists, the compiler's own sharing) must be rewritten around indices.
   Recommended (B) now, (C) studied on real code (the compiler, a GUI sketch) before deciding. In effect: (A). For
   2026-10-31 with the rest.
+- QCC follow-up 2026-10-30 (the user: "Or is this a bad idea? What if the compiler infers if something should be a
+  reference or not?"): answered - inferring the REPRESENTATION (pointer or copy, inline or boxed) is good and is option
+  B's core; inferring the MEANING is not possible, because it is observable: after `b := a; b.x = 1`, whether `a.x`
+  changed must not depend on an optimizer's choice. So the compiler can infer everything only once one meaning holds for
+  all values: (C) all values (Hylo, Swift structs - a copy is semantically a copy, the compiler makes it a borrow, a
+  move or copy-on-write where nobody can tell), or all references (Java/Python - every struct shared, inline layout
+  only where escape analysis proves it; rejected: arrays of structs stop being C's layout, principle 2). A mixed language
+  needs a marker where sharing is meant - today's `&`, which B keeps only in stored positions. Recommendation unchanged:
+  B now, C studied on real code.
