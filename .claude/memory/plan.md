@@ -578,3 +578,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   blocks, 242 functions; guard clauses, one-line bodies, helpers split out) and a depth report in `olang format
   -check`/the LSP (QCA); the ~60 flag-beside-value sites follow QBZ's answer. Not before the language batch's checker work
   lands (same files).
+- QUEUED 2026-10-30 (the user's QCB yes): the scoping rework - every scope marker inferred. Round 1 (opus xhigh, new
+  section-8 design): the small formal model first (docs/scope-infer.md: the inference, the no-extension rule, why it is
+  sound, the errors left), then markers optional in the port's scope pass, then every marker deleted from std and
+  compiler/ to measure (what inference cannot place, peak memory of the self-build and bench against today). Round 2:
+  the spellings removed (SPEC section 8, a migration tool in `olang fix`, checks cases), with a bulk review after. Runs
+  beside the language batch only where files allow (scope.olang is its own; check.olang's marker parsing waits).

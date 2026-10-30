@@ -26279,3 +26279,25 @@ block's id (`breakUnless`). Conservative where unsure: a missed decision is a ru
 Checked in functions (return, break, continue, error, a try passing on), tests, branches and loops: tests/asserts.olang
 (run time and a baked global agreeing), checks cases assertfalsepieces, assertfalsewritten, assertreachedfalse; the
 bitset test back to `catch ... { return }` then `assert false`.
+
+## Scopes inferred, none written: the decision (QCB, 2026-10-30)
+
+The user asked whether manual scoping could go entirely - "let the compiler infer any scope it uses ... a more GC-like
+language but without the overhead", accepting that "every once in a while the compiler gives a weird error at
+assigning". Measured what is written by hand: compiler/ 748 `T&x` markers (335 of them `&c`), 24 `&return`, 18 scope
+arguments, 52 `outlives`, against 9,065 bare `&`; std 80, 33, 2, 7. Obligations (O10b) and a returned local's home
+(O26a) were already inferred, and nothing about them needs interface files, so inferring the rest adds no
+whole-program step: a summary per function, callee first, scopes as hidden parameters, cycles by a fixed point as error
+sets are; an edit changing a callee's summary rebuilds its callers' objects, as an inferred error set does.
+
+Memory: every marker is a choice among the scopes inference sees, and inference takes the shortest every use allows -
+what a correct marker says - while a value kept longer is built where it is kept (O18a's landing), so its temporaries
+stay in their turn. The one case where inference would hold more than a person is a view into short-lived storage kept
+long (a slice of a turn's buffer pushed into a list across turns): a person copies the slice; lifting would keep the
+whole buffer, every turn - the region-inference leak the ML Kit is known for. Hence the rule: no storage is extended
+past the loop turn or block that made it; such a kept view is an error naming `.Clone()`/`$x`, never a hidden copy
+(principle 2). The other errors left: a function made a value or an `any` whose inferred obligations its type cannot
+carry (T22a, T32). The user: "Yes, do this scoping rework." Against reference counting it keeps what scopes give: no
+count per object, no increment and decrement on every copy (atomic across threads), no leaked cycles, a whole scope
+reclaimed in one step; reference counting's one advantage, freeing at the last use, is what early freeing (O8d) already
+recovers where it can prove it.

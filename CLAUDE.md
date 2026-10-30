@@ -881,6 +881,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   before (O8c); globals live in the program's scope (O1b). Allocas are in the entry block (O2c). The arena aligns by
   size, 64 at 64 bytes (O8a); aggregates take their own alignment. The chunk pool is per-thread size classes bounded
   by RAM/8 with an LRU, parked workers sharing the rest (O8b).
+- **Scopes inferred, none written (QCB, the user's decision 2026-10-30: "Yes, do this scoping rework"; not built
+  yet).** Every scope marker goes - `&x`, `&return`, scope arguments `f&x()`, `outlives` - and the compiler places each
+  value in the shortest-lived scope every use allows (region inference over the whole program, as obligations already
+  are; field and result scopes hidden parameters), a value kept longer built directly where it is kept. One rule keeps
+  memory at today's best hand placement: no storage is extended past the loop turn or block that made it - a view of such
+  storage kept longer is an error naming `.Clone()`/`$x`, never a hidden copy. A bare `&` (a reference) stays.
+  Staged: markers optional, deleted from std and compiler/ to measure, then the spellings removed. The rules below are
+  today's until it lands.
 - **No scope names (O3, O4a, O13, O14, O26, the user's design 2026-10-05).** A marker is bare `&`, `&x` (lives where
   `x` does) or `&return`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding
   references too; a scope argument `f&x()` (E25). A result is built (`T&`, in the result scope, which lands where the

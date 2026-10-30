@@ -1881,3 +1881,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   obligations its function type cannot carry (T22a), and an `any` (T32). With that, memory is never above today's best
   hand-placed program, and the markers (`&x`, `&return`, `f&x()`, `outlives`) all go. To be measured by the staged
   plan. Still asked; to discuss 2026-10-31 with QBZ.
+- QCB DECIDED 2026-10-30 (the user: "Yes, do this scoping rework"): every scope marker inferred, none written, under
+  follow-up 2's rule (no storage extended past the turn or block that made it; a kept view of it an error naming
+  `.Clone()`/`$x`). Recorded in CLAUDE.md/HISTORY.md; queued in plan.md. The user will answer the rest of the ledger
+  on 2026-10-31.
