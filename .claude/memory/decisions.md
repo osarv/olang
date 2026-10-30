@@ -1849,3 +1849,22 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   there and memory is held until it closes (early freeing and `-memory` are the answer, as today); function types and
   `any` values must carry inferred scopes. Staged: make markers optional first, delete them from std and compiler/ to
   measure what inference cannot place, then remove the spellings. In effect: written markers.
+- QBZ follow-up 2026-10-30 (the user: "Is if x := f() {} else {} really that much shorter than x := try f() catch {}?
+  I guess the block isn't there then. Record it and we will talk about it tomorrow"): conceded - it is not shorter, and
+  `x := try f() catch { return }` (a guard, x usable after it) already fits the nesting rule better than the if form,
+  which nests the success path. So the flag sites' real cost is declaring an error type for each failure, not the call
+  site; the `if x := f()` form is withdrawn from the recommendation unless tomorrow's talk finds a use. Left for
+  tomorrow: (1) forbid a Bool among several results (still recommended); (2) whether failing should need less than a
+  declared error type (a prelude `Missing`, or words declared where they are raised). To discuss 2026-10-31.
+- QCB follow-up 2026-10-30 (the user: "how much memory will that cost? Will that force full program compilation?"):
+  answered - (1) memory: for a program that compiles today, inference chooses the shortest scope every use allows, so
+  it matches or beats the markers written now; the cost is in what compiles today only with a restructuring (a copy,
+  `$x`) - inferred, the value is instead lifted to the longer scope, and where that lift is out of a loop's turn into a
+  scope outside the loop it grows with every turn (QF's pattern, the ML Kit's known leak). Proposed with it (rec): a lift
+  out of a loop turn is never silent - an error naming the copy to write, or a `-memory` entry - so memory stays where
+  today's rules put it; the number measured in the staged plan (markers deleted from std and compiler/, peak memory of
+  the self-build and bench compared). (2) No new whole-program step: obligations, error sets and section 8 are already
+  read off callees' bodies (no interface files, B3i keys objects on what they were compiled against); inferred scopes
+  would be summaries per function, built callee first (regions as hidden parameters, so a caller never changes a
+  callee's code), cycles by a fixed point as error sets are. Cost: an edit that changes a callee's inferred summary
+  rebuilds its callers' objects, as an inferred error set does today. Still asked; to discuss 2026-10-31.
