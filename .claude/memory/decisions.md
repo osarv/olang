@@ -1913,3 +1913,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   only where escape analysis proves it; rejected: arrays of structs stop being C's layout, principle 2). A mixed language
   needs a marker where sharing is meant - today's `&`, which B keeps only in stored positions. Recommendation unchanged:
   B now, C studied on real code.
+- QCC DECIDED 2026-10-30 (the user: "Add that yes" - read as yes to the recommendation, stated to the user): option B -
+  no `&` in signatures: a parameter is borrowed read-only by default, `mut x T` means writes reach the caller, the
+  compiler chooses pointer or copy by size, a result is built where it lands; `&` stays only where a value is stored
+  shared (fields, locals, elements, type arguments); recursive enum payloads boxed by the compiler. Option C (no
+  references at all) to be studied on real code before any decision. With QCB (scopes inferred) it forms one rework.
+  Asked with it (the user: "Does the mut keyword do anything really today?"): answered - yes: `mut` on a reference is
+  its write permission (T25b/T25c), checked at every level - a callee given `T&` cannot write through it, a read-only
+  reference never converts to writable, a copy taken through a read-only path stays read-only (QC); on a global it is
+  the binding (an immutable global no writable reference reaches is baked as constant data, K2/T25d); on a method it
+  says the receiver is written (`mut Next()`, `mut any`). It is a permission, not immutability: another writable name
+  may still change what a `T&` sees, so it buys checking, not optimizer facts. Measured: 4,464 `mut` in compiler/ and
+  std, 3,792 of them in signatures. Under B it keeps its job and becomes the whole of it at a parameter: `mut x T`
+  is the only mark a signature needs.
