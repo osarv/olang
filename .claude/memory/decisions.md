@@ -1891,3 +1891,16 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   at its close, the one structural way left to bound memory - keep it (rec: yes; blocks are needed for grouping and
   `defer` anyway, and it names no scope) or make blocks reclaim nothing special (everything inferred to the function)?
   `x.Destroy()` is about destructors, not scopes, and stays.
+- QCC ASKED 2026-10-30 (the user: "Is there a way to remove references too?"): what `&` decides today - sharing (two
+  names see one instance: graphs, parent pointers, a callee writing the caller's value through `mut T&`), indirection
+  (recursive types, `Tree<T>&` payloads), reference-only destructor types (C11), nullability (`?&`). Measured: 11,594 `&`
+  in compiler/ and std, 8,867 (76%) in function signatures; 3,747 `mut` parameters. Options: (A) keep as is; (B) no `&`
+  in signatures - a parameter is borrowed read-only by default, `mut x T` writes reach the caller (Swift's inout,
+  Mojo's/Hylo's conventions), the compiler choosing pointer or copy by size, a result built where it lands; `&` stays
+  only where a value is STORED shared (fields, locals, elements, type arguments: "this holds an instance, not a copy"),
+  recursive enum payloads boxed by the compiler; removes ~3/4 of every `&`; (C) no references at all - mutable value
+  semantics (Hylo): every value is its own, sharing only through handles (Vec, Map) or indices into them, a graph or
+  parent pointer as an index, recursion boxed automatically; scopes then become nearly trivial, but shared mutable
+  objects (widget trees, doubly linked lists, the compiler's own sharing) must be rewritten around indices.
+  Recommended (B) now, (C) studied on real code (the compiler, a GUI sketch) before deciding. In effect: (A). For
+  2026-10-31 with the rest.
