@@ -6631,9 +6631,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # (a recorded limit: the callee's obligations cannot tell its storage from what it holds)
                 handle := rf.Runs() and s.handleLent(c, i, a)
                 loop := cr == Term.None and s.lentLoopCopy(a)
-                if s.calleeKeepsArg(c, i) and not handle and s.lentByStorage(c, i) {
+                if s.calleeKeepsArg(c, i) and not handle and not ctorCallee and s.lentByStorage(c, i) {
                     # the rework's round 2c: lent by its storage, to a callee putting nothing into what it reaches
-                    # (docs/scope-model.md 3.3, "not reg"): what it keeps of it lives here, where the copy does
+                    # (docs/scope-model.md 3.3, "not reg"): what it keeps of it lives here, where the copy does - never
+                    # to a constructor, whose instance holds what it is given where C2d judges it
                 } else if s.calleeKeepsArg(c, i) and not handle {
                     s.wantPromotion(a)
                     if s.report {
