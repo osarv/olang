@@ -2037,3 +2037,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QCF DECIDED 2026-10-31 (the user: "yes, add variadic args"): as proposed - `xs ...T` last, one type, a read-only
   array inside built in the caller's frame, `...a` passes an array on; filepath.Join and os.Exec move to it. Queued
   with array patterns.
+- QCG ASKED 2026-10-31 (the user, on QBV: "should we add the ** operator?"). Proposed: `a ** b` is the operator of the
+  `Pow` method (E31, as `+` is Plus), so `x ** 2.0` for floats and `n ** 3` for integers (the exponent a U32, a literal
+  adapting); binds tighter than unary minus and is right-associative (`-x ** 2` is `-(x ** 2)`, `2 ** 3 ** 2` is
+  `2 ** 9`, as in mathematics and Python); `**=` with it; a user type declaring Pow gets it. Rec: yes - formulas in data
+  and AI code read as written on paper (`a ** 2 + b ** 2`), a symbol earning its place (principle 3), no new rule. QBV's
+  folding of constant exponents 2 (and 3 if exact) still applies, to both spellings. In effect: `x.Pow(y)` only.
