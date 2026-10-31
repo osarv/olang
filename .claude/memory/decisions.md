@@ -2107,3 +2107,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Rec: yes, with QCC in the held rework. In effect: `:=` takes e's type.
 - QCH DECLINED 2026-10-31 (the user: "I think we keep := to mean what it does today. 'Whatever is in the right hand
   side'"): no `:=&`; `x := e` takes e's type - a value copies, a reference or handle names the same instance.
+- QCE found 2026-10-31 (the user: "we need a way to have strings in maps right? And right now strings can always be
+  changed from the outside?"): measured - `Map<String, V>` is refused (T7a: text inside a structure is held by
+  reference), so every text key is `String&` and the Map holds the caller's text: `k := $"abc"; m.Put(k, 1);
+  k[0] = 'x'` leaves `{"xbc": 1}` that neither Get("abc") nor Get("xbc") finds. A real hole today. PROPOSED (a') Map
+  and Set store their own copy of a new key whose type is a reference or handle compared by contents (one copy per new
+  key at Put, none on an update or a lookup, as C++'s and Rust's maps own their string keys), or (c) String immutable
+  (no copy needed; text shared freely; in-place edits move to Array<Char>/Vec<Char>/StringBuilder). Rec (a') now -
+  small, closes the hole - and (c) only if text should be shared without copies generally. ASKED.
