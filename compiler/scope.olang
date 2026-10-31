@@ -4327,9 +4327,13 @@ fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     # a call the inference landed where the local's uses need is the local's own, as a call landing at the local is
     c := s.callOf(unPassed(s.unAway(x)))
     if c is not null and s.siteLift(I64(c.Site)) != Term.None { return }
-    r := s.wholeRoot(x)
+    r := s.claimRoot(x)
     ok := r >= 0 and r != l and (s.liftable(r) or s.held.Has(r) or s.heldCall(r) >= 0)
     s.origin[l] = r if ok else -2
+    if s.Trace and not ok {
+        shape := $unPassed(s.unAway(x))
+        s.TraceLog.Push($"origin none " $r " " $(shape[:120] if shape.Len() > 120 else shape) " | " $s.traceAt(x.Span().Start))
+    }
 }
 
 # a local initialized by a constructor call, or by a call whose result is an instance of known bindings (O13c), and
@@ -6000,7 +6004,9 @@ fn (s mut Scoper&) readPart(p typed.Lvalue&, ty types.TypeId, dest Term) Val {
     # built where the value goes (T7b)
     match p {
         case typed.Lvalue.Deref(_, _, r) {
-            if dest != Term.None and s.arenaValue(ty) and s.isFresh(r) {
+            # (not a call whose result was written borrowed, KeptPerm: it may hand back existing storage, which the value
+            # copies - as a borrowed result's was)
+            if dest != Term.None and s.arenaValue(ty) and s.isFresh(r) and not s.keptCall(r) {
                 v := s.val(r, dest)
                 if not s.holds(ty) { return plain() }
                 return existing(v.T)
@@ -6180,8 +6186,8 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
                 s.terms[l] = v.T
                 bound.Push(l)
                 # the inference: a binding's claim is its subject's, which a lift of the binding lengthens (2.4)
-                r := s.wholeRoot(bd.From)
-                if l < s.origin.Len() { s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2 }
+                r := s.claimRoot(bd.From)
+                if l < s.origin.Len() { s.origin[l] = r if r >= 0 and r != l and (s.liftable(r) or s.heldCall(r) >= 0) else -2 }
             }
         }
     }
@@ -6776,6 +6782,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # returned or made an any as the same value declared first would be ("x := f&t(); h.p = x", O25h)
     if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
     return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
+}
+
+# whether x is a call of a function whose result was written borrowed from a parameter (KeptPerm, the inference's)
+fn (s mut Scoper&) keptCall(x typed.Expr&) Bool {
+    c := s.callOf(s.unAway(x))
+    return c is not null and s.P.T.ResultFrom(s.calleeType(c), 0) == types.KeptPerm
 }
 
 # whether x is a call the inference landed (a site lift)
@@ -8148,6 +8160,18 @@ fn (s mut Scoper&) borrowRoot(p typed.Lvalue&) I64 {
     }
 }
 
+# the local whose claim value x's is, for the inference's origins (2.4): wholeRoot, through the held locals check makes
+# (a match's subject, an operand held for its one use, O18a) to what they hold
+fn (s mut Scoper&) claimRoot(x typed.Expr&) I64 {
+    r := s.wholeRoot(x)
+    for _ in range 16 {
+        if r < 0 or s.B!.Locals[r].Kind != typed.LocalKind.Held or s.heldCall(r) >= 0 { return r }
+        init := try s.inits.Get(r) catch { return r }
+        r = s.wholeRoot(init)
+    }
+    return r
+}
+
 # whether what value x keeps is a local's own storage: a value local borrowed whole (E12c)
 fn (s mut Scoper&) keepsStorage(x typed.Expr&) Bool {
     match unPassed(s.unAway(x)) {
@@ -8198,7 +8222,7 @@ fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
         }
         case _ { }
     }
-    r := s.wholeRoot(x)
+    r := s.claimRoot(x)
     if r < 0 {
         s.proposeCall(u, t)
         return
@@ -8257,7 +8281,8 @@ fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
 # the call site a hidden local holding a call's several results is initialized by (D8d), -1 for none
 fn (s mut Scoper&) heldCall(l I64) I64 {
     x := try s.inits.Get(l) catch { return -1 }
-    if s.B!.Locals[l].Kind != typed.LocalKind.Hidden { return -1 }
+    k := s.B!.Locals[l].Kind
+    if k != typed.LocalKind.Hidden and k != typed.LocalKind.Held { return -1 }
     c := s.callOf(x)
     return I64(c.Site) if c is not null else -1
 }
