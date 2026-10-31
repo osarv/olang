@@ -1929,3 +1929,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   removal and QCC change the same rules and signatures it would rewrite (built now, it would be redone); the queued
   batch of already-decided features (survey2 items 6, 8, 9, 10, 12) and bulk review 4 go ahead, touching neither.
   Reading stated to the user.
+- `mut` KEPT 2026-10-31, the removal REVERSED before anything was built (the user: "knowing whether or not a function
+  you pass things into mutates what you passed is valuable, so keep mut for that", "globals shouldn't be mut unless you
+  say so", "So keep mut as is"): T25b/T25c and `mut` globals unchanged; the three `mut` follow-up questions are moot.

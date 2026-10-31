@@ -26320,3 +26320,14 @@ built as one rework of section 8. Left open (decisions.md): whether the read-onl
 an inferred "writes these parameters" shown in explain and hover; globals immutable by inference where never assigned;
 trait receivers always writable. An earlier note in the ledger had recorded QCC's option B as decided; the user's "yes"
 meant "ask me again tomorrow", and the note was corrected.
+
+## `mut` kept: the removal reversed (2026-10-31)
+
+A day after deciding to remove `mut`, the user reversed it before anything was built: "knowing whether or not a
+function you pass things into mutates what you passed is valuable, so keep mut for that", "also globals shouldn't be
+mut unless you say so", "so keep mut as is". The two things `mut` decides - a parameter's write permission, visible in
+the signature and checked by the compiler, and a global's mutability, written where it is declared - are exactly the
+two the user wants written rather than inferred: an inferred "writes" would change when a body changes, under callers
+that read the signature. So T25b/T25c and the global binding stay as they are, and the three follow-up questions (what
+replaces the read-only check, inferred immutable globals, trait receivers) are moot. What is still open about
+signatures is QCC (references in signatures), which the scoping rework waits on.
