@@ -44,6 +44,11 @@ type walker struct(src String&, ts Array<token.Token>&) {
     resultMuts Map<I64, Bool>
     finish Bool = false
     keepResults Bool = false
+    # the read-only references made bare, applied only to a file written in the old form - one with a "mut" the text
+    # phase drops (round 2c): in a file with none, "p T&" already means "may write" (the text phase run again on its
+    # own output changes nothing)
+    bareEdits Vec<edit>
+    oldForm Bool = false
 }
 
 # whether a parameter's type from n to e is written a reference with a scope marker ("T&x", "T&return")
@@ -156,11 +161,13 @@ fn (w mut walker&) walk() {
 # in the finish phase only a result's top
 fn (w mut walker&) onMut(i I64) {
     if w.resultMuts.Has(i) {
+        w.oldForm = true
         if w.finish or not w.keepResults: w.drop(i)
         return
     }
     if w.finish: return
     if w.topLevel() and w.kind(i - 1) == token.Tok.Iden and w.stmtStart(i - 1): return
+    w.oldForm = true
     if w.inTrait() and w.kind(i + 1) == token.Tok.Iden and w.stmtStart(i) {
         w.edits.Push(edit(I64(w.ts[i].Start), I64(w.ts[i + 1].Start), "&"))
         return
@@ -305,12 +312,12 @@ fn (w mut walker&) param(s I64, e I64, names Vec<String&>&, ext Bool) {
     # a scope marker after it ("b N&a"): scopes are inferred (docs/rework.md round 1), so it says nothing - made bare
     # with its reference, as one named by a marker is ("T&p" - what is handed back of it is read-only, as it was)
     if w.refMarked(t, end) and w.kind(last - 2) != token.Tok.Question {
-        if not ext: w.edits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
+        if not ext: w.bareEdits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
         return
     }
     if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return
     if ext and not w.textOrArray(t): return
-    w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
+    w.bareEdits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
 }
 
 # whether the type at t is text or an array: "String", "Array<...>" (an extern type such as CStr is held by reference, X10)
@@ -342,6 +349,9 @@ fn TextPhase(src String&, keep Bool = false) String {
     w := walker(src, ts.Toks)
     w.keepResults = keep
     w.walk()
+    if w.oldForm {
+        for e in w.bareEdits { w.edits.Push(e) }
+    }
     return apply(src, w.edits)
 }
 
@@ -361,20 +371,35 @@ test FinishPhase "drops a result's mut the text phase kept for the driven phase"
     assert TextPhase("fn (s S&) chunk(k I64) mut Array<T>&s { }\n") == "fn (s S) chunk(k I64) Array<T>&s { }\n"
 }
 
+test TextPhase "changes nothing run again on its own output, nor in a file written in the new form" {
+    for src in String&["fn f(a mut T&, b T&, c T?&) T& { }\n", "fn (c mut Checker&) Add(t String&) { }\n"
+                       "type It trait {\n    mut Next() I64 ? Exhausted\n}\n", "fn (s S&) chunk(k I64) mut Array<T>&s { }\n"] {
+        once := TextPhase(src)
+        assert TextPhase(once) == once
+    }
+    assert TextPhase("fn (b Buf&) Put(x I64, t String) { }\nG mut I64 = 0\n") == "fn (b Buf&) Put(x I64, t String) { }\nG mut I64 = 0\n"
+}
+
+# a test's text read in the old form, as a file holding an old "mut" is: its text phase with that line taken off
+fn inOldForm(src String&) String {
+    out := TextPhase("fn zz(z mut Z&) { }\n" $src)
+    return $out[16:]
+}
+
 test TextPhase "drops mut, makes read-only parameters bare" {
-    assert TextPhase("fn f(a mut T&, b T&, c T?&) T& { }\n") == "fn f(a T&, b T, c T?&) T& { }\n"
-    assert TextPhase("fn (c Checker&) Lookup(n I64) I64 { }\n") == "fn (c Checker) Lookup(n I64) I64 { }\n"
-    assert TextPhase("fn (c mut Checker&) Add(t String&) { }\n") == "fn (c Checker&) Add(t String) { }\n"
-    assert TextPhase("G mut I64 = 0\nfn f() { x mut Vec<mut N&>& = v }\n") == "G mut I64 = 0\nfn f() { x Vec<N&>& = v }\n"
-    assert TextPhase("fn first(l List&) Node&l { }\n") == "fn first(l List) Node&l { }\n"
-    assert TextPhase("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N) { }\n"
-    assert TextPhase("type It trait {\n    mut Next() I64 ? Exhausted\n    Peek() I64\n}\n") == "type It trait {\n    &Next() I64 ? Exhausted\n    Peek() I64\n}\n"
-    assert TextPhase("type L<T> trait { Less(o T&) Bool }\n") == "type L<T> trait { Less(o T) Bool }\n"
-    assert TextPhase("fn f(g fn(x T&) I64, h any Shape&) { }\n") == "fn f(g fn(x T) I64, h any Shape&) { }\n"
-    assert TextPhase("extern { fn w(fd I32, b Array<U8>&, p Point&) I64 }\n") == "extern { fn w(fd I32, b Array<U8>, p Point&) I64 }\n"
-    assert TextPhase("fn f() { xs.Map(fn(a T&) I64 { return 1 }) }\n") == "fn f() { xs.Map(fn(a T) I64 { return 1 }) }\n"
-    assert TextPhase("type S struct(a String&) { a }\n") == "type S struct(a String&) { a }\n"
-    assert TextPhase("if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n") == "if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n"
+    assert inOldForm("fn f(a mut T&, b T&, c T?&) T& { }\n") == "fn f(a T&, b T, c T?&) T& { }\n"
+    assert inOldForm("fn (c Checker&) Lookup(n I64) I64 { }\n") == "fn (c Checker) Lookup(n I64) I64 { }\n"
+    assert inOldForm("fn (c mut Checker&) Add(t String&) { }\n") == "fn (c Checker&) Add(t String) { }\n"
+    assert inOldForm("G mut I64 = 0\nfn f() { x mut Vec<mut N&>& = v }\n") == "G mut I64 = 0\nfn f() { x Vec<N&>& = v }\n"
+    assert inOldForm("fn first(l List&) Node&l { }\n") == "fn first(l List) Node&l { }\n"
+    assert inOldForm("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N) { }\n"
+    assert inOldForm("type It trait {\n    mut Next() I64 ? Exhausted\n    Peek() I64\n}\n") == "type It trait {\n    &Next() I64 ? Exhausted\n    Peek() I64\n}\n"
+    assert inOldForm("type L<T> trait { Less(o T&) Bool }\n") == "type L<T> trait { Less(o T) Bool }\n"
+    assert inOldForm("fn f(g fn(x T&) I64, h any Shape&) { }\n") == "fn f(g fn(x T) I64, h any Shape&) { }\n"
+    assert inOldForm("extern { fn w(fd I32, b Array<U8>&, p Point&) I64 }\n") == "extern { fn w(fd I32, b Array<U8>, p Point&) I64 }\n"
+    assert inOldForm("fn f() { xs.Map(fn(a T&) I64 { return 1 }) }\n") == "fn f() { xs.Map(fn(a T) I64 { return 1 }) }\n"
+    assert inOldForm("type S struct(a String&) { a }\n") == "type S struct(a String&) { a }\n"
+    assert inOldForm("if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n") == "if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n"
 }
 
 # ---- the driven phase ----
@@ -577,11 +602,25 @@ fn driven(paths Vec<String&>&, olang String&, jobs I64) ? {
         try os.MkDirAll(work[k])
     }
     left Vec<String&>
-    total I64 = 0
     fileArray := files.ToArray()
     srcmask.Say($fileArray.Len() " files, compiled by " $olang)
+    total := try rounds(olang, fileArray, work, allowed, left, "round")
+    # (round 2c) a parameter made "&" from a note is pinned so the rounds cannot undo it; once they settle, D9d may find
+    # it never written after all (what its note asked for was made bare later) - one more settling with no pins
+    if Pinned.Len() > 0 {
+        Pinned = Map<String&, Bool>()
+        total += try rounds(olang, fileArray, work, allowed, left, "unpinned round")
+    }
+    srcmask.Say("total: " $total " edits")
+    for l in left { srcmask.Say("by hand: " $l) }
+}
+
+# the driven rounds, until one makes no edit: how many edits, what was left for a person in left
+fn rounds(olang String&, files Array<String&>&, work Array<String&>&, allowed Vec<String&>&, left mut Vec<String&>&
+          label String&) I64 ? os.Error {
+    total I64 = 0
     for round in range 1, 60 {
-        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        outputs := diagedit.CompileAll(olang, files, work, true)
         reqs Vec<diagedit.Request>
         errors I64 = 0
         for o in outputs {
@@ -593,12 +632,11 @@ fn driven(paths Vec<String&>&, olang String&, jobs I64) ? {
         }
         left.Clear()
         made := try applyRequests(reqs, left)
-        srcmask.Say("round " $round ": " $made " edits, " $errors " errors")
+        srcmask.Say($label " " $round ": " $made " edits, " $errors " errors")
         total += made
         if made == 0: break
     }
-    srcmask.Say("total: " $total " edits")
-    for l in left { srcmask.Say("by hand: " $l) }
+    return total
 }
 
 fn main() ? {

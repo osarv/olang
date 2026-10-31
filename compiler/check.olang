@@ -10533,6 +10533,22 @@ fn (c mut Checker&) lendLater(sp source.Span, fix String&, p typed.Lvalue?& = nu
     return true
 }
 
+# a reference parameter's written type as its bare form: its last "&" dropped, with a scope marker after it ("T&cfg",
+# round 2c - scopes are inferred) and an old "mut" before it
+fn bareSpelled(ty String&) String {
+    t := ty[4:] if ty.StartsWith("mut ") else ty
+    at := t.Len() - 1
+    for at > 0 and (t[at].IsLetter() or t[at].IsDigit() or t[at] == '_') { at-- }
+    return $t[:at] if at >= 0 and t[at] == '&' else $t
+}
+
+test bareSpelled "drops a reference's last &, its scope marker and an old mut" {
+    assert bareSpelled("Checker&") == "Checker"
+    assert bareSpelled("Diagnostics&cfg") == "Diagnostics"
+    assert bareSpelled("mut List<T>&") == "List<T>"
+    assert bareSpelled("Vec<Node&>&return") == "Vec<Node&>"
+}
+
 # D9d, once every body is checked: a "&" parameter no body of its function uses as one is an error naming the bare
 # form - but where it cannot be bare: one that may be null ("?&"), an "any", an extern type's or a destructor's
 # (reference-only, X10, C11), a function value, a type variable's, an extern's or an export fn's (C's to write), a
@@ -10579,8 +10595,7 @@ fn (c mut Checker&) refSettle() {
         mi := c.P.FnModule(f)
         nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
         ty := c.P.L.Mods[mi].Src!.Text[I64(prm.Ty!.Span().Start):I64(prm.Ty!.Span().End)]
-        bare := ty[:ty.Len() - 1] if ty.EndsWith("&") else ty
-        c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(nsp.Start), I64(nsp.End)), msgs.RefNeverUsed(c.text(prm.Name), $bare))
+        c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(nsp.Start), I64(nsp.End)), msgs.RefNeverUsed(c.text(prm.Name), bareSpelled(ty)))
     }
 }
 
