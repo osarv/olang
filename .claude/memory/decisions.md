@@ -2090,3 +2090,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   is a reference key compared by contents (`Map<String&, V>`, a `&` to a type declaring Eq) changed through another
   holder. PROPOSED: no immutable types now; Map and Set refuse such a key type, naming the value form or an identity
   key; revisit immutability if sharing between tasks needs it. ASKED.
+- QCE follow-up 2026-10-31 (the user: "The alternative is an immut keyword for type declarations, then String would
+  become immut? Also ... what the := does, you seem to treat it as that it always copies by value"): answered `:=` -
+  it declares with e's type: a value copies, a reference names the same instance, a handle (Vec, Map, List) is a
+  second name, a call's result is built in place. Found: a Vec key is a handle compared by contents, so the map hole
+  covers handles too. ASKED: (a) the narrow key check (reference and handle keys compared by contents refused), (b)
+  `immut` on type declarations (deep; Map/Set keys must be immut or plain values), (c) (b) with String immutable
+  (shared text without copies; in-place edits move to Array<Char>/Vec<Char>/StringBuilder). In effect: none.
