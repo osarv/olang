@@ -566,6 +566,68 @@ fn (a Array<T>&) Partition<? E>(keep fn(x T) Bool ? E) Array<T>, Array<T> ? E {
     return yes, no
 }
 
+# the first position whose element is not below x ("<"), in an array sorted by "<": where x would go to keep it sorted,
+# Len() where every element is below x - a binary search, log2 n reads (text by its bytes, as "<" orders it)
+fn (a Array<T>&) LowerBound(x T) I64 {
+    lo I64 = 0
+    hi := a.Len()
+    for lo < hi {
+        mid := lo + (hi - lo) / 2
+        if a[mid] < x { lo = mid + 1 } else { hi = mid }
+    }
+    return lo
+}
+
+# the first position whose element is equal to x ("==", E10), in an array sorted by "<" - a binary search, failing with
+# ArrayError.NOT_FOUND where there is none
+fn (a Array<T>&) BinarySearch(x T) I64 ? ArrayError.NOT_FOUND {
+    i := a.LowerBound(x)
+    if i < a.Len() and a[i] == x: return i
+    error ArrayError.NOT_FOUND
+}
+
+# a position in an array walked from its first element to its last and round again, without end - what Cycle gives
+type CycleIter<T> struct(of Array<T>&) {
+    arr Array<T>&of = of
+    i I64 = 0
+}
+
+fn (it mut CycleIter<T>&) Next() T ? Exhausted {
+    if it.arr.Len() == 0: error Exhausted.END
+    if it.i >= it.arr.Len(): it.i = 0
+    it.i++
+    return it.arr[it.i - 1]
+}
+
+# the elements over and over, without end - "for x in a.Cycle().Take(10)"; an empty array gives nothing. A walk,
+# building nothing
+fn (a Array<T>&) Cycle() CycleIter<T> { return CycleIter<T>(a) }
+
+# the array cut into runs of consecutive elements same holds for, called on each element and the one before it: each run
+# a read-only view of the array's own storage (a slice, E16a), nothing copied - "a.ChunkBy(fn(x, y): return x == y)"
+# gives the runs of equal elements. The views are held in an array that lives where the array does, as Windows' and
+# Chunks', allocated once at its exact length; same is called once per neighbouring pair
+fn (a Array<T>&) ChunkBy<? E>(same fn(x T, y T) Bool ? E) Array<Array<T>&>&a ? E {
+    if a.Len() == 0: return Array<Array<T>&>(0, a)
+    cuts := Array<Bool>(a.Len())            # cuts[i]: a run begins at i
+    n I64 = 1
+    for i in range 1, a.Len() {
+        cuts[i] = not try same(a[i - 1], a[i])
+        if cuts[i]: n++
+    }
+    runs mut Array<Array<T>&>&a = Array<Array<T>&>(n, a)   # each run written below
+    k I64 = 0
+    from I64 = 0
+    for i in range 1, a.Len() {
+        if not cuts[i]: continue
+        runs[k] = a[from:i]
+        k++
+        from = i
+    }
+    runs[k] = a[from:]
+    return runs
+}
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 
@@ -583,6 +645,27 @@ if TestBuild {
         s := 0
         for x in I64[1, 2, 3].Reversed() { s = s * 10 + x }
         assert s == 321 and I64[].Reversed().ToVec().Len() == 0
+    }
+    test Array.BinarySearch "the position of an element of a sorted array, the first of equal ones" {
+        a := I64[1, 3, 3, 5, 8]
+        assert (try a.BinarySearch(3) catch default -1) == 1 and (try a.BinarySearch(8) catch default -1) == 4
+        assert (try a.BinarySearch(4) catch ArrayError.NOT_FOUND default -1) == -1
+        assert (try I64[].BinarySearch(4) catch default -1) == -1 and (try "abcz".BinarySearch('c') catch default -1) == 2
+    }
+    test Array.LowerBound "where an element would go to keep a sorted array sorted" {
+        a := I64[1, 3, 3, 5, 8]
+        assert a.LowerBound(3) == 1 and a.LowerBound(4) == 3 and a.LowerBound(0) == 0 and a.LowerBound(9) == 5
+    }
+    test Array.Cycle "the elements over and over" {
+        assert I64[1, 2, 3].Cycle().Take(7).ToVec().ToArray() == I64[1, 2, 3, 1, 2, 3, 1]
+        assert I64[].Cycle().Take(3).ToVec().Len() == 0
+    }
+    test Array.ChunkBy "the runs a test holds for between neighbours, as views" {
+        r := I64[1, 2, 3, 7, 8, 4].ChunkBy(fn(x, y): return y == x + 1)
+        assert r.Len() == 3 and r[0] == I64[1, 2, 3] and r[1] == I64[7, 8] and r[2] == I64[4]
+        assert I64[].ChunkBy(fn(x, y): return x == y).Len() == 0
+        w := "aabccc".ChunkBy(fn(x, y): return x == y)
+        assert w.Len() == 3 and w[2] == "ccc"
     }
     test Array.Windows "every run of so many consecutive elements, as views" {
         w := I64[1, 2, 3].Windows(2)

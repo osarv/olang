@@ -147,3 +147,24 @@ test "the walks are evaluated while compiling" {
     assert WalkBaked == 9 and WindowsBaked == 791
     assert WalkBaked == I64[1, 2, 3, 4, 5, 6].Iter().TakeWhile(fn(x): return x < 6).StepBy(2).Sum()
 }
+
+# ---- walks, round 3: computed while compiling (K2) beside the same at run time ----
+
+Walks3Baked I64 = try I64[1, 2, 3, 4].Iter().Scan(0, fn(a, x): return a + x).Last() catch default -1
+Walks3Product I64 = I64[1, 1, 2, 3, 3].Iter().Dedup().Product() + (try I64[5, 6, 7].Iter().Nth(2) catch default -1)
+Walks3Search I64 = (try I64[1, 3, 5, 7].BinarySearch(5) catch default -1) * 100 + I64[1, 3, 5, 7].LowerBound(6) * 10 +
+                   I64[1, 1, 2, 3, 3].ChunkBy(fn(x, y): return x == y).Len()
+Walks3Groups I64 = I64[1, 2, 3, 4, 5].Iter().GroupBy(fn(x): return x % 3).Len()
+Walks3Cycle I64 = I64[1, 2].Cycle().Take(5).Sum()
+
+test "the third round's walks are evaluated while compiling, as they run" {
+    a := I64[1, 2, 3, 4]
+    assert Walks3Baked == 10 and Walks3Baked == (try a.Iter().Scan(0, fn(acc, x): return acc + x).Last() catch default -1)
+    assert Walks3Product == 13 and Walks3Search == 233 and Walks3Groups == 3 and Walks3Cycle == 7
+    v := Vec<I64>()
+    v.Push(4)
+    v.Push(9)
+    assert (try v.BinarySearch(9) catch default -1) == 1 and v.Cycle().Take(3).Sum() == 17
+    xs, ys := a.Iter().Zip(a.Iter().Skip(1)).Unzip()
+    assert xs.Len() == 3 and ys.ToArray() == I64[2, 3, 4]
+}
