@@ -26714,6 +26714,9 @@ R23 and R23a (the flag bans), T19's CamelCase; how each was built, and what I de
   stands in, in rounds - found because the fix scenario's 2026-10-25 program (a contract with no `?`) stopped building.
   The fix fixtures' old programs keep their old upper-case words (the rename had reached their uses, not their old
   `error E { }` declarations); `olang fix` renames both.
+  Found on the way (pre-existing): the tree printer (compiler/unparse.olang, astdiff's round trip) wrote a
+  constructor's `?` before its contract block (`struct(v I64) ? [v >= 0]`), which no parser reads back - unseen while no
+  constructor wrote both; now written as the grammar has it. The seed was regenerated: its compiler knew no raised errors.
 - **The flag bans** are judged on signatures as resolved (`generic.flagBans`): every declared function and method but
   an `extern fn` or `export fn` (C's conventions, X1/X13), and every function type. R23a counts a parameter written
   `mut T&`, the receiver aside: a method's `Bool` speaks of what it acts on (`s.Add(x)` whether it changed, a parser's

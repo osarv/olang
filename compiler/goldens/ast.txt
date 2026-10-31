@@ -1836,7 +1836,7 @@ fa9ed970d3d1051f 9f78e65f53f87c40 compiler/mcp.olang
 e4210cea8cf38619 704f6e7790f00505 compiler/mir.olang
 8e709f240cb4bea9 bb0138a0eaf6f217 compiler/msgs.olang
 2692b34a531c3acb 156fce18f6708c4d compiler/names.olang
-24925d3b7e346376 2eb49dede5f697d6 compiler/olang.olang
+367aa17e5aabb8a7 ae06d0a43c8523b2 compiler/olang.olang
 1a623199911055c7 76e6ecd29d2c2717 compiler/parse.olang
 e973b3051708b87b e6252b802009e10b compiler/profile.olang
 672b63f9a00d870a 9d2c759018457eed compiler/runtime.olang
@@ -1886,7 +1886,7 @@ aaf9b5b98ee1c059 7d27d6bd617a7ae3 compiler/tools/seed.olang
 3fd972ce8b4f9b6d 896ecb48581ae83a compiler/tools/toolkit.olang
 004aa97a0607da55 b11b799231854ab6 compiler/typed.olang
 2b90be9208871da2 bbb09de3f44ad095 compiler/types.olang
-aca1aeab053aa567 4421d3cc5f183009 compiler/unparse.olang
+f77c0f7a37d8935f ada056a4e4800945 compiler/unparse.olang
 cb8856e0596c55d7 12ef4c8161360b71 compiler/views.olang
 d9573d2a91b69e64 e5244a0c623971dd fuzz/fuzz.olang
 0acc87e7b8ecc8e8 88437f2a0fe21b9c fuzz/gen.olang
