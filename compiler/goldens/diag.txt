@@ -261,17 +261,17 @@ b11notehandle.olang:14:16: note: this text lives in a block that closes first - 
       |                ^
 compilation failed with 1 error
 === b11notevalue.olang
-b11notevalue.olang:12:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   12 |         out.Push(p)
+b11notevalue.olang:13:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   13 |         out.Push(p)
       |             ^~~~
 $ROOT/std/prelude/vec.olang:60:5: note: the callee requires it because of this statement
    60 |     s.data[s.n] = x
       |     ^
-b11notevalue.olang:11:9: note: 'p' is made here, in a block that closes first - make it where 'out' lives: 'Join&out(...)'
-   11 |         p := filepath.Join&t(dir, name)
+b11notevalue.olang:12:9: note: 'p' is made here, in a block that closes first - make it where 'out' lives: 'glue&out(...)'
+   12 |         p := glue&t(dir, name)
       |         ^
-b11notevalue.olang:12:18: note: this text lives in a block that closes first - pass a copy, which is made where 'out' lives: write '$' before it
-   12 |         out.Push(p)
+b11notevalue.olang:13:18: note: this text lives in a block that closes first - pass a copy, which is made where 'out' lives: write '$' before it
+   13 |         out.Push(p)
       |                  ^
 compilation failed with 1 error
 === b11unknownonce.olang
@@ -1652,6 +1652,59 @@ d8ereturn.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this
     4 |     if n > 0 { return }
       |                ^~~~~~
 compilation failed with 1 error
+=== d8gctor.olang
+d8gctor.olang:2:20: error[D8g]: a variadic parameter is a function's, not a constructor's or a case's - take an array, 'xs Array<T>&'
+    2 | type Bag struct(xs ...I64) { xs }
+      |                    ^~~~~~
+compilation failed with 1 error
+=== d8gdefault.olang
+d8gdefault.olang:2:20: error[D8g]: a variadic parameter takes no default - a call giving it no argument gives it the empty array
+    2 | fn sum(xs ...I64 = I64[1]) I64 { return xs.Len() }
+      |                    ^~~~~~
+compilation failed with 1 error
+=== d8gelement.olang
+d8gelement.olang:6:19: error[E12]: expected I64, found String
+    6 |     assert sum(1, "two") == 2
+      |                   ^~~~~
+compilation failed with 1 error
+=== d8gextern.olang
+d8gextern.olang:4:16: error[D8g]: a variadic parameter is a function's, not an extern's - C's variable arguments are '...'
+    4 |     fn puts(xs ...I64) I32
+      |                ^~~~~~
+compilation failed with 1 error
+=== d8gfewer.olang
+d8gfewer.olang:12:12: error[E14]: expected at least 1 argument, found 0
+   12 |     assert largest() == 0
+      |            ^~~~~~~~~
+compilation failed with 1 error
+=== d8gnotlast.olang
+d8gnotlast.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name
+    3 | fn tag(xs ...I64, last I64) I64 { return xs.Len() + last }
+      |                   ^~~~~~~~
+compilation failed with 1 error
+=== d8greadonly.olang
+d8greadonly.olang:3:24: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+    3 | fn bump(xs ...I64) { xs[0] = 1 }
+      |                        ^
+d8greadonly.olang:3:9: note: 'xs' is declared read-only here - declare it 'xs mut Array<I64>&' to write through it
+    3 | fn bump(xs ...I64) { xs[0] = 1 }
+      |         ^~~~~~~~~
+compilation failed with 1 error
+=== d8gspreadalone.olang
+d8gspreadalone.olang:7:19: error[D8g]: '...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it
+    7 |     assert sum(0, ...a) == 3
+      |                   ^~~~
+compilation failed with 1 error
+=== d8gspreadnot.olang
+d8gspreadnot.olang:7:18: error[D8g]: '...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'
+    7 |     assert count(...a) == 2
+      |                  ^~~~
+compilation failed with 1 error
+=== d8gtwo.olang
+d8gtwo.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name
+    3 | fn tag(xs ...I64, ys ...I64) I64 { return xs.Len() + ys.Len() }
+      |                   ^~~~~~~~~
+compilation failed with 1 error
 === d9abarevariable.olang
 d9abarevariable.olang:4:17: error[D9a]: array parameter 'taps' is passed by reference - write Array<I16>&
     4 | type Fir struct(taps Array<I16>) {
@@ -2578,6 +2631,34 @@ compilation failed with 1 error
 e4azerodiv.olang:4:20: error[E6a]: division by zero
     4 |     x I32 = 7 % (3 - 3)
       |                    ^
+compilation failed with 1 error
+=== e5apowbool.olang
+e5apowbool.olang:5:15: error[E5a]: '**' calls Pow, which Bool has none of
+    5 |     b := true ** 2
+      |               ^~
+compilation failed with 1 error
+=== e5apowexponent.olang
+e5apowexponent.olang:5:10: error[T6b]: I64 does not flow into U32 - convert it, as U32(x)
+    5 |     n := 2 ** k
+      |          ^~~~~~
+e5apowexponent.olang:4:5: note: 'k' is I64, its literal's own type - declare the type it should have, 'k U32 = ...'
+    4 |     k := 3
+      |     ^
+compilation failed with 1 error
+=== e5apowfails.olang
+e5apowfails.olang:6:32: error[E31]: this operator calls Pow, which can fail - write 'try' before the expression
+    6 |     c := arith.Checked(I32(3)) ** 21
+      |                                ^~
+compilation failed with 1 error
+=== e5apownone.olang
+e5apownone.olang:6:16: error[E5a]: '**' calls Pow, which Pt has none of - declare 'fn (x Pt) Pow(y E) Pt'
+    6 |     p := Pt(2) ** 3
+      |                ^~
+compilation failed with 1 error
+=== e5apowshape.olang
+e5apowshape.olang:6:11: error[E31]: Pow gives one result
+    6 | fn (p Pt) Pow(n U32) { }
+      |           ^~~
 compilation failed with 1 error
 === e6dnomeet.olang
 e6dnomeet.olang:6:15: error[E6d]: this literal does not fit U64, and U64 does not flow into I64 - convert one
@@ -5440,6 +5521,46 @@ compilation failed with 1 error
 === s13gnovalue.olang
 s13gnovalue.olang:8:18: error[S13a]: case Right of Either<I64, Bool> is not covered - add it, or 'case _ { }'
     8 |     return match e {
+      |                  ^
+compilation failed with 1 error
+=== s13helemtype.olang
+s13helemtype.olang:4:14: error[S13h]: this array pattern's elements are F64, and what is matched holds I64 - write 'I64[...]'
+    4 |         case F64[x] { return I64(x) }
+      |              ^~~~~~
+compilation failed with 1 error
+=== s13hlength.olang
+s13hlength.olang:4:12: error[S13h]: a match over Array<I64>& gives a value only when its cases cover every value - none matches an array of 1 element; add a case for it, or 'case _: v'
+    4 |     return match xs {
+      |            ^~~~~
+compilation failed with 1 error
+=== s13hlengthmore.olang
+s13hlengthmore.olang:4:12: error[S13h]: a match over Array<I64>& gives a value only when its cases cover every value - none matches an array of 3 elements or more; add a case for it, or 'case _: v'
+    4 |     return match xs {
+      |            ^~~~~
+compilation failed with 1 error
+=== s13hnotseq.olang
+s13hnotseq.olang:6:14: error[S13h]: an array pattern matches an array, text or a type declaring At and Len - P is none of them
+    6 |         case I64[a] { return a }
+      |              ^~~~~~
+compilation failed with 1 error
+=== s13hrestpayload.olang
+s13hrestpayload.olang:9:22: error[S13h]: '...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'
+    9 |         case Cmd.Run(...rest) { return 1 }
+      |                      ^~~~~~~
+compilation failed with 1 error
+=== s13hrestslice.olang
+s13hrestslice.olang:5:21: error[S13h]: a named rest is a slice of what is matched, and Vec<I64> declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())
+    5 |         case I64[a, ...rest] { return a + rest.Len() }
+      |                     ^~~~~~~
+compilation failed with 1 error
+=== s13hresttwice.olang
+s13hresttwice.olang:4:27: error[S13h]: an array pattern has one '...', for the elements its other items do not name
+    4 |         case I64[a, ...r, ...s] { return a + r.Len() + s.Len() }
+      |                           ^~~~
+compilation failed with 1 error
+=== s13hshadow.olang
+s13hshadow.olang:5:18: error: 'z' is declared twice
+    5 |         case I64[z] { return 1 }
       |                  ^
 compilation failed with 1 error
 === s15returnvalue.olang
