@@ -26609,7 +26609,8 @@ Every module's `olang.init.MODULE` function (calling each of its globals' initia
 build, though nothing calls it - main, the test harness and a library's start call each global's initializer
 themselves, skipping the baked ones - and it named every initializer, baked or not, so each was compiled and linked
 under `-quick` and compiled for LTO to delete. Emit no longer wants it, writes no initializer of a baked global, and
-wants the root's own unbaked initializers directly. And a mutable global whose initializer the evaluator computes to
+wants the root's own unbaked initializers directly; a baked global's storage is still defined in its module's object
+whether or not code there reads it (an importer's may - the initializer had named it before). And a mutable global whose initializer the evaluator computes to
 plain data (no reference - a number, a struct of numbers; std/time's virtual clock's counters) is now baked too: its
 value is its writable storage's initial value (`@G = global <{ ... }>`, `eval.Image.Mutable`), so nothing runs for it
 at startup. The evaluator computes such an initializer only for this (`Global(.., baking, mutable)`); every other read

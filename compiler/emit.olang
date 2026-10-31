@@ -506,8 +506,12 @@ fn (e mut Emitter&) emitAll() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
                 if e.Lw.Bodies[i].Root is null { continue }
-                # K2: a baked global's initializer is never run - its value is its storage's - so it is not written
-                if e.Baked.Has(i) { continue }
+                # K2: a baked global's initializer is never run - its value is its storage's - so it is not written;
+                # its storage is, in its module's object, whatever reads it (an importer's code, or nothing here)
+                if e.Baked.Has(i) {
+                    e.bakedStorage(i)
+                    continue
+                }
                 h := e.homeOf(k)
                 if e.ReusedAt.Has(h) {
                     # a reused module's: declared, for the objects that name it (the entry calls a global's
@@ -1031,6 +1035,29 @@ fn (e mut Emitter&) globalOrder(inits Vec<I64>) Vec<I64> {
         }
     }
     return out
+}
+
+# baked global i's storage defined (K2), at the type its initializer stores
+fn (e mut Emitter&) bakedStorage(i I64) {
+    b := e.Lw.Bodies[i]
+    match b.Of {
+        case typed.BodyOf.Global(m, n) { e.global(m, n, storedType(b, m, n)) }
+        case _ { }
+    }
+}
+
+# the type a global's initializer stores into it (check writes one Assign to the global), unknown where none
+fn storedType(b typed.Body&, m I64, n source.NameId) types.TypeId {
+    if b.Root is null { return types.UnknownT }
+    for s in b.Root!.Stmts {
+        match s {
+            case typed.Stmt.Assign(_, typed.Lvalue.Global(_, ty, gm, gn), _) {
+                if gm == m and gn == n { return ty }
+            }
+            case _ { }
+        }
+    }
+    return types.UnknownT
 }
 
 fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
