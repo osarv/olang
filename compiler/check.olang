@@ -33,6 +33,7 @@ import "types"
 import "generic"
 import "typed"
 import "definit"
+import "effects"
 
 # ---- the checker ----
 
@@ -178,6 +179,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     spellQualified Bool = false            # spelling a type as code in this module writes it: another module's by its alias
     spellIn I64 = -1                       # explain's module, where Ty spells types qualified from (B11b)
     spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
+    fx mut effects.Effects?& = null           # A2.3, G42: the effect summaries of this attempt's bodies, made when first asked
     s4d Vec<typed.Lvalue&>                 # S4d: the value places an assignment writes over, while its values are checked
     placeWrite Bool = false                # S8e: the place asked for next is a target written, of its declared type
     enumWanted Bool = false                # S8d: the expression checked next is a case test's, an "as"'s or a match's
@@ -582,6 +584,7 @@ fn (c mut Checker&) CheckMain() {
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
+    c.fx = null
     c.Gaps = Vec<Gap>()
     c.anyBad = Map<I64, Bool>()
     c.slotsCalled = Map<I64, diag.Where>()
@@ -3157,6 +3160,13 @@ fn (c mut Checker&) typeContexts(t types.TypeId, td ast.TypeDecl?&) I64 {
 # the note an instance's context gives, and a type as source writes it, for the passes after checking (G16b, B11)
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
+# A2.3, B1.1, B1.2: what each body may do, summarized where something asks - explain, doc, the language server, a fact
+# read through a function's name (G42) - and nowhere else
+fn (c mut Checker&) Effects() mut effects.Effects&c {
+    if c.fx is null { c.fx = effects.Effects(c.P, c.Bodies) }
+    return c.fx!
+}
+
 fn (c mut Checker&) Ty(t types.TypeId) String {
     if c.spellIn < 0 or c.frames.Len() > 0 { return c.ty(t) }
     # explain (B11b): as code in that module writes it - another module's type by its alias (os.Error)
@@ -5326,6 +5336,62 @@ fn (c mut Checker&) at(sp source.Span) diag.Where {
 
 fn (c mut Checker&) err(sp source.Span, m msgs.Msg) I64 { return c.P.L.Diags.Error(c.at(sp), m) }
 
+# G18 (B1.4): what a generic's body asks of the type a call bound one of its variables to - a method, an operator's
+# method, a field, a walk - where the type has none: said at the outermost call that bound it ("Max needs Less, and
+# Point has none"), with a note where the body asks for it, never as an error inside the generic; anything else is m,
+# said where it is
+fn (c mut Checker&) needErr(sp source.Span, t types.TypeId, need String&, m msgs.Msg) I64 {
+    inst := c.boundBy(c.deref(t))
+    if inst < 0 { return c.err(sp, m) }
+    o := c.P.InstanceOrigin(inst)
+    called := c.text(c.P.FnDecl(c.P.InstanceFn(inst)).Name)
+    rec := c.P.L.Diags.ErrorBare(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.GenericNeeds(called, need, c.ty(c.deref(t))))
+    here := c.checkedInst()
+    asks := c.text(c.P.FnDecl(c.P.InstanceFn(here)).Name) if here >= 0 else called
+    c.P.L.Diags.Note(rec, c.at(sp), msgs.NoteGenericNeeds(asks, need))
+    return rec
+}
+
+# the outermost instance of the generics being checked - the program's own call that began the chain - where t is one
+# of its type arguments, so that call bound it; -1 where no instance is being checked or t is no argument of it
+fn (c mut Checker&) boundBy(t types.TypeId) I64 {
+    cur := c.checkedInst()
+    outer I64 = -1
+    for _ in range 64 {
+        if cur < 0 or c.P.T.Items(c.P.InstanceArgs(cur)).Len() == 0 { break }
+        o := c.P.InstanceOrigin(cur)
+        if o.File < 0 { break }
+        outer = cur
+        cur = o.Within
+    }
+    if outer < 0 { return -1 }
+    for a in c.P.T.Items(c.P.InstanceArgs(outer)) {
+        if c.P.T.Same(c.deref(a), t) { return outer }
+    }
+    return -1
+}
+
+# the function instance whose body is being checked - a lambda's, the one it is written in; -1 for none
+fn (c mut Checker&) checkedInst() I64 {
+    i := c.frames.Len() - 1
+    for i >= 0 {
+        b := c.frames[i].Body
+        i--
+        if b < 0 { continue }
+        match c.Bodies[b].Of {
+            case typed.BodyOf.Fn(inst) { return inst }
+            case _ { }
+        }
+    }
+    return -1
+}
+
+# G18: what an operator needs of its left operand's type, as a generic's need is said - "Less ('<')"
+fn opNeed(op token.Tok) String {
+    name := operatorName(op)
+    return $msgs.Tok(op.Text()) if name == "" else $name " (" $msgs.Tok(op.Text()) ")"
+}
+
 # T2c: the note at the type a null or a nullable value is fitted to, where it is written - what to make "?&"
 fn (c mut Checker&) declNote(rec I64) {
     if c.nullDecl != diag.Where.Nowhere { c.P.L.Diags.Note(rec, c.nullDecl, msgs.NoteNullableDecl()) }
@@ -5386,7 +5452,7 @@ fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId
         c.err(c.compoundAt if c.compoundAt.Start >= 0 else bsp, msgs.AtUndeclared(c.ty(written)))
         return
     }
-    c.err(bsp, msgs.NotIndexable(c.ty(t)))
+    c.needErr(bsp, t, "At ('x[i]')", msgs.NotIndexable(c.ty(t)))
 }
 
 # an index's "[": the one matching the "]" its span ends with
@@ -7661,7 +7727,7 @@ fn (c mut Checker&) unaryOn(sp source.Span, op token.Tok, x typed.Expr&c) typed.
     }
     if op == token.Tok.Minus {
         if not c.isNumber(t) {
-            c.err(sp, msgs.OperandNotNumber("'-'", c.ty(t)))
+            c.needErr(sp, t, "Neg ('-')", msgs.OperandNotNumber("'-'", c.ty(t)))
             return c.unknown(sp)
         }
         from := c.exprs.Len()
@@ -7953,7 +8019,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         if c.isNumber(ta) or c.isNumber(tb) {
             c.err(opSp, msgs.OperandsDiffer(msgs.Tok(op.Text()), c.ty(ta), c.ty(tb)))
         } else {
-            c.err(opSp, msgs.OperandNotNumber(msgs.Tok(op.Text()), c.ty(ta)))
+            c.needErr(opSp, ta, opNeed(op), msgs.OperandNotNumber(msgs.Tok(op.Text()), c.ty(ta)))
         }
         return c.unknown(sp)
     }
@@ -8885,7 +8951,7 @@ fn (c mut Checker&) sliceOf(sp source.Span, b typed.Lvalue&c, lo ast.Expr?&, hi 
         # x[lo:hi] on a declared type (E31): its Slice; an absent end its Len()
         m := c.roleMethod(t, "Slice", 2)
         if m < 0 {
-            if not c.notOperator(t, "Slice", sp, "'x[lo:hi]'", 2, false) { c.err(sp, msgs.NotIndexable(c.ty(t))) }
+            if not c.notOperator(t, "Slice", sp, "'x[lo:hi]'", 2, false) { c.needErr(sp, t, "Slice ('x[lo:hi]')", msgs.NotIndexable(c.ty(t))) }
             return c.unknown(sp)
         }
         lm := c.roleMethod(t, "Len", 0)
@@ -9045,7 +9111,7 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     if m < 0 and c.notOperator(ct, name, c.between(a.Span(), b.Span(), 2), "'x in c'", 1, false) { return c.lit(sp, types.BoolT, 0) }
     if m < 0 {
         # E29: x of the collection's own type asks Contains - a sub-collection
-        c.err(c.between(a.Span(), b.Span(), 2), msgs.MembershipNoMethod(name, c.ty(ct)))
+        c.needErr(c.between(a.Span(), b.Span(), 2), ct, $name " ('in')", msgs.MembershipNoMethod(name, c.ty(ct)))
         return c.lit(sp, types.BoolT, 0)
     }
     # E29: a Has or Contains that can fail is written under try - said at "in"
@@ -12148,7 +12214,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             # T29f: a Char is no Integer, so it has neither - its character is padded as text
             c.err(nsp, msgs.CharNoPad(c.tok(n), name))
         } else {
-            c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n), c.memberHint(rt, n, true)))   # the receiver as written, a reference one too
+            c.needErr(nsp, rt, $c.text(n), msgs.UnknownMethod(c.ty(rt), c.tok(n), c.memberHint(rt, n, true)))   # the receiver as written
         }
         c.dropArgs(args)
         return c.unknown(sp)
@@ -12533,7 +12599,7 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Lvalue&c, n s
     }
     i := c.fieldIndex(t, n)
     if i < 0 {
-        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
+        c.needErr(nsp, t, $"a field " $c.tok(n), msgs.NoSuchMember(c.ty(t), c.text(n), c.memberHint(t, n, true)))
         return null
     }
     fs := c.P.T.Items(c.P.T.Fields(t))
@@ -17249,7 +17315,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
     }
     # E31: a Next shaped otherwise is an ordinary method, and "for" has nothing to walk with
     if c.notOperator(dt, "Next", sp, "'for ... in'", 0, false) { return null }
-    c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
+    c.needErr(f.Source.Span(), st, "a walk ('for ... in': Next, Iter, or At and Len)", msgs.NotIterable(c.ty(st)))
     return null
 }
 
@@ -18605,6 +18671,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     from := c.stmts.Len()
     id, outer, mark := c.open(typed.BlockKind.Loop, sp)
     c.fr().loops.Push(id)
+    c.cur().Bounded.Push(typed.BlockId(I32(id)))   # B1.1: a count known before it starts
     c.fr().exits.Push(id)
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), c.readLocal(sp, n)), id))
     kt := c.localType(k)

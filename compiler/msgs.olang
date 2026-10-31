@@ -876,6 +876,13 @@ type Diag enum {
     LaneMaskBool
     ByteSwapWidth
     AtomicWidth
+    GenericNeeds
+    NoteGenericNeeds
+    FactOfGeneric
+    FactUndecided
+    FactNoFunction
+    ApiNoSide
+    ApiNoFiles
 }
 
 # one function each, under the id it is known by
@@ -3108,6 +3115,26 @@ fn ContractFalse(cond String&, name String&) Msg { return Msg(Diag.ContractFalse
 fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
 
 fn NoteContractCondition() Msg { return Msg(Diag.NoteContractCondition, "", "the condition") }
+
+# ERR_GENERIC_NEEDS
+fn GenericNeeds(text String&, need String&, ty String&) Msg { return Msg(Diag.GenericNeeds, "G18", $text " needs " $need ", and " $ty " has none - declare it for " $ty ", or call " $text " with a type that has it") }
+
+fn NoteGenericNeeds(text String&, need String&) Msg { return Msg(Diag.NoteGenericNeeds, "", $text " needs " $need " here") }
+
+# ERR_FACT_OF_GENERIC
+fn FactOfGeneric(text String&, fact String&) Msg { return Msg(Diag.FactOfGeneric, "G42", $text " is generic, and each of its instances has facts of its own - name one with its type arguments: '" $text "<T>." $fact "'") }
+
+# ERR_FACT_UNDECIDED
+fn FactUndecided(text String&) Msg { return Msg(Diag.FactUndecided, "G42", "'" $text "' cannot be decided: the code it reads it from changes with its value - read it outside what it decides") }
+
+# ERR_FACT_NO_FUNCTION
+fn FactNoFunction(fact String&) Msg { return Msg(Diag.FactNoFunction, "G42", $fact " is read through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
+
+# ERR_API_NO_SIDE
+fn ApiNoSide(text String&) Msg { return Msg(Diag.ApiNoSide, "B21", "'" $text "' is neither a path nor a commit of the repository here") }
+
+# ERR_API_NO_FILES
+fn ApiNoFiles(text String&) Msg { return Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))

@@ -191,6 +191,15 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
     return rec
 }
 
+# an error said at at alone, with none of the open contexts' notes: what a generic needs of a type (G18), said at the
+# call that bound it, which those notes would only repeat
+fn (d mut Diagnostics&) ErrorBare(at Where, m msgs.Msg) I64 {
+    if d.Quiet { return -1 }
+    group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
+    d.records.Push(record(at, $m.Rule, $m.Text, m.Kind, group, false))
+    return d.records.Len() - 1
+}
+
 # a note on the error numbered rec - nothing when that error was not reported
 fn (d mut Diagnostics&) Note(rec I64, at Where, m msgs.Msg) {
     if rec < 0 { return }

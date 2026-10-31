@@ -699,6 +699,9 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # a collection's growth (M19d: a body calling the prelude's grown) - emitted out of line and cold, so the Push
     # that calls it only when its buffer is full stays small enough to inline wherever it is called
     Cold Bool = false
+    # B1.1: the loops of a for-in over an array or a range, by their body block - each runs at most a count known
+    # before it starts (check.counted), which Terminates (compiler/effects.olang) takes as bounded
+    Bounded Vec<BlockId>
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
