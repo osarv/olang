@@ -93,6 +93,7 @@ f07698f229ac9f3f ce6a896ae6134d79 checks/cases/b10u64.olang
 92343f08fb5131f1 ae23b2dfa8366819 checks/cases/b10undefined.olang
 cd74265fc78fcb41 c362e307045e9b62 checks/cases/b10version.olang
 79633bbc6101d0d9 9175a9ba56df7efa checks/cases/b11beffects.olang
+6d80f3aa19ba3192 93d8bbcc51f6d7ae checks/cases/b11beffectsbind.olang
 f7a5aacf0b8ecf21 88cde0bc6a1146d1 checks/cases/b11bneeds.olang
 8a6fa0c346b9f02e b99a6d06601475b7 checks/cases/b11near.olang
 14672af62de7b864 b85f5e3cc00734e8 checks/cases/b11notehandle.olang
@@ -1850,12 +1851,12 @@ aeee3bb29f3f1dfd b74c8070ae532e54 checks/fixtures/vecalias/p3.olang
 964e31a8bba79921 cfa0d0daabf2c53c compiler/bindgen.olang
 cd6ce9c4496ddb31 7035884d2ec57055 compiler/build.olang
 d31e1ac25d3903b0 aafdaa4ada8b4216 compiler/cabi.olang
-565f81a75701bc2b 1fbde6c4cbe420fe compiler/check.olang
+0a1facc61cf298d9 ce9d322809480d42 compiler/check.olang
 a167e14f1874795b 8fa6fe368850baaf compiler/cond.olang
 18fe289a60e0ce53 9a2c2eacf5e1c306 compiler/definit.olang
 95395ef569786b41 4b09eeebf28c1acd compiler/diag.olang
 4d552016f2b57bba f3f9f2d9a953017d compiler/doc.olang
-2fa450ca3fe31106 9d2355ad2642aa14 compiler/effects.olang
+91ac0523b6b7b54a 693d0725495fac1e compiler/effects.olang
 aa1d5fe9d4edf7a0 1f072452f8bc5d1f compiler/emit.olang
 9b7067f0258d7223 9c7dcde0314d3785 compiler/eval.olang
 9f97979b18f80110 e0ef52c0062ca48e compiler/explain.olang
