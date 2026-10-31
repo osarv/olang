@@ -4791,11 +4791,11 @@ fn (s mut Scoper&) unknownBinding(t Term) Bool {
 fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Lvalue&, slot Term) {
     match slot {
         case Term.Derived(_, _) {
-            if s.unknownBinding(slot) {
-                s.giveBackPlace(p)
-                if s.report { s.err(s.eqAfter(p.Span()), msgs.BuildThroughUnknownScope()) }
-                return
-            }
+            # through a "&p" field of a parameter, an element, or an instance whose bindings are not tracked here (a
+            # lambda's capture): its container's scope is only an underestimate, which nothing new is built into (O23)
+            s.giveBackPlace(p)
+            if s.report { s.err(s.eqAfter(p.Span()), msgs.BuildThroughUnknownScope()) }
+            return
         }
         case Term.Set(_) {
             if s.report { s.err(s.eqAfter(p.Span()), msgs.StoreIntoUnknownScope()) }

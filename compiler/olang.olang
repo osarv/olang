@@ -491,7 +491,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
-        if not d.HasFatal() { placement(c, cfg, -1, false) }
+        if not d.HasFatal() { try placement(c, cfg, -1, false) }
         error build.Failed.Reported
     }
     # a construct the checker does not check yet: never built as though it were not there (a store it left out was a
@@ -503,7 +503,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
-    fr := placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
+    fr := try placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
     lw.Plans = fr.Plans
     lw.Free = fr
     build.Phase("scope")
@@ -835,13 +835,18 @@ fn inferStats(sc mut scope.Scoper&) {
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free&cfg {
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free&cfg ? build.Failed {
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Trace = source.InferScopes and (try os.Env("OLANG_INFERDUMP") catch default "") != ""
     sc.Run()
+    # a construct section 8 does not judge yet: never built as though it were judged, as the checker's gaps are not
+    if sc.Gaps.Len() > 0 {
+        for g in sc.Gaps { build.Unbuildable($c.P.L.Diags.Locate(g.File, I64(g.Sp.Start)) ": it does not judge " $g.What " yet") }
+        error build.Failed.Unbuilt
+    }
     if source.InferScopes { inferStats(sc) }
     for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
@@ -894,7 +899,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
     # not run
-    fr := placement(c, cfg, l.Root)
+    fr := try placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.Reported }
     x.Lw.Plans = fr.Plans
     x.Lw.Free = fr

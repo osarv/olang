@@ -1,0 +1,29 @@
+# check: fail error[C2d]: this builds through a '&p' field whose scope is not known here
+# C2d/O23a: a lambda capturing an instance builds through its "&p" field - inside the lambda the instance's bindings are
+# not known, only the capture's own scope, which is the frame here while what the field refers to is the receiver's:
+# refused (it was a silent gap of the scope pass, and the new node lived in the frame - a use after free)
+import "std/io"
+type Node struct(v I64, next mut Node?&) {
+    v
+    next
+}
+type Bag struct(head mut Node&) {
+    head
+}
+type Wr struct(h mut Node&) {
+    hh mut Node&h = h
+}
+fn (b Bag&) Str() String {
+    w := Wr(b.head)
+    f := fn() { w.hh.next = Node(5, null) }
+    f()
+    return "b"
+}
+fn main() ? {
+    b := Bag(Node(1, null))
+    s := $b
+    keep := Vec<Node&>()
+    for _ in range 2000 { keep.Push(Node(-7, null)) }
+    try io.Println(s)
+    try io.Println($b.head.next!.v)
+}
