@@ -519,8 +519,10 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
     if cyclic {
         # what the component's bodies may build into is a least fixed point: none at first, each round what the last
         # found (docs/scope-model.md 7.2)
+        # to the fixed point, never cut short (as free.olang's, bulk review 1's F3): what a body may build into, keep or
+        # store and its obligations only grow, and each is finite, so the rounds end
         for b in comp { s.sums[b].Judging = true }
-        for _ in range 20 {
+        for {
             grew := false
             for b in comp {
                 before := s.sums[b].Rels.Len()

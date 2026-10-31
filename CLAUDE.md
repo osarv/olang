@@ -212,8 +212,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameters (types, permissions, scopes, T22), result - and, once sets are final, one error set in one order (R6's
   codes); nothing passed through memory (over 128 bytes); not in deferred code, a message, a task clause or a join, nor
   with deferred code pending; section 8: no argument is storage of a closing scope - the callee's scope variables bind
-  only the function's own and the program's, a temporary for it built in the result scope; no destructor-bearing value
-  held (a local whose type may hold one, `any` included) or built in a block (the scope pass's `dtorBlock`). typed:
+  only the function's own and the program's, a temporary for it built in the result scope; an argument whose own
+  storage is an arena's (a run-time array or text bound to a by-value type variable, which no scope variable names) is
+  a parameter with no D9b copy, a global's, constant data or a slice of one (bulk review 4); no destructor-bearing value
+  held (a local whose type may hold one, `any` included) or built in a block - a call's result whose type may reach
+  one through references too, `Wrap(r Res&)` by value (the scope pass's `dtorAt`, noted where it is built). typed:
   `Return` of a `Call` with `Tail`; MIR: `Term.Tail` after `leave(0)`, its arguments held in frame temporaries.
 - **`defer` is block-scoped (S19, the user's decision).** Last registered first, on every way out but the
   process-ending ones; deferred code runs before a join's wait and before the scope closes; it may not leave.
@@ -242,7 +245,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   error-value tests narrow in the same places - `and`/`or`/`not`, a conditional, after an assert, in a loop on the test,
   after a loop with no break (check's `pushFacts`); a narrowing holds until a statement assigns the local (mine; it had
   needed nothing to assign it in the whole block), assigning a case value narrows nothing, and a whole-payload narrowing
-  reads as the enum where the enum is wanted (an argument of its type, a case test's or a match's subject).
+  reads as the enum where the enum is wanted (an argument of its type, a case test's or a match's subject). Since bulk
+  review 4: deferred code is checked without a narrowing a later statement of its block ends (it runs after them), and
+  a narrowed payload's copy is never lent writably either (`e.Grow()`, `grow(e)`, `e.c.Grow()` - the write would be
+  lost), S8d's message naming the local and its case; lending the payload place itself was not taken (another
+  reference to the enum's storage could change its case under it).
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
@@ -759,7 +766,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   before a type, a function or method, an enum's case, a constructor's field or a parameter - on lines above or on its
   line; anywhere else an error. A value of a struct, an enum or a declared number type a program declares (not a
   built-in's, not the prelude's), one per type per declaration, built while compiling (an error otherwise; what it can
-  fail with ends it as `!` does); the compiler gives none a meaning. Built as a hidden immutable global beside the item
+  fail with ends it as `!` does); the compiler gives none a meaning. Read-only data: a type holding a `mut` reference is
+  no attribute's, an error where it is written (bulk review 4; it was T25c's at the reader, naming the prelude's
+  `attrGot`). Built as a hidden immutable global beside the item
   (`VarDecl.Hidden`, named `@` and its offset), so names, check, K2 and the evaluator do it all. Read by reflection:
   `try x.Attr<A>()` (fails with the prelude's `AttrError.MISSING`; elaborates to the prelude's `attrGot`/`attrMissing`)
   and `x.HasAttr<A>()` (a Bool decided while compiling, G35) on a type or a field/case/parameter/function descriptor; a
@@ -1084,8 +1093,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Decided asserts (S18c, 2026-10-27, mine; fixing two bugs std2 found).** A true one loses its run-time check
   anywhere; a false (or aborting) one is a compile error only where every run of its body reaches it - in its body's
   statements or a block, loop body or join block among them, with nothing before it that may leave (return, a break or
-  continue out, an error raised or passed on by a try whose clauses leave some of it, a clause or arm doing so, a
-  yield); in a branch the build does not decide, an arm, a clause, deferred code or after such a statement it stays a
+  continue out, an error raised or passed on by a try whose clauses leave some of it, a call of a noreturn function -
+  bulk review 4 -, a clause or arm doing so, a yield); in a branch the build does not decide, an arm, a clause, deferred code or after such a statement it stays a
   run-time check (`try f() catch X { return }` then `assert false` in a test was refused). It had been decided wherever
   written. `typed.AlwaysReached`, check recording a try's leftovers (`Try.Left`). The error's message is rendered as the
   run time would: by reflection for the instance (`"field " $f.Name`, `check.reflText`) - a reflection-decided assert
@@ -1190,7 +1199,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/regex` (RE2's syntax, linear time: a lazy forward DFA finds a match's end, a reversed one its start, the Pike
   VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
 - **`std/bitset` and `std/order` (survey2 items 3-4, the user 2026-10-26; details mine).** `bitset.BitSet<T>` holds an enum's cases
-  in one `U64` (bit k the k-th case), a plain value; the constructor asserts, decided per instance, that T is an enum of at most 64
+  in one `U64` (bit k the k-th case), a plain value; the constructor's contract refuses bits past the last case
+  (`ArgumentError.INVALID`, bulk review 4 - a walk of one met a case that does not exist), and it asserts, decided per instance, that T is an enum of at most 64
   cases with no payload. `x in s`, `Add`/`Remove` (say whether it changed), `Len`, `Has`, `Empty<T>()`, `Full<T>()`, `Of(array)`,
   operators `| & - ^` (union, intersection, difference, exactly-one; no `+`: one spelling), `Complement`, `IsSubset`, `for c in s` in
   case order, `$` as `BitSet{Color.Red}`, `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OUT_OF_RANGE`

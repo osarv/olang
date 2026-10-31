@@ -26331,3 +26331,75 @@ two the user wants written rather than inferred: an inferred "writes" would chan
 that read the signature. So T25b/T25c and the global binding stay as they are, and the three follow-up questions (what
 replaces the read-only check, inferred immutable globals, trait receivers) are moot. What is still open about
 signatures is QCC (references in signatures), which the scoping rework waits on.
+
+## Bulk review 4, fixed (S21, O16, D9b, S8d, S8e, S19, S18c, D8e, R22, D17, G39, T25c, 2026-10-31)
+
+A read-only review of 1dd87cf..f0e0743 (the checker batch, the profiler, attributes, std/bitset and std/order,
+`Place.Here`, `become`, the top-level assert, S18c's rendering; /home/user/review/bulk4) reproduced six findings and
+two diagnostics. Each fix has a check case or a corpus test; the directions ("when in doubt, refuse") were the
+coordinator's, the details mine.
+
+**F1: `become` and a by-value type variable's array (S21, D9b; use after free).** `fn walk<T>(a T, n I64)` handing on
+`b := Array<I64>(n + 2, ...)` was accepted: the become check asked only the callee's scope variables, and a
+run-time-length array of numbers bound to a bare type variable holds no reference, so no scope variable names it -
+though its storage is the frame's arena, which the become closes. `-debug -sanitize` and `interpret` both stopped
+with a use after free. Now every argument whose own storage is an arena's (`arenaValue`: a run-time array or text,
+reached without a reference) must be what the function was given - a by-value parameter it has no D9b copy of (one
+the body writes is copied into the frame, so handing it on is refused too), what a reference parameter names - or a
+global's, constant data, or a slice or conversion of one (`Scoper.tailStorageGiven`). A local's, one made in the
+function (`Array<I64>(n)`, `$n " text"`) and a call's result are refused with S21's existing message. Generic struct
+shapes hold such arrays by reference (T7a), so the scope variables already covered them. Cases `becomearenaarray`,
+`becomearenatext`, `becomearenacopied`, `becomearenacall`; corpus: tests/become.olang hands a run-time array and text
+on 100,000 times (baked too), clean under `-debug -sanitize`.
+
+**F2: narrowings in deferred code (S8d, S8e, T20, S19, S19e; pre-existing).** `if p is not null { defer use(p.V);
+p = null }` compiled and segfaulted: deferred code was checked under the facts holding where it is registered, but it
+runs as its block closes, after every later statement. A defer or errdefer is now checked without any narrowing whose
+local a later statement of its own block assigns (the block's rest, `fr.rest[fr.restAt:]`, read by the same
+`assignsName` walk; the facts put back after); statements of enclosing blocks run after the deferred code, so they do
+not matter. The case-narrowing twin read a field of a case `e` no longer held. Cases `s8edefernull`,
+`s8eerrdefernull`, `s8ddefercase` (refused) and `s8ddeferheld` (a narrowing no later statement ends still holds).
+
+**F3: a write through a narrowed payload lost (S8d, T17a; pre-existing).** `e.Grow()` on a local narrowed to `Round
+Circle`, `grow(e)` through a `mut Shape&` parameter, and `e.c.Grow()` on a field-list case wrote the hidden copy the
+narrowing reads, and the write vanished; a store was already refused. Decided: refuse every writable lending of the
+copy too, as the store is - lending the payload place itself was not taken: a narrowed local may be a reference to an
+enum another reference (a struct's field) can overwrite with another case while the payload's reference is held, so
+the place would be a type confusion, and no rule tracks that. A payload that is itself a reference is a copy of the
+reference and stays writable through it (case `s8dnarrowrefpayload`). The message (`NarrowedWrite`) had always said
+`e = Shape.Circle(...)`; it now names the local and its case and offers a match's binding (a copy of its own, assigned
+back). Note: a match's binding is a copy by S13b, so `c.Grow()` there writes the binding - as written, not lost. Cases
+`s8dnarrowlentmethod`, `s8dnarrowlentparam`, `s8dnarrowlentfield`.
+
+**F4: a destructor through a by-value result, before a become (S21, O16).** `k := peek(mkw(n))` with `mkw` giving a
+`Wrap(r Res&)` by value built the `Res` in the frame (the callee's result scope) and destroyed it before the become's
+call. The scope pass flagged only a call whose result is a reference to a destructor type; it now asks whether the
+result's type may reach one through references, elements, fields or cases, or is an `any` or a type variable's
+(`mayHoldDtor`, check's `holdsDtor` read in the scope pass), and the error gains a note where the call is. Cases
+`becomedtorresult`, `becomedtorpayload`.
+
+**F5: S18c and a noreturn call (D8e).** `if x > 0 { os.Exit(0) }` before `assert false` made the assert "reached on
+every run" and so a compile error, though os.Exit ends those runs normally. A call of a noreturn function is now among
+the statements that may leave (`typed.exprLeaves`, a Call whose type is noreturn), in SPEC S18c's list too. Case
+`s18cnoreturn` (a run case).
+
+**F6: `bitset.BitSet<T>(bits)` (R22).** The constructor took any bits, and a walk then met `caseAt`'s `unreachable`.
+It has a contract now, `[bits & ~mask<T>() == 0]`, so bits past the last case fail with `ArgumentError.INVALID` (a
+constant one is D17e's error at the call); the module builds its own sets through `of<T>`, a zero value given its bits,
+so Empty, Full, Of and the operators need no `try`. std test (the evaluator agreeing through a baked global) and case
+`bitsetctorbits`.
+
+**G1: an attribute holding a `mut` reference (G39, T25c; a diagnostic).** `@Holder(Cell(1))` with `Holder(c mut
+Cell&)` was refused only at a reader, by T25c naming the prelude's `attrGot`. An attribute is read-only data, so such a
+type is now an error where the attribute is written (`AttrWritable`), and the reader says nothing more. Cases
+`attrwritable`, `attrreadonlyref`.
+
+**Suspected, looked at.** The scope pass's fixed point over a cyclic component was cut at 20 rounds - now run to
+convergence, as free.olang's since bulk review 1 (its obligations and may-facts only grow). A fuzz build's module
+records are keyed apart from a plain test build's (`buildInputs`), though only the root's harness differs. Not
+reproduced: a narrowed copy dangling under early freeing (a Map value replaced while a narrowed copy of its old payload
+was read), and S3 refusing a call whose only effect is a user `Eq` (both a struct's `==` and an array's call it and
+count as effects). Left: the profiler's signal handler runs on the interrupted stack (no `sigaltstack`), and samples
+reserved but not published at `__olang_prof_stop` are dropped. Found on the way, not fixed (an over-rejection): a
+second name for a constructed local returned (`x2 := x1; return x2`) is O10d's error, the flow analysis not following
+`x2 := x1` into the result scope.
