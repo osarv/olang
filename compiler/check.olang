@@ -10311,6 +10311,7 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
         if c.fieldsWritAll(fs.ToArray()) { return false }
     }
     t := typeOf(x)
+    if c.askTypeFields(t) { return false }
     fix := c.roFix(c.roName(x!), t)
     m := msgs.ReadOnlyCopyStored(c.ty(t), fix)
     if kind == 1 { m = msgs.ReadOnlyCopyDecl(c.ty(t), fix) }
@@ -10972,6 +10973,30 @@ fn (c mut Checker&) fieldKeyOf(t types.TypeId, idx I64) pair.Pair<I64, I64> {
     fs := c.P.T.Items(c.P.T.Fields(t))
     if idx < 0 or idx >= fs.Len() or not c.isRef(fs[idx]): return pair.Pair(-1, -1)
     return pair.Pair(I64(t), idx)
+}
+
+# round 2c: a read-only copy of a struct stored where it can be written, its writable references all in its own fields:
+# those fields asked read-only (fieldWant) - an attempt they are, the copy holds nothing writable and the store is fine;
+# one written through anywhere keeps them writable and the store refused. Whether it is let through this attempt
+fn (c mut Checker&) askTypeFields(t types.TypeId) Bool {
+    if not source.NewParams or not c.isNamed(t) or c.declKind(t) != types.DeclKind.Struct or not c.P.Body(t): return false
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    keys Vec<pair.Pair<I64, I64>>
+    for i, f in fs {
+        if c.isRef(f) and c.writable(f) {
+            keys.Push(pair.Pair(I64(t), I64(i)))
+            continue
+        }
+        if c.holdsWritableAt(f, 1): return false     # (a writable reference deeper than its own fields: not asked)
+    }
+    if keys.Len() == 0: return false
+    for k in keys {
+        if c.fieldWrit.Has(k): return false
+    }
+    for k in keys {
+        if not c.fieldRo.Has(k): c.fieldWant.Put(k, true)
+    }
+    return true
 }
 
 # the reference field a place is - a store into it lands there - as a key

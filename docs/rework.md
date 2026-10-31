@@ -1338,6 +1338,14 @@ spelling).
   handing back a borrow was an O17. An O17 at a bare parameter now notes the parameter (`splitErr`), so the
   migration's driven phase can make it `&` where the callee does put into it.
 
+- **A nullable parameter handed back is followed, not widened** (check.olang, `followNull`). `fn unAway(x Expr?&)
+  Expr&x` hands back `x` (or a reference read out of it) as a writable `T&`; round 2b made `x` writable for it
+  (wantWritable), so every caller had to give a writable argument - the migrated compiler's `s.unAway(x)` over a bare
+  `x` was the commonest T25c left. Now such a result follows the parameter, as an instance's does (load.FollowResults):
+  read-only at a call giving a read-only argument, writable where the argument is, and the parameter stays read-only.
+  A write through such a result uses the argument's `&` parameter (`followedUse`, D9d), so `fn bump(n Node&) {
+  first(n).v = 5 }` keeps its `&`. A function whose result follows is no function value (FollowsAny, as before).
+
 ### 12.2 Decided here (mine, the user absent - provisional, for the user's review)
 
 1. **Per struct type, not per instance.** The coordinator's brief asked for bindings per instance (an instance made
@@ -1354,6 +1362,11 @@ spelling).
 3. **A view through such a field handed back from a plain function narrows the result**; from an instance it marks the
    field written (12.1). Narrowing an instance's result changes it for every caller of that instance type (an
    `ArrayIter<String&>` walked over writable text), which following does not.
+4. **A split value lent by its storage** (12.1): docs/scope-model.md 3.3's second binding, held back in 2026-10-18 for
+   parity with stage 0, taken now that stage 0 is gone - only behind the switches, never to a constructor, and refused
+   wherever the callee's summary cannot say it puts nothing there. A section-8 relaxation: the next bulk review's.
+5. **A nullable parameter written through what it reaches, or kept, is made writable; one only handed back is followed**
+   (12.1). The first closes a hole (12.3); the second keeps the common reader (`unAway`) callable with read-only data.
 
 ### 12.3 Found and fixed on the way
 

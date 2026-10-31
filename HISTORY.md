@@ -27334,3 +27334,10 @@ to a nullable one hid which parameter it came from; a refusal at a bare paramete
 an inferred field written; and the evaluator read a struct or an enum converted to itself as a scalar - `interpret`
 walked `expr.lit(0)` where the run time had the tree, so a decided assert over the probe's depth was refused as false.
 The effects line, too, missed a write through a payload binding (on the default path as well).
+
+Closing the nullable hole made the commonest reader in the compiler expensive: `fn (s Scoper) unAway(x typed.Expr?&)
+typed.Expr&x` hands `x` back in a writable result, so `x` became writable and every caller with a bare `x` was refused.
+Such a result now follows the parameter, as an instance's result follows its argument since round 2b: read-only at a
+call giving read-only data, writable where the argument is, the parameter itself read-only. The one thing following
+had lost - that `first(n).v = 5` writes through `n` - is recorded at the write (`followedUse`), so D9d does not tell
+`n` to go bare.
