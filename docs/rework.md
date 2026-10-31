@@ -1436,7 +1436,13 @@ effects line (explain, doc and hover only - nothing decides by it).
 
 - std under the switches: 40 of 40 test files (round 2b: 35), and `tests/params/fields.olang` (a cursor over a bare
   parameter's text returned and walked, an instance holding a fresh one made from read-only text, a global baked while
-  compiling and a top-level assert decided on it beside the run time).
+  compiling and a top-level assert decided on it beside the run time), `tests/params/lend.olang` (a bare enum lent by
+  its storage, walked recursively; a baked global and a top-level assert beside the run time), and six must-fail
+  cases in `tests/params/fail/` (a constructor writing through what it is given, a view held by a holder, the
+  storeThrough shape, a nullable parameter written through a payload binding, a loop turn's copy lent to a callee
+  storing into its reach, a choice of a writable reference and a bare parameter's view). The migration leaves 9
+  errors in std's own modules (25 before this round's fixes), all of a module checked alone (`time.Virtual`'s decided
+  assert outside a test build), none in a test.
 
 ### 12.6 Left, in order, with what each needs
 
