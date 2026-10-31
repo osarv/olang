@@ -3321,6 +3321,39 @@ fn (s mut Scoper&) valueKeepsNothing(c typed.Call&, k I64) Bool {
     return not s.P.T.HoldsRefs(s.P.T.Result(fty))
 }
 
+# under the rework's switches, whether a split argument k may be lent by its own storage: its callee puts nothing into
+# what it reaches (docs/scope-model.md 3.3 - "not reg" makes that binding sound), so what the callee keeps of it - a
+# result borrowed from it - is held to the copy's scope, the shorter one, and judged there as any result is
+fn (s mut Scoper&) lentByStorage(c typed.Call&, k I64) Bool {
+    if not source.NewParams or s.calleeStoresArg(c, k) or s.calleePutsArg(c, k): return false
+    t := c.Target
+    if t != typed.Callee.Body: return false
+    return not s.putsUnder(I64(t.id), k)
+}
+
+# whether body cb's obligations need something to outlive what its parameter k reaches - what it stores there through
+# the parameter's references, "reg" (docs/scope-model.md 3.3); a term the summary cannot place counts
+fn (s mut Scoper&) putsUnder(cb I64, k I64) Bool {
+    sm := s.sums[cb]
+    if not sm.Done and not sm.Judging: return true
+    v := s.paramVar(cb, k)
+    for r in sm.Rels {
+        if r.Hi == r.Lo: continue
+        if reaches(r.Lo, v, k) or (r.Exact and reaches(r.Hi, v, k)): return true
+    }
+    return false
+}
+
+# whether a term may be parameter k's scope variable v, or one derived from its argument, or one the term cannot tell
+fn reaches(t Term, v I64, k I64) Bool {
+    return match t {
+        case Term.Var(i): i == v
+        case Term.Derived(p, _): p == k
+        case Term.Set(_), Term.Untraced: true
+        case _: false
+    }
+}
+
 # whether a callee may store into what its argument k names itself, or by a callee that does (O17b)
 fn (s mut Scoper&) calleePutsArg(c typed.Call&, k I64) Bool {
     match c.Target {
@@ -6532,7 +6565,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     if s.atCall(pr.X) {
                         s.err(s.elemAt(pr.X), msgs.WriteThroughAtBuilds())
                     } else {
-                        s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                        s.splitErr(a)
                     }
                 }
             }
@@ -6554,7 +6587,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             landed[i] = true
             if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
                 s.wantPromotion(pr.X)
-                if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
+                if s.report { s.splitErr(a) }
             }
             if v.K == ValKind.Fresh { v = existing(v.T) }
         } else if s.isFresh(a) and s.argLands(a) {
@@ -6598,7 +6631,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # (a recorded limit: the callee's obligations cannot tell its storage from what it holds)
                 handle := rf.Runs() and s.handleLent(c, i, a)
                 loop := cr == Term.None and s.lentLoopCopy(a)
-                if s.calleeKeepsArg(c, i) and not handle {
+                if s.calleeKeepsArg(c, i) and not handle and s.lentByStorage(c, i) {
+                    # the rework's round 2c: lent by its storage, to a callee putting nothing into what it reaches
+                    # (docs/scope-model.md 3.3, "not reg"): what it keeps of it lives here, where the copy does
+                } else if s.calleeKeepsArg(c, i) and not handle {
                     s.wantPromotion(a)
                     if s.report {
                         # a part of x[i]'s copy, said at its member as E31b's (stage 0: "E31, O17")
@@ -6606,7 +6642,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                         if ap is not null {
                             s.err(s.lastName(ap.Span()), msgs.WriteThroughAtBuilds())
                         } else {
-                            s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                            s.splitErr(a)
                         }
                     }
                 } else if cr != Term.None or handle or not loop {
@@ -8914,6 +8950,28 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
 
 fn (s mut Scoper&) err(sp source.Span, m msgs.Msg) I64 {
     return s.P.L.Diags.Error(diag.Where.Span(s.B!.File, I64(sp.Start), I64(sp.End)), m)
+}
+
+# O17 at an argument: said at it - and where it is a by-value parameter of this function (a bare one under the rework's
+# round 2, by value where it is no struct: an enum), a note there, which names what to make a reference (round 2c)
+fn (s mut Scoper&) splitErr(a typed.Expr&) {
+    rec := s.err(s.argAt(a), msgs.BorrowSplitScopes())
+    if not source.NewParams: return
+    p := s.placeRead(s.unAway(a))
+    if p is null: return
+    if p != typed.Lvalue.Local or s.isRef(p.ty): return
+    l := s.B!.Locals[I64(p.id)]
+    if l.Kind != typed.LocalKind.Param: return
+    s.note(rec, s.B!.File, l.Sp, msgs.NoteBareParam(s.P.L.Names.Text(l.Name)))
+}
+
+# the place a read or a borrow of one names, else null
+fn (s mut Scoper&) placeRead(x typed.Expr&) typed.Lvalue?&x {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): p
+        case typed.Expr.Borrow(_, _, p): p
+        case _: null
+    }
 }
 
 fn (s mut Scoper&) note(rec I64, file I64, sp source.Span, m msgs.Msg) {

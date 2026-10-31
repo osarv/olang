@@ -1,0 +1,28 @@
+# check: fail error[O17]: this value's references live where its own storage does not
+# a copy of an enum, made in a loop's turn, lent to a callee that stores into what it reaches: lent by its storage, what
+# the callee stores would be held to the turn while the outer node keeps it - still O17 (a split value is lent by its
+# storage only where the callee puts nothing there, docs/scope-model.md 3.3)
+type node struct(v I64) {
+    v
+    next node?& = null
+}
+
+type holder enum {
+    one(n node&)
+}
+
+fn put(h holder?&, n node&) {
+    match h! {
+        case holder.one(x) { x.next = n }
+    }
+}
+
+fn main() {
+    a := node(1)
+    outer := holder.one(a)
+    for i in range 3 {
+        v := outer
+        put(v, node(i))
+    }
+    assert a.next!.v == 2
+}

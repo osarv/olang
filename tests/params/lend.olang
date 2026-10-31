@@ -1,0 +1,46 @@
+# The scoping and parameters rework (docs/rework.md section 12): a bare enum parameter lent by its own storage. Run by
+# `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer, as fields.olang is.
+
+type expr enum {
+    lit(v I64)
+    away(x expr&)
+    add(a expr&, b expr&)
+}
+
+# what an expression is once its "away" wrappers are gone: borrowed from what it is given
+fn unAway(x expr?&) expr&x {
+    match x! {
+        case expr.away(y) { return unAway(y) }
+        case _ { return x! }
+    }
+}
+
+# a bare enum - this function's own copy, held by value - lent to unAway, which keeps it only in its result: the
+# result lives where the copy does, which nothing here outlives (it had been O17, a split value)
+fn isAdd(x expr) Bool {
+    return match unAway(x) {
+        case expr.add(_, _): true
+        case _: false
+    }
+}
+
+fn depth(x expr) I64 {
+    return match unAway(x) {
+        case expr.add(a, b): 1 + depth(a).Max(depth(b))
+        case _: 0
+    }
+}
+
+test isAdd "sees through the wrappers of a bare enum" {
+    e := expr.away(expr.away(expr.add(expr.lit(1), expr.lit(2))))
+    assert isAdd(e)
+    assert not isAdd(expr.away(expr.lit(3)))
+}
+
+test depth "walks a bare enum's tree through borrowed results" {
+    e := expr.add(expr.away(expr.add(expr.lit(1), expr.lit(2))), expr.lit(3))
+    assert depth(e) == 2
+}
+
+Depth I64 = depth(expr.add(expr.lit(1), expr.away(expr.add(expr.lit(2), expr.lit(3)))))
+assert Depth == 2
