@@ -22261,8 +22261,10 @@ fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
     c.P.L.Diags.Drop(g)
     # (round 2c: values that are one reference type but for what may be written through them - one inferred read-only,
     # a bare parameter's view - meet read-only, as S13c's bindings do; the values before it fit that too)
-    if source.NewParams and c.isRef(rt) and c.isRef(typeOf(v)) and c.P.T.SameButPerm(typeOf(v), rt) {
-        ro := c.P.ReadOnlyAll(rt)
+    vt := typeOf(v)
+    if source.NewParams and c.isRef(rt) and c.isRef(vt) and c.P.T.SameButPerm(c.P.T.Referent(vt), c.P.T.Referent(rt)) {
+        # (a null-able one and one never null meet null-able, T2c)
+        ro := c.P.ReadOnlyAll(c.P.T.Ref(c.P.T.Referent(rt), meetPerm(c.P.T.PermOf(rt), c.P.T.PermOf(vt))))
         n2 := c.P.L.Diags.Count()
         g2 := c.P.L.Diags.Hold()
         w2 := c.fit(v, ro, x.Span())
