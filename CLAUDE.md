@@ -417,9 +417,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   written), lends as deep as the callee uses them, a function value's bare parameter keeping nothing - std 40 of 40 test
   files under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`, with `tests/params/`), a split value (a
   bare enum's copy) lent by its storage where the callee puts nothing into what it reaches (docs/scope-model.md 3.3,
-  mine), a nullable parameter written through what it reaches made writable; fixed on the way: a permission conversion
-  had hidden a bare parameter's view (a writable instance over the caller's text), the evaluator read an aggregate
-  converted to itself as a zero. Left before
+  mine), a nullable parameter written through what it reaches made writable and one only handed back followed (its
+  result read-only where its argument is); fixed on the way: a permission conversion and `x!` had hidden a bare
+  parameter's view (a writable instance over the caller's text, a choice writing the caller's node), the evaluator read
+  an aggregate converted to itself as a zero; compiler/'s migrated root down to 347 distinct errors, most of them
+  readers handing back a view of a `&` parameter given bare data - the by-pointer value results' job. Left before
   the flip: compiler/'s migration finished, the by-pointer value results, the scope phase's field loop. The entry
   below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
