@@ -3721,6 +3721,12 @@ fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
 fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
     if not source.NewParams or c.frames.Len() == 0 or c.bodyFn(c.fr().Body) < 0: return -1
     r := c.levelRootX(x)
+    # (a reference local made from what it reaches - a binding of its payload: that parameter)
+    for _ in range 16 {
+        if r < 0 or c.cur().Local(typed.LocalId(I32(r))).Kind == typed.LocalKind.Param: break
+        o := try c.roFrom.Get(c.roKey(r)) catch { break }
+        r = c.rootLocal(o.P)
+    }
     if r < 0: return -1
     l := c.cur().Local(typed.LocalId(I32(r)))
     if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) or not c.P.T.IsNullable(l.Ty) or c.writable(l.Ty): return -1
@@ -5713,6 +5719,7 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
                     c.refUse(readPlace(unwrapped(ref)))
                     # through the parameter itself: its referent's own part; through what it reaches: deep
                     if not c.isParamRead(unwrapped(ref)) { c.refDeepUse(readPlace(unwrapped(ref))) }
+                    c.followedUse(unwrapped(ref))
                 }
             }
         }
@@ -7374,7 +7381,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
                 }
                 if source.NewParams {
-                    if c.followResult(x) { return c.convert(sp, x, want) }
+                    if c.followResult(x) or c.followNull(x) { return c.convert(sp, x, want) }
                     fo := c.fieldStore(want)
                     if fo == 1 { return c.convert(sp, x, want) }
                     if fo == 0 { return x }
@@ -7609,6 +7616,8 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
     hr := c.isRef(have)
     wr := c.isRef(want)
     if c.retInst >= 0 {
+        # (a nullable parameter read-only by inference handed back: the result follows it instead, round 2c)
+        if c.P.T.SameButPerm(have, want) and c.P.T.WiderPerm(want, have) and c.followNull(x) { return c.convert(sp, x, want) }
         # (its top too: a view of a bare parameter handed back is read-only, as what the parameter reaches is)
         v := have
         if c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.Attempts < 19 and c.P.NarrowResult(c.retInst, v) {
@@ -10008,7 +10017,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
             return true
         }
         if source.NewParams {
-            if c.followResult(x) { return true }
+            if c.followResult(x) or c.followNull(x) { return true }
             # (round 2c: stored into a field that may be read-only - read-only it is, or is asked to be)
             fo := c.fieldStore(typeOf(x))
             if fo >= 0 { return fo == 1 }
@@ -10031,6 +10040,8 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
     }
     # an instance's type variable's reference parameter follows its argument (T25c): this body's parameter needs a
     # writable argument only where that one is written through or kept
+    # (round 2c: what a nullable parameter read-only by inference reaches handed back - the result follows it)
+    if source.NewParams and c.followNull(x) { return true }
     if source.NewParams and c.argFollows { c.roNeedOf(readPlace(x), c.argBody, c.argK) } else { c.roNeed(readPlace(x)) }
     if source.NewParams and not c.argRef {
         c.refUseX(x)
@@ -10443,6 +10454,43 @@ fn (c mut Checker&) refUseX(x typed.Expr?&) {
     }
 }
 
+# a call whose result follows one of its arguments (load.FollowResults, round 2c): that argument, else null
+fn (c mut Checker&) followedArg(x typed.Expr&) typed.Expr?&x {
+    if c.P.L.FollowResults.Len() == 0: return null
+    cl := callHeld(x)
+    if cl is null: return null
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0: return null
+    b := c.Bodies[id].Of
+    if b != typed.BodyOf.Fn: return null
+    for k in range cl.Args.Len() {
+        if c.P.L.FollowResults.Has($b.instance ":" $k): return cl.Args[k]
+    }
+    return null
+}
+
+# the call an expression is - itself, read where its value is held to be read through (E16a), or written in another
+# file - else null
+fn callHeld(x typed.Expr&) typed.Call?&x {
+    return match x {
+        case typed.Expr.Call(_, _, cl): cl
+        case typed.Expr.Away(_, _, y): callHeld(y)
+        case typed.Expr.Read(_, _, p, _): callHeld(p.value) if p == typed.Lvalue.Temp else null
+        case _: null
+    }
+}
+
+# a write through a call's result that follows a "&" parameter's argument: that parameter used, deeply (round 2c - what
+# the result names may be anything the argument reaches)
+fn (c mut Checker&) followedUse(x typed.Expr&) {
+    a := c.followedArg(x)
+    if a is null: return
+    k := c.refParamOfX(a)
+    if k < 0: return
+    c.refUsed.Put(pair.Pair(c.fr().Body, k), true)
+    c.refDeep.Put(pair.Pair(c.fr().Body, k), true)
+}
+
 # the "&" parameter of this body a reference value comes from, its index; -1 for none
 fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
     if c.refConverted(x) is not null: return c.refParamOfX(c.refConverted(x)!)
@@ -10528,6 +10576,7 @@ fn (c mut Checker&) refPlaceWritten(p typed.Lvalue?&) {
         case typed.Lvalue.Deref(_, _, ref) {
             c.refUse(readPlace(unwrapped(ref)))
             if not c.isParamRead(unwrapped(ref)) { c.refDeepUse(readPlace(unwrapped(ref))) }
+            c.followedUse(unwrapped(ref))
             c.fieldsThrough(readPlace(unwrapped(ref)), false, 0)
         }
         case _ { }
@@ -21081,6 +21130,21 @@ fn (c mut Checker&) followResult(x typed.Expr&) Bool {
     return true
 }
 
+# round 2c: a plain function's nullable parameter, read-only by inference, handed back in its result (a reference
+# borrowed from it, "fn unAway(x Expr?&) Expr&x"): the result follows it - read-only at a call giving a read-only
+# argument (followedResult) - rather than the parameter made writable, which made every caller's argument one
+fn (c mut Checker&) followNull(x typed.Expr&) Bool {
+    if c.retInst < 0 or c.instanceBody(c.fr().Body): return false
+    k := c.nullParamOf(x)
+    if k < 0: return false
+    key := $c.retInst ":" $k
+    if not c.P.L.FollowResults.Has(key) {
+        c.P.L.FollowResults.Put($key, true)
+        c.copiesGrew = true
+    }
+    return true
+}
+
 # the by-value parameter of a body that needs a writable argument (T25c's roNeeds), named; "" for none - what keeps a
 # function from being a value (ReadOnlyFuncValue), said by explain's "# not a value" (round 2c)
 fn (c mut Checker&) WritableNeed(body I64) String {
@@ -21151,7 +21215,7 @@ fn (c mut Checker&) followedResult(target typed.Callee&, args Array<typed.Expr&>
         if not ro: continue
         # (a reference handed back from what a "&" parameter reaches: read-only itself, round 2c)
         ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
-        if c.isRef(r) and k < ps.Len() and c.isRef(ps[k]) and c.writable(ps[k]): return c.P.ReadOnlyAll(r)
+        if c.isRef(r) and k < ps.Len() and c.isRef(ps[k]) and (c.writable(ps[k]) or c.P.T.IsNullable(ps[k])): return c.P.ReadOnlyAll(r)
         if c.isRef(r): return c.P.T.Ref(c.P.ReadOnlyAll(c.P.T.Referent(r)), c.P.T.PermOf(r))
         return c.P.ReadOnlyAll(r)
     }
