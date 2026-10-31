@@ -2142,3 +2142,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   through a bare receiver (`fn (s Server) Cfg() Config&`), which is read-only by inference outside; inside its module the
   type's own code writes it. So no read-only marker - closed. (4) "if round 1 finds those fields, tell me about them and
   we will decide" - no fallback built; round 1's cases go to the user.
+- Rework point 3 REVISED 2026-10-31 (the user: "In that case the config is shown as a reference to the outside and it
+  can be modified through the reference right? Shouldn't this function return Config as a value instead?"): agreed -
+  my getter returned `Config&` read-only by inference, which the signature does not show. PROPOSED rule: every `&` a
+  signature shows is writable shared; read-only is always said by a value. A result `T&` may only hand back storage
+  reached through a `&` parameter, a global or a shared field; handing back a view into a bare parameter is an error
+  naming the value result `T`. A value result is physically not copied where the caller only reads it and nothing
+  changes the source meanwhile (the same smart rule as bare parameters, copying only what may change). Inside a body,
+  views of a bare parameter stay read-only (they never leave as references). Functions that hand back views of their
+  input (Split, Trim, a list's First) take `&` - sharing the caller's storage, which the `&` then says - or return
+  values. ASKED.
