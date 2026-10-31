@@ -1355,6 +1355,12 @@ spelling).
 - **Bare parameters were remembered across attempts** by body id (`bareLocals` was never reset), so when an attempt
   made other instances, a stale entry made an instance's `&` receiver a "bare parameter" (`for x in try it` in
   `ToVec`, refused as read-only).
+- **A constructor wrote through a read-only argument** (round 2a/2b): a read-only value given a constructor's `&`
+  parameter was taken as given whatever the constructor did with it, so `type popper struct(v Vec<I64>&) { v; n I64 =
+  first(v) }` with `first` pushing onto `v`, built in `fn take(xs Vec<I64>)`, grew the caller's Vec. Such an argument
+  is now recorded (`roCtorArgs`) and refused where the constructor uses that parameter deeply - a constructor's own
+  field keeping it is no deep use (it holds it as given), and a constructor's parameter handed on is as deep as the
+  callee uses it (refArg, a dependency, no longer deep at once).
 
 ### 12.4 Today's path
 
