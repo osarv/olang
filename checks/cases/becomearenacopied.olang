@@ -1,0 +1,13 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
+# S21, D9b: a by-value run-time array parameter the body writes is its own copy, made in the frame - handing it on
+# would pass storage the become closes
+import "std/io"
+import "std/os"
+
+fn walk<T>(a T, n I64) I64 {
+    if n == 0: return a.Len()
+    a[0] = 5
+    become walk(a, n - 1)
+}
+
+fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }

@@ -4915,6 +4915,74 @@ fn (s mut Scoper&) frameHere() Term {
     }
 }
 
+# S21: whether an argument whose own storage is an arena's (arenaValue) is storage a become may pass - the program's,
+# or what the function was given: a by-value parameter it has no copy of (D9b), what a reference it was given names, a
+# slice or a conversion of either. Anything else - a local's, one made here, a call's result - is in a scope the become
+# closes, or may be
+fn (s mut Scoper&) tailStorageGiven(a typed.Expr&) Bool {
+    x := s.unAway(a)
+    return match x {
+        case typed.Expr.Data(_, _, _, _) => true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p) => s.givenPlace(p)
+        case typed.Expr.Borrow(_, _, p) => s.givenPlace(p)
+        case typed.Expr.Slice(_, _, sl) => s.givenPlace(sl.Base)
+        case typed.Expr.Prim(_, _, op, _, args) => typed.PassesRefs(op) and args.Len() > 0 and s.tailStorageGiven(args[0])
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) givenPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id) => s.givenLocal(I64(id))
+        case typed.Lvalue.Global(_, _, _, _) => true
+        case typed.Lvalue.Field(_, _, b, _) => s.givenPlace(b)
+        case typed.Lvalue.Elem(_, _, e) => s.givenPlace(e.Base)
+        case typed.Lvalue.Payload(_, _, pl) => s.givenPlace(pl.Base)
+        case typed.Lvalue.Deref(_, _, r) => s.givenRef(r)
+        case _ => false
+    }
+}
+
+# a local's storage given to the function: a by-value parameter it has no copy of, or a local living in the program's
+# scope or a scope variable's (a returned local, O26a)
+fn (s mut Scoper&) givenLocal(l I64) Bool {
+    if s.isParam(l) and not s.copied.Has(l) { return true }
+    return termGiven(s.stors[l])
+}
+
+# what a reference read out of a local names lives in the program's scope or a scope variable's
+fn (s mut Scoper&) givenRef(r typed.Expr&) Bool {
+    l := localRead(s.unAway(r))
+    return l >= 0 and termGiven(s.terms[l])
+}
+
+# the local a value reads whole, -1 for none
+fn localRead(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Lvalue.Local(_, _, id) { return I64(id) }
+                case _ { return -1 }
+            }
+        }
+        case _ { return -1 }
+    }
+}
+
+fn termGiven(t Term) Bool {
+    return match t {
+        case Term.Program, Term.Var(_) => true
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) isParam(l I64) Bool {
+    for p in s.B!.Params {
+        if I64(p) == l { return true }
+    }
+    return false
+}
+
 # a place's own subexpressions judged as operands: a reference it goes through, an index
 fn (s mut Scoper&) placeOperands(p typed.Lvalue&) {
     match p {
@@ -6485,6 +6553,14 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 }
                 at := s.argAt(c.Args[firstArg[v]]) if firstArg[v] >= 0 else s.nameSpan(sp)
                 s.err(at, msgs.BecomeBorrows())
+                break
+            }
+            # ... and an argument whose own storage is an arena's - a run-time-length array or text, bound to a by-value
+            # type variable (D9b), which no scope variable names when it holds no reference - is what the function was
+            # given or the program's
+            for a in c.Args {
+                if not s.arenaValue(a.Type()) or s.tailStorageGiven(a) { continue }
+                s.err(s.argAt(a), msgs.BecomeBorrows())
                 break
             }
         }

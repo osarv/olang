@@ -57,6 +57,15 @@ fn twice<T>(x T, n I64) T {
     become twice(x, n - 1)
 }
 
+# a run-time-length array or text bound to a by-value type variable is the caller's storage (D9b): handed on, it is
+# what the function was given (S21)
+fn ends<T>(a T, n I64) I64 {
+    if n == 0: return a[0] + a[a.Len() - 1]
+    become ends(a, n - 1)
+}
+
+GivenArray := Array<I64>(5, 3)
+
 # a state machine: each state a function of one signature
 fn start(t String&, i I64) I64 {
     if i >= t.Len(): return 0
@@ -74,6 +83,7 @@ BakedSum I64 = sum(1000, 0)
 BakedEven Bool = isEven(1001)
 BakedPad String = pad(3, "x")
 BakedRun I64 = Counter(2).Run(100, 0)
+BakedEnds I64 = ends(GivenArray, 10)
 
 test "become runs a chain of any depth in one frame" {
     assert sum(10000000, 0) == 50000005000000
@@ -95,11 +105,20 @@ test "references given are handed on, results built where they go" {
     assert start("a(b)c(d)", 0) == 2 and start("((", 0) == -1
 }
 
+test "a run-time array a generic was given is handed on" {
+    k := sum(3, 0) + 1
+    a := Array<I64>(k, 2)
+    a[k - 1] = 5
+    assert ends(a, 100000) == 7 and ends(GivenArray, 3) == 6
+    t := $k " end"
+    assert ends(t, 10) == I64('7') + I64('d')
+}
+
 test "the evaluator agrees" {
     assert BakedSum == sum(1000, 0) and BakedSum == 500500
     assert BakedEven == isEven(1001) and not BakedEven
     assert BakedPad == "x..." and BakedPad == pad(3, "x")
-    assert BakedRun == 200
+    assert BakedRun == 200 and BakedEnds == 6
     assert sum(100, 0) == 5050                # decided while compiling (S18c)
     assert count("aaa", 0, 0) == 3
     io.Println("become: " $BakedSum)!

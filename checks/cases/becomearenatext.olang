@@ -1,0 +1,10 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
+# S21: text rendered in the function, bound to a by-value type variable, is storage of a scope the become closes
+import "std/io"
+
+fn walk<T>(a T, n I64) I64 {
+    if n == 0: return a.Len()
+    become walk($n " text", n - 1)
+}
+
+fn main() { io.Println($walk("abc", 2))! }

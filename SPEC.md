@@ -5304,7 +5304,10 @@ the call); and so is each of the following, since a jump cannot keep a promise t
 - an **argument is storage of a scope the become closes** (§8): what is handed on is a value, or lives where the
   function was given it (its parameters' scopes, its result scope - a temporary for the callee is built there, as a
   `return f(x)`'s would be), or in the program's. `become walk(b, i + 1)` with `b` a local array of the function is
-  the error;
+  the error - and so is any argument whose own storage is an arena's (a run-time-length array or text, bound to a
+  by-value type variable, D9b) other than a parameter the function has no copy of, what a reference it was given names,
+  a global, a slice or conversion of one of these, or constant data: a local's, one made in the function, a call's
+  result;
 - the function holds, or builds in one of its blocks, an instance whose **destructor** would run as that block closes
   (O16) - before the call, where a `return` would run it after; or a value that may hold one (an `any`, a type
   variable's).

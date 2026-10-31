@@ -1,0 +1,16 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them
+# S21, D9b: a run-time-length array bound to a by-value type variable holds no reference, so no scope variable names
+# it - but its storage, made in the frame, closes before the call
+import "std/io"
+import "std/os"
+
+fn walk<T>(a T, n I64) I64 {
+    if n == 0: return a[0] + a[1]
+    b := Array<I64>(n + 2, n * 10)
+    become walk(b, n - 1)
+}
+
+fn main() {
+    a := Array<I64>(os.Args().Len() + 2, 1)
+    io.Println($walk(a, 3))!
+}
