@@ -1,0 +1,13 @@
+# check: fail error[E14]: expected at least 1 argument, found 0
+# D8g: the parameters before a variadic one are required (D8b)
+fn largest(first I64, rest ...I64) I64 {
+    m := first
+    for x in rest {
+        if x > m: m = x
+    }
+    return m
+}
+
+fn main() {
+    assert largest() == 0
+}

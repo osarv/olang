@@ -1,0 +1,6 @@
+# check: fail error[D8g]: a variadic parameter takes no default - a call giving it no argument gives it the empty array
+fn sum(xs ...I64 = I64[1]) I64 { return xs.Len() }
+
+fn main() {
+    assert sum() == 0
+}

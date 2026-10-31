@@ -282,8 +282,8 @@ compile-time errors.
 valid token starting at the current position):
 
 ```
-+  -  *  /  %  ,  .  ?  =  :=
-+=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
++  -  *  **  /  %  ,  .  ?  =  :=
++=  -=  *=  **=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --  !
 ==  !=
 <  <=  >  >=
@@ -1774,7 +1774,7 @@ a method, whatever its first parameter's type.
 
 ```
 param-list      ::= list(param)                         (L18a)
-param           ::= { attribute } IDEN type-expr [ "=" expr ]   (attribute: G39 - not on a receiver)
+param           ::= { attribute } IDEN ( type-expr | "..." type-expr ) [ "=" expr ]   (attribute: G39 - not on a receiver; "...": D8g)
 ret-type        ::= result { "," result }                (on one line; several results, D8c)
 result          ::= type-expr
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
@@ -1880,6 +1880,25 @@ G16) share the one made for them, which is a function of that module's code wher
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
+
+**D8g (variadic parameters).** A parameter written `xs ...T` is **variadic**: a call gives it any number of arguments
+of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`, `sum(1, 2, 3)` - and inside the body
+`xs` is a read-only `Array<T>&` holding them in order (T25b), its length the count given. It is the last of its
+function's parameters but the defaulted ones (D8b), which then follow it and are given by name (E14b) -
+`fn Exec(args ...String&, dir String& = "")` is called `Exec("ls", "-l", dir = "/tmp")` - so a function has at most one,
+it has no default, and the parameters before it are required. Every argument by position from its place on, up to the
+first argument by name, is one of its arguments; each is checked against `T` as an argument is (E12, a literal adapting
+as it would there, T6). They are evaluated in the order written, after the arguments before them and before those by
+name (S4, E14b), and held as a **fixed array in the caller's frame** (T7c) - no storage made, lent to the call (E12) for
+as long as it runs. An existing array of `T` - of a known length or not, a slice, `v.View()` of a `Vec` - is passed on
+whole with `...a` written as all of the variadic parameter's arguments: `sum(...xs)`; `...a` beside other arguments
+there, or anywhere but a variadic parameter's place, is a compile-time error. A generic's `T` is inferred from the
+arguments as from any (G9: `fn largest<T>(first T, rest ...T) T` gives `largest(3, 9, 2)` an `I64` and
+`largest("b", "a")` a `String`). A method, a lambda and a function type may have one (`fn(xs ...I64) I64`, T21); a
+function type's says how a call through it is written, and the value either way is a function taking the array, so a
+function fits a function type of either form (T22). A constructor, an enum case's payload and an `extern fn` (whose
+variable arguments are C's `...`, X21) have none - a compile-time error naming an array parameter. `explain`, `doc` and
+`$` of a function type write it `...T`.
 
 ### 3.4.1 Contracts
 
@@ -2981,7 +3000,8 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | "embed" unary | { unary-op } postfix   (embed: E38)
+unary    ::= "not" binary | text | "embed" unary | { unary-op } power   (embed: E38)
+power    ::= postfix [ "**" unary ]                                    (E5a)
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
@@ -3092,7 +3112,22 @@ The bitwise operators bind tighter than the comparisons and looser than the shif
 is `(x & 1) == 0`, `a | b < c` is `(a | b) < c`.
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
-exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
+exception (E7a), and `**` binds tighter than they do (E5a). The conditional `a if c else b` (E28) binds looser than
+every binary operator.
+
+**E5a (`**`, the power).** `a ** b` is `a` raised to the power `b`: the call of `a`'s type's `Pow` with `b` (E31), so
+on a number it is the prelude's method - `x ** 2.0` is `x.Pow(2.0)` for a float, its exponent of the float's own type,
+and `n ** 3` is `n.Pow(3)` for an integer, its exponent a `U32` (M19d) - and a type declaring `Pow` takes it as it takes
+`+` through `Plus`. It binds **tighter than the prefix operators** and **to the right**, as in mathematics: `-x ** 2`
+is `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`, and the exponent is a `unary`, so `2.0 ** -1.0` needs no parentheses; a
+`$` renders the `postfix` after it, so `$x ** 2` raises the text and `$(x ** 2)` is written. The exponent adapts to
+`Pow`'s parameter as an argument does (T6: a literal, a literal-only expression); a literal base adapts to the number
+type wanted where one is (an initializer's, an operand's beside a typed one, E6d), and is otherwise of its own type
+(T6a), as a literal receiver is (E13c) - so `e F32 = 2.0 ** 3.0` is an `F32` and `2.0 ** f` with `f` an `F32` an
+`F64`. An integer exponent that is no literal is a `U32` or converted to one (`n ** U32(k)`), as `n.Pow(k)` asks. A
+type with no `Pow` - a `Bool`, a struct declaring none - has no power, a compile-time error naming `Pow`. On arrays
+`**` works lane by lane (E39), each lane its element type's `Pow`. `x **= y` is `x = x ** y` (S4), its exponent adapting
+as `**`'s does. `Pow` folds where its exponent is constant (M19d), so `x ** 2.0` is `x * x`.
 
 **E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
 type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
@@ -3854,6 +3889,7 @@ type declares one:
 |---|---|---|
 | `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | `Plus`, `Minus`, `Mul`, `Div`, `Rem` | one operand, a result |
 | `a @ b` | `MatMul` | one operand, a result |
+| `a ** b` | `Pow` | one operand, a result (E5a) |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
 | `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
@@ -4361,7 +4397,7 @@ names written, never by where references lead: storage reached through a referen
 `x = E.Neg(r)`, or `q.a` where `q` and `p` name one instance in `p.a = E.Neg(q.a)` - is the program's own, and makes the
 cycle it says.
 
-**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
+**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "**=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
 corresponding binary operator (§5.2) - or the operator method the target's type declares for it (E31) - and its own
 operand-type requirements, except that the place is evaluated **once**: `a[next()] += 5` calls `next` once, reads that
@@ -4597,11 +4633,13 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | type-case | "_" | binary
+case-alt       ::= pattern | array-pattern | type-case | "_" | binary
 type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
 case-body      ::= block | ":" line-stmnt
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
-sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+sub-pattern    ::= IDEN | pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+array-pattern  ::= elem-type "[" [ list(array-item) ] "]"                (S13h)
+array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
@@ -4721,6 +4759,27 @@ there. A type match (G13) takes no guard: its arm is chosen while compiling.
 by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as
 covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
 given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
+
+**S13h (array patterns).** `case String&["test", file, ...words]` matches an array element by element. The element
+type is written before the `[` as an array literal writes it (`I64[...]`, `String&[...]`, `Char[...]`), and is the
+matched value's element type (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
+element, as a payload's position is (S13b): a literal compares the element by `==`, a name binds a copy of it - always a
+fresh name, never a local's value read, so comparing with a local is a guard (`case I64[x] if x == want`), and a name
+already in scope is D3a's error - `_` ignores it, and a nested pattern matches it. One item may be `...name`: the
+elements the other items do not name, bound as a **view** of the matched array's storage - a slice of it (E16a), with
+its permission - or a bare `...`, binding nothing. Items before it match from the start, items after it from the end:
+`case I64[first, ..., last]`. With no `...` the array has exactly as many elements as items; with one, at least as many
+as the other items. The **length is tested first**, so no element is read outside the array, then the items in order.
+What is matched is an array - text too, its elements `Char`s (`case Char['-', '-', ...name]` on a `String`, the rest a
+`String`) - or a value of a type declaring `At` and `Len` (E31, a `Vec`), whose elements are its `At`'s copies and whose
+named rest is its `Slice` (a bare `...` where it declares none; a named one is then a compile-time error naming the
+array to match instead). An array pattern stands at a case's top or in a payload position: `case
+Cmd.Run(String&["ls", ...args])`. Its lengths are what S13a covers: for exhaustiveness the length is the array's
+constructor, so `case I64[]` and `case I64[first, ...rest]` cover every array of `I64`, and `case String&[]`, `case
+String&[only]` and `case String&[first, ...rest, last]` every array of text; a match used as a value (S12b) that leaves a
+length to no case is a compile-time error naming it ("an array of 1 element", "3 elements or more"). A `...` anywhere but
+among an array pattern's items is a compile-time error. An alternative written as an array literal after a path that
+names no type (`case table[k]`) is a value compared by `==` (S13).
 
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the

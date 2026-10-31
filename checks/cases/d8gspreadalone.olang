@@ -1,0 +1,8 @@
+# check: fail error[D8g]: '...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it
+# never: stands nowhere else
+fn sum(xs ...I64) I64 { return xs.Len() }
+
+fn main() {
+    a := I64[1, 2]
+    assert sum(0, ...a) == 3
+}

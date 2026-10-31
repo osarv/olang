@@ -1,0 +1,12 @@
+# check: fail error[S13h]: a named rest is a slice of what is matched, and Vec<I64> declares no Slice - write a bare '...'
+# S13h: a type with At and Len is matched element by element; a named rest needs its Slice
+fn f(v Vec<I64>&) I64 {
+    match v {
+        case I64[a, ...rest] { return a + rest.Len() }
+        case _ { return 0 }
+    }
+}
+
+fn main() {
+    assert f(Vec<I64>()) == 0
+}

@@ -1,0 +1,7 @@
+# check: fail error[D8g]: a variadic parameter is the last one but defaulted ones
+# D8g: after a variadic parameter only defaulted parameters, given by name
+fn tag(xs ...I64, last I64) I64 { return xs.Len() + last }
+
+fn main() {
+    assert tag(1, 2) == 3
+}

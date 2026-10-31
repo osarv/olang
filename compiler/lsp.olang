@@ -831,7 +831,7 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/noSuchThing\",\"params\":{}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, "olang lsp ended with " $out.Status ": " $out.Stderr
     got := Map<String&, String&>()
     diags := ""
@@ -864,7 +864,7 @@ test "a file that does not parse gets its diagnostics, and requests on it answer
                   uri "\"},\"position\":{\"line\":0,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
     assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout
@@ -894,7 +894,7 @@ test "a hover on a function shows the first test naming it and how many more the
                   ",\"position\":{\"line\":3,\"character\":18}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
+    out := try os.Exec(compilerUnderTest(), "lsp", input = b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("Example: doubles") and out.Stdout.Contains("assert Twice(2) == 4"), out.Stdout
     assert out.Stdout.Contains("+1 more test") and not out.Stdout.Contains("doubles a negative"), out.Stdout

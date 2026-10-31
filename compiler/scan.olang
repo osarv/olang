@@ -382,7 +382,10 @@ fn operator(t String&, i I64) token.Tok, I64 {
         }
         case '*' {
             if d == '=' { return token.Tok.StarEq, i + 2 }
-            return token.Tok.Star, i + 1
+            if d != '*' { return token.Tok.Star, i + 1 }
+            # E5a: "**" the power operator, "**=" its compound assignment
+            if i + 2 < n and t[i + 2] == '=' { return token.Tok.StarStarEq, i + 3 }
+            return token.Tok.StarStar, i + 2
         }
         case '/' {
             if d == '=' { return token.Tok.SlashEq, i + 2 }

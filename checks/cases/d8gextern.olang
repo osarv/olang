@@ -1,0 +1,9 @@
+# check: fail error[D8g]: a variadic parameter is a function's, not an extern's - C's variable arguments are '...'
+# never: take an array
+extern {
+    fn puts(xs ...I64) I32
+}
+
+fn main() {
+    assert puts(1) == 0
+}

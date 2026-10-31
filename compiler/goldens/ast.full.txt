@@ -100,6 +100,32 @@
 | IMPORT 4:1-4:16
 | -- diagnostics
 | error  8:26
+=== checks/cases/d8gctor.olang
+| ASSERT 6:5-6:27
+| FN 4:1-7:2
+| VAR 5:5-5:19
+| -- diagnostics
+| error D8g 2:20
+=== checks/cases/d8gdefault.olang
+| ASSERT 5:5-5:22
+| FN 4:1-6:2
+| -- diagnostics
+| error D8g 2:20
+=== checks/cases/d8gextern.olang
+| ASSERT 8:5-8:24
+| FN 7:1-9:2
+| -- diagnostics
+| error D8g 4:16
+=== checks/cases/d8gnotlast.olang
+| ASSERT 6:5-6:26
+| FN 5:1-7:2
+| -- diagnostics
+| error D8g 3:19
+=== checks/cases/d8gtwo.olang
+| ASSERT 6:5-6:26
+| FN 5:1-7:2
+| -- diagnostics
+| error D8g 3:19
 === checks/cases/e11bafterrendering.olang
 | IMPORT 3:1-3:16
 | -- diagnostics

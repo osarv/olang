@@ -1,14 +1,15 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's
-# also: make it where 'out' lives: 'Join&out(...)'
+# also: make it where 'out' lives: 'glue&out(...)'
 # never: 'p mut String&out = ...'
 # B11, E25: a value local a call given a scope argument declares lives where the argument says (the fifth any review,
 # 5) - so the note names the scope argument to change, never a declaration (study 4's r05 had it the other way, when
 # such a local's storage was its block)
-import "std/filepath"
+# (a function of its own: filepath.Join is variadic since D8g, its arguments then held in the caller's frame)
+fn glue(a String&, b String&) String { return $a "/" $b }
 fn joined(dir String&, names Array<String&>&, out mut Vec<String&>&) {
     for name in names {
         t := "x" $name
-        p := filepath.Join&t(dir, name)
+        p := glue&t(dir, name)
         out.Push(p)
     }
 }

@@ -1,0 +1,7 @@
+# check: fail error[E12]: expected I64, found String
+# D8g: every argument a variadic parameter is given is one of its element type
+fn sum(xs ...I64) I64 { return xs.Len() }
+
+fn main() {
+    assert sum(1, "two") == 2
+}

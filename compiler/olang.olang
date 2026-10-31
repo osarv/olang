@@ -929,7 +929,7 @@ fn cIr(unit String&, text String&, cfg build.Config&) String {
     kept := try os.ReadFile(path) catch os.Error default ""
     if kept != "" { return kept }
     if cfg.Clang == "" { return "" }
-    out := try os.Exec(args.ToArray(), text) catch os.Error { return "" }
+    out := try os.Exec(...args.ToArray(), input = text) catch os.Error { return "" }
     if out.Status != 0 {
         try io.PrintErr(out.Stderr) catch io.Error { }
         return ""
@@ -981,7 +981,7 @@ fn cLibrary(unit String&, cfg build.Config&) String {
         args.Push($cfg.Clang)
         for f in cfg.CFlags() { args.Push($f) }
         for a in String&["-shared", "-fPIC", "-O2", "-w", "-x", "c", "-o", $so ".tmp", unit] { args.Push($a) }
-        out := try os.Exec(args.ToArray()) catch os.Error { return "clang could not be run" }
+        out := try os.Exec(...args.ToArray()) catch os.Error { return "clang could not be run" }
         if out.Status != 0 { return $"clang could not compile it: " $out.Stderr.Trim() }
         try os.Rename($so ".tmp", so) catch os.Error { return "its library cannot be written" }
     }
