@@ -1697,6 +1697,11 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             return s
         }
         case token.Tok.For { return try p.forStmt() }
+        case token.Tok.Comptime if p.look(1) == token.Tok.For {
+            # K3a: "comptime for x in e { }", unrolled while compiling
+            p.advance()
+            return try p.forStmt(at)
+        }
         case token.Tok.Do {
             p.advance()
             body := try p.block()
@@ -2254,8 +2259,10 @@ fn lineBodyRefused(k token.Tok) String {
     }
 }
 
-fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
+fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt&p ? Fail {
     at := try p.want(token.Tok.For)
+    unrolled := comptimeAt >= 0
+    if unrolled { at = comptimeAt }
     if p.sees(token.Tok.LBrace) {
         body := try p.block()
         sp := p.from(at)
@@ -2287,7 +2294,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             if tried { cl = try p.clauses(false) }
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
-            return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl))
+            return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl, unrolled))
         }
         # three clauses: an initializer like a declaration, then "," cond "," post
         if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut {
@@ -2316,6 +2323,8 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
         }
     }
+    # K3a: only a for-in is unrolled
+    if unrolled { try p.fail("'for NAME in' after 'comptime'") }
     cond := try p.expr()
     body := try p.body()
     sp := p.from(at)
@@ -3064,6 +3073,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             }
             p.skip = wasSkip
             return ast.Expr.Paren(p.from(at), x)
+        }
+        case token.Tok.Comptime {
+            # K3: computed while compiling - the whole expression after it, as a try's reach (E24)
+            p.advance()
+            x := try p.expr()
+            return ast.Expr.Unary(p.from(at), token.Tok.Comptime, x)
         }
         case token.Tok.Try {
             # E24: what it covers is the whole expression after it, ending at the expression's end or a "catch" - its

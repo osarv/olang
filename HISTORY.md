@@ -26349,3 +26349,50 @@ class as the statement is. `:=` from one says `'unreachable' gives no value` (D8
 parameter). Found on the way: the scope pass's `choiceOfRefs` read a `Seq`'s value with `!`, which a value-less `Seq` of
 type `noreturn` would have stopped on (a reference conditional with an unreachable branch). tests/unreachable.olang;
 checks cases unreachvaluedecl, unreachvaluemsg, unreachvaluebaked.
+
+## `comptime e` and `comptime for` (K3, K3a, survey2 item 8, 2026-10-31)
+
+The second survey's item 8, decided by the user on 2026-10-27 ("nah you can add it. comptime is a good word. Its good
+for speed guarantees in certain loops too"): a `comptime` keyword at the use site only - K1a's "no colouring of
+functions" stands. Reading taken then: `comptime e` and `comptime for`.
+
+**`comptime e` (K3).** Before, K1 computed a value while compiling only where a context asked for one (a global, an
+assert, a length) and silently left everything else to the run time: an expression in a hot loop whose value is fixed
+could still be computed every turn. `comptime e` makes the claim checkable: computed while compiling, constant data, or
+a compile-time error naming why the evaluator could not (K1's refusal, the budget, an abort, a value that is no data).
+Decided (mine): it takes the whole expression after it, as `try` does (E24) - one rule for a prefix word that reaches
+far; it reads what a global's initializer reads plus, of the code around it, the instance's type variables and
+lengths, a fixed local and an enclosing walk's names (a local or parameter otherwise is an error naming it - the
+checker sees it where the name is read in the comptime's own frame, `comptimeDepth`); an array's value is a read-only
+reference to the data, as an array literal of constants is (T25d), so a loop reading a table copies nothing.
+
+Built (mine) on what K2 already does: the expression is the initializer of a **hidden immutable global**, one per place
+and per instance - named `comptime.MODULE:OFFSET` and the canonical spelling of the context's variables and names,
+deterministic across builds - checked in the context of the code it is written in (its module for names, its
+instance's variables, its fixed locals), and the code reads that global. `generic.Program` holds the hidden globals'
+declarations (`SynthGlobal`; `GlobalDecl` finds them, so every rule about an immutable global holds: read-only slices,
+`constant` data, K2b's sharing). Where the context tells instances apart the global is homed in the root module,
+whose object holds the instances (B3d), so a module object reused by B3i never needs a global it did not have. The
+evaluator bakes it with every other immutable global; `interp.Bake` reports one it did not bake at the comptime (an
+error, never a startup value) - `ComptimeSites`. On a global's whole initializer (`Table := comptime build()`) no hidden
+global is made: the global itself is held to baking. Measured: `comptime fib(22)` in a loop compiles to a load of a
+`constant` global, no call; `comptime fib(30)` is the budget's error (`the computation runs longer than compile-time
+evaluation allows`).
+
+**`comptime for` (K3a).** Unrolled while compiling, as reflection's walks over `T.Fields` are (G33), the loop's name a
+constant of each copy. Decided (mine): the source is a `range` or an array (text, a `View()`), its elements integers
+of at most 64 bits, `Bool` or `Char` - what a constant of the type table holds (`T.Const`); a float or a struct is an
+error naming the walk over positions (`comptime for i in range xs.Len()`), which a `comptime` or an index then reads.
+The name is bound both where reflection reads its names (`Ctx.Refl`, so G35's folds decide an `if`, a conditional, an
+assert or a `match` per copy - `reflFold` now gives a `Bool` constant as a Bool) and where folds and lengths read a
+type variable's constant (`Ctx.Vars`, so `Array<I64>(n)` is fixed per copy, T7c, and a `comptime` inside is computed
+per copy; `generic.readsLocal` takes such a name for no local). The elements are computed by the evaluator after a
+check of the program and given to the next check, as QP1's lengths are (`UnrollAsk` in `interp.decide`, the values in
+`Program.Unrolls` by `LengthKey`, a failure's reason in `UnrollWhy`), so a walk nested in another is computed per copy
+of the outer one, a round later. `break` leaves the walk, `continue` the copy. At most 4096 copies (mine), and
+`comptime for x in try` is an error (nothing of an unrolled walk fails at run time). The source is checked as a
+`comptime`'s value is, its errors said where it is (`unrollBody`); the evaluator reads an array's elements with
+`Machine.Elems`. `ExprBodyIn` now copies an unrolled walk's constant names too, so an assert in a copy reading the
+name can be decided (S18c). tests/comptime.olang (run time, baked globals and decided asserts agreeing); checks cases
+comptimelocal, comptimebudget, comptimeglobal, comptimefortry, comptimeforelem, comptimeformany, comptimeforsource,
+comptimeforfails, comptimeforwhile.

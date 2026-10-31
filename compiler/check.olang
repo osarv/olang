@@ -312,6 +312,13 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # G30: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
     # binds is read as its value (a condition's is not: one parse of a local if serves every instance, S8b)
     constsRead Bool = false
+    # K3: how deep the checker is in a "comptime e"'s body - a local of the code around it read there is an error; and
+    # the bodies Bake must give a value, each by the comptime's span in its file: a hidden global's, or a global's whose
+    # whole initializer is a comptime
+    comptimeDepth I64 = 0
+    ComptimeSites Map<I64, source.Span>
+    # K3a: the "comptime for" walks this check met whose elements the evaluator is to compute
+    UnrollAsks Vec<UnrollAsk>
     unknowns I64 = 0           # the stand-ins made for what did not check: a body holding one is never evaluated (K1a)
     CondReadUnknown Bool = false   # the last condition body refused for reading what did not check, said already
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
@@ -454,6 +461,15 @@ type ValueKind enum {
 # where it is, and the if
 # E38: an embed whose path is no literal, its path the body of a function giving it (ExprBody) - for the evaluator,
 # by its file and where it starts
+# K3a: a "comptime for"'s elements for the evaluator: by Key (LengthKey), a range's arguments' bodies each giving an
+# I64, or Source a body giving the array walked, its elements of type Elem
+type UnrollAsk struct(Key String&, Args Array<I64>&, Source I64, Elem types.TypeId) {
+    Key
+    Args
+    Source
+    Elem
+}
+
 type EmbedAsk struct(Body I64, File I64, At I32) {
     Body
     File
@@ -612,6 +628,8 @@ fn (c mut Checker&) reset() {
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.Asks = Vec<Ask>()
     c.EmbedAsks = Vec<EmbedAsk>()
+    c.UnrollAsks = Vec<UnrollAsk>()
+    c.ComptimeSites = Map<I64, source.Span>()
     c.AssertAsks = Vec<AssertAsk>()
     c.TopAsserts = Vec<TopAssertAsk>()
     c.tails = Vec<tailAsk>()
@@ -2347,6 +2365,10 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     if c.constsRead {
         fr.Ctx = generic.Context(mi, outerCtx.Owner)
         for e in outerCtx.Vars { fr.Ctx.Vars.Put(e.Key, e.Value) }
+        # K3a: an unrolled walk's names, constants of the copy
+        for e in outerCtx.Refl {
+            if c.P.T.KindOf(e.Value) == types.Kind.Const { fr.Ctx.Refl.Put(e.Key, e.Value) }
+        }
     }
     for i in range ns.Len() { fr.Ctx.Vars.Put(ns[i], vals[i]) }
     for e in fixed { fr.fixed.Put(e.Key, e.Value) }
@@ -3460,6 +3482,226 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     }
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
+}
+
+# ---- comptime (K3) ----
+
+# "comptime e" (K3): e's value computed while compiling, the program's constant data. On a global's initializer as a
+# whole the global itself is baked or an error; anywhere else e is the initializer of a hidden immutable global, one per
+# place and instance (the type variables, lengths and unrolled constants it is checked with), which the code reads -
+# an array's value as a read-only reference to that data (T25d). Bake reports one the evaluator cannot compute
+fn (c mut Checker&) comptime(sp source.Span, y ast.Expr&, want types.TypeId) typed.Expr&c {
+    fr := c.fr()
+    match c.Bodies[fr.Body].Of {
+        case typed.BodyOf.Global(gm, gn) {
+            v := c.P.GlobalDecl(gm, gn)
+            if v is not null and not c.P.IsSynth(gm, gn) and v.Values.Len() > 0 and v.Values[0].Span() == sp {
+                c.ComptimeSites.Put(fr.Body, sp)
+                return c.expr(y, want)
+            }
+        }
+        case _ { }
+    }
+    ctx := c.comptimeCtx()
+    home := fr.Mi if ctx == "" else c.P.L.Root
+    n := c.P.L.Names.Intern($"comptime." $c.P.L.Mods[fr.Mi].Identity ":" $sp.Start $ctx)
+    key := pair.Pair(home, I64(n))
+    id := try c.globalBodies.Get(key) catch default -1
+    if id < 0 { id = c.comptimeBody(sp, y, want, home, n) }
+    t := try c.globalTypes.Get(key) catch default types.UnknownT
+    if t == types.UnknownT { return c.unknown(sp) }
+    p mut typed.Lvalue&c = typed.Lvalue.Global(sp, t, home, n)
+    if c.P.T.KindOf(t) == types.Kind.Array { return typed.Expr.Borrow(sp, c.P.T.Ref(t, types.ReadOnly), p) }
+    return c.read(sp, p)
+}
+
+# what tells a comptime's instances apart (K3): the type variables, lengths and unrolled names of the context it is
+# checked in, each spelled canonically - "" where it has none, its value then the same wherever its code runs
+fn (c mut Checker&) comptimeCtx() String {
+    b := StringBuilder()
+    for v in c.fr().Ctx.Vars {
+        b.Push(" " $c.text(v.Key) "=")
+        b.Push(c.P.T.Canon(v.Value))
+    }
+    for r in c.fr().Ctx.Refl {
+        b.Push(" " $c.text(r.Key) "=")
+        b.Push(c.P.T.Canon(r.Value))
+    }
+    return b.ToString()
+}
+
+# the body of the hidden global n of module home holding a comptime's value (K3): y checked in the context of the code
+# it is written in - its module, its variables, its fixed locals (S8c) and unrolled names - as a global's initializer
+fn (c mut Checker&) comptimeBody(sp source.Span, y ast.Expr&, want types.TypeId, home I64, n source.NameId) I64 {
+    outer := c.fr()
+    mi := outer.Mi
+    c.P.SynthGlobal(home, n, y)
+    fixed := Map<source.NameId, I64>()
+    c.lastFixed.Clear()
+    if not c.onlyFixed(y, fixed) { fixed.Clear() }
+    id := c.newBody(typed.BodyOf.Global(home, n), c.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0)), mi, sp)
+    key := pair.Pair(home, I64(n))
+    c.globalBodies.Put(key, id)
+    c.state[id] = 1
+    fixedIn := outer.Body
+    fr := c.push(id, mi, types.VoidT, types.ListId(0))
+    fr.Ctx = generic.Context(mi, outer.Ctx.Owner)
+    for e in outer.Ctx.Vars { fr.Ctx.Vars.Put(e.Key, e.Value) }
+    for e in outer.Ctx.Refl { fr.Ctx.Refl.Put(e.Key, e.Value) }
+    for e in fixed { fr.fixed.Put(e.Key, e.Value) }
+    fr.fixedIn = fixedIn
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    c.comptimeDepth++
+    x := c.exprTo(y, want)
+    c.comptimeDepth--
+    t := want if want != types.UnknownT else c.inferred(y, x, true)
+    if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, t, x)) }
+    c.globalTypes.Put(key, t)
+    if t != types.UnknownT { c.stmts.Push(typed.Stmt.Assign(sp, typed.Lvalue.Global(sp, t, home, n), x)) }
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    c.ComptimeSites.Put(id, sp)
+    return id
+}
+
+# ---- comptime for (K3a) ----
+
+# the most copies one "comptime for" unrolls into
+MaxUnroll I64 = 4096
+
+# "comptime for x in e { }" (K3a): e's elements computed while compiling - asked of the evaluator in one check of the
+# program, given to the next (interp's Analyze) - and the body checked once per element, x a constant of the copy
+fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
+    head := source.Span(sp.Start, sp.Start + 8)
+    if f.Tried {
+        c.err(head, msgs.ComptimeForTry())
+        return
+    }
+    args := Vec<I64>()
+    src I64 = -1
+    et := c.i64()
+    match f.Source {
+        case ast.Expr.Range(_, rargs) {
+            for a in rargs { args.Push(c.unrollBody(a, c.i64())) }
+        }
+        nomatch {
+            src = c.unrollBody(f.Source, types.UnknownT)
+            if src < 0 { return }
+            rt := c.P.T.Result(c.Bodies[src].Ty)
+            at := c.arrayOf(c.deref(rt))
+            et = c.P.T.Elem(at) if at != types.UnknownT else types.UnknownT
+            if et == types.UnknownT {
+                c.err(f.Source.Span(), msgs.ComptimeForSource(c.ty(rt)))
+                return
+            }
+        }
+    }
+    if args.Has(-1) { return }
+    if not c.unrollable(et) {
+        c.err(f.Source.Span(), msgs.ComptimeForElem(c.ty(et)))
+        return
+    }
+    key := $"u:" $c.P.LengthKey(c.fr().Ctx, f.Source)
+    if c.P.UnrollWhy.Has(key) {
+        c.err(f.Source.Span(), msgs.ComptimeForUnknown(try c.P.UnrollWhy.Get(key) catch default ""))
+        return
+    }
+    vals := try c.P.Unrolls.Get(key) catch {
+        c.UnrollAsks.Push(UnrollAsk($key, args.ToArray(), src, et))
+        return
+    }
+    if vals.Len() > MaxUnroll {
+        c.err(head, msgs.ComptimeForTooMany(vals.Len(), MaxUnroll))
+        return
+    }
+    c.unrollConsts(sp, f, vals, et)
+}
+
+# an element a comptime for binds as a constant (K3a): an integer of at most 64 bits, a Bool, a Char
+fn (c mut Checker&) unrollable(t types.TypeId) Bool {
+    u := c.under(t)
+    return u == types.BoolT or (c.P.T.IsInt(u) and c.P.T.Bits(u) <= 64)
+}
+
+# a comptime for's source, or one of its range's arguments, as the body of a function giving its value (BodyOf.Cond)
+# for the evaluator - checked as a comptime's value is (K3), in the context of the code around it, what is wrong said
+# where it is: -1 for that
+fn (c mut Checker&) unrollBody(x ast.Expr&, ty types.TypeId) I64 {
+    outer := c.fr()
+    mi := outer.Mi
+    d := c.P.L.Diags
+    mark := d.Count()
+    fixed := Map<source.NameId, I64>()
+    c.lastFixed.Clear()
+    if not c.onlyFixed(x, fixed) { fixed.Clear() }
+    sp := x.Span()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fixedIn := outer.Body
+    fr := c.push(id, mi, ty, types.ListId(0))
+    fr.Ctx = generic.Context(mi, outer.Ctx.Owner)
+    for e in outer.Ctx.Vars { fr.Ctx.Vars.Put(e.Key, e.Value) }
+    for e in outer.Ctx.Refl { fr.Ctx.Refl.Put(e.Key, e.Value) }
+    for e in fixed { fr.fixed.Put(e.Key, e.Value) }
+    fr.fixedIn = fixedIn
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    c.comptimeDepth++
+    v := c.exprTo(x, ty)
+    c.comptimeDepth--
+    if ty == types.UnknownT { c.Bodies[id].Ty = c.P.T.Func(types.ListId(0), typeOf(v), types.ListId(0)) }
+    c.stmts.Push(typed.Stmt.Return(sp, v))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    if d.Count() > mark or typeOf(v) == types.UnknownT { return -1 }
+    return id
+}
+
+# the unrolled walk (K3a), as reflection's is (G33): a loop of its own for break, each copy a loop of its own for
+# continue, its name bound to the element - a constant, as a type variable's length is - and its key to the position
+fn (c mut Checker&) unrollConsts(sp source.Span, f ast.ForIn&, vals Array<I64>&, et types.TypeId) {
+    from := c.stmts.Len()
+    oid, oouter, omark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().exits.Push(oid)
+    for k in range vals.Len() {
+        efrom := c.stmts.Len()
+        eid, eouter, emark := c.open(typed.BlockKind.Loop, sp)
+        c.fr().loops.Push(eid)
+        wasName := c.unrollBind(f.Name, c.P.T.Const(et, vals[k]))
+        wasKey := c.unrollBind(f.Key, c.P.T.Const(c.i64(), k))
+        if f.Body.Len() > 0 { c.stmtsOf(f.Body) }
+        c.unrollUnbind(f.Key, wasKey)
+        c.unrollUnbind(f.Name, wasName)
+        c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(eid))))
+        try c.fr().loops.Pop() catch { }
+        eb := c.close(eid, eouter, emark, efrom)
+        pfrom := c.stmts.Len()
+        pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+        c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(eid))))
+        pb := c.close(pid, pouter, pmark, pfrom)
+        c.emit(typed.Stmt.Loop(sp, eb, pb))
+    }
+    c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(oid))))
+    try c.fr().exits.Pop() catch { }
+    ob := c.close(oid, oouter, omark, from)
+    c.emit(typed.Stmt.Loop(sp, ob, null))
+}
+
+# a comptime for's name bound to a constant: where reflection reads it (G35's decisions) and where folds and lengths
+# read a type variable's (T7c) - what it stood for before
+fn (c mut Checker&) unrollBind(n source.NameId, k types.TypeId) types.TypeId {
+    if n == source.NameId(0) or c.text(n) == "_" { return types.TypeId(-1) }
+    c.fr().Ctx.Vars.Put(n, k)
+    return c.reflBind(n, k)
+}
+
+fn (c mut Checker&) unrollUnbind(n source.NameId, was types.TypeId) {
+    if n == source.NameId(0) or c.text(n) == "_" { return }
+    c.fr().Ctx.Vars.Remove(n)
+    c.reflUnbind(n, was)
 }
 
 # ---- attributes (G39) ----
@@ -7042,6 +7284,11 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId, want types.TypeId = ty
             fp := c.instField(sp, n)
             if fp is not null { return c.read(sp, fp) }
         }
+        if id < 0 and c.comptimeDepth > 0 {
+            # K3: what a comptime computes while compiling reads no local of the code around it
+            c.err(sp, msgs.ComptimeLocal(c.tok(n)))
+            return c.unknown(sp)
+        }
         if id < 0 {
             c.gap(sp, "a local the checker has not bound")
             return c.unknown(sp)
@@ -7269,6 +7516,7 @@ fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
 
 fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.TypeId) typed.Expr?&c {
     if op == token.Tok.Embed { return c.embed(sp, y) }
+    if op == token.Tok.Comptime { return c.comptime(sp, y, want) }
     if op == token.Tok.Not {
         c.laneAccept = true
         x := c.expr(y, types.BoolT)
@@ -12608,6 +12856,7 @@ fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
                 r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
                 if r >= types.TypeId(0) and c.P.T.KindOf(r) == types.Kind.Const {
                     c.reflTouched = true
+                    if c.P.T.ConstType(r) == types.BoolT { return rvBool(c.P.T.ConstValue(r) != 0) }   # K3a
                     return rvInt(c.P.T.ConstValue(r))
                 }
             }
@@ -12992,7 +13241,7 @@ fn (c mut Checker&) reflUnbind(n source.NameId, was types.TypeId) {
 fn (c mut Checker&) reflName(sp source.Span, n source.NameId) typed.Expr?&c {
     r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
     if r < types.TypeId(0) { return null }
-    if c.P.T.KindOf(r) == types.Kind.Const { return c.lit(sp, c.i64(), c.P.T.ConstValue(r)) }
+    if c.P.T.KindOf(r) == types.Kind.Const { return c.lit(sp, c.P.T.ConstType(r), c.P.T.ConstValue(r)) }
     return c.zero(sp, r)
 }
 
@@ -16712,6 +16961,10 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
 
 # for x in range ... and for [i,] x in an array (S9a, S9b): a counted loop over a count worked out once
 fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
+    if f.Comptime {
+        c.comptimeFor(sp, f)
+        return
+    }
     # G33: a list known while compiling is unrolled, the body checked per item
     rl := c.listOf(f.Source)
     if rl.Ok {

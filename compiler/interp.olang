@@ -50,6 +50,8 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     dead Map<pair.Pair<I64, I64>, Bool>
     lengths Map<String&, I64>
     embeds Map<pair.Pair<I64, I64>, String&>
+    unrolls Map<String&, Array<I64>&>
+    unrollWhy Map<String&, String&>
     # B9c: the top-level conditions decided as errors - each said once the last check is made, the if taking no branch
     condErrs Vec<CondErr>
     for {
@@ -59,11 +61,13 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         p := generic.Program(l, r)
         p.Lengths = lengths
         p.Embeds = embeds
+        p.Unrolls = unrolls
+        p.UnrollWhy = unrollWhy
         c := typecheck.Checker(p, tests)
         c.Decided = decided
         c.Dead = dead
         c.CheckProgram()
-        if not decide(l, c, decided, dead, lengths, embeds, condErrs) {
+        if not decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) {
             for e in condErrs { l.Diags.Error(e.At, e.M) }
             if l.Diags.Count() == mark { judgeViews(c) }
             return c
@@ -81,9 +85,12 @@ fn judgeViews(c mut typecheck.Checker&) {
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
 fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
     dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&
-    embeds mut Map<pair.Pair<I64, I64>, String&>&, condErrs mut Vec<CondErr>&) Bool {
+    embeds mut Map<pair.Pair<I64, I64>, String&>&, unrolls mut Map<String&, Array<I64>&>&
+    unrollWhy mut Map<String&, String&>&, condErrs mut Vec<CondErr>&) Bool {
     tops := l.PendingIfs()
-    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 { return false }
+    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 and c.UnrollAsks.Len() == 0 {
+        return false
+    }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.ReadsBuild = c.ReadsBuild
@@ -99,6 +106,17 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         embeds.Put(key, $(path if ok else "\0"))
     }
     if made { return true }
+    # K3a: a comptime for's elements, each walk once - its range's arguments or its array evaluated
+    for a in c.UnrollAsks {
+        if unrolls.Has(a.Key) or unrollWhy.Has(a.Key) { continue }
+        made = true
+        vals, why := x.unrolled(a)
+        if why != "" {
+            unrollWhy.Put($a.Key, $why)
+            continue
+        }
+        unrolls.Put($a.Key, I64[v for v in vals])
+    }
     undecided Vec<ast.If&>
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
@@ -498,10 +516,16 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     x.start()
     d := c.P.L.Diags
     abortsAt Map<pair.Pair<I64, I64>, Bool>
+    whyNot Map<I64, String&>        # K3: why a comptime's global gave no value
     for i in x.Globals {
         match x.Bodies[i].Of {
             case typed.BodyOf.Global(m, n) {
                 img := try x.M.Image(m, n) catch eval.NotBaked {
+                    if c.ComptimeSites.Has(i) {
+                        why, _, _ := valueWhy(x.M.Stopped, x.Bodies[i].Sp)
+                        whyNot.Put(i, $why)
+                        continue
+                    }
                     # G39: an attribute's value is built while compiling, or is an error - never set at startup
                     av := c.P.GlobalDecl(m, n)
                     if av is not null and av.Hidden {
@@ -610,6 +634,14 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
         }
         out.Put(i, kept)
     }
+    # K3: a comptime's value is data or an error - never set at startup
+    for e in c.ComptimeSites {
+        if out.Has(e.Key) or x.Faulty.Has(e.Key) { continue }
+        b := x.Bodies[e.Key]
+        why := try whyNot.Get(e.Key) catch default ""
+        if why == "" { why = "its value is no data the program can hold - it reaches storage made elsewhere, or a destructor" }
+        d.Error(diag.Where.Span(b.File, I64(e.Value.Start), I64(e.Value.End)), msgs.ComptimeNotBaked(why))
+    }
     return out
 }
 
@@ -687,6 +719,45 @@ fn (x mut Exec&) Int(body I64, ty types.TypeId) I64, Bool {
     s := x.M.Eval(k, Array<I64>(0))
     if s != eval.Stop.None { return 0, false }
     return x.M.Int(x.M.Result, ty), true
+}
+
+# K3a: a comptime for's elements evaluated - a range's from its arguments' values, an array's read from its value -
+# and "", or why the evaluator gave none
+fn (x mut Exec&) unrolled(a typecheck.UnrollAsk&) Array<I64>, String {
+    i64 := x.P.T.Prim("I64")
+    if a.Source < 0 {
+        r := Array<I64>(3, 0)
+        r[2] = 1
+        for i, b in a.Args {
+            v, s := x.intStop(b, i64)
+            if s != eval.Stop.None { return Array<I64>(0), stopWhy(s) }
+            if a.Args.Len() == 1 { r[1] = v } else { r[i] = v }
+        }
+        if r[2] <= 0 { return Array<I64>(0), "its range's step is not positive" }
+        n := (r[1] - r[0] + r[2] - 1) / r[2] if r[1] > r[0] else 0
+        if n > 1 << 20 { return Array<I64>(0), "its range holds " $n " elements" }
+        return I64[r[0] + k * r[2] for k in range n], ""
+    }
+    k := mir.FnKey.Body(typed.BodyId(I32(a.Source)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return Array<I64>(0), stopWhy(s) }
+    return x.M.Elems(x.M.Result, x.M.ResultTy, a.Elem), ""
+}
+
+# a body giving an integer evaluated, with what stopped it
+fn (x mut Exec&) intStop(body I64, ty types.TypeId) I64, eval.Stop {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return 0, s }
+    return x.M.Int(x.M.Result, ty), s
+}
+
+# why an evaluation stopped, as K1 says it
+fn stopWhy(s eval.Stop) String {
+    why, _, _ := valueWhy(s, source.Span(-1, -1))
+    return $why
 }
 
 # ---- the machine ----

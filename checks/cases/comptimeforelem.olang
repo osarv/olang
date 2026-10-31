@@ -1,0 +1,8 @@
+# check: fail error[K3a]: a comptime for's elements are integers, Bool or Char, found F64
+# K3a: each copy's name is a constant of an integer, Bool or Char - walk the positions of anything else
+Ws := F64[0.5, 0.25]
+fn main() {
+    t F64 = 0.0
+    comptime for w in Ws { t += w }
+    assert t == 0.75
+}

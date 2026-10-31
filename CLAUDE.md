@@ -1083,6 +1083,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function
   is evaluable is a property of the function (K1a); a body that did not check - a global's initializer, a default - is
   no value to anything reading it, so one mistake is one error (2026-10-26). It must handle everything it can (the user's rule).
+- **`comptime e` and `comptime for` (K3, K3a, survey2 item 8, the user's decision 2026-10-27: "comptime is a good word.
+  Its good for speed guarantees in certain loops too"; built 2026-10-31, details mine).** A keyword at the use site only
+  (no colouring, K1a stays): `comptime e` takes the whole expression after it (try's reach, E24), is computed while
+  compiling and is constant data - `t := comptime squares(16)` in a loop is a read of constant data; it reads what a
+  global's initializer may plus the instance's type variables and lengths, a fixed local (S8c) and an enclosing walk's
+  names, a local or parameter otherwise an error; what the evaluator cannot compute is an error at it saying why, never
+  a run-time fallback; an array's value is a read-only reference to the data (T25d). Built as a hidden immutable
+  global per place and instance (`generic.SynthGlobal`, `check.comptime`), homed in the root's object where the
+  instance's variables or names tell copies apart (B3d, B3i), so K2's baking, emit and the evaluator do the rest and
+  `interp.Bake` reports one not baked; on a global's whole initializer the global itself must bake. `comptime for x in
+  e` (e a range or an array of integers up to 64 bits, Bool or Char) is unrolled as reflection's walks are (G33):
+  each copy's `x` a constant (bound as a type variable's length is and as reflection's names are), so it decides `if`s,
+  asserts and lengths (G35, T7c); its elements are asked of the evaluator in one check and given to the next
+  (`UnrollAsk`, as QP1's lengths), at most 4096 copies, `for x in try` refused.
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
   can decide is checked while compiling (S18c); a condition the build decides (B9c, S8b); fixed locals (S8c).
 - **Decided asserts (S18c, 2026-10-27, mine; fixing two bugs std2 found).** A true one loses its run-time check

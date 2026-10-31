@@ -215,13 +215,14 @@ type For3 struct(Init Stmt&, Cond Expr?&, Post Stmt&, Body Array<Stmt&>&) {
 
 # for [key,] name in [try] source { body } [catch ...] (S9a, S9e)
 type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&
-                  Clauses Array<Catch&>&) {
+                  Clauses Array<Catch&>&, Comptime Bool = false) {
     Key
     Name
     Source
     Tried
     Body
     Clauses
+    Comptime   # "comptime for" (K3a): unrolled while compiling
 }
 
 # [try] join { body } [catch ...] (P1, P4c)

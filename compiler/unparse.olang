@@ -660,6 +660,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.body(f.Body)
         }
         case ast.Stmt.ForIn(_, f) {
+            if f.Comptime { w.put("comptime ") }
             w.put("for ")
             if f.Key != source.NameId(0) {
                 w.name(f.Key)
@@ -871,7 +872,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Unary(_, op, y) {
             w.put(op.Text())
-            if op == token.Tok.Not or op == token.Tok.Return or op == token.Tok.Embed {
+            if op == token.Tok.Not or op == token.Tok.Return or op == token.Tok.Embed or op == token.Tok.Comptime {
                 w.put(" ")
             } else if (op == token.Tok.Minus or op == token.Tok.Dec) and startsWithMinus(y) {
                 w.put(" ")          # "- -x" is no "--x"

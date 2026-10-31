@@ -1,0 +1,6 @@
+# check: fail error[K3]: a comptime is computed while compiling, and this one cannot be: it reads a mutable global
+# K3: a global whose whole initializer is a comptime is baked, or that is an error - never set at startup
+N mut I64 = 3
+fn get() I64 { return N }
+Table := comptime get()
+fn main() { assert Table == 3 }

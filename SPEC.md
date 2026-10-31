@@ -142,7 +142,7 @@ is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
 trait     spawn   join    defer   errdefer yield   become
-import    test    destruct embed
+import    test    destruct embed  comptime
 unreachable
 extern    default
 ```
@@ -2939,12 +2939,12 @@ unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
 postfix  ::= primary { index | member | call-on | "++" | "--" | "!" }
-primary  ::= literal | try-expr | call-expr | struct-literal
+primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | unreachable-expr | IDEN | "(" expr ")"
 ```
 
 `match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
-(§6.6 S16e). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
+(§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
 indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
@@ -4413,6 +4413,7 @@ for-stmnt ::= "for" block                                   (forever)
             | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
             | "for" IDEN [ "," IDEN ] "in" "try" expr body { catch-clause }   (S9e)
             | "for" IDEN [ "," IDEN ] "in" range-expr body   (S9b)
+            | "comptime" "for" IDEN [ "," IDEN ] "in" ( expr | range-expr ) body   (unrolled while compiling, K3a)
 ```
 
 A `body` is a block or a one-line body (S1b): `for x in xs: total += x`.
@@ -8530,6 +8531,36 @@ structure referring to itself is written as such. Data a writable reference reac
 what nothing can write is read-only. A global whose value reaches an instance another module's global holds, or one
 held by a global of its own module that is set at startup, is set at startup too, reading that instance as it is
 there. The data lives as long as the program (O1b).
+
+**K3 (`comptime e`).** `comptime-expr ::= "comptime" expr` asks for `expr`'s value **while compiling**: it is computed
+by the evaluation K1 states and is the program's constant data, written out as K2 writes a global's value - no code
+computing it is part of the program, so `comptime table(64)` in a loop costs a read of constant data each turn. It is
+written where it is used and asks nothing of the functions it calls (no colouring, K1a). `comptime` takes the whole
+expression after it, as `try` does (E24): up to the expression's end, a list's `,` or a `catch`; `comptime f() + 1` is
+`comptime (f() + 1)`. What it may read is what a global's initializer may - globals, functions, constants, types - and,
+of the code it is written in, the type variables and constant lengths of the instance it is checked for (G16a, G29), a
+fixed local (S8c) and the names of an enclosing `comptime for` (K3a): it is computed once per instance and per copy,
+each its own constant. A local or parameter otherwise is a compile-time error naming it. Its type is `expr`'s; a value
+of an array type is the constant data itself - a read-only reference to it, as an array literal of constants is
+(T25d) - and text a `String`. Where the evaluation cannot give a value - an operation K1 refuses, the budget run out,
+an abort or an error no clause handles (as K1's "required" case), or a value that cannot be written as data (one
+reaching another module's storage or a startup-set global's, K2b, or holding a destructor-bearing instance) - it is a
+compile-time error at the `comptime` saying why; never a value computed at run time instead. On a global's whole
+initializer (`Table := comptime build()`), the global is baked as K2 bakes it or that is the error: it is never set at
+startup.
+
+**K3a (`comptime for`).** `comptime for x in e { }` (and `comptime for i, x in e`) is **unrolled while compiling**: `e`,
+a `range` (S9b) or an array - text included, a `Vec`'s `View()` - read as a `comptime`'s value is (K3), gives its
+elements by K1's evaluation, which must be integers of at most 64 bits, `Bool` or `Char`; the body is checked once per
+element, in order, with `x` a **constant** of the element's type and `i` its position (an `I64`) - so in each copy `x`
+decides an `if`, a conditional, a `match` or an `assert` as reflection's names do (G35), gives array lengths (T7c),
+and a `comptime` in the body is computed per copy. `break` leaves the whole walk and `continue` the copy, as in
+reflection's unrolled walks (G33). A walk computed while compiling has nothing to fail at run time: `comptime for x in
+try e` is a compile-time error. One unrolling into more than 4096 copies is a compile-time error naming the plain
+`for`; so are elements of another type (naming the walk over positions, `comptime for i in range xs.Len()`), a source
+reading a local, and one the evaluator cannot compute (saying why). A walk's elements are computed after the program
+around it has checked, and the program checked again with them (as B9c's decisions are), so a source reading an
+enclosing walk's name is computed per copy of that walk.
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

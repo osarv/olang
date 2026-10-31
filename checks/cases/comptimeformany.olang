@@ -1,0 +1,7 @@
+# check: fail error[K3a]: this comptime for unrolls into 5000 copies, at most 4096
+# K3a: an unrolling has a bound - past it the walk is a plain for
+fn main() {
+    t I64 = 0
+    comptime for k in range 5000 { t += k }
+    assert t > 0
+}

@@ -1,0 +1,5 @@
+# check: fail error[K3]: a comptime is computed while compiling, and 'n' is a local or a parameter, which only the running program knows
+# K3: a comptime reads what a global's initializer may - never a local or a parameter of the code around it
+fn sq(n I64) I64 { return n * n }
+fn f(n I64) I64 { return comptime sq(n) }
+fn main() { assert f(2) == 4 }

@@ -131,6 +131,12 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # E38: the paths of embeds written as no literal, evaluated while compiling - by file and offset (set before
     # checking; interp's Analyze): the path, or "\0" where its evaluation gave none
     Embeds Map<pair.Pair<I64, I64>, String&>
+    # K3a: the elements of the "comptime for" walks evaluated while compiling - by LengthKey (set before checking;
+    # interp's Analyze): each element's bits, or in UnrollWhy why the evaluator gave none
+    Unrolls Map<String&, Array<I64>&>
+    UnrollWhy Map<String&, String&>
+    # K3: the hidden globals holding a "comptime e"'s value, by (module, name) - no program names one
+    synth Map<pair.Pair<I64, I64>, ast.VarDecl&>
     # B5a: every module's global initializers' bodies in the order they run - a module's after its imports', each
     # after the globals its initializer reads (check's orderGlobals, once every body is checked)
     InitOrder Vec<I64>
@@ -1289,8 +1295,10 @@ fn (p mut Program&) FoldLength(c Context&, e ast.Expr?&) types.TypeId {
 fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
     if e is null { return false }
     match e {
-        case ast.Expr.Name(sp, _) {
+        case ast.Expr.Name(sp, n) {
             k := p.R.Use(p.file(c.Mi), sp.Start).Kind
+            # K3a: a "comptime for"'s name is a constant of the copy it is read in
+            if k == names.What.Local and p.T.KindOf(try c.Vars.Get(n) catch default types.UnknownT) == types.Kind.Const { return false }
             return k == names.What.Local or k == names.What.None
         }
         nomatch { }
@@ -2005,7 +2013,19 @@ fn (p mut Program&) nameType(c Context&, sp source.Span, n source.NameId) types.
 }
 
 # a global's declaration in a module, in the branches of its top-level ifs that were taken too; null for none
-fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl?&p { return p.globalIn(mi, p.L.Mods[mi].Decls, n) }
+fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl?&p {
+    v := try p.synth.Get(pair.Pair(mi, I64(n))) catch { return p.globalIn(mi, p.L.Mods[mi].Decls, n) }
+    return v
+}
+
+# K3: a hidden immutable global of module mi named n, its value x - a "comptime e"'s, which no program names
+fn (p mut Program&) SynthGlobal(mi I64, n source.NameId, x ast.Expr&) {
+    v ast.VarDecl&p = ast.VarDecl(Array<source.NameId>(1, n), Array<source.Span>(1, x.Span()), null, Array<ast.Expr&>(1, x), true, false)
+    p.synth.Put(pair.Pair(mi, I64(n)), v)
+}
+
+# K3: whether module mi's global n is a hidden one holding a "comptime e"'s value
+fn (p mut Program&) IsSynth(mi I64, n source.NameId) Bool { return p.synth.Has(pair.Pair(mi, I64(n))) }
 
 fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.VarDecl?&p {
     if ds.Len() == 0 { return null }
