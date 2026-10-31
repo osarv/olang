@@ -1325,6 +1325,19 @@ spelling).
   parameter, and nothing is written through a read-only one - so regex's `ReplaceFunc(t, f fn(m Match) String)` lends
   a loop's `Match` to `f` (O17 had refused it).
 
+- **A split value lent by its storage** (scope.olang, `lentByStorage`, O17, behind the switches). A value whose
+  references live elsewhere than its own storage - most often a bare enum parameter, this function's copy held by
+  value (only structs and arrays go by pointer) - lent to a callee that keeps something of it (a result borrowed from
+  it: `unAway(x Expr?&) Expr&x`) had been refused (O17: one scope variable cannot say both places). Now it is lent by
+  its storage where the callee puts nothing into what it reaches - no store into it or through it (`Stores`, `Puts`)
+  and no obligation needing something to outlive its scope variable (`putsUnder`: a relation whose lower side is it, an
+  exact one naming it, a term the summary cannot place). That binding is sound by docs/scope-model.md 3.3's "not reg":
+  what the callee keeps of the argument is held to the copy's scope, the shorter one, and judged there as any result
+  is (`return unAway(x)` from the copy's function is O26). It is what compiler/'s migrated `fn (s Scoper)
+  choiceOfRefs(x typed.Expr)` needs: the migration had made such parameters bare, and every one lent to a reader
+  handing back a borrow was an O17. An O17 at a bare parameter now notes the parameter (`splitErr`), so the
+  migration's driven phase can make it `&` where the callee does put into it.
+
 ### 12.2 Decided here (mine, the user absent - provisional, for the user's review)
 
 1. **Per struct type, not per instance.** The coordinator's brief asked for bindings per instance (an instance made
@@ -1362,10 +1375,33 @@ spelling).
   field keeping it is no deep use (it holds it as given), and a constructor's parameter handed on is as deep as the
   callee uses it (refArg, a dependency, no longer deep at once).
 
+- **A nullable parameter written through what it reaches stayed read-only** (round 2a): `p T?&` is read-only unless
+  its body writes through it (wantWritable), but only a write through `p` itself was seen - a write through a
+  reference read out of it or a binding of its payload (`match h! { case One(x) { x.v = n } }`) went through a
+  writable-typed local and widened nothing, so a bare parameter - read-only all the way down - was handed to it and the
+  caller's node written. Now a nullable parameter its body uses as a `&` one once the uses are settled (refUsed, after
+  refSettle's fixed point) is made writable and the program checked again (`widenUsed`).
+- **`x!` and a conversion hid where a reference came from**: a local made from `h!` (a pure read under a test) had no
+  origin (`roTrack` reads through `unwrapped`), and a reference converted to a nullable one for a `?&` parameter
+  (`Convert`, T2c) named no parameter for D9d (`refConverted`, in refParamOfX and refUseX) - `fn mk(h holder&) { v :=
+  h; put(v, 5) }` was told to take `h` bare.
+- **A refusal at a bare parameter's reach rested on inferred fields** (this round): fieldsWritAll let a lend, a store
+  or a constructor's argument through by marking the field written, though a bare parameter's reach is read-only
+  whatever its fields say (QCC); such refusals now rest on no field (`bareRooted`).
+- **The evaluator read a struct or an enum converted to itself as a scalar** (round 2a): the checker gives a bare
+  parameter's argument copied out of a reference as `Convert` of the value, which the evaluator computed through its
+  scalar path - a zero, `expr.lit(0)` for `expr.away(...)` - so `interpret` and a baked global disagreed with the run
+  time (`depth` walking a tree gave 1 for 2). It now copies the record, as emit does.
+- **The effects line missed writes through a local made from a parameter's reach** (the tooling batch, on the default
+  path too): a binding of a payload or a reference read out of a parameter wrote "effects: none" for `match h { case
+  One(x) { x.v = n } }`; such locals now stand for their parameter (effects.olang's `derive`).
+
 ### 12.4 Today's path
 
 Without the switches nothing changes: every new path is behind `source.NewParams` (the scope pass's too); `make quick`
-passed but for the token and tree goldens of the edited files, recaptured.
+passed but for the token and tree goldens of the edited files, recaptured. Two fixes of this round reach the default
+path, on purpose: the evaluator's identity conversion of a struct or an enum (no default program produced one) and the
+effects line (explain, doc and hover only - nothing decides by it).
 
 ### 12.5 Measured
 

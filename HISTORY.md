@@ -27318,3 +27318,19 @@ loop's Match to `f`.
 `make verify-params`. Left: compiler/'s migration (param_migrate made idempotent, a finishing D9d round), the
 by-pointer value-result handover and QCC's `T&` result error, open point 5, the remaining not-a-value reasons, KeptPerm
 and the storeThrough hole, the caller-side copy, the scope phase's field loop.
+
+**The migrated compiler's O17s, and what they turned up.** compiler/'s migration stalled at O17: the text phase made
+`x typed.Expr` parameters bare, a bare enum is a copy held by value (only structs and arrays go by pointer), and every
+such copy lent to a reader handing back a borrow of it (`s.unAway(x)`, a result `typed.Expr&x`) is a split value -
+its references live where the caller's do, its own storage in the frame - which O17 refuses. Passing enums by pointer
+too was tried and reverted (a generic binding a type variable to an enum then saw a reference: std/json's Str). What
+went in instead is docs/scope-model.md 3.3's other binding, written down in 2026-10-18 and held back then for parity
+with stage 0: a split value lent by its storage where the callee puts nothing into what it reaches - sound by "not
+reg", the kept result held to the copy's scope. A probe storing a local node through such a copy is still refused, and
+so is one storing through a loop turn's copy (`tests/params/fail/putsunder.olang`). The probes around it found four
+older holes, all fixed: a nullable parameter written through a binding of its payload or a reference read out of it
+was never made writable, so a bare parameter's reach was written (`nullwrites.olang`); `x!` and a reference converted
+to a nullable one hid which parameter it came from; a refusal at a bare parameter's reach was let through by marking
+an inferred field written; and the evaluator read a struct or an enum converted to itself as a scalar - `interpret`
+walked `expr.lit(0)` where the run time had the tree, so a decided assert over the probe's depth was refused as false.
+The effects line, too, missed a write through a payload binding (on the default path as well).
