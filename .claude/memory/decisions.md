@@ -2063,3 +2063,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and drawing backend through C imports) - rec when the user wants GUI work; (5) B1.6 `olang api OLD NEW` (two commits:
   added, removed, changed exports, and whether importers break) - rec yes now, on doc's signatures; B1.5 enums that may
   grow (an `open` keyword making importers' matches carry `case _`) - rec not now, with a registry.
+- QBP 11-15 ANSWERED 2026-10-31: (1) caps report YES "if it doesn't cost compile time" - a mode run on demand
+  (`olang explain -caps`), nothing in other builds; (2) reuse in place YES "if it saves performance" - built only where
+  the benchmark shows a gain; (5) `olang api OLD NEW` YES ("do it"). Queued as a tooling batch with QBP 6/9 (effects,
+  facts) and 3's shown needs. (4) the user did not know the Elm architecture - explained (one model struct, a message
+  enum, update(model, msg), view(model) rebuilding the tree each frame); nothing to decide until GUI work. (3) to
+  discuss: PROPOSED (d) - a generic's needs read off its body are its full requirement, shown by doc/explain/hover, and a
+  call whose type lacks one is an error AT THE CALL naming the need ("Max needs Less, and Point has none"), never
+  inside the body; no written constraints required; match T arms and reflection-decided branches are per instance
+  as now. Alternatives: (a) today + shown needs; (b) Rust's full definition check (every use promised by a written
+  constraint); (c) (b) for exported generics only. Rec (d). ASKED. (5b) enums that may grow - the user: "Why not Enums
+  too?": PROPOSED `type Event open enum { ... }` (spelling to confirm): matches in other modules must carry `case _`,
+  matches in its own module stay exhaustive; adding a case to an open enum is then no breaking change (`olang api`
+  says so). Cost: one keyword, and importers lose the "every place to handle a new case" check on that enum - which
+  is the point. Rec: yes, small. ASKED (spelling `open enum`).
