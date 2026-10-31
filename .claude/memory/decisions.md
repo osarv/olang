@@ -2084,3 +2084,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - B1.5 open enums DECLINED 2026-10-31 (the user: "Don't do them, force the API user to adapt to the API change, with a
   new enum, the other entries might not mean the same thing anymore"): every enum stays closed; a new case breaks
   importers' matches on purpose, and `olang api` reports it as breaking.
+- QCE, the user 2026-10-31 ("we don't even have support for immutable types do we?", "map entries ... kinda is
+  handled by module context right?"): answered - no immutable types today (immutable places only: globals, read-only
+  references until QCC lands, constant data); a Map's slots are private and value keys are copied in, so the only hole
+  is a reference key compared by contents (`Map<String&, V>`, a `&` to a type declaring Eq) changed through another
+  holder. PROPOSED: no immutable types now; Map and Set refuse such a key type, naming the value form or an identity
+  key; revisit immutability if sharing between tasks needs it. ASKED.
