@@ -104,6 +104,38 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
   evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
   compiler/explain.olang.
+- **Effects, needs and "not a value" under a signature; `explain -caps` (B11b, B11c, QBP 6, QBP 11, A2.3, B1.2, the
+  user's "build it" 2026-10-27 and "if it doesn't cost compile time" 2026-10-31; built 2026-10-31, details mine).**
+  explain, doc and hover print under each function (each instance, each method under its type) `# effects: ...` -
+  `none`, or the parameters written through, `writes a global`, `allocates`/`allocates nothing`, `may grow a Vec`,
+  `starts tasks`, the classes reached, else `calls C`, `may end the program`, `may block`/`never blocks`, `recursive`,
+  `always ends`, `may be computed while compiling` (`anything` through a function value or an `any`); under a generic
+  `# T needs: Less, a walk` (G18a, read off its text); under a function that cannot become a value `# not a value: why`
+  (a method, an extern, a generic named bare, a G29 instance, T22a's scope obligations - docs/rework.md point 1).
+  `olang explain -caps FILE`: each module the program loads, the root first, with the classes its code may reach
+  through everything it calls - files, network, processes, environment, threads, C (the program's own) - and the
+  module where each is first reached. Decided (mine): one summary pass over the typed core, compiler/effects.olang
+  (each body's own facts, then Tarjan's components callees first), made only when something asks - explain, doc, the
+  language server, `-caps`, a fact read in code - so no other build computes it (the self-build's check phase measured
+  unchanged); a capability counted where it is gained, by the C function gaining it (open, socket, posix_spawn,
+  getenv, pthread_create ...), never where a descriptor already open is read or written, so printing is no capability;
+  "C" only for C the program's own modules call (std's is said by what it gains); a C function not on a short list
+  of known quick ones (memcpy, clock_gettime, unlocking ...) may block and may not return; a lambda's body counts as
+  called where it is made; a module's caps line covers all its own code, so a function value's target is said on its
+  own module's line (calls through values are no "anything" there). Needs are a reading for people (compiler/needs.olang:
+  values of a variable's type through parameters, locals, Array/Vec elements, for-in, and into other generics the program
+  calls, `match T` arms and reflection-decided `if`s left out, the written constraint's methods and a closed trait's
+  operators dropped); what the checker holds a call to is G18a below.
+- **`olang api OLD NEW PATH` (B21, QBP 15/B1.6, the user's "do it" 2026-10-31; built 2026-10-31, details mine).** Two
+  versions - commits (their trees through `git archive`, PATH relative to where it runs) or directories - of the
+  modules at PATH (a file, or every .olang below a directory), each checked as doc checks it in a process of its own,
+  their exported items and members compared by name and B11b's signature; a row each, `breaking` or `ok`, the count
+  last; status 0, 1 where something breaks, 2 where a side cannot be read or does not check. Breaking: a name removed,
+  a signature, field type, constructor or global type changed, an error set grown, an enum case, error word or trait
+  method added (B1.5's open enums declined: a new case breaks on purpose), a trait no longer met. Not: an addition
+  otherwise, a narrower error set, a global's value, a trait newly met. Decided (mine): both sides are checked with
+  this compiler and its std; an added defaulted parameter counts as a changed signature (it breaks a use as a value);
+  effects and doc comments are no part of the interface. compiler/api.olang; the checks scenario `apicaps`.
 - **Doc comments (L4b) and `olang doc` (B14).** Go's rule, no new syntax: the `#` lines directly above a declaration,
   member or global are its documentation (a member or global with none takes its line's trailing comment; an aligned
   continuation of a trailing comment is no doc comment; a block comment never is); a module's is the comment lines its
@@ -679,6 +711,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Monomorphized; the instantiation's name is its identity, spelled injectively (G16a).** Instantiations are defined
   by the root object only (B3d). Rules about what a type contains are re-checked per instantiation (G18); errors carry
   where the instantiation was asked for (G16b); G17 bounds depth.
+- **A generic's needs are its requirement, said at the call (G18a, QBP 13/B1.4 option d, the user's "do D"
+  2026-10-31; built 2026-10-31).** What a generic's body asks of a type variable's binding - a method, an operator's
+  method, an index, a slice, a walk, a membership test, a field - is its need; no written constraint is required, and a
+  call whose type lacks one is an error at the program's own call that began the chain, `Max needs Less ('<'), and
+  Point has none - declare it for Point, or call Max with a type that has it`, with a note where the body asks, never
+  an error in the generic with G16b's notes. Decided (mine): judged by each instance's check, as before (no archetype
+  check), so `match T` arms and reflection-decided branches stay per instance; the error is rerouted where the type
+  lacking the member is one of the outermost instance's type arguments (`check.needErr`, `boundBy`), else it stays
+  where it is (a concrete type inside the generic is the generic's own mistake); `diag.ErrorBare` says it without the
+  context notes.
 - **Inference (G9a-G9d).** Literals adapt after other arguments bind; text binds `String`; `null` takes no part; a
   value of a destructor type binds the reference; reference arguments of differing permission meet read-only.
 - **Constructors infer type arguments (G10c)** and a plain type's constructor may introduce variables its fields do
@@ -818,6 +860,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   field holds) via `keys = ...` on Encode/Decode/From, `@json.Key`, `@json.Skip`, a type's `@json.Naming.X` winning over
   the call's; std/csv records as structs (`Header`, `RecordOf`, `Encode`, `Decode`, `@csv.Column`, `@csv.Skip`);
   std/flags `p.Read<T>(args)` from a struct's parameters with `@flags.Help`, `@flags.Short`.
+- **Function facts (G42, QBP 9, B1.1, the user's "yes build with item 6" 2026-10-27, and the declared facts of
+  2026-10-27; built 2026-10-31, details mine).** `mix.Allocates`, `dsp.mix.Blocks`, `pick<I64>.Terminates` through a
+  function's name, and `f.Allocates` on G41's descriptors (each copy of a walk its own function's): `Allocates`,
+  `Blocks`, `WritesGlobals`, `CallsC`, `Spawns`, `Recursive`, `Terminates` - a Bool constant, true where the function or
+  anything it may call may (Terminates: every loop a for-in over an array or a range, an unrolled walk, no recursion,
+  nothing that waits, no C not known to return); a call through a function value or an `any`, or a body that did not
+  check, has every fact but Terminates; so `assert not mix.Allocates` (S17a) pins one. Descriptors also say `NoReturn`,
+  `Exported`, `Extern`, `Commutes`. A generic named without type arguments is an error naming `f<T>.Fact`. Decided
+  (mine): read off the same summaries as the effects line (effects.olang); a fact is read as its cautious value in the
+  first attempt and the program is checked again with what the bodies found until reads and findings agree (as R1a's
+  sets, `factPresets`), one that changes the code it is read from an error (FactUndecided); a fact in a plain body's
+  `if` is S8a's dead branch, as any constant condition (in an unrolled walk it differs per copy and is fine); check
+  marks the bounded loops (`typed.Body.Bounded`: counted for-ins, unrolled walks). tests/facts.olang.
 
 ### Errors
 

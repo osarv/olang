@@ -2845,6 +2845,28 @@ g17type.olang:3:6: error[G17]: this generic's instantiations never end - each on
     3 | type Grow<T> struct() {
       |      ^~~~
 compilation failed with 1 error
+=== g18needcall.olang
+g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none - declare it for Point, or call Largest with a type that has it
+   15 |     p := Largest(ps)
+      |          ^~~~~~~
+g18needcall.olang:9:40: note: pick needs Less ('<') here
+    9 | fn pick<T>(a T, b T) T { return b if a < b else a }
+      |                                        ^
+compilation failed with 1 error
+=== g18needmethod.olang
+g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none - declare it for String, or call Describe with a type that has it
+    9 |     q := Describe("a")
+      |          ^~~~~~~~
+g18needmethod.olang:6:39: note: Describe needs Name here
+    6 | fn Describe<T>(a T) String { return a.Name() }
+      |                                       ^~~~
+g18needmethod.olang:10:10: error[G18]: Describe needs Name, and I64 has none - declare it for I64, or call Describe with a type that has it
+   10 |     r := Describe(4)
+      |          ^~~~~~~~
+g18needmethod.olang:6:39: note: Describe needs Name here
+    6 | fn Describe<T>(a T) String { return a.Name() }
+      |                                       ^~~~
+compilation failed with 2 errors
 === g19arrayspell.olang
 g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
     4 |   m := Map<Array<F64>, I32>()
@@ -2955,6 +2977,21 @@ g23narrow.olang:4:14: error[T6b]: I64 does not flow into U8 - convert it, as U8(
 g23narrow.olang:9:10: note: instantiated here, with a.Len() = 3
     9 |     q := first(a)
       |          ^~~~~
+compilation failed with 1 error
+=== g42factfalse.olang
+g42factfalse.olang:5:8: error[S17a]: this top-level assert is false, decided while compiling: the callback must not allocate
+    5 | assert not Label.Allocates, "the callback must not allocate"
+      |        ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== g42factgeneric.olang
+g42factgeneric.olang:5:13: error[G42]: pick is generic, and each of its instances has facts of its own - name one with its type arguments: 'pick<T>.Terminates'
+    5 | assert pick.Terminates
+      |             ^~~~~~~~~~
+compilation failed with 1 error
+=== g42factvalue.olang
+g42factvalue.olang:6:8: error[S17a]: this top-level assert is false, decided while compiling: anything it calls may allocate
+    6 | assert not Apply.Allocates, "anything it calls may allocate"
+      |        ^~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === g4resultonly.olang
 g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no parameter's type, so the call writes it - mk<...>(...)

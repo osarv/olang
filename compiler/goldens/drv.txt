@@ -253,6 +253,7 @@
 |   fix         rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)
 |   bindgen     writes a C header's declarations as olang declares them, read by clang (X16)
 |   profile     builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20; interpret's runs are not profiled)
+|   api         lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
 | stderr:
@@ -347,13 +348,14 @@
 | status 0
 === olang help explain
 | stdout:
-| usage: olang explain RULE | FILE.olang NAME
+| usage: olang explain RULE | FILE.olang NAME | -caps FILE.olang
 | prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
 | 
 | options:
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -caps              prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)
 | stderr:
 | status 0
 === olang help help

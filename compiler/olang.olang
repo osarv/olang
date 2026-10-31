@@ -1182,17 +1182,29 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
-    assert explained("divmod") == "fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n"
-    assert explained("wrap") == "fn wrap(n N&) H\n    [n outlives return]\n"
-    assert explained("big") == "fn big<T>(a T, b T) T\n    instance big<I64>: fn(a I64, b I64) I64\n"
-    assert explained("N") == "type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n"
-    assert explained("N.Value") == "fn (n N&) Value() I64\n"
+    assert explained("divmod") == ("fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n" $
+            "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+    assert explained("wrap") == ("fn wrap(n N&) H\n    [n outlives return]\n" $
+            "    # not a value: its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
+            "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+    # B11b, G18a: a generic's needs and why it is no value; each instance's effects
+    assert explained("big") == ("fn big<T>(a T, b T) T\n    # T needs: Less\n" $
+            "    # not a value: a generic is a value only named with its type arguments, 'big<...>' (G12)\n" $
+            "    instance big<I64>: fn(a I64, b I64) I64\n        # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+    assert explained("N") == ("type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n" $
+            "        # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+    assert explained("N.Value") == ("fn (n N&) Value() I64\n" $
+            "    # not a value: a method is called as one (M19) - a lambda calling it is a value\n" $
+            "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     assert explained("MathError") == "type MathError error\n    Zero\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: a contract's conditions as written, its results named; a scope relation it writes among the obligations
-    assert explained("pct") == "fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n    [part >= 0]\n"
-    assert explained("link") == "fn link(a mut N&, b N&)\n    [b outlives a]\n"
+    assert explained("pct") == ("fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n" $
+            "    [part >= 0]\n    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
+    assert explained("link") == ("fn link(a mut N&, b N&)\n    [b outlives a]\n" $
+            "    # not a value: its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly\n" $
+            "    # effects: none - it may be computed while compiling where its arguments are known; always ends\n")
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }
 

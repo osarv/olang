@@ -26958,3 +26958,61 @@ parameter, a global or a shared field; read-only is a value result (or parameter
 caller only reads it and nothing changes the source, copying only what may change otherwise. Functions handing back
 views of their input (Split, Trim, First) take `&` or give values.
 
+
+## The tooling batch: effects, facts, -caps, needs at the call, olang api (2026-10-31)
+
+The decided tooling of docs/survey3.md - A2.3 (effects shown, QBP 6), B1.1 (function facts, QBP 9), B1.2 (`explain
+-caps`, QBP 11), B1.4 (a generic's needs, QBP 13, the user's option d) and B1.6 (`olang api`, QBP 15) - with the
+declared facts FuncInfo gained (the "keywords into reflection" answer: NoReturn, Exported, Extern, Commutes) and the
+"not a value" line docs/rework.md's first point asked for, built as one batch on one summary pass.
+
+**One summary pass, made on demand.** compiler/effects.olang walks a body's typed core once for what it does itself -
+stores into a global or through which parameter (a store whose place goes through a reference rooted at it, an atomic
+on a place under it), storage asked of the runtime (a text, an array made with a site, a comprehension, a temporary
+given storage, a lambda's environment), a Vec's growth (the prelude's `retire`, the one operation every growth reaches),
+C (extern and C-import calls but C's math and the runtime's `__olang_` functions), waits (a join; any C function not on
+a short list known to return at once), tasks, its loops, its calls - and then settles the call graph's strongly
+connected components callees first (Tarjan), each component sharing one set of facts and `Recursive` where it is a
+cycle; which parameters a body writes through is a fixed point over its calls' arguments within the component. It is
+asked only by explain, doc, the language server, `-caps` and a fact read in code (the Checker's `Effects()`, reset with
+each attempt), so the self-build - which reads no fact - computes none of it: its check phase measured the same before
+and after (see below). settleIdle (S3) was left as it was: its "does nothing" counts asserts and ends of the program as
+doing something, which the effects line need not say, and S3's verdicts are pinned by checks cases.
+
+**Facts are constants found after checking.** A fact depends on bodies the checker produces lazily, so `mix.Allocates`
+cannot be computed where it is read: the first attempt reads each fact as the value that claims nothing (true, but
+Terminates false), and after the attempt the summaries say what the bodies do; a read that differs makes the checker
+check the program again with the found values (`factPresets`, kept across attempts as R1a's sets are), until reads and
+findings agree. A fact whose value changes the code it is read from would never agree and is an error (none could be
+made in testing: both branches of an `if` are checked whatever its condition). A fact read in a plain function's `if`
+is a constant condition, S8a's dead branch, as any other; in a walk unrolled over `m.Functions` it differs per copy and
+is no error. Terminates needed to know which loops are bounded, which the typed core no longer says (every loop is a
+`Loop`), so the checker marks them as it makes them: counted for-ins over arrays and ranges, and the unrolled walks
+(`typed.Body.Bounded`). A for-in over a Vec (At and Len, re-read each turn) or an iterator is not bounded.
+
+**Capabilities.** Classified by the C function that gains them (open, mkdir, rename ...; socket, connect,
+getaddrinfo ...; posix_spawn, waitpid, kill ...; getenv, setenv ...; pthread_create, and any spawn) - never by the
+read or write of a descriptor, so `io.Println` gains nothing and std/io's line says only `files` (its file opening).
+"C" is said only of C a module outside std calls itself; std's C is said by what it gains. A module's line is the union
+over all of its bodies - functions, lambdas, its generics' instances - so a call through a function value runs code
+whose own module's line says what it reaches; `-caps` therefore prints no "anything" (the facts, which speak of one
+function's calls, do count a function value as anything).
+
+**Needs at the call.** Before, `Max(Point(1, 2), p)` with `a < b` in Max's body said `'<' takes numbers, found Point`
+inside Max with "instantiated here" notes. Now the checker's member, operator, index, slice, walk, membership and field
+errors go through `needErr`: where the type lacking the member is one of the outermost instance's type arguments (the
+type the program's own call gave), the error is said at that call - `Max needs Less ('<'), and Point has none` - with a
+note where the body asks (`diag.ErrorBare`, no context notes); otherwise (a concrete type inside the generic) it stays
+where it is, the generic's own mistake. The shown needs (`# T needs: ...`) are a separate syntactic reading
+(compiler/needs.olang) of the declaration, so a generic no program instantiates still shows them in doc; it follows
+values of a variable's type through parameters, locals, Array/Vec elements and for-ins, and into other generics the
+program calls with such a value, leaving out `match T` arms and `if`s on reflected members.
+
+**olang api.** Built on doc's entries: each side's module checked in a forked child (session.InChild), its exported
+items and members written as key, kind and signature, compared by key. An error set is the text after the top-level
+` ? `: a subset is narrower (ok), anything else wider (breaking). A commit's tree comes from `git archive` and `tar`,
+run without a shell.
+
+**Measured.** The compiler's self-build (`OLANG_TIMES`, a warm build of compiler/olang.olang): check 1514 ms before;
+after - see PROGRESS (recorded at the end of the batch). `olang api` over two small directories 0.35 s; `explain -caps`
+of a program using std/net, std/http and std/json 0.45 s.
