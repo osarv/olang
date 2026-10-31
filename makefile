@@ -53,6 +53,12 @@ build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/f
 fmtdiff: build/compiler_tools_fmt
 	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang') || $(NOTE_FAILED)
 
+# the parts that must say the same thing, held to each other (DEPENDENTS.md): the scanner's keywords against SPEC L9, the
+# Neovim syntax and the language server; `help` against SPEC B1 and the commands the READMEs write; fix's tools against
+# tools/; the MCP tools; the READMEs (compiler/tools/consistency.olang)
+consistency: $(OLANG) build/compiler_tools_consistency
+	build/compiler_tools_consistency $(OLANG) || $(NOTE_FAILED)
+
 # the self-hosted compiler's driver (compiler/olang.olang), built by the compiler under test
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 	$(OLANG) build compiler/olang.olang
@@ -296,7 +302,7 @@ runner: FORCE
 	@./build/tests_runner || $(NOTE_FAILED)
 
 # the port's diffs against the goldens, each named in build/failed.txt when it fails
-DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff
+DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff consistency
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
 usertest: $(OLANG)
@@ -475,4 +481,4 @@ clean:
 	rm -rf build
 
 # FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
-.PHONY: all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+.PHONY: consistency all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
