@@ -88,6 +88,9 @@
 === checks/cases/comprnotype.olang
 | -- diagnostics
 | error  4:10
+=== checks/cases/comptimeforwhile.olang
+| -- diagnostics
+| error  5:18
 === checks/cases/condnoelse.olang
 | -- diagnostics
 | error  5:23
