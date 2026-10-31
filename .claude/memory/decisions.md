@@ -1994,3 +1994,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   everywhere (D3a), so its errors stay inside sets. ASKED: one casing for every error - a raised name is written like
   a type (`NotFound`) while words today are upper case (`FULL`); rec: words become capitalized too (`IoError.Full`,
   `ListError.Empty`), migrated by a tool, so an error reads one way wherever it is declared. In effect: upper-case words.
+- QBZ DECIDED 2026-10-31 (the user: "No '?' shouldnt be an option. We still declare that there are errors. Any error in
+  a signature that is called externally is only visible if it is upper case. We don't need a type to write errors.
+  Just naming the error word is fine. Yes rename errors to use camelcase and be lower case if private."): errors
+  declared where raised (module-scoped), named sets list them, CamelCase for every error (words too, migrated),
+  private lower case, `?` required on every function that can fail (bare = inferred; contract functions and main
+  included). Still ASKED: the two flag bans (a Bool among several results; a success Bool with a written `&`
+  parameter) - rec yes. Queued as a language batch after wt-opt31 merges.
+

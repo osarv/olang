@@ -26660,3 +26660,19 @@ value (D13c). Found: an iterator of reference-holding elements built per Next (C
 `ToVec` (O10c at its Push: each element lives with its turn) - a recorded limit, consumed by a for-in instead. Each has
 B7a examples (`test Iterator.Scan`, `test Array.BinarySearch`, `test Indexable.Cycle` ...) and std/prelude/tests/
 iterator.olang bakes five globals through them beside the same at run time.
+
+## Errors declared where they are raised (2026-10-31)
+
+Asked how to force errors instead of flags, the user took the cause: a flag is written because an error needs a
+declared type, while the call side already costs what a flag does. The user's design: "just name errors when we throw
+them and alternatively in the signature too", "we can also name error sets instead of naming them all word for word",
+then "No '?' shouldn't be an option. We still declare that there are errors. Any error in a signature that is called
+externally is only visible if it is upper case. We don't need a type to write errors. Just naming the error word is
+fine. Yes rename errors to use camelcase and be lower case if private." So `error NotFound` declares an error of its
+module (Zig's error.Name, made module-scoped so its origin prints), named sets group them, a set's braces still
+declare qualified members (the prelude's, whose bare names would be reserved everywhere), every error is CamelCase
+with M6's visibility, and `?` is always written by a function that can fail (bare infers): the reading that no `?`
+could also infer was mine and is withdrawn - a contract function's implicit ArgumentError and `main` without `?` go
+with it. Typos: R14 already refuses a clause naming what the call never raises; a raised name one edit from one of the
+module's errors is refused with did-you-mean unless the signature names it (mine). Not built yet.
+

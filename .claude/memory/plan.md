@@ -606,3 +606,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   carrying one needs no clause). Left: Select(SendOf(...)) inside a join refused by C2d (a local first works); a mutable
   global with a literal initializer still gets a startup call; a baked global that aborts gives a second error at an
   assert reading it.
+- QUEUED 2026-10-31: the errors batch (decisions.md QBZ): errors declared where raised, CamelCase error words with a
+  migration tool in olang fix, `?` required (contract functions' implicit ArgumentError and main without `?` gone),
+  did-you-mean on near-miss raises, the flag bans if the user says yes, and the compiler's ~60 flag sites moved to
+  errors. After wt-opt31 merges. Not under the hold (no scope or signature rework).
+

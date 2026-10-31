@@ -813,6 +813,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; coverage is judged at the callee's
   set. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal << 16) | word ordinal from the function's
   own list, so no whole-program numbering exists and propagation re-encodes.
+- **Errors declared where raised; `?` always written (the user's decision 2026-10-31; not built yet).** `error NotFound`
+  with nothing declared declares an error of its module (one value: `catch NotFound`, `e == NotFound`, `lex.NotFound`
+  outside); the same name raised anywhere in the module is the same error; no type is needed to write one. Named sets
+  list them (`type LookupError error NotFound, Ambiguous`), braces still declare a set's own (`IoError.Full`). Every
+  error name is CamelCase, exported capitalized and private lower case (`notFound`) - words included (`ListError.Empty`,
+  migrated by a tool); a private error a caller outside cannot name. A function that can fail writes `?` - bare to infer
+  the set, or the set as a promise; no function fails without it (contract functions and `main` included). A raised name
+  one edit from an error of the module is an error with did-you-mean unless the signature names it. The entry below is
+  today's rule until it lands.
 - **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).**
   A bare `?` is what the body can fail with - a least fixed point over calls, cycles included, ordered canonically
   (owner module, then name) so separately compiled modules agree; it may come out empty, and in a generic differ per
