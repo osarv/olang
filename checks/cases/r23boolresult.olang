@@ -1,0 +1,12 @@
+# check: fail error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+# R23: a value and a flag saying whether it is there are a value and an error
+fn find(xs Array<I64>&, k I64) I64, Bool {
+    for i, x in xs {
+        if x == k: return i, true
+    }
+    return 0, false
+}
+fn main() {
+    i, ok := find(I64[1], 1)
+    assert ok and i == 0
+}

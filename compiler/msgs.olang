@@ -1347,13 +1347,13 @@ fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'err
 fn RaiseNearError(tok String&, near String&) Msg { return Msg(Diag.RaiseNearError, "R3b", "no error of this module is named " $tok " - did you mean " $near "? To raise a new error of that name, name it after this function's '?'") }
 
 # ERR_RAISE_NEEDS_QUESTION
-fn RaiseNeedsQuestion(ty String&) Msg { return Msg(Diag.RaiseNeedsQuestion, "R1", "this function raises " $ty " but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? " $ty "'") }
+fn RaiseNeedsQuestion(ty String&) Msg { return Msg(Diag.RaiseNeedsQuestion, "R1d", "this function raises " $ty " but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? " $ty "'") }
 
 # ERR_TRY_NEEDS_QUESTION
-fn TryNeedsQuestion(ty String&) Msg { return Msg(Diag.TryNeedsQuestion, "R1", $ty " can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it") }
+fn TryNeedsQuestion(ty String&) Msg { return Msg(Diag.TryNeedsQuestion, "R1d", $ty " can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it") }
 
 # ERR_CONTRACT_NEEDS_QUESTION
-fn ContractNeedsQuestion(name String&) Msg { return Msg(Diag.ContractNeedsQuestion, "R1, D17", $name " has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'") }
+fn ContractNeedsQuestion(name String&) Msg { return Msg(Diag.ContractNeedsQuestion, "R1d, D17", $name " has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'") }
 
 # ERR_FLAG_AMONG_RESULTS
 fn FlagAmongResults() Msg { return Msg(Diag.FlagAmongResults, "R23", "a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)") }

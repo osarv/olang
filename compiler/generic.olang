@@ -1012,7 +1012,7 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
     n := e.Parts.Len()
     if t != types.UnknownT or n < 2 { return t }
     et := p.errorType(c, ast.Path(e.Sp, e.Parts[:n - 1]))
-    if et == types.UnknownT { return et }
+    if et == types.UnknownT or p.IsRaisedError(p.T.DeclOf(et)) { return types.UnknownT }   # R3b: never qualified
     ws := p.ErrorWords(p.T.DeclOf(et))
     for i in range ws.Len() {
         if ws[i] == e.Parts[n - 1] { return p.T.ErrWords(et, U64(1) << i) if i < 64 else types.UnknownT }
@@ -1120,7 +1120,7 @@ fn (p mut Program&) ErrorItemKnown(c Context&, e ast.Path&) Bool {
             ws := p.ErrorWords(p.T.DeclOf(et))
             far := false
             for i in range ws.Len() {
-                if ws[i] == w { far = true }
+                if ws[i] == w and not p.IsRaisedError(p.T.DeclOf(et)) { far = true }
             }
             nm := p.text(p.T.DeclName(p.T.DeclOf(et)))
             if far {

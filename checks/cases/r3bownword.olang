@@ -1,0 +1,4 @@
+# check: fail error[R3b]: an error of one word named as its type is declared by raising it - write 'error NotFound' where it is raised, with no declaration
+# R3b: an error type of one word named as itself is what raising the name declares - it is not declared
+type NotFound error { NotFound }
+fn main() { }

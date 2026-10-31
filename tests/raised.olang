@@ -1,0 +1,58 @@
+# errors raised by name (R3b): an error of the module declared where it is raised, caught, compared, held, printed and
+# baked while compiling, the same from another module (raisedlex)
+import "raisedlex"
+
+fn half(n I64) I64 ? {
+    if n < 0 { error Negative }
+    if n % 2 == 1 { error Odd }
+    return n / 2
+}
+
+# the same name raised in another function is the same error
+fn quarter(n I64) I64 ? Negative, Odd {
+    if n < 0 { error Negative }
+    return try half(try half(n))
+}
+
+fn named(n I64) String {
+    try half(n) catch e { return $e }
+    return "none"
+}
+
+# K2: baked while compiling, the evaluator raising and catching as the run time does
+Baked := try half(-4) catch Negative, Odd default 100
+BakedOdd := try quarter(6) catch Odd default 7 catch Negative default 8
+BakedName := named(-1)
+
+test "an error raised by name is caught by its name and is one error wherever it is raised" {
+    assert (try half(-2) catch Negative default 1) == 1
+    assert (try half(3) catch Odd default 2) == 2
+    assert (try quarter(-8) catch Negative default 3) == 3
+    assert (try quarter(4) catch default 0) == 1
+}
+
+test "it prints by its name, is held as a value and compared" {
+    assert named(-1) == "Negative" and named(3) == "Odd" and named(2) == "none"
+    held Negative = null
+    assert held is null
+    try half(-2) catch Negative n { held = n }
+    assert held == Negative and $held == "Negative"
+    got Vec<Odd>
+    try half(1) catch Odd o { got.Push(o) }
+    assert got.Len() == 1 and $got[0] == "Odd"
+}
+
+test "the evaluator agrees: values baked while compiling" {
+    assert Baked == 100 and BakedOdd == 7 and BakedName == "Negative"
+}
+
+test "another module's: named through its alias, private ones caught whole, a set listing them" {
+    assert (try raisedlex.Find(I64[5, 6], 6)) == 1
+    assert (try raisedlex.Find(I64[5], 9) catch raisedlex.NotFound default -1) == -1
+    assert (try raisedlex.Hidden(-1) catch default -2) == -2
+    assert (try raisedlex.Pick(I64[1, 1], 1) catch raisedlex.Ambiguous default -3) == -3
+    assert (try raisedlex.Pick(I64[1], 2) catch raisedlex.LookupError default -4) == -4
+    m := ""
+    try raisedlex.Find(I64[], 1) catch e { m = $e }
+    assert m == "raisedlex.NotFound"
+}

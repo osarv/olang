@@ -1,0 +1,13 @@
+# check: fail error[T19]: NotFound has no word 'NotFound'
+# R3b: an error raised by name is never written qualified by itself
+fn f(k I64) I64 ? {
+    if k < 0 { error NotFound }
+    return k
+}
+fn g() ? {
+    error NotFound.NotFound
+}
+fn main() ? {
+    try f(1)
+    try g()
+}

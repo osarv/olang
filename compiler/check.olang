@@ -22044,7 +22044,7 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
     c := Checker(p, false)
     c.RootOnly = true
     c.CheckProgram()
-    assert rootRules(l) == "R3 R1 R14 R11a R8 E35 D8e ", rootRules(l)
+    assert rootRules(l) == "R3 R1d R14 R11a R8 E35 D8e ", rootRules(l)
 }
 
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {

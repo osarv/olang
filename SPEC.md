@@ -993,8 +993,10 @@ the only form an error type is declared in: `error` after the name says what the
 **error type**: a closed, ordered set of named words, `type IoError error { Full, Denied }` - shaped like an enum
 body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
 B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
-qualified by its own type (`IoError.Full`) and is public by its own first letter (M6a). An error type takes no type
-parameters and extends nothing.
+qualified by its own type (`IoError.Full`) and is public by its own first letter (M6a). Every error name is
+CamelCase - a word as a type is (`ListError.OutOfRange`, a private `notFound`) - so an error reads one way whether it is
+declared in braces or raised by name (R3b). An error type takes no type parameters and extends nothing; one of a
+single word named as itself is no declaration (R3b: an error raised by name is that).
 
 **T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type
 LoadError error os.Error, ParseError`. Its members are what an `error-list` names (D8) - error types, single words
@@ -1900,9 +1902,10 @@ the call fail with the prelude's `ArgumentError.Invalid` (§7.6), its trace (S18
 function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
 own error, as a call in the body would (R6), and the conditions after it are not evaluated.
 
-**D17b (the error set).** A function with conditions can fail with `ArgumentError`: a bare `?` (R1a) infers it with
-the rest, a function with no `?` has the set `? ArgumentError` and anything its conditions' calls can fail with, and a
-written set must list `ArgumentError` - a compile-time error naming it otherwise. Every call is then handled as any
+**D17b (the error set).** A function with conditions can fail with `ArgumentError`, so it writes `?` (R1d): a bare
+`?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
+otherwise; a function with conditions writing no `?` is a compile-time error naming `?`. A trait's method with
+conditions lists `ArgumentError` in its set (R1b). Every call is then handled as any
 fallible call is (R8): `try`, a `catch`, or `!`. A function whose only items are `outlives` ones has no conditions and
 fails with nothing more.
 
@@ -5442,19 +5445,44 @@ one is a compile-time error. A named function used as a value fits a function ty
 function can fail with, in any order (T22) - its codes are re-encoded for the type's list where the two differ - and a
 method meets a trait's method (T31) on the same terms.
 
+**R1d (a function that can fail says so).** A function, a method or a constructor that can fail - its body raising
+an error (R3), letting through what a `try` covers (R9, R13), or having conditions (D17) - writes `?` after its result:
+bare to infer its set (R1a), or the set as a promise (R1). One that writes no `?` cannot fail, and anything in it that
+would let an error out is a compile-time error naming `?` - `main` included (B4). A lambda (D16b) and a generator
+(D18, whose errors its result writes) are not declarations of their own set and write none.
+
 **R2.** Declaring the same error type twice in one `error-list` is redundant but not itself
 specified as an error here; each of R1's members is nonetheless still exactly one declared error
 type.
 
 ### 7.2 The `error` statement
 
-**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
-possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
-and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
+**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | alias-chain IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
+possibly empty, giving a bare `Type.Word`). `alias-chain IDEN "." IDEN` names a declared error type (§4.4) and one of
+that type's own declared words (T19); a lone `IDEN` is a held error (R3a) where it names a local, a parameter or a
+global, else an error raised by name (R3b), and `alias-chain IDEN` another module's error raised by name. Every error
+is of a type: a declared one names its word; one raised by name is its own type. A declared error type written whole
+(`error IoError`) is a compile-time error naming one of its words.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
 error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
 so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
+
+**R3b (errors raised by name).** `error NotFound`, where `NotFound` names no local, parameter, global, function, type,
+import, build constant or prelude name there - and no local of that name is in scope where it is raised - **declares**
+an error of its module named `NotFound`: an error type of one value, which is the error itself. Every `error NotFound`
+in the module raises that one error, wherever it stands (in any function, a lambda, a constructor). It is a type of the
+module as a declared one is (D2): `catch NotFound` takes it, `? NotFound` names it in a set, `e == NotFound` tests a
+held error for it, a named set may list it (`type LookupError error NotFound, Ambiguous`), an error value may be of it
+(T20), and it prints by its name alone - `NotFound` in its own program, `lex.NotFound` from another module (B5, E11a).
+It is public by its first letter (M6): `NotFound` is reached from other modules as `lex.NotFound`, a private `notFound`
+by none. It is never written qualified by itself (`NotFound.NotFound` names nothing), and a declared error type of one
+word named as the type (`type NotFound error { NotFound }`) is a compile-time error naming `error NotFound` - raising it
+is how it is declared. The prelude raises no error by name: its errors are declared in sets, since its names are
+reserved everywhere (D3a). A name raised that is **one edit** from another error of its module (case-insensitive edit
+distance at most one, and within a third of the word, B11) is taken for a misspelling: a compile-time error naming the
+other, with did-you-mean - the other a declared error type or set, or a name raised more often (as often and raised
+first) - unless a function raising it names it after its `?` (`fn f() ? NotFond`), which says it is meant.
 
 **R3a (raising a held error).** `error e`, with `e` an error value (T20) - a local, a parameter or a global holding
 one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word.
@@ -5647,12 +5675,24 @@ it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayE
 `ArrayError.Empty` (E39), and `Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
 `catch` names it, or one of its words.
 
-**R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
+**R22.** Every failure a program can handle is an error of a declared type with a word (R3), or one raised by name
+(R3b) - there is no error
 without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, a
 slice or a length out of range, running out of memory, a task that cannot start - ends the test or
 the process (§6.6) and is never an error. The standard library holds itself to this: a function that can fail on its
 arguments (an index out of range, an empty collection, a closed channel, a bad base) fails with an error declared
 beside it, and none ends the process on a caller's mistake.
+
+### 7.7 No flags beside values
+
+**R23.** A `Bool` among several results (D8c) - `fn find(k K) V, Bool` - is a compile-time error naming `? E`: what
+can be missing or fail says so with an error and its caller's `try` (R8), never with a flag beside the value. So is one
+in a function type's results. A struct holding a `Bool` among its fields is a value of its own, not a flag beside one.
+
+**R23a.** A function or method giving a `Bool` that also writes through a reference parameter - a parameter written
+`mut T&`, its receiver aside (a method's `Bool` says something of what it acts on: `s.Add(x)` whether it changed) - is
+a compile-time error naming `? E`: an out-parameter and a success flag are a value and an error. So is a function type
+of that shape. An `extern fn` and an `export fn` keep C's conventions (X1, X13) and are neither's.
 
 ## 8. Scopes
 
@@ -7054,8 +7094,8 @@ only the text objects. What is printed is the same either way. `compile`, which 
 ### 10.2 Program entry
 
 **B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
-no parameters and no success type - with no error set (`fn main() { ... }`), or one written (`fn main() ? SomeError
-[+ ...] { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
+no parameters and no success type - with no error set (`fn main() { ... }`, which then cannot fail, R1d), or one
+written (`fn main() ? SomeError, ... { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
 a `ret-type`) is a compile-time error. There is no
 other valid `main` signature; in particular, there is no "return an int/bool status" convention.
 
