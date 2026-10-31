@@ -617,3 +617,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   Pow(2.0) 138 -> 4.4M; left: items 2/5 (scoping rework), 10 enum layout, 6 constant calls, 11 fusion, 7's in-place
   growth, I128 division) - goldens recaptured, full verify on the merged tip passed. Next queued: the errors batch
   (QBZ), array patterns + variadic + `**`, the survey3 tooling the user picks.
+- DIRECTIVE 2026-10-31 (the user: "Do the rework and a large refactoring effort at the end. Then verify, then we are
+  done with the compiler's first version. I will be absent till you are done with that"): run to the end without
+  waiting on the user - errors batch (running), then the language batch (array patterns, variadic, `**`) and the
+  tooling batch (effects/facts, -caps, needs at the call, olang api) side by side, then the rework in rounds from
+  docs/rework.md (scopes inferred, `&` parameters, values held by value, spellings removed + migration), then a large
+  refactoring of compiler/ (nesting <= 3-4, flags to errors, duplicated code, dead code; no splitting files for size),
+  then a bulk review with its fix rounds and a full verify - "the compiler's first version". Direction questions that
+  come up are decided by me (recorded "mine, user absent" in decisions.md for their review on return). Stop at 0.92
+  weekly; arm wake-ups past limits.
