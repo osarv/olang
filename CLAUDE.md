@@ -411,10 +411,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   section 11): a body's written reference levels inferred (read-only where a read-only value is stored into one,
   `load.RoLevels`), results narrowed or following their arguments, G29 instances only where a body decides on a
   length, a `?&` parameter read-only unless its body needs it writable, a body's level made read-only before any copy
-  on entry (provisional, mine, the user absent) - std 35 of 40 test files under `OLANG_PARAMS=new OLANG_SCOPES=infer`
-  (`make verify-params`), bench's instruction counts unchanged, compiler/ migrated by the tool to 882 errors; left
-  before the flip: per-field permission bindings (2.8), the by-pointer value results, compiler/'s migration finished,
-  the scope phase's field loop. The entry below is today's rule until it lands.
+  on entry (provisional, mine, the user absent) - bench's instruction counts unchanged; **round 2c** (docs/rework.md
+  section 12): a reference field no code writes through read-only by inference, per struct type (mine, the user absent:
+  not per instance - a function value carries no binding), decided by checking again (a refusal resting on one marks it
+  written), lends as deep as the callee uses them, a function value's bare parameter keeping nothing - std 40 of 40 test
+  files under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`, with `tests/params/`); fixed on the way: a
+  permission conversion had hidden a bare parameter's view (a writable instance over the caller's text). Left before
+  the flip: compiler/'s migration finished, the by-pointer value results, the scope phase's field loop. The entry
+  below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
   its own key text (a copy at Put of a new key, none on an update or a lookup); `Map<String&, V>` shares the caller's,

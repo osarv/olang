@@ -1285,3 +1285,84 @@ Without the switches the compiler checks as before; every change is behind `sour
 - **Compile time** under `OLANG_SCOPES=infer` stands as round 1 left it: the scope phase's field loop is not made
   incremental (check 2.7 s, scope 8.0 s on the compiler, measured beside a migration run; 1.3 s without the switch) -
   left for round 2c (10.7, "the field loop").
+
+## 12. Round 2c: permission per field, as far as built
+
+Built on `wt-rework` behind the same switches; without them the compiler checks as before (12.4). std is 40 of its 40
+test files under the switches (`make verify-params`, which now runs `tests/params/` too, written in the rework's
+spelling).
+
+### 12.1 What was built
+
+- **Reference fields read-only by inference** (2.8's permission binding, at the granularity of a struct type - an
+  instance of a generic is a type of its own). A reference field no code writes through - nothing written through what
+  it names, nothing it reaches handed where it may be written - is read-only, as a written `T&` field was before every
+  written `&` became writable: an instance holding read-only data there is no read-only copy, so it is returned, lent
+  and walked as any value (an `ArrayIter` over a captured array returned from a lambda, regex's searcher and `Match`
+  built from a bare parameter's text, `LineIter`). Decided by attempts as entry copies and inferred levels are: a field
+  a read-only value is stored into is asked read-only (`fieldWant`, a constructor's argument or an assignment into it)
+  unless it is written through (`fieldWrit`, every write through a reference read out of a field, recorded where
+  mustWrite and an atomic operation write); an attempt's read-only fields are the first set less the second; in it what
+  is read through one is read-only (`roRef`, `roFieldX`), and a refusal resting on one - a write through it, a view of
+  it handed where it may be written, a read-only copy made from it lent to a body using it deeply - marks the field
+  written and checks again, instead of saying the error. Both sets only grow, so the attempts end. A constructor's
+  argument is kept where its fields' initializers put it (`ctorSinks`: a view of the parameter into a reference field,
+  into what a nested constructor builds, a fresh array or a plain function's fresh result keeping nothing; anything
+  else unknown, today's whole read-only copy); every field it lands in read-only, the instance is no read-only copy
+  (`sinksRo`, which also asks the fields). Where a view read through such a field is handed back: a plain function's
+  result is narrowed read-only (the field is the type's, so are its views: `LineIter.Next`'s lines of a bare `t`'s
+  text), an instance's field is marked written first (its result follows its arguments).
+- **Deep use, made precise for lends.** A value lent to a function's `&` parameter in an instance needs a writable
+  argument only where that parameter is used deeply (`roDeepLends`, judged once refDeep is settled) - a walk's Next
+  writing the iterator's position asks nothing of the map it was made from; a walked `&` parameter is as deep as that
+  walk's Next (`walkDeep`, a dependency, not deep at once); a reference a `&` parameter reaches kept in that
+  parameter's own field, or in a local made from what it reaches, stays within its reach (`storeParam`); a reference
+  handed back from what a `&` parameter of an instance reaches makes the result follow that parameter
+  (`followRef`, load.FollowResults) - read-only, at its top too, at a call giving it a read-only argument.
+- **A function value's bare parameter keeps nothing** (scope.olang, `valueKeepsNothing`): a call through a function
+  value whose parameter is a bare one (a read-only reference, 2.10) and whose result holds no reference keeps nothing
+  of the argument past the call - no function type relates its parameters' scopes (T22a), a capture outlives no
+  parameter, and nothing is written through a read-only one - so regex's `ReplaceFunc(t, f fn(m Match) String)` lends
+  a loop's `Match` to `f` (O17 had refused it).
+
+### 12.2 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **Per struct type, not per instance.** The coordinator's brief asked for bindings per instance (an instance made
+   from read-only arguments recording which fields are bound read-only, methods judged per field, results carrying the
+   binding as roToResult does). Built instead at the type's granularity first, because a binding carried by an
+   instance does not survive a function value or an `any` (iterator.olang's `FlatMap(fn(x I64) ArrayIter<I64> {...})`
+   returns one through a function type that cannot say it), and because the old code's meaning was exactly this - a
+   field written `T&` was read-only for every instance. Per-instance refinement (a field one body writes through, read
+   only for instances made from read-only data) is additive where real code needs it; std and the compiler have not
+   yet.
+2. **A refusal resting on an inferred field marks it written** rather than being said - the field goes back to
+   writable and the program is checked again - so no program the round-2b checker accepted is refused for a field made
+   read-only (the regression check: every std file still passes).
+3. **A view through such a field handed back from a plain function narrows the result**; from an instance it marks the
+   field written (12.1). Narrowing an instance's result changes it for every caller of that instance type (an
+   `ArrayIter<String&>` walked over writable text), which following does not.
+
+### 12.3 Found and fixed on the way
+
+- **A permission conversion hid a bare parameter's view** (round 2a/2b): a read-only argument for a constructor's `&`
+  parameter is converted to the writable type "as given" (argCtor), and `roRef` read the conversion's writable type -
+  so `fn mk(t String) holder { return holder(t) }` returned a writable `holder` over the caller's text, and a write
+  through it changed the caller's string, observably (`xbc` for `abc`: by-pointer passing was visible). `roRef` now
+  reads through a permission conversion. It was what had let `String.Lines()` return a writable `LineIter`.
+- **`:=` of a read-only `T?&` dropped its null** (round 2a): the local's type was rebuilt keeping only `Owning`, so a
+  nullable reference read through a read-only copy became never-null (`s := it.slot` in MapKeyIter.Next: "s is never
+  null").
+- **Bare parameters were remembered across attempts** by body id (`bareLocals` was never reset), so when an attempt
+  made other instances, a stale entry made an instance's `&` receiver a "bare parameter" (`for x in try it` in
+  `ToVec`, refused as read-only).
+
+### 12.4 Today's path
+
+Without the switches nothing changes: every new path is behind `source.NewParams` (the scope pass's too); `make quick`
+passed but for the token and tree goldens of the edited files, recaptured.
+
+### 12.5 Measured
+
+- std under the switches: 40 of 40 test files (round 2b: 35), and `tests/params/fields.olang` (a cursor over a bare
+  parameter's text returned and walked, an instance holding a fresh one made from read-only text, a global baked while
+  compiling and a top-level assert decided on it beside the run time).
