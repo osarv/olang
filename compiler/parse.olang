@@ -2574,7 +2574,43 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
             }
             return ast.Pattern.Value(sp, x)
         }
+        case ast.Expr.Index(sp, ty, items) {
+            if isPath(ty) { return p.elemsPattern(sp, x, items) }
+            return ast.Pattern.Value(sp, x)
+        }
+        case ast.Expr.ArrayLit(sp, _, items) { return p.elemsPattern(sp, x, items) }
+        case ast.Expr.Spread(sp, y) {
+            match y {
+                case ast.Expr.Name(_, n) { if not top: return ast.Pattern.Rest(sp, n) }
+                case _ { }
+            }
+            return ast.Pattern.Value(sp, x)
+        }
         case _ { return ast.Pattern.Value(x.Span(), x) }
+    }
+}
+
+# S13h: an array literal's form as a pattern - each item an element's pattern, "...name" its rest; one item that is no
+# pattern (an expression but a literal) makes the whole a value, compared by "==" as written
+fn (p mut Parser&) elemsPattern(sp source.Span, x ast.Expr&p, items Array<ast.Expr&>&p) ast.Pattern&p {
+    from := p.pats.Len()
+    for it in items {
+        sub := p.pattern(it, false)
+        if not valuePattern(sub) {
+            p.pats.Push(sub)
+            continue
+        }
+        p.pats.Truncate(from)
+        return ast.Pattern.Value(sp, x)
+    }
+    return ast.Pattern.Elems(sp, x, gather(p.pats, from))
+}
+
+# a value alternative that is no literal: what makes the pattern around it a value
+fn valuePattern(q ast.Pattern&) Bool {
+    match q {
+        case ast.Pattern.Value(_, v) { return not isLiteral(v) }
+        case _ { return false }
     }
 }
 

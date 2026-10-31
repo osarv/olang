@@ -524,6 +524,12 @@ type Diag enum {
     UnhandledFallibleCall
     OperatorCallFails
     PowNone
+    MatchLengthUncovered
+    RestNotHere
+    RestTwice
+    RestNoSlice
+    ElemsNotSeq
+    ElemsType
     VariadicNotLast
     VariadicHere
     VariadicDefault
@@ -2361,6 +2367,24 @@ fn SpreadAlone() Msg { return Msg(Diag.SpreadAlone, "D8g", "'...a' passes an arr
 
 # ERR_VARIADIC_ARG_COUNT
 fn VariadicArgCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
+
+# ERR_REST_NOT_HERE
+fn RestNotHere() Msg { return Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'") }
+
+# ERR_REST_TWICE
+fn RestTwice() Msg { return Msg(Diag.RestTwice, "S13h", "an array pattern has one '...', for the elements its other items do not name") }
+
+# ERR_REST_NO_SLICE
+fn RestNoSlice(ty String&) Msg { return Msg(Diag.RestNoSlice, "S13h", "a named rest is a slice of what is matched, and " $ty " declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())") }
+
+# ERR_ELEMS_NOT_SEQ
+fn ElemsNotSeq(ty String&) Msg { return Msg(Diag.ElemsNotSeq, "S13h", "an array pattern matches an array, text or a type declaring At and Len - " $ty " is none of them") }
+
+# ERR_ELEMS_TYPE
+fn ElemsType(written String&, elem String&) Msg { return Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write '" $elem "[...]'") }
+
+# ERR_MATCH_LENGTH_UNCOVERED
+fn MatchLengthUncovered(ty String&, what String&) Msg { return Msg(Diag.MatchLengthUncovered, "S13h", "a match over " $ty " gives a value only when its cases cover every value - none matches an array of " $what "; add a case for it, or 'case _: v'") }
 
 # ERR_POW_NONE
 fn PowNone(ty String&, hint String&) Msg { return Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }

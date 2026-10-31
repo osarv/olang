@@ -4623,11 +4623,13 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | type-case | "_" | binary
+case-alt       ::= pattern | array-pattern | type-case | "_" | binary
 type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
 case-body      ::= block | ":" line-stmnt
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
-sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+sub-pattern    ::= IDEN | pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+array-pattern  ::= elem-type "[" [ list(array-item) ] "]"                (S13h)
+array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
@@ -4747,6 +4749,27 @@ there. A type match (G13) takes no guard: its arm is chosen while compiling.
 by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as
 covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
 given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
+
+**S13h (array patterns).** `case String&["test", file, ...words]` matches an array element by element. The element
+type is written before the `[` as an array literal writes it (`I64[...]`, `String&[...]`, `Char[...]`), and is the
+matched value's element type (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
+element, as a payload's position is (S13b): a literal compares the element by `==`, a name binds a copy of it - always a
+fresh name, never a local's value read, so comparing with a local is a guard (`case I64[x] if x == want`), and a name
+already in scope is D3a's error - `_` ignores it, and a nested pattern matches it. One item may be `...name`: the
+elements the other items do not name, bound as a **view** of the matched array's storage - a slice of it (E16a), with
+its permission - or a bare `...`, binding nothing. Items before it match from the start, items after it from the end:
+`case I64[first, ..., last]`. With no `...` the array has exactly as many elements as items; with one, at least as many
+as the other items. The **length is tested first**, so no element is read outside the array, then the items in order.
+What is matched is an array - text too, its elements `Char`s (`case Char['-', '-', ...name]` on a `String`, the rest a
+`String`) - or a value of a type declaring `At` and `Len` (E31, a `Vec`), whose elements are its `At`'s copies and whose
+named rest is its `Slice` (a bare `...` where it declares none; a named one is then a compile-time error naming the
+array to match instead). An array pattern stands at a case's top or in a payload position: `case
+Cmd.Run(String&["ls", ...args])`. Its lengths are what S13a covers: for exhaustiveness the length is the array's
+constructor, so `case I64[]` and `case I64[first, ...rest]` cover every array of `I64`, and `case String&[]`, `case
+String&[only]` and `case String&[first, ...rest, last]` every array of text; a match used as a value (S12b) that leaves a
+length to no case is a compile-time error naming it ("an array of 1 element", "3 elements or more"). A `...` anywhere but
+among an array pattern's items is a compile-time error. An alternative written as an array literal after a path that
+names no type (`case table[k]`) is a value compared by `==` (S13).
 
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the

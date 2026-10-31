@@ -836,6 +836,11 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
             w.put(" ")
             w.name(n)
         }
+        case ast.Pattern.Elems(_, x, _) { w.expr(x) }
+        case ast.Pattern.Rest(_, n) {
+            w.put("...")
+            w.name(n)
+        }
     }
 }
 

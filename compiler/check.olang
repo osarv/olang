@@ -20244,7 +20244,35 @@ fn (c mut Checker&) sayUncovered(m ast.Match&, st types.TypeId, rows Vec<Array<a
         if k >= 0 and k < ms.Len() { c.err(ssp, msgs.MatchNotExhaustive(c.ty(ms[k]), c.ty(st))) }
         return
     }
+    if isValue and st != types.UnknownT and c.seqColumn(rows) {
+        # S13h: the first length no case matches, past the longest written "or more"
+        n := try c.seqUncovered(rows) catch Covered default -1
+        if n >= 0 {
+            what := $n " element" $("" if n == 1 else "s") $(" or more" if n > c.seqLongest(rows) else "")
+            c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchLengthUncovered(c.ty(st), what))
+            return
+        }
+    }
     if isValue and st != types.UnknownT { c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchValueUncovered(c.ty(st))) }
+}
+
+# S13h: the first length of an array no row matches - one past the longest written standing for every longer one -
+# failing with Covered where some row matches each (an element's value is what they miss)
+fn (c mut Checker&) seqUncovered(rows Vec<Array<ast.Pattern&>&>&) I64 ? Covered {
+    for n in range c.seqLongest(rows) + 2 {
+        if c.seqRows(rows, n).Len() == 0 { return n }
+    }
+    error Covered
+}
+
+# the most items an array pattern among the rows' first column holds
+fn (c mut Checker&) seqLongest(rows Vec<Array<ast.Pattern&>&>&) I64 {
+    most := 0
+    for r in rows {
+        sh := c.shapeOf(r[0])
+        if sh.Rest >= -1 and sh.Subs.Len() > most { most = sh.Subs.Len() }
+    }
+    return most
 }
 
 # ---- type cases (T34) ----
@@ -20549,11 +20577,83 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
         }
         return true
     }
+    if c.seqColumn(rows) { return c.coversSeq(rows, t, rest, depth) }
     sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
     for r in rows {
         if c.patWild(r[0]) { sub.Push(patTail(r, Array<ast.Pattern&>(0), 0)) }
     }
     return c.coversRows(sub, rest, depth + 1)
+}
+
+# S13a, S13h: whether a column holds an array pattern, so its lengths are its constructors
+fn (c mut Checker&) seqColumn(rows Vec<Array<ast.Pattern&>&>&) Bool {
+    for r in rows {
+        if c.shapeOf(r[0]).Rest >= -1 { return true }
+    }
+    return false
+}
+
+# an array pattern's items and where its "..." stands (-1 for none); Rest -2 for any other pattern, and an array
+# pattern written after what names no type, which is a value
+type elemsShape struct(Subs Array<ast.Pattern&>&, Rest I64) {
+    Subs
+    Rest
+}
+
+fn (c mut Checker&) shapeOf(p ast.Pattern&) elemsShape&p {
+    match p {
+        case ast.Pattern.Elems(_, x, subs) {
+            match x {
+                case ast.Expr.Index(_, ty, _) { if c.typeNamed(ty) < types.TypeId(0): return elemsShape(subs, -2) }
+                case _ { }
+            }
+            r := -1
+            for j in range subs.Len() {
+                if isRest(subs[j]) { r = j }
+            }
+            return elemsShape(subs, r)
+        }
+        case _ { return elemsShape(Array<ast.Pattern&>(0), -2) }
+    }
+}
+
+# S13h: rows whose first column is an array of type t, covering every value when they do at every length - each length
+# up to one past the longest item count written, past which every pattern with a rest reads as it does there, the
+# middle all its rest
+fn (c mut Checker&) coversSeq(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId, rest Array<types.TypeId>&, depth I64) Bool {
+    sq := try c.seqType(t) catch NotSeq { return false }
+    for n in range c.seqLongest(rows) + 2 {
+        cols Vec<types.TypeId>
+        for _ in range n { cols.Push(sq.Elem) }
+        for q in rest { cols.Push(q) }
+        if not c.coversRows(c.seqRows(rows, n), cols.ToArray(), depth + 1) { return false }
+    }
+    return true
+}
+
+# the rows that match an array of length n, its elements their first n columns: a wildcard's n wildcards, an array
+# pattern's items where it holds n elements - its rest as the wildcards between
+fn (c mut Checker&) seqRows(rows Vec<Array<ast.Pattern&>&>&, n I64) Vec<Array<ast.Pattern&>&>&rows {
+    sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
+    for r in rows {
+        if c.patWild(r[0]) {
+            sub.Push(patTail(r, Array<ast.Pattern&>(0), n))
+            continue
+        }
+        sh := c.shapeOf(r[0])
+        if sh.Rest == -2 or (sh.Rest == -1 and sh.Subs.Len() != n) or (sh.Rest >= 0 and sh.Subs.Len() - 1 > n) { continue }
+        row mut Vec<ast.Pattern&>&rows = Vec<ast.Pattern&>()
+        for j in range sh.Subs.Len() {
+            if j != sh.Rest {
+                row.Push(sh.Subs[j])
+                continue
+            }
+            for _ in range n - (sh.Subs.Len() - 1) { row.Push(ast.Pattern.Wild(sh.Subs[j].Span())) }
+        }
+        for i in range 1, r.Len() { row.Push(r[i]) }
+        sub.Push(row.ToArray())
+    }
+    return sub
 }
 
 # a row of one pattern
@@ -20803,7 +20903,158 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Lvalue&c, t types.TypeId
             return tst
         }
         case ast.Pattern.Value(_, x) { return c.exprPattern(x, place, t, binds, arm, true) }
+        case ast.Pattern.Elems(sp, x, subs) { return c.elemsPattern(sp, x, subs, place, t, binds, arm) }
+        case ast.Pattern.Rest(sp, _) {
+            c.err(sp, msgs.RestNotHere())    # S13h: an array pattern's item, which it reads itself
+            return c.lit(sp, types.BoolT, 0)
+        }
     }
+}
+
+# ---- array patterns (S13h) ----
+
+# what an array pattern matches: an array - text included - its elements read in place, or a type declaring At and
+# Len (E31), its elements its At's copies (At -1 for an array), a named rest its Slice (-1 for none)
+type seqOf struct(Elem types.TypeId, At I64, Len I64, Slice I64) {
+    Elem
+    At
+    Len
+    Slice
+}
+
+fn (c mut Checker&) seqType(t types.TypeId) seqOf ? NotSeq {
+    d := c.deref(t)
+    at := c.arrayOf(d)
+    if at != types.UnknownT { return seqOf(c.P.T.Elem(at), -1, -1, -1) }
+    if not c.isNamed(d) { error NotSeq }
+    am := c.roleMethod(d, "At", 1)
+    lm := c.roleMethod(d, "Len", 0)
+    if am < 0 or lm < 0 { error NotSeq }
+    return seqOf(c.laneResult(am, d), am, lm, c.roleMethod(d, "Slice", 2))
+}
+
+# the element type an array pattern writes before its "[" - its literal's, or a type a path names; less than 0 where
+# the path names no type, so the alternative is a value
+fn (c mut Checker&) elemsWritten(x ast.Expr&) types.TypeId {
+    match x {
+        case ast.Expr.ArrayLit(_, elem, _) { return c.resolve(elem) }
+        case ast.Expr.Index(_, ty, _) { return c.typeNamed(ty) }
+        case _ { return types.TypeId(-1) }
+    }
+}
+
+# where an array pattern's "..." stands among its items, -1 for none; -2 where there are several, said
+fn (c mut Checker&) restAt(subs Array<ast.Pattern&>&) I64 {
+    r := -1
+    for j in range subs.Len() {
+        if not isRest(subs[j]) { continue }
+        if r >= 0 {
+            c.err(subs[j].Span(), msgs.RestTwice())
+            return -2
+        }
+        r = j
+    }
+    return r
+}
+
+fn isRest(p ast.Pattern&) Bool {
+    match p {
+        case ast.Pattern.Rest(_, _) { return true }
+        case _ { return false }
+    }
+}
+
+# S13h: an array pattern's test over the value at place: its length first - exactly the items' count, or at least the
+# named items' where a "..." stands among them - then each item's pattern over its element, the ones after the rest
+# counted from the end; the rest a view of the elements between, bound where it is named
+fn (c mut Checker&) elemsPattern(sp source.Span, x ast.Expr&, subs Array<ast.Pattern&>&, place typed.Lvalue&c, t types.TypeId
+                                 binds mut Vec<typed.Bind&>&c, arm I64) typed.Expr&c {
+    wt := c.elemsWritten(x)
+    if wt < types.TypeId(0) { return c.valueTest(sp, place, x, t) }
+    sq := try c.seqType(t) catch NotSeq {
+        if t != types.UnknownT { c.err(sp, msgs.ElemsNotSeq(c.ty(c.deref(t)))) }
+        return c.lit(sp, types.BoolT, 0)
+    }
+    if wt != types.UnknownT and sq.Elem != types.UnknownT and not c.P.T.Same(c.P.T.Plain(wt), c.P.T.Plain(sq.Elem)) {
+        c.err(sp, msgs.ElemsType(c.ty(wt), c.ty(sq.Elem)))
+        return c.lit(sp, types.BoolT, 0)
+    }
+    r := c.restAt(subs)
+    if r == -2 { return c.lit(sp, types.BoolT, 0) }
+    fixed := subs.Len() - (1 if r >= 0 else 0)
+    base := c.seqBase(sp, place)
+    i64 := c.i64()
+    tst := c.opValues(sp, sp, token.Tok.Ge if r >= 0 else token.Tok.EqEq, c.seqLen(sp, base, sq), c.lit(sp, i64, fixed), sp, sp)
+    for j in range subs.Len() {
+        if j == r { continue }
+        idx := c.lit(sp, i64, j)
+        if r >= 0 and j > r { idx = c.opValues(sp, sp, token.Tok.Minus, c.seqLen(sp, base, sq), c.lit(sp, i64, subs.Len() - j), sp, sp) }
+        tst = c.and2(sp, tst, c.pattern(subs[j], c.seqElem(subs[j].Span(), base, sq, idx), sq.Elem, binds, arm))
+    }
+    if r >= 0 { c.restBind(subs[r], base, sq, t, r, subs.Len() - r - 1, binds, arm) }
+    return tst
+}
+
+# the place an array pattern reads elements of: an array's storage, through the references holding it; a type's value
+# as it is, its methods' receiver
+fn (c mut Checker&) seqBase(sp source.Span, place typed.Lvalue&c) typed.Lvalue&c {
+    base := place
+    if c.arrayOf(base.Type()) == types.UnknownT { return base }
+    for _ in range 4 {
+        if not c.isRef(base.Type()) { break }
+        base = typed.Lvalue.Deref(sp, c.P.T.Referent(base.Type()), c.read(sp, base))
+    }
+    return base
+}
+
+fn (c mut Checker&) seqLen(sp source.Span, base typed.Lvalue&c, sq seqOf&) typed.Expr&c {
+    if sq.At >= 0 { return c.invoke(sp, sp, sq.Len, c.read(sp, base), Array<ast.Expr&>(0), Array<typed.Expr&>(0)) }
+    return c.prim(sp, c.i64(), typed.PrimOp.Len, typed.Expr.Borrow(sp, c.P.T.Ref(base.Type(), types.ReadOnly), base), null)
+}
+
+# element idx of what an array pattern matches: an array's in place (the length tested first, so in range), a type's
+# its At's copy
+fn (c mut Checker&) seqElem(sp source.Span, base typed.Lvalue&c, sq seqOf&, idx typed.Expr&c) typed.Lvalue&c {
+    if sq.At < 0 { return typed.Lvalue.Elem(sp, sq.Elem, typed.Elem(base, idx, typed.Check.None)) }
+    x := c.invoke(sp, sp, sq.At, c.read(sp, base), Array<ast.Expr&>(0), c.one(idx))
+    return typed.Lvalue.Temp(sp, typeOf(x), x, c.site(typed.SiteKind.Temp, sp))
+}
+
+# S13h: a named rest bound to the elements from "before" to "after" from the end - a view of an array's storage, as a
+# slice is (E16a), or a type's Slice; a bare "..." binds nothing
+fn (c mut Checker&) restBind(p ast.Pattern&, base typed.Lvalue&c, sq seqOf&, t types.TypeId, before I64, after I64
+                             binds mut Vec<typed.Bind&>&c, arm I64) {
+    sp := p.Span()
+    n := source.NameId(0)
+    match p {
+        case ast.Pattern.Rest(_, rn) { n = rn }
+        case _ { }
+    }
+    if n == source.NameId(0) or c.text(n) == "_" { return }
+    if sq.At >= 0 and sq.Slice < 0 {
+        c.err(sp, msgs.RestNoSlice(c.ty(c.deref(t))))
+        return
+    }
+    lo := c.lit(sp, c.i64(), before)
+    hi := c.opValues(sp, sp, token.Tok.Minus, c.seqLen(sp, base, sq), c.lit(sp, c.i64(), after), sp, sp)
+    v := c.seqSlice(sp, base, sq, lo, hi)
+    nsp := source.Span(sp.End - I32(c.text(n).Len()), sp.End)
+    c.pattern(ast.Pattern.Bind(nsp, n), typed.Lvalue.Temp(sp, typeOf(v), v, c.site(typed.SiteKind.Temp, sp)), typeOf(v), binds, arm)
+}
+
+# elements lo to hi of what an array pattern matches: an array's, a view with the base's permission (E16a) - its bounds
+# in range, the length tested first - or a type's through its Slice
+fn (c mut Checker&) seqSlice(sp source.Span, base typed.Lvalue&c, sq seqOf&, lo typed.Expr&c, hi typed.Expr&c) typed.Expr&c {
+    if sq.At >= 0 {
+        from := c.exprs.Len()
+        c.exprs.Push(lo)
+        c.exprs.Push(hi)
+        return c.invoke(sp, sp, sq.Slice, c.read(sp, base), Array<ast.Expr&>(0), gather(c.exprs, from))
+    }
+    bt := base.Type()
+    perm := types.Writable if c.slicedWritable(base) else types.ReadOnly
+    rt := bt if c.isNamed(bt) else c.P.T.Array(sq.Elem, types.TypeId(0))
+    return typed.Expr.Slice(sp, c.P.T.Ref(rt, perm), typed.Slice(base, lo, hi, typed.Check.None))
 }
 
 # an expression the parser left as a value (DESIGN.md point 13), read as the pattern it is where it names an enum case:
