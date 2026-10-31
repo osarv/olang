@@ -2,4 +2,4 @@
 # S16e, K1: an unreachable value the compile-time evaluator reaches aborts as the run time's does - an error at the global
 fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd" }
 Half I64 = half(3)
-fn main() { assert Half == 1 }
+fn main() { assert half(4) == 2 }

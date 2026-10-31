@@ -3577,6 +3577,7 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
     head := source.Span(sp.Start, sp.Start + 8)
     if f.Tried {
         c.err(head, msgs.ComptimeForTry())
+        c.unrollOnce(sp, f)
         return
     }
     args := Vec<I64>()
@@ -3588,24 +3589,17 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
         }
         nomatch {
             src = c.unrollBody(f.Source, types.UnknownT)
-            if src < 0 { return }
-            rt := c.P.T.Result(c.Bodies[src].Ty)
-            at := c.arrayOf(c.deref(rt))
-            et = c.P.T.Elem(at) if at != types.UnknownT else types.UnknownT
-            if et == types.UnknownT {
-                c.err(f.Source.Span(), msgs.ComptimeForSource(c.ty(rt)))
-                return
-            }
+            et = c.unrollElem(f.Source, src) if src >= 0 else types.UnknownT
         }
     }
-    if args.Has(-1) { return }
-    if not c.unrollable(et) {
-        c.err(f.Source.Span(), msgs.ComptimeForElem(c.ty(et)))
+    if args.Has(-1) or et == types.UnknownT {
+        c.unrollOnce(sp, f)
         return
     }
     key := $"u:" $c.P.LengthKey(c.fr().Ctx, f.Source)
     if c.P.UnrollWhy.Has(key) {
         c.err(f.Source.Span(), msgs.ComptimeForUnknown(try c.P.UnrollWhy.Get(key) catch default ""))
+        c.unrollOnce(sp, f)
         return
     }
     vals := try c.P.Unrolls.Get(key) catch {
@@ -3614,9 +3608,44 @@ fn (c mut Checker&) comptimeFor(sp source.Span, f ast.ForIn&) {
     }
     if vals.Len() > MaxUnroll {
         c.err(head, msgs.ComptimeForTooMany(vals.Len(), MaxUnroll))
+        c.unrollOnce(sp, f)
         return
     }
     c.unrollConsts(sp, f, vals, et)
+}
+
+# the element type of the array a comptime for's source body gives (K3a) - Unknown, said, where it is no array or its
+# elements no constants of an integer, a Bool or a Char
+fn (c mut Checker&) unrollElem(x ast.Expr&, src I64) types.TypeId {
+    rt := c.P.T.Result(c.Bodies[src].Ty)
+    at := c.arrayOf(c.deref(rt))
+    if at == types.UnknownT {
+        c.err(x.Span(), msgs.ComptimeForSource(c.ty(rt)))
+        return types.UnknownT
+    }
+    et := c.P.T.Elem(at)
+    if not c.unrollable(et) {
+        c.err(x.Span(), msgs.ComptimeForElem(c.ty(et)))
+        return types.UnknownT
+    }
+    return et
+}
+
+# a walk that does not unroll, the reason said: its body checked once all the same, its names standing for what did
+# not check, and left out - so what it says is said, and what it writes is written (a local it sets is no fixed one
+# that a later assert would be decided on, which would say a second error for the one mistake)
+fn (c mut Checker&) unrollOnce(sp source.Span, f ast.ForIn&) {
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().loops.Push(id)
+    c.fr().exits.Push(id)
+    if f.Key != source.NameId(0) { c.local(f.Key, sp, types.UnknownT, typed.LocalKind.Hidden, typed.Mark.None) }
+    c.local(f.Name, sp, types.UnknownT, typed.LocalKind.Hidden, typed.Mark.None)
+    c.unknowns++
+    if f.Body.Len() > 0 { c.stmtsOf(f.Body) }
+    try c.fr().loops.Pop() catch { }
+    try c.fr().exits.Pop() catch { }
+    c.close(id, outer, mark, from)
 }
 
 # an element a comptime for binds as a constant (K3a): an integer of at most 64 bits, a Bool, a Char
