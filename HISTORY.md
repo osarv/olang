@@ -26588,3 +26588,11 @@ and so is the ramp `.coro` (a few stores and the first suspend; the arena form i
 marked `.walk` alone; here that took bench/repro/gen_big_function's `genfor 100000 10` from 28.6M to 22.6M Ir only - the
 ramp stayed a call - and all three to 2.6M (the same walk alone in a small function: 1.4M). bench/gen's rows unchanged
 (range 0.3M, filter 17.6M at 1M x 2); tests/generators.olang passes built, `-debug` and `-sanitize`.
+
+**12. An integer's `Sqrt` without division.** `sqrtU64`'s corrections compared `r > n / r` and `r + 1 <= n / (r + 1)` -
+two 64-bit divisions a call. The root of any U64 is below 2^32, so `r` is now held at `0xFFFFFFFF` at most and the
+corrections square (`r * r > n`, and `(r + 1) * (r + 1) <= n` only while `r < 0xFFFFFFFF`), which cannot overflow.
+Measured over 1M roots of `i * 7919 + 12345`: 48.3M -> 38.8M Ir, and natively over 100M 0.58-0.66 s -> 0.20-0.24 s
+(the divisions were few instructions but tens of cycles each). New tests beside every perfect square in the last 96
+below 2^64 and around 2^53's root, one more baked global for the evaluator (std/prelude/tests/number.olang); the
+128-bit widths' sqrtU128 is unchanged.

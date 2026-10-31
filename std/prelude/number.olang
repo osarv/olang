@@ -468,12 +468,14 @@ fn (x T) Pow<T Integer>(n U32) T {
 
 # the largest whole number whose square is not above n - the floor of its square root, exact for every U64: the
 # hardware's square root of the nearest F64, then a correction of one each way (the F64's rounding and the root's leave
-# it within one). The comparisons divide rather than square, so nothing overflows near 2^64
+# it within one). The root of any U64 is below 2^32, so r is held there and the comparisons square without overflowing
+# (r + 1 is squared only while r < 2^32 - 1) - no division
 fn sqrtU64(n U64) U64 {
     if n < 2 { return n }
     r U64 = U64(cmath.sqrt(F64(n)))
-    for r > n / r { r-- }                           # r * r > n
-    for r + 1 <= n / (r + 1) { r++ }                # (r + 1) * (r + 1) <= n
+    if r > 0xFFFFFFFF { r = 0xFFFFFFFF }
+    for r * r > n { r-- }
+    for r < 0xFFFFFFFF and (r + 1) * (r + 1) <= n { r++ }
     return r
 }
 

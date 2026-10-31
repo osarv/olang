@@ -173,6 +173,22 @@ test "an integer's Sqrt is the floor of its root, exact at every edge" {
     assert (try I64(144).Sqrt() catch default -1) == 12 and (try I64(143).Sqrt() catch default -1) == 11
 }
 
+bakedSqrtNear U64 = U64(18446744056529682436).Sqrt()                   # (2^32 - 2)^2: the root held below 2^32
+
+test "an integer's Sqrt beside every perfect square near the top of U64, where the F64 rounds" {
+    assert bakedSqrtNear == 4294967294
+    for k in range 4294967200, 4294967296 {
+        r := U64(k)
+        sq := r * r
+        assert sq.Sqrt() == r and (sq + 1).Sqrt() == r and (sq - 1).Sqrt() == r - 1
+    }
+    for k in range 94906200, 94906300 {
+        r := U64(k)
+        sq := r * r
+        assert sq.Sqrt() == r and (sq + 1).Sqrt() == r and (sq - 1).Sqrt() == r - 1
+    }
+}
+
 test "a negative signed integer has no square root" {
     assert (try minusOne.Sqrt() catch NumberError.NEGATIVE default 99) == 99
     assert (try I8(-128).Sqrt() catch NumberError.NEGATIVE default 99) == 99

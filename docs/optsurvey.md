@@ -25,7 +25,7 @@ of a loop body.
 | 9 | [Text locals from a literal are copied every turn](#9-text-locals-from-a-literal-are-copied-every-turn) | `t := "abc"` in a loop | ~70 Ir a turn against ~2 for `I64[1, 2, 3, 4]` | lower | hours | none |
 | 10 | [Enum layout: an I32 tag and whole-word payloads](#10-enum-layout) | arrays of small enums | `Opt { None, Some(F32) }` 16 bytes (C 8): 314 MB / 0.86-1.19 s against 158 MB / 0.47 s | types, emit, eval | days | `T.Size` reads differently |
 | 11 | [Filter/Map chains build every array](#11-filtermap-chains-build-every-array) | `for y in a.Filter(f).Map(g)` | 2x the hand loop (22.6M against 11.4M Ir) | check (fusion) | days | none |
-| 12 | [Integer `Sqrt` divides twice](#12-integer-sqrt-divides-twice) | `x.Sqrt()` on integers | 47 Ir against F64's 3.6 | prelude | minutes | none |
+| 12 | **done 2026-10-31** [Integer `Sqrt` divides twice](#12-integer-sqrt-divides-twice) | `x.Sqrt()` on integers | 47 Ir against F64's 3.6 | prelude | minutes | none |
 | 13 | [`match` is a compare chain with a trap](#13-match-is-a-compare-chain-with-a-trap) | `match` over many cases | 8-way: 13.7M against C's switch 11.1M Ir | emit | hours | none |
 | 14 | [Every empty array is an allocation](#14-every-empty-array-is-an-allocation) | `Vec<T>()`, `Array<T>(0)` | `Vec` + two pushes 150 Ir; one of its three allocations is the empty buffer | runtime, emit | hours | check E10 |
 | 15 | [Small leftovers](#15-small-leftovers) | `nounwind`, I128 division by a constant, baked globals' startup code under `-quick` | regex binary -4%; 27.5 against 10.3 Ir; 6k Ir at startup | emit | minutes each | none |
