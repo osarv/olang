@@ -1366,3 +1366,31 @@ passed but for the token and tree goldens of the edited files, recaptured.
 - std under the switches: 40 of 40 test files (round 2b: 35), and `tests/params/fields.olang` (a cursor over a bare
   parameter's text returned and walked, an instance holding a fresh one made from read-only text, a global baked while
   compiling and a top-level assert decided on it beside the run time).
+
+### 12.6 Left, in order, with what each needs
+
+1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands).
+2. **The by-pointer value-result handover, then QCC's `T&` error** (the coordinator's decision 1). What it needs, as
+   found here: the copy a value result makes of a view (`fn (m Match) Text() String { return m.t[a:b] }` copies at the
+   return today) moves from the callee to the caller - the callee hands back the view, marked in its summary as "may
+   be a view of bare parameter k"; at each call the caller copies the result unless the view is only read before the
+   statement ends (passed to a bare parameter, rendered, compared, measured, indexed or sliced to be read) and nothing
+   in that statement writes the argument for k; a result kept (a local, a field, a return) is copied at the call, so
+   section 8 never sees a view outlive its source. Then a `T&` result handing back a view of a bare parameter is an
+   error naming the value result (and `KeptPerm`, live under the switches through the 32 result markers std keeps -
+   `Trim() String&t` - goes with it), with `param_migrate` turning such results into values.
+3. **Open point 5** (a function type's `T&` result read as borrowed from its `&` parameters): measured at two checks
+   scenarios, none in std or compiler/; a section-8 change (the result of a call through a function value read as
+   existing storage where its `&` arguments are) for the bulk review to look at.
+4. **The caller-side copy of 2.10** (a bare argument read in place while the same call may write its storage through a
+   `&` argument, a mutable global, a function value or an `any`): needs the storage-type write summary per body,
+   views.olang's growth summary generalized.
+5. **The scope phase's field loop.** Merging its last quiet judging with the reporting one was tried and reverted: the
+   scope pass has control flow that depends on whether it reports (`if not s.report { return }` at several refusals),
+   so a reporting judging is not a quiet one and the promotions found changed. What is left is incremental judging -
+   only the components a promotion touches and their callers - which needs the pass's memo maps (`trMemo`, `useMemo`,
+   the lift maps) kept per body. Measured: 3 field rounds and the report on tests/shared.olang, the scope phase 362 ms
+   against 143 ms without the switch.
+6. **The storeThrough hole** (checks/cases/derivedcopybuild.olang without `&ns`): refused under the switches (O25h,
+   with and without `OLANG_PARAMS=new`); on the default path it still reads freed storage - master's hole, closed by
+   the flip.
