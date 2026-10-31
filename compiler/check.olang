@@ -9930,7 +9930,9 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
         c.err(sp, msgs.ReadOnlyToWritable())
         return false
     }
-    c.roNeed(readPlace(x))
+    # an instance's type variable's reference parameter follows its argument (T25c): this body's parameter needs a
+    # writable argument only where that one is written through or kept
+    if source.NewParams and c.argFollows { c.roNeedOf(readPlace(x), c.argBody, c.argK) } else { c.roNeed(readPlace(x)) }
     if source.NewParams and not c.argRef {
         c.refUseX(x)
         c.refDeepX(x)
@@ -10519,6 +10521,15 @@ fn (c mut Checker&) roNeed(p typed.Lvalue?&) {
     }
     k := c.paramOf(p)
     if k >= 0 { c.roNeeds.Put(pair.Pair(c.fr().Body, k), true) }
+}
+
+# this body's parameter a place is part of needs a writable argument where parameter k of body does (roDeps)
+fn (c mut Checker&) roNeedOf(p typed.Lvalue?&, body I64, k I64) {
+    if p is null or c.roRoot(p) >= 0: return
+    j := c.tvRefOf(p)
+    if j >= 0: c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+    j = c.paramOf(p)
+    if j >= 0: c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
 }
 
 # an argument for a by-value parameter of a body: a read-only copy is judged once the body's need is known; a
@@ -12713,7 +12724,13 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         if pre.Len() > 0 and i < pre.Len() and pre[i] != c.hole {
             wasPre := c.nullDecl
             c.nullDecl = c.paramAt(target, f, k)    # T2c: where the parameter's type is written
+            c.argFor(ps, k, target, f)
             e = c.fit(c.heldArray(from, pre[i]) if k == spreadParam else pre[i], ps[k], asp)
+            c.argRef = false
+            c.argBare = false
+            c.argBody = -1
+            c.argFollows = false
+            c.argCtor = false
             c.nullDecl = wasPre
         } else if args.Len() > 0 and i < args.Len() {
             isDefault := false
@@ -12726,6 +12743,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             } else if k == spreadParam and args[i].IsGathered() {
                 e = c.fit(c.heldArray(from, c.variadicValue(args[i], ps[k])), ps[k], args[i].Span())   # D8g
             } else {
+                # (the argument's context already where it is checked: a place read fitted to the parameter's type
+                # follows it, T25c - set again below, after what the argument's own calls left)
+                c.argFor(ps, k, target, f)
                 e = c.litCtor(args[i], ps[k])
                 if e is null { e = c.expr(args[i], ps[k]) }
                 if c.P.T.KindOf(typeOf(e)) == types.Kind.Tuple and c.P.T.KindOf(ps[k]) != types.Kind.Tuple {
