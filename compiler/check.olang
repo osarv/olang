@@ -21144,8 +21144,28 @@ fn (c mut Checker&) settleUnread() {
         }
         k := pair.Pair(u.File, (I64(u.Sp.Start) << 32) | I64(u.Sp.End))
         if not (try held.Get(k) catch default false) { continue }
+        # the rework's round 1 (OLANG_SCOPES=infer): a local named by a marker read as bare was read by it
+        if source.InferScopes and c.namedByMarker(u.File, c.P.L.Names.Text(u.Name)) { continue }
         c.P.L.Diags.Error(where, msgs.LocalUnused(c.tok(u.Name)))
     }
+}
+
+# whether a file's text names name after a reference marker's "&" or a scope argument's ("&name" ending there): read
+# as bare under OLANG_SCOPES=infer, which the local it named is no longer read by
+fn (c mut Checker&) namedByMarker(file I64, name String&) Bool {
+    for m in c.P.L.Mods {
+        if m.File != file or m.Src is null { continue }
+        text := m.Src!.Text
+        mark := $"&" $name
+        at := 0
+        for {
+            i := try text[at:].Find(mark) catch { return false }
+            end := at + i + mark.Len()
+            if end >= text.Len() or not (text[end].IsLetter() or text[end].IsDigit() or text[end] == '_') { return true }
+            at = end
+        }
+    }
+    return false
 }
 
 # ---- calls that do nothing (S3) ----

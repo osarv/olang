@@ -5853,7 +5853,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
                 s.block(c.Code)
                 for df in c.Defaults {
                     dv := s.val(df, dd)
-                    if s.report and s.isRef(x.Type()) and not s.defaultFits(cv, dv) { s.err(s.opTok(df), msgs.DefaultScope()) }
+                    # (the inference's one result form: an existing default of another run-time scope makes the try one of
+                    # two scopes, judged per member as a conditional's values are, E28 - never built into, never exact)
+                    infer := source.InferScopes and dv.K == ValKind.Existing and dv.T.Runs()
+                    if s.report and s.isRef(x.Type()) and not infer and not s.defaultFits(cv, dv) { s.err(s.opTok(df), msgs.DefaultScope()) }
                     v = s.join(v, dv, d)
                 }
             }
