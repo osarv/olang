@@ -20965,6 +20965,17 @@ fn (c mut Checker&) followResult(x typed.Expr&) Bool {
     return true
 }
 
+# the by-value parameter of a body that needs a writable argument (T25c's roNeeds), named; "" for none - what keeps a
+# function from being a value (ReadOnlyFuncValue), said by explain's "# not a value" (round 2c)
+fn (c mut Checker&) WritableNeed(body I64) String {
+    if body < 0 or body >= c.Bodies.Len(): return ""
+    b := c.Bodies[body]
+    for k in range b.Params.Len() {
+        if c.roNeeds.Has(pair.Pair(body, k)): return $c.text(b.Local(b.Params[k]).Name)
+    }
+    return ""
+}
+
 # whether a body's result follows an argument it is given (load.FollowResults): no function value's (T21, explain)
 fn (c mut Checker&) FollowsAny(body I64) Bool {
     if not source.NewParams or body < 0 or body >= c.Bodies.Len() or c.P.L.FollowResults.Len() == 0: return false
