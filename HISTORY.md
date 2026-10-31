@@ -26565,3 +26565,9 @@ is an error naming `.Clone()`/`$t`. Not built: held with the scoping rework, bui
 signatures. Open: how a mutable global is written. Decided the same day: a global stays
 immutable by default and a writable one is written `mut` - the user weighed `const` ("negative mutability feels kinda
 weird now that it's only for globals") and kept `mut`, since immutable globals are the common and safe case.
+
+Asked whether nothing then enforces what should or should not change, the user took three checks ("Yes do them"):
+an unused `&` parameter is an error (so `&` always means "may write"), a bare parameter stored into a shared place is
+an error naming `&` or `.Clone()` (the promise or a hidden copy would break otherwise), and a write to a bare parameter
+that nothing reads afterwards is an error naming `&` (the forgotten `&`, without making counting parameters read-only).
+Accepted as a loss: a stored reference can no longer be declared read-only (Go's and Java's position).

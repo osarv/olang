@@ -337,7 +337,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   nothing the call reaches writes storage of that type). No `mut` on parameters, receivers or references; a view taken
   from a bare parameter or constant data is read-only by inference, never written. `&` stays on fields, elements, type
   arguments, `?&` and a result handing back an existing instance. Globals stay immutable unless written `mut` (the
-  user, 2026-10-31: "Keep mut and make globals immutable by default") - the one place `mut` is written. The entry
+  user, 2026-10-31: "Keep mut and make globals immutable by default") - the one place `mut` is written. Enforced
+  (the user's "Yes do them"): a `&` parameter the body never writes, passes to a `&` parameter or stores shared is an
+  error naming `p T`; a bare parameter stored shared is an error naming `p T&` or `.Clone()`; a write to a bare
+  parameter nothing reads afterwards is an error naming `p T&` (the forgotten `&`). A stored reference cannot be
+  declared read-only (accepted; revisit if code wants it). The entry
   below is today's rule until it lands.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and

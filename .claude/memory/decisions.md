@@ -1963,3 +1963,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   alternative, bare parameters read-only with `q := p` for a scratch copy, costs every counting parameter). What is
   lost: declaring a stored reference read-only (a field every holder may only read) - not expressible; rec accept (Go's
   and Java's position), revisit if real code wants it. In effect: nothing built.
+- QCC enforcement DECIDED 2026-10-31 (the user: "Yes do them"): checks (1)-(3) as proposed, the read-only stored
+  reference given up. Built with QCC in the held rework.
