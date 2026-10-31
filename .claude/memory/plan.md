@@ -653,3 +653,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   per-field permission bindings (2.8), the by-pointer value-result handover then QCC's T& error, the tool's idempotence
   guard and unpinned D9d round, compiler/ migrated and self-built, open point 5, not-a-value reasons, KeptPerm and the
   storeThrough hole, the caller-side copy, the field loop's speed, then the flip.
+- 2026-11-01 CET: rework round 2c merged (0ddb256, verified on 1773d9c; merge = tip + memory): O17 lends a split value
+  by its storage under the switches (a section-8 relaxation - FOR THE NEXT BULK REVIEW), nullable `?&` parameters widened
+  where written through and followed where only handed back, variadic struct elements by value, match values meet
+  read-only; std 40/40 under the switches; compiler/ 658 -> 326 errors (most one shape: a reader handing back a view of
+  a `&` parameter given bare data - the value-result handover's job). Fixed: three permission holes, an evaluator
+  zero-read of a self-conversion (default path), the effects line missing payload writes (default path). Next: round
+  2d - the by-pointer value-result handover then QCC's T& error, the migration's last oscillation, compiler/ to zero
+  and the self-build under the switches, open point 5, 2.10, the field loop's speed.
