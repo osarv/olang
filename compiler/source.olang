@@ -11,6 +11,10 @@ import "std/os"
 # changes
 InferScopes := (try os.Env("OLANG_SCOPES") catch default "") == "infer"
 
+# the rework's round 2 (docs/rework.md section 10): OLANG_PARAMS=new reads "&" as "may write" - every written reference
+# writable, "mut" before one read as nothing, a bare parameter the callee's own value whose reach is read-only
+NewParams := (try os.Env("OLANG_PARAMS") catch default "") == "new"
+
 # a stretch of a file's text, [Start, End) as byte offsets
 type Span struct(Start I32, End I32) {
     Start

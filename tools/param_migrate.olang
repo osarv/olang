@@ -1,0 +1,518 @@
+# param_migrate - the rework's round 2 (QCC, the user's decisions 2026-10-31; docs/rework.md section 10): "&" on a
+# parameter means it may write the caller's instance, a bare parameter is the callee's own value, and "mut" is written
+# only at the top of a global. Two phases:
+#
+# text   every "mut" before a reference type is dropped ("p mut T&" -> "p T&", "List<mut Node&>" -> "List<Node&>",
+#        "x mut T& = e" -> "x T& = e"), but a global's ("G mut T"); a trait method that may write its receiver is
+#        written with "&" ("mut Next()" -> "&Next()"); and every reference parameter or receiver written without
+#        "mut" - one only read - is made bare ("t String&" -> "t String", "fn (c Checker&)" -> "fn (c Checker)"), but
+#        a nullable one ("?&"), an "any", one sharing a scope by a marker ("b N&a") or named by one ("T&p"), and a
+#        constructor's or an enum case's (stored by nature). An extern's makes bare only text and arrays (a const
+#        pointer); a struct C is handed stays a reference (X11: a bare struct is C's by-value one).
+# driven the compiler, run with OLANG_PARAMS=new, then says what the text phase got wrong, and each is fixed from its
+#        diagnostic until none is left: a bare parameter written through, kept or handed back is made "&" again (D9e,
+#        T25b); a "&" one never written or kept is made bare (D9d); constant data passed to a "&" parameter is given a
+#        copy ("$"). Anything else is listed for a person.
+#
+# Running it again changes nothing. Files are rewritten in place; --check writes nothing and the status says whether
+# anything would change.
+#
+#     $OLANG build tools/param_migrate.olang && build/tools_param_migrate [--check] [--text] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+import "../compiler/scan"
+import "../compiler/token"
+
+# an edit: the source from Start to End replaced by Text
+type edit struct(Start I64, End I64, Text String&) { Start, End, Text }
+
+# what an open bracket is: its kind, and for a "{" what it opens - a body nothing else is said of, a trait's, an
+# extern block's, a branch of a top-level "if" (where globals are declared)
+type open struct(Kind token.Tok, Trait Bool, Extern Bool, TopIf Bool) { Kind, Trait, Extern, TopIf }
+
+type walker struct(src String&, ts Array<token.Token>&) {
+    src
+    ts
+    stack Vec<open>
+    edits Vec<edit>
+}
+
+fn (w mut walker&) kind(i I64) token.Tok {
+    if i < 0 or i >= w.ts.Len(): return token.Tok.Eof
+    return w.ts[i].Kind
+}
+
+fn (w mut walker&) text(i I64) String&w { return w.src[I64(w.ts[i].Start):I64(w.ts[i].End)] }
+
+# whether the token at i begins a statement: first, first on its line, or after an end of one or a brace
+fn (w mut walker&) stmtStart(i I64) Bool {
+    k := w.kind(i - 1)
+    return i == 0 or w.ts[i].Has(token.LineBreak) or k == token.Tok.StmtEnd or k == token.Tok.LBrace or k == token.Tok.RBrace
+}
+
+# whether the walk is outside every body: at the top level, or in a branch of a top-level "if"
+fn (w mut walker&) topLevel() Bool {
+    for o in w.stack {
+        if not o.TopIf: return false
+    }
+    return true
+}
+
+fn (w mut walker&) inTrait() Bool { return w.stack.Len() > 0 and w.stack[w.stack.Len() - 1].Trait }
+
+fn (w mut walker&) inExtern() Bool {
+    for o in w.stack {
+        if o.Extern: return true
+    }
+    return false
+}
+
+# the index of the bracket closing the one opened at i, or -1
+fn (w mut walker&) closer(i I64) I64 {
+    depth I64 = 0
+    for j in range i, w.ts.Len() {
+        k := w.kind(j)
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace: depth++
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace: depth--
+        if depth == 0: return j
+    }
+    return -1
+}
+
+# the statement's first token, for the "{" at i: walked back over balanced brackets to a statement's start
+fn (w mut walker&) stmtOf(i I64) I64 {
+    depth I64 = 0
+    j := i - 1
+    for j > 0 {
+        k := w.kind(j)
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace: depth++
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            if depth == 0: return j + 1
+            depth--
+        }
+        if depth == 0 and w.stmtStart(j): return j
+        j--
+    }
+    return 0
+}
+
+# what the "{" at i opens
+fn (w mut walker&) opening(i I64) open {
+    s := w.stmtOf(i)
+    tr := false
+    ext := false
+    for j in range s, i {
+        k := w.kind(j)
+        if k == token.Tok.Trait: tr = true
+        if k == token.Tok.Extern: ext = true
+    }
+    k := w.kind(s)
+    topIf := w.topLevel() and (k == token.Tok.If or k == token.Tok.Else or (k == token.Tok.RBrace and w.kind(s + 1) == token.Tok.Else))
+    return open(token.Tok.LBrace, tr, ext, topIf)
+}
+
+# drop the token at i and the one space after it
+fn (w mut walker&) drop(i I64) {
+    s := I64(w.ts[i].Start)
+    e := I64(w.ts[i].End)
+    if e < w.src.Len() and w.src[e] == ' ': e++
+    w.edits.Push(edit(s, e, ""))
+}
+
+# ---- the text phase ----
+
+fn (w mut walker&) walk() {
+    i I64 = 0
+    for i < w.ts.Len() {
+        k := w.kind(i)
+        match k {
+            case token.Tok.LBrace { w.stack.Push(w.opening(i)) }
+            case token.Tok.LParen, token.Tok.LBrack { w.stack.Push(open(k, false, false, false)) }
+            case token.Tok.RParen, token.Tok.RBrack, token.Tok.RBrace { if w.stack.Len() > 0: w.stack.Pop()! }
+            case token.Tok.Mut { w.onMut(i) }
+            case token.Tok.Fn { w.onFn(i) }
+            case _ { }
+        }
+        i++
+    }
+}
+
+# a "mut": a global's kept, a trait method's written "&", any other dropped
+fn (w mut walker&) onMut(i I64) {
+    if w.topLevel() and w.kind(i - 1) == token.Tok.Iden and w.stmtStart(i - 1): return
+    if w.inTrait() and w.kind(i + 1) == token.Tok.Iden and w.stmtStart(i) {
+        w.edits.Push(edit(I64(w.ts[i].Start), I64(w.ts[i + 1].Start), "&"))
+        return
+    }
+    w.drop(i)
+}
+
+# a "fn": a declaration's, a method's, a lambda's or a function type's parameter list, and a trait method's in a
+# trait's body (no "fn" there - see sig)
+fn (w mut walker&) onFn(i I64) {
+    j := i + 1
+    ext := w.inExtern() or w.kind(i - 1) == token.Tok.Extern or w.exported(i)
+    if w.kind(j) == token.Tok.LParen {
+        c := w.closer(j)
+        if c < 0: return
+        # a receiver clause: "fn (r T&) Name(" - the method's name on its line after it
+        if w.kind(c + 1) == token.Tok.Iden and not w.ts[c + 1].Has(token.LineBreak) and
+           (w.kind(c + 2) == token.Tok.LParen or w.kind(c + 2) == token.Tok.Lt) {
+            names := w.markerNames(c + 1)
+            w.params(j, c, names, ext)
+            p := c + 2
+            if w.kind(p) == token.Tok.Lt: p = w.angleEnd(p) + 1
+            if w.kind(p) == token.Tok.LParen {
+                pc := w.closer(p)
+                if pc > 0: w.params(p, pc, names, ext)
+            }
+            return
+        }
+        w.params(j, c, w.markerNames(j), ext)
+        return
+    }
+    if w.kind(j) != token.Tok.Iden: return
+    p := j + 1
+    if w.kind(p) == token.Tok.Lt: p = w.angleEnd(p) + 1
+    if w.kind(p) != token.Tok.LParen: return
+    pc := w.closer(p)
+    if pc > 0: w.params(p, pc, w.markerNames(p), ext)
+}
+
+# whether the "fn" at i is an "export fn"'s: an export fn is C's to call, so it keeps C's parameter forms (X13)
+fn (w mut walker&) exported(i I64) Bool { return w.kind(i - 1) == token.Tok.Iden and w.text(i - 1) == "export" }
+
+# the index of the ">" closing the "<" at i (a type parameter list), counted by angle brackets
+fn (w mut walker&) angleEnd(i I64) I64 {
+    depth I64 = 0
+    for j in range i, w.ts.Len() {
+        k := w.kind(j)
+        if k == token.Tok.Lt: depth++
+        if k == token.Tok.Gt {
+            depth--
+            if depth == 0: return j
+        }
+        if k == token.Tok.Shr {
+            depth -= 2
+            if depth <= 0: return j
+        }
+        if k == token.Tok.LBrace or k == token.Tok.StmtEnd: return j
+    }
+    return i
+}
+
+# the names scope markers name in a signature from i to its body's "{" or its line's end: "T&p", "b N&a" - a parameter
+# so named keeps its reference (a relation between scopes needs one)
+fn (w mut walker&) markerNames(i I64) Vec<String&> {
+    out := Vec<String&>()
+    depth I64 = 0
+    for j in range i, w.ts.Len() {
+        k := w.kind(j)
+        if k == token.Tok.LParen or k == token.Tok.LBrack: depth++
+        if k == token.Tok.RParen or k == token.Tok.RBrack: depth--
+        if depth == 0 and (k == token.Tok.LBrace or k == token.Tok.StmtEnd): break
+        if k == token.Tok.Amp and w.kind(j + 1) == token.Tok.Iden and w.ts[j].End == w.ts[j + 1].Start: out.Push(w.text(j + 1))
+    }
+    return out
+}
+
+# the parameters between the brackets at open and close: each item's type looked at
+fn (w mut walker&) params(openAt I64, close I64, names Vec<String&>&, ext Bool) {
+    start := openAt + 1
+    depth I64 = 0
+    for j in range openAt + 1, close + 1 {
+        k := w.kind(j)
+        if j == close or (depth == 0 and (k == token.Tok.Comma or (j > start and w.ts[j].Has(token.LineBreak) and w.itemBreak(j)))) {
+            if j > start: w.param(start, j, names, ext)
+            start = j + 1 if k == token.Tok.Comma or j == close else j
+            continue
+        }
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace or k == token.Tok.Lt: depth++
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace or k == token.Tok.Gt: depth--
+        if k == token.Tok.Shr: depth -= 2
+    }
+}
+
+# whether a line break before the token at j separates two items of a list (the listing rule, L18a): the token before
+# could end an item
+fn (w mut walker&) itemBreak(j I64) Bool {
+    k := w.kind(j - 1)
+    return k.EndsStatement() or k == token.Tok.Amp or k == token.Tok.Gt or k == token.Tok.RBrace
+}
+
+# one parameter, its tokens from s to e: "name TYPE [= default]"; a read-only reference made bare
+fn (w mut walker&) param(s I64, e I64, names Vec<String&>&, ext Bool) {
+    if w.kind(s) != token.Tok.Iden or e - s < 3: return
+    name := w.text(s)
+    if names.Has(name): return
+    t := s + 1
+    end := e
+    for q in range t, e {
+        if w.kind(q) == token.Tok.Assign {
+            end = q
+            break
+        }
+    }
+    last := end - 1
+    k0 := w.kind(t)
+    # written writable, a function value, a variadic list, an "any": nothing to make bare here
+    if k0 == token.Tok.Mut or k0 == token.Tok.Fn or k0 == token.Tok.LParen or k0 == token.Tok.Dot: return
+    if k0 == token.Tok.Iden and w.text(t) == "any" and w.kind(t + 1) == token.Tok.Iden: return
+    if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return
+    if ext and not w.textOrArray(t): return
+    w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
+}
+
+# whether the type at t is text or an array: "String", "Array<...>", "CStr"
+fn (w mut walker&) textOrArray(t I64) Bool {
+    if w.kind(t) != token.Tok.Iden: return false
+    n := w.text(t)
+    return n == "String" or n == "Array" or n == "CStr"
+}
+
+# the text with the edits applied
+fn apply(src String&, edits Vec<edit>&) String {
+    es := edits.Clone()
+    es.Sort(fn(a edit, b edit) Bool { return a.Start < b.Start })
+    b := StringBuilder()
+    at I64 = 0
+    for e in es {
+        if e.Start < at: continue
+        b.Push(src[at:e.Start])
+        b.Push(e.Text)
+        at = e.End
+    }
+    b.Push(src[at:])
+    return b.ToString()
+}
+
+# a file's text after the text phase
+fn TextPhase(src String&) String {
+    ts := scan.Scan(src)
+    w := walker(src, ts.Toks)
+    w.walk()
+    return apply(src, w.edits)
+}
+
+test TextPhase "drops mut, makes read-only parameters bare" {
+    assert TextPhase("fn f(a mut T&, b T&, c T?&) T& { }\n") == "fn f(a T&, b T, c T?&) T& { }\n"
+    assert TextPhase("fn (c Checker&) Lookup(n I64) I64 { }\n") == "fn (c Checker) Lookup(n I64) I64 { }\n"
+    assert TextPhase("fn (c mut Checker&) Add(t String&) { }\n") == "fn (c Checker&) Add(t String) { }\n"
+    assert TextPhase("G mut I64 = 0\nfn f() { x mut Vec<mut N&>& = v }\n") == "G mut I64 = 0\nfn f() { x Vec<N&>& = v }\n"
+    assert TextPhase("fn first(l List&) Node&l { }\n") == "fn first(l List&) Node&l { }\n"
+    assert TextPhase("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N&a) { }\n"
+    assert TextPhase("type It trait {\n    mut Next() I64 ? Exhausted\n    Peek() I64\n}\n") == "type It trait {\n    &Next() I64 ? Exhausted\n    Peek() I64\n}\n"
+    assert TextPhase("fn f(g fn(x T&) I64, h any Shape&) { }\n") == "fn f(g fn(x T) I64, h any Shape&) { }\n"
+    assert TextPhase("extern { fn w(fd I32, b Array<U8>&, p Point&) I64 }\n") == "extern { fn w(fd I32, b Array<U8>, p Point&) I64 }\n"
+    assert TextPhase("fn f() { xs.Map(fn(a T&) I64 { return 1 }) }\n") == "fn f() { xs.Map(fn(a T) I64 { return 1 }) }\n"
+    assert TextPhase("type S struct(a String&) { a }\n") == "type S struct(a String&) { a }\n"
+    assert TextPhase("if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n") == "if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n"
+}
+
+# ---- the driven phase ----
+
+# what the compiler's diagnostics ask for: a parameter made "&" again (a bare one written through, kept or handed
+# back - its note names it, where it is declared; an extern type's), made bare (D9d), and constant data copied
+BareNote String& = "is a bare parameter"
+ExternBare String& = "is an extern type, held only by reference"
+NeverUsed String& = "is never written, handed where it may be written, or kept"
+ConstData String& = "hands data written in the program to"
+KindAmp String& = "amp"
+KindBare String& = "bare"
+KindCopy String& = "copy"
+
+# the byte offset of a 1-based line and column in src, -1 past its end
+fn offsetOf(src String&, line I64, col I64) I64 {
+    at I64 = 0
+    for _ in range line - 1 {
+        nl := try src[at:].FindByte('\n') catch { return -1 }
+        at += nl + 1
+    }
+    o := at + col - 1
+    return o if o <= src.Len() else -1
+}
+
+# the token index starting at offset o, -1 for none
+fn tokenAt(ts Array<token.Token>&, o I64) I64 {
+    for i in range ts.Len() {
+        if I64(ts[i].Start) == o: return i
+        if I64(ts[i].Start) > o: return -1
+    }
+    return -1
+}
+
+# the index just past a parameter's type, the parameter's name at token i: its item's end - a "," or ")" at its own
+# depth, a line break between items, a default's "="
+fn (w mut walker&) typeEnd(i I64) I64 {
+    depth I64 = 0
+    for j in range i + 1, w.ts.Len() {
+        k := w.kind(j)
+        if depth == 0 and (k == token.Tok.Comma or k == token.Tok.RParen or k == token.Tok.Assign or k == token.Tok.StmtEnd): return j
+        if depth == 0 and j > i + 1 and w.ts[j].Has(token.LineBreak) and w.itemBreak(j): return j
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.Lt: depth++
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Gt: depth--
+        if k == token.Tok.Shr: depth -= 2
+        if k == token.Tok.LBrace or k == token.Tok.Eof: return j
+    }
+    return w.ts.Len()
+}
+
+# the edit a request makes in src, the name or literal at offset o, added to the walker's: whether it made one
+fn (w mut walker&) request(kind String&, o I64) Bool {
+    i := tokenAt(w.ts, o)
+    if i < 0: return false
+    if kind == KindCopy {
+        if w.kind(i) != token.Tok.StrLit: return false
+        w.edits.Push(edit(o, o, "$"))
+        return true
+    }
+    # the parameter's name: a note may point at its type ("CStr" of "p CStr") - walk back to the name
+    n := i
+    if w.kind(n - 1) == token.Tok.Iden and (w.kind(n - 2) == token.Tok.LParen or w.kind(n - 2) == token.Tok.Comma or w.ts[n - 1].Has(token.LineBreak)): n = n - 1
+    if w.kind(n) != token.Tok.Iden: return false
+    e := w.typeEnd(n)
+    last := e - 1
+    if last <= n: return false
+    if kind == KindAmp {
+        if w.kind(last) == token.Tok.Amp: return false
+        at := I64(w.ts[last].End)
+        w.edits.Push(edit(at, at, "&"))
+        return true
+    }
+    if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
+    w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
+    return true
+}
+
+# the requests made of each file, applied: how many edits, the ones that found nothing listed for a person
+fn applyRequests(reqs Vec<diagedit.Request>&, left mut Vec<String&>&) I64 ? os.Error {
+    byFile := Map<String&, Vec<diagedit.Request>>()
+    for r in reqs {
+        if not byFile.Has(r.Path): byFile.Put(r.Path, Vec<diagedit.Request>())
+        l := try byFile.Get(r.Path) catch { continue }
+        l.Push(r)
+    }
+    made I64 = 0
+    for en in byFile {
+        src := try srcmask.ReadText(en.Key)
+        ts := scan.Scan(src)
+        w := walker(src, ts.Toks)
+        seen := Map<I64, Bool>()
+        for r in en.Value {
+            o := offsetOf(src, r.Line, r.Col)
+            if o < 0 or seen.Has(o): continue
+            seen.Put(o, true)
+            if not w.request(r.Kind, o): left.Push($r.Why)
+        }
+        if w.edits.Len() == 0: continue
+        made += w.edits.Len()
+        try os.WriteFile(en.Key, apply(src, w.edits))
+    }
+    return made
+}
+
+# a diagnostic row's request, its kind "" where it asks for nothing this tool does
+fn requestOf(row String&, allowed Vec<String&>&) diagedit.Request ? {
+    r := try diagedit.ParseRow(row)
+    full := diagedit.RealPathOf(r.Path)
+    if not diagedit.Allowed(full, allowed) { error NotMine }
+    kind := ""
+    if not r.IsError and r.Msg.Contains(BareNote): kind = KindAmp
+    if r.IsError and r.Msg.Contains(ExternBare): kind = KindAmp
+    if r.IsError and r.Msg.Contains(NeverUsed): kind = KindBare
+    if r.IsError and r.Msg.Contains(ConstData): kind = KindCopy
+    if kind == "" { error NotMine }
+    return diagedit.Request($full, r.Line, r.Col, $kind, "", $row)
+}
+
+fn driven(paths Vec<String&>&, olang String&, jobs I64) ? {
+    files Vec<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed Vec<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    tmp := try os.MkTemp("", "param_migrate")
+    defer try os.RemoveAll(tmp) catch { }
+    work := Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k])
+    }
+    left Vec<String&>
+    total I64 = 0
+    fileArray := files.ToArray()
+    srcmask.Say($fileArray.Len() " files, compiled by " $olang)
+    for round in range 1, 60 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        reqs Vec<diagedit.Request>
+        errors I64 = 0
+        for o in outputs {
+            for row in o.Split("\n") {
+                if row.Contains(": error"): errors++
+                rq := try requestOf&reqs(row, allowed) catch { continue }
+                reqs.Push(rq)
+            }
+        }
+        left.Clear()
+        made := try applyRequests(reqs, left)
+        srcmask.Say("round " $round ": " $made " edits, " $errors " errors")
+        total += made
+        if made == 0: break
+    }
+    srcmask.Say("total: " $total " edits")
+    for l in left { srcmask.Say("by hand: " $l) }
+}
+
+fn main() ? {
+    args := os.Args()
+    check := false
+    text := false
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths := Vec<String&>()
+    i I64 = 1
+    for i < args.Len() {
+        a := args[i]
+        i++
+        if a == "--check" {
+            check = true
+            continue
+        }
+        if a == "--text" {
+            text = true
+            continue
+        }
+        if a == "--olang" and i < args.Len() {
+            olang = $args[i]
+            i++
+            continue
+        }
+        if a == "-j" and i < args.Len() {
+            jobs = try args[i].ParseInt() catch default 3
+            i++
+            continue
+        }
+        paths.Push(a)
+    }
+    files := Vec<String&>()
+    for p in paths {
+        info := try os.Stat(p)
+        if info.Kind == os.FileKind.DIR { srcmask.Walk(p, files) } else { files.Push(p) }
+    }
+    changed I64 = 0
+    for f in files {
+        src := try srcmask.ReadText(f)
+        out := TextPhase(src)
+        if out == src: continue
+        changed++
+        if not check: try os.WriteFile(f, out)
+    }
+    srcmask.Say($changed " files " $("would change" if check else "changed") " by the text phase")
+    if check {
+        if changed > 0: os.Exit(1)
+        return
+    }
+    if text: return
+    try driven(paths, $diagedit.RealPathOf(olang), jobs.Max(1))
+}

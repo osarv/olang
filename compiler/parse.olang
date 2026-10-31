@@ -948,9 +948,10 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             p.skipEnds()
             for not p.sees(token.Tok.RBrace) {
                 mat := p.here()
-                # "mut" before the name: the receiver may be written through - a receiver of no name, typed "mut"
+                # "&" before the name (the rework's round 2, D9 - "mut" before it as the old spelling): the receiver
+                # may be written through - a receiver of no name, typed writable
                 recv ast.Param?&p = null
-                if p.sees(token.Tok.Mut) {
+                if p.sees(token.Tok.Mut) or p.sees(token.Tok.Amp) {
                     mt := p.tk()
                     p.advance()
                     msp := source.Span(mt.Start, mt.End)

@@ -11,6 +11,15 @@ fn (a Array<T>&) Has(x T) Bool {
     return false
 }
 
+# a copy of the array, its elements copied into storage of its own (a reference element still naming its instance): how
+# a view of storage another holds is kept past it, or one of constant data handed where it may be written (D9e, T25d)
+fn (a Array<T>&) Clone() Array<T>& {
+    if a.Len() == 0 { return Array<T>(0) }
+    out mut Array<T>&return = Array<T>(a.Len(), a[0])
+    for i in range a.Len() { out[i] = a[i] }
+    return out
+}
+
 # whether the two hold equal elements in the same order - what "==" on two arrays, values or references, is when an
 # element type declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
 fn (a Array<T>&) Equal(b Array<T>&) Bool {

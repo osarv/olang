@@ -639,10 +639,14 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
             for q > I64(sp.Start) and not (text[q] == '?' and text[q + 1] == '&') { q-- }
             p.L.Diags.Error(p.at(c.Mi, source.Span(I32(q), I32(q + 1))), msgs.ArrayNullable())
         }
-        return p.T.Ref(r, types.ReadOnly)
+        return p.T.Ref(r, p.writtenRef())
     }
-    return p.T.Ref(r, types.Nullable if nullable else types.ReadOnly)
+    return p.T.Ref(r, p.writtenRef() | (types.Nullable if nullable else types.ReadOnly))
 }
+
+# the permission a written reference has: under the rework's round 2 every written "&" may be written (QCC - a
+# read-only reference is only ever inferred: a view of a bare parameter, of constant data, of an immutable global)
+fn (p Program&) writtenRef() I64 { return types.Writable if source.NewParams else types.ReadOnly }
 
 # "mut"/"own" before a type: a reference's permission (T25b, T25e), a variable's where it is bound to a reference (T2);
 # before a value type it says nothing the type holds (the checker's D9/D11a)
@@ -1369,7 +1373,10 @@ fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
 # whether a call is x.Len() of an array an instance takes by value - its length a variable the context binds (G29)
 fn (p mut Program&) instanceLen(c Context&, f ast.Expr&, args Array<ast.Expr&>&) Bool {
     k := p.LenKey(f, args)
-    return k != "" and c.Vars.Has(p.L.Names.Intern(k))
+    if k == "" { return false }
+    v := try c.Vars.Get(p.L.Names.Intern(k)) catch default types.TypeId(-1)
+    # a length bound at run time (the rework's round 2, D9a) is no constant
+    return v >= types.TypeId(0) and v != types.RunLength
 }
 
 fn (p mut Program&) anyReadsLocal(c Context&, xs Array<ast.Expr&>&) Bool {

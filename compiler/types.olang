@@ -262,6 +262,9 @@ BoolT TypeId = TypeId(2)
 NullT TypeId = TypeId(15)
 DefaultErrT TypeId = TypeId(16)
 NoreturnT TypeId = TypeId(17)
+# the rework's round 2: what a by-value array's length variable is bound to where the instance takes its length at run
+# time (D9a) - an array of it is one of a run-time length (Array)
+RunLength TypeId = NullT
 
 # an error set's entry for some words of error type e (R1c): mask bit i is e's word i
 fn (t mut Table&) ErrWords(e TypeId, mask U64) TypeId { return t.intern(data(Kind.ErrWords, I64(e), I64(mask), 0), 1) }
@@ -343,6 +346,7 @@ fn (t mut Table&) Named(d DeclId, args ListId) TypeId {
 }
 
 fn (t mut Table&) Array(elem TypeId, length TypeId) TypeId {
+    if length == RunLength { length = TypeId(0) }
     id := t.intern(data(Kind.Array, I64(elem), I64(length), 0), t.depthOf(elem) + 1)
     if t.Plain(elem) != elem { t.plains[I64(id)] = t.Array(t.Plain(elem), length) }
     return id

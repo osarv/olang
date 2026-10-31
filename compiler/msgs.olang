@@ -380,6 +380,11 @@ type Diag enum {
     LiteralExprRange
     LiteralNeedsCtor
     ReadOnlyToWritable
+    ReadOnlyHere
+    BareDeadWrite
+    RefNeverUsed
+    ConstToRefParam
+    NoteBareParam
     ReadOnlyToBuiltResult
     ReadOnlyToBuiltResultNo
     ReadOnlyCopyDecl
@@ -1936,6 +1941,24 @@ fn LiteralNeedsCtor(ty1 String&, ty2 String&) Msg { return Msg(Diag.LiteralNeeds
 
 # ERR_READ_ONLY_TO_WRITABLE
 fn ReadOnlyToWritable() Msg { return Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") }
+
+# ERR_READ_ONLY_HERE
+fn ReadOnlyHere() Msg { return Msg(Diag.ReadOnlyHere, "T25c", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and is wanted where it may be written: give a copy of its own ('$x', 'x.Clone()'), or take the parameter as 'p T&'") }
+
+# ERR_BARE_DEAD_WRITE
+fn BareDeadWrite(name String&, ty String&, number Bool) Msg {
+    if number { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - return the new value instead") }
+    return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - take it as '" $name " " $ty "&' to change the caller's")
+}
+
+# ERR_REF_NEVER_USED
+fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D9d", "'" $name "' is never written, handed where it may be written, or kept - take it as '" $name " " $ty "'") }
+
+# ERR_CONST_TO_REF_PARAM
+fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefParam, "T25d", "this hands data written in the program to '" $name "', which may write it - pass a copy of its own: " $fix) }
+
+# NOTE_BARE_PARAM
+fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
 
 # ERR_READ_ONLY_TO_BUILT_RESULT
 fn ReadOnlyToBuiltResult(text String&) Msg { return Msg(Diag.ReadOnlyToBuiltResult, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '" $text "'") }

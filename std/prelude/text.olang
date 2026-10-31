@@ -190,9 +190,9 @@ fn isSpace(c U8) Bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r'
 }
 
-# the text without leading and trailing whitespace - a borrow of the receiver's own storage, so it lives where the
-# receiver does and costs no copy
-fn (t String&) Trim() String&t {
+# the text without leading and trailing whitespace, as text of its own (a value: the receiver is only read, so what it
+# gives back is no view of it - the rework's round 2, read-only said by a value)
+fn (t String&) Trim() String {
     lo I64 = 0
     hi I64 = t.Len()
     for lo < hi and isSpace(t[lo]) {
@@ -204,8 +204,8 @@ fn (t String&) Trim() String&t {
     return t[lo:hi]
 }
 
-# the text without leading whitespace - a borrow of the receiver's own storage, as Trim's is
-fn (t String&) TrimStart() String&t {
+# the text without leading whitespace, as text of its own, as Trim's is
+fn (t String&) TrimStart() String {
     lo I64 = 0
     for lo < t.Len() and isSpace(t[lo]) {
         lo++
@@ -213,8 +213,8 @@ fn (t String&) TrimStart() String&t {
     return t[lo:]
 }
 
-# the text without trailing whitespace - a borrow of the receiver's own storage, as Trim's is
-fn (t String&) TrimEnd() String&t {
+# the text without trailing whitespace, as text of its own, as Trim's is
+fn (t String&) TrimEnd() String {
     hi I64 = t.Len()
     for hi > 0 and isSpace(t[hi - 1]) {
         hi--
