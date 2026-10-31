@@ -277,6 +277,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     keptPut Vec<Bool>                     # ... itself, not only by handing a reference out (Puts)
     under Vec<Term>                       # the terms fieldTerm's underestimates stand above, a Derived(-1 - k, _) for under[k]
     underElem Vec<Bool>                   # ... and whether each was read through an array's element (O23)
+    underDecl Vec<I64>                    # ... and the declaration whose "&p" field each read (the field inference)
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     partDest Map<I64, Term>                # by call site: where a part read out of its built result is put (O18a)
     resAt Term = Term.None                 # the result scope the call judged last was bound to
@@ -329,6 +330,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     partLifts Map<pair.Pair<I64, I64>, Bool> # ... lifted because a part of it - a field, an element - is kept (counted, 2.6)
     partFlow Bool = false                   # the proposal being made is for a part of the local
+    derivedDecl Map<pair.Pair<I64, I64>, I64> # the field inference: by (body, parameter) and variable, the declaration
+                                              # whose promoted field a derived scope D(p, w) was read through
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
     viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
@@ -662,6 +665,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     }
     s.under.Clear()
     s.underElem.Clear()
+    s.underDecl.Clear()
     s.temps.Clear()
     s.partDest.Clear()
     s.lifted.Clear()
@@ -4914,7 +4918,10 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
                 match base {
                     case typed.Lvalue.Deref(_, _, r) {
                         y := regionLocal(r)
-                        if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param { return Term.Derived(s.paramIndex(y), w) }
+                        if y >= 0 and s.B!.Locals[y].Kind == typed.LocalKind.Param {
+                            if s.fieldGather { s.derivedDecl.Put(pair.Pair<I64, I64>(s.Id * 65536 + s.paramIndex(y), w), s.declOf(bt)) }
+                            return Term.Derived(s.paramIndex(y), w)
+                        }
                     }
                     case _ { }
                 }
@@ -4922,6 +4929,7 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
                 if s.recAt(s.recOf(base), w) != Term.None { return s.recAt(s.recOf(base), w) }
                 s.under.Push(s.partsTerm(base))
                 s.underElem.Push(throughElem(base))
+                s.underDecl.Push(s.declOf(bt))
                 return Term.Derived(-s.under.Len(), w)
             }
             case _ { }
@@ -8744,8 +8752,12 @@ fn (s mut Scoper&) giveBackArg(c typed.Call&, v Term) {
 # ... the declaration of the parameter whose "&p" field derived term t reads
 fn (s mut Scoper&) giveBackDerived(t Term) {
     match t {
-        case Term.Derived(p, _) {
+        case Term.Derived(p, w) {
             if p >= 0 and p < s.B!.Params.Len() { s.giveBack(s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)) }
+            # ... and the declaration whose field it was read through, deeper along the parameter's path, or above an
+            # underestimate
+            if p >= 0 { s.giveBack(try s.derivedDecl.Get(pair.Pair<I64, I64>(s.Id * 65536 + p, w)) catch default -1) }
+            if p < 0 and -p - 1 < s.underDecl.Len() { s.giveBack(s.underDecl[-p - 1]) }
         }
         case _ { }
     }
