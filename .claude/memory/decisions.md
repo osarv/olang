@@ -1953,3 +1953,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   written. In effect: `mut` globals.
 - QCC (2) DECIDED 2026-10-31 (the user: "Keep mut and make globals immutable by default"): globals immutable unless
   written `mut`, as today; `mut` stays only there once QCC is built. No `const`.
+- QCC enforcement ASKED 2026-10-31 (the user: "don't we run into problems then where we don't know if a value should
+  or shouldn't be mutable and the compiler doesn't enforce it?"). Proposed, three checks keeping both directions
+  enforced: (1) a `&` parameter the body never writes, passes on to a `&` parameter, or stores shared is an error naming
+  `p T` - so `&` in a signature always means "may write" (rec yes); (2) a bare parameter stored into a shared place (a
+  `&` field, a List<T&>) is an error naming `p T&` (share it) or `.Clone()` (keep a copy) - else the promise breaks or a
+  copy is hidden (rec yes); (3) the forgotten `&`: a write to a bare parameter that nothing reads afterwards is an
+  error naming `p T&` (rec yes - catches `fn grow(c Circle) { c.R *= 2 }` silently doing nothing; the stricter
+  alternative, bare parameters read-only with `q := p` for a scratch copy, costs every counting parameter). What is
+  lost: declaring a stored reference read-only (a field every holder may only read) - not expressible; rec accept (Go's
+  and Java's position), revisit if real code wants it. In effect: nothing built.
