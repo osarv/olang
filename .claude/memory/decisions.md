@@ -2130,3 +2130,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   numbers; (4) a field round 1 cannot place gets a per-instance run-time scope word only if real cases show up -
   round 1 lists them first. Rework rounds merge to master one by one when verified (round 1 behind OLANG_SCOPES=infer),
   not in one merge after round 4, so the branch stays short.
+- docs/rework.md's open points, the user 2026-10-31 (reviewing my calls): (1) accepted "as long as it is clear to the
+  programmer what functions can be valued and which can't ... That goes in general for function values" - DECIDED:
+  doc, explain and hover say of every function that cannot become a value that it cannot and why (a scope relation
+  between parameters, an array by value making instances, become-only rules ...), and the error at the conversion
+  names the same reason; built in the rework (round 2 or 4). (2) "copy only the parts that could actually change? Do
+  this smart ... I don't want to lose performance" - DECIDED: the hidden copy for a bare argument covers only the parts
+  whose storage the call may write (read off effect summaries, field by field), none where nothing may be written;
+  round 2 measures the overhead on bench and the self-build and reports it. (3) "Isn't 3) decided by Capitalized name or
+  not?" - yes in effect: a field another module must only read is made private (lower case) with a method giving it
+  through a bare receiver (`fn (s Server) Cfg() Config&`), which is read-only by inference outside; inside its module the
+  type's own code writes it. So no read-only marker - closed. (4) "if round 1 finds those fields, tell me about them and
+  we will decide" - no fallback built; round 1's cases go to the user.
