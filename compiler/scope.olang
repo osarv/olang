@@ -331,22 +331,21 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
     promoteLocal I64 = -1                  # the local the temporary judged next is declared as (a Promote), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
+    # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
+    # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
+    fieldGather Bool = false
+    wantDecl Map<I64, Bool>
+    wantField Map<pair.Pair<I64, I64>, Bool>
+    promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
+    demotedF Map<pair.Pair<I64, I64>, Bool>
+    Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
     Trace Bool = false                     # OLANG_INFERDUMP: every lift written to TraceLog, for a person
     TraceLog Vec<String&>
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
 fn (s mut Scoper&) Run() {
-    n := s.Bodies.Len()
-    for i in range n {
-        s.Plans.Push(typed.NewPlan(s.Bodies[i]))
-        s.sums.Push(summary())
-        s.judged.Push(false)
-        # D17d: the scope relations a contract writes - obligations every call is held to, as inferred ones are
-        for w in s.Bodies[i].Written {
-            r := rel(Term.Var(w.Hi), Term.Var(w.Lo), false, w.Sp, 0)
-            if not hasRel(s.sums[i].Rels, r) { s.sums[i].Rels.Push(r) }
-        }
+    for i in range s.Bodies.Len() {
         match s.Bodies[i].Of {
             case typed.BodyOf.Ctor(t, twin) {
                 if twin == types.ListId(0) { s.ctorOf.Put(t, i) }
@@ -358,15 +357,43 @@ fn (s mut Scoper&) Run() {
         if m.Src is not null and m.File >= 0 { s.texts.Put(m.File, m.Src!.Text) }
     }
     s.components()
+    if source.InferScopes { s.inferFields() }
+    s.judgeAll(true)
+    s.fnValues()
+    s.anyTables()
+    s.exports()
+}
+
+# every body judged, a component at a time, callees first - its errors said where report holds
+fn (s mut Scoper&) judgeAll(report Bool) {
+    s.Plans.Clear()
+    s.sums.Clear()
+    s.judged.Clear()
+    s.Gaps.Clear()
+    s.fnUses.Clear()
+    s.trMemo.Clear()
+    s.useMemo.Clear()
+    s.useWhy.Clear()
+    s.lifts.Clear()
+    s.siteLifts.Clear()
+    s.liftStor.Clear()
+    s.wLocals.Clear()
+    for i in range s.Bodies.Len() {
+        s.Plans.Push(typed.NewPlan(s.Bodies[i]))
+        s.sums.Push(summary())
+        s.judged.Push(false)
+        # D17d: the scope relations a contract writes - obligations every call is held to, as inferred ones are
+        for w in s.Bodies[i].Written {
+            r := rel(Term.Var(w.Hi), Term.Var(w.Lo), false, w.Sp, 0)
+            if not hasRel(s.sums[i].Rels, r) { s.sums[i].Rels.Push(r) }
+        }
+    }
     for k in range s.compFrom.Len() {
         end := s.compFrom[k + 1] if k + 1 < s.compFrom.Len() else s.compNodes.Len()
         comp := Array<I64>(end - s.compFrom[k])
         for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
-        s.component(comp)
+        s.component(comp, report)
     }
-    s.fnValues()
-    s.anyTables()
-    s.exports()
 }
 
 # X12: an export fn is called by C, which no obligation of its body can be held to (O10b) - it requires nothing of its
@@ -504,7 +531,7 @@ fn (s mut Scoper&) anyTables() {
 
 # a component of the call graph judged: alone, once; with a cycle, until no body's obligations grow, then once more
 # saying its errors (docs/scope-model.md 7.2)
-fn (s mut Scoper&) component(comp Array<I64>&) {
+fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
     cyclic := comp.Len() > 1 or s.callsItself(comp[0])
     if cyclic {
         # what the component's bodies may build into is a least fixed point: none at first, each round what the last
@@ -526,7 +553,7 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
     }
     # the inference's claims (OLANG_SCOPES=infer), then the judging that reports
     for b in comp { s.inferClaims(b) }
-    for b in comp { s.judge(b, true) }
+    for b in comp { s.judge(b, report) }
     for b in comp {
         s.sums[b].Done = true
         s.sums[b].Judging = false
@@ -6450,6 +6477,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
                     # callee's obligations then judge (O10c), as stage 0 binds it
                     v = existing(s.here())
+                } else if s.fieldGather {
+                    s.wantPromotion(pr.X)
                 } else if s.report {
                     # x[i]'s copy, said at its "[" (E31b)
                     if s.atCall(pr.X) {
@@ -6475,8 +6504,9 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v = s.val(pr.X, Term.None)
             s.build(pr.Site, s.here())
             landed[i] = true
-            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and s.report {
-                s.err(s.argAt(a), msgs.BorrowSplitScopes())
+            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
+                if s.fieldGather { s.wantPromotion(pr.X) }
+                if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
             }
             if v.K == ValKind.Fresh { v = existing(v.T) }
         } else if s.isFresh(a) and s.argLands(a) {
@@ -6521,6 +6551,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 handle := rf.Runs() and s.handleLent(c, i, a)
                 loop := cr == Term.None and s.lentLoopCopy(a)
                 if s.calleeKeepsArg(c, i) and not handle {
+                    s.wantPromotion(a)
                     if s.report {
                         # a part of x[i]'s copy, said at its member as E31b's (stage 0: "E31, O17")
                         ap := s.atPart(a)
@@ -6548,6 +6579,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             # first (B11)
             rec := s.disagree(a.Span() if s.P.T.Role(fty) == types.RoleCtor else s.nameSpan(sp), beta[k], v.T)
             if rec >= 0 and firstArg[k] >= 0 { s.noteDisagree(rec, c.Args[firstArg[k]], beta[k], a, v.T) }
+        }
+    }
+    # the inference: what a task is handed proposes lasting until its join (P2, 2.4)
+    if spawned and s.liftGather {
+        for i in range n {
+            if not landed[i] and vals[i].K == ValKind.Existing and not s.lastsUntil(vals[i].T, j) { s.propose(c.Args[i], j) }
         }
     }
     # what a task is handed lasts until its join (P2): an argument's storage, and what it holds
@@ -7868,6 +7905,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     k := s.order(t, slot)
     # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
     # local's that the value outlives, a longer claim for that local
+    if s.fieldGather and not s.report and (k == FailsBlock or k == FailsUnknown) { s.wantPromotion(x) }
     if s.liftGather and k == FailsBlock {
         if s.Trace { s.TraceLog.Push($"fails root " $s.wholeRoot(x) " kind " $kind " | " $s.traceAt(x.Span().Start)) }
         s.propose(x, slot)
@@ -8353,9 +8391,158 @@ fn (s mut Scoper&) traceAt(at I32) String {
     return $"line " $line ": " $text[start:end].Trim()
 }
 
+# ---- the field inference (2.6) ----
+#
+# A reference field lives in its container's scope (O20) unless it is given a binding of its own, per instance - what a
+# field written "&q" has (C2d, O23a). Every field starts in its container's scope; a quiet judging of the program finds
+# the declarations a refusal needs promoted - a value read out of one of their fields kept longer than its container,
+# an instance of one lent where its references and its own storage differ (O17) - and each field of theirs that holds what
+# a constructor parameter was given is given that parameter's binding; then the program is judged again. A promoted field
+# some body builds through where no binding is known (O23a) goes back for good. Promotions only grow, so the rounds end
+
+fn (s mut Scoper&) inferFields() {
+    for _ in range 16 {
+        s.wantDecl.Clear()
+        s.wantField.Clear()
+        s.fieldGather = true
+        s.judgeAll(false)
+        s.fieldGather = false
+        grew := false
+        for d in s.wantDecl.Keys() {
+            if s.promoteDecl(d) { grew = true }
+        }
+        # a declaration a promoted field of was built through: its promoted fields given back, for good
+        for w in s.wantField.Keys() {
+            for k in s.promotedF.Keys() {
+                if k.First != w.First or s.demotedF.Has(k) { continue }
+                s.demotedF.Put(k, true)
+                s.setFieldMark(k.First, k.Second, typed.Mark.Bare)
+                grew = true
+            }
+        }
+        if not grew { break }
+    }
+}
+
+# the declaration of the struct a value of type t is, or refers to, whose constructor the pass knows; -1 for none
+fn (s mut Scoper&) declOf(t types.TypeId) I64 {
+    r := s.P.T.Repr(t)
+    if s.isRef(r) { r = s.P.T.Repr(s.P.T.Referent(r)) }
+    if not s.ctorOf.Has(r) or s.P.T.KindOf(r) != types.Kind.Named { return -1 }
+    return I64(s.P.T.DeclOf(r))
+}
+
+# the declaration's fields given a binding of their own where they hold what a constructor parameter was given: true where
+# one was new
+fn (s mut Scoper&) promoteDecl(d I64) Bool {
+    grew := false
+    for b in range s.Bodies.Len() {
+        t := match s.Bodies[b].Of {
+            case typed.BodyOf.Ctor(ct, _): ct
+            case _: types.UnknownT
+        }
+        if t == types.UnknownT or I64(s.P.T.DeclOf(s.P.T.Repr(t))) != d or s.P.T.KindOf(s.P.T.Repr(t)) != types.Kind.Named { continue }
+        body := s.Bodies[b]
+        for i in range body.Fields.Len() {
+            key := pair.Pair<I64, I64>(d, i)
+            f := I64(body.Fields[i])
+            if s.demotedF.Has(key) or body.Locals[f].Marked != typed.Mark.Bare or not s.isRef(body.Locals[f].Ty) { continue }
+            q := s.bindingParam(body, f)
+            if q < 0 {
+                note := $"field " $i " of " $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) ": no constructor parameter to bind to"
+                if not s.Unplaced.Has(note) { s.Unplaced.Push($note) }
+                continue
+            }
+            body.Locals[f].Marked = typed.Mark.Of(typed.LocalId(I32(q)))
+            if not s.promotedF.Has(key) { grew = true }
+            s.promotedF.Put(key, q)
+        }
+    }
+    return grew
+}
+
+# every constructor body of declaration d given field i's mark m
+fn (s mut Scoper&) setFieldMark(d I64, i I64, m typed.Mark) {
+    for b in range s.Bodies.Len() {
+        match s.Bodies[b].Of {
+            case typed.BodyOf.Ctor(ct, _) {
+                r := s.P.T.Repr(ct)
+                if s.P.T.KindOf(r) != types.Kind.Named or I64(s.P.T.DeclOf(r)) != d or i >= s.Bodies[b].Fields.Len() { continue }
+                s.Bodies[b].Locals[I64(s.Bodies[b].Fields[i])].Marked = m
+            }
+            case _ { }
+        }
+    }
+}
+
+# the constructor parameter field f of a constructor body holds what was given: the parameter its initializer reads, else
+# the constructor's one reference parameter; -1 for none
+fn (s mut Scoper&) bindingParam(body typed.Body&, f I64) I64 {
+    if body.Root is not null {
+        for st in body.Root!.Stmts {
+            match st {
+                case typed.Stmt.Let(_, l, x) {
+                    if I64(l) != f { continue }
+                    r := flRootExpr(unPassed(s.unAway(x)))
+                    if r >= 0 and body.Locals[r].Kind == typed.LocalKind.Param and s.holds(body.Locals[r].Ty) { return r }
+                }
+                case _ { }
+            }
+        }
+    }
+    one := -1
+    for p in body.Params {
+        if not s.isRef(body.Locals[I64(p)].Ty) { continue }
+        if one >= 0 { return -1 }
+        one = I64(p)
+    }
+    return one
+}
+
+# what a quiet judging's refusal asks of the field inference: the declaration a value read out of a field is, or the
+# declaration of the value itself
+fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
+    if not s.fieldGather { return }
+    d := s.fieldDecl(x)
+    if d < 0 { d = s.declOf(x.Type()) }
+    if d >= 0 { s.wantDecl.Put(d, true) }
+}
+
+# the declaration whose field value x is read out of (the outermost such field), -1 for none
+fn (s mut Scoper&) fieldDecl(x typed.Expr&) I64 {
+    return match unPassed(s.unAway(x)) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): s.placeDecl(p)
+        case _: -1
+    }
+}
+
+fn (s mut Scoper&) placeDecl(p typed.Lvalue&) I64 {
+    match p {
+        case typed.Lvalue.Field(_, _, b, _) {
+            d := s.declOf(b.Type())
+            return d if d >= 0 else s.placeDecl(b)
+        }
+        case typed.Lvalue.Elem(_, _, e) { return s.placeDecl(e.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { return s.placeDecl(pl.Base) }
+        case typed.Lvalue.Deref(_, _, r) { return s.fieldDecl(r) }
+        case _ { return -1 }
+    }
+}
+
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
 fn (s Scoper&) InferStats() String {
-    return $"inferred: " $s.lifts.Len() " locals lifted, " $s.liftStor.Len() " with their storage, " $s.wLocals.Len() " needing a W"
+    return $"inferred: " $s.lifts.Len() " locals lifted, " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back)"
+}
+
+# the fields the field inference promoted, "Declaration.field" each, for OLANG_SCOPESTATS
+fn (s mut Scoper&) PromotedFields() Vec<String&> {
+    out Vec<String&>
+    for k in s.promotedF.Keys() {
+        if s.demotedF.Has(k) { continue }
+        name := s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(k.First))))
+        out.Push($name " field " $k.Second)
+    }
+    return out
 }
 
 # ---- placement ----
@@ -8379,10 +8566,15 @@ fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
 # - a callee's own, for a build through a call
 fn (s mut Scoper&) buildsInto(t Term, sp source.Span, file I64, at source.Span) {
     match t {
-        case Term.Derived(_, _) {
+        case Term.Derived(p, _) {
             # a derived scope exists at no run time: nothing is built into it (C2d, O23a) - a task's stand-in for it is
             # made where the instance whose field it reads lives, which it outlives (O23)
             if s.report and not s.standIn { s.err(sp, msgs.BuildThroughUnknownScope()) }
+            # the field inference: a promoted field built through goes back to its container's scope (2.6, step 4)
+            if s.fieldGather and not s.standIn and p >= 0 and p < s.B!.Params.Len() {
+                d := s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)
+                if d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
+            }
         }
         case Term.Var(k) {
             if k < s.buildsVar.Len() and not s.buildsVar[k] {

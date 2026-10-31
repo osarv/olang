@@ -825,6 +825,8 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, des
     # what the rework's inference found (OLANG_SCOPES=infer), where OLANG_SCOPESTATS asks
     if source.InferScopes and (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
         try io.PrintErr($"olang: " $sc.InferStats() "\n") catch io.Error { }
+        for f in sc.PromotedFields() { try io.PrintErr($"olang: promoted " $f "\n") catch io.Error { } }
+        for f in sc.Unplaced { try io.PrintErr($"olang: unplaced " $f "\n") catch io.Error { } }
     }
     for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
