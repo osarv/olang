@@ -26641,10 +26641,11 @@ two of them are two instances" was for identity, which arrays lost with `a is b`
 `Eq` by contents, so two empty arrays are equal however made, and nothing reads or writes an element of one. Checked
 what could still see the address: an `extern` given an empty array is given a pointer to no bytes; `retire()` of an
 empty buffer does nothing (`__olang_san_retire` returns for 0 bytes); a region's functions read the word before an
-object, so the static's first words are zero - constant data to them (O8d). So `__olang_scope_alloc` and
-`__olang_scope_alloc_min` - every array's and text's storage - give `@__olang_empty_array` (a 64-aligned constant, the
-storage at its offset 64) for a size of 0, a branch that folds where the size is known: `Array<T>(0)`, a Vec's first
-buffer, an empty comprehension, text of no bytes. A struct of no fields still gets storage of its own through
+object, so the static's first words are zero - constant data to them (O8d). So an array made with a length of 0
+known while compiling - `Array<T>(0)`, a Vec's first buffer - is `@__olang_empty_array` (a 64-aligned constant, the
+storage at its offset 64), emit's `newArray` writing no allocation at all. (First built as a branch in the runtime's
+`__olang_scope_alloc` for every size of 0, which covered run-time empties too; the compare at every array allocation cost
+the compiler's own build 5-10% of its clang time, measured, so it is only where the length is a constant.) A struct of no fields still gets storage of its own through
 `__olang_scope_alloc_a` (a reference to one compares by identity). A loop making a Vec, pushing twice and making an
 `Array<I64>(0)` each turn, 100,000 turns: 17.3M -> 16.2M Ir. SPEC E27's "an empty array with storage of its own"
 reworded.

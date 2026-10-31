@@ -4189,6 +4189,12 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     sc := fe.scope(s)
     p := ""
+    if cnt == "0" {
+        # E10: an array of no elements, known while compiling, names the one static storage every such array does - no
+        # allocation (std/runtime's __olang_empty_array)
+        fe.E.runtime("__olang_empty_array")
+        return fe.pair("0", "getelementptr (i8, ptr @__olang_empty_array, i64 64)")
+    }
     if fill == mir.Operand.None and not fe.E.San {
         # E39: no fill - each element written before anything reads it
         return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false))

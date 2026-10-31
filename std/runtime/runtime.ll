@@ -943,23 +943,17 @@ entry:
   ret i64 %limit
 }
 
-; the storage every array of no elements names: nothing is ever read or written there, and arrays compare by what
-; they hold (E10), so one address serves every empty array, made with no allocation - an Array<T>(0), a Vec's first
-; buffer, an empty text. Its first word is the zero word a region's object has before it (O8d: constant data), so the
-; region functions take an empty array for constant data
+; the storage an array made with no elements names where that is known while compiling (an Array<T>(0), a Vec's first
+; buffer): nothing is ever read or written there, and arrays compare by what they hold (E10), so one address serves
+; them all, made with no allocation (emit's newArray gives its offset 64). Its first words are the zero word a region's
+; object has before it (O8d: constant data), so the region functions take such an array for constant data
 @__olang_empty_array = constant [16 x i64] zeroinitializer, align 64
 
 ; O8a: an array's storage, or anything else that is not one aggregate - aligned by its own size, so a large array
 ; is ready for the widest vector loads: 8 bytes below 32, 32 below 64, and 64 from 64 up. Two selects, no
-; branch; with the size known while compiling, as it mostly is, they fold away. An empty array's storage is
-; @__olang_empty_array's, a branch that folds away where the size is known
+; branch; with the size known while compiling, as it mostly is, they fold away
 define noalias ptr @__olang_scope_alloc(ptr %scope, i64 %rawsize) alwaysinline {
 entry:
-  %empty = icmp eq i64 %rawsize, 0
-  br i1 %empty, label %none, label %some
-none:
-  ret ptr getelementptr (i8, ptr @__olang_empty_array, i64 64)
-some:
   %sizeup = add i64 %rawsize, 7
   %size8 = and i64 %sizeup, -8
   %a32 = icmp uge i64 %size8, 32
@@ -975,11 +969,6 @@ some:
 ; array of I128s 16-aligned, not the 8 an array under 32 bytes takes
 define noalias ptr @__olang_scope_alloc_min(ptr %scope, i64 %rawsize, i64 %minaln) alwaysinline {
 entry:
-  %empty = icmp eq i64 %rawsize, 0
-  br i1 %empty, label %none, label %some
-none:
-  ret ptr getelementptr (i8, ptr @__olang_empty_array, i64 64)
-some:
   %sizeup = add i64 %rawsize, 7
   %size8 = and i64 %sizeup, -8
   %a32 = icmp uge i64 %size8, 32
