@@ -1,0 +1,28 @@
+# check: run
+# S8d: a narrowed payload that is a reference is a copy of the reference, which still names the instance - a mut
+# method, a mut parameter and a store through it all write the instance
+import "std/io"
+
+type Circle struct(r F64) { r }
+fn (c mut Circle&) Grow() { c.r = c.r * 2.0 }
+fn grow(c mut Circle&) { c.r = c.r * 3.0 }
+
+type Shape enum { Round mut Circle&, Box(c mut Circle&), Sq(s F64) }
+
+fn main() {
+    k := Circle(1.0)
+    e := Shape.Round(k)
+    if e == Shape.Round {
+        e.Grow()
+        grow(e)
+        e.r = e.r + 1.0
+    }
+    f := Shape.Box(k)
+    if f == Shape.Box {
+        f.c.Grow()
+        grow(f.c)
+        f.c.r = f.c.r + 1.0
+    }
+    assert k.r == 43.0
+    io.Println($k.r)!
+}

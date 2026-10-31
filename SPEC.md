@@ -4376,14 +4376,16 @@ three, so they hold in the same places. What a condition says holds:
 - and, for null alone, after a statement assigning the local a value never null (`p = Node(1)`, S8e).
 It holds from there until a statement assigns the local (an assignment, a compound one, an increment, a target - `p =
 p.next` reading `p.next` before the store), and so inside a loop only up to where the loop assigns it; never inside a
-lambda written there. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
+lambda written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is
+checked under a narrowing only where no statement after it in its block assigns the local. Only a local or a parameter narrows - a field never does, a call may change it: a field is tested
 through a local (`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
 
 Where `e` is known to hold a case, `e.r` reads the payload field `r`. Where the case's payload is one type written whole
 (T17a, `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The payload's
 fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they are read
-there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a compile-time
-error naming the whole-value assignment. A field of a case the local is not known to hold is no member of an enum,
+there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole), and lending one
+of them writably (`e.Grow()` with a `mut` receiver, `e.c` or `e` given to a `mut T&` parameter), is a compile-time
+error naming the whole-value assignment and a match's binding, a copy of its own. A field of a case the local is not known to hold is no member of an enum,
 and a compile-time error.
 
 **S8e (null narrowing).** A local or a parameter holding a `T?&` known not to be null (S8d) reads as a `T&` (T2c);

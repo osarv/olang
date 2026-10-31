@@ -2303,7 +2303,7 @@ fn ReadMaybeNull(text String&, ty String&, bang String&) Msg { return Msg(Diag.R
 fn ArrayNullable() Msg { return Msg(Diag.ArrayNullable, "T2c", "an array is never null - its zero value is the empty array: write '&', not '?&'") }
 fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array is never null - its zero value is the empty array: write '" $empty "', or no value, for an empty " $ty) }
 fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array is never null - test whether it is empty: write '" $text $empty "'") }
-fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
+fn NarrowedWrite(local String&, kase String&) Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written or lent writably - '" $local "' is narrowed to " $kase ", and what it reads there is a copy of the payload: assign the whole case, '" $local " = " $kase "(...)', or change a copy a match binds and assign the case back") }
 fn CallDoesNothing(call String&) Msg { return Msg(Diag.CallDoesNothing, "S3", "'" $call "' gives a value and does nothing else - use the value (assign it, pass it on), or leave the call out") }
 
 fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', until it is assigned") }

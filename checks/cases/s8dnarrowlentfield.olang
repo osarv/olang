@@ -1,0 +1,13 @@
+# check: fail error[S8d]: 'e' is narrowed to Shape.Box, and what it reads there is a copy of the payload: assign the whole case, 'e = Shape.Box(...)'
+# S8d: a field of a narrowed payload is a copy - a mut method on it is refused as a store into it is
+type Circle struct(r F64) { r }
+fn (c mut Circle&) Grow() { c.r = c.r * 2.0 }
+
+type Shape enum { Box(c Circle), Sq(s F64) }
+
+fn main() {
+    e := Shape.Box(Circle(1.0))
+    if e == Shape.Box {
+        e.c.Grow()
+    }
+}

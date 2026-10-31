@@ -4838,7 +4838,10 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
     c.noteWrite(p)
     match p {
         case typed.Lvalue.Local(_, _, id) {
-            if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
+            if c.narrowOwner(I64(id)) >= 0 {
+                # S8d: a narrowed payload's copy, lent writably - the write would change nothing the program holds
+                c.narrowedWrite(sp, I64(id))
+            } else if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
                 c.err(sp, msgs.CaptureReadOnly())
             } else if not store and c.roLocal(I64(id)) {
                 # T25c: a read-only copy is not lent writably
@@ -4891,8 +4894,8 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
                 case typed.Expr.Try(_, _, _) => true
                 case _ => false
             }
-            if store and c.narrowCopy(x) {
-                c.err(sp, msgs.NarrowedWrite())
+            if c.narrowCopy(x) >= 0 {
+                c.narrowedWrite(sp, c.narrowCopy(x))
             } else if store {
                 c.err(sp, msgs.AssignIntoTried() if tried else msgs.WriteIntoCallValue())
             }
@@ -20482,17 +20485,37 @@ fn caseDecl(td ast.TypeDecl?&, k I64) ast.CaseDecl?&td {
     }
 }
 
-# S8d: whether a value reads a narrowed local's payload copy
-fn (c mut Checker&) narrowCopy(x typed.Expr&) Bool {
+# S8d: the narrowed local's payload copy a value reads, -1 for none
+fn (c mut Checker&) narrowCopy(x typed.Expr&) I64 {
     p := readPlace(x)
-    if p is null { return false }
+    if p is null { return -1 }
     match p {
-        case typed.Lvalue.Local(_, _, id) {
-            for k in c.fr().narrowFields { if k == I64(id) { return true } }
-        }
-        nomatch { }
+        case typed.Lvalue.Local(_, _, id) { return I64(id) if c.narrowOwner(I64(id)) >= 0 else -1 }
+        nomatch { return -1 }
     }
-    return false
+}
+
+# S8d: the narrowing whose payload copy local fl holds - its index among the frame's narrowings, -1 for none
+fn (c mut Checker&) narrowOwner(fl I64) I64 {
+    fr := c.fr()
+    at := try fr.narrowFields.IndexOf(fl) catch default -1
+    if at < 0 { return -1 }
+    for j in range fr.narrows.Len() {
+        k := fr.narrows.Len() - 1 - j
+        nr := fr.narrows[k]
+        n := c.P.T.Items(c.P.T.Params(c.P.CaseSig(nr.Enum, nr.Tag))).Len()
+        if at >= nr.From and at < nr.From + n { return k }
+    }
+    return -1
+}
+
+# S8d: a narrowed payload's copy (local fl) written or lent writably - an error naming the local and its case
+fn (c mut Checker&) narrowedWrite(sp source.Span, fl I64) {
+    nr := c.fr().narrows[c.narrowOwner(fl)]
+    cd := caseDecl(c.P.TypeDecl(c.P.T.DeclOf(nr.Enum)), nr.Tag)
+    name := c.text(cd.Name) if cd is not null else ""
+    kase := $(c.ty(nr.Enum)) "." $name
+    c.err(sp, msgs.NarrowedWrite(c.text(c.cur().Locals[nr.Local].Name), kase))
 }
 
 # S8d: x.n where x names a narrowed local and n a field of its case's payload: the field's copy, -1 for none

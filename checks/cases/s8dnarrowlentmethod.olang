@@ -1,0 +1,18 @@
+# check: fail error[S8d]: a narrowed payload field is read, never written or lent writably - 'e' is narrowed to Shape.Round
+# S8d: a payload written whole is read as a copy where its local is narrowed - a mut method on it would grow the copy
+# and lose the write
+import "std/io"
+
+type Circle struct(r F64) { r }
+fn (c mut Circle&) Grow() { c.r = c.r * 2.0 }
+
+type Shape enum { Round Circle, Sq(s F64) }
+
+fn main() {
+    e := Shape.Round(Circle(1.0))
+    if e == Shape.Round {
+        e.Grow()
+        io.Println("inside: " $e.r)!
+    }
+    io.Println("after: " $e)!
+}
