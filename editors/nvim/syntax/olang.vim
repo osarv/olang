@@ -7,12 +7,14 @@ syn keyword olangKeyword fn type struct enum trait extends import test extern de
 syn keyword olangStatement return break continue error defer errdefer assert unreachable noreturn spawn join yield become comptime
 syn keyword olangConditional if else match case
 syn keyword olangRepeat for in range do
-syn keyword olangException try catch checked default
+syn keyword olangException try catch default
 syn keyword olangOperator and or not xor is as embed
 syn keyword olangStorage mut
 syn keyword olangBoolean true false
 syn keyword olangConstant null
 syn keyword olangType Bool I8 I16 I32 I64 U8 U16 U32 U64 F16 BF16 F32 F64 Array String Char List Map Vec StringBuilder
+syn match olangType "\<[IU][0-9]\+\>"
+syn keyword olangType F8E4M3 F8E5M2 C16 C32 C64 Place
 syn keyword olangTodo TODO FIXME XXX contained
 
 " a declared type, a constant: a name with a capital first letter after "type", and any CapitalisedName

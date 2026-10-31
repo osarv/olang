@@ -13,6 +13,9 @@ Rust-like compile-time memory/security guarantees (underway - see "Memory and sc
 scope containment is checked at compile time, a general borrow checker is not, and nothing about freeing is written by
 the program: freeing early is the compiler's, `docs/memory.md`).
 
+What depends on what across the repository - which files change with a keyword, an option, a diagnostic, a std API -
+is `DEPENDENTS.md`.
+
 This file is a living design record, kept terse on purpose - it is not a spec (see `SPEC.md` for the
 normative, current-state language reference) and not the full story either (see `HISTORY.md`
 for the complete discursive record behind every entry below: why each decision was made, what was
@@ -53,7 +56,10 @@ Go through this for every change to what olang means - a rule added, revised or 
 6. **Diagnostics**: new errors name the rule and say what to write instead; reword any message the change made stale.
 7. **Record it**: the current-state entry below, the full story in `HISTORY.md`, and any question left open in the
    pending-decisions ledger (`.claude/memory/decisions.md`).
-8. **`make verify`** passes, then commit.
+8. **Walk `DEPENDENTS.md`** for this kind of change - every place that must change with it (SPEC, scanner, formatter,
+   LSP lists, editors/nvim, `help`, READMEs, goldens, seed, fix's table); `make consistency` (in `make verify`) fails
+   naming the file for the edges it can check.
+9. **`make verify`** passes, then commit.
 
 ## Settled decisions
 
