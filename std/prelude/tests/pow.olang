@@ -1,0 +1,34 @@
+# Pow with the exponents it computes without pow (std/prelude/number.olang): 0, 1, 2 and -1 exactly what pow gives,
+# 0.5 a square root with pow's two edge cases, other whole numbers up to 16 by squaring - each run alike at run time and
+# by the evaluator (the baked globals), and every other exponent pow's.
+
+fn pwCases(x F64) String {
+    return $x.Pow(0.0) " " $x.Pow(-0.0) " " $x.Pow(1.0) " " $x.Pow(2.0) " " $x.Pow(-1.0) " " $x.Pow(0.5) " " $x.Pow(3.0) " " $x.Pow(-2.0) " " $x.Pow(16.0) " " $x.Pow(17.0) " " $x.Pow(2.5)
+}
+
+fn pwEdges() String {
+    nan := F64.NaN
+    return $nan.Pow(0.0) " " $nan.Pow(2.0) " " $(-0.0).Pow(0.5) " " $(-F64.Inf).Pow(0.5) " " $(-4.0).Pow(0.5) " " $(0.0).Pow(-1.0) " " $(-0.0).Pow(-1.0) " " $(-0.0).Pow(3.0) " " $(-0.0).Pow(-3.0) " " $(-2.0).Pow(3.0) " " $F64.Inf.Pow(-2.0)
+}
+
+fn pw32(x F32) String { return $x.Pow(2.0) " " $x.Pow(-1.0) " " $x.Pow(0.5) " " $x.Pow(4.0) " " $F16(x).Pow(2.0) " " $BF16(x).Pow(3.0) }
+
+PwBaked String& = pwCases(1.5)
+PwEdgesBaked String& = pwEdges()
+Pw32Baked String& = pw32(F32(1.25))
+
+test "the exponents Pow computes without pow, alike at run time and while compiling" {
+    want := "1 1 1.5 2.25 0.6666666666666666 1.224744871391589 3.375 0.4444444444444444 656.8408355712891 985.2612533569336 2.7556759606310752"
+    assert pwCases(1.5) == want and PwBaked == want
+    edges := "1 nan 0 inf nan inf -inf -0 -inf -8 0"
+    assert pwEdges() == edges and PwEdgesBaked == edges
+    assert pw32(F32(1.25)) == Pw32Baked
+}
+
+test "x * x, 1 / x and the square root are what pow gives" {
+    for i in range 1, 200 {
+        x := F64(i) * 0.37 - 20.0
+        assert x.Pow(2.0) == x * x and x.Pow(-1.0) == 1.0 / x and x.Pow(1.0) == x
+        if x > 0.0: assert x.Pow(0.5) == x.Sqrt()
+    }
+}

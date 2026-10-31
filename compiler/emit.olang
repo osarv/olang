@@ -467,9 +467,10 @@ fn (e Emitter&) head() String {
 }
 
 # what every module ends with: the type tree its access tags name (T36), the runtime's header tags among them, and
-# the attribute group every function carries
+# the attribute group every function carries - nounwind among them: nothing in olang unwinds (an error is a value, a
+# failed check in a test a longjmp), so no function needs an unwind table
 fn (e mut Emitter&) attributes() String {
-    return $tbaaTree "attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n"
+    return $tbaaTree "attributes #0 = { null_pointer_is_valid " $e.Attrs " nounwind }\n"
 }
 
 # every function the program reaches written as an item, from main or the tests (or, compiling one module, from its
@@ -482,9 +483,6 @@ fn (e mut Emitter&) emitAll() {
     p := e.P
     instKeys := e.reusing()
     inits := e.initOrder()
-    for m in inits {
-        if not e.Module or m == p.L.Root { e.want(mir.FnKey.Init(m)) }
-    }
     tests Vec<I64>
     mainBody I64 = -1
     for i in range e.Lw.Bodies.Len() {
@@ -508,6 +506,12 @@ fn (e mut Emitter&) emitAll() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
                 if e.Lw.Bodies[i].Root is null { continue }
+                # K2: a baked global's initializer is never run - its value is its storage's - so it is not written;
+                # its storage is, in its module's object, whatever reads it (an importer's code, or nothing here)
+                if e.Baked.Has(i) {
+                    e.bakedStorage(i)
+                    continue
+                }
                 h := e.homeOf(k)
                 if e.ReusedAt.Has(h) {
                     # a reused module's: declared, for the objects that name it (the entry calls a global's
@@ -518,6 +522,13 @@ fn (e mut Emitter&) emitAll() {
                 }
             }
             case _ { }
+        }
+    }
+    # the root's globals the entry sets at startup (every one K2 did not bake), defined in the root's own object
+    if not e.Module {
+        for i in e.globalOrder(inits) {
+            k := mir.FnKey.Body(typed.BodyId(I32(i)))
+            if not e.Baked.Has(i) and e.homeOf(k) == p.L.Root { e.want(k) }
         }
     }
     for k in instKeys { e.want(k) }
@@ -1024,6 +1035,29 @@ fn (e mut Emitter&) globalOrder(inits Vec<I64>) Vec<I64> {
         }
     }
     return out
+}
+
+# baked global i's storage defined (K2), at the type its initializer stores
+fn (e mut Emitter&) bakedStorage(i I64) {
+    b := e.Lw.Bodies[i]
+    match b.Of {
+        case typed.BodyOf.Global(m, n) { e.global(m, n, storedType(b, m, n)) }
+        case _ { }
+    }
+}
+
+# the type a global's initializer stores into it (check writes one Assign to the global), unknown where none
+fn storedType(b typed.Body&, m I64, n source.NameId) types.TypeId {
+    if b.Root is null { return types.UnknownT }
+    for s in b.Root!.Stmts {
+        match s {
+            case typed.Stmt.Assign(_, typed.Lvalue.Global(_, ty, gm, gn), _) {
+                if gm == m and gn == n { return ty }
+            }
+            case _ { }
+        }
+    }
+    return types.UnknownT
 }
 
 fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
@@ -1745,6 +1779,14 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if b >= 0 and e.Baked.Has(b) {
         img := try e.Baked.Get(b) catch default eval.Image()
         text := e.bakedText(s, img)
+        if img.Mutable {
+            # a mutable global's first value written as its storage's (interp.bakeMutable): plain data, declared
+            # elsewhere as the writable global it is
+            ty := e.ty(t) if t != types.UnknownT else ""
+            ext := $"@" $s " = external global " $ty if ty != "" else $"@" $s " = external global i8"
+            e.item(s, m, text, $ext "\n")
+            return "@" $s
+        }
         at := try text.Find(" = constant ") catch default -1
         end := try text.Find("}>") catch default -1
         decl := $"@" $s " = external constant " $text[at + 12:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
@@ -1769,9 +1811,9 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
         b := img.Blobs[j]
         q I64 = 0       # the next of its references another global's image holds (K2b)
         name := "@" $s if j == 0 else "@" $s ".k" $j
-        # K2: an immutable global's own storage is never written once set - only immutable ones are baked - so it is a
-        # constant, whose loads LLVM folds
-        kind := "constant" if j == 0 else "internal constant" if b.Constant else "internal global"
+        # K2: an immutable global's own storage is never written once set, so it is a constant, whose loads LLVM folds;
+        # a mutable one's first value is its storage's (interp.bakeMutable)
+        kind := ("global" if img.Mutable else "constant") if j == 0 else "internal constant" if b.Constant else "internal global"
         tyText, valText := StringBuilder(), StringBuilder()
         at I64 = 0
         for r in range b.At.Len() + 1 {
@@ -2040,6 +2082,21 @@ fn (fe mut fnEm&) let(text String&) String {
 
 fn (fe mut fnEm&) load(ty String&, at String&, tag String& = "") String { return fe.let("load " $ty ", ptr " $at $tag) }
 
+# an enum's tag load's range: one of its n cases
+fn (fe fnEm&) tagRange(w String&, n I64) String { return "" if n < 1 else $", !range !{" $w " 0, " $w " " $n "}" }
+
+# a value of type ty, loaded as LLVM type lt: where it is an enum with no payload - its tag alone - the range of its
+# cases (tagRange), so a match on it needs no test for a case it does not have
+fn (fe mut fnEm&) caseRange(ty types.TypeId, lt String&) String {
+    if lt != "i32" { return "" }
+    t := fe.E.T
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k != types.Kind.Named and k != types.Kind.AnonEnum { return "" }
+    if k == types.Kind.Named and t.Cases(r) == types.ListId(0) { return "" }
+    return fe.tagRange("i32", t.Items(fe.casesList(r)).Len())
+}
+
 fn (fe mut fnEm&) store(ty String&, v String&, at String&, tag String& = "") { fe.w("store " $ty " " $v ", ptr " $at $tag) }
 
 fn blockName(b mir.BlockId) String { return "bb" $b }
@@ -2059,7 +2116,8 @@ fn (e mut Emitter&) signature(ty types.TypeId) {
 
 # the function's LLVM header: linkage, result, name and parameters
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
-fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal") String {
+fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal"
+        inline String& = "") String {
     t := e.T
     e.signature(ty)
     b := StringBuilder()
@@ -2091,8 +2149,19 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
             case _ { b.Push($e.ty(ps[i]) " %a" $i) }
         }
     }
-    b.Push(")\n" if link == "declare" else ") #0 {\n")
+    b.Push(")\n" if link == "declare" else $")" $(inline if inline != "" else e.inlining(k)) " #0 {\n")
     return b.ToString()
+}
+
+# what a definition says of its inlining: a collection's growth (typed.Body.Cold) never inlined and cold
+fn (e Emitter&) inlining(k mir.FnKey) String {
+    match k {
+        case mir.FnKey.Body(id) {
+            if e.Lw.Bodies[I64(id)].Cold { return " noinline cold" }
+        }
+        case _ { }
+    }
+    return ""
 }
 
 # the linkage a function is defined with for its home
@@ -2198,8 +2267,12 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     }
     if not e.writeBody(k, f, symbol, passed, env, hdr, false) { return }
     # D18e: a generator function's second form, the one a for-in that finishes its walk calls - written beside the
-    # first in every build, so whether one exists never depends on the program or the build it was compiled in
-    if e.isGenFn(k) { e.writeBody(k, f, $symbol ".walk", passed, env, e.header(k, f.Ty, $symbol ".walk", passed, env, linkFor(e.homeOf(k))), true) }
+    # first in every build, so whether one exists never depends on the program or the build it was compiled in. It is
+    # inlined wherever it is called (a for-in's own source, made for that one call), so CoroElide sees its frame made
+    # and destroyed beside the resumes even in a caller too large for the inliner to take it of its own accord
+    if not e.isGenFn(k) { return }
+    wh := e.header(k, f.Ty, $symbol ".walk", passed, env, linkFor(e.homeOf(k)), " alwaysinline")
+    e.writeBody(k, f, $symbol ".walk", passed, env, wh, true)
 }
 
 # a generator function's ".walk" form standing in for a body that could not be made (D18e)
@@ -2243,7 +2316,8 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     b := StringBuilder()
     if fe.gen {
         # D18: the coroutine, its Next (the function value's code) beside it
-        hdr = $"define internal ptr @" $symbol ".coro(ptr %env, ptr %home) presplitcoroutine #0 {\n"
+        # its ramp inlined wherever it is made (D18e: the walk form's frame elided only where the ramp is seen)
+        hdr = $"define internal ptr @" $symbol ".coro(ptr %env, ptr %home) presplitcoroutine alwaysinline #0 {\n"
     }
     if fe.dbgSp >= 0 {
         # B2e: the define line names its subprogram
@@ -2286,7 +2360,7 @@ fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, 
     rt := t.RetLlvm(f.Ty)
     via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
     b := StringBuilder()
-    b.Push(e.header(k, f.Ty, $symbol ".wnext" if walk else symbol, passed, true, "internal"))
+    b.Push(e.header(k, f.Ty, $symbol ".wnext" if walk else symbol, passed, true, "internal", " alwaysinline" if walk else ""))
     b.Push("entry:\n  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
     if walk {
         b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %running = load i32, ptr %pr\n")
@@ -3164,7 +3238,8 @@ fn (fe mut fnEm&) val(x mir.Operand, want types.TypeId = types.UnknownT) String 
         case mir.Operand.None { return "undef" }
         case mir.Operand.Copy(p) {
             at, ty := fe.addr(p)
-            return fe.load(fe.ty(ty), at, fe.tagAt)
+            lt := fe.ty(ty)
+            return fe.load(lt, at, $fe.tagAt $fe.caseRange(ty, lt))
         }
         case mir.Operand.Const(ty, bits) {
             k := ty
@@ -3986,9 +4061,12 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Prim(op, ty, args) { return fe.prim(op, ty, args) }
         case mir.Rvalue.Overflows(op, ty, args) { return fe.overflows(op, ty, args) }
         case mir.Rvalue.Tag(p) {
+            # the tag is one of the cases' (only a case's construction writes it), which LLVM is told (!range), so
+            # a match's compare chain needs no last test before its exhaustiveness trap and becomes a switch
             at, pty := fe.addr(p)
-            if fe.E.enumWords(pty) { return fe.load("i64", at) }
-            return fe.let("sext i32 " $fe.load("i32", at) " to i64")
+            n := t.Items(fe.casesList(t.Repr(pty))).Len()
+            if fe.E.enumWords(pty) { return fe.load("i64", at, fe.tagRange("i64", n)) }
+            return fe.let("sext i32 " $fe.load("i32", at, fe.tagRange("i32", n)) " to i64")
         }
         case mir.Rvalue.Aggregate(ty, tag, args) { return fe.aggregate(ty, tag, args) }
         case mir.Rvalue.New(s, x, ty) {
@@ -4111,6 +4189,12 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     sc := fe.scope(s)
     p := ""
+    if cnt == "0" {
+        # E10: an array of no elements, known while compiling, names the one static storage every such array does - no
+        # allocation (std/runtime's __olang_empty_array)
+        fe.E.runtime("__olang_empty_array")
+        return fe.pair("0", "getelementptr (i8, ptr @__olang_empty_array, i64 64)")
+    }
     if fill == mir.Operand.None and not fe.E.San {
         # E39: no fill - each element written before anything reads it
         return fe.pair(cnt, fe.arrayStorage(sc, bytes, el, false))

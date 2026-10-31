@@ -1,0 +1,52 @@
+# Take's and Skip's folds over an array's and an Indexable's iterator (docs/optsurvey.md item 8): a counted loop over
+# what the iterator has left, giving what Next walking would give - the same values, and the iterators standing where
+# Next would have left them, after an error from the callback too - with Sum, Count, Min and Max through Fold. Each
+# beside a baked global the compile-time evaluator computes.
+
+type FoldBad error { NO }
+
+fn foldsAll(a Array<I64>&) String {
+    v Vec<I64>
+    for x in a { v.Push(x) }
+    out := StringBuilder()
+    out.Push($a.Iter().Take(4).Sum() " " $a.Iter().Skip(2).Sum() " " $a.Iter().Skip(1).Take(3).Sum() " ")
+    out.Push($(try a.Iter().Take(4).Min() catch Exhausted default -1) " " $(try a.Iter().Skip(2).Max() catch Exhausted default -1) " ")
+    out.Push($a.Iter().Take(5).Count(fn(x): return x > 2) " " $v.Iter().Take(3).Sum() " " $v.Iter().Skip(1).Take(2).Sum() " ")
+    out.Push($a.Iter().Take(0).Sum() " " $a.Iter().Take(-3).Sum() " " $a.Iter().Skip(99).Sum() " " $a.Iter().Skip(2).Take(99).Sum())
+    return out.ToString()
+}
+
+# the callback failing part way: each iterator where Next would have left it
+fn foldsFailing(a Array<I64>&) String {
+    stop := fn(acc I64, x I64) I64 ? FoldBad {
+        if x == 8: error FoldBad.NO
+        return acc + x
+    }
+    t := a.Iter().Take(4)
+    r := try t.Fold(I64(0), stop) catch FoldBad default -1
+    n1 := try t.Next() catch Exhausted default -7
+    n2 := try t.Next() catch Exhausted default -7
+    s := a.Iter().Skip(1).Take(3)
+    r2 := try s.Fold(I64(0), stop) catch FoldBad default -1
+    m1 := try s.Next() catch Exhausted default -7
+    m2 := try s.Next() catch Exhausted default -7
+    e := a.Iter().Take(9)
+    f := e.Sum()
+    g := try e.Next() catch Exhausted default -7
+    return $r " " $n1 " " $n2 " " $r2 " " $m1 " " $m2 " " $f " " $g
+}
+
+FoldsBaked String& = foldsAll(I64[5, 3, 8, 1, 9, 2])
+FoldsFailingBaked String& = foldsFailing(I64[5, 3, 8, 1, 9, 2])
+
+test "Take and Skip fold as Next walks them, with Sum, Count, Min and Max through Fold" {
+    a := I64[5, 3, 8, 1, 9, 2]
+    want := "17 20 12 1 9 4 16 11 0 0 0 20"
+    assert foldsAll(a) == want and FoldsBaked == want
+}
+
+test "a fold failing part way leaves Take and Skip where Next would" {
+    a := I64[5, 3, 8, 1, 9, 2]
+    want := "-1 1 -7 -1 1 -7 28 -7"
+    assert foldsFailing(a) == want and FoldsFailingBaked == want
+}

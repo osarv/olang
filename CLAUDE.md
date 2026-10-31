@@ -625,7 +625,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   computing them bit by bit. Inherited through `extends`, never redeclared, as E33's.
 - **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an
   inherited array method is never overridden (T29e); `x.Bits()` and `u.F64FromBits()` etc. move a float's IEEE pattern
-  (E33); an `Array<T, 0>` has storage of its own (E10); a NaN renders `nan`.
+  (E33); an array made with a constant length 0 names one static storage, no allocation (arrays compare by contents, E10; a
+  struct of no fields still has storage of its own, since a reference to one compares by identity); a NaN renders `nan`.
 - **Visibility details (M6a, M12, M4).** A member or error word is public by its own first letter; enum cases are
   alias-qualified across modules (`Lib.Dir.North`); an alias-less import takes the file's base name, so a file's
   capitalization is part of its interface; capitalized aliases re-export, through chains of any depth; a cycle in
@@ -1361,6 +1362,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   carries the target's CPU and features and `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (BF16
   narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-debug`, AVX512-BF16 conversions removed -
   T4, E33, B2c, B12c). The arena under `-sanitize` poisons with `0x7FF5...`, protects and holds back closed chunks.
+- **Optimizations from the survey (docs/optsurvey.md; built 2026-10-31, HISTORY.md "Optimizations from the survey,
+  built"; none changes meaning).** Its items 2 and 5 wait for the scoping rework (section 8 placement); `Pow(2.0)` is QBV's.
+  - 1: the arena's bump path `alwaysinline`, the rest `__olang_scope_alloc_slow` (`noinline`) - binary-trees 185 -> 131M Ir.
+  - 3: a body calling `grown` (a Vec's growth) is `typed.Body.Cold`, emitted `noinline cold`, so `Push` inlines.
+  - 4: a generator's `.walk`, `.wnext` and ramp `.coro` are `alwaysinline`, so D18e's elision holds in a large caller.
+  - 12: an integer's `Sqrt` corrects by squaring a root held below 2^32 - no division (3x natively).
+  - 15: every function `nounwind` (nothing unwinds; no unwind tables - regex's binary -4%); a baked global's initializer is never written, nor
+    the unused `olang.init.MODULE`; a mutable global whose initializer the evaluator computes to plain data is baked as its
+    writable storage's first value (std/time's counters) - nothing at startup. 128-bit division by a constant not built.
+  - 9: a text local copied from a literal, homed in its own block, gets a stack slot (`lower.slotCopy`), not arena storage.
+  - 14: an array of a constant length 0 is `@__olang_empty_array` - no allocation (an `Array<T>(0)`, a Vec's first buffer).
+  - 13: every enum tag load carries `!range` over its cases, so a match's exhaustiveness trap folds (8-way -12%).
+  - 8: `Sum`/`Count`/`Min`/`Max` through `Fold`; `Take`/`Skip` fold an array's (Take: an Indexable's) iterator by a counted loop
+    (`ArrayIter.Rest`, `Advance`) - `a.Iter().Skip(10).Take(k).Sum()` vectorizes (16.4 -> 1.9M Ir).
+  - 7: a filtered comprehension's result is the first n elements of its own buffer, no copy (17.7 -> 13.7M Ir); a Vec
+    grown in place is not built (View's read-only receiver has nowhere to record a view).
+  - 16 (QBV, the user: every exponent that gains): float `Pow` gives 1, x, x*x, 1/x for 0, 1, 2, -1 (pow's bits), a square root
+    for 0.5 (pow's edges kept), squaring for other whole |n| <= 16 (last bits may differ), else pow; decided by the value,
+    the evaluator computing the same - Pow(2.0) 138 -> 4.4M Ir, a variable exponent +17 Ir a call. SPEC states it.
+  - Not built: 10 (enum layout), 6 (constant calls in bodies), 11 (Filter/Map fusion) - each a design of its own; HISTORY.md.
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).

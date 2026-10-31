@@ -5115,7 +5115,9 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
 # a global's value (K2, B3e): its initializer run where it has not been, the value then at Result, of type ResultTy.
 # While compiling, a mutable global, or one holding storage a writable reference reaches, is no compile-time value -
 # baking, the latter is (its own storage written out as it is)
-fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false) Stop {
+# (baking, mutable: a mutable global's initial value, which emit writes as the storage's first value - only plain data,
+# Image's caller's test; nothing else may read it while compiling, and placeReady still refuses a read of it)
+fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false, mutable Bool = false) Stop {
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
@@ -5127,7 +5129,7 @@ fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false) 
     }
     ty := types.TypeId(I32(m.globals[g].Ty))
     if m.When == Mode.Compile {
-        if m.globals[g].Mutable {
+        if m.globals[g].Mutable and not (baking and mutable) {
             m.refuse(WhyMutableGlobal)
             return m.Stopped
         }
@@ -5323,6 +5325,7 @@ type Blob struct() {
 type Image struct() {
     Blobs Vec<Blob>
     Slots Vec<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
+    Mutable Bool = false   # a mutable global's first value (plain data): its storage written, not constant
 }
 
 type NotBaked error {
@@ -5332,8 +5335,8 @@ type NotBaked error {
 # the image of global (module, name) once evaluated while compiling: a value that is plain data, and what it reaches,
 # the program's own storage made by its initializer. One reaching code (a function value), another global's storage
 # or storage the evaluator does not hold as data is set at startup instead
-fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
-    if m.Global(module, name, true) != Stop.None { error NotBaked.REFUSED }
+fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) Image ? NotBaked {
+    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.REFUSED }
     g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
     img := Image()
     blobOf Map<I64, I64>

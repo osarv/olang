@@ -155,7 +155,8 @@ fn Text(arch String&, san Bool, dyncall Bool, prof Bool = false) String ? Bad {
 # ir with the build's attributes, as stage 0 writes every object's: a linkonce_odr global in a comdat of its own, every
 # function definition given group #0 (#1, never instrumented, for the two crash handlers: they can run while
 # ThreadSanitizer's own state is inconsistent), the groups defined at the end - null_pointer_is_valid (T2b), the
-# target's attributes (B12), sanitize_thread on #0 under -race (P7)
+# target's attributes (B12), sanitize_thread on #0 under -race (P7), and nounwind: olang has no unwinding, so no
+# function needs an unwind table
 fn WithAttributes(ir String&, attrs String&, race Bool) String {
     out := StringBuilder()
     for line in ir.Lines() {
@@ -186,8 +187,8 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
         out.Push(line)
         out.PushChar('\n')
     }
-    out.Push($"\nattributes #0 = { null_pointer_is_valid " $("sanitize_thread " if race else "") $attrs " }\n")
-    out.Push($"attributes #1 = { null_pointer_is_valid " $attrs " }\n")
+    out.Push($"\nattributes #0 = { null_pointer_is_valid " $("sanitize_thread " if race else "") $attrs " nounwind }\n")
+    out.Push($"attributes #1 = { null_pointer_is_valid " $attrs " nounwind }\n")
     return out.ToString()
 }
 
@@ -328,7 +329,7 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     assert x.StartsWith("target triple = \"x86_64-pc-linux-gnu\"\n")
     assert x.Contains("define i32 @__olang_spawn(ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) #0 {")
     assert x.Contains("%fa = alloca [80 x i8]")
-    assert x.EndsWith("attributes #1 = { null_pointer_is_valid \"target-cpu\"=\"x86-64\" }\n")
+    assert x.EndsWith("attributes #1 = { null_pointer_is_valid \"target-cpu\"=\"x86-64\" nounwind }\n")
     # no placeholder or directive is left outside a comment
     for line in x.Lines() {
         if line.TrimStart().StartsWith(";") { continue }
@@ -339,7 +340,7 @@ test "the runtime is filled in for an architecture and a mode, every placeholder
     s := try Text("x86_64", true, false)
     assert s.Len() > x.Len()
     r := try Ir("x86_64-pc-linux-gnu", "x86_64", "", false, true)
-    assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  }")
+    assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  nounwind }")
     assert r.Contains("@__olang_crash_handler(") and r.Contains(") #1 {")
 }
 

@@ -1492,11 +1492,14 @@ and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
-(`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
+(`total(a.Iter())`); its `Rest()` is a view of the elements it has still to give, and `Advance(n)` moves it past at
+most `n` of them, as that many `Next` calls would, giving how many it passed. There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter` - the last two building a new `Vec` -
 and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
-(G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
+(G1a) - so it is called without `try` where neither can fail. `Sum`, `Count`, `Min` and `Max` go through `Fold`, which
+`Take` and `Skip` give a fold of their own over an array's iterator (`Take` over an `Indexable`'s too) - a counted loop
+over what it has left, the same values, the iterators left where `Next` would leave them. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
 `Chain`) fail as the iterators they wrap do. So do the walks of the same shape, each failing also with what its callback
 fails with: `TakeWhile(keep)`, the values up to the first `keep` does not hold for (which ends the walk and is not
 given); `SkipWhile(keep)`, the values from that first one on; `StepBy(n)`, the first value and every `n`-th after it,
@@ -2545,7 +2548,13 @@ first as in C), `Sinh`, `Cosh`, `Tanh`, `Erf`, `Erfc`, `Floor`, `Ceil`, `Trunc`,
 compiling where a value is needed then, K1, by the very function the program calls), an `F16` or a `BF16` in `F32` -
 `F64` for `Fma` - and rounded once to its own type. A result outside a function's domain is what IEEE 754 says
 (`(-1.0).Sqrt()` and `(-1.0).Log()` are `NaN`, `0.0.Log()` is `-Inf`, `1000.0.Exp()` is `Inf`), never an error: a NaN
-carries the failure through the rest of a computation and is asked about once, with `IsNan`.
+carries the failure through the rest of a computation and is asked about once, with `IsNan`. `x.Pow(y)` is C's `pow` but for
+these exponents, decided by `y`'s value wherever it comes from: `0` (either sign) gives `1`, `1` gives `x`, `2` gives
+`x * x`, `-1` gives `1 / x` - each `pow`'s own result; `0.5` gives `x.Sqrt()`, except `+0` for `-0` and `+Inf` for
+`-Inf`, as `pow` has them; any other whole number `n` with `|n| <= 16` gives `x` multiplied by itself by squaring (the
+bits of `n` from the lowest, the result, starting from `1`, multiplied by each square whose bit is set), and for a
+negative `n` `1` divided by that - a result that may differ from `pow`'s in its last bits. The compile-time evaluator
+computes the same operations, so a constant exponent's power is one value while compiling and at run time.
 Every number has `Abs()`, `a.Min(b)`, `a.Max(b)` and `x.Clamp(lo, hi)`, defaults over `Number`: on a float `Abs`
 clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a NaN if either is one, and `-0.0` below
 `0.0`, so `a.Min(b)` and `b.Min(a)` are one value; on an integer `Abs` negates a negative value (the most negative one
@@ -3745,7 +3754,8 @@ Its storage is allocated before the first element where the source's length is k
 length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. Storage
 is never cleared: each element is written once, as it is computed, and nothing reads an element not yet written. With
 no `if` and a known length, the storage allocated is the array itself, exactly its length. A comprehension that keeps
-nothing is an empty array with storage of its own.
+nothing is an empty array - whose storage, as every empty array's, nothing can tell apart from another's: there is
+nothing in it to read or write, and arrays compare by what they hold (E10).
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 

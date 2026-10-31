@@ -3833,8 +3833,8 @@ o14bfoldshort.olang:7:5: error[D3b]: 'longest' is declared and never read - read
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/iterator.olang:73:5: note: the callee requires it because of this statement
-   73 |     return acc
+$ROOT/std/prelude/iterator.olang:72:5: note: the callee requires it because of this statement
+   72 |     return acc
       |     ^~~~~~
 compilation failed with 2 errors
 === o14btypevar.olang

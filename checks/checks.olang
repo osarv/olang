@@ -1245,7 +1245,8 @@ fn k2(r mut report&) ? Failed {
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tiles") " = available_externally constant <\\{ \\[16 x i8\\] \\}>"), "ctlib_Tiles imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Rows") " = external (global \\{ i64, ptr \\}|constant <\\{ \\[8 x i8\\], ptr \\}>)$"), "ctlib_Rows imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Counter") " = external global i64$"), "ctlib_Counter imported", dir)
-    try r.expect(irHas(dir, ll, "^" $gsym("ct", "seed") " = global i32 zeroinitializer$"), "ct_seed", dir)
+    # a mutable global whose initializer is plain data computed while compiling: its first value written as its storage's
+    try r.expect(irHas(dir, ll, "^" $gsym("ct", "seed") " = global (i32 3|<\\{ \\[4 x i8\\] \\}> <\\{ \\[4 x i8\\] c\"\\\\03(\\\\00){3}\" \\}>)"), "ct_seed", dir)
     # K2b: a referent only a read-only reference reaches is constant; an instance holding itself is written as itself
     try r.expect(irHas(dir, ll, $gsym("ct", "Table") "\\.k[01] = internal constant (\\[4 x i32\\] \\[ i32 55, i32 89, i32 144, i32 233 \\]|<\\{ \\[16 x i8\\] \\}> <\\{ \\[16 x i8\\] c\"\\\\37(\\\\00){3}\\\\59(\\\\00){3}\\\\90(\\\\00){3}\\\\E9(\\\\00){3}\" \\}>)"), "ct_Table.k0", dir)
     try r.expect(irHas(dir, ll, $gsym("ct", "Ring") "\\.k[01] = internal global (%ct\\.Node \\{ i32 1, ptr @ct_Ring\\.k0 \\}|<\\{ \\[8 x i8\\], ptr \\}> <\\{ \\[8 x i8\\] c\"\\\\01(\\\\00){7}\", ptr @G_2ect_2eRing\\.k1 \\}>)"), "ct_Ring.k0", dir)

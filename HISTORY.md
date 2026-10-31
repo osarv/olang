@@ -26679,3 +26679,191 @@ module's errors is refused with did-you-mean unless the signature names it (mine
 The user then banned both flag shapes ("yes, ban both flag shapes"): a `Bool` among several results, and a
 success `Bool` beside a written `&` parameter, are compile errors naming `? E` - with errors this cheap, nothing needs
 them, and the rule "errors are errors" holds in every program.
+
+## Optimizations from the survey, built (docs/optsurvey.md, 2026-10-31)
+
+The survey of 2026-10-27 (docs/optsurvey.md) measured fifteen missed optimizations; this batch builds the ones that
+change no meaning, in order of payoff per effort, and leaves out its items 2 and 5 (temporaries on the stack, a result
+copied into a reference parameter): both are placement decisions of section 8, which the held scoping rework (QCB) will
+redo. `x.Pow(2.0)` is not folded (QBV, the user's open question). Measured as the survey measured: callgrind's
+instructions retired (Ir) of builds at `-target x86-64-v3` (valgrind decodes no AVX-512), before with master's compiler
+(1de5612), after with the batch's; the programs are bench/'s at smaller sizes and the survey's reproducers in
+bench/repro/.
+
+**1. The allocator's bump path inlined.** `__olang_scope_alloc_a` was one body holding the ten-instruction bump and
+the whole slow path (a scope's first chunk, the pool's spare, a forwarded stand-in, a region, a new chunk), its inline
+cost ~290 against LLVM's 250, so every allocation was a call. It is now `alwaysinline` with only the bump, and calls
+`__olang_scope_alloc_slow` (`noinline`, the old rest) when the head chunk is missing or full. Nothing else changes: emit
+already copies the runtime's `alwaysinline` bodies into every module as `available_externally`, and an item's
+references are followed, so the slow path's declaration comes with it. Measured (Ir): binary-trees 14 185.0M -> 130.9M
+(the C arena 127.4M); text 200000 100.3M -> 94.7M; k-nucleotide 200000 247.0M -> 243.4M; Vec push 2M 36.5M -> 32.5M;
+regex 1 172.4M -> 165.2M; sha256 and the generator filter unchanged; dispatch's enum row 21.3M -> 22.3M (its setup's
+pushes, laid out differently).
+
+**3. A Vec's growth out of line.** LLVM inlined `vecState.room` - and `grown`'s copy loop with it - into `Push`, which
+then cost too much to inline at its callers. A body that calls the prelude's `grown` (M19d - a collection's buffer
+grown, so only the prelude's growth paths) is marked `typed.Body.Cold` by check, and emit defines it `noinline cold`
+(`emit.inlining`), so `Push` is a test, a store and an increment wherever it is called. Most of the survey's gap had
+already gone with the cold paths' error-edge weights (Vec push 2M is 32.5M Ir with or without, Push already inlined
+into `main`); what is left shows where a Push sits in a function of its own: a probe pushing onto two Vecs held in a
+struct through a method called per element, 2M calls, 86.4M (master) -> 50.1M (item 1) -> 48.1M; dispatch's enum row
+22.3M -> 22.1M. List's chunk growth (std/list, not the prelude) and Map's rehash (no `grown`) are left as they are:
+neither was measured costing its caller.
+
+**4. A generator's walk elided in any caller.** D18e's walk form folds only where LLVM inlines the walk's whole
+chain into the loop - the `.walk` function, the coroutine's ramp (`.coro`) and the `.wnext` its Generator calls - so
+that CoroElide sees the frame made and destroyed beside the resumes; in a large function the inliner declined them and
+the frame came from the arena. `.walk` and `.wnext` are now `alwaysinline` (both exist only for a for-in's own walk),
+and so is the ramp `.coro` (a few stores and the first suspend; the arena form inlines it too). The survey's prototype
+marked `.walk` alone; here that took bench/repro/gen_big_function's `genfor 100000 10` from 28.6M to 22.6M Ir only - the
+ramp stayed a call - and all three to 2.6M (the same walk alone in a small function: 1.4M). bench/gen's rows unchanged
+(range 0.3M, filter 17.6M at 1M x 2); tests/generators.olang passes built, `-debug` and `-sanitize`.
+
+**12. An integer's `Sqrt` without division.** `sqrtU64`'s corrections compared `r > n / r` and `r + 1 <= n / (r + 1)` -
+two 64-bit divisions a call. The root of any U64 is below 2^32, so `r` is now held at `0xFFFFFFFF` at most and the
+corrections square (`r * r > n`, and `(r + 1) * (r + 1) <= n` only while `r < 0xFFFFFFFF`), which cannot overflow.
+Measured over 1M roots of `i * 7919 + 12345`: 48.3M -> 38.8M Ir, and natively over 100M 0.58-0.66 s -> 0.20-0.24 s
+(the divisions were few instructions but tens of cycles each). New tests beside every perfect square in the last 96
+below 2^64 and around 2^53's root, one more baked global for the evaluator (std/prelude/tests/number.olang); the
+128-bit widths' sqrtU128 is unchanged.
+
+**15a. `nounwind` on every function.** Nothing in olang unwinds (an error is a value, a failed check in a test a
+`longjmp`), but no emitted function said so, so every one had an unwind table. Attribute group #0 of every module, and
+the runtime's #0 and #1, end in `nounwind`. Instruction counts unchanged (regex 1 164.6M, k-nucleotide 243.4M); the
+regex binary 106,608 -> 102,512 bytes, its `.eh_frame` 0xae8 -> 0x70 bytes. A `-debug` build keeps its frames for a
+debugger in `.debug_frame`. Stated with it: a C++ exception thrown through olang frames (a foreign library's) was
+already never caught there; now it is undefined, as any unwind through a `nounwind` C function is.
+
+**15c. Baked globals' initializers not written; a mutable global's first value baked.** Two findings in one place.
+Every module's `olang.init.MODULE` function (calling each of its globals' initializers) was wanted in every program
+build, though nothing calls it - main, the test harness and a library's start call each global's initializer
+themselves, skipping the baked ones - and it named every initializer, baked or not, so each was compiled and linked
+under `-quick` and compiled for LTO to delete. Emit no longer wants it, writes no initializer of a baked global, and
+wants the root's own unbaked initializers directly; a baked global's storage is still defined in its module's object
+whether or not code there reads it (an importer's may - the initializer had named it before). And a mutable global whose initializer the evaluator computes to
+plain data (no reference - a number, a struct of numbers; std/time's virtual clock's counters) is now baked too: its
+value is its writable storage's initial value (`@G = global <{ ... }>`, `eval.Image.Mutable`), so nothing runs for it
+at startup. The evaluator computes such an initializer only for this (`Global(.., baking, mutable)`); every other read
+of a mutable global while compiling is still refused (placeReady), and an initializer it refuses is set at startup and
+says nothing. A three-global probe under `-quick`: 212,488 -> 166,744 bytes, startup Ir level (269k: main had already
+skipped the baked ones). tests/globalstart.olang holds mutable globals of numbers, a struct, a U128 and a reference
+written and read at run time, built, `-quick`, `-debug` and `-sanitize`.
+
+**15b, not built: 128-bit division by a constant.** LLVM calls `__divti3` for an I128 divided by a constant where it
+multiplies by a magic number at 64 bits. Doing it in emit means a 256-bit multiply-high (24 straight-line instructions
+at x86-64-v3, measured on hand IR against `__divti3`'s small-divisor path) and the magic number of a 128-bit divisor
+computed in the compiler with 256-bit arithmetic it does not have; the survey called it rare, and the gain on its probe
+(27.5 against 10.3 Ir an element) is mostly the multiply's. Left for when 128-bit code matters (FPGA, hashing).
+
+**9. A text local from a literal in a stack slot.** `t := "abcdef"` copied the literal into its block's arena every
+turn - an allocation and a copy - where `I64[1, 2, 3, 4]` is fixed storage in registers. Lowering now gives such a
+local's copy a stack slot instead (`lower.slotCopy`): a hidden fixed array of the literal's length in the frame, the
+literal's bytes copied in, the local the pair naming it, as a fixed array a reference names is (T7c). Only where the
+scope pass moved the local nowhere (its home its declaring block, so nothing reaches its storage past that block, which
+a slot reused each turn outlives) and the literal holds at most 256 bytes; a local the program writes is written in its
+slot, and one it never writes LLVM replaces with the constant itself (memory only ever copied from a constant). MIR
+gains nothing new, so the evaluator and `interpret` run it as before. bench/repro/text_local_copy 100000: 7.6M -> 0.3M
+Ir. tests/textslot.olang writes, slices, lends writably, assigns whole and keeps (into a `Vec<String&>`, which the scope
+pass homes elsewhere) such locals, built, `-quick`, `-debug` and `-sanitize`, beside a baked global of the same function.
+
+**14. Empty arrays allocate nothing.** E10's old rule that "an allocation of nothing still gets storage of its own, so
+two of them are two instances" was for identity, which arrays lost with `a is b` (2026-10-24): every array declares
+`Eq` by contents, so two empty arrays are equal however made, and nothing reads or writes an element of one. Checked
+what could still see the address: an `extern` given an empty array is given a pointer to no bytes; `retire()` of an
+empty buffer does nothing (`__olang_san_retire` returns for 0 bytes); a region's functions read the word before an
+object, so the static's first words are zero - constant data to them (O8d). So an array made with a length of 0
+known while compiling - `Array<T>(0)`, a Vec's first buffer - is `@__olang_empty_array` (a 64-aligned constant, the
+storage at its offset 64), emit's `newArray` writing no allocation at all. (First built as a branch in the runtime's
+`__olang_scope_alloc` for every size of 0, which covered run-time empties too; the compare at every array allocation cost
+the compiler's own build 5-10% of its clang time, measured, so it is only where the length is a constant.) A struct of no fields still gets storage of its own through
+`__olang_scope_alloc_a` (a reference to one compares by identity). A loop making a Vec, pushing twice and making an
+`Array<I64>(0)` each turn, 100,000 turns: 17.3M -> 16.2M Ir. SPEC E27's "an empty array with storage of its own"
+reworded.
+
+**13. A match's tag test told its range.** LLVM already turns a match's chain of tag compares into a jump table; what
+was left is the exhaustiveness trap before it (`cmp $7; ja trap` for eight cases): nothing told LLVM a tag can only be
+one of the cases. Emit now puts `!range !{i32 0, i32 N}` on every load of a payload-less enum's value (its tag alone)
+and on every tag load of an enum with payloads (`Rvalue.Tag`, i32 or a word) - a fact, since only a case's construction
+writes a tag, and an enum's zero value is its first case - so the last compare folds and the trap goes. An eight-case
+`match` over an array of 1M operations, 10 passes: 161.7M -> 141.7M Ir; dispatch's enum row (three cases with
+payloads) 21.9M -> 21.4M. No new MIR; the evaluator unchanged.
+
+**8. Take's and Skip's reductions vectorize.** Each adapter's `Next` wraps the inner one's - two counters and an
+`Exhausted` code a value - so a reduction's loop had two exits and LLVM's vectorizer refused it. Rust's answer, in the
+prelude: `Sum`, `Count`, `Min` and `Max` are written over `Fold` (the defaults' meaning unchanged), and `Take` and `Skip`
+override `Fold`. Over an array's iterator (`ArrayIter`, gaining `Rest()`, a view of what it has still to give, and
+`Advance(n)`, moving past at most n as that many Nexts would) Take's fold is a counted loop over at most its count of
+the elements left (`foldUpTo`), Skip's takes its skip at once and folds the rest by the array's own iterator; Take over a
+Skip over an array settles the Skip first, and Take over an `Indexable`'s `IndexIter` (a Vec's `Iter()`) counts over
+`At` (`foldIndexed`). Anything else folds as Next walks. Each leaves the iterators where Next would - Take's count
+lowered by one more where the array ended first, as its Next does - and where the callback fails part way, past the
+value it failed on (a `catch F e` that advances and raises `e` again: the happy path stores nothing per element, so it
+still vectorizes). Decided (mine): a match on the wrapped iterator's type (G15) rather than a new internal protocol,
+since prelude files cannot reach each other's private members; `Some`/`Every` stay on Next (they stop early).
+bench/repro/adapter_reduce, 100,000 x 10 (setup 1.7M): take 11.4M -> 1.9M, skip 12.4M -> 1.9M, Skip-then-Take inline
+16.4M -> 1.9M and as locals 13.4M -> 1.9M, `a.Iter().Sum()` 1.9M unchanged; a Vec's `v.Iter().Take(k).Sum()` 13.5M ->
+2.9M. std/prelude/tests/folds.olang compares every form with the same walk by Next, after a failing callback too, beside
+baked globals of the same functions.
+
+**7. A filtered comprehension's result is its buffer.** A comprehension with an `if` filled a buffer (reserved from the
+source's length, else 100 and doubling) and then copied its first n elements into an array of exactly n - 45% of its
+instructions. Where the buffer is built in the scope the result is made in (no promotion adopting it elsewhere), the
+result is now those n elements of the buffer, a slice taken as the value (`lower.collect`): nothing else names the
+buffer, and the room past n is kept exactly as long as the copy would have kept the buffer, so memory is never more.
+bench/repro/filtered_comprehension `if` 100000: 17.7M -> 13.7M Ir (a Vec filled by Push: 12.6M); the unfiltered `sq`
+(already exact) unchanged. tests/filtered.olang writes, keeps, grows past and empties such results, built, `-debug`,
+`-sanitize`, `-quick` and baked.
+
+**7, not built: a Vec grown in place.** Decided as "only while no `View()` was taken", but the flag has nowhere to be
+set: `View()` takes a read-only `Vec<T>&`, and the state its handle names is read-only through it (QC), so recording a
+view needs either a writable receiver (a change of `View`'s signature, so of what programs may call it on) or a new
+prelude privilege to write through a read-only reference. And a growing Vec's buffer past 4KB is a chunk of its own, so
+growing it in place means `mremap` and relinking the scope's chunk list, which may move the chunk. Left for the user's
+QBV-like call on the first and a runtime round on the second; the comprehension's growth (private, no views) is the
+same runtime work and waits with it.
+
+**Not built in this batch: items 10, 6 and 11** - each the survey's "days", and each a design of its own rather than a
+local change; recorded here so the next round starts from what was found.
+- *10, enum layout* (decided: tightened, `T.Size`/`T.Align`/`f.Offset` reporting the new numbers). The tag is an I32
+  and a payload whole words in three places that must change together: types' `layEnum`/`enumLlvm` (`{ i64, [k x i64]
+  }`), emit's tag loads and stores (`Rvalue.Tag`'s `i64`/`sext i32`, case construction, `Proj.Payload` at offset 8) and
+  the evaluator's shapes (`vEnum`'s 8-byte tag, `vOrd`'s 4 bytes - shared with error codes, which stay I32), with K2's
+  images, the supplied Hash and `$` reading the same bytes and cabi's plain-data structs (if an enum field may cross).
+  A payload-less enum to the smallest integer counting its cases is the smaller half (Dir 4 -> 1 byte); the payload's
+  natural alignment the larger (Opt 16 -> 8).
+- *6, constant calls in bodies computed while compiling.* K3's `comptime e` already makes a hidden global per site
+  that must be baked; the silent form needs a site that falls back to the call where the evaluator refuses (a hidden
+  global set at startup would run the call at another time - a change of meaning for any call with an effect), so a
+  typed node holding both, lowering choosing by what Bake gave, and a budget and cache per callee and arguments so the
+  compiler's own build does not slow.
+- *11, Filter/Map chains fused.* Fusing `for y in a.Filter(f).Map(g)` interleaves f, g and the body, which reorders
+  their effects and failures; sound only for callbacks that do nothing and cannot fail - S3's `settleIdle` knows that
+  only after every body is checked, so the elaboration has to move after it.
+
+**The compiler's own build, before and after.** Measured on compiler/olang.olang from clean build directories, each
+compiler (1de5612 bootstrapped from the seed; this batch's, built by itself) on its own sources, interleaved, the
+machine loaded by other agents (load 11-22 on 4 cores), `OLANG_TIMES`: the front end (load, check, evaluate, scope,
+lower and emit) 6.79 s -> 6.53 s; clang's compile 27.6-28.1 s -> 28.7 s; peak memory 1.90 GB -> 1.85 GB. Measured on
+the way: the empty-array branch in `__olang_scope_alloc` (item 14's first form) had taken clang's compile to 30-33 s,
+and the inlined bump alone (item 1) to 28.5-30 s; item 14 moved to emit's constant-length case brought it back.
+
+**16. Pow with the exponents that gain computed without pow (QBV, the user, 2026-10-31: "Wrap all the exponents that
+you think would gain from it").** X8 declares libm's `pow` `nobuiltin`, so `x.Pow(2.0)` was a call of 137
+instructions. The prelude's float `Pow` now decides by `y`'s value, so a constant exponent folds once inlined: 0 (either
+sign) gives 1, 1 gives x, 2 `x * x`, -1 `1 / x` - each pow's own result to the bit (IEEE rounds each once, as pow
+does, its special cases included); 0.5 `x.Sqrt()` with pow's two differences, +0 for -0 and +Inf for -Inf; any other
+whole number up to 16 either way by squaring (`powSquares`: the bits from the lowest, from 1), a negative one as 1 over
+that - here the last bits may differ from pow's, as decided; every other exponent pow's. No new mechanism: being
+prelude code, the evaluator computes exactly the same operations, so a power computed while compiling is the
+program's (std/prelude/tests/pow.olang bakes them beside the run-time calls, edges included: NaN, signed zeros,
+infinities, F32, F16, BF16). The bound 16 was picked by measurement: x.Pow(16.0) by squaring is 6.3M Ir over 1M
+values against pow's 138.2M (4 squarings and one multiply), so every |n| up to it gains; past it, accuracy rather than
+speed sets the bound. Measured (1M values x 10, callgrind): Pow(2.0) 138.0M -> 4.4M, Pow(3.0) 138.0M -> 4.9M,
+Pow(16.0) 138.2M -> 6.3M, Pow(-2.0) 138.2M -> 4.9M, Pow(0.5) 138.0M -> 12.8M, Pow(2.5) 138.2M unchanged. The cost:
+an exponent that is not a constant pays the test (`y.Abs() <= 16`, a conversion and a compare) before pow - x.Pow(x)
+138.0M -> 155.3M, 17 instructions a call, and natively 0.41-0.42 s against 0.38-0.50 s (noise) over 30M calls. Decided
+(mine): decided by the value, not by whether the exponent is written as a constant, so one value has one power wherever
+it comes from - in every build and in the evaluator (`llvm.is.constant` would make -debug and -O3 disagree). Integer
+`Pow` with a constant exponent already folds to the same multiplications as a hand-written product (I64 Pow(3) 9.3M =
+hand 9.3M, Pow(13) 12.3M = hand 12.3M): LLVM unrolls its squaring loop, so it is left as it is. SPEC's math paragraph
+states which exponents are computed how.

@@ -14,21 +14,21 @@ of a loop body.
 
 | # | finding | shape | measured | where | cost | meaning |
 |---|---|---|---|---|---|---|
-| 1 | [The allocator's fast path is a call](#1-the-allocators-fast-path-is-a-call) | every allocation | binary-trees 185M -> 131M Ir, 0.43 -> 0.35 s (C arena 0.35); the compiler's front end -7.1% Ir; StringBuilder pushes -29% | runtime | an afternoon | none |
-| 2 | [Temporaries on the stack, and a loop body's scope reused](#2-temporaries-on-the-stack-and-a-loop-bodys-scope-reused) | `f(P(x))` for a `P&` parameter, `p P& = P(..)`, `mk(i).M()`, adapters built inline | ~70 Ir a turn against 3 for the same argument as a value local lent to it | scope, lower, emit, runtime | days (a §8 argument) | none |
-| 3 | [Vec/List Push cannot be inlined](#3-veclist-push-cannot-be-inlined) | `v.Push(x)` | Push 24 Ir an element (C's realloc loop ~10); out-of-line growth 74.5M -> 60.5M Ir; building 100k elements 5.4M Ir against C's 1.1M | prelude, emit | an hour | none |
-| 4 | [Generator walks in large functions lose their elision](#4-generator-walks-in-large-functions-lose-their-elision) | `for x in gen(n)` in a big function | 28.6M -> 2.4M Ir with `alwaysinline` on the `.walk` ramp | emit | one line | none |
-| 5 | [A call's result is copied into a reference parameter](#5-a-calls-result-is-copied-into-a-reference-parameter) | `use(make(x))`, `ln(mk(i))` with arrays or text | 233 -> 172 Ir a call (text); 3.5x for a 10,000-element array | lower / scope | a day | none |
-| 6 | [Constant calls in bodies are run at run time](#6-constant-calls-in-bodies-are-run-at-run-time) | `primes(200)`, `"..".Find("x")` inside a function | 255,000 Ir a turn against 52 for the same call baked as a global | check, interp | days | none |
-| 7 | [Growth copies, and nothing grows in place](#7-growth-copies-and-nothing-grows-in-place) | a Vec growing large; `T[x for x in a if p]` | Vec push 50M: 1.3 GB and 326k page faults against C's 783 MB and 195k (1.2-5 s against 0.5 s); 45% of a filtered comprehension is memcpy | runtime, prelude, lower | days | Vec: see section |
-| 8 | [Lazy adapters keep reductions scalar](#8-lazy-adapters-keep-reductions-scalar) | `a.Iter().Take(k).Sum()`, `Skip`, `StepBy` ... | 9.5 Ir an element against 0.2 (`a.Iter().Sum()`) and 1.4 (the counted loop) | prelude | a day | none |
-| 9 | [Text locals from a literal are copied every turn](#9-text-locals-from-a-literal-are-copied-every-turn) | `t := "abc"` in a loop | ~70 Ir a turn against ~2 for `I64[1, 2, 3, 4]` | lower | hours | none |
-| 10 | [Enum layout: an I32 tag and whole-word payloads](#10-enum-layout) | arrays of small enums | `Opt { None, Some(F32) }` 16 bytes (C 8): 314 MB / 0.86-1.19 s against 158 MB / 0.47 s | types, emit, eval | days | `T.Size` reads differently |
-| 11 | [Filter/Map chains build every array](#11-filtermap-chains-build-every-array) | `for y in a.Filter(f).Map(g)` | 2x the hand loop (22.6M against 11.4M Ir) | check (fusion) | days | none |
-| 12 | [Integer `Sqrt` divides twice](#12-integer-sqrt-divides-twice) | `x.Sqrt()` on integers | 47 Ir against F64's 3.6 | prelude | minutes | none |
-| 13 | [`match` is a compare chain with a trap](#13-match-is-a-compare-chain-with-a-trap) | `match` over many cases | 8-way: 13.7M against C's switch 11.1M Ir | emit | hours | none |
-| 14 | [Every empty array is an allocation](#14-every-empty-array-is-an-allocation) | `Vec<T>()`, `Array<T>(0)` | `Vec` + two pushes 150 Ir; one of its three allocations is the empty buffer | runtime, emit | hours | check E10 |
-| 15 | [Small leftovers](#15-small-leftovers) | `nounwind`, I128 division by a constant, baked globals' startup code under `-quick` | regex binary -4%; 27.5 against 10.3 Ir; 6k Ir at startup | emit | minutes each | none |
+| 1 | **done 2026-10-31** [The allocator's fast path is a call](#1-the-allocators-fast-path-is-a-call) | every allocation | binary-trees 185M -> 131M Ir, 0.43 -> 0.35 s (C arena 0.35); the compiler's front end -7.1% Ir; StringBuilder pushes -29% | runtime | an afternoon | none |
+| 2 | **waits for the scoping rework (QCB)** [Temporaries on the stack, and a loop body's scope reused](#2-temporaries-on-the-stack-and-a-loop-bodys-scope-reused) | `f(P(x))` for a `P&` parameter, `p P& = P(..)`, `mk(i).M()`, adapters built inline | ~70 Ir a turn against 3 for the same argument as a value local lent to it | scope, lower, emit, runtime | days (a §8 argument) | none |
+| 3 | **done 2026-10-31 (Vec)** [Vec/List Push cannot be inlined](#3-veclist-push-cannot-be-inlined) | `v.Push(x)` | Push 24 Ir an element (C's realloc loop ~10); out-of-line growth 74.5M -> 60.5M Ir; building 100k elements 5.4M Ir against C's 1.1M | prelude, emit | an hour | none |
+| 4 | **done 2026-10-31** [Generator walks in large functions lose their elision](#4-generator-walks-in-large-functions-lose-their-elision) | `for x in gen(n)` in a big function | 28.6M -> 2.4M Ir with `alwaysinline` on the `.walk` ramp | emit | one line | none |
+| 5 | **waits for the scoping rework (QCB)** [A call's result is copied into a reference parameter](#5-a-calls-result-is-copied-into-a-reference-parameter) | `use(make(x))`, `ln(mk(i))` with arrays or text | 233 -> 172 Ir a call (text); 3.5x for a 10,000-element array | lower / scope | a day | none |
+| 6 | **not built 2026-10-31 (HISTORY.md)** [Constant calls in bodies are run at run time](#6-constant-calls-in-bodies-are-run-at-run-time) | `primes(200)`, `"..".Find("x")` inside a function | 255,000 Ir a turn against 52 for the same call baked as a global | check, interp | days | none |
+| 7 | **done 2026-10-31 (the comprehension's last copy; Vec in place not built)** [Growth copies, and nothing grows in place](#7-growth-copies-and-nothing-grows-in-place) | a Vec growing large; `T[x for x in a if p]` | Vec push 50M: 1.3 GB and 326k page faults against C's 783 MB and 195k (1.2-5 s against 0.5 s); 45% of a filtered comprehension is memcpy | runtime, prelude, lower | days | Vec: see section |
+| 8 | **done 2026-10-31 (Take, Skip)** [Lazy adapters keep reductions scalar](#8-lazy-adapters-keep-reductions-scalar) | `a.Iter().Take(k).Sum()`, `Skip`, `StepBy` ... | 9.5 Ir an element against 0.2 (`a.Iter().Sum()`) and 1.4 (the counted loop) | prelude | a day | none |
+| 9 | **done 2026-10-31** [Text locals from a literal are copied every turn](#9-text-locals-from-a-literal-are-copied-every-turn) | `t := "abc"` in a loop | ~70 Ir a turn against ~2 for `I64[1, 2, 3, 4]` | lower | hours | none |
+| 10 | **not built 2026-10-31 (HISTORY.md)** [Enum layout: an I32 tag and whole-word payloads](#10-enum-layout) | arrays of small enums | `Opt { None, Some(F32) }` 16 bytes (C 8): 314 MB / 0.86-1.19 s against 158 MB / 0.47 s | types, emit, eval | days | `T.Size` reads differently |
+| 11 | **not built 2026-10-31 (HISTORY.md)** [Filter/Map chains build every array](#11-filtermap-chains-build-every-array) | `for y in a.Filter(f).Map(g)` | 2x the hand loop (22.6M against 11.4M Ir) | check (fusion) | days | none |
+| 12 | **done 2026-10-31** [Integer `Sqrt` divides twice](#12-integer-sqrt-divides-twice) | `x.Sqrt()` on integers | 47 Ir against F64's 3.6 | prelude | minutes | none |
+| 13 | **done 2026-10-31** [`match` is a compare chain with a trap](#13-match-is-a-compare-chain-with-a-trap) | `match` over many cases | 8-way: 13.7M against C's switch 11.1M Ir | emit | hours | none |
+| 14 | **done 2026-10-31** [Every empty array is an allocation](#14-every-empty-array-is-an-allocation) | `Vec<T>()`, `Array<T>(0)` | `Vec` + two pushes 150 Ir; one of its three allocations is the empty buffer | runtime, emit | hours | check E10 |
+| 15 | **done 2026-10-31 (nounwind, startup code; I128 division not built)** [Small leftovers](#15-small-leftovers) | `nounwind`, I128 division by a constant, baked globals' startup code under `-quick` | regex binary -4%; 27.5 against 10.3 Ir; 6k Ir at startup | emit | minutes each | none |
 
 Needs a decision before it is built: `x.Pow(2.0)` as `x * x` (section 16, X8's exactness), and - only if section 7 is
 taken further than proposed - what a stale `View()` reads after a Vec grows in place. Everything else is the
@@ -354,7 +354,7 @@ result); **cost** hours, after the check; meaning: none if the check holds.
 
 ## 16. Needs a decision
 
-- **`x.Pow(2.0)`** costs 137 Ir an element against `x * x`'s 3.1: X8 declares inexact libm functions `nobuiltin` so the
+- **Done 2026-10-31 (the user's answer to QBV: every exponent that gains; HISTORY.md item 16).** **`x.Pow(2.0)`** costs 137 Ir an element against `x * x`'s 3.1: X8 declares inexact libm functions `nobuiltin` so the
   run time calls exactly what the evaluator called. `pow(x, 2.0)` and `x * x` are both correctly rounded in IEEE
   terms only if libm's `pow` is; glibc's is not guaranteed to be. Folding small integral exponents into multiplies
   (as LLVM would without `nobuiltin`) makes `Pow` mean "x times x" for those exponents, in the evaluator and at run

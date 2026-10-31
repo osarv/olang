@@ -55,13 +55,12 @@ fn (it mut I&) Every<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) Bool ? E {
     return true
 }
 
-# how many values keep holds for
+# how many values keep holds for - through Fold, as Sum
 fn (it mut I&) Count<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) I64 ? E {
-    n I64 = 0
-    for x in try it {
-        if try keep(x) { n++ }
-    }
-    return n
+    return try it.Fold(I64(0), fn(n I64, x T) I64 ? E {
+        if try keep(x): return n + 1
+        return n
+    })
 }
 
 # every value folded into one, starting from init
@@ -143,6 +142,78 @@ fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted {
 
 fn (it mut I&) Take<I Iterator<T ? E>, T ? E>(n I64) TakeIter<I, T ? E> { return TakeIter<I, T ? E>(it, n) }
 
+# every value left folded into one, as Fold - over an array's iterator (or Skip's over one) a counted loop over at most
+# the n elements it has left, so a reduction through Fold (Sum, Count, Min, Max) vectorizes as over the array itself;
+# over anything else as Next walks
+fn (t mut TakeIter<I, T ? E>&) Fold<U ? F>(init U, f fn(acc U, x T) U ? F) U ? {
+    match I {
+        case ArrayIter<T> { return try t.foldArray(t.it, init, f) }
+        case SkipIter<ArrayIter<T>, T ? E> {
+            t.it.settle()
+            return try t.foldArray(t.it.it, init, f)
+        }
+        case IndexIter<T, C> {
+            before := t.it.c.Len() - t.it.i
+            acc, k := try foldIndexed(t.it, t.left, init, f) catch F e {
+                t.left -= before - (t.it.c.Len() - t.it.i)
+                error e
+            }
+            t.left -= k + 1 if k < t.left else k
+            return acc
+        }
+        case _ { }
+    }
+    acc U = init
+    for x in try t { acc = try f(acc, x) }
+    return acc
+}
+
+# Take's fold over a, the array iterator it wraps (itself, or behind a Skip settled): its count taken down by what it
+# gave, as Next would - by one more where the array ended before the count did
+fn (t mut TakeIter<I, T ? E>&) foldArray<U ? F>(a mut ArrayIter<T>&, init U, f fn(acc U, x T) U ? F) U ? F {
+    before := a.Rest().Len()
+    acc, k := try foldUpTo(a, t.left, init, f) catch F e {
+        t.left -= before - a.Rest().Len()
+        error e
+    }
+    t.left -= k + 1 if k < t.left else k
+    return acc
+}
+
+# at most n of what an array's iterator has left folded into one, as that many Nexts and folds would: the fold and
+# how many it folded, the iterator past them - or, where f fails, past the one it failed on
+fn foldUpTo<T, U ? F>(a mut ArrayIter<T>&, n I64, init U, f fn(acc U, x T) U ? F) U, I64 ? F {
+    rest := a.Rest()
+    k := n if n < rest.Len() else rest.Len()
+    if k < 0: k = 0
+    acc U = init
+    for j in range k {
+        acc = try f(acc, rest[j]) catch F e {
+            a.Advance(j + 1)
+            error e
+        }
+    }
+    a.Advance(k)
+    return acc, k
+}
+
+# ... of what an Indexable's iterator has left: a counted loop over its At
+fn foldIndexed<T, C Indexable<T>, U ? F>(a mut IndexIter<T, C>&, n I64, init U, f fn(acc U, x T) U ? F) U, I64 ? F {
+    k := a.c.Len() - a.i
+    if n < k: k = n
+    if k < 0: k = 0
+    acc U = init
+    from := a.i
+    for j in range from, from + k {
+        acc = try f(acc, a.c.At(j)) catch F e {
+            a.i = j + 1
+            error e
+        }
+    }
+    a.i = from + k
+    return acc, k
+}
+
 # every value after the first n
 type SkipIter<I, T ? E> struct(of I, n I64) {
     it I = of
@@ -158,6 +229,31 @@ fn (s mut SkipIter<I, T ? E>&) Next() T ? E, Exhausted {
 }
 
 fn (it mut I&) Skip<I Iterator<T ? E>, T ? E>(n I64) SkipIter<I, T ? E> { return SkipIter<I, T ? E>(it, n) }
+
+# its skip taken now, as its first Next takes it, where it wraps an array's iterator - what is left of the count only
+# where the array ended first, the iterator then at its end
+fn (s mut SkipIter<I, T ? E>&) settle() {
+    match I {
+        case ArrayIter<T> { s.skip -= s.it.Advance(s.skip) }
+        case _ { }
+    }
+}
+
+# every value left folded into one, as Fold - over an array's iterator its skip taken at once, then the rest folded by
+# the array's own iterator
+fn (s mut SkipIter<I, T ? E>&) Fold<U ? F>(init U, f fn(acc U, x T) U ? F) U ? {
+    match I {
+        case ArrayIter<T> {
+            s.settle()
+            if s.skip > 0: return init
+            return try s.it.Fold(init, f)
+        }
+        case _ { }
+    }
+    acc U = init
+    for x in try s { acc = try f(acc, x) }
+    return acc
+}
 
 # a value and how many came before it - what Enumerate gives
 type Indexed<T> struct(index I64, value T) {
@@ -224,29 +320,23 @@ fn (it mut I&) Chain<I Iterator<T ? E>, T, J Iterator<T ? E> ? E>(other J) Chain
     return ChainIter<I, J, T ? E>(it, other)
 }
 
-# every value added up, from 0 - wrapping as "+" does for integers (E6c); a sum of none is 0
+# every value added up, from 0 - wrapping as "+" does for integers (E6c); a sum of none is 0. Through Fold, so an
+# adapter that folds faster than its Next walks (Take's, Skip's) sums as fast
 fn (it mut I&) Sum<I Iterator<T ? E>, T Number ? E>() T ? E {
-    acc T = 0
-    for x in try it { acc = acc + x }
-    return acc
+    return try it.Fold(T(0), fn(acc T, x T) T { return acc + x })
 }
 
-# the least value by "<" - the first of several equal ones - failing with Exhausted when there is none
+# the least value by "<" - the first of several equal ones - failing with Exhausted when there is none (the rest
+# through Fold, as Sum)
 fn (it mut I&) Min<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
     best := try it.Next()
-    for x in try it {
-        if x < best: best = x
-    }
-    return best
+    return try it.Fold(best, fn(b T, x T) T { return x if x < b else b })
 }
 
 # the greatest value by "<" - the first of several equal ones - failing with Exhausted when there is none
 fn (it mut I&) Max<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
     best := try it.Next()
-    for x in try it {
-        if best < x: best = x
-    }
-    return best
+    return try it.Fold(best, fn(b T, x T) T { return x if b < x else b })
 }
 
 # the value whose key is least, key called once per value - the first of several equal ones; failing with Exhausted

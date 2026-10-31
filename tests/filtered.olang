@@ -1,0 +1,24 @@
+# A comprehension with an "if" gives the first elements of its own buffer as its result where both live in one scope
+# (docs/optsurvey.md item 7): no copy to the exact length. The result is an array of its own all the same - written,
+# kept, grown past by another comprehension - alike built and in the evaluator (a baked global).
+
+fn flEvens(a Array<I64>&) Array<I64> { return I64[x for x in a if x % 2 == 0] }
+
+fn flMix(n I64) String {
+    a := I64[i * 3 for i in range n]
+    e := flEvens(a)
+    e[0] = 99
+    f := I64[x + 1 for x in e if x > 5]
+    g := I64[x for x in range 1000 if x % 97 == 0]       # past its first room of 100 elements: grown, then given
+    none := I64[x for x in a if x < 0]
+    kept Vec<Array<I64>&>
+    for k in range 3 { kept.Push(I64[x * k for x in a if x % 4 == 0]) }
+    return $e " " $f " " $g.Len() " " $g[10] " " $none.Len() " " $kept[2]
+}
+
+FlBaked String& = flMix(9)
+
+test "a filtered comprehension's result is an array of its own" {
+    want := "I64[99, 6, 12, 18, 24] I64[100, 7, 13, 19, 25] 11 970 0 I64[0, 24, 48]"
+    assert flMix(9) == want and FlBaked == want
+}

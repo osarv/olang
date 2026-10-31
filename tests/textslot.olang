@@ -1,0 +1,44 @@
+# A text local made from a literal, held in a stack slot of the frame (docs/optsurvey.md item 9): read, written,
+# sliced, lent, assigned whole and rendered as any value text is - each turn of a loop starting from the literal again -
+# and computed alike by the evaluator (a baked global) and at run time.
+
+fn tsUpper(t mut String&) {
+    for i in range t.Len() {
+        if t[i] >= 'a' and t[i] <= 'z' { t[i] = Char(U8(t[i]) - 32) }
+    }
+}
+
+fn tsWalk(n I64) String {
+    out := StringBuilder()
+    for i in range n {
+        t := "abc"
+        t[0] = Char(U8('a') + U8(i))
+        if i % 2 == 0 { tsUpper(t) }
+        u := t[1:3]
+        out.Push($t ":" $u " ")
+        if i == 3 { t = "longer than abc" }
+        out.Push($t.Len())
+    }
+    return out.ToString()
+}
+
+fn tsKept(n I64) Vec<String&> {
+    v Vec<String&>
+    for i in range n {
+        t := "xy"
+        t[1] = Char(U8('0') + U8(i))
+        v.Push(t)
+    }
+    return v
+}
+
+TsBaked String& = tsWalk(5)
+
+test "a text local from a literal starts from the literal every turn, and is written as any array" {
+    want := "ABC:BC 3bbc:bc 3CBC:BC 3dbc:bc 15EBC:BC 3"
+    assert tsWalk(5) == want and TsBaked == want
+    v := tsKept(3)
+    assert v[0] == "x0" and v[1] == "x1" and v[2] == "x2"
+    s := "same"
+    assert s == "same" and s.Len() == 4 and s[3] == 'e'
+}

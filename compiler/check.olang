@@ -12311,6 +12311,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         # M19d: a collection's buffer grown - a new array of n elements, the first a.Len() moved out of a (each as
         # vacate moves it) and the rest unwritten, as E39's exact collect leaves none: the prelude's claim that its
         # collection writes each before reading it (a Vec's room past its count), which the compiler cannot infer
+        c.cur().Cold = true
         el := c.P.T.Elem(c.arrayOf(rt))
         at := c.P.T.Array(el, types.TypeId(0))
         from := c.stmts.Len()
