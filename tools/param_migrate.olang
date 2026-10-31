@@ -343,16 +343,26 @@ fn apply(src String&, edits Vec<edit>&) String {
     return b.ToString()
 }
 
-# a file's text after the text phase - a result's "mut" kept where the driven phase follows (keep)
-fn TextPhase(src String&, keep Bool = false) String {
+# a file's text after the text phase - a result's "mut" kept where the driven phase follows (keep); its read-only
+# references made bare where the file is written in the old form, or where old says the files run with it are (a tree
+# is migrated whole: a file of it with no "mut" to drop is old where the others are)
+fn TextPhase(src String&, keep Bool = false, old Bool = false) String {
     ts := scan.Scan(src)
     w := walker(src, ts.Toks)
     w.keepResults = keep
     w.walk()
-    if w.oldForm {
+    if w.oldForm or old {
         for e in w.bareEdits { w.edits.Push(e) }
     }
     return apply(src, w.edits)
+}
+
+# whether a file is written in the old form: it holds a "mut" the text phase drops (anywhere but a global's top)
+fn OldForm(src String&) Bool {
+    ts := scan.Scan(src)
+    w := walker(src, ts.Toks)
+    w.walk()
+    return w.oldForm
 }
 
 # a file's text after the finish phase: the "mut" the text phase kept at results' tops dropped
@@ -378,6 +388,9 @@ test TextPhase "changes nothing run again on its own output, nor in a file writt
         assert TextPhase(once) == once
     }
     assert TextPhase("fn (b Buf&) Put(x I64, t String) { }\nG mut I64 = 0\n") == "fn (b Buf&) Put(x I64, t String) { }\nG mut I64 = 0\n"
+    # (a file with nothing to drop is migrated with the rest of an old tree)
+    assert TextPhase("fn (p P<A>&) Hash() I64 { }\n", old = true) == "fn (p P<A>) Hash() I64 { }\n"
+    assert not OldForm("fn (b Buf&) Put(t String) { }\nG mut I64 = 0\n") and OldForm("fn f(a mut T&) { }\n")
 }
 
 # a test's text read in the old form, as a file holding an old "mut" is: its text phase with that line taken off
@@ -680,9 +693,13 @@ fn main() ? {
         if info.Kind == os.FileKind.DIR { srcmask.Walk(p, files) } else { files.Push(p) }
     }
     changed I64 = 0
+    old := false
+    for f in files {
+        if OldForm(try srcmask.ReadText(f)) { old = true }
+    }
     for f in files {
         src := try srcmask.ReadText(f)
-        out := TextPhase(src, keep = not (check or text))
+        out := TextPhase(src, keep = not (check or text), old = old)
         if out == src: continue
         changed++
         if not check: try os.WriteFile(f, out)

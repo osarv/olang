@@ -307,6 +307,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # ...and the values lent to a function's "&" parameter (round 2c): a need only where that parameter is used deeply
     # (refDeep) - a walk's Next writing the iterator's own position asks nothing of what the iterator was made from
     roDeepLends Vec<roDeepArg>
+    # ...and the read-only values given a constructor's "&" parameter (round 2c): refused where the constructor writes
+    # through it (refDeep), settled with D9d
+    roCtorArgs Vec<roLendRec>
     roDeepArgs Vec<roDeepArg>
     roRefArgs Vec<roArg>
     # the rework's round 2c (docs/rework.md 12): reference fields read-only by inference, by (the struct type, the
@@ -739,6 +742,7 @@ fn (c mut Checker&) reset() {
     c.roResults = Vec<pair.Pair<I64, typed.Expr&>>()
     c.roDeepNeeds = Vec<pair.Pair<I64, typed.Expr&>>()
     c.roDeepLends = Vec<roDeepArg>()
+    c.roCtorArgs = Vec<roLendRec>()
     c.roCopyFields = Map<pair.Pair<I64, I64>, Vec<pair.Pair<I64, I64>>>()
     c.roDeepArgs = Vec<roDeepArg>()
     c.roRefArgs = Vec<roArg>()
@@ -5615,6 +5619,7 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
             } else if not store and c.roLocal(I64(id)) {
                 # T25c: a read-only copy is not lent writably - but, under the rework's round 2, to a "&" parameter whose
                 # body writes only its own plain parts, judged once that is settled
+                if c.argCtor { c.ctorRoCopy(sp, p) }    # (round 2c: refused where the constructor writes through it)
                 if not c.argCtor and not c.lendLater(sp, c.roFix(source.NameId(0), c.cur().Local(id).Ty), p) {
                     if c.copyFieldsWrit(I64(id)) { return }    # (round 2c: resting on fields read-only - written)
                     rec := c.err(sp, msgs.ReadOnlyCopyLent(c.roFix(source.NameId(0), c.cur().Local(id).Ty)))
@@ -7303,6 +7308,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
                 # an instance's type variable's reference parameter: as read-only as this argument (settled)
+                if source.NewParams and c.argCtor { c.ctorRoArg(sp, x) }
                 if source.NewParams and (c.argFollows or c.argCtor) { return c.convert(sp, x, want) }
                 # the rework's round 2 (T25d): constant data handed to a "&" parameter, which may write it - a copy is
                 # written, never made unseen
@@ -9941,6 +9947,7 @@ fn (c mut Checker&) roPlace(p typed.Lvalue?&) Bool {
 fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
     if c.P.T.KindOf(c.P.T.Referent(typeOf(x))) == types.Kind.Func { return true }
     if c.roRef(x) {
+        if source.NewParams and c.argCtor { c.ctorRoArg(sp, x) }
         if source.NewParams and (c.argFollows or c.argCtor) { return true }
         if source.NewParams and c.retFollows and c.followsArg(x) {
             # T25c's generic rule: as read-only, at the call, as the argument it is read out of
@@ -9974,7 +9981,9 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
     if source.NewParams and c.argFollows { c.roNeedOf(readPlace(x), c.argBody, c.argK) } else { c.roNeed(readPlace(x)) }
     if source.NewParams and not c.argRef {
         c.refUseX(x)
-        c.refDeepX(x)
+        # (a constructor's parameter kept in a field of what it builds: what it builds holds it as given, no deep use -
+        # round 2c, so a read-only argument is refused only where the constructor writes through it, roCtorArgs)
+        if not (c.fr().InCtor and c.fieldOn.First >= 0) { c.refDeepX(x) }
     }
     return true
 }
@@ -10402,9 +10411,15 @@ fn (c mut Checker&) refArg(body I64, k I64, e typed.Expr&) {
     if j < 0 { return }
     ps := c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))
     if k >= ps.Len() or not c.isRef(ps[k]) or not c.writable(ps[k]) { return }
-    # a constructor's, an enum case's, a lambda's: kept in what it makes, or not known - used
+    # a constructor's, an enum case's, a lambda's: kept in what it makes, or not known - used; a constructor's as deep
+    # as it uses that parameter (round 2c: its own fields keep it as given)
     match c.Bodies[body].Of {
         case typed.BodyOf.Fn(_) { }
+        case typed.BodyOf.Ctor(_, _) {
+            c.refUsed.Put(pair.Pair(c.fr().Body, j), true)
+            c.deepDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+            return
+        }
         case _ {
             c.refUsed.Put(pair.Pair(c.fr().Body, j), true)
             c.refDeep.Put(pair.Pair(c.fr().Body, j), true)
@@ -10565,6 +10580,11 @@ fn (c mut Checker&) refSettle() {
         if not moved { break }
     }
     c.refDeepClose()
+    for l in c.roCtorArgs {
+        if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) or c.fieldsWritAll(l.Fields) { continue }
+        rec := c.P.L.Diags.Error(l.At, msgs.ReadOnlyHere())
+        if l.BareName.Len() > 0 { c.P.L.Diags.Note(rec, l.Bare, msgs.NoteBareParam(l.BareName)) }
+    }
     for l in c.roLends {
         if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) { continue }
         # (round 2c: resting on fields read-only by inference - those written, the program checked again)
@@ -10936,6 +10956,30 @@ fn (c mut Checker&) fieldsThroughX(x typed.Expr?&, onlyRo Bool, depth I64) Bool 
 fn (c mut Checker&) fieldsWrite(x typed.Expr&) Bool {
     if not source.NewParams or c.fieldRo.Len() == 0 or not c.roFieldX(x, 0): return false
     return c.fieldsThroughX(x, true, 0)
+}
+
+# a read-only value given the "&" parameter of a constructor being fitted (argCtor): judged once the constructor's
+# use of that parameter is settled - a constructor writing through what it was given would write the caller's
+# read-only data (round 2c; it had been taken as given whatever the constructor did)
+fn (c mut Checker&) ctorRoArg(sp source.Span, x typed.Expr&) {
+    if c.argBody < 0 or not c.roRef(x): return
+    fs Vec<pair.Pair<I64, I64>>
+    c.roFieldsOf(x, fs, 0)
+    id := c.roRoot(readPlace(x))
+    if id >= 0 and c.bareNamed(id) {
+        l := c.cur().Local(typed.LocalId(I32(id)))
+        c.roCtorArgs.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, "", c.at(l.Sp), $c.text(l.Name), fs.ToArray()))
+        return
+    }
+    c.roCtorArgs.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, "", Fields = fs.ToArray()))
+}
+
+# ... and a read-only copy lent to one
+fn (c mut Checker&) ctorRoCopy(sp source.Span, p typed.Lvalue&) {
+    if not source.NewParams or c.argBody < 0: return
+    fs Vec<pair.Pair<I64, I64>>
+    c.roFieldsIn(p, fs, 0)
+    c.roCtorArgs.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, "", Fields = fs.ToArray()))
 }
 
 # the fields read-only this attempt among fs marked written - whether there were any
