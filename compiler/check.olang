@@ -47,6 +47,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     typeAt Map<I64, diag.Where>   # T2c: where a local's or a parameter's type is written, by local
     entryLets Vec<typed.Stmt&>    # the rework's round 2: bare parameters' copies made on entry (2.10), the body's first
     levels Map<I64, Array<levelSite>&>  # ... and by local, the reference levels its type's written "&"s give it (2.8)
+    resultSites Array<levelSite>& = Array<levelSite>(0)  # ... a lambda's written result's levels (permFit)
     Ctx generic.Context = generic.Context(0, -1)
     Result     # Void for none; a tuple for several (D8c)
     Errors     # the declared error set, the default error DefaultErrT among them (R15)
@@ -277,6 +278,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     levelOn Vec<levelSite>    # the written reference levels a store being checked reaches (levelRo): its target's local's
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
     retInst I64 = -1          # a value being returned from this function's instance: its result may narrow (permFit)
+    retLambda Bool = false    # ... from a lambda whose result is written: its written levels may narrow (permFit)
     localStore Bool = false   # the store being checked lands in a local of this body (followResult)
     refUsed Map<pair.Pair<I64, I64>, Bool>
     refDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
@@ -7496,6 +7498,8 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
             return x
         }
     }
+    # a lambda's: its written result's levels made read-only (load.RoLevels), and the program checked again
+    if c.retLambda and c.P.T.SameButPerm(have, want) and c.P.T.WiderPerm(want, have) and c.levelsRo(c.fr().resultSites) { return x }
     # a value made here, no other name holding it: what it is wanted as may be read-only where it is not - itself, or
     # what it is lent as
     if c.freshValue(x) {
@@ -10717,8 +10721,9 @@ fn (c mut Checker&) roCallCopy(cl typed.Call&) Bool {
     # the rework's round 2: an instance built from a read-only reference holds it read-only (docs/rework.md 2.8's
     # permission binding) - a read-only copy
     if source.NewParams and c.builds(id) {
+        # (but an instance's value that follows its argument, kept in a local the body made: the result follows, 2.8)
         for a in cl.Args {
-            if c.isRef(typeOf(a)) and c.roRef(a) { return true }
+            if c.isRef(typeOf(a)) and c.roRef(a) and not c.followResult(a) { return true }
         }
     }
     for k in range cl.Args.Len() {
@@ -18757,6 +18762,12 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     fr.Parent = pfi
     fr.InferResult = infer
     fr.InferErrors = inferErrs
+    # the rework's round 2 (2.8): a written result's reference levels, which a value returned read-only there makes so
+    if source.NewParams and f.S.Results.Len() == 1 {
+        rsites Vec<levelSite>
+        c.levelSites(f.S.Results[0], false, rsites)
+        fr.resultSites = rsites.ToArray()
+    }
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
     for i in range n {
         c.param(ps[i].Name, ps[i].Sp, pts[i], i, ps[i].Ty)
@@ -20342,8 +20353,10 @@ fn (c mut Checker&) returned(v ast.Expr&, rt types.TypeId) typed.Expr&c {
     if lc is not null: return lc
     e := c.expr(v, rt)
     c.retInst = c.narrowable()
+    c.retLambda = source.NewParams and c.fr().resultSites.Len() > 0
     x := c.fit(e, rt, c.argSpan(v))
     c.retInst = -1
+    c.retLambda = false
     return x
 }
 
