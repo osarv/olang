@@ -176,7 +176,7 @@ fn build(olang String&, rows Vec<String&>&, base Bool) {
             if base {
                 # baseline x86-64
                 buildOlang(olang, prog, String&["-target", "x86-64"])
-                try os.Exec(String&["cp", "build/" $prog, "build/" $prog ".base"], "", true, benchlib.Dir) catch os.Error { }
+                try os.Exec("cp", "build/" $prog, "build/" $prog ".base", dir = benchlib.Dir) catch os.Error { }
             }
             buildOlang(olang, prog, Array<String&>(0))
             built.Put("o." $prog, true)

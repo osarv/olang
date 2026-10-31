@@ -1561,7 +1561,7 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
 
 # clang's output for args, or why it could not be run
 fn clangSays(args Array<String&>&) os.Output ? Skip {
-    out := try os.Exec(args) catch os.Error { error Skip.Why }
+    out := try os.Exec(...args) catch os.Error { error Skip.Why }
     return out
 }
 

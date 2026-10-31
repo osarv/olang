@@ -7,7 +7,7 @@
 #         ...
 #     } catch csv.Error { ... }
 #
-#     out.Write(csv.Record(String&[name, $count, $price.Fixed(2)]))
+#     out.Write(csv.Record(name, $count, $price.Fixed(2)))
 #
 # A record is fields separated by a separator - ',' unless another is given (csv.Rows(text, ';'), '\t' for TSV) - and
 # ends at a line break: "\n", or "\r\n", the carriage return dropped; one just before the end of the text goes too, as
@@ -142,9 +142,9 @@ fn unquote(inner String&, pairs I64) String {
 
 # the fields as one record: separated by sep, ending with "\n", each quoted when it must be - when it holds the
 # separator, a quote or a line break - with its quotes doubled. Other fields are written as they are, so
-# Record(String&["a", "b c", "say \"hi\""]) is a,b c,"say ""hi"""\n. No fields at all is "\n", which reads back as
+# Record("a", "b c", "say \"hi\"") is a,b c,"say ""hi"""\n. No fields at all is "\n", which reads back as
 # one empty field - CSV has no record of none. New text, built at its length once, where its result is put
-fn Record(fields Array<String&>&, sep Char = ',') String ? Error {
+fn Record(fields ...String&, sep Char = ',') String ? Error {
     if sep == '"' or sep == '\n' or sep == '\r' { error Error.BadSeparator }
     n I64 = fields.Len() if fields.Len() > 0 else 1    # the separators and the line break
     for f in fields {
@@ -209,7 +209,7 @@ fn Header<T>(sep Char = ',') String ? Error {
     for f in T.Fields {
         if not f.HasAttr<Skip>() { names.Push(columnOf(f)) }
     }
-    return try Record(names.ToArray(), sep)
+    return try Record(...names.ToArray(), sep = sep)
 }
 
 # the records of xs, after their header: a text Decode reads back
@@ -227,7 +227,7 @@ fn RecordOf<T>(v T, sep Char = ',') String ? Error {
     for f in T.Fields {
         if not f.HasAttr<Skip>() { fs.Push(cell(f.Of(v))) }
     }
-    return try Record(fs.ToArray(), sep)
+    return try Record(...fs.ToArray(), sep = sep)
 }
 
 # a field's text: text as it is, a number, a Bool or a Char as "$" writes it
@@ -387,12 +387,12 @@ test "fields borrow the text unless a doubled quote must be made one" {
 }
 
 test "Record quotes what must be, and Rows reads it back" {
-    assert try Record(String&["a", "b c", "say \"hi\""]) == "a,b c,\"say \"\"hi\"\"\"\n"
-    assert try Record(String&["x,y", "two\nlines", "", "cr\r"]) == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
-    assert try Record(String&["a;b", "c,d"], ';') == "\"a;b\";c,d\n"
-    assert try Record(Array<String&>(0)) == "\n"
+    assert try Record("a", "b c", "say \"hi\"") == "a,b c,\"say \"\"hi\"\"\"\n"
+    assert try Record("x,y", "two\nlines", "", "cr\r") == "\"x,y\",\"two\nlines\",,\"cr\r\"\n"
+    assert try Record("a;b", "c,d", sep = ';') == "\"a;b\";c,d\n"
+    assert try Record(...Array<String&>(0)) == "\n"
     fields := String&["", "\"", "a,\"b\"\r\nc", " lead", "x"]
-    text := try Record(fields)
+    text := try Record(...fields)
     for row in try Rows(text) {
         assert row.Len() == 5
         for k in range 5 { assert row[k] == fields[k] }

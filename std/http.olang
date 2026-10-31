@@ -64,13 +64,13 @@ fn sameName(a String&, b String&) Bool {
     return true
 }
 
-# the response to a GET of url, sending the header fields given
-fn Get(url String&, headers Array<Header>& = Array<Header>(0)) Response ? Error {
+# the response to a GET of url, sending the header fields given after it
+fn Get(url String&, headers ...Header) Response ? Error {
     return try Send("GET", url, headers, "")
 }
 
-# the response to a POST of body to url, as contentType ("application/json", say), with the header fields given
-fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>& = Array<Header>(0)) Response ? Error {
+# the response to a POST of body to url, as contentType ("application/json", say), with the header fields given after it
+fn Post(url String&, contentType String&, body Array<U8>&, headers ...Header) Response ? Error {
     all := Array<Header>(headers.Len() + 1, Header("Content-Type", contentType))     # every field written below
     for i, h in headers { all[i] = h }
     all[headers.Len()] = Header("Content-Type", contentType)
@@ -120,7 +120,7 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     args.Push("--url")
     args.Push(url)
     if url.Has(0) { error Error.Invalid }      # no command line can carry a zero byte
-    run os.Output&return = try os.Exec(args.ToArray(), body if sending else "")
+    run os.Output&return = try os.Exec(...args.ToArray(), input = body if sending else "")
         catch os.Error.NotFound, os.Error.Denied { error Error.NoCurl }
         catch os.Error { error Error.Failed }
     if run.Status != 0 { try transportError(run.Status) }
@@ -253,7 +253,7 @@ if TestBuild {
         hello := try Get($base "/hello")
         assert hello.Status == 200 and hello.Body == "hello" and (try hello.Header("x-test") catch default "") == "a"
         assert hello.Headers.Count(fn(h Header) Bool { return h.Name == "X-Test" }) == 2
-        echo := try Post($base "/echo", "application/json", "{\"a\":1}", Header[Header("X-Ask", "yes")])
+        echo := try Post($base "/echo", "application/json", "{\"a\":1}", Header("X-Ask", "yes"))
         assert echo.Body == "{\"a\":1}" and (try echo.Header("X-Seen") catch default "") == "yes"
         assert (try echo.Header("X-Type") catch default "") == "application/json"
         put := try Send("PUT", $base "/echo", Array<Header>(0), "data")

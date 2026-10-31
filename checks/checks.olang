@@ -2103,7 +2103,7 @@ test "os.OnCrash reports a crash on every thread, and os.RunOnStack makes room" 
 
 # the fixture program, run in dir with its arguments and no core file left behind, through no shell of its own
 fn crashRun(dir String&, args String&) os.Output {
-    return try os.Exec(String&["sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args]) catch { unreachable }
+    return try os.Exec("sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args) catch { unreachable }
 }
 
 fn crashes(r mut report&) ? Failed {

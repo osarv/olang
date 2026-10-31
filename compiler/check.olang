@@ -11564,7 +11564,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     # D8g: a variadic parameter's arguments gathered into one (a call through a function value; invoke did it for a
     # function's), the parameter taken as the read-only array it is
-    if pre.Len() == 0 { args = c.gatherVariadic(c.P.T.SpreadAt(sig) - (1 if recv is not null else 0), args, sp) }
+    if pre.Len() == 0 and not invokedCallee(target) { args = c.gatherVariadic(c.P.T.SpreadAt(sig) - (1 if recv is not null else 0), args, sp) }
     spreadParam := c.P.T.SpreadAt(sig)
     ps := c.unspreadAll(c.P.T.Items(c.P.T.Params(sig)))
     sfrom := c.stmts.Len()
@@ -11703,6 +11703,15 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 }
 
 # ---- variadic parameters (D8g) ----
+
+# whether a callee is a function's - reached through invoke, which gathered a variadic parameter's arguments already,
+# before arguments by name were put in place
+fn invokedCallee(t typed.Callee&) Bool {
+    match t {
+        case typed.Callee.Body(_), typed.Callee.Extern(_) { return true }
+        case _ { return false }
+    }
+}
 
 # a call's arguments with those its variadic parameter, at si among them, is given gathered into one: a "...a" alone
 # passing an array on, else a Variadic of them all - every argument by position from si on, up to the first by name.

@@ -111,14 +111,14 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         args.Push("build")
         for f in toolkit.Fields(flags) { args.Push($f) }
         args.Push(name)
-        b := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { continue }
+        b := try os.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         body String& = ""
         if b.Status != 0 {
             body = toolkit.RunBody(-1, false, $"did not build\n" $b.Stdout)
         } else {
             exe := $dir "/build/" $binaryOf(base, flags)
-            one := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.Error { continue }
-            two := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.Error { continue }
+            one := try os.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
+            two := try os.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
             body = toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
         }
         try os.WriteFile($dir "/run.txt", body) catch os.Error { }

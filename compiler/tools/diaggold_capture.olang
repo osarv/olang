@@ -72,7 +72,7 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         args.Push("build")
         for f in toolkit.Fields(flagsOf(text)) { args.Push($f) }
         args.Push(name)
-        o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { continue }
+        o := try os.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         try os.WriteFile($dir "/out.txt", o.Stdout) catch os.Error { }
         try os.WriteFile($dir "/err.txt", o.Stderr) catch os.Error { }
     }

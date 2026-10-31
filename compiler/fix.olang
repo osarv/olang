@@ -139,7 +139,7 @@ fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String
     sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
     if from == builtBy(exe) and mtime(program) > sources { return }
     try os.Remove(stamp) catch os.Error { }
-    out := try os.Exec(String&[exe, "build", "-output", program, filepath.Join(tools, $name ".olang")], "", true, bin) catch os.Error {
+    out := try os.Exec(exe, "build", "-output", program, filepath.Join(tools, $name ".olang"), dir = bin) catch os.Error {
         said.Write("olang: fix: cannot run " $exe "\n")
         error NotBuilt
     }
@@ -191,7 +191,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         program := filepath.Join(bin, "tools_" $name)
         for at in range 0, files.Len(), Batch {
             run := files[at:(at + Batch).Min(files.Len())]
-            r := try os.Exec(arguments(program, ToolKinds[t], exe, std, run), "", true, "") catch os.Error {
+            r := try os.Exec(...arguments(program, ToolKinds[t], exe, std, run)) catch os.Error {
                 said.Write("olang: fix: cannot run " $program "\n")
                 status = 2
                 break

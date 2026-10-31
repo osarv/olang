@@ -1199,7 +1199,7 @@ test "M16 and M17: one file reached twice, and a re-export back to its importer"
 }
 
 fn git(dir String&, args Array<String&>&) Bool {
-    out := try os.Exec(args, "", true, dir) catch os.Error { return false }
+    out := try os.Exec(...args, dir = dir) catch os.Error { return false }
     return out.Status == 0
 }
 

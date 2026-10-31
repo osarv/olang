@@ -231,7 +231,7 @@ fn declareError(text String&, line I64, errType String&) String ? {
 fn diagnostics(olang String&, path String&) Vec<diagnostic> ? {
     out := Vec<diagnostic>()
     dir := filepath.Dir(path)
-    r := try os.Exec(String&[olang, "test", filepath.Base(path)], "", true, dir)
+    r := try os.Exec(olang, "test", filepath.Base(path), dir = dir)
     for row in r.Stdout.Lines() {
         # "FILE:LINE:COL: error[RULE]: MESSAGE"
         e := try row.Find(": error[") catch { continue }

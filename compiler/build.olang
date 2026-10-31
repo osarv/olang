@@ -419,7 +419,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
 
 fn runner(queue mut chan.Chan<I64>&, cmds Array<Array<String&>&>&, status mut Array<I32>&, said mut Array<String&>&) {
     for k in queue {
-        out := try os.Exec(cmds[k]) catch os.Error {
+        out := try os.Exec(...cmds[k]) catch os.Error {
             status[k] = 127
             said[k] = $"cannot run " $cmds[k][0] "\n"
             continue
@@ -652,7 +652,7 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     if linkCurrent(bin, stamp, h) { return }
     try os.Remove(stamp) catch os.Error { }
     if c.Clang == "" { error Failed.Unbuilt }
-    out := try os.Exec(args.ToArray(), "", false) catch os.Error { error Failed.Reported }
+    out := try os.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
     if out.Status != 0 { error Failed.Reported }
     c.Linked++
     info := try os.Stat(bin) catch os.Error { return }
@@ -795,7 +795,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     for w in run { av.Push($w) }
     av.Push($file if run.Len() == 0 else Shown(c.Built))
     for a in args { av.Push($a) }
-    try os.ExecInPlace(Shown(c.Built) if run.Len() == 0 else $run[0], av.ToArray()) catch os.Error {
+    try os.ExecInPlace(Shown(c.Built) if run.Len() == 0 else $run[0], ...av.ToArray()) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
@@ -827,7 +827,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if c.Fuzz != "" { return c.fuzzRun(cmd, prog) }
     # B7a: the words naming the tests to run, read by the test binary's harness
     for w in filters { cmd.Push($w) }
-    out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
+    out := try os.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
@@ -878,7 +878,7 @@ fn closeness(word String&, text String&) I64 {
 fn (c Config&) fuzzRun(cmd mut Vec<String&>&, prog Program&) I32 {
     if c.FuzzTime > 0 { cmd.Push($"-max_total_time=" $c.FuzzTime) }
     sayln(c.paint("36", $"fuzzing " $c.Fuzz ": failing inputs go to " $prog.FuzzCorpus "/"))
-    out := try os.Exec(cmd.ToArray(), "", false) catch os.Error { return 1 }
+    out := try os.Exec(...cmd.ToArray(), capture = false) catch os.Error { return 1 }
     if out.Status == 0 {
         sayln(c.paint("32", $"fuzzing " $c.Fuzz ": nothing failed"))
         return 0
@@ -928,7 +928,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         for p in passed { args.Push($p) }
         args.Push($f)
         for w in filters { args.Push($w) }
-        out := try os.Exec(args.ToArray(), "", false) catch os.Error {
+        out := try os.Exec(...args.ToArray(), capture = false) catch os.Error {
             sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true
             continue
@@ -1091,7 +1091,7 @@ fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d 
 
 # the status the binary at bin ends with
 fn statusOf(bin String&) I32 {
-    out := try os.Exec(String&[$bin]) catch os.Error { return -1 }
+    out := try os.Exec($bin) catch os.Error { return -1 }
     return out.Status
 }
 
@@ -1209,7 +1209,7 @@ test "listed test files run one after another in processes of their own, a signa
     script := ("#!/bin/sh\necho \"$@\" >> " $log "\nfor a in \"$@\"; do case \"$a\" in *.olang) last=$a ;; esac; done\n" $
             "case \"$last\" in *ok*) exit 0 ;; *bad*) exit 1 ;; *none*) exit 3 ;; *kill*) kill -9 $$ ;; esac\n")
     try os.WriteFile(exe, script)
-    chmod := try os.Exec(String&["chmod", "+x", exe])
+    chmod := try os.Exec("chmod", "+x", exe)
     assert chmod.Status == 0
     c := Config()
     assert TestFiles(c, exe, String&["-debug"], String&["a_ok.olang", "b_ok.olang"]) == 0

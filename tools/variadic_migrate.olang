@@ -5,8 +5,8 @@
 # (`os.Exec(args, "", false)` becomes `os.Exec(..., capture = false)`), their defaults left out; ExecUntil's token goes
 # first. filepath.Join needs nothing: its calls read the same. In a module's own file its calls written bare are
 # rewritten too. Re-runnable: a call already written the new way - its variadic place holding "...", text or nothing -
-# is left alone. A call it cannot tell - the array a plain name, which a String could be too - is listed "by hand:"
-# with its line, for a person (write `...args`), and the tool then ends with the status 1.
+# is left alone. A call it cannot tell - the array a plain name or another call, which could give a String too - is
+# listed "by hand:" with its line, for a person (write `...args`), and the tool then ends with the status 1.
 #
 #     olang build tools/variadic_migrate.olang && build/tools_variadic_migrate [--check] [-v] FILE|DIR...
 
@@ -84,14 +84,18 @@ fn migrate(path String&, text String&) migrated {
     return migrated(out, hand)
 }
 
-# the alias a file imports module under - its base name, or the one written before the path - "" where it imports none
+# the alias a file imports module under - its base name, or the one written before the path - "" where it imports none;
+# a std module imports another by its bare name ("os")
 fn aliasOf(text String&, module String&) String {
+    bare := module[(try module.Find("/") catch default -1) + 1:]
     for line in text.Split("\n") {
         t := srcmask.Strip(line)
-        if not t.StartsWith("import ") or not (t.EndsWith($"\"" $module "\"")) { continue }
-        head := srcmask.Strip(t[7:t.Len() - module.Len() - 2])
+        if not t.StartsWith("import ") { continue }
+        path := $module if t.EndsWith($"\"" $module "\"") else ($bare if t.EndsWith($" \"" $bare "\"") else "")
+        if path.Len() == 0 { continue }
+        head := srcmask.Strip(t[7:t.Len() - path.Len() - 2])
         if head.Len() > 0 { return $head }
-        return $module[(try module.Find("/") catch default -1) + 1:]
+        return $bare
     }
     return ""
 }
@@ -187,13 +191,14 @@ fn newArgs(args Vec<String&>&, m moved&) String ? Unchanged, Unclear {
     return $all.Join(", ")
 }
 
-# what an old call's array becomes among the variadic arguments: a literal's items, or a call's array passed on with
-# "..."; Unchanged for what the new form already holds there - "...", text - and Unclear for any other value
+# what an old call's array becomes among the variadic arguments: a literal's items, or an array a ToArray(), a View()
+# or an Array<T>(n) gives passed on with "..."; Unchanged for what the new form already holds there - "...", text - and Unclear for any other value
 fn spreadOf(a String&) String ? Unchanged, Unclear {
     if a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$") { error Unchanged }
     lb := try a.Find("[") catch default -1
     if lb > 0 and a.EndsWith("]") and typeText(a[:lb]) { return $srcmask.Strip(a[lb + 1:a.Len() - 1]) }
-    if a.EndsWith(")") { return $"..." $a }   # a call's array: ToArray(), View(), Args()
+    # a call that gives an array by its name - another call may give a String, the new form's first argument
+    if a.EndsWith(".ToArray()") or a.EndsWith(".View()") or a.StartsWith("Array<") { return $"..." $a }
     error Unclear
 }
 

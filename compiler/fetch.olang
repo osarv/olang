@@ -133,14 +133,14 @@ fn (f mut Fetcher&) updatedNow(key String&, mark Bool) Bool {
 
 # git, run quietly; whether it succeeded
 fn git(args Array<String&>&) Bool {
-    out := try os.Exec(args) catch os.Error { return false }
+    out := try os.Exec(...args) catch os.Error { return false }
     return out.Status == 0
 }
 
 # the commit a checked-out repository is at, or "" when it cannot be read
 fn head(dir String&) String {
     d := $dir
-    out := try os.Exec(String&["git", "-C", d, "rev-parse", "HEAD"]) catch os.Error { return "" }
+    out := try os.Exec("git", "-C", d, "rev-parse", "HEAD") catch os.Error { return "" }
     if out.Status != 0 { return "" }
     c := out.Stdout.Trim()
     return $c if IsCommit(c) else ""
@@ -251,7 +251,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
 # ---- tests: local repositories in a scratch directory, served through OLANG_GIT_BASE ----
 
 fn sh(dir String&, args Array<String&>&) Bool {
-    out := try os.Exec(args, "", true, dir) catch os.Error { return false }
+    out := try os.Exec(...args, dir = dir) catch os.Error { return false }
     return out.Status == 0
 }
 

@@ -90,7 +90,7 @@ fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&)
     stdlib.setenv("OLANG_PROFILE\0", $samples "\0", 1)
     pid := unistd.fork()
     if pid == 0 {
-        try os.ExecInPlace(build.Shown(bin), av.ToArray()) catch os.Error { }
+        try os.ExecInPlace(build.Shown(bin), ...av.ToArray()) catch os.Error { }
         unistd._exit(127)
     }
     stdlib.unsetenv("OLANG_PROFILE\0")
@@ -383,7 +383,7 @@ fn Resolve(p Profile&, tool String&) Places {
             asked++
         }
         if asked > 0 {
-            out := try os.Exec(String&[$tool, "--inlining", "--functions=short"], ask.ToString(), true)
+            out := try os.Exec($tool, "--inlining", "--functions=short", input = ask.ToString())
                 catch os.Error default os.Output(1, "", "")
             if out.Status == 0 {
                 for l in out.Stdout.Lines() { said.Push($l) }

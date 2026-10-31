@@ -136,7 +136,7 @@ fn gitIn(dir String&, rest Array<String&>&) {
 # a remote import, from a local repository, fetched, locked and its relative imports kept inside it (M23, M23b): the
 # module graph and the lock's keys, as the self-hosted loader reaches them; "" where git is missing
 fn remote(work String&, dump String&) String {
-    if (try os.Exec(String&["git", "--version"]) catch os.Error { return "" }).Status != 0 { return "" }
+    if (try os.Exec("git", "--version") catch os.Error { return "" }).Status != 0 { return "" }
     root := try os.Cwd() catch os.Error { toolkit.Die("modgraph: no working directory") }
     base := $work "/remote"
     try os.RemoveAll(base) catch os.Error { }

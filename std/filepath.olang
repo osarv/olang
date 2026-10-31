@@ -111,11 +111,9 @@ fn Clean(path String&) String&path {
 }
 
 # the parts made one path, a '/' between each two, and cleaned (Clean): Join("a", "b/c") is "a/b/c", Join("a/", "../b")
-# is "b", and Join("/", "x") is "/x". Empty parts are left out, and when every part is empty the path is "" - not "." as
-# Clean would make it. Up to six parts; for more, or for an array of them, "Clean(parts.Join("/"))" - the same but for
-# empty parts, which are then empty elements, and so dropped all the same unless leading ("", "a" is "/a" that way)
-fn Join(a String&, b String&, c String& = "", d String& = "", e String& = "", f String& = "") String {
-    parts := String&[a, b, c, d, e, f]
+# is "b", and Join("/", "x") is "/x"; any number of parts, an array of them passed on as Join(...parts). Empty parts are
+# left out, and when every part is empty - or there are none - the path is "", not "." as Clean would make it
+fn Join(parts ...String&) String {
     n I64 = 0
     for p in parts {
         if p.Len() > 0 {

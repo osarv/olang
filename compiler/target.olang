@@ -322,7 +322,7 @@ fn canCompileBf16(clang String&, triple String&) Bool {
     ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" $
         "  %r = fpext bfloat %c to float\n  ret float %r\n}\n"
     args := String&[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
-    out := try os.Exec(args, ir) catch os.Error { return false }
+    out := try os.Exec(...args, input = ir) catch os.Error { return false }
     return out.Status == 0
 }
 
@@ -342,7 +342,7 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
         text := try os.ReadFile(path) catch default ""
         if text.Len() > key.Len() and text.StartsWith(key) { return os.Output(0, $text[key.Len():], "") }
     }
-    out := try os.Exec(args, input)
+    out := try os.Exec(...args, input = input)
     if out.Status == 0 and path != "" and keep {
         try os.MkDirAll(probeDir()) catch os.Error { return out }
         tmp := $path "." $unistd.getpid() ".tmp"
