@@ -420,6 +420,14 @@ for walks, `try` covering a whole expression, errors raised by name, named argum
 `defer`/`errdefer`, reflection over repetition, lane operators over element loops - whichever is clearest and
 cheapest for the case. Every agent brief says so.
 
+## Keep every dependent part in step
+The user, 2026-10-31: "keep a graph somewhere about which parts of the project reference which other part, so that
+when something is updated, the other parts of the project are updated too. For example the SPEC or LSP or neovim
+integration etc."
+**How to apply:** DEPENDENTS.md (repository root) lists, per kind of change, every place that must change with it; the
+mechanically checkable edges are checked by `make verify` (a consistency tool). Every change - and every agent brief -
+walks it before calling the work done; a new edge found goes into the map in the same commit.
+
 ## Flags beside values are errors, in my code too
 The user, 2026-10-30, seeing compiler/ return `value, Bool` and success Bools with out-parameters: the rule "errors are
 errors" (Language rules) holds for the compiler's own code, not only for std's API. New code declares an error; the
