@@ -39,7 +39,10 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
-| `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, a type's members, a global's baked value |
+| `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, effects, needs, a type's members, a global's baked value; `explain -caps` (B11c) |
+| `effects.olang` | what each body may do - writes, storage, C and what it reaches, waits, tasks, loops, recursion - read off the typed core and settled over the call graph, on demand: explain's `# effects:` line (B11b), `explain -caps` (B11c) and the function facts (G42) |
+| `needs.olang` | what a generic's body asks of each type variable, read off its text: explain's `# T needs:` line (B11b, G18a) |
+| `api.olang` | `olang api OLD NEW PATH` (B21): two versions' exported interfaces compared, each change breaking or not |
 | `doc.olang` | doc comments (L4b), read from the text by a declaration's span; `olang doc` (B14): a module's documentation as text or HTML |
 | `session.olang` | the front end held for a tool: an analysis with an editor's unsaved text standing in for files, what a name at an offset is, symbols, completion, the processes and message framing the servers share |
 | `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker |
