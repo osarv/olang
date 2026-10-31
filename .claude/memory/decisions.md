@@ -1932,3 +1932,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - `mut` KEPT 2026-10-31, the removal REVERSED before anything was built (the user: "knowing whether or not a function
   you pass things into mutates what you passed is valuable, so keep mut for that", "globals shouldn't be mut unless you
   say so", "So keep mut as is"): T25b/T25c and `mut` globals unchanged; the three `mut` follow-up questions are moot.
+- QCC follow-up 2026-10-31 (the user: "maybe we should remove the mut keyword here instead? If it is a reference, it
+  can be mutated so the caller is affected and if it isn't a reference then it can't be. The compiler still decides if
+  we pass by value or pointer?"): PROPOSED - a parameter or receiver `p T&` may write the caller's instance, a bare
+  `p T` can never affect the caller (the callee may write its own copy); the compiler passes a bare one by pointer
+  where the value is large and it proves nothing the call reaches writes storage of that type (effect summaries), else
+  copies - unobservable. No `mut` on parameters, receivers or references. Needed with it: a view taken from a bare
+  parameter or from constant data (a slice, Split's pieces, a returned element) is read-only, the permission inferred
+  from where the value came from (as QC already infers it for copies), never written - a value holding such a view may
+  not be passed to a `&` parameter or written through; constant data passed to a `&` parameter is an error naming
+  `.Clone()`/`$t`. ASKED: (1) take it (rec yes); (2) globals keep `mut` as the one place it is written (the user's
+  2026-10-31 "globals shouldn't be mut unless you say so") (rec yes). In effect: today's `mut`.
