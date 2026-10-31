@@ -779,7 +779,11 @@ fn (s mut Scoper&) isFunc(t types.TypeId) Bool { return s.P.T.KindOf(t) == types
 fn (s mut Scoper&) storeThrough(t types.TypeId) Bool {
     match s.P.T.KindOf(t) {
         case types.Kind.Ref {
-            if (s.P.T.PermOf(t) & types.Writable) == 0 { return false }
+            # under the inference: a read-only reference through which writable references are read out - each
+            # judged at the term the read gives, its container's (O20) - is one something can be stored through
+            # (docs/rework.md section 9's finding: today's rule lets a callee build through such an element at its
+            # container's shorter scope)
+            if (s.P.T.PermOf(t) & types.Writable) == 0 { return source.InferScopes and s.admitsAt(s.P.T.Referent(t), false) }
             return s.assignableHolds(s.P.T.Referent(t))
         }
         case types.Kind.Func { return false }
@@ -7086,6 +7090,9 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # the inference: an argument whose local's claim is too short for what the callee keeps of it whole proposes a
         # longer one - the local the call's result lands for, where the result is what is too short (2.4, O27)
         if s.liftGather and k == FailsBlock and not r.View { s.liftAtCall(c, r, lo) }
+        # the field inference: an instance a callee makes holding its argument, which this call cannot place (C2d) -
+        # its type's fields may want bindings of their own (2.6)
+        if k != Obliged and s.fieldGather and s.onResult(c, r) { s.wantPromotionOf(s.P.T.Result(s.calleeType(c))) }
         if k == Obliged {
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
             # where it is called as such
@@ -8320,6 +8327,9 @@ fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
     s.proposeLocal(r, t, s.keepsStorage(x))
 }
 
+# whether t is a generator's Next's result scope (D18b): one call's, which nothing the walk keeps may live in
+fn (s mut Scoper&) genResult(t Term) Bool { return s.B!.Gen and s.resultVar >= 0 and t == Term.Var(s.resultVar) }
+
 # a lift proposed for the call value x is, where it is one: it lands at a term outliving t (2.4)
 fn (s mut Scoper&) proposeCall(x typed.Expr&, t Term) {
     c := s.callOf(x)
@@ -8329,7 +8339,7 @@ fn (s mut Scoper&) proposeCall(x typed.Expr&, t Term) {
 # a lift proposed for the call at site: where it lands outlives t - its result scope bound there, what it builds built
 # there - rather than where its obligations or where it stands put it
 fn (s mut Scoper&) proposeSite(site I64, t Term) {
-    if site < 0 or not t.Runs() { return }
+    if site < 0 or not t.Runs() or s.genResult(t) { return }
     key := pair.Pair<I64, I64>(s.Id, site)
     cur := try s.siteLifts.Get(key) catch default Term.None
     nt := s.joinTerm(cur, t) if cur.Runs() else t
@@ -8378,6 +8388,9 @@ fn (s mut Scoper&) heldCall(l I64) I64 {
 }
 
 fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
+    # a generator's locals live across its yields, and each Next call's result scope is that call's: nothing is lifted
+    # into it (D18b, as O26a moves nothing there)
+    if s.genResult(t) { return }
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
             s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $t " (origin " $s.origin[l] ") | " $s.traceAt(s.B!.Locals[l].Sp.Start))
@@ -8564,6 +8577,19 @@ fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
     if not s.fieldGather or not s.finalQuiet { return }
     d := s.fieldDecl(x)
     if d < 0 { d = s.declOf(x.Type()) }
+    if d >= 0 { s.wantDecl.Put(d, true) }
+}
+
+# whether a callee's relation r, at call c, names the callee's result scope
+fn (s mut Scoper&) onResult(c typed.Call&, r rel) Bool {
+    rv := s.resultVarOf(s.calleeType(c))
+    return rv >= 0 and (r.Hi == Term.Var(rv) or r.Lo == Term.Var(rv))
+}
+
+# ... of the declaration a value of type t is
+fn (s mut Scoper&) wantPromotionOf(t types.TypeId) {
+    if not s.fieldGather or not s.finalQuiet or t == types.UnknownT { return }
+    d := s.declOf(t)
     if d >= 0 { s.wantDecl.Put(d, true) }
 }
 
