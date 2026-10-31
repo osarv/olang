@@ -38,6 +38,12 @@ type walker struct(src String&, ts Array<token.Token>&) {
     stack Vec<open>
     edits Vec<edit>
     done Map<String&, Bool>    # the driven phase: the parameters edited this round
+    # a "mut" at the top of a function's result, by token: kept by the text phase while the driven phase runs (the
+    # compiler reads it as "what this hands back is the caller's to write", so a parameter it is reached through is made
+    # "&" from the error), dropped by the finish phase
+    resultMuts Map<I64, Bool>
+    finish Bool = false
+    keepResults Bool = false
 }
 
 # whether a parameter's type from n to e is written a reference with a scope marker ("T&x", "T&return")
@@ -145,8 +151,14 @@ fn (w mut walker&) walk() {
     }
 }
 
-# a "mut": a global's kept, a trait method's written "&", any other dropped
+# a "mut": a global's kept, a trait method's written "&", a result's top kept for the driven phase, any other dropped -
+# in the finish phase only a result's top
 fn (w mut walker&) onMut(i I64) {
+    if w.resultMuts.Has(i) {
+        if w.finish or not w.keepResults: w.drop(i)
+        return
+    }
+    if w.finish: return
     if w.topLevel() and w.kind(i - 1) == token.Tok.Iden and w.stmtStart(i - 1): return
     if w.inTrait() and w.kind(i + 1) == token.Tok.Iden and w.stmtStart(i) {
         w.edits.Push(edit(I64(w.ts[i].Start), I64(w.ts[i + 1].Start), "&"))
@@ -172,11 +184,15 @@ fn (w mut walker&) onFn(i I64) {
             if w.kind(p) == token.Tok.Lt: p = w.angleEnd(p) + 1
             if w.kind(p) == token.Tok.LParen {
                 pc := w.closer(p)
-                if pc > 0: w.params(p, pc, names, ext)
+                if pc > 0 {
+                    w.params(p, pc, names, ext)
+                    w.markResult(pc)
+                }
             }
             return
         }
         w.params(j, c, w.markerNames(j), ext)
+        w.markResult(c)
         return
     }
     if w.kind(j) != token.Tok.Iden: return
@@ -184,7 +200,15 @@ fn (w mut walker&) onFn(i I64) {
     if w.kind(p) == token.Tok.Lt: p = w.angleEnd(p) + 1
     if w.kind(p) != token.Tok.LParen: return
     pc := w.closer(p)
-    if pc > 0: w.params(p, pc, w.markerNames(p), ext)
+    if pc > 0 {
+        w.params(p, pc, w.markerNames(p), ext)
+        w.markResult(pc)
+    }
+}
+
+# a "mut" right after a parameter list's close: its result's top (onMut)
+fn (w mut walker&) markResult(close I64) {
+    if w.kind(close + 1) == token.Tok.Mut: w.resultMuts.Put(close + 1, true)
 }
 
 # whether the "fn" at i is an "export fn"'s: an export fn is C's to call, so it keeps C's parameter forms (X13)
@@ -226,6 +250,7 @@ fn (w mut walker&) markerNames(i I64) Vec<String&> {
 
 # the parameters between the brackets at open and close: each item's type looked at
 fn (w mut walker&) params(openAt I64, close I64, names Vec<String&>&, ext Bool) {
+    if w.finish: return
     start := openAt + 1
     depth I64 = 0
     for j in range openAt + 1, close + 1 {
@@ -298,12 +323,29 @@ fn apply(src String&, edits Vec<edit>&) String {
     return b.ToString()
 }
 
-# a file's text after the text phase
-fn TextPhase(src String&) String {
+# a file's text after the text phase - a result's "mut" kept where the driven phase follows (keep)
+fn TextPhase(src String&, keep Bool = false) String {
     ts := scan.Scan(src)
     w := walker(src, ts.Toks)
+    w.keepResults = keep
     w.walk()
     return apply(src, w.edits)
+}
+
+# a file's text after the finish phase: the "mut" the text phase kept at results' tops dropped
+fn FinishPhase(src String&) String {
+    ts := scan.Scan(src)
+    w := walker(src, ts.Toks)
+    w.finish = true
+    w.walk()
+    return apply(src, w.edits)
+}
+
+test FinishPhase "drops a result's mut the text phase kept for the driven phase" {
+    kept := TextPhase("fn (s S&) chunk(k I64) mut Array<T>&s { }\n", keep = true)
+    assert kept == "fn (s S) chunk(k I64) mut Array<T>&s { }\n"
+    assert FinishPhase(kept) == "fn (s S) chunk(k I64) Array<T>&s { }\n"
+    assert TextPhase("fn (s S&) chunk(k I64) mut Array<T>&s { }\n") == "fn (s S) chunk(k I64) Array<T>&s { }\n"
 }
 
 test TextPhase "drops mut, makes read-only parameters bare" {
@@ -582,7 +624,7 @@ fn main() ? {
     changed I64 = 0
     for f in files {
         src := try srcmask.ReadText(f)
-        out := TextPhase(src)
+        out := TextPhase(src, keep = not (check or text))
         if out == src: continue
         changed++
         if not check: try os.WriteFile(f, out)
@@ -594,4 +636,9 @@ fn main() ? {
     }
     if text: return
     try driven(paths, $diagedit.RealPathOf(olang), jobs.Max(1))
+    for f in files {
+        src := try srcmask.ReadText(f)
+        out := FinishPhase(src)
+        if out != src: try os.WriteFile(f, out)
+    }
 }

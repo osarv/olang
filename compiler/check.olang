@@ -277,6 +277,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     levelOn Vec<levelSite>    # the written reference levels a store being checked reaches (levelRo): its target's local's
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
     retInst I64 = -1          # a value being returned from this function's instance: its result may narrow (permFit)
+    localStore Bool = false   # the store being checked lands in a local of this body (followResult)
     refUsed Map<pair.Pair<I64, I64>, Bool>
     refDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     # ...and the ones used deeply - written or kept through what their referent's references reach, handed back - and
@@ -543,7 +544,7 @@ type roOrigin struct(P typed.Lvalue?&, View Bool) {
 # a read-only copy passed to a by-value parameter (T25c): the callee's body and the parameter, where, its name, the
 # copy's type and how one of its own is made
 type roArg struct(Body I64, Param I64, At diag.Where, Callee String&, Ty String&, Fix String&
-                  Levels Array<levelSite>& = Array<levelSite>(0)) {
+                  Levels Array<levelSite>& = Array<levelSite>(0), Bare diag.Where = diag.Where.Nowhere, BareName String& = "") {
     Body
     Param
     At
@@ -551,6 +552,8 @@ type roArg struct(Body I64, Param I64, At diag.Where, Callee String&, Ty String&
     Ty
     Fix
     Levels     # the written levels its store would narrow (levelRo), if refused
+    Bare       # the bare parameter of the caller it is read out of, where it is declared (NoteBareParam), if one
+    BareName
 }
 
 # a reference level a body's written type gives a local or a value it makes (the rework's round 2, docs/rework.md 2.8):
@@ -3564,6 +3567,13 @@ fn (c mut Checker&) levelRootAst(x ast.Expr&) I64 {
     }
 }
 
+# whether a local is one this body declared - no parameter or capture: what a store into it keeps stays here
+fn (c mut Checker&) ownLocal(id I64) Bool {
+    if id < 0: return false
+    k := c.cur().Local(typed.LocalId(I32(id))).Kind
+    return k == typed.LocalKind.Var or k == typed.LocalKind.Held
+}
+
 # a local's levels made the levels a store being checked reaches (levelRo) - how many were before, to truncate back to
 fn (c mut Checker&) levelsOf(id I64) I64 {
     n := c.levelOn.Len()
@@ -3844,7 +3854,8 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         want = c.inferred(ax, x, true)
         if want != types.UnknownT and not c.attrTypeOk(want) {
             c.err(ax.Span(), msgs.AttrType(c.ty(want)))
-        } else if want != types.UnknownT and c.holdsWritable(want) {
+        } else if want != types.UnknownT and not source.NewParams and c.holdsWritable(want) {
+            # (under the rework's round 2 every written "&" may be written: the read, a read-only copy, says the rest)
             # an attribute is read as a read-only copy of constant data (G39, T25c)
             c.err(ax.Span(), msgs.AttrWritable(c.ty(want)))
         }
@@ -4270,7 +4281,7 @@ fn (c mut Checker&) attrRead(sp source.Span, g ast.Expr&, targs Array<ast.TypeRe
     if name == "HasAttr" { return c.lit(sp, types.BoolT, 1 if mi >= 0 else 0) }
     if mi < 0 { return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrMissing"), null, Array<ast.Expr&>(0), Array<typed.Expr&>(0), Array<types.TypeId>(1, a)) }
     # an attribute of a type holding a "mut" reference is an error where it is written (G39), and nothing more here
-    if c.holdsWritable(c.globalType(mi, gn)) { return c.unknown(sp) }
+    if not source.NewParams and c.holdsWritable(c.globalType(mi, gn)) { return c.unknown(sp) }
     v := c.read(sp, typed.Lvalue.Global(sp, c.globalType(mi, gn), mi, gn))
     return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), typed.Expr&[v])
 }
@@ -7222,6 +7233,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     return typed.Expr.Promote(sp, want, typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
                 }
                 if source.NewParams {
+                    if c.followResult(x) { return c.convert(sp, x, want) }
                     if c.wantCopy(c.bareWhole(x)) { return x }
                     c.levelRo(want)
                     c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
@@ -7466,10 +7478,22 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
             return c.fit(c.convert(sp, x, c.P.T.Referent(want)), want, sp)
         }
     }
+    # an argument for a bare parameter held by value (G29): read-only at every level, whatever its levels say
+    if not wr and c.argBare and not hr and c.P.T.SameButPerm(have, want): return c.convert(sp, x, want)
+    if not wr and c.argBare and hr and c.P.T.SameButPerm(c.P.T.Referent(have), want) {
+        v := c.read(sp, typed.Lvalue.Deref(sp, c.P.T.Referent(have), x))
+        return c.convert(sp, v, want)
+    }
     if not wr or c.writable(want) and not c.argBare { return null }
     wt := c.P.T.Referent(want)
     if hr and c.P.T.IsNullable(have) != c.P.T.IsNullable(want) { return null }
     ht := c.P.T.Referent(have) if hr else have
+    # a fixed array where one of a run-time length is wanted (T7c): widened to it first, then seen at its levels
+    if c.P.T.KindOf(ht) == types.Kind.Array and c.P.T.KindOf(wt) == types.Kind.Array and c.P.T.Length(wt) == types.TypeId(0) and
+       c.P.T.Length(ht) != types.TypeId(0) and c.P.T.SameButPerm(c.P.T.Elem(ht), c.P.T.Elem(wt)) and not c.P.T.Same(c.P.T.Elem(ht), c.P.T.Elem(wt)) {
+        mid := c.P.T.Array(c.P.T.Elem(ht), types.TypeId(0))
+        return c.fit(c.fit(x, c.P.T.Ref(mid, c.P.T.PermOf(want)), sp), want, sp)
+    }
     if c.P.T.Same(ht, wt) or not c.P.T.SameButPerm(ht, wt) { return null }
     if not c.argBare and c.P.T.WiderPerm(wt, ht) { return null }
     if hr { return c.convert(sp, x, want) }
@@ -9835,6 +9859,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
             return true
         }
         if source.NewParams {
+            if c.followResult(x) { return true }
             if c.wantCopy(c.bareWhole(x)) { return false }
             # a view of what a bare parameter reaches handed back: the result read-only, at every level (2.8)
             if c.retInst >= 0 and c.Attempts < 19 and c.P.NarrowResult(c.retInst, c.P.ReadOnlyAll(typeOf(x))) {
@@ -10055,8 +10080,10 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
         }
         return
     }
-    # the rework's round 2: what a bare parameter reaches is read-only - the note names it, where it is declared
-    if source.NewParams and l.Kind == typed.LocalKind.Param {
+    # the rework's round 2: what a bare parameter reaches is read-only - the note names it, where it is declared (its
+    # copy on entry too, which holds the same references: a copy of its own named after itself)
+    entry := l.Kind == typed.LocalKind.Var and (try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)) == l.Name
+    if source.NewParams and (l.Kind == typed.LocalKind.Param or entry) {
         c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteBareParam(c.text(l.Name)))
         return
     }
@@ -10073,7 +10100,9 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
 # a result): a read-only copy may not be, said with m's words
 fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
     if not c.roValue(x) or c.followsArg(x) {
-        if x is not null and not c.isRef(typeOf(x)) { c.roNeed(readPlace(x)) }
+        # (an instance's value handed back follows its argument - roResult: no writable one asked, the round 2's rule)
+        follows := kind == RoReturned and source.NewParams and c.instanceBody(c.fr().Body)
+        if x is not null and not c.isRef(typeOf(x)) and not follows { c.roNeed(readPlace(x)) }
         if kind == RoReturned { c.roResult(x) } else { c.roDeepNeed(x) }
         return false
     }
@@ -10101,6 +10130,12 @@ fn (c mut Checker&) followsArg(x typed.Expr?&) Bool {
                     if c.isRef(typeOf(a)) and c.roRef(a) and not c.followsArg(a) { return false }
                 }
                 return true
+            }
+            # ... and a value a call copies out of one it is given, as read-only as that (h.s.items[0] through At)
+            if id >= 0 {
+                for k, a in cl.Args {
+                    if c.roFollows(id, k) and c.followsArg(a) { return true }
+                }
             }
         }
         case _ { }
@@ -10192,6 +10227,9 @@ fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
 fn (c mut Checker&) argFor(ps Array<types.TypeId>&, k I64, target typed.Callee&, f I64) {
     c.argRef = source.NewParams and k < ps.Len() and c.writable(ps[k])
     c.argBare = source.NewParams and k < ps.Len() and c.isRef(ps[k]) and not c.writable(ps[k]) and not c.P.T.IsNullable(ps[k])
+    # (a bare array kept by value for the instances per length its body decides on, G29: read-only at every level too)
+    bid := c.bodyOfCallee(target)
+    if source.NewParams and not c.argBare and k < ps.Len() and not c.isRef(ps[k]) and bid >= 0 and c.bareAt(bid, k) { c.argBare = true }
     c.argBody = c.bodyOfCallee(target) if c.argRef else -1
     c.argK = k
     c.argFollows = c.argRef and c.argBody >= 0 and c.instanceBody(c.argBody) and c.tvRefParam(c.argBody, k)
@@ -10416,7 +10454,13 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
         tv := source.NewParams and c.writable(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]) and c.tvRefParam(body, k)
         if not tv and not c.namedHolds(r) { return }
         if c.roRef(e) or tv and (c.P.T.PermOf(typeOf(e)) & types.Writable) == 0 {
-            c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])))
+            bp := c.roRoot(readPlace(e))
+            if source.NewParams and bp >= 0 and c.cur().Local(typed.LocalId(I32(bp))).Kind == typed.LocalKind.Param and c.cur().Local(typed.LocalId(I32(bp))).Name != source.NameId(0) {
+                bl := c.cur().Local(typed.LocalId(I32(bp)))
+                c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), c.at(bl.Sp), $c.text(bl.Name)))
+            } else {
+                c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])))
+            }
             # 2.8: an instance's parameter that follows its argument handed on so - what its callers give it narrows too
             j := c.tvRefOf(readPlace(e))
             if source.NewParams and j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(me, j), pair.Pair(body, k))) }
@@ -10477,6 +10521,7 @@ fn (c mut Checker&) roSettle() {
         c.levelsRo(a.Levels)
         rec := c.P.L.Diags.Error(a.At, msgs.ReadOnlyRefKept(a.Callee, c.text(l.Name), a.Ty))
         c.P.L.Diags.Note(rec, diag.Where.Span(b.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteDeclaredHere(c.tok(l.Name)))
+        if a.BareName.Len() > 0 { c.P.L.Diags.Note(rec, a.Bare, msgs.NoteBareParam(a.BareName)) }
     }
     for f in c.roFns {
         b := c.Bodies[f.Body]
@@ -10818,7 +10863,7 @@ fn (c mut Checker&) armPlace(x typed.Expr?&) Bool {
 fn (c mut Checker&) roLend(x typed.Expr&, sp source.Span) {
     if c.roValue(x) {
         if c.lendLater(c.roCallAt(x, sp), c.roFix(c.roName(x), typeOf(x))) { return }
-        c.err(c.roCallAt(x, sp), msgs.ReadOnlyCopyLent(c.roFix(c.roName(x), typeOf(x))))
+        c.noteRo(c.err(c.roCallAt(x, sp), msgs.ReadOnlyCopyLent(c.roFix(c.roName(x), typeOf(x)))), readPlace(x))
         return
     }
     c.roDeepNeed(x)
@@ -12522,6 +12567,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     lmark := c.levelsOf(c.levelRootX(recv))
     for a in args { c.levelsOf(c.levelRootAst(a)) }
     defer c.levelOn.Truncate(lmark)
+    wasLocal := c.localStore
+    c.localStore = c.ownLocal(c.levelRootX(recv))
+    defer c.localStore = wasLocal
     if recv is not null {
         c.argFor(ps, 0, target, f)
         rx := c.fit(recv, ps[0] if ps.Len() > 0 else types.UnknownT, recv.Span())
@@ -12651,6 +12699,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     }
     c.roCheckCallee(target, r)
     targs := gather(c.exprs, from)
+    r = c.followedResult(target, targs, r)
     site := c.site(typed.SiteKind.Call, sp)
     call := typed.Expr.Call(sp, r, typed.Call(target, targs, typed.Mark.None, site))
     # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
@@ -17263,6 +17312,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         lmark := c.levelOn.Len()
         for st in sites { c.levelOn.Push(st) }
+        wasLocal := c.localStore
+        c.localStore = not v.Field
         pend := unsetCand(-1, -1, -1, false, -1, nsp, types.UnknownT, false)
         # T7d: a field's storage is its type's (C2e: held in the instance where its declaration gives it a length); a
         # local's fixed where its initializer's length is known and nothing assigns it as a whole afterwards
@@ -17346,6 +17397,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         c.levelOn.Truncate(lmark)
+        c.localStore = wasLocal
         id := c.local(v.Names[i], nsp, t, kind, mark)
         if sites.Len() > 0 { c.fr().levels.Put(id, sites.ToArray()) }
         # D14d: a fixed array so filled is not written before the loop (its value is never seen)
@@ -17685,7 +17737,10 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     t := p.Type()
     if op == token.Tok.Assign {
         lmark := c.levelsOf(c.levelRoot(p))     # 2.8: a read-only value stored into a level of its local's type
+        wasLocal := c.localStore
+        c.localStore = c.ownLocal(c.levelRoot(p))
         c.storeInto(sp, p, value, osp, target)
+        c.localStore = wasLocal
         c.levelOn.Truncate(lmark)
         return
     }
@@ -20190,6 +20245,11 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         c.nullDecl = wasNull
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, rt, x)) }
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } # T25c: the caller holds it writably
+        # (a value holding writable references handed back from what a "&" parameter reaches: kept - D9d)
+        if source.NewParams and not c.isRef(rt) and c.holdsWritable(rt) {
+            c.refUseX(x)
+            c.refDeepX(x)
+        }
         c.emit(typed.Stmt.Return(sp, x))
         return
     }
@@ -20235,6 +20295,71 @@ fn (c mut Checker&) freshValue(x typed.Expr&) Bool {
         case typed.Expr.Seq(_, _, q): q.X is not null and c.freshValue(q.X!)
         case _: false
     }
+}
+
+# the rework's round 2 (2.8, T25c's generic rule): in an instance, a value read through a bare parameter that follows its
+# argument (roByArg), stored into a local this body made - what its result is built from - is held as given, and the
+# result follows that argument: a call giving a read-only one gets it read-only below its top (followedResult). So a
+# container's Clone or ToArray copies out a bare receiver's elements as writable as the caller's. Whether x is one
+fn (c mut Checker&) followResult(x typed.Expr&) Bool {
+    if not c.localStore or not c.followsArg(x) { return false }
+    k := c.followedParam(x)
+    i := c.narrowable()
+    if k < 0 or i < 0 { return false }
+    if not c.P.L.FollowResults.Has($i ":" $k) {
+        c.P.L.FollowResults.Put($i ":" $k, true)
+        c.copiesGrew = true
+    }
+    return true
+}
+
+# the parameter of this body a value followsArg reaches it through, -1 for none
+fn (c mut Checker&) followedParam(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Call(_, _, cl) {
+            id := c.bodyOfCallee(cl.Target)
+            if id < 0: return -1
+            for k, a in cl.Args {
+                if c.roFollows(id, k) and c.followsArg(a): return c.followedParam(a)
+            }
+            return -1
+        }
+        case _ { }
+    }
+    pl := readPlace(x)
+    match x {
+        case typed.Expr.Borrow(_, _, bp) { pl = bp }
+        case typed.Expr.Slice(_, _, sl) { pl = sl.Base }
+        case _ { }
+    }
+    r := c.roRoot(pl)
+    if r < 0: return -1
+    ps := c.cur().Params
+    for k in range ps.Len() {
+        if I64(ps[k]) == r: return k
+    }
+    return -1
+}
+
+# a call's result where the callee's result follows an argument it is given read-only (followResult): read-only at
+# every level below its top
+fn (c mut Checker&) followedResult(target typed.Callee&, args Array<typed.Expr&>&, r types.TypeId) types.TypeId {
+    if not source.NewParams or c.P.L.FollowResults.Len() == 0: return r
+    id := c.bodyOfCallee(target)
+    if id < 0: return r
+    i := match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): inst
+        case _: -1
+    }
+    if i < 0: return r
+    for k, a in args {
+        if not c.P.L.FollowResults.Has($i ":" $k): continue
+        ro := c.roRef(a) if c.isRef(typeOf(a)) else c.roValue(a)
+        if not ro: continue
+        if c.isRef(r): return c.P.T.Ref(c.P.ReadOnlyAll(c.P.T.Referent(r)), c.P.T.PermOf(r))
+        return c.P.ReadOnlyAll(r)
+    }
+    return r
 }
 
 # the instance whose result a returned value may make read-only at a level (permFit): the body's own function's - none

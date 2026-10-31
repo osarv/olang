@@ -103,6 +103,9 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # (module, the start of the written "T&") - the checker records one where a read-only value is stored into a level
     # of a local's type and checks the program again; such a "&" then reads read-only there
     RoLevels Map<pair.Pair<I64, I64>, Bool>
+    # ... and an instance's parameter whose reach its result holds as given (by "instance:parameter"): a call giving it a
+    # read-only argument gets the result read-only at every level below its top (check's followResult)
+    FollowResults Map<String&, Bool>
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1

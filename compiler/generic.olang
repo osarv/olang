@@ -148,6 +148,38 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     anySlotsOf Map<types.TypeId, Array<AnySlot>&>
     # D17f: the body owning the contract a trait writes on a slot's method, by SlotKey - -1 for none
     SlotContracts Map<I64, I64>
+    decided Map<source.NameId, Bool>   # the parameters whose length the body being signed decides on (BareRef, G29)
+    decidedViews Bool = false          # ... and whether its result may hand back views (then none is held by value)
+}
+
+# whether a written type writes a reference anywhere in it - itself, an argument's, an element's
+fn refWritten(tr ast.TypeRef&) Bool {
+    return match tr {
+        case ast.TypeRef.Ref(_, _, _, _), ast.TypeRef.Any(_, _), ast.TypeRef.Func(_, _): true
+        case ast.TypeRef.Perm(_, of, _, _): of is not null and refWritten(of)
+        case ast.TypeRef.Named(_, _, args): args.Some(fn(a ast.TypeRef&) Bool { return refWritten(a) })
+        case _: false
+    }
+}
+
+# the parameters whose length a function's body decides on, while its signature is read (LengthDecided)
+fn (p mut Program&) decidedFor(row fnRow&) {
+    p.decided = Map<source.NameId, Bool>()
+    p.decidedViews = false
+    if not source.NewParams or row.F.Body.Len() == 0: return
+    # a result that may hold references may hold views of a parameter: none is copied in by value then
+    for r in row.F.S.Results {
+        if refWritten(r): p.decidedViews = true
+    }
+    text := p.L.Mods[row.Mi].Src!.Text
+    from := I64(row.F.Body[0].Span().Start)
+    to := I64(row.F.Body[row.F.Body.Len() - 1].Span().End)
+    ps Vec<source.NameId>
+    if row.F.Recv is not null: ps.Push(row.F.Recv!.Name)
+    for prm in row.F.S.Params { ps.Push(prm.Name) }
+    for n in ps {
+        if LengthDecided(text, from, to, p.text(n)): p.decided.Put(n, true)
+    }
 }
 
 # a table (T32): the instance's type and the trait, the type the instance is stored as (Stored: the type itself, or for
@@ -671,9 +703,32 @@ fn (p Program&) writtenRef() I64 { return types.Writable if source.NewParams els
 # body writes it (check); an enum, a number, a function value and a type variable's binding stay by value, and an
 # extern's and an export fn's struct keep C's by-value convention (X11). An array of numbers too, so no bare parameter
 # makes G29's instances per length (one per literal length a program passes would be made). t is what tr resolved to
-fn (p mut Program&) BareRef(tr ast.TypeRef?&, t types.TypeId) types.TypeId {
+fn (p mut Program&) BareRef(tr ast.TypeRef?&, t types.TypeId, n source.NameId = source.NameId(0)) types.TypeId {
     if not source.NewParams or tr is null or t == types.UnknownT or not WrittenBare(tr) { return t }
+    # G29 (round 2b): an array whose length its body decides something on stays by value - one instance per length
+    if n != source.NameId(0) and p.T.KindOf(t) == types.Kind.Array and p.decided.Has(n) and not p.decidedViews { return t }
     return p.T.Ref(t, types.ReadOnly) if p.byPointer(t) else t
+}
+
+# G29, G30 under the rework's round 2b: whether a body decides something on a parameter's length - "n.Len()" written in
+# an if's, an assert's or a match's line before its block, after a conditional's or a guard's "if", in a comptime or in
+# an array's length: the instances per length that decide it while compiling are kept for it alone. Read from the text,
+# so a length held in a local first decides at run time (no meaning changes: only what is decided while compiling)
+fn LengthDecided(text String&, from I64, to I64, name String&) Bool {
+    pat := $name ".Len()"
+    at := from
+    for at < to {
+        k := try text[at:to].Find(pat) catch { return false }
+        q := at + k
+        at = q + pat.Len()
+        if q > 0 and (text[q - 1].IsLetter() or text[q - 1].IsDigit() or text[q - 1] == '_' or text[q - 1] == '.'): continue
+        ls := q
+        for ls > from and text[ls - 1] != '\n' { ls-- }
+        line := text[ls:q].TrimStart()
+        if line.StartsWith("if ") or line.StartsWith("} else if ") or line.StartsWith("assert ") or line.StartsWith("match "): return true
+        if line.Contains(" if ") or line.Contains("comptime") or line.EndsWith("Array<") or line.Contains(">("): return true
+    }
+    return false
 }
 
 # a parameter's written type that is bare: no reference, function type, variadic or any written at its top
@@ -966,7 +1021,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         shares.Push(types.OwnScope)
     }
     for prm in s.Params {
-        ps.Push(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty)))
+        ps.Push(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name))
         shares.Push(p.markedParam(c, prm.Ty!, named, shares))
         named.Push(prm.Name)
     }
@@ -2647,9 +2702,10 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
     wasCabi := p.cabi
     p.cabi = p.FnIsExtern(f) or row.F.Export
-    if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty)), true, row.F.Recv!.Name, 0, ns, levels) }
+    p.decidedFor(row)
+    if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty), row.F.Recv!.Name), true, row.F.Recv!.Name, 0, ns, levels) }
     for prm in row.F.S.Params {
-        if prm.Ty is not null and not p.FnIsExtern(f) { p.lengthLevels(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty)), true, prm.Name, 0, ns, levels) }
+        if prm.Ty is not null and not p.FnIsExtern(f) { p.lengthLevels(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name), true, prm.Name, 0, ns, levels) }
     }
     p.addVars(owner, ns.ToArray())
     i64 := p.T.Prim("I64")
@@ -2664,11 +2720,12 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     recv := types.UnknownT
     recvName := source.NameId(0)
     if row.F.Recv is not null {
-        recv = p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty))
+        recv = p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty), row.F.Recv!.Name)
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
     p.cabi = wasCabi
+    p.decided = Map<source.NameId, Bool>()
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
@@ -3536,7 +3593,10 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     hs := p.T.Items(p.T.Params(have))
     ws := p.T.Items(p.T.Params(want))
     if hs.Len() != ws.Len() + 1 { return false }
-    if m.Recv is not null and not p.writableRecv(hs[0]) { return false }   # a "mut" method: a writable receiver (T31)
+    # a "mut" method: a writable receiver (T31) - under the rework's round 2 a bare one passed by pointer too, which
+    # writes nothing: "&Name()" says a method may write, and one that does not meets it
+    rb := source.NewParams and p.T.KindOf(hs[0]) == types.Kind.Ref and not p.T.IsNullable(hs[0])
+    if m.Recv is not null and not p.writableRecv(hs[0]) and not rb { return false }
     # ... and only a "mut" one: a method writing its receiver meets no signature that only reads it (T31)
     if m.Recv is null and p.T.KindOf(hs[0]) == types.Kind.Ref and (p.T.PermOf(hs[0]) & types.Writable) != 0 { return false }
     for i in range ws.Len() {
@@ -3672,6 +3732,11 @@ fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
     if p.T.Same(a, c) { return true }
     ar := p.T.KindOf(a) == types.Kind.Ref
     cr := p.T.KindOf(c) == types.Kind.Ref
+    # the rework's round 2: a bare parameter passed by pointer (a read-only reference) takes what any reference to the
+    # same type names - read-only at every level, whatever the other's levels say
+    if source.NewParams and ar and cr and (p.T.PermOf(a) & types.Writable) == 0 and not p.T.IsNullable(a) and not p.T.IsNullable(c) {
+        return p.T.SameButPerm(p.T.Referent(a), p.T.Referent(c))
+    }
     if ar and cr { return false }
     x := p.T.Referent(a) if ar else a
     y := p.T.Referent(c) if cr else c
@@ -4962,12 +5027,27 @@ fn (p mut Program&) NarrowResult(i I64, value types.TypeId) Bool {
     sig := p.instances[i].Sig
     r := p.T.Result(sig)
     nr := p.MeetPerm(r, value)
+    # a result written "mut" in a source not yet migrated keeps its top writable: what it hands back is the caller's
+    # to write, so the parameter it is reached through is to be a "&" one (the rework's migration reads the error)
+    if p.mutResult(p.instances[i].Fn) and p.T.KindOf(r) == types.Kind.Ref and (p.T.PermOf(r) & types.Writable) != 0 {
+        nr = p.T.Ref(p.T.Referent(nr), p.T.PermOf(nr) | types.Writable)
+    }
     if nr == r { return false }
     ns := p.T.Func(p.T.Params(sig), nr, p.T.Errors(sig), p.T.ScopesOf(sig), p.T.NamesIdOf(sig))
     row := p.instances[i]
     p.instances[i] = instance(row.Fn, row.Args, ns, row.Name, row.Text, row.From)
     if row.Args == types.ListId(0) and p.fnSig.Has(row.Fn): p.fnSig.Put(row.Fn, ns)
     return true
+}
+
+# whether a function's one result is written "mut" at its top
+fn (p mut Program&) mutResult(f I64) Bool {
+    rs := p.fns[f].F.S.Results
+    if rs.Len() != 1: return false
+    return match rs[0] {
+        case ast.TypeRef.Perm(_, _, writable, _): writable
+        case _: false
+    }
 }
 
 # t with every reference level read-only - through references, arrays, instances' arguments and several results: what
