@@ -640,6 +640,7 @@ fn (c mut Checker&) CheckMain() {
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
+    c.testKeys = StringBuilder()   # B7a's targets are said once an attempt (another attempt had found every one twice)
     c.fx = null
     c.Gaps = Vec<Gap>()
     c.anyBad = Map<I64, Bool>()
@@ -9437,6 +9438,9 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
             }
         }
     }
+    # the rework's round 2: what is looked for is only read - a reference to it as read-only as it is (T25c's rule
+    # for an instance's type variable, which Has's and Contains' parameter is)
+    if source.NewParams and c.isRef(xw) { xw = c.P.T.Ref(c.P.T.Referent(xw), c.P.T.PermOf(xw) & ~types.Writable) }
     x := c.expr(a, xw)
     name := "Contains" if c.P.T.Same(c.deref(typeOf(x)), ct) else "Has"
     m := c.roleUse(ct, name, 1, c.between(a.Span(), b.Span(), 2), "'in'")
@@ -10129,6 +10133,9 @@ fn (c mut Checker&) bodyFn(id I64) I64 {
 fn (c mut Checker&) refEligible(f I64, id I64, k I64) Bool {
     fd := c.P.FnDecl(f)
     if c.P.FnIsExtern(f) or fd.Export or fd.Body.Len() == 0 and not fd.Bodied { return false }
+    # a generic's: what its instances make of it depends on the program they are made for (a "match T" arm's write is
+    # in some instances and not others) - never judged, as S3 judges no generic's body
+    if c.P.VarCount(generic.FnOwner(f)) > 0 { return false }
     j := k - (1 if fd.Recv is not null else 0)
     prm := fd.Recv if fd.Recv is not null and k == 0 else (fd.S.Params[j] if j >= 0 and j < fd.S.Params.Len() else null)
     if prm is null or prm.Ty is null { return false }
@@ -10302,7 +10309,7 @@ fn (c mut Checker&) roByArg(id I64, k I64) Bool {
     }
     # ...and one written as a bare type variable bound to a reference: as read-only as the argument, its body's writes
     # through it and what it keeps of it asking a writable one (T25c's generic rule, now every written "&" is writable)
-    if source.NewParams and k >= 0 and k < ps.Len() and c.isRef(ps[k]) { return c.tvRefParam(id, k) }
+    if source.NewParams and k >= 0 and k < ps.Len() and c.isRef(ps[k]) and c.writable(ps[k]) { return c.tvRefParam(id, k) }
     if k < 0 or k >= ps.Len() or not c.isRef(ps[k]) { return false }
     return (c.P.T.PermOf(ps[k]) & types.Writable) == 0 and c.P.T.KindOf(c.P.T.Referent(ps[k])) != types.Kind.Func
 }
@@ -10314,7 +10321,8 @@ fn (c mut Checker&) bareAt(id I64, k I64) Bool {
     f := c.bodyFn(id)
     if f < 0 { return false }
     ds := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
-    return k < ds.Len() and c.P.T.KindOf(ds[k]) != types.Kind.Var and not c.isRef(ds[k]) and c.P.T.KindOf(ds[k]) != types.Kind.Func
+    if k >= ds.Len() or c.P.T.KindOf(ds[k]) == types.Kind.Var or c.P.T.KindOf(ds[k]) == types.Kind.Func { return false }
+    return not c.isRef(ds[k]) or not c.writable(ds[k])   # passed by pointer, a read-only reference (generic.BareRef)
 }
 
 # the rework's round 2: whether parameter k of instance body id is written as a bare type variable ("x T") its instance
