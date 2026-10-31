@@ -1498,6 +1498,6 @@ What the 347 are: T25c's 157 "read-only here" are nearly all one shape - a reade
 back, `fn unPassed(x typed.Expr&) typed.Expr&x`, `fn (s Scoper) callOf(x typed.Expr&) typed.Call?&x`, given a bare
 parameter's value (`unPassed(s.unAway(x))`). Under QCC such a reader takes its argument bare and gives a value - the
 by-pointer value-result handover (12.6 item 2) - so the remaining class waits for it, not for more inference; making
-those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are the
-unpinned stage's (bare where the pinned stage kept `&`); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
+those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are parameters the
+pinned stage keeps `&` (made so by a note, then never used as one - what the unpinned settling would bare); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
 copy refusals of views a bare parameter now gives, to be read again once value results hand over by pointer.
