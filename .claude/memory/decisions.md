@@ -2052,3 +2052,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   right-associative, `**=`; a type declaring Pow gets it. Queued with array patterns and variadic parameters.
 - QBY ANSWERED 2026-10-31 (the user: "wait with the experiments for now"): no settling experiments yet, oagent's
   included; the user says when.
+- QBP 11-15 ASKED 2026-10-31 (the user: "Let's solve the surveys ones now, why wait?"), docs/survey3.md: (1) B1.2
+  `olang explain -caps FILE` - each import's reach (files, network, processes, environment, C, threads) read off the
+  effect summaries; rec yes, built with QBP 6/9 (same summaries); (2) A6.1 reuse in place - an optimization, mine:
+  benchmark (interpreter loop, tree rebalance), build after the scoping rework (free.olang's let-go meets placement);
+  (3) B1.4 a generic's needs shown in doc/explain/hover (`# T needs: Less`) - rec yes now; checking a body against its
+  constraint at the definition - rec not now (per-instance checking is what match T, G35 and per-length instances
+  need; revisit if libraries keep breaking at users' calls); (4) A8 the Elm architecture as the style of a GUI library
+  - recorded as the direction (the GUI style was left to me); building a GUI library is a project of its own (a window
+  and drawing backend through C imports) - rec when the user wants GUI work; (5) B1.6 `olang api OLD NEW` (two commits:
+  added, removed, changed exports, and whether importers break) - rec yes now, on doc's signatures; B1.5 enums that may
+  grow (an `open` keyword making importers' matches carry `case _`) - rec not now, with a registry.
