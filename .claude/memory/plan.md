@@ -575,8 +575,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   the allocator's bump path, stack slots for turn temporaries, growth out of line, alwaysinline .walk, no result copy
   into a reference parameter) - an optimization batch of its own beside the language batch (disjoint files where it can).
 - QUEUED 2026-10-30 (the user: at most 3-4 nested blocks): a nesting refactor of compiler/ (~1,000 lines deeper than 4
-  blocks, 242 functions; guard clauses, one-line bodies, helpers split out) and a depth report in `olang format
-  -check`/the LSP (QCA); the ~60 flag-beside-value sites follow QBZ's answer. Not before the language batch's checker work
+  blocks, 242 functions; guard clauses, one-line bodies, helpers split out) (QCA; no depth report for other code - the user: a human writes code how they want); the ~60 flag-beside-value sites follow QBZ's answer. Not before the language batch's checker work
   lands (same files).
 - QUEUED 2026-10-30 (the user's QCB yes): the scoping rework - every scope marker inferred. Round 1 (opus xhigh, new
   section-8 design): the small formal model first (docs/scope-infer.md: the inference, the no-extension rule, why it is

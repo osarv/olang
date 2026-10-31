@@ -2002,3 +2002,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   included). Still ASKED: the two flag bans (a Bool among several results; a success Bool with a written `&`
   parameter) - rec yes. Queued as a language batch after wt-opt31 merges.
 - QBZ flag bans DECIDED 2026-10-31 (the user: "yes, ban both flag shapes"): in the errors batch.
+- QCA DECIDED 2026-10-31 (the user: "no, this is just for you. A human may write code how it wants"): the nesting
+  limit is my own code's discipline (rules.md), never a rule, report or check on other people's olang code.

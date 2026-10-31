@@ -406,7 +406,9 @@ The user, 2026-10-30: "your code has like 10 nested indented blocks. That is dis
 yourself to around 3, 4 on special occasions etc and break things up more."
 **How to apply:** at most three blocks nested inside a function's body, four on a special occasion; reach for guard
 clauses (`if bad: return`, `continue`), `:` one-line bodies and a helper function when a block is a thing of its own.
-Every agent brief says so. compiler/ is far over it (QCA, decisions.md) - a refactor batch is queued.
+Every agent brief says so. compiler/ is far over it (QCA, decisions.md) - a refactor batch is queued. The limit is mine and my agents'
+only (the user, 2026-10-31: "this is just for you. A human may write code how it wants") - no compiler, formatter or
+editor check on anyone else's code.
 
 ## Flags beside values are errors, in my code too
 The user, 2026-10-30, seeing compiler/ return `value, Bool` and success Bools with out-parameters: the rule "errors are
