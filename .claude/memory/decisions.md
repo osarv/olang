@@ -1951,4 +1951,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   keep immutable the default (the common, safe case: baked while compiling, no races, readable by the evaluator; 7
   writable globals in compiler/ and std), and mark the writable one - `var` if `mut` reads odd as the last place it is
   written. In effect: `mut` globals.
-
+- QCC (2) DECIDED 2026-10-31 (the user: "Keep mut and make globals immutable by default"): globals immutable unless
+  written `mut`, as today; `mut` stays only there once QCC is built. No `const`.

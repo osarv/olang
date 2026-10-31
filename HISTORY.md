@@ -26562,5 +26562,6 @@ so no aliasing is visible. Soundness needs one inferred permission: what is take
 constant data (slices, Split's pieces, a returned element) is read-only - not written anywhere, inferred from origin as
 copies' permission already is (QC); writing through it, passing it to a `&` parameter, or passing constant data to one,
 is an error naming `.Clone()`/`$t`. Not built: held with the scoping rework, built as one rework of section 8 and the
-signatures. Open: how a mutable global is written.
-
+signatures. Open: how a mutable global is written. Decided the same day: a global stays
+immutable by default and a writable one is written `mut` - the user weighed `const` ("negative mutability feels kinda
+weird now that it's only for globals") and kept `mut`, since immutable globals are the common and safe case.
