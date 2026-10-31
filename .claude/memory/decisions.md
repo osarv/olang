@@ -2025,3 +2025,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBP 10 spelling DECIDED 2026-10-31 (the user: "Could we do ... for the array match?"): the rest of an array pattern
   is written `...` - `case String&["test", file, ...words]`, a bare `...` where the rest is not named (mine: before
   the name, as JavaScript's rest pattern, so a pattern's last item says at once that it takes the rest).
+- QCF ASKED 2026-10-31 (the user: "Is variadic args anything to have?"). Found in std: filepath.Join fakes it with six
+  defaulted parameters; os.Exec takes `Array<String&>&` (callers write `String&["ls", "-l"]`, and with QBU's type in
+  front `Array<String&>["ls", "-l"]`). Proposed (Go's form): the last parameter may be `xs ...T`, an `Array<T>`
+  read-only view inside; a call gives any number of T there (`filepath.Join(a, b, c)`), built as a fixed array in the
+  caller's frame (length known at the call, no allocation); an existing array is passed on with `...a` (as the pattern
+  rest is written); one type only - several types are what `$` joins and generics are for (no printf); named
+  arguments still come last, after the variadic ones; a function type writes `fn(...I64)`; never with defaults on the
+  same parameter. Rec: yes - small, and it removes filepath.Join's six-default trick and the type-in-front literal at
+  most calls. In effect: none (olang functions are never variadic, X21).
