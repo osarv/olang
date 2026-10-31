@@ -1,0 +1,25 @@
+# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
+# a nullable parameter whose body writes through a binding of its payload is writable by inference (it had stayed
+# read-only, so a bare parameter - read-only all the way down - was given it and the caller's node written)
+type node struct(v I64) {
+    v
+}
+
+type holder enum {
+    one(n node&)
+}
+
+fn put(h holder?&, n I64) {
+    match h! {
+        case holder.one(x) { x.v = n }
+    }
+}
+
+fn viaCall(h holder) {
+    put(h, 9)
+}
+
+fn main() {
+    a := node(1)
+    viaCall(holder.one(a))
+}

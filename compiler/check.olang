@@ -3630,6 +3630,22 @@ fn (c mut Checker&) bareNamed(id I64) Bool {
     return l.Kind == typed.LocalKind.Var and (try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)) == l.Name
 }
 
+# round 2c: whether a local is a bare parameter, its entry copy, or a reference made from a place reached from one -
+# whose reach is read-only whatever the fields between say (QCC), so a refusal at it rests on no field read-only by
+# inference (fieldsWritAll) and stands
+fn (c mut Checker&) bareRooted(id I64) Bool {
+    for _ in range 16 {
+        if id < 0: return false
+        key := c.roKey(id)
+        if c.bareLocals.Has(key): return true
+        l := c.cur().Local(typed.LocalId(I32(id)))
+        if l.Name != source.NameId(0) and (try c.roCopies.Get(key) catch default source.NameId(0)) == l.Name: return true
+        o := try c.roFrom.Get(key) catch { return false }
+        id = c.rootLocal(o.P)
+    }
+    return false
+}
+
 # a local's levels made the levels a store being checked reaches (levelRo) - how many were before, to truncate back to
 fn (c mut Checker&) levelsOf(id I64) I64 {
     n := c.levelOn.Len()
@@ -3692,6 +3708,12 @@ fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
     for i in range c.cur().Params.Len() {
         if I64(c.cur().Params[i]) == r: k = i
     }
+    return c.widenNullable(f, k)
+}
+
+# function f's nullable parameter k (the receiver first) made writable, the program checked again - whether it was
+# read-only before
+fn (c mut Checker&) widenNullable(f I64, k I64) Bool {
     fd := c.P.FnDecl(f)
     j := k - (1 if fd.Recv is not null else 0)
     if j < 0 or j >= fd.S.Params.Len() or fd.S.Params[j].Ty is null: return false
@@ -3701,6 +3723,18 @@ fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
     c.P.WidenParam(f, k)
     c.copiesGrew = true
     return true
+}
+
+# round 2c: a nullable parameter read-only by inference that its body uses as a "&" one once the uses are settled -
+# writing through what it reaches (a reference read out of it, a binding of its payload), passing that where it may be
+# written, keeping it - made writable as wantWritable makes one the body writes through directly
+fn (c mut Checker&) widenUsed(at pair.Pair<I64, I64>) {
+    f := c.bodyFn(at.First)
+    if f < 0: return
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[at.First].Ty))
+    k := at.Second
+    if k >= ps.Len() or not c.isRef(ps[k]) or not c.P.T.IsNullable(ps[k]) or c.writable(ps[k]): return
+    c.widenNullable(f, k)
 }
 
 # whether the body being checked is a generator's (D18) - its parameters held by its walk, never copied on entry
@@ -10096,7 +10130,9 @@ fn (c mut Checker&) roRoot(p typed.Lvalue?&) I64 {
 # a reference local made from a place (T25c): recorded, so what is reached through it is reached from that place
 fn (c mut Checker&) roTrack(id I64, x typed.Expr?&) {
     if x is null or not c.isRef(typeOf(x)) { return }
-    match x {
+    # ("x!" read where x is: what it names is what x names, E35 - under the rework's switches, round 2c)
+    y := unwrapped(x) if source.NewParams else x
+    match y {
         case typed.Expr.Read(_, _, p, _) { c.roFrom.Put(c.roKey(id), roOrigin(p, false)) }
         case typed.Expr.Borrow(_, _, p) { c.roFrom.Put(c.roKey(id), roOrigin(p, true)) }
         case typed.Expr.Slice(_, _, sl) { c.roFrom.Put(c.roKey(id), roOrigin(sl.Base, true)) }
@@ -10239,7 +10275,7 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
         return false
     }
     # (round 2c: resting on fields read-only by inference - those written, the program checked again)
-    if source.NewParams and c.fieldRo.Len() > 0 {
+    if source.NewParams and c.fieldRo.Len() > 0 and not c.bareRooted(c.rootLocal(readPlace(x!))) {
         fs Vec<pair.Pair<I64, I64>>
         c.roFieldsOf(x, fs, 0)
         if c.fieldsWritAll(fs.ToArray()) { return false }
@@ -10360,9 +10396,22 @@ fn (c mut Checker&) refUseOuter(p typed.Lvalue?&, deep Bool) {
     }
 }
 
+# a reference converted to another reference type - one that may be null (T2c), a read-only one: the reference it was
+# (round 2c: the conversion had hidden which parameter it came from), else null
+fn (c mut Checker&) refConverted(x typed.Expr&) typed.Expr?&x {
+    return match x {
+        case typed.Expr.Prim(_, ty, op, _, args): args[0] if op == typed.PrimOp.Convert and args.Len() == 1 and c.isRef(typeOf(args[0])) and c.isRef(ty) else null
+        case _: null
+    }
+}
+
 # a reference value used so: what it is read, borrowed or sliced from, either of a conditional's
 fn (c mut Checker&) refUseX(x typed.Expr?&) {
     if x is null { return }
+    if c.refConverted(x) is not null {
+        c.refUseX(c.refConverted(x))
+        return
+    }
     match x {
         case typed.Expr.Borrow(_, _, p) { c.refUse(p) }
         case typed.Expr.Slice(_, _, sl) { c.refUse(sl.Base) }
@@ -10377,6 +10426,7 @@ fn (c mut Checker&) refUseX(x typed.Expr?&) {
 
 # the "&" parameter of this body a reference value comes from, its index; -1 for none
 fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
+    if c.refConverted(x) is not null: return c.refParamOfX(c.refConverted(x)!)
     return match x {
         case typed.Expr.Borrow(_, _, p): c.refParamOf(p)
         case typed.Expr.Slice(_, _, sl): c.refParamOf(sl.Base)
@@ -10538,7 +10588,7 @@ fn (c mut Checker&) lendLater(sp source.Span, fix String&, p typed.Lvalue?& = nu
     }
     id := c.roRoot(p)
     fs Vec<pair.Pair<I64, I64>>
-    c.roFieldsIn(p, fs, 0)
+    if not c.bareRooted(c.rootLocal(p)) { c.roFieldsIn(p, fs, 0) }
     if id >= 0 and c.bareNamed(id) {
         l := c.cur().Local(typed.LocalId(I32(id)))
         c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, c.at(l.Sp), $c.text(l.Name), fs.ToArray()))
@@ -10579,6 +10629,7 @@ fn (c mut Checker&) refSettle() {
         }
         if not moved { break }
     }
+    for e in c.refUsed { c.widenUsed(e.Key) }
     c.refDeepClose()
     for l in c.roCtorArgs {
         if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) or c.fieldsWritAll(l.Fields) { continue }
@@ -10701,7 +10752,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
         if c.roRef(e) or tv and (c.P.T.PermOf(typeOf(e)) & types.Writable) == 0 {
             bp := c.roRoot(readPlace(e))
             fs Vec<pair.Pair<I64, I64>>
-            c.roFieldsOf(e, fs, 0)
+            if not c.bareRooted(c.rootLocal(readPlace(e))) { c.roFieldsOf(e, fs, 0) }
             if source.NewParams and bp >= 0 and c.bareNamed(bp) {
                 bl := c.cur().Local(typed.LocalId(I32(bp)))
                 c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), c.at(bl.Sp), $c.text(bl.Name), fs.ToArray()))
@@ -10730,7 +10781,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
     if not c.holdsWritable(typeOf(e)) { return }
     if c.roValue(e) {
         fs Vec<pair.Pair<I64, I64>>
-        c.roFieldsOf(e, fs, 0)
+        if not c.bareRooted(c.rootLocal(readPlace(e))) { c.roFieldsOf(e, fs, 0) }
         c.roArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(typeOf(e)), c.roFix(c.roName(e), typeOf(e)), Fields = fs.ToArray()))
         return
     }
@@ -10964,7 +11015,7 @@ fn (c mut Checker&) fieldsWrite(x typed.Expr&) Bool {
 fn (c mut Checker&) ctorRoArg(sp source.Span, x typed.Expr&) {
     if c.argBody < 0 or not c.roRef(x): return
     fs Vec<pair.Pair<I64, I64>>
-    c.roFieldsOf(x, fs, 0)
+    if not c.bareRooted(c.rootLocal(readPlace(x))) { c.roFieldsOf(x, fs, 0) }
     id := c.roRoot(readPlace(x))
     if id >= 0 and c.bareNamed(id) {
         l := c.cur().Local(typed.LocalId(I32(id)))
@@ -10978,7 +11029,7 @@ fn (c mut Checker&) ctorRoArg(sp source.Span, x typed.Expr&) {
 fn (c mut Checker&) ctorRoCopy(sp source.Span, p typed.Lvalue&) {
     if not source.NewParams or c.argBody < 0: return
     fs Vec<pair.Pair<I64, I64>>
-    c.roFieldsIn(p, fs, 0)
+    if not c.bareRooted(c.rootLocal(p)) { c.roFieldsIn(p, fs, 0) }
     c.roCtorArgs.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, "", Fields = fs.ToArray()))
 }
 
