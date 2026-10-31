@@ -44,6 +44,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `errorcase_rename.olang` | R3 (QBZ): every error name is CamelCase - an upper-case word of an error type becomes its parts capitalized (`IoError.FULL` -> `IoError.Full`, `ListError.OUT_OF_RANGE` -> `ListError.OutOfRange`), in its declaration and wherever it is written qualified (code, comments, strings, Markdown); the words are read from the files' declarations and, with `--std`, std's; idempotent | `build/tools_errorcase_rename [--std DIR] [--check] [-v] FILE\|DIR...` |
 | `question_migrate.olang` | R1d (QBZ): a function that can fail writes `?` - where the compiler says a function "writes no '?'" (a `main` whose errors escaped, a function with conditions whose ArgumentError was implied), `?` is written before its body's brace, in rounds; a checks/cases program whose header names the diagnostic keeps it | `build/tools_question_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 | `list_vec.olang` | QZ2: the prelude's List moved to `std/list`, the iterator helpers and StringBuilder onto Vec, `ToList` renamed `ToVec` - by default a List is kept, qualified and imported (`list.List<T>`, `list.Error`, `list.Iter`; what `olang fix` runs), `--vec` moves it onto Vec (`Vec<T>`, `VecError`, `.ToVec()`), as this repository was; `ToList()` in the default mode, ListIter and RunFrom with `--vec`, a name `list` beside the import and text in strings listed | `build/tools_list_vec [--vec] [--check] [-v] FILE\|DIR...` |
+| `variadic_migrate.olang` | D8g: std's functions taking an array of their variable arguments moved onto a variadic parameter - `os.Exec(String&["ls", "-l"], "", false)` -> `os.Exec("ls", "-l", capture = false)`, an array a call gives passed on (`...args.ToArray()`), ExecUntil's token first; os.Exec/Start/ExecUntil/ExecInPlace, http.Get/Post, csv.Record; a plain name listed `by hand:` (status 1); re-runnable | `build/tools_variadic_migrate [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -88,7 +89,7 @@ compiler has nothing to say about it until the text tools have run:
 `bare_typevars`, `perm_mut`, `int_literal_i64`, `errors_migrate`, `cli_words`, `donefail_migrate`, `syntax_migrate`,
 `math_methods`, `arrays_migrate`, `results_migrate`, `equality_migrate`, `helper_rename`, `null_migrate`,
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
-`errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `errorcase_rename`, `question_migrate`,
+`errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `errorcase_rename`, `variadic_migrate`, `question_migrate`,
 `unused_migrate` (last: D3b is
 said only of a file with no other error, so it runs once everything else has been fixed).
 
