@@ -852,6 +852,13 @@ type Diag enum {
     AttrTwice
     AttrNotBuilt
     AttrWritable
+    ComptimeLocal
+    ComptimeNotBaked
+    ComptimeForTry
+    ComptimeForSource
+    ComptimeForElem
+    ComptimeForUnknown
+    ComptimeForTooMany
     AttrRead
     ReflFnList
     ReflFnCall
@@ -902,6 +909,14 @@ fn AttrPun(name String&) Msg { return Msg(Diag.AttrPun, "G39", $"field '" $name 
 fn AttrType(ty String&) Msg { return Msg(Diag.AttrType, "G39", $"an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is " $ty) }
 fn AttrTwice(ty String&) Msg { return Msg(Diag.AttrTwice, "G39", $"a declaration takes one attribute of each type, and this is its second " $ty) }
 fn AttrWritable(ty String&) Msg { return Msg(Diag.AttrWritable, "G39", $"an attribute's value is read-only data, baked while compiling, and " $ty " holds a 'mut' reference no reader could write through - give its type read-only references ('T&')") }
+fn ComptimeLocal(tok String&) Msg { return Msg(Diag.ComptimeLocal, "K3", $"a comptime is computed while compiling, and " $tok " is a local or a parameter, which only the running program knows - compute it from constants, globals and type parameters, or drop 'comptime'") }
+fn ComptimeNotBaked(why String&) Msg { return Msg(Diag.ComptimeNotBaked, "K3", $"a comptime is computed while compiling, and this one cannot be: " $why) }
+fn ComptimeForTry() Msg { return Msg(Diag.ComptimeForTry, "K3a", "a comptime for's elements are computed while compiling, so nothing of its walk fails at run time - write 'comptime for x in e'") }
+fn ComptimeForSource(ty String&) Msg { return Msg(Diag.ComptimeForSource, "K3a", $"a comptime for walks a range or an array, found " $ty " - give it an array: 'comptime for x in xs.View()'") }
+fn ComptimeForElem(ty String&) Msg { return Msg(Diag.ComptimeForElem, "K3a", $"a comptime for's elements are integers, Bool or Char, found " $ty " - walk its positions: 'comptime for i in range xs.Len()'") }
+fn ComptimeForUnknown(why String&) Msg { return Msg(Diag.ComptimeForUnknown, "K3a", $"a comptime for's elements are computed while compiling, and these cannot be: " $why) }
+fn ComptimeForTooMany(n I64, most I64) Msg { return Msg(Diag.ComptimeForTooMany, "K3a", $"this comptime for unrolls into " $n " copies, at most " $most " - walk it at run time: drop 'comptime'") }
+
 fn AttrNotBuilt(why String&) Msg { return Msg(Diag.AttrNotBuilt, "G39", $"an attribute's value is built while compiling, and this one cannot be: " $why) }
 fn AttrRead(name String&) Msg { return Msg(Diag.AttrRead, "G40", $"'" $name "' takes the attribute's type and no arguments - '" $name "<json.Key>()'") }
 fn ReflFnList(what String&) Msg { return Msg(Diag.ReflFnList, "G41", $what " - 'Functions' is read through an import's alias ('handlers.Functions'), 'Methods' through a type") }
@@ -2740,7 +2755,7 @@ fn NoreturnErrors() Msg { return Msg(Diag.NoreturnErrors, "D8e", "a 'noreturn' f
 fn NoreturnHere(text String&) Msg { return Msg(Diag.NoreturnHere, "D8e", $text " cannot be 'noreturn'") }
 
 # ERR_DECL_FROM_NORETURN
-fn DeclFromNoreturn() Msg { return Msg(Diag.DeclFromNoreturn, "D8e", "a 'noreturn' call gives no value, so ':=' has no type to take") }
+fn DeclFromNoreturn(what String& = "a 'noreturn' call") Msg { return Msg(Diag.DeclFromNoreturn, "D8e", $what " gives no value, so ':=' has no type to take") }
 
 # ERR_RETURN_VALUE_IN_VOID
 fn ReturnValueInVoid() Msg { return Msg(Diag.ReturnValueInVoid, "D8", "this function returns no value") }

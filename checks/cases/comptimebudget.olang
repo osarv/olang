@@ -1,0 +1,7 @@
+# check: fail error[K3]: a comptime is computed while compiling, and this one cannot be: the computation runs longer than compile-time evaluation allows
+# K3: what the evaluator cannot compute is an error at the comptime - never computed at run time instead
+fn fib(n I64) I64 {
+    if n < 2: return n
+    return fib(n - 1) + fib(n - 2)
+}
+fn main() { assert comptime fib(40) > 0 }

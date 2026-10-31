@@ -177,6 +177,17 @@ fn (p Parser&) here() I32 {
     return p.ts.Toks[p.skipFrom(p.pos)].Start
 }
 
+# whether an unreachable's message follows on its line (S16d): a literal, a "$" rendering, a name or a parenthesized
+# expression - anything else (a ",", a closing bracket, "if", "else", an operator, the line's end) ends the unreachable
+fn (p Parser&) messageHere() Bool {
+    if p.breakBefore() { return false }
+    return match p.peek() {
+        case token.Tok.StrLit, token.Tok.Dollar, token.Tok.Iden, token.Tok.LParen, token.Tok.IntLit => true
+        case token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit => true
+        nomatch => false
+    }
+}
+
 # whether a line ended before the next token
 fn (p Parser&) breakBefore() Bool {
     if p.half != token.Tok.Eof { return false }
@@ -1693,6 +1704,11 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             return s
         }
         case token.Tok.For { return try p.forStmt() }
+        case token.Tok.Comptime if p.look(1) == token.Tok.For {
+            # K3a: "comptime for x in e { }", unrolled while compiling
+            p.advance()
+            return try p.forStmt(at)
+        }
         case token.Tok.Do {
             p.advance()
             body := try p.block()
@@ -2250,8 +2266,10 @@ fn lineBodyRefused(k token.Tok) String {
     }
 }
 
-fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
+fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt&p ? Fail {
     at := try p.want(token.Tok.For)
+    unrolled := comptimeAt >= 0
+    if unrolled { at = comptimeAt }
     if p.sees(token.Tok.LBrace) {
         body := try p.block()
         sp := p.from(at)
@@ -2283,7 +2301,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             if tried { cl = try p.clauses(false) }
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
-            return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl))
+            return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl, unrolled))
         }
         # three clauses: an initializer like a declaration, then "," cond "," post
         if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut {
@@ -2312,6 +2330,8 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
         }
     }
+    # K3a: only a for-in is unrolled
+    if unrolled { try p.fail("'for NAME in' after 'comptime'") }
     cond := try p.expr()
     body := try p.body()
     sp := p.from(at)
@@ -3061,6 +3081,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             p.skip = wasSkip
             return ast.Expr.Paren(p.from(at), x)
         }
+        case token.Tok.Comptime {
+            # K3: computed while compiling - the whole expression after it, as a try's reach (E24)
+            p.advance()
+            x := try p.expr()
+            return ast.Expr.Unary(p.from(at), token.Tok.Comptime, x)
+        }
         case token.Tok.Try {
             # E24: what it covers is the whole expression after it, ending at the expression's end or a "catch" - its
             # clauses then end the try, and the expression around it goes on (a default is one unary)
@@ -3080,6 +3106,13 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
         case token.Tok.Match {
             m := try p.matchBody()
             return ast.Expr.MatchE(p.from(at), m)
+        }
+        case token.Tok.Unreachable {
+            # S16d: "unreachable [why]" where a value is expected - its message the expression after it on its line
+            p.advance()
+            msg ast.Expr?&p = null
+            if p.messageHere() { msg = try p.expr() }
+            return ast.Expr.Unreachable(p.from(at), msg)
         }
         case token.Tok.Iden {
             if p.anyHere() {
@@ -3319,9 +3352,10 @@ fn (p mut Parser&) hint(want String&) Bool {
         p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
         return true
     }
-    # S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
-    if pk == token.Tok.Arrow and (fk == token.Tok.Unreachable or fk == token.Tok.Return or fk == token.Tok.Break or
-                                  fk == token.Tok.Continue or fk == token.Tok.Error) {
+    # S12b: "nomatch => return 0" - a clause that leaves gives no value, so it is a block ("=> unreachable" is a value,
+    # S16e)
+    if pk == token.Tok.Arrow and (fk == token.Tok.Return or fk == token.Tok.Break or fk == token.Tok.Continue or
+                                  fk == token.Tok.Error) {
         from := I64(p.ts.Toks[f].Start)
         end := from
         for end < p.src.Text.Len() and p.src.Text[end] != '\n' { end++ }

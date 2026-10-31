@@ -113,6 +113,7 @@ type Expr enum {
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
     Default(sp source.Span)                            # "default" as an argument (E14a)
     Named(sp source.Span, name source.NameId, x Expr&)   # "name = x" as an argument, a defaulted parameter by name (E14b)
+    Unreachable(sp source.Span, msg Expr?&)            # "unreachable [why]" where a value is expected (S16d)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -214,13 +215,14 @@ type For3 struct(Init Stmt&, Cond Expr?&, Post Stmt&, Body Array<Stmt&>&) {
 
 # for [key,] name in [try] source { body } [catch ...] (S9a, S9e)
 type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&
-                  Clauses Array<Catch&>&) {
+                  Clauses Array<Catch&>&, Comptime Bool = false) {
     Key
     Name
     Source
     Tried
     Body
     Clauses
+    Comptime   # "comptime for" (K3a): unrolled while compiling
 }
 
 # [try] join { body } [catch ...] (P1, P4c)
@@ -383,7 +385,7 @@ fn (e Expr&) Span() source.Span {
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
         case Expr.Default(sp) => sp
-        case Expr.Named(sp, _, _) => sp
+        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _) => sp
     }
 }
 

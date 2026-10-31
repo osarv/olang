@@ -19,14 +19,25 @@ fn read(clock I32) I64 {
 }
 
 # now on the monotonic clock, in nanoseconds from an arbitrary start - only differences between two readings mean
-# anything
-fn Now() I64 { return read(clockMonotonic) }
+# anything. Inside Virtual, the virtual clock's reading
+fn Now() I64 {
+    if TestBuild {
+        if virtualDepth.AtomicLoad() > 0: return virtualNs.AtomicLoad()
+    }
+    return read(clockMonotonic)
+}
 
 # the nanoseconds that have passed since t, a reading of Now()
 fn Since(t I64) I64 { return Now() - t }
 
-# the date and time, in nanoseconds since 1970-01-01 00:00 UTC
-fn Wall() I64 { return read(clockRealtime) }
+# the date and time, in nanoseconds since 1970-01-01 00:00 UTC. Inside Virtual, the virtual clock's reading - the date
+# it started at, VirtualStart, and the time slept since
+fn Wall() I64 {
+    if TestBuild {
+        if virtualDepth.AtomicLoad() > 0: return virtualNs.AtomicLoad()
+    }
+    return read(clockRealtime)
+}
 
 test "the monotonic clock never goes back, and measures what passes" {
     a := Now()
@@ -103,6 +114,12 @@ fn fraction(u U64, unit U64) String {
 # where a call is reached, it sleeps as at run time (an effect: a global set from one is set at startup)
 fn Sleep(d Duration) {
     if d <= 0 { return }
+    if TestBuild {
+        if virtualDepth.AtomicLoad() > 0 {
+            virtualNs.AtomicAdd(I64(d))
+            return
+        }
+    }
     req := ctime.timespec()
     req.tv_sec = I64(d) / 1000000000
     req.tv_nsec = I64(d) % 1000000000
@@ -111,6 +128,85 @@ fn Sleep(d Duration) {
         req.tv_sec = rem.tv_sec
         req.tv_nsec = rem.tv_nsec
     }
+}
+
+# ---- a virtual clock, for tests ----
+
+# Virtual(f) runs f on a virtual clock - in a test build only: Now() and Wall() read it, starting at VirtualStart (a
+# fixed date, the same in every run), Sleep(d) moves it on by d and returns at once, std/cancel's deadlines and Select's
+# timers (After) are read on it, and the tasks f spawns share it - so a test of timeouts and retries runs in no time and
+# the same way every time, with the code under test unchanged. Time passes only as it is slept: several tasks sleeping
+# at once move the one clock by what each sleeps. A wait with a deadline and nothing to take (a token's, a timer's)
+# moves the clock to the deadline and then gives what it waits for a millisecond to arrive, as if every other task were
+# waiting too. Virtual inside Virtual runs on the clock already running. Anywhere but a test build a call of it is a
+# compile-time error (the assert below, decided while compiling for the call's instance), and nothing of the virtual
+# clock is compiled into Now, Wall or Sleep. f's errors are Virtual's
+fn Virtual<? E>(f fn() ? E) ? E {
+    assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
+    if virtualDepth.AtomicAdd(1) == 0: virtualNs.AtomicStore(VirtualStart)
+    defer virtualDepth.AtomicAdd(-1)
+    try f()
+}
+
+# where the virtual clock starts: 2000-01-01 00:00 UTC
+VirtualStart I64 = 946684800000000000
+
+# how many Virtual calls are running, and the virtual clock's reading - touched only atomically, tasks reading them
+virtualDepth mut I64 = 0
+virtualNs mut I64 = 0
+
+# whether the clock is a virtual one (Virtual) - always false outside a test build
+fn IsVirtual() Bool {
+    if TestBuild: return virtualDepth.AtomicLoad() > 0
+    return false
+}
+
+# under the virtual clock, the clock moved on to at where it is behind it - what a wait with a deadline does when
+# nothing it waits for has come (std/cancel, Select). Nothing outside it
+fn Reach(at I64) {
+    if not TestBuild: return
+    for {
+        cur := virtualNs.AtomicLoad()
+        if cur >= at or virtualDepth.AtomicLoad() == 0: return
+        if virtualNs.AtomicCompareSwap(cur, at) == cur: return
+    }
+}
+
+# ---- timers ----
+
+# a timer: ready once the clock (Now's - the virtual one inside Virtual) reaches At. As a case of chan.Select it gives
+# the clock's reading when it was found ready; it is ready from then on
+type Timer struct(At I64) {
+    At
+}
+
+# a timer ready once d has passed - Select's timeout: "chan.Select(c, time.After(time.Millis(50)))"
+fn After(d Duration) Timer { return Timer(Now() + I64(d)) }
+
+# the clock's reading where the timer is ready; Exhausted before then
+fn (t mut Timer&) TryNow() I64 ? Exhausted {
+    n := Now()
+    if n < t.At: error Exhausted.END
+    return n
+}
+
+# when the timer is ready by itself
+fn (t Timer&) Due() I64 { return t.At }
+
+test Virtual "sleeps take no time, and the clock reads what was slept" {
+    real := read(clockMonotonic)
+    Virtual(fn() {
+        assert Now() == VirtualStart and Wall() == VirtualStart and IsVirtual()
+        Sleep(Hours(2))
+        assert Now() == VirtualStart + I64(Hours(2))
+        assert DateOf(Wall()).Hour == 2
+        t := After(Seconds(5))
+        assert (try t.TryNow() catch Exhausted default -1) == -1
+        Sleep(Seconds(5))
+        assert (try t.TryNow() catch Exhausted default -1) == VirtualStart + I64(Hours(2) + Seconds(5))
+    })
+    assert not IsVirtual()
+    assert read(clockMonotonic) - real < 1000000000    # two virtual hours, well under a real second
 }
 
 test "durations are made, read back, compared and rendered" {

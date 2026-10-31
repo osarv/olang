@@ -1,0 +1,11 @@
+# check: fail error[K3a]: a comptime for's elements are computed while compiling, and these cannot be: an assertion in it fails, which aborts the program
+# K3a: a source the evaluator cannot compute is an error saying why
+fn boom(n I64) Array<I64> {
+    assert n > 5
+    return I64[1]
+}
+fn main() {
+    t I64 = 0
+    comptime for k in boom(2) { t += k }
+    assert t > 0
+}

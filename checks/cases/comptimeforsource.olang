@@ -1,0 +1,7 @@
+# check: fail error[K3a]: a comptime for walks a range or an array, found I64
+# K3a: what a comptime for walks is a range or an array
+fn main() {
+    t I64 = 0
+    comptime for k in 7 { t += k }
+    assert t > 0
+}

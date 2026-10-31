@@ -991,6 +991,51 @@ comprref.olang:5:17: error[E27]: a comprehension's elements may not be or hold r
     5 |     a := String&[t for _ in t]
       |                 ^
 compilation failed with 1 error
+=== comptimebudget.olang
+comptimebudget.olang:7:20: error[K3]: a comptime is computed while compiling, and this one cannot be: the computation runs longer than compile-time evaluation allows
+    7 | fn main() { assert comptime fib(40) > 0 }
+      |                    ^~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== comptimeforelem.olang
+comptimeforelem.olang:6:23: error[K3a]: a comptime for's elements are integers, Bool or Char, found F64 - walk its positions: 'comptime for i in range xs.Len()'
+    6 |     comptime for w in Ws { t += w }
+      |                       ^~
+compilation failed with 1 error
+=== comptimeforfails.olang
+comptimeforfails.olang:9:23: error[K3a]: a comptime for's elements are computed while compiling, and these cannot be: an assertion in it fails, which aborts the program
+    9 |     comptime for k in boom(2) { t += k }
+      |                       ^~~~~~~
+compilation failed with 1 error
+=== comptimeformany.olang
+comptimeformany.olang:5:5: error[K3a]: this comptime for unrolls into 5000 copies, at most 4096 - walk it at run time: drop 'comptime'
+    5 |     comptime for k in range 5000 { t += k }
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== comptimeforsource.olang
+comptimeforsource.olang:5:23: error[K3a]: a comptime for walks a range or an array, found I64 - give it an array: 'comptime for x in xs.View()'
+    5 |     comptime for k in 7 { t += k }
+      |                       ^
+compilation failed with 1 error
+=== comptimefortry.olang
+comptimefortry.olang:5:5: error[K3a]: a comptime for's elements are computed while compiling, so nothing of its walk fails at run time - write 'comptime for x in e'
+    5 |     comptime for k in try I64[1, 2] { t += k } catch { }
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== comptimeforwhile.olang
+comptimeforwhile.olang:5:18: error: expected 'for NAME in' after 'comptime', found 'k'
+    5 |     comptime for k < 3 { k++ }
+      |                  ^
+compilation failed with 1 error
+=== comptimeglobal.olang
+comptimeglobal.olang:5:10: error[K3]: a comptime is computed while compiling, and this one cannot be: it reads a mutable global, whose value is the running program's
+    5 | Table := comptime get()
+      |          ^~~~~~~~~~~~~~
+compilation failed with 1 error
+=== comptimelocal.olang
+comptimelocal.olang:4:38: error[K3]: a comptime is computed while compiling, and 'n' is a local or a parameter, which only the running program knows - compute it from constants, globals and type parameters, or drop 'comptime'
+    4 | fn f(n I64) I64 { return comptime sq(n) }
+      |                                      ^
+compilation failed with 1 error
 === condcycle.olang
 condcycle.olang:5:4: error[B9a]: 'A' is defined in terms of itself
     5 | if A == 1 {
@@ -4358,6 +4403,9 @@ $ROOT/std/order.olang:20:9: note: here
 $ROOT/std/order.olang:20:16: error[S18c]: this assertion is false, evaluated while compiling: ByFields orders structs and enums, and this type is neither
    20 |         assert false, "ByFields orders structs and enums, and this type is neither"
       |                ^~~~~
+ordernotstruct.olang:6:22: note: instantiated here, with T = I64
+    6 |     assert not order.ByFields<I64>(1, 2)
+      |                      ^~~~~~~~
 compilation failed with 2 errors
 === overridesig.olang
 overridesig.olang:11:12: error[M19e]: Twice does not have the signature of the default it overrides - match it, or choose another name
@@ -5203,9 +5251,9 @@ s12barrow.olang:6:16: error[S12b]: '=>' gives a value, which only a match used a
       |                ^~
 compilation failed with 1 error
 === s12barrowleaves.olang
-s12barrowleaves.olang:8:20: error[S12b]: '=>' gives a value, and 'unreachable' gives none - a clause that leaves is a block: '{ unreachable }'
-    8 |         nomatch => unreachable
-      |                    ^~~~~~~~~~~
+s12barrowleaves.olang:8:20: error[S12b]: '=>' gives a value, and 'return' gives none - a clause that leaves is a block: '{ return 0 }'
+    8 |         nomatch => return 0
+      |                    ^~~~~~
 compilation failed with 1 error
 === s12barrowreturncall.olang
 s12barrowreturncall.olang:13:25: error[S12b]: '=>' gives a value, and 'return' gives none - a clause that leaves is a block: '{ return one(t) }'
@@ -5322,6 +5370,11 @@ compilation failed with 1 error
 s13fwildcardalone.olang:6:17: error[S13f]: '_' matches every value, so it is its case's only alternative
     6 |         case 1, _ => 1
       |                 ^
+compilation failed with 1 error
+=== s13gnovalue.olang
+s13gnovalue.olang:8:18: error[S13a]: case Right of Either<I64, Bool> is not covered - add it, or 'nomatch { }'
+    8 |     return match e {
+      |                  ^
 compilation failed with 1 error
 === s15returnvalue.olang
 s15returnvalue.olang:4:5: error[S15]: a test has no result - a bare 'return' ends it as passed
@@ -7283,6 +7336,14 @@ tdscope2.olang:8:68: error[R11, O25]: a reference default lives where the call's
     8 | fn other(p B&, q B&) B&p { return try pick(p, false) catch default q }
       |                                                                    ^
 compilation failed with 1 error
+=== timevirtualbuild.olang
+$ROOT/std/time.olang:145:12: error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test') - a program's clock is the real one
+  145 |     assert TestBuild, "time.Virtual runs only in a test build ('olang test') - a program's clock is the real one"
+      |            ^~~~~~~~~
+timevirtualbuild.olang:6:10: note: instantiated here, with E = nothing
+    6 |     time.Virtual(fn() { time.Sleep(time.Seconds(1)) })
+      |          ^~~~~~~
+compilation failed with 1 error
 === topassertbool.olang
 topassertbool.olang:3:8: error: a condition is a Bool, found I64
     3 | assert 1 + 2
@@ -7428,6 +7489,24 @@ compilation failed with 1 error
 unknowntypehint.olang:4:7: error[T4]: unknown type 'Int32' - the numbers are named by kind and width: did you mean 'I32'?
     4 |     n Int32 = 3
       |       ^~~~~
+compilation failed with 1 error
+=== unreachvaluebaked.olang
+unreachvaluebaked.olang:4:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
+    4 | Half I64 = half(3)
+      | ^~~~
+unreachvaluebaked.olang:3:54: note: here
+    3 | fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd" }
+      |                                                      ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== unreachvaluedecl.olang
+unreachvaluedecl.olang:4:10: error[D8e]: 'unreachable' gives no value, so ':=' has no type to take
+    4 |     x := unreachable "no value"
+      |          ^~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== unreachvaluemsg.olang
+unreachvaluemsg.olang:3:51: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " $x
+    3 | fn f(b Bool) I64 { return 1 if b else unreachable 3 }
+      |                                                   ^
 compilation failed with 1 error
 === unseen.olang
 unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check

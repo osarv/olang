@@ -1,0 +1,6 @@
+# check: fail expected 'for NAME in' after 'comptime'
+# K3a: only a for-in is unrolled
+fn main() {
+    k I64 = 0
+    comptime for k < 3 { k++ }
+}

@@ -175,7 +175,7 @@ done:
 
 ; E35: a "!" took an error - its message ("FILE:LINE: Type.WORD\n"), then the trace that led there, then the end a failed
 ; check makes
-define void @__olang_bang_failed(ptr %msg) {
+define void @__olang_bang_failed(ptr %msg) cold noreturn {
 entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
@@ -190,7 +190,7 @@ entry:
 @__olang_ert_req = thread_local(initialexec) global ptr null
 @__olang_msg_debughint = unnamed_addr constant [47 x i8] c"(build with -debug to see where it came from)\0A\00"
 
-define void @__olang_ert_req_set(ptr %line) {
+define void @__olang_ert_req_set(ptr %line) cold {
 entry:
   store ptr %line, ptr @__olang_ert_req
   ret void
@@ -218,7 +218,7 @@ hint:
 }
 
 ; E35 in a build that keeps no trace: the "!"'s message, the requirement that raised the error where one did, the hint
-define void @__olang_bang_failed_plain(ptr %msg) {
+define void @__olang_bang_failed_plain(ptr %msg) cold noreturn {
 entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
@@ -228,7 +228,7 @@ entry:
 }
 
 ; S16: an error left a test body - the test fails, its FAIL line naming the error ("Type.WORD") and the trace following
-define void @__olang_test_error(ptr %name) {
+define void @__olang_test_error(ptr %name) cold noreturn {
 entry:
   store ptr %name, ptr @__olang_fail_error
   call void @__olang_check_end()
@@ -259,7 +259,7 @@ witherr:
 ; an array length out of range. Distinct from os.Exit, which is the program's own orderly decision -
 ; this one aborts, so it leaves a core dump and skips atexit, which is what you want for a broken
 ; invariant. Under a test it is recoverable, exactly as S18 says.
-define void @__olang_check_failed(ptr %msg) {
+define void @__olang_check_failed(ptr %msg) cold noreturn {
 entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %msg, ptr %stream)
@@ -268,7 +268,7 @@ entry:
 }
 
 ; S18a: "assert cond, message" - its location's prefix, then the program's own text and a line end
-define void @__olang_check_failed_text(ptr %where, { i64, ptr } %text) {
+define void @__olang_check_failed_text(ptr %where, { i64, ptr } %text) cold noreturn {
 entry:
   %stream = call ptr @__olang_check_stream()
   call i32 @fputs(ptr %where, ptr %stream)
@@ -293,7 +293,7 @@ entry:
   ret ptr %stream
 }
 
-define void @__olang_check_end() {
+define void @__olang_check_end() cold noreturn {
 entry:
   %tgt = load ptr, ptr @__olang_jmp_target
   %isnull = icmp eq ptr %tgt, null

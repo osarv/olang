@@ -1,0 +1,7 @@
+# check: fail error[S18c]: this assertion is false, evaluated while compiling: time.Virtual runs only in a test build ('olang test')
+# also: note: instantiated here
+# std/time: a virtual clock is for tests - called in a program, it is an error at the call's instance
+import "std/time"
+fn main() {
+    time.Virtual(fn() { time.Sleep(time.Seconds(1)) })
+}

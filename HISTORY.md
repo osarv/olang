@@ -26408,3 +26408,144 @@ parse - the line break after a bare `&` separates entries by QY, which the list 
 `t17wholereflines`. Found on the way, not fixed (an over-rejection): a
 second name for a constructed local returned (`x2 := x1; return x2`) is O10d's error, the flow analysis not following
 `x2 := x1` into the result scope.
+
+## `unreachable` as a value (S16e, D8e, survey2 item 6, 2026-10-31)
+
+The second survey's item 6, decided by the user on 2026-10-27 ("Yes that structure is okay"): `unreachable ["why"]`
+also stands where a value of any type is expected, as a `noreturn` call already did (D8e) - `x I64 = t[k] if k in t
+else unreachable "checked above"`, a `match` value, a `catch default`, an argument. Before, the only way was a
+`noreturn` helper function or a statement form wrapped around the code.
+
+Built (mine): the parser takes `unreachable` as a primary (`ast.Expr.Unreachable`); its message is an expression
+beginning on its line with a literal, a `$`, a name or a `(` - so `f(unreachable, 2)`, `(unreachable)`, `unreachable
+if bad else 3` and a line's end take none. The checker elaborates it to a typed `Seq` holding S16d's
+`Stmt.Exit(Unreachable, message)` with no value, typed `noreturn` - so everything that already let a noreturn call
+give way to the values beside it (E28's meet, D10a, D13d's dead paths) applies, and lowering, section 8, early
+freeing, the evaluator and `interpret` met nothing new: a baked global or a decided assert reaching it is K1's abort
+class as the statement is. `:=` from one says `'unreachable' gives no value` (D8e's message took the word as a
+parameter). Found on the way: the scope pass's `choiceOfRefs` read a `Seq`'s value with `!`, which a value-less `Seq` of
+type `noreturn` would have stopped on (a reference conditional with an unreachable branch). tests/unreachable.olang;
+checks cases unreachvaluedecl, unreachvaluemsg, unreachvaluebaked.
+
+## `comptime e` and `comptime for` (K3, K3a, survey2 item 8, 2026-10-31)
+
+The second survey's item 8, decided by the user on 2026-10-27 ("nah you can add it. comptime is a good word. Its good
+for speed guarantees in certain loops too"): a `comptime` keyword at the use site only - K1a's "no colouring of
+functions" stands. Reading taken then: `comptime e` and `comptime for`.
+
+**`comptime e` (K3).** Before, K1 computed a value while compiling only where a context asked for one (a global, an
+assert, a length) and silently left everything else to the run time: an expression in a hot loop whose value is fixed
+could still be computed every turn. `comptime e` makes the claim checkable: computed while compiling, constant data, or
+a compile-time error naming why the evaluator could not (K1's refusal, the budget, an abort, a value that is no data).
+Decided (mine): it takes the whole expression after it, as `try` does (E24) - one rule for a prefix word that reaches
+far; it reads what a global's initializer reads plus, of the code around it, the instance's type variables and
+lengths, a fixed local and an enclosing walk's names (a local or parameter otherwise is an error naming it - the
+checker sees it where the name is read in the comptime's own frame, `comptimeDepth`); an array's value is a read-only
+reference to the data, as an array literal of constants is (T25d), so a loop reading a table copies nothing.
+
+Built (mine) on what K2 already does: the expression is the initializer of a **hidden immutable global**, one per place
+and per instance - named `comptime.MODULE:OFFSET` and the canonical spelling of the context's variables and names,
+deterministic across builds - checked in the context of the code it is written in (its module for names, its
+instance's variables, its fixed locals), and the code reads that global. `generic.Program` holds the hidden globals'
+declarations (`SynthGlobal`; `GlobalDecl` finds them, so every rule about an immutable global holds: read-only slices,
+`constant` data, K2b's sharing). Where the context tells instances apart the global is homed in the root module,
+whose object holds the instances (B3d), so a module object reused by B3i never needs a global it did not have. The
+evaluator bakes it with every other immutable global; `interp.Bake` reports one it did not bake at the comptime (an
+error, never a startup value) - `ComptimeSites`. On a global's whole initializer (`Table := comptime build()`) no hidden
+global is made: the global itself is held to baking. Measured: `comptime fib(22)` in a loop compiles to a load of a
+`constant` global, no call; `comptime fib(30)` is the budget's error (`the computation runs longer than compile-time
+evaluation allows`).
+
+**`comptime for` (K3a).** Unrolled while compiling, as reflection's walks over `T.Fields` are (G33), the loop's name a
+constant of each copy. Decided (mine): the source is a `range` or an array (text, a `View()`), its elements integers
+of at most 64 bits, `Bool` or `Char` - what a constant of the type table holds (`T.Const`); a float or a struct is an
+error naming the walk over positions (`comptime for i in range xs.Len()`), which a `comptime` or an index then reads.
+The name is bound both where reflection reads its names (`Ctx.Refl`, so G35's folds decide an `if`, a conditional, an
+assert or a `match` per copy - `reflFold` now gives a `Bool` constant as a Bool) and where folds and lengths read a
+type variable's constant (`Ctx.Vars`, so `Array<I64>(n)` is fixed per copy, T7c, and a `comptime` inside is computed
+per copy; `generic.readsLocal` takes such a name for no local). The elements are computed by the evaluator after a
+check of the program and given to the next check, as QP1's lengths are (`UnrollAsk` in `interp.decide`, the values in
+`Program.Unrolls` by `LengthKey`, a failure's reason in `UnrollWhy`), so a walk nested in another is computed per copy
+of the outer one, a round later. `break` leaves the walk, `continue` the copy. At most 4096 copies (mine), and
+`comptime for x in try` is an error (nothing of an unrolled walk fails at run time). The source is checked as a
+`comptime`'s value is, its errors said where it is (`unrollBody`); the evaluator reads an array's elements with
+`Machine.Elems`. `ExprBodyIn` now copies an unrolled walk's constant names too, so an assert in a copy reading the
+name can be decided (S18c). tests/comptime.olang (run time, baked globals and decided asserts agreeing); checks cases
+comptimelocal, comptimebudget, comptimeglobal, comptimefortry, comptimeforelem, comptimeformany, comptimeforsource,
+comptimeforfails, comptimeforwhile.
+
+## `time.Virtual` and `chan.Select`; defaults binding variables and cases with no values (G9e, S13g, T18, survey2 items 10 and 12, 2026-10-31)
+
+**time.Virtual (item 10).** The user decided on 2026-10-27 ("maybe dont need the trait for it? its not like we are gonna
+be mixing testclocks and normal clocks?") a virtual clock for tests with no clock parameter threaded through the code
+under test, Go's synctest. Built (mine): `time.Virtual<? E>(f fn() ? E) ? E` runs f with `Now()` and `Wall()` reading a
+virtual counter that starts at `VirtualStart` (2000-01-01 00:00 UTC, the same every run) and `Sleep(d)` adding d to it
+and returning; the counter and the depth of running Virtual calls are two mutable globals touched only atomically, so
+tasks spawned inside share the clock. Time passes only as it is slept, and several tasks sleeping at once each move
+the one clock (no per-task time - nothing in the runtime knows which tasks are blocked). A wait with a deadline and
+nothing to take - std/cancel's `WakeAt` (RecvUntil, SendUntil), Select's pause with a timer case - moves the clock to
+the deadline (`time.Reach`) and gives what it waits for one millisecond of real time to arrive: Go's "every other
+goroutine durably blocked" approximated by a quiet millisecond. std/cancel reads `time.Now()` for its deadlines (it had
+its own clock_gettime). Test builds only: every use is behind `if TestBuild` (a local if the build decides, S8b), so
+Now, Wall and Sleep compile to what they were; and Virtual's body begins with `assert TestBuild, ...`, decided false
+while compiling in any other build - an error at the instance the call asked for (Virtual is generic over its error set,
+so only a call checks its body). For that note to reach the program's call, check now keeps the instantiation's note on
+a decided assert in the standard library even where the condition reads nothing of the instance (it was dropped).
+
+**chan.Select (item 12, revised the same day to "build select in std/chan as well").** Decided (mine): `Select(a, b[, c,
+d])`, two to four cases; a case is anything meeting `chan.Case<T ? E>` - `mut TryNow() T ? E, Exhausted` (take it now,
+Exhausted for "not ready", E for a failure) and `Due() I64` (the clock reading it is ready by itself at, 0 for none). A
+channel is one (its `TryNow` is a non-blocking receive, `Error.CLOSED` once closed and drained), so is `SendOf(c, v)`
+(a send, never waiting for room; on a rendezvous channel only when a receiver is waiting - Chan counts its blocked
+receivers now, `waiting`) and `time.Timer` (`time.After(d)`), which std/time declares without importing chan since a
+trait is met implicitly and the error set is a parameter (std/time had no business depending on chan, and chan
+imports time). The result is `Ready<A, B, C, D>`, `First(v A)` to `Fourth(v D)`, the first ready in the order given -
+deterministic; no fairness beyond position. It polls, holding no lock: 64 rounds of spinning, then sleeps doubling from
+10 us to 1 ms, cut to the earliest timer's due time; inside Virtual it reaches that time at once. Its errors are the
+union of its cases' (G1a), so a Select over channels fails with `chan.Error` and one over timers alone cannot fail.
+
+Two language rules made the optional cases possible. **G9e:** `fn Select<..., K Case<C ? E>, ...>(..., c mut K& =
+idle(), ...)` - a parameter the call leaves off had no way to bind K, so `Select(a, b)` was G4's "cannot be inferred".
+Now a left-off parameter whose type is an unbound variable of the call (or a reference to one) binds it to its
+default's type, the default checked in the declaration's context before any instance (its diagnostics forgotten there -
+the fill says them), and G9c's inference through constraints then runs again so C binds through K's. **S13g / T18:**
+with C and D bound to a never-ready case, `Ready` still had four cases and a match of the two that can fire was not
+exhaustive. T18 said an enum declares at least one case, which nothing enforced; it now allows none - a type with no
+values, no zero value, never made - and a case whose payload holds such a value (by value or by a reference never
+null) is never matched, so S13a asks no clause for it (`noValueCase`, in the flat check, `firstUncovered` and
+Maranget's matrix). Rust's empty-enum rule. Found on the way: a constructor called with too few arguments said
+"expected 0 arguments, found -1" (ctorDefault passed the missing index twice) - now it names how many it takes and how
+many were given. Limit: `Select(SendOf(r, 9), ...)` written inside a join block is refused by C2d (the temporary holding
+the channel's reference); a SendOf made in a local before the join works. Tests: std/time's, std/cancel's and std/chan's
+own (Select over receives, sends, a rendezvous, a timer on the virtual clock and the real one, a closed channel),
+tests/defaultbinds.olang; checks cases timevirtualbuild, s13gnovalue.
+
+## Cold paths, inferred (survey2 item 9, 2026-10-31)
+
+The user's decision of 2026-10-27 ("build it either way no? ... it is quite guaranteed to work?", then "ye do the cold
+paths work the way you want"): no syntax; what ends the program or a test is always cold, and a raised error's path gets
+weights only if the bench gains and a miss-heavy benchmark does not lose.
+
+**Always cold.** Every way a program or a test ends from a failed check goes through a handful of runtime functions -
+`__olang_check_failed`, `__olang_check_failed_text` (asserts, guaranteed checks, `unreachable`, a null `!`, the lane and
+slice checks), `__olang_bang_failed` and `_plain` (`!`), `__olang_test_error` (an error leaving a test) and
+`__olang_check_end` behind them all - now defined `cold noreturn` in std/runtime/runtime.ll, so every declaration of them
+says so too (runtime.olang's `Decls` copies a definition's attributes), and `__olang_ert_req_set`, which a requirement
+found false calls in a build keeping no trace, `cold`. LLVM's branch probabilities already took a block ending in
+`unreachable` for unlikely, so the gain is in layout and inlining: the functions go to `.text.unlikely`, nothing is
+inlined into them, and every bench program's `.text` shrank by about 64 bytes. Measured (callgrind, baseline x86-64, the
+machine shared with another agent's work so timings were noise of 10-20%): dynamic instruction counts identical for
+knucleotide, text, regex, dispatch, vec, sum and binarytrees.
+
+**Raised errors' paths.** An experiment first (a toggle in emit, removed): a call's error edge given `!prof
+!{"branch_weights", 1, 2000}` (LLVM's own weights for `__builtin_expect`), the success edge the likely one. Callgrind
+counts against the cold-only build: Vec push 188.7M -> 103.7M instructions (its growth's error edge out of the loop's
+straight line), Vec gather 62.3M -> 58.3M, regex 168.5M -> 167.4M, any-dispatch 243.8M -> 242.8M, sum and knucleotide
+and binarytrees within 0.01%, text 1047.4M -> 1051.4M (+0.4%), enum dispatch 217.2M -> 220.2M (+1.4%). The miss-heavy
+program (a Map of 1,000 keys asked for 2M keys of which half are missing, `try m.Get(k) catch MapError default -1`,
+and 1M `Find`s of which five in seven fail) went 125.8M -> 124.8M with the same 1.53M mispredictions - weighting the
+error edge unlikely costs nothing where errors are the common outcome, the layout being the only thing it changes. The
+bench timings (min of 7, interleaved) moved by a geometric mean of 0.994 against the cold-only build, inside the noise;
+Vec push's 0.855 -> 0.815 s agreed with its counts. So by the decision's rule the weights stay: every call's error edge
+is written `, !prof !99`, `!99` beside the fixed alias tags in every object. Not weighted: a join's failure edge (rare
+and not in loops), the entry's and harness's (once).

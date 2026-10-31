@@ -1,0 +1,12 @@
+# check: fail error[S13a]: case Right of Either<I64, Bool> is not covered
+# S13g: only a case carrying a value of an enum with no case needs no clause - one carrying anything else does
+type Either<A, B> enum {
+    Left(v A)
+    Right(v B)
+}
+fn only(e Either<I64, Bool>) I64 {
+    return match e {
+        case Either.Left(v) => v
+    }
+}
+fn main() { assert only(Either<I64, Bool>.Left(1)) == 1 }

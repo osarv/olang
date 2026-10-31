@@ -142,7 +142,7 @@ is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
 trait     spawn   join    defer   errdefer yield   become
-import    test    destruct embed
+import    test    destruct embed  comptime
 unreachable
 extern    default
 ```
@@ -974,7 +974,10 @@ bound through the methods of the type its constrained variable is bound to (G9c)
 
 A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
 
-**T18.** An enum type must declare at least one case; case names must be unique within the type. A
+**T18.** Case names must be unique within an enum type. An enum declaring **no case** (`type Never enum { }`) has no
+values: nothing makes one, it has no zero value (D13c), so a local, field or global of it cannot be read, and a case
+of another enum carrying one is never the value matched (S13g) - what a generic's parameter left unused can be bound to
+(std/chan's Select). A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
 reference in a later case's payload is unreachable without a `match` whose tag test selects that case
 (S13b). A first case carrying no payload therefore makes the type's zero value a complete, meaningful one —
@@ -1774,7 +1777,8 @@ to a `noreturn` function or through a `noreturn` function value, by `unreachable
 `break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
 handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
 wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
-argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used. Beside
+argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used; so does
+`unreachable` written as a value (S16e). Beside
 other values (E28, S12b) it gives way to theirs, and a conditional or `match` all of whose values are such calls fits
 wherever a value is expected too; as a generic argument it takes no part in inference (G9a), as `null` takes none. A
 `noreturn` call written in a value position has no type of its own, so no diagnostic names one: where it does not fit
@@ -2938,11 +2942,12 @@ unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
 postfix  ::= primary { index | member | call-on | "++" | "--" | "!" }
-primary  ::= literal | try-expr | call-expr | struct-literal
-           | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
+primary  ::= literal | try-expr | comptime-expr | call-expr | struct-literal
+           | array-literal | comprehension | enum-value | lambda | match-expr | unreachable-expr | IDEN | "(" expr ")"
 ```
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
+`match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
+(§6.6 S16e); `comptime-expr ::= "comptime" expr` is a value computed while compiling (§13 K3). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
 indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
@@ -4413,6 +4418,7 @@ for-stmnt ::= "for" block                                   (forever)
             | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
             | "for" IDEN [ "," IDEN ] "in" "try" expr body { catch-clause }   (S9e)
             | "for" IDEN [ "," IDEN ] "in" range-expr body   (S9b)
+            | "comptime" "for" IDEN [ "," IDEN ] "in" ( expr | range-expr ) body   (unrolled while compiling, K3a)
 ```
 
 A `body` is a block or a one-line body (S1b): `for x in xs: total += x`.
@@ -4558,7 +4564,8 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 `case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
 `return`, `error`, `break`, `continue`, `unreachable` or a `noreturn` call, as D10a decides it with `break`
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
-error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
+error. `case P => unreachable` and `case P => os.Exit(2)` give a value (S16e, D8e), one that never arrives; a
+statement that leaves (`return`, `error`, `break`, `continue`) after `=>` is a compile-time error naming the block. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
 counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
@@ -4647,6 +4654,11 @@ expression, which may read them) is evaluated; when it is false the match goes o
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
 guarded clause covers nothing for S13a. A type match (G13) takes no guard: its arm is chosen while compiling.
 
+**S13g (cases with no values).** A case whose payload holds a value of an enum declaring no case (T18) - by value, or
+by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as
+covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
+given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
+
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the
 matched value already being named where it was written:
@@ -4704,6 +4716,17 @@ code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rat
 `unreachable` exists because D10a requires a result on every path and the analysis behind it is
 deliberately structural — it cannot see that a loop never exits, or that a `match` a caller guarantees is
 exhaustive really is. `unreachable` is how a program says so.
+
+**S16e (`unreachable` as a value).** `unreachable-expr ::= "unreachable" [ message ]` stands wherever a value of any
+type is expected, as a call of a `noreturn` function does (D8e): `d := table[k] if k in table else unreachable "checked
+above"`, `return x if x >= 0 else unreachable`, an argument, a `match` value, a `catch default`. Reached, it is S16d's
+statement: the message, if any, evaluated there and printed, the test failed or the process aborted. Never reached,
+it gives no value and has no type of its own: beside other values (E28, S12b) it gives way to theirs, and `:=` from it
+is a compile-time error (D15, D8e) naming it. Its `message` is an expression beginning on the `unreachable`'s line with
+a literal, a `$` rendering, a name or a `(` - text, under S17's rules for a message, as S16d's; anything else after the
+word (a `,`, a closing bracket, `if`, `else`, an operator, the line's end) ends it without one. A statement beginning
+with `unreachable` is S16d's statement. The compile-time evaluator reaches it as the run time does: a baked global's
+initializer or a decided assert reaching it is K1's abort class, an error where the value is required.
 
 
 ### 6.7 `assert`
@@ -8014,6 +8037,14 @@ parameter types and result are matched against those of the method the type supp
 `ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
 constraint's check (G19).
 
+**G9e (a default binds what nothing else does).** A parameter the call leaves off (D8a) whose type is one of the
+call's variables, or a reference to one, that no argument, receiver, constraint or lambda bound, binds that variable to
+its default's type - the default checked as the declaration writes it, before any instance is known: `fn
+f<A Named, B Named>(a A, b B = Idle()) String` called as `f(x)` is `f` at `B = Idle`, the default then given as D8a
+gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Select(a, b)` binding
+its third and fourth cases' types to the defaults' never-ready case). A default that does not say a type (`null`) binds
+nothing, and G4 says what is missing.
+
 **G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
 variable to a reference to its type, writable as any built value is (T25c) - never to the value type. C11 holds no
 value of such a type anywhere else, so the argument is a temporary: it is promoted into the parameter (E12), built where
@@ -8525,6 +8556,36 @@ structure referring to itself is written as such. Data a writable reference reac
 what nothing can write is read-only. A global whose value reaches an instance another module's global holds, or one
 held by a global of its own module that is set at startup, is set at startup too, reading that instance as it is
 there. The data lives as long as the program (O1b).
+
+**K3 (`comptime e`).** `comptime-expr ::= "comptime" expr` asks for `expr`'s value **while compiling**: it is computed
+by the evaluation K1 states and is the program's constant data, written out as K2 writes a global's value - no code
+computing it is part of the program, so `comptime table(64)` in a loop costs a read of constant data each turn. It is
+written where it is used and asks nothing of the functions it calls (no colouring, K1a). `comptime` takes the whole
+expression after it, as `try` does (E24): up to the expression's end, a list's `,` or a `catch`; `comptime f() + 1` is
+`comptime (f() + 1)`. What it may read is what a global's initializer may - globals, functions, constants, types - and,
+of the code it is written in, the type variables and constant lengths of the instance it is checked for (G16a, G29), a
+fixed local (S8c) and the names of an enclosing `comptime for` (K3a): it is computed once per instance and per copy,
+each its own constant. A local or parameter otherwise is a compile-time error naming it. Its type is `expr`'s; a value
+of an array type is the constant data itself - a read-only reference to it, as an array literal of constants is
+(T25d) - and text a `String`. Where the evaluation cannot give a value - an operation K1 refuses, the budget run out,
+an abort or an error no clause handles (as K1's "required" case), or a value that cannot be written as data (one
+reaching another module's storage or a startup-set global's, K2b, or holding a destructor-bearing instance) - it is a
+compile-time error at the `comptime` saying why; never a value computed at run time instead. On a global's whole
+initializer (`Table := comptime build()`), the global is baked as K2 bakes it or that is the error: it is never set at
+startup.
+
+**K3a (`comptime for`).** `comptime for x in e { }` (and `comptime for i, x in e`) is **unrolled while compiling**: `e`,
+a `range` (S9b) or an array - text included, a `Vec`'s `View()` - read as a `comptime`'s value is (K3), gives its
+elements by K1's evaluation, which must be integers of at most 64 bits, `Bool` or `Char`; the body is checked once per
+element, in order, with `x` a **constant** of the element's type and `i` its position (an `I64`) - so in each copy `x`
+decides an `if`, a conditional, a `match` or an `assert` as reflection's names do (G35), gives array lengths (T7c),
+and a `comptime` in the body is computed per copy. `break` leaves the whole walk and `continue` the copy, as in
+reflection's unrolled walks (G33). A walk computed while compiling has nothing to fail at run time: `comptime for x in
+try e` is a compile-time error. One unrolling into more than 4096 copies is a compile-time error naming the plain
+`for`; so are elements of another type (naming the walk over positions, `comptime for i in range xs.Len()`), a source
+reading a local, and one the evaluator cannot compute (saying why). A walk's elements are computed after the program
+around it has checked, and the program checked again with them (as B9c's decisions are), so a source reading an
+enclosing walk's name is computed per copy of that walk.
 
 **K2a.** A **parameter's default value** (D8a) that is not a literal must be evaluable at compile time;
 one that is not is a compile-time error naming the operation that prevents it.

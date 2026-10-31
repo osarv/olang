@@ -165,7 +165,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`unreachable "why"` (S16d, mine 2026-10-24).** An optional message, any text expression, evaluated only where the
   statement is reached: `FILE:LINE: unreachable reached: why` (a plain one says `unreachable reached`; the old
   wording "reached unreachable code" changed with it, everywhere). Not a statement that leaves its function (no
-  `return`, error or loop jump inside the message's lambdas), as an assert's message.
+  `return`, error or loop jump inside the message's lambdas), as an assert's message. **As a value (S16e, survey2 item
+  6, the user's yes 2026-10-27; built 2026-10-31)**: `d := t[k] if k in t else unreachable "checked above"` - wherever a
+  value of any type is expected, as a noreturn call fits (D8e), `:=` from it an error naming it. Decided (mine): its
+  message is the expression starting on its line with a literal, `$`, a name or `(` (anything else ends it); built as a
+  typed `Seq` of S16d's exit typed `noreturn`, so lowering, section 8, the evaluator and `interpret` needed nothing new.
 - **A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).** A test passes by
   reaching its end or a bare `return` (deferred code runs); it fails by a failed assert or check, `unreachable`, a `!`,
   or an error leaving its body - a `try` in a test need not catch everything (`FAIL - name: T.W`, then the trace).
@@ -1088,6 +1092,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function
   is evaluable is a property of the function (K1a); a body that did not check - a global's initializer, a default - is
   no value to anything reading it, so one mistake is one error (2026-10-26). It must handle everything it can (the user's rule).
+- **`comptime e` and `comptime for` (K3, K3a, survey2 item 8, the user's decision 2026-10-27: "comptime is a good word.
+  Its good for speed guarantees in certain loops too"; built 2026-10-31, details mine).** A keyword at the use site only
+  (no colouring, K1a stays): `comptime e` takes the whole expression after it (try's reach, E24), is computed while
+  compiling and is constant data - `t := comptime squares(16)` in a loop is a read of constant data; it reads what a
+  global's initializer may plus the instance's type variables and lengths, a fixed local (S8c) and an enclosing walk's
+  names, a local or parameter otherwise an error; what the evaluator cannot compute is an error at it saying why, never
+  a run-time fallback; an array's value is a read-only reference to the data (T25d). Built as a hidden immutable
+  global per place and instance (`generic.SynthGlobal`, `check.comptime`), homed in the root's object where the
+  instance's variables or names tell copies apart (B3d, B3i), so K2's baking, emit and the evaluator do the rest and
+  `interp.Bake` reports one not baked; on a global's whole initializer the global itself must bake. `comptime for x in
+  e` (e a range or an array of integers up to 64 bits, Bool or Char) is unrolled as reflection's walks are (G33):
+  each copy's `x` a constant (bound as a type variable's length is and as reflection's names are), so it decides `if`s,
+  asserts and lengths (G35, T7c); its elements are asked of the evaluator in one check and given to the next
+  (`UnrollAsk`, as QP1's lengths), at most 4096 copies, `for x in try` refused.
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
   can decide is checked while compiling (S18c); a condition the build decides (B9c, S8b); fixed locals (S8c).
 - **Decided asserts (S18c, 2026-10-27, mine; fixing two bugs std2 found).** A true one loses its run-time check
@@ -1220,6 +1238,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   generator cannot yield references its inner walks hold); an array method or an Iterator default could not be a B7a
   target (only a named type's method could then), so the examples named the adapter types - they name the methods since
   the checker batch (`Iterator.TakeWhile`, `Array.Reversed`).
+- **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31,
+  details mine).** `time.Virtual(fn() { ... })` runs its body on a virtual clock: `Now`/`Wall` read it (from
+  `VirtualStart`, 2000-01-01), `Sleep(d)` moves it on by d at once, std/cancel's deadlines (`NowNs` is `time.Now` now)
+  and `time.After`'s timers fire on it, tasks spawned inside share it (one atomic counter: sleeps add up); a wait with a
+  deadline and nothing to take moves the clock to the deadline and gives what it waits for 1 ms of real time (Go's
+  synctest approximated). Test builds only: elsewhere a call is S18c's false assert at the call's instance (the note
+  now kept for an assert in std), and `if TestBuild` keeps it out of Now/Wall/Sleep. `chan.Select(a, b[, c, d])` takes
+  the first ready of two to four cases in the order given - a channel received from, `SendOf(c, v)`, a `time.Timer`
+  (`time.After(d)`) - as `Ready<A, B, C, D>.First(v)`..`Fourth`, failing with what a case fails with (CLOSED); the
+  cases meet `chan.Case<T ? E>` (`TryNow() T ? E, Exhausted`, `Due() I64`), so time needs no import of chan; it polls
+  (spins, then sleeps to 1 ms, waking for its earliest timer). Two language rules came with it: **G9e** (a parameter
+  left off binds its variable to its default's type: Select's unused cases) and **S13g** (a case carrying a value of an
+  enum of no cases, T18 now allowing one, needs no clause: a match of two clauses over a two-case Select's `Ready` is
+  exhaustive). Limit: a `SendOf(c, v)` written inside a join block is refused by C2d (a local made before it works).
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
@@ -1262,6 +1294,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every module `available_externally`.
 - **Representation choices**: a function value is a code/environment pair crossing calls as two words; aggregates over
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
+- **Cold paths, inferred (survey2 item 9, the user's decision 2026-10-27, "ye do the cold paths work the way you want";
+  built 2026-10-31, mine).** No syntax. What ends the program or a test - a failed assert or guaranteed check,
+  `unreachable`, `!`, a null `!`, an error leaving a test - calls runtime functions declared `cold noreturn`, and a
+  requirement found false (D17) calls a `cold` one, so LLVM lays those paths out of line and inlines nothing into them
+  (no dynamic change measured: callgrind's counts were identical with and without). A call's error edge carries
+  `!prof` weights of 1 to 2000 (LLVM's "unlikely"), kept because the bench gained and a miss-heavy program did not lose:
+  callgrind on baseline x86-64, Vec push 188.7M -> 103.7M instructions, a gather 62.3M -> 58.3M, regex -0.7%, any-dispatch
+  -0.4%, enum dispatch +1.4%, text +0.4%, and a program whose Map.Get misses half the time and whose Find mostly fails
+  125.8M -> 124.8M with the same mispredictions; timings agreed within the (heavy) noise.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
   opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`).
 - **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C;

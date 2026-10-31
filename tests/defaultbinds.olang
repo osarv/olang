@@ -1,0 +1,54 @@
+# G9e: a parameter left off binds its variable to its default's type; S13g: a case carrying a value of an enum with no
+# case needs no clause. Each test holds the run time to what the compile-time evaluator bakes (K2) and decides (S18c)
+import "std/io"
+
+type Named trait {
+    Name() String
+}
+
+type Idle struct() { }
+fn (i Idle) Name() String { return "idle" }
+
+type Busy struct(n I64) {
+    n
+}
+fn (b Busy) Name() String { return "busy " $b.n }
+
+fn both<A Named, B Named>(a A, b B = Idle()) String { return $a.Name() " " $b.Name() }
+
+type Nothing enum { }
+
+type Either<A, B> enum {
+    Left(v A)
+    Right(v B)
+}
+
+# Right never holds a value: a match of Left alone is exhaustive
+fn only(e Either<I64, Nothing>) I64 {
+    return match e {
+        case Either.Left(v) => v
+    }
+}
+
+BakedBoth := both(Busy(1))
+BakedOnly I64 = only(Either<I64, Nothing>.Left(4))
+
+test "a default left off gives its variable a type" {
+    assert both(Busy(1)) == "busy 1 idle"
+    assert both(Busy(1), Busy(2)) == "busy 1 busy 2"
+    io.Println(both(Busy(3)))!
+}
+
+test "a case of no values needs no clause" {
+    assert only(Either<I64, Nothing>.Left(7)) == 7
+    x := Either<I64, Nothing>.Left(2)
+    match x {
+        case Either.Left(v) { assert v == 2 }
+    }
+}
+
+test "the evaluator agrees" {
+    assert BakedBoth == "busy 1 idle" and BakedBoth == both(Busy(1))
+    assert BakedOnly == 4
+    assert only(Either<I64, Nothing>.Left(5)) == 5 # decided while compiling (S18c)
+}

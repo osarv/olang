@@ -5422,6 +5422,16 @@ fn (m mut Machine&) Bits(p Ptr, n I64) I64 { return m.rd(p, n) }
 # the reference stored at p
 fn (m mut Machine&) RefAt(p Ptr) Ptr { return m.rdPtr(p) }
 
+# the elements of the array at p, or of the one a reference at p names, each an integer, Bool or Char of type elem
+# (K3a) - sign-extended as Int reads one
+fn (m mut Machine&) Elems(p Ptr, ty types.TypeId, elem types.TypeId) Array<I64> {
+    data, n := m.arrayView(p, ty)
+    stride := m.size(elem)
+    out := Array<I64>(n)
+    for i in range n { out[i] = m.Int(Ptr(data.Id, data.Off + i * stride), elem) }
+    return out
+}
+
 # the text at p: an array of U8 or Char, or a reference to one
 fn (m mut Machine&) Text(p Ptr, ty types.TypeId) String {
     data, n := m.arrayView(p, ty)

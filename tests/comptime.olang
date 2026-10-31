@@ -1,0 +1,129 @@
+# K3, K3a: comptime e computed while compiling, comptime for unrolled while compiling. Each test holds the run time to
+# what the compile-time evaluator bakes (K2) and decides (S18c)
+import "std/io"
+
+fn squares(n I64) Array<I64> { return I64[i * i for i in range n] }
+
+fn fib(n I64) I64 {
+    if n < 2: return n
+    return fib(n - 1) + fib(n - 2)
+}
+
+# a global's whole initializer: baked, or an error
+Table := comptime squares(8)
+Coeffs := I64[3, 1, 4, 1, 5]
+
+fn size<T>() I64 { return comptime T.Size * 2 }
+
+# computed once, read in every turn
+fn hot(k I64) I64 {
+    total I64 = 0
+    for i in range k {
+        t := comptime squares(16)
+        total += t[i % 16] + comptime fib(20)
+    }
+    return total
+}
+
+fn fixedLocal() I64 {
+    n := 6
+    return comptime fib(n)
+}
+
+fn dot(xs Array<I64>&) I64 {
+    t I64 = 0
+    comptime for i, c in Coeffs {
+        t += c * xs[i]
+    }
+    return t
+}
+
+fn evens() I64 {
+    t I64 = 0
+    comptime for k in range 10 {
+        if k % 2 == 0 { t += k }
+    }
+    return t
+}
+
+# each copy's name a constant: a length, a comptime of its own
+fn lens() I64 {
+    t I64 = 0
+    comptime for n in range 1, 4 {
+        a := Array<I64>(n, 1)
+        t += a.Len() + comptime n * 100
+    }
+    return t
+}
+
+fn flags() I64 {
+    t I64 = 0
+    comptime for b in Bool[true, false] {
+        if b: t += 1
+        if not b: t += 10
+    }
+    return t
+}
+
+fn stop() I64 {
+    t I64 = 0
+    comptime for k in range 100 {
+        if k == 3: break
+        if k == 1: continue
+        t += k
+    }
+    return t
+}
+
+fn tri() I64 {
+    t I64 = 0
+    comptime for i in range 4 {
+        comptime for j in range i { t += j }
+    }
+    return t
+}
+
+fn sizes<T>() I64 {
+    t I64 = 0
+    comptime for k in range 3 { t += comptime T.Size * k }
+    return t
+}
+
+fn letters() I64 {
+    n I64 = 0
+    comptime for ch in "abc" { n = n * 256 + I64(ch) }
+    return n
+}
+
+BakedHot I64 = hot(3)
+BakedDot I64 = dot(I64[1, 2, 3, 4, 5])
+BakedTri I64 = tri()
+
+test "comptime gives constant data" {
+    assert Table[3] == 9 and Table.Len() == 8
+    assert hot(2) == 1 + 2 * 6765
+    assert size<I32>() == 8 and size<I64>() == 16
+    s := comptime "ab" "cd"
+    assert s == "abcd"
+    assert fixedLocal() == 8
+    io.Println("comptime: " $hot(3))!
+}
+
+test "comptime for unrolls" {
+    assert dot(I64[1, 1, 1, 1, 1]) == 14
+    assert evens() == 20
+    assert lens() == 6 + 600
+    assert flags() == 11
+    assert stop() == 2
+    assert tri() == 4
+    assert sizes<I32>() == 12 and sizes<I16>() == 6
+    assert letters() == 0x616263
+}
+
+test "the evaluator agrees" {
+    assert BakedHot == hot(3) and BakedHot == 5 + 3 * 6765
+    assert BakedDot == 46 and BakedDot == dot(I64[1, 2, 3, 4, 5])
+    assert BakedTri == 4
+    assert evens() == 20 # decided while compiling (S18c)
+    assert lens() == 606
+}

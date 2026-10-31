@@ -10,7 +10,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `io.olang` | file descriptors, `Print`/`Println`, buffered `Writer`, `Lines` |
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
-| `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse` |
+| `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse`, `After`'s timers, and `Virtual(f)` - a virtual clock for tests |
 | `rand.olang` | seeded xoshiro256** generator |
 | `list.olang` | `List<T>`: a growable sequence that never moves what it stores (chunks doubling in size) - for when a `Vec`'s growth copying its elements is what is to be avoided; `list.Of(a)`, `list.From(it)`, `list.Error`, `list.Iter` |
 | `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
@@ -28,7 +28,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `csv.olang` | RFC 4180 records, read and written; structs as records (`Encode`, `Decode<T>`, `@csv.Column`, `@csv.Skip`) |
 | `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error` |
 | `http.olang` | requests by running `curl` |
-| `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
+| `chan.olang`, `cancel.olang` | bounded blocking channel, `Select` over two to four channels, sends (`SendOf`) and timers, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
 | `fuzz.olang` | fuzz targets: `fuzz.Check(fn(data Array<U8>&) { })`, run per input by `olang test -fuzz NAME FILE` (libFuzzer; `-fuzztime`, `-sanitize`), and on every saved input in `testdata/fuzz/SLUG/` by a plain `olang test` - which also takes words naming the tests to run (`olang test FILE Target`, B7a) (B19) |
 | `prop.olang` | property tests: `prop.Check(fn(xs Array<I64>&, p Point) { assert ... }, cases = 100)` - values made by reflection, cases in child processes, a failure shrunk, printed, saved and replayed; driven by the fuzzer's bytes under `-fuzz` (B19a) |
