@@ -105,3 +105,30 @@ test "D8g: arguments evaluated in the order written" {
     want := "154 habt"
     assert order(Live) == want and OrderBaked == want
 }
+
+# a trait's method may be variadic: called through a constraint and through an any alike
+type Adder trait {
+    Add(xs ...I64) I64
+}
+
+type Base struct(base I64) { base }
+
+fn (b Base) Add(xs ...I64) I64 {
+    t := b.base
+    for x in xs { t += x }
+    return t
+}
+
+fn constrained<T Adder>(t T) I64 { return t.Add(1, 2) }
+
+fn traits(z I64) String {
+    b := Base(10 + z)
+    w any Adder& = b
+    return $w.Add(1, 2, 3) " " $w.Add() " " $constrained(b)
+}
+
+TraitsBaked := traits(0)
+
+test "D8g: a trait's variadic method, through a constraint and an any" {
+    assert traits(Live) == "16 10 13" and TraitsBaked == "16 10 13"
+}
