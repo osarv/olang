@@ -467,9 +467,10 @@ fn (e Emitter&) head() String {
 }
 
 # what every module ends with: the type tree its access tags name (T36), the runtime's header tags among them, and
-# the attribute group every function carries
+# the attribute group every function carries - nounwind among them: nothing in olang unwinds (an error is a value, a
+# failed check in a test a longjmp), so no function needs an unwind table
 fn (e mut Emitter&) attributes() String {
-    return $tbaaTree "attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n"
+    return $tbaaTree "attributes #0 = { null_pointer_is_valid " $e.Attrs " nounwind }\n"
 }
 
 # every function the program reaches written as an item, from main or the tests (or, compiling one module, from its

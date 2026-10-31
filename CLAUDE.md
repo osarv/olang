@@ -1318,6 +1318,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   - 3: a body calling `grown` (a Vec's growth) is `typed.Body.Cold`, emitted `noinline cold`, so `Push` inlines.
   - 4: a generator's `.walk`, `.wnext` and ramp `.coro` are `alwaysinline`, so D18e's elision holds in a large caller.
   - 12: an integer's `Sqrt` corrects by squaring a root held below 2^32 - no division (3x natively).
+  - 15: every function `nounwind` (nothing unwinds; no unwind tables - regex's binary -4%).
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).

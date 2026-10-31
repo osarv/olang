@@ -26596,3 +26596,10 @@ Measured over 1M roots of `i * 7919 + 12345`: 48.3M -> 38.8M Ir, and natively ov
 (the divisions were few instructions but tens of cycles each). New tests beside every perfect square in the last 96
 below 2^64 and around 2^53's root, one more baked global for the evaluator (std/prelude/tests/number.olang); the
 128-bit widths' sqrtU128 is unchanged.
+
+**15a. `nounwind` on every function.** Nothing in olang unwinds (an error is a value, a failed check in a test a
+`longjmp`), but no emitted function said so, so every one had an unwind table. Attribute group #0 of every module, and
+the runtime's #0 and #1, end in `nounwind`. Instruction counts unchanged (regex 1 164.6M, k-nucleotide 243.4M); the
+regex binary 106,608 -> 102,512 bytes, its `.eh_frame` 0xae8 -> 0x70 bytes. A `-debug` build keeps its frames for a
+debugger in `.debug_frame`. Stated with it: a C++ exception thrown through olang frames (a foreign library's) was
+already never caught there; now it is undefined, as any unwind through a `nounwind` C function is.
