@@ -645,6 +645,8 @@ type Diag enum {
     ReturnBorrowAsBuilt
     ReturnProgramAsBuilt
     ReturnOwnStorage
+    ViewKept
+    ViewReturned
     DeferReturns
     YieldOutside
     YieldInLambda
@@ -2746,6 +2748,12 @@ fn ReturnProgramAsBuilt() Msg { return Msg(Diag.ReturnProgramAsBuilt, "O14, T25c
 
 # ERR_RETURN_OWN_STORAGE
 fn ReturnOwnStorage() Msg { return Msg(Diag.ReturnOwnStorage, "O26", "this value refers to this function's own storage, which dies at the return - build it in '&return'") }
+
+# ERR_VIEW_KEPT
+fn ViewKept(name String&) Msg { return Msg(Diag.ViewKept, "O27", "this keeps a view of '" $name "', which lives only until its block or loop turn ends, where it outlives that - keep a copy of what it shows: '$x' or 'x.Clone()'") }
+
+# ERR_VIEW_RETURNED
+fn ViewReturned(name String&) Msg { return Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'") }
 
 # ERR_DEFER_RETURNS
 fn DeferReturns() Msg { return Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }

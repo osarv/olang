@@ -6326,6 +6326,15 @@ registered in it (O15, run when the caller's scope closes) see it; a local decla
 is built in the result scope on every turn; and a call that fails leaves what it built in the caller's scope until that
 scope closes.
 
+**O27 (no storage extended for a view; provisional - the rework's round 1, `OLANG_SCOPES=infer` only).** With every
+scope marker read as bare, the compiler places each local, and each call's result, in the shortest-lived scope every
+use allows: a value kept whole somewhere longer-lived than its block is built where it is kept from the start. Only a
+whole value's flow lengthens where it is built. A **view** of storage - a slice, a borrow of a part, what a callee hands
+back of an argument's storage - kept where that storage does not already live (past the loop turn or the block that
+built it, or through a reference result past the function) is a compile-time error naming a copy of what the view
+shows (`$x`, `x.Clone()`): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused, `keep.Push($t[0:1])`
+accepted.
+
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
 tagged field) carries whatever those were bound to where the value was built. If one of them was bound to one
 of the returning function's own block scopes, the return is a compile-time error: the value hands back a

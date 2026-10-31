@@ -999,6 +999,13 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
     if not ln.planned { return mir.ScopeRef.Program }
     h := ln.F.Locals[I64(l)].Home
     if h != mir.ScopeRef.Frame { return h }
+    # an array value whose elements the scope pass keeps in an outer block's arena (OLANG_SCOPES=infer's lift, 2.4)
+    if source.InferScopes and I64(l) < ln.plan.Stored.Len() {
+        match ln.plan.Stored[I64(l)] {
+            case typed.Scope.Block(b) { return ln.scopeRef(typed.Scope.Block(b)) }
+            case _ { }
+        }
+    }
     return ln.scopeRef(typed.Scope.Block(ln.B.Locals[I64(l)].In))
 }
 

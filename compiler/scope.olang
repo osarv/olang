@@ -328,6 +328,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
+    viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
     promoteLocal I64 = -1                  # the local the temporary judged next is declared as (a Promote), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
@@ -609,6 +610,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.terms.Clear()
     s.stors.Clear()
     s.origin.Clear()
+    s.viewOf.Clear()
     s.copied.Clear()
     s.blocks.Clear()
     s.joins.Clear()
@@ -1196,6 +1198,7 @@ fn (s mut Scoper&) run() {
         s.terms.Push(Term.None)
         s.stors.Push(Term.Block(typed.BlockId(0)))
         s.origin.Push(-1 if b!.Locals[k].Kind == typed.LocalKind.Var or b!.Locals[k].Kind == typed.LocalKind.Hidden else -2)
+        s.viewOf.Push(-1)
     }
     for k in range b!.Vars.Len() {
         match b!.Vars[k] {
@@ -4355,6 +4358,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
 fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     if not source.InferScopes or l >= s.origin.Len() or s.origin[l] == -2 { return }
     if v.K != ValKind.Existing { return }
+    s.viewOf[l] = s.viewSource(x)
     # a call the inference landed where the local's uses need is the local's own, as a call landing at the local is
     c := s.callOf(unPassed(s.unAway(x)))
     if c is not null and s.siteLift(I64(c.Site)) != Term.None { return }
@@ -5994,11 +5998,13 @@ fn (s mut Scoper&) builtOK(x typed.Expr?&, t Term) Bool {
         match r.Hi {
             case Term.Var(v) {
                 b := Term.None
+                ai := -1
                 for i in range c.Args.Len() {
                     k := s.P.T.ShareOf(fty, i)
                     q := k if k >= 0 else i
                     if v < vars.Len() and vars[v] == q {
                         b = s.peekTerm(c.Args[i])
+                        ai = i
                         break
                     }
                 }
@@ -6006,6 +6012,8 @@ fn (s mut Scoper&) builtOK(x typed.Expr?&, t Term) Bool {
                 # a temporary given for it is bound after, where the result lands
                 if b == Term.None { continue }
                 o := s.order(b, t)
+                # the inference: the argument too short for where the part is put proposes a longer claim (2.4)
+                if s.liftGather and o == FailsBlock and ai >= 0 and not r.View { s.propose(c.Args[ai], t) }
                 if o != Holds and o != Obliged { return false }
             }
             case Term.Program { }
@@ -7116,6 +7124,16 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             if ai >= 0 and w >= 0 { s.noteMadeNamed(rec, c.Args[ai], w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
             continue
         }
+        # O27: what the callee keeps of its argument is a view of storage of this function's, or the argument is one
+        ai0 := s.argOfVar(c, r.Hi)
+        if ai0 >= 0 and r.View and source.InferScopes {
+            wl := s.wholeRoot(c.Args[ai0])
+            if wl >= 0 and not s.isParam(wl) {
+                s.err(s.nameSpan(sp), msgs.ViewKept(s.P.L.Names.Text(s.B!.Locals[wl].Name)))
+                continue
+            }
+        }
+        if ai0 >= 0 and s.viewKept(c.Args[ai0], s.nameSpan(sp), false) { continue }
         m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
         # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
         if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
@@ -8007,6 +8025,8 @@ fn (s mut Scoper&) isBlock(t Term) Bool {
 
 fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
+    # O27: a view of storage kept where the storage does not live
+    if s.viewKept(x, s.fitSp if s.fitAt else s.opTok(x), kind == FitReturn or kind == FitOwn) { return }
     if s.Trace { s.TraceLog.Push($"fit error kind " $kind " slot " $s.fitSlot " exact " $exact " narrow " $s.fitNarrow " | " $s.traceAt(x.Span().Start)) }
     # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
     # O26's
@@ -8239,6 +8259,31 @@ fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
     }
 }
 
+# the local whose storage value x shows a view of (O27): directly, or through the locals its claim was taken from; -1
+# for none
+fn (s mut Scoper&) viewSource(x typed.Expr&) I64 {
+    v := s.viewRoot(x)
+    if v >= 0 { return v }
+    l := s.wholeRoot(x)
+    for _ in range 16 {
+        if l < 0 or l >= s.viewOf.Len() { return -1 }
+        if s.viewOf[l] >= 0 { return s.viewOf[l] }
+        if s.origin[l] < 0 { return -1 }
+        l = s.origin[l]
+    }
+    return -1
+}
+
+# O27's error for value x, a view of a local's storage kept too long, said at sp: true where it was one
+fn (s mut Scoper&) viewKept(x typed.Expr&, sp source.Span, returned Bool) Bool {
+    if not source.InferScopes { return false }
+    vs := s.viewSource(x)
+    if vs < 0 or s.isParam(vs) { return false }
+    name := s.P.L.Names.Text(s.B!.Locals[vs].Name)
+    s.err(sp, msgs.ViewReturned(name) if returned else msgs.ViewKept(name))
+    return true
+}
+
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
 fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
     u := unPassed(s.unAway(x))
@@ -8343,7 +8388,10 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
         s.wLocals.Put(key, true)
     }
     grows := nt != cur
-    if stor and not isBlockTerm(nt) and not s.liftStor.Has(key) {
+    # a run-time array's elements are built where lowering says it keeps them (storageOf), a block's arena included; any
+    # other local's own storage only in a scope variable or the program's (O26a's homes)
+    arr := s.arenaValue(s.B!.Locals[l].Ty) and not s.isRef(s.B!.Locals[l].Ty)
+    if stor and (arr or not isBlockTerm(nt)) and not s.liftStor.Has(key) {
         s.liftStor.Put(key, true)
         grows = true
     }
