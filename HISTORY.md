@@ -27203,7 +27203,7 @@ map - reverted until the flip.
 Round 2a (above) ended on one missing piece: a fresh container could not hold read-only references, since every written
 `&` reads writable and T25c's read-only copy is all of a value. Round 2b built 2.8's inferred levels (docs/rework.md
 section 11 has the detail and the numbers), still behind `OLANG_PARAMS=new`, measured with round 1's
-`OLANG_SCOPES=infer` beside it. std went from 19 to 34 of its 40 test files under the switches (`make verify-params`).
+`OLANG_SCOPES=infer` beside it. std went from 19 to 35 of its 40 test files under the switches (`make verify-params`).
 
 **Keyed by where the `&` is written, decided by checking again.** A level is a permission variable named by its
 written position (module and offset - `load.RoLevels`). The checker records a position read-only where a read-only
@@ -27246,7 +27246,30 @@ for 2b was to keep instances where the body decides on the length. Read from the
 where the result may hold references - the first version made std's `Windows` a by-value instance and its views of the
 copy died at the return.
 
-**Left** (docs/rework.md 11.3-11.5): read-only nullable parameters have no spelling (283 in compiler/); permission
-bindings per field (an iterator over read-only data is a read-only copy whole) - the class of the 7 std files left;
-the result rule (a view of a bare parameter handed back is read-only here, where QCC said an error naming the value
-result - waiting for the by-pointer handover); compiler/ not migrated; no flip.
+**Nullable parameters and following results** (later the same day): a `?&` parameter of a declared function is
+read-only unless its body writes through it, passes it writably or keeps it (`load.NullWritable`, the signature and its
+instances widened, checked again) - option (a) of open point 6, provisional; a function whose result follows its
+argument is no function value (T21, `FollowingFuncValue`).
+
+**A hidden copy found by measuring bench.** bench migrated and built under the switches matched the default build to a
+few startup instructions per row, but `-memory` listed one bare parameter copied on entry in every program:
+`String.Split(t String)`, whose `Array<String&>(n, t)` fill met the writable level with a read-only view, and the
+copy-on-entry rescue was tried before the level. The order is now the other way (a body's level made read-only before
+any copy; 11.2's seventh decision): no copy in bench or std.
+
+**`order.ByFields` as a function value.** It was refused as "writes through or keeps its by-value parameter": a field
+read `f.Of(a)` fitted to `lessThan`'s following `x V` was checked outside the argument's context - an argument is
+checked (`c.expr(arg, want)`) before `argFor` set the context, and inference's pre-checked arguments were fitted with
+none - so the old by-value-parameter rule marked `a` as needing a writable argument. The context is set before both
+now, and a place a following parameter is given becomes a dependency on that parameter's need (`roNeedOf`) rather than
+a need. std: 35 of 40.
+
+**The compiler's migration** (docs/rework.md 11.5): the text phase leaves 2,430 distinct errors in compiler/, the
+driven phase (9 rounds, 2,113 edits) 882 - 517 of them D9d on parameters the tool had pinned `&` in an earlier round
+from a note naming them, which once the rest settled are never written after all. The tool now also drops a scope-named
+marker with a D9d request (`d T&cfg`).
+
+**Left** (docs/rework.md 11.3-11.7): permission bindings per field (an iterator over read-only data is a read-only copy
+whole) - the class of the 5 std files left and of compiler/'s O17 rest; the result rule (a view of a bare parameter
+handed back is read-only here, where QCC said an error naming the value result - waiting for the by-pointer handover);
+compiler/'s migration finished (a driven run with fresh pins, then by hand); the scope phase's field loop; no flip.

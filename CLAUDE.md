@@ -410,9 +410,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   where its body writes it), D9d-D9f, `&Name()` in traits, `tools/param_migrate.olang`; **round 2b** (docs/rework.md
   section 11): a body's written reference levels inferred (read-only where a read-only value is stored into one,
   `load.RoLevels`), results narrowed or following their arguments, G29 instances only where a body decides on a
-  length - std 34 of 40 test files under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`), compiler/ not migrated; left before the
-  flip: read-only nullable parameters, per-field permission bindings (2.8), the by-pointer value results. The entry
-  below is today's rule until it lands.
+  length, a `?&` parameter read-only unless its body needs it writable, a body's level made read-only before any copy
+  on entry (provisional, mine, the user absent) - std 35 of 40 test files under `OLANG_PARAMS=new OLANG_SCOPES=infer`
+  (`make verify-params`), bench's instruction counts unchanged, compiler/ migrated by the tool to 882 errors; left
+  before the flip: per-field permission bindings (2.8), the by-pointer value results, compiler/'s migration finished,
+  the scope phase's field loop. The entry below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
   its own key text (a copy at Put of a new key, none on an update or a lookup); `Map<String&, V>` shares the caller's,

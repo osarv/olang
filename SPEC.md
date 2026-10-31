@@ -1257,7 +1257,8 @@ round-2 entry), the permission of a reference level that no declaration fixes is
   or arguments of a constructor made there included - is read-only where a read-only value is stored into it, and
   writable otherwise: `out := Vec<String&>()` then `out.Push(t[0:2])` from a bare `t` makes `out` a `Vec` of read-only
   views. A write through such a level is then refused as a write through any read-only reference (T25b). The top of a
-  local's own written reference type takes its value's permission (inferred, as before).
+  local's own written reference type takes its value's permission (inferred, as before). Where a level could be made
+  read-only, no bare parameter is copied on entry for that store (D9's round-2 entry): the level is read-only instead.
 - *A function's result.* A result is read-only at a level where the body hands back a value read-only there - at every
   level where it hands back a view of what a bare parameter reaches - and every caller holds it so. A result written
   `mut` (source not yet migrated, read during the migration) keeps its top writable.

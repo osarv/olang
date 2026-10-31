@@ -1119,7 +1119,7 @@ reading; under round 1's switch alone they are as section 9 left them), the scop
 
 Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and measured together with round 1's
 `OLANG_SCOPES=infer`, 11.2's first decision); without them the compiler checks as before (11.6). Not flipped: std is
-34 of its 40 test files under the switches (11.4), compiler/ not migrated (11.5).
+35 of its 40 test files under the switches (11.4), compiler/ migrated by the tool to 882 errors, not yet to none (11.5).
 
 ### 11.1 What was built
 
@@ -1175,6 +1175,16 @@ Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and
   driven phase and dropped by a finish phase (`FinishPhase`).
 - **std**: `listState.chunkIn`, the read-only form of `chunk` a walk reads (old code handed a writable view out of a
   read-only receiver - shallow permission - which deep read-only bare parameters cannot).
+- **A level before a copy.** Where a read-only value meets a writable level a body writes (11.1's first item), the
+  level is made read-only before the bare parameter it came from is copied on entry: `String.Split(t String)` filling
+  `Array<String&>(n, t)` with views of `t` copied its receiver on every call (bench's text row did); it makes the
+  array's level read-only now, and no bare parameter of bench or std/prelude is copied on entry (11.7).
+- **An argument checked in its parameter's context.** The argument's state (`argFor`: a `&` parameter's, a following
+  type variable's) is set before the argument is checked and before a pre-checked one (inference's) is fitted, so a
+  place read fitted to the parameter's type inside the argument follows it; and a place an instance's following
+  parameter is given needs a writable argument of this body only where that parameter does (`roNeedOf`, a dependency,
+  not a need). `order.ByFields<T>` - whose fields reach `lessThan<F, V>`'s `x V` - is a function value again
+  (`xs.Sort(order.ByFields<Version>)`).
 
 ### 11.2 Decided here (mine, the user absent - provisional, for the user's review)
 
@@ -1195,6 +1205,11 @@ Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and
    permission is the body's, as an entry copy is. Direction question 2 in the report.
 6. **A function whose result follows its argument is no function value** (T21, `FollowingFuncValue`, said by
    `olang explain` too): a call through a value cannot see the argument's permission.
+7. **A level the body writes is made read-only before a bare parameter is copied on entry** (11.1, "a level before a
+   copy"): no copy is made where a read-only level does; a later write through that level is refused where it is
+   written (naming the bare parameter), where the copy would have let it write the copy - so a body writing a view of
+   its bare parameter's text through a container it made says so, rather than copying the text unseen. The rule that
+   hidden copies are made only of what may change, applied first to the body's own levels.
 
 ### 11.3 Open points added
 
@@ -1219,21 +1234,49 @@ prelude-test file tested under `OLANG_PARAMS=new OLANG_SCOPES=infer`:
 
 | | round 2a (10.4) | round 2b |
 |---|---|---|
-| test files compiling and passing | 19 of 40 | 34 of 40 |
-| distinct errors left | ~190 | 22 |
+| test files compiling and passing | 19 of 40 | 35 of 40 |
+| distinct errors left | ~190 | 14 |
 
-Left (`make verify-params` runs this cycle): std/regex (its searcher and `Match` built from read-only text - 11.3 point 7), std/set and the Map test (`Str`
-walking a bare receiver through a read-only copy of its iterator), std/prop and the iterator test (an `ArrayIter` over a
-captured array returned from a lambda; `Reversed()` lent read-only), std/order (`ByFields` as a function value: a
-parameter of it is taken to need a writable argument), and Map.Clone's slot made from a read-only entry - all point 7's
-class but ByFields.
+Left (`make verify-params` runs this cycle): std/regex (its searcher and `Match` built from read-only text - 11.3 point
+7; 6 errors), std/set and the Map test (`Str` walking a bare receiver's `Keys()` - the keys of a read-only map are
+read-only, which E11c's Str cannot hand on; and Map.Clone's slot made from a read-only entry), std/prop and the
+iterator test (an `ArrayIter` over a captured array returned from a lambda; `Reversed()` lent read-only) - all point
+7's class. std/order passes since 11.1's argument context.
 
 ### 11.5 compiler/ under the switches
 
-Not migrated this round: the 283 read-only nullable parameters (point 6) and point 7's class come first; the tool's text
-phase alone was measured in 10.5.
+A copy of compiler/ migrated by `param_migrate` under the switches, with the migrated std as `OLANG_STD`, and the
+compiler's root (`compiler/olang.olang`) checked; distinct errors, by rule:
+
+| | text phase only | after the driven phase (9 rounds, 2,113 edits) |
+|---|---|---|
+| D9d (a `&` parameter never written, passed writably or kept) | 777 | 517 |
+| T25c (read-only here) | 1,111 | 97 |
+| O17 (lent where the callee may keep) | 109 | 95 |
+| O10c / O10d / O26 (scope placement) | 78 / 98 / 30 | 21 / 17 / 15 |
+| S12b / E35 / E31b / T17c / E28 / D16c / C2d / T2c / T24 | 25 / 50 / - / 64 / - / - / - / - / - | 24 / 24 / 12 / 7 / 7 / 7 / 6 / 5 / 6 |
+| all | 2,430 | 882 |
+
+The driven phase converges (its last rounds 9, 1, 0 edits) but not to none. Most of what is left is D9d's 488 the tool
+listed for a person: a parameter it made `&` in an earlier round, from a note naming it as the bare parameter behind a
+refusal, is pinned there so the rounds cannot oscillate - and once the rest settled, D9d finds it never written after
+all (making `build.olang`'s `ensureDir` receiver bare by hand removes its error and adds none). A second driven run with
+fresh pins over the result is the next step (11.6), then O17's 95 (bare struct values holding references lent to `&`
+parameters - point 7's class) and the T25c rest. Not yet built and measured: the self-build under the switches.
 
 ### 11.6 Today's path
 
 Without the switches the compiler checks as before; every change is behind `source.NewParams` but std/list's `chunkIn`
 (the same meaning in both) and the tool.
+
+### 11.7 Measured
+
+- **bench under the switches** (bench/ migrated by the text phase, built with the migrated std, `-target x86-64` for
+  callgrind, 19 rows at reduced sizes): outputs byte-identical to the default build; instructions identical but for
+  70-210 more at startup on every row (the migrated std's longer file paths in the failed-check texts), 0.00-0.01%;
+  peak memory within 64 KB (binary-trees 16, text, Vec push, List walk, matmul). Bare parameters copied on entry: 0 in
+  every row (1 before 11.1's "a level before a copy": `String.Split`'s receiver, in every program splitting text).
+- **std's tests** (11.4): 35 of 40 files.
+- **Compile time** under `OLANG_SCOPES=infer` stands as round 1 left it: the scope phase's field loop is not made
+  incremental (check 2.7 s, scope 8.0 s on the compiler, measured beside a migration run; 1.3 s without the switch) -
+  left for round 2c (10.7, "the field loop").
