@@ -327,6 +327,8 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
+    partLifts Map<pair.Pair<I64, I64>, Bool> # ... lifted because a part of it - a field, an element - is kept (counted, 2.6)
+    partFlow Bool = false                   # the proposal being made is for a part of the local
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
     viewOf Vec<I64>                        # by local: the local whose storage it is a view of (O27), -1 none
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
@@ -380,6 +382,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.siteLifts.Clear()
     s.liftStor.Clear()
     s.wLocals.Clear()
+    s.partLifts.Clear()
     for i in range s.Bodies.Len() {
         s.Plans.Push(typed.NewPlan(s.Bodies[i]))
         s.sums.Push(summary())
@@ -7094,6 +7097,12 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # the inference: an argument whose local's claim is too short for what the callee keeps of it whole proposes a
         # longer one - the local the call's result lands for, where the result is what is too short (2.4, O27)
         if s.liftGather and k == FailsBlock and not r.View { s.liftAtCall(c, r, lo) }
+        # ... and an argument read out of what a local builds, too short: never lifted (O20), its field may want a binding
+        # of its own (2.6)
+        if k == FailsBlock or k == FailsUnknown {
+            ai := s.argOfVar(c, r.Hi)
+            if ai >= 0 and s.partOfOwn(c.Args[ai]) { s.wantPromotion(c.Args[ai]) }
+        }
         # the field inference (2.6): an instance a call makes required to live as long as what it holds - a bare field
         # storing its argument exactly (st) - is met by the field's own binding, never by landing the instance longer.
         # A constructor's asks in every judging of the field inference, not only the converged one - also passed up as
@@ -7101,13 +7110,17 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # returning such an instance) where the converged judging still refuses it
         if s.onResult(c, r.Hi) {
             res := s.P.T.Result(s.calleeType(c))
-            if r.Why == WhyHolds and (k != Obliged or s.instanceRel(hi, Term.None)) { s.wantExact(res) }
+            if r.Why == WhyHolds and (k != Obliged or (s.resultVar >= 0 and hi == Term.Var(s.resultVar))) { s.wantExact(res) }
             if k != Obliged and not s.isRef(res) { s.wantPromotionOf(res) }
         }
         # ... and a promoted field's binding a refusal reads through, given back (2.6, step 4)
         if k != Obliged {
             s.giveBackDerived(hi)
             s.giveBackDerived(lo)
+            if s.derivedTerm(hi) or s.derivedTerm(lo) {
+                s.giveBackArg(c, r.Hi)
+                s.giveBackArg(c, r.Lo)
+            }
         }
         if k == Obliged {
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
@@ -7160,6 +7173,7 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             }
         }
         if ai0 >= 0 and s.viewKept(c.Args[ai0], s.nameSpan(sp), false) { continue }
+        if ai0 >= 0 and s.partKept(c.Args[ai0], s.nameSpan(sp)) { continue }
         m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
         # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
         if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
@@ -7947,10 +7961,12 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     # a local exactly in a derived scope, or in another scope exactly where a derived one is: nothing here shows the two
     # the same (O25, O23a) - a result's is an obligation each call discharges (O14b)
     if exact and t != slot and (kind == FitLocal or kind == FitValue) and (s.derivedTerm(t) or s.derivedTerm(slot)) {
+        s.giveBackRead(x, t)
         s.fitError(x, kind, true)
         return
     }
     k := s.order(t, slot)
+    if (k == FailsBlock or k == FailsUnknown) and (s.derivedTerm(t) or s.derivedTerm(slot)) { s.giveBackRead(x, t) }
     # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
     # local's that the value outlives, a longer claim for that local
     if (k == FailsBlock or k == FailsUnknown) { s.wantPromotion(x) }
@@ -8053,6 +8069,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
     # O27: a view of storage kept where the storage does not live
     if s.viewKept(x, s.fitSp if s.fitAt else s.opTok(x), kind == FitReturn or kind == FitOwn) { return }
+    if s.partKept(x, s.fitSp if s.fitAt else s.opTok(x)) { return }
     if s.Trace { s.TraceLog.Push($"fit error kind " $kind " slot " $s.fitSlot " exact " $exact " narrow " $s.fitNarrow " | " $s.traceAt(x.Span().Start)) }
     # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
     # O26's
@@ -8340,7 +8357,56 @@ fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
         s.proposeCall(u, t)
         return
     }
+    s.partFlow = partRead(u)
     s.proposeLocal(r, t, s.keepsStorage(x))
+    s.partFlow = false
+}
+
+# whether local l is declared with an instance its constructor builds here - not a call's result, which may be
+# storage the callee hands back (a result written borrowed is read as built under the inference: KeptPerm)
+fn (s mut Scoper&) buildsOwn(l I64) Bool {
+    if l < 0 { return false }
+    init := try s.inits.Get(l) catch { return false }
+    return s.ctorBuilt(init)
+}
+
+fn (s mut Scoper&) ctorBuilt(x typed.Expr&) Bool {
+    return match unPassed(s.unAway(x)) {
+        case typed.Expr.Call(_, _, c): s.P.T.Role(s.calleeType(c)) == types.RoleCtor
+        case typed.Expr.Promote(_, _, pr): s.ctorBuilt(pr.X)
+        case _: false
+    }
+}
+
+# whether x reads a part of what a local builds (under the inference)
+fn (s mut Scoper&) partOfOwn(x typed.Expr&) Bool {
+    return source.InferScopes and partRead(unPassed(s.unAway(x))) and s.buildsOwn(s.claimRoot(x))
+}
+
+# O20 under the inference: x reads a part of what a local builds, kept where that does not live - said at sp; whether
+fn (s mut Scoper&) partKept(x typed.Expr&, sp source.Span) Bool {
+    if not s.partOfOwn(x) { return false }
+    u := unPassed(s.unAway(x))
+    r := s.claimRoot(x)
+    text := try s.texts.Get(s.B!.File) catch default ""
+    part := text[I64(u.Span().Start):I64(u.Span().End)] if I64(u.Span().End) <= text.Len() else "x"
+    s.err(sp, msgs.PartKept(part, s.P.L.Names.Text(s.B!.Locals[r].Name)))
+    return true
+}
+
+# whether x reads a part of a local - a field or an element of what it names - rather than the local itself
+fn partRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): partPlace(p)
+        case _: false
+    }
+}
+
+fn partPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _), typed.Lvalue.Payload(_, _, _): true
+        case _: false
+    }
 }
 
 # whether t is a generator's Next's result scope (D18b): one call's, which nothing the walk keeps may live in
@@ -8407,6 +8473,12 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     # a generator's locals live across its yields, and each Next call's result scope is that call's: nothing is lifted
     # into it (D18b, as O26a moves nothing there)
     if s.genResult(t) { return }
+    # a part of what a local builds - a field, an element - kept longer is no reason to build all of it longer: its field
+    # gets a binding of its own (2.6), or the read is O20's error (no storage extended past the block that made it)
+    if s.partFlow and s.buildsOwn(l) {
+        if s.Trace { s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " for a part kept | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
+        return
+    }
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
             s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $t " (origin " $s.origin[l] ") | " $s.traceAt(s.B!.Locals[l].Sp.Start))
@@ -8429,10 +8501,11 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     }
     if not grows { return }
     s.lifts.Put(key, nt)
+    if s.partFlow { s.partLifts.Put(key, true) }
     s.liftGrew = true
     if s.Trace {
         loc := s.B!.Locals[l]
-        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") " | " $s.traceAt(loc.Sp.Start))
+        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") $(" for a part kept" if s.partFlow else "") " | " $s.traceAt(loc.Sp.Start))
     }
 }
 
@@ -8631,6 +8704,19 @@ fn (s mut Scoper&) giveBack(d I64) {
     if s.fieldGather and s.finalQuiet and not s.standIn and d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
 }
 
+# ... the field a refusal reads through at a derived term t: the declaration it is read out of, and the parameter's
+fn (s mut Scoper&) giveBackRead(x typed.Expr&, t Term) {
+    if not s.fieldGather or not s.finalQuiet { return }
+    s.giveBack(s.fieldDecl(x))
+    s.giveBackDerived(t)
+}
+
+# ... the field the argument for callee variable v at call c is read out of
+fn (s mut Scoper&) giveBackArg(c typed.Call&, v Term) {
+    a := s.argOfVar(c, v)
+    if a >= 0 { s.giveBack(s.fieldDecl(c.Args[a])) }
+}
+
 # ... the declaration of the parameter whose "&p" field derived term t reads
 fn (s mut Scoper&) giveBackDerived(t Term) {
     match t {
@@ -8671,7 +8757,7 @@ fn (s mut Scoper&) placeDecl(p typed.Lvalue&) I64 {
 
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
 fn (s Scoper&) InferStats() String {
-    return $"inferred: " $s.lifts.Len() " locals lifted, " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back)"
+    return $"inferred: " $s.lifts.Len() " locals lifted (" $s.partLifts.Len() " for a part of them kept), " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back)"
 }
 
 # what folding (2.9, not built in round 1) could reach, for OLANG_SCOPESTATS: the plain blocks - a "{ }", a branch, an

@@ -647,6 +647,7 @@ type Diag enum {
     ReturnOwnStorage
     ViewKept
     ViewReturned
+    PartKept
     DeferReturns
     YieldOutside
     YieldInLambda
@@ -2754,6 +2755,10 @@ fn ViewKept(name String&) Msg { return Msg(Diag.ViewKept, "O27", "this keeps a v
 
 # ERR_VIEW_RETURNED
 fn ViewReturned(name String&) Msg { return Msg(Diag.ViewReturned, "O27", "this returns a view of '" $name "', which this function builds - return the value (a result written without '&' copies it), or a copy: '$x'") }
+
+# O20 under the inference (docs/rework.md 2.6, 3): a value read out of a container this function builds, kept where the
+# container does not live, through a field that cannot have a binding of its own
+fn PartKept(part String&, whole String&) Msg { return Msg(Diag.PartKept, "O20", "'" $part "' lives where '" $whole "' does, which closes first - keep a copy ('$" $part "'), or keep what '" $whole "' was made from") }
 
 # ERR_DEFER_RETURNS
 fn DeferReturns() Msg { return Msg(Diag.DeferReturns, "S19b", "deferred code may not return - it runs while its block is left") }
