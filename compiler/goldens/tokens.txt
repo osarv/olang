@@ -1870,7 +1870,7 @@ e2fd04379a77a2f7 5e5c85b2d9ea5fe3 compiler/fmt.olang
 84472718f9c617d7 c093f18bbf925002 compiler/lsp.olang
 2aec2931356c6a7f 11e484d640f0038b compiler/mcp.olang
 cdbc4425d75be041 19ade70f33242774 compiler/mir.olang
-bd09fcb57dace6b1 d58656c8735d479f compiler/msgs.olang
+2fd791da8e1da920 25130b52a867d6e0 compiler/msgs.olang
 1305379aeb20517c 879c6019f16ef05d compiler/names.olang
 e96d6c8f08ffed5c 261a89692e2a59e7 compiler/needs.olang
 6d4992a3c9cd74b9 f0c45d3216bf4d4d compiler/olang.olang
