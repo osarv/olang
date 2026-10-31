@@ -611,3 +611,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   errors. After wt-opt31 merges. Not under the hold (no scope or signature rework).
 - QUEUED 2026-10-31: array patterns (QBP 10, rest written `...name`) and variadic parameters (QCF: `xs ...T`, `...a`
   passes an array on; filepath.Join and os.Exec moved) and the `**` operator (QCG) - one batch with or right after the errors batch.
+- 2026-10-31 CET: wt-lang31 merged (case _, case P: v with `=>` and nomatch gone and the repository migrated by
+  tools/match_migrate.olang, guard narrowing, Mod/DivFloor/DivCeil, E41 typed holes, io.Show, walks round 3), then
+  wt-opt31 (survey items 1, 3, 4, 7 filter, 8, 9, 12, 13, 14, 15 and QBV's Pow folding: binary-trees 185 -> 131M Ir,
+  Pow(2.0) 138 -> 4.4M; left: items 2/5 (scoping rework), 10 enum layout, 6 constant calls, 11 fusion, 7's in-place
+  growth, I128 division) - goldens recaptured, full verify on the merged tip passed. Next queued: the errors batch
+  (QBZ), array patterns + variadic + `**`, the survey3 tooling the user picks.
