@@ -2005,7 +2005,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QCA DECIDED 2026-10-31 (the user: "no, this is just for you. A human may write code how it wants"): the nesting
   limit is my own code's discipline (rules.md), never a rule, report or check on other people's olang code.
 - QBP 10 DECIDED 2026-10-31 (the user: "Do it Ig"): array patterns `case String&["test", file, ..words]` - literals
-  compare, names bind, `..name` binds the rest as a view (once per pattern), no `..` means the exact length; lengths
+  compare, names bind, `...name` binds the rest as a view (once per pattern), no `..` means the exact length; lengths
   checked first; exhaustiveness over lengths. Queued with the errors batch's language round.
 - QCD ASKED 2026-10-31 (the user: "Can we remake range with this keyword?" - `..` from array patterns). Proposed:
   `lo..hi` is a range value - half-open (hi excluded, as slices and Len are), counting up, a prelude Range that is an
@@ -2021,3 +2021,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   declared on the type or the use, what it means for arrays/Vec/Map inside, how it meets `&` parameters (a `&`
   parameter of an immutable type could never write), and the compile-time evaluator (immutable values bake freely).
   Not discussed yet.
+- QCD DECLINED 2026-10-31 (the user: "Nah, don't do it. Keep range"): `range` stays; no `..` ranges.
+- QBP 10 spelling DECIDED 2026-10-31 (the user: "Could we do ... for the array match?"): the rest of an array pattern
+  is written `...` - `case String&["test", file, ...words]`, a bare `...` where the rest is not named (mine: before
+  the name, as JavaScript's rest pattern, so a pattern's last item says at once that it takes the rest).
