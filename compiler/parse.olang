@@ -177,6 +177,17 @@ fn (p Parser&) here() I32 {
     return p.ts.Toks[p.skipFrom(p.pos)].Start
 }
 
+# whether an unreachable's message follows on its line (S16d): a literal, a "$" rendering, a name or a parenthesized
+# expression - anything else (a ",", a closing bracket, "if", "else", an operator, the line's end) ends the unreachable
+fn (p Parser&) messageHere() Bool {
+    if p.breakBefore() { return false }
+    return match p.peek() {
+        case token.Tok.StrLit, token.Tok.Dollar, token.Tok.Iden, token.Tok.LParen, token.Tok.IntLit => true
+        case token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit => true
+        nomatch => false
+    }
+}
+
 # whether a line ended before the next token
 fn (p Parser&) breakBefore() Bool {
     if p.half != token.Tok.Eof { return false }
@@ -3073,6 +3084,13 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
         case token.Tok.Match {
             m := try p.matchBody()
             return ast.Expr.MatchE(p.from(at), m)
+        }
+        case token.Tok.Unreachable {
+            # S16d: "unreachable [why]" where a value is expected - its message the expression after it on its line
+            p.advance()
+            msg ast.Expr?&p = null
+            if p.messageHere() { msg = try p.expr() }
+            return ast.Expr.Unreachable(p.from(at), msg)
         }
         case token.Tok.Iden {
             if p.anyHere() {

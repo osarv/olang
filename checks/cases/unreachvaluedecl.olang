@@ -1,0 +1,5 @@
+# check: fail error[D8e]: 'unreachable' gives no value, so ':=' has no type to take
+# S16e: an unreachable written as a value has no type of its own - ':=' from it has nothing to declare
+fn main() {
+    x := unreachable "no value"
+}

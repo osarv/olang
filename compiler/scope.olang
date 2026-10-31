@@ -1201,7 +1201,7 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
 fn (s mut Scoper&) choiceOfRefs(x typed.Expr&) Bool {
     return match s.unAway(x) {
         case typed.Expr.Cond(_, _, _), typed.Expr.Match(_, _, _) => true
-        case typed.Expr.Seq(_, _, q) => s.choiceOfRefs(q.X!)
+        case typed.Expr.Seq(_, _, q) => q.X is not null and s.choiceOfRefs(q.X!)
         case _ => false
     }
 }

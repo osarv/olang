@@ -165,7 +165,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`unreachable "why"` (S16d, mine 2026-10-24).** An optional message, any text expression, evaluated only where the
   statement is reached: `FILE:LINE: unreachable reached: why` (a plain one says `unreachable reached`; the old
   wording "reached unreachable code" changed with it, everywhere). Not a statement that leaves its function (no
-  `return`, error or loop jump inside the message's lambdas), as an assert's message.
+  `return`, error or loop jump inside the message's lambdas), as an assert's message. **As a value (S16e, survey2 item
+  6, the user's yes 2026-10-27; built 2026-10-31)**: `d := t[k] if k in t else unreachable "checked above"` - wherever a
+  value of any type is expected, as a noreturn call fits (D8e), `:=` from it an error naming it. Decided (mine): its
+  message is the expression starting on its line with a literal, `$`, a name or `(` (anything else ends it); built as a
+  typed `Seq` of S16d's exit typed `noreturn`, so lowering, section 8, the evaluator and `interpret` needed nothing new.
 - **A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).** A test passes by
   reaching its end or a bare `return` (deferred code runs); it fails by a failed assert or check, `unreachable`, a `!`,
   or an error leaving its body - a `try` in a test need not catch everything (`FAIL - name: T.W`, then the trace).

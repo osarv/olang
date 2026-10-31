@@ -2738,7 +2738,7 @@ fn NoreturnErrors() Msg { return Msg(Diag.NoreturnErrors, "D8e", "a 'noreturn' f
 fn NoreturnHere(text String&) Msg { return Msg(Diag.NoreturnHere, "D8e", $text " cannot be 'noreturn'") }
 
 # ERR_DECL_FROM_NORETURN
-fn DeclFromNoreturn() Msg { return Msg(Diag.DeclFromNoreturn, "D8e", "a 'noreturn' call gives no value, so ':=' has no type to take") }
+fn DeclFromNoreturn(what String& = "a 'noreturn' call") Msg { return Msg(Diag.DeclFromNoreturn, "D8e", $what " gives no value, so ':=' has no type to take") }
 
 # ERR_RETURN_VALUE_IN_VOID
 fn ReturnValueInVoid() Msg { return Msg(Diag.ReturnValueInVoid, "D8", "this function returns no value") }

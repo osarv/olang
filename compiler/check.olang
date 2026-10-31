@@ -810,6 +810,7 @@ fn (c mut Checker&) onlyFixed(x ast.Expr?&, out mut Map<source.NameId, I64>&) Bo
         case ast.Expr.Slice(_, a, lo, hi) => c.onlyFixed(a, out) and c.onlyFixed(lo, out) and c.onlyFixed(hi, out)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.allFixed(items, out)
         case ast.Expr.Try(_, a, clauses) => c.onlyFixed(a, out) and (clauses.Len() == 0)
+        case ast.Expr.Unreachable(_, msg) => msg is null or c.onlyFixed(msg, out)
         nomatch => false
     }
 }
@@ -2462,6 +2463,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
         case ast.Expr.Slice(_, a, lo, hi) => c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.anyDeclaresNames(items)
         case ast.Expr.Try(_, a, clauses) => c.declaresNames(a) or (clauses.Len() > 0)
+        case ast.Expr.Unreachable(_, msg) => c.declaresNames(msg)
         nomatch => true
     }
 }
@@ -4033,6 +4035,7 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
     if x is null { return }
     match x {
         case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Unary(_, _, y), ast.Expr.Postfix(_, _, y), ast.Expr.Member(_, y, _) { storedExpr(y, out) }
+        case ast.Expr.Unreachable(_, msg) { storedExpr(msg, out) }
         case ast.Expr.IsType(_, y, _, _), ast.Expr.As(_, y, _), ast.Expr.Generic(_, y, _) { storedExpr(y, out) }
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
             storedExpr(a, out)
@@ -6638,7 +6641,10 @@ fn (c mut Checker&) litCtor(x ast.Expr?&, want types.TypeId) typed.Expr?&c {
 fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&, keep Bool = false) types.TypeId {
     t := typeOf(e)
     if t == types.NoreturnT {
-        c.err(c.calleeSpan(x), msgs.DeclFromNoreturn())
+        match x {
+            case ast.Expr.Unreachable(sp, _) { c.err(sp, msgs.DeclFromNoreturn("'unreachable'")) }
+            nomatch { c.err(c.calleeSpan(x), msgs.DeclFromNoreturn()) }
+        }
         return types.UnknownT
     }
     if t == types.NullT {
@@ -6949,6 +6955,12 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
         case ast.Expr.NotIn(sp, a, b) { return c.negate(sp, c.membership(sp, a, b)) }
         case ast.Expr.Chain(sp, ch) { return c.chain(sp, ch) }
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
+        case ast.Expr.Unreachable(sp, msg) {
+            # S16d, D8e: reached, it stops as the statement does; never reached, it fits where any value is wanted -
+            # an exit and no value, of no type of its own (a noreturn call's)
+            ex := typed.Stmt.Exit(sp, typed.ExitKind.Unreachable, c.message(msg, true))
+            return typed.Expr.Seq(sp, types.NoreturnT, typed.Seq(Array<typed.Stmt&>(1, ex), null))
+        }
         case ast.Expr.Compr(sp, cm) {
             if cm.InCall {
                 # G37: an argument a comprehension written as arguments gave; one no call spread is an error
@@ -20624,6 +20636,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
         }
         case ast.Expr.Try(_, y, cl) { return exprAssigns(y, n) or clausesAssign(cl, n) }
         case ast.Expr.MatchE(_, m) { return matchAssigns(m, n) }
+        case ast.Expr.Unreachable(_, msg) { return exprAssigns(msg, n) }
     }
 }
 

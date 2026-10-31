@@ -26331,3 +26331,21 @@ two the user wants written rather than inferred: an inferred "writes" would chan
 that read the signature. So T25b/T25c and the global binding stay as they are, and the three follow-up questions (what
 replaces the read-only check, inferred immutable globals, trait receivers) are moot. What is still open about
 signatures is QCC (references in signatures), which the scoping rework waits on.
+
+## `unreachable` as a value (S16e, D8e, survey2 item 6, 2026-10-31)
+
+The second survey's item 6, decided by the user on 2026-10-27 ("Yes that structure is okay"): `unreachable ["why"]`
+also stands where a value of any type is expected, as a `noreturn` call already did (D8e) - `x I64 = t[k] if k in t
+else unreachable "checked above"`, a `match` value, a `catch default`, an argument. Before, the only way was a
+`noreturn` helper function or a statement form wrapped around the code.
+
+Built (mine): the parser takes `unreachable` as a primary (`ast.Expr.Unreachable`); its message is an expression
+beginning on its line with a literal, a `$`, a name or a `(` - so `f(unreachable, 2)`, `(unreachable)`, `unreachable
+if bad else 3` and a line's end take none. The checker elaborates it to a typed `Seq` holding S16d's
+`Stmt.Exit(Unreachable, message)` with no value, typed `noreturn` - so everything that already let a noreturn call
+give way to the values beside it (E28's meet, D10a, D13d's dead paths) applies, and lowering, section 8, early
+freeing, the evaluator and `interpret` met nothing new: a baked global or a decided assert reaching it is K1's abort
+class as the statement is. `:=` from one says `'unreachable' gives no value` (D8e's message took the word as a
+parameter). Found on the way: the scope pass's `choiceOfRefs` read a `Seq`'s value with `!`, which a value-less `Seq` of
+type `noreturn` would have stopped on (a reference conditional with an unreachable branch). tests/unreachable.olang;
+checks cases unreachvaluedecl, unreachvaluemsg, unreachvaluebaked.

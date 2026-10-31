@@ -1774,7 +1774,8 @@ to a `noreturn` function or through a `noreturn` function value, by `unreachable
 `break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
 handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
 wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
-argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used. Beside
+argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used; so does
+`unreachable` written as a value (S16e). Beside
 other values (E28, S12b) it gives way to theirs, and a conditional or `match` all of whose values are such calls fits
 wherever a value is expected too; as a generic argument it takes no part in inference (G9a), as `null` takes none. A
 `noreturn` call written in a value position has no type of its own, so no diagnostic names one: where it does not fit
@@ -2939,10 +2940,11 @@ text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
 postfix  ::= primary { index | member | call-on | "++" | "--" | "!" }
 primary  ::= literal | try-expr | call-expr | struct-literal
-           | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
+           | array-literal | comprehension | enum-value | lambda | match-expr | unreachable-expr | IDEN | "(" expr ")"
 ```
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
+`match-expr` is a `match` used as a value (§6.4 S12b); `unreachable-expr` is `unreachable` where a value is expected
+(§6.6 S16e). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
 indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
 `call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
@@ -4702,6 +4704,17 @@ code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rat
 `unreachable` exists because D10a requires a result on every path and the analysis behind it is
 deliberately structural — it cannot see that a loop never exits, or that a `match` a caller guarantees is
 exhaustive really is. `unreachable` is how a program says so.
+
+**S16e (`unreachable` as a value).** `unreachable-expr ::= "unreachable" [ message ]` stands wherever a value of any
+type is expected, as a call of a `noreturn` function does (D8e): `d := table[k] if k in table else unreachable "checked
+above"`, `return x if x >= 0 else unreachable`, an argument, a `match` value, a `catch default`. Reached, it is S16d's
+statement: the message, if any, evaluated there and printed, the test failed or the process aborted. Never reached,
+it gives no value and has no type of its own: beside other values (E28, S12b) it gives way to theirs, and `:=` from it
+is a compile-time error (D15, D8e) naming it. Its `message` is an expression beginning on the `unreachable`'s line with
+a literal, a `$` rendering, a name or a `(` - text, under S17's rules for a message, as S16d's; anything else after the
+word (a `,`, a closing bracket, `if`, `else`, an operator, the line's end) ends it without one. A statement beginning
+with `unreachable` is S16d's statement. The compile-time evaluator reaches it as the run time does: a baked global's
+initializer or a decided assert reaching it is K1's abort class, an error where the value is required.
 
 
 ### 6.7 `assert`

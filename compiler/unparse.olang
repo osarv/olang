@@ -1022,6 +1022,13 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.exprs(args)
         }
         case ast.Expr.Default(_) { w.put("default") }
+        case ast.Expr.Unreachable(_, msg) {
+            w.put("unreachable")
+            if msg is not null {
+                w.put(" ")
+                w.expr(msg)
+            }
+        }
         case ast.Expr.Named(_, n, y) {
             w.name(n)
             w.put(" = ")

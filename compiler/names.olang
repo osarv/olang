@@ -1169,6 +1169,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
     match x {
         case ast.Expr.Name(sp, n) { r.name(sp, n) }
         case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a) { r.expr(a) }
+        case ast.Expr.Unreachable(_, msg) { r.expr(msg) }
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
             r.expr(a)
             r.expr(b)
