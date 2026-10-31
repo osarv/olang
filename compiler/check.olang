@@ -10084,6 +10084,11 @@ fn (c mut Checker&) roRef(x typed.Expr?&) Bool {
             case typed.Expr.Prim(_, _, op, _, args) {
                 if op == typed.PrimOp.Convert and args.Len() == 1 and c.isRef(typeOf(args[0])) { return c.roRef(args[0]) }
             }
+            # ("x!" read where x is, E35: as read-only as x - a conditional or a match choosing it had lost that)
+            case typed.Expr.Seq(_, _, _) {
+                u := unwrapped(x)
+                if u != x { return c.roRef(u) }
+            }
             case _ { }
         }
     }
@@ -22251,10 +22256,24 @@ fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
     c.P.L.Diags.EndHold()
     if c.P.L.Diags.Count() == n {
         c.P.L.Diags.Choose(g)
-    } else {
-        c.P.L.Diags.Drop(g)
-        c.matchValueMismatch(x.Span(), said, rt, w)
+        return w, rt, said
     }
+    c.P.L.Diags.Drop(g)
+    # (round 2c: values that are one reference type but for what may be written through them - one inferred read-only,
+    # a bare parameter's view - meet read-only, as S13c's bindings do; the values before it fit that too)
+    if source.NewParams and c.isRef(rt) and c.isRef(typeOf(v)) and c.P.T.SameButPerm(typeOf(v), rt) {
+        ro := c.P.ReadOnlyAll(rt)
+        n2 := c.P.L.Diags.Count()
+        g2 := c.P.L.Diags.Hold()
+        w2 := c.fit(v, ro, x.Span())
+        c.P.L.Diags.EndHold()
+        if c.P.L.Diags.Count() == n2 {
+            c.P.L.Diags.Choose(g2)
+            return w2, ro, ro
+        }
+        c.P.L.Diags.Drop(g2)
+    }
+    c.matchValueMismatch(x.Span(), said, rt, w)
     return w, rt, said
 }
 
