@@ -410,6 +410,16 @@ Every agent brief says so. compiler/ is far over it (QCA, decisions.md) - a refa
 only (the user, 2026-10-31: "this is just for you. A human may write code how it wants") - no compiler, formatter or
 editor check on anyone else's code.
 
+## Write each thing with the construct that fits it best
+The user, 2026-10-31: "make sure you use the most efficient language constructs for the job. I want the code to use
+what works best, not what you are used to necessarily."
+**How to apply:** in olang code (compiler/, std/, tools, tests), reach for what the language now has rather than the
+C-style habit: `:` one-line bodies and guard clauses, narrowing (`if e == C`, `is not null`) over matches of one case,
+`case P: v` value matches, conditional expressions, comprehensions and the iterator walks over hand loops, generators
+for walks, `try` covering a whole expression, errors raised by name, named arguments, `become` for state machines,
+`defer`/`errdefer`, reflection over repetition, lane operators over element loops - whichever is clearest and
+cheapest for the case. Every agent brief says so.
+
 ## Flags beside values are errors, in my code too
 The user, 2026-10-30, seeing compiler/ return `value, Bool` and success Bools with out-parameters: the rule "errors are
 errors" (Language rules) holds for the compiler's own code, not only for std's API. New code declares an error; the
