@@ -128,6 +128,7 @@ type Resolver struct(L mut load.Loader&) {
     # each is first written (its own copy assigned, a part of it assigned or changed)
     bareParams Map<I64, source.Span>
     bareWrites Map<I64, source.Span>
+    bareStarts Map<I64, I64>       # a bare parameter's local: where its declaration starts (load.BareWritten's key)
 }
 
 # R3b: "error X" met by the survey, X naming nothing - where, and whether its function's signature names X
@@ -707,6 +708,14 @@ fn (r mut Resolver&) bareParam(p ast.Param&) {
     i := r.locals.Len() - 1
     if r.locals[i].Name != p.Name { return }
     r.bareParams.Put(i, p.Ty!.Span())
+    r.bareStarts.Put(i, I64(p.Sp.Start))
+}
+
+# a bare parameter's own storage written (D9f's write, 2.10's copy on entry): said to the checker through the loader
+fn (r mut Resolver&) bareWritten(i I64, sp source.Span) {
+    if not r.bareWrites.Has(i) { r.bareWrites.Put(i, sp) }
+    start := try r.bareStarts.Get(i) catch { return }
+    r.L.BareWritten.Put(pair.Pair(r.L.Mods[r.mi].File, start), true)
 }
 
 # what an assignment changes, not a name alone: a part of a local - "p.f", "p[i]" - written; its root read, but a bare
@@ -723,7 +732,7 @@ fn (r mut Resolver&) targetPart(x ast.Expr&) {
             ref := r.lookup(n)
             if ref.Kind == What.Local and r.bareParams.Has(ref.Index) {
                 r.record(sp, ref)
-                if not r.bareWrites.Has(ref.Index) { r.bareWrites.Put(ref.Index, sp) }
+                r.bareWritten(ref.Index, sp)
                 return
             }
             r.expr(x)
@@ -748,7 +757,7 @@ fn (r mut Resolver&) target(x ast.Expr&) {
         case ast.Expr.Name(sp, n) {
             ref := r.lookup(n)
             r.record(sp, ref)
-            if ref.Kind == What.Local and r.bareParams.Has(ref.Index) and not r.bareWrites.Has(ref.Index) { r.bareWrites.Put(ref.Index, sp) }
+            if ref.Kind == What.Local and r.bareParams.Has(ref.Index) { r.bareWritten(ref.Index, sp) }
         }
         case ast.Expr.Paren(_, y) { r.target(y) }
         case ast.Expr.Member(_, _, _), ast.Expr.Index(_, _, _) { r.targetPart(x) }
@@ -810,6 +819,7 @@ fn (r mut Resolver&) startItem(mi I64) {
     r.locals.Clear()
     r.bareParams.Clear()
     r.bareWrites.Clear()
+    r.bareStarts.Clear()
     r.scope.Clear()
     r.undo.Clear()
     r.itemNames.Clear()

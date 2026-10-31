@@ -96,6 +96,9 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Fetch
     Names
     Diags
+    # the rework's round 2: the bare parameters names found written in their bodies, by (file, the parameter's start) -
+    # each given a copy of its own on entry (D9, 2.10)
+    BareWritten Map<pair.Pair<I64, I64>, Bool>
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1

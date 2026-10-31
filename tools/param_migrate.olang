@@ -37,6 +37,12 @@ type walker struct(src String&, ts Array<token.Token>&) {
     ts
     stack Vec<open>
     edits Vec<edit>
+    done Map<String&, Bool>    # the driven phase: the parameters edited this round
+}
+
+# whether a parameter's type from n to e is written a reference with a scope marker ("T&x", "T&return")
+fn (w mut walker&) refMarked(n I64, e I64) Bool {
+    return e - 2 > n and w.kind(e - 2) == token.Tok.Amp and (w.kind(e - 1) == token.Tok.Iden or w.kind(e - 1) == token.Tok.Return)
 }
 
 fn (w mut walker&) kind(i I64) token.Tok {
@@ -322,6 +328,8 @@ ConstData String& = "hands data written in the program to"
 KindAmp String& = "amp"
 KindBare String& = "bare"
 KindCopy String& = "copy"
+KindOwn String& = "own"
+OwnStorage String& = "refers to this function's own storage"
 
 # the byte offset of a 1-based line and column in src, -1 past its end
 fn offsetOf(src String&, line I64, col I64) I64 {
@@ -359,15 +367,35 @@ fn (w mut walker&) typeEnd(i I64) I64 {
     return w.ts.Len()
 }
 
+# the parameters made "&" again, by file, line and name: never made bare after - a cycle of the two edits ends there
+Pinned mut Map<String&, Bool> = Map<String&, Bool>()
+Verbose mut Bool = false
+
+fn pinKey(path String&, src String&, i I64, w mut walker&) String {
+    line I64 = 1
+    for c in src[:I64(w.ts[i].Start)] {
+        if c == '\n': line++
+    }
+    return $path ":" $line ":" $w.text(i)
+}
+
 # the edit a request makes in src, the name or literal at offset o, added to the walker's: whether it made one
-fn (w mut walker&) request(kind String&, o I64) Bool {
+fn (w mut walker&) request(kind String&, o I64, path String&) Bool {
     i := tokenAt(w.ts, o)
     if i < 0: return false
     if kind == KindCopy {
-        if w.kind(i) != token.Tok.StrLit: return false
+        if w.kind(i) != token.Tok.StrLit or w.kind(i - 1) == token.Tok.Dollar: return false
+        # a method's receiver: a copy made by Clone ("x".Clone().Split(",")), "$" binding the whole chain
+        if w.kind(i + 1) == token.Tok.Dot {
+            if w.kind(i + 2) == token.Tok.Iden and w.text(i + 2) == "Clone": return false
+            at := I64(w.ts[i].End)
+            w.edits.Push(edit(at, at, ".Clone()"))
+            return true
+        }
         w.edits.Push(edit(o, o, "$"))
         return true
     }
+    if kind == KindOwn: return w.ownStorage(i, path)
     # the parameter's name: a note may point at its type ("CStr" of "p CStr") - walk back to the name
     n := i
     if w.kind(n - 1) == token.Tok.Iden and (w.kind(n - 2) == token.Tok.LParen or w.kind(n - 2) == token.Tok.Comma or w.ts[n - 1].Has(token.LineBreak)): n = n - 1
@@ -375,15 +403,53 @@ fn (w mut walker&) request(kind String&, o I64) Bool {
     e := w.typeEnd(n)
     last := e - 1
     if last <= n: return false
-    if kind == KindAmp {
-        if w.kind(last) == token.Tok.Amp: return false
-        at := I64(w.ts[last].End)
-        w.edits.Push(edit(at, at, "&"))
-        return true
-    }
-    if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
+    if kind == KindAmp: return w.makeRef(n, path)
+    key := pinKey(path, w.src, n, w)
+    if w.done.Has(key): return true
+    w.done.Put($key, true)
+    if Pinned.Has(key) or w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
     w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
     return true
+}
+
+# the parameter named at token n made "&" (its type's end given an "&"), once a round, and pinned so: whether it is one now
+fn (w mut walker&) makeRef(n I64, path String&) Bool {
+    key := pinKey(path, w.src, n, w)
+    Pinned.Put($key, true)
+    if w.done.Has(key): return true
+    w.done.Put($key, true)
+    e := w.typeEnd(n)
+    last := e - 1
+    if last <= n: return false
+    if w.kind(last) == token.Tok.Amp or w.refMarked(n, e): return true
+    at := I64(w.ts[last].End)
+    w.edits.Push(edit(at, at, "&"))
+    return true
+}
+
+# O26 at a call: a bare parameter of the function it is in, among the call's arguments, kept in what the call gives
+# back - made "&", so what is kept is the caller's (D9e). Whether one was
+fn (w mut walker&) ownStorage(call I64, path String&) Bool {
+    f := call
+    for f > 0 and not (w.kind(f) == token.Tok.Fn and w.stmtStart(f)) { f-- }
+    if f <= 0: return false
+    lp := call
+    for lp < w.ts.Len() and w.kind(lp) != token.Tok.LParen { lp++ }
+    close := w.closer(lp)
+    if close < 0: return false
+    names Vec<String&>
+    for j in range lp, close {
+        if w.kind(j) == token.Tok.Iden: names.Push($w.text(j))
+    }
+    made := false
+    j := f + 1
+    for j < call and w.kind(j) != token.Tok.LBrace {
+        if w.kind(j) == token.Tok.Iden and names.Has(w.text(j)) and (w.kind(j - 1) == token.Tok.LParen or w.kind(j - 1) == token.Tok.Comma) {
+            if w.makeRef(j, path) { made = true }
+        }
+        j++
+    }
+    return made
 }
 
 # the requests made of each file, applied: how many edits, the ones that found nothing listed for a person
@@ -404,7 +470,11 @@ fn applyRequests(reqs Vec<diagedit.Request>&, left mut Vec<String&>&) I64 ? os.E
             o := offsetOf(src, r.Line, r.Col)
             if o < 0 or seen.Has(o): continue
             seen.Put(o, true)
-            if not w.request(r.Kind, o): left.Push($r.Why)
+            if not w.request(r.Kind, o, en.Key) {
+                left.Push($r.Why)
+            } else if Verbose {
+                srcmask.Say("  " $r.Kind ": " $r.Why)
+            }
         }
         if w.edits.Len() == 0: continue
         made += w.edits.Len()
@@ -423,6 +493,7 @@ fn requestOf(row String&, allowed Vec<String&>&) diagedit.Request ? {
     if r.IsError and r.Msg.Contains(ExternBare): kind = KindAmp
     if r.IsError and r.Msg.Contains(NeverUsed): kind = KindBare
     if r.IsError and r.Msg.Contains(ConstData): kind = KindCopy
+    if r.IsError and r.Msg.Contains(OwnStorage): kind = KindOwn
     if kind == "" { error NotMine }
     return diagedit.Request($full, r.Line, r.Col, $kind, "", $row)
 }
@@ -481,6 +552,10 @@ fn main() ? {
         }
         if a == "--text" {
             text = true
+            continue
+        }
+        if a == "-v" {
+            Verbose = true
             continue
         }
         if a == "--olang" and i < args.Len() {

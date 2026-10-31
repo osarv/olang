@@ -95,6 +95,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     errVars Map<pair.Pair<I64, I64>, Bool>  # (owner, index): the error-set parameter of a list (G1a, QAH)
     genFns Map<I64, Bool>              # the generators (D18), by function: their result made a Generator<T ? E>
     genElems Map<I64, I64>             # ... where each one's elements live (D18c): GenPerTurn, GenFromReturn or a parameter
+    cabi Bool = false                  # an extern's or an export fn's signature is being read: C's conventions (BareRef)
     membersOf Map<types.TypeId, Array<types.TypeId>&> # a closed trait's members (T31a), once asked for
     memberSets Map<types.TypeId, Map<types.TypeId, Bool>&>
     typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
@@ -623,7 +624,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
         case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
         # D8g: a variadic parameter's, a read-only array of what it is written as - "...T" its spelling (Spread)
-        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.Resolve(c, of), types.TypeId(0)), types.Spread)
+        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.spreadElem(p.Resolve(c, of)), types.TypeId(0)), types.Spread)
     }
 }
 
@@ -644,9 +645,56 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
     return p.T.Ref(r, p.writtenRef() | (types.Nullable if nullable else types.ReadOnly))
 }
 
+# a variadic parameter's element, as its arguments are held (D8g): under the rework's round 2 its references read-only
+# - a variadic list is the callee's to read, as a bare parameter is - so data written in the program fits as it is
+fn (p mut Program&) spreadElem(t types.TypeId) types.TypeId {
+    if not source.NewParams or p.T.KindOf(t) != types.Kind.Ref { return t }
+    return p.T.Ref(p.T.Referent(t), p.T.PermOf(t) & ~types.Writable)
+}
+
 # the permission a written reference has: under the rework's round 2 every written "&" may be written (QCC - a
 # read-only reference is only ever inferred: a view of a bare parameter, of constant data, of an immutable global)
 fn (p Program&) writtenRef() I64 { return types.Writable if source.NewParams else types.ReadOnly }
+
+# the rework's round 2 (D9, docs/rework.md 2.10): a bare parameter is passed by pointer to the caller's storage where it
+# is a struct or an array, text included - held as a read-only reference, its body's own copy made on entry where the
+# body writes it (check); one of numbers or Bools stays by value, for G29's instances per length, as do an enum, a
+# number, a function value and a type variable's binding; an extern's and an export fn's struct keep C's by-value
+# convention (X11). t is what tr resolved to
+fn (p mut Program&) BareRef(tr ast.TypeRef?&, t types.TypeId) types.TypeId {
+    if not source.NewParams or tr is null or t == types.UnknownT or not WrittenBare(tr) { return t }
+    return p.T.Ref(t, types.ReadOnly) if p.byPointer(t) else t
+}
+
+# a parameter's written type that is bare: no reference, function type, variadic or any written at its top
+fn WrittenBare(tr ast.TypeRef&) Bool {
+    return match tr {
+        case ast.TypeRef.Ref(_, _, _, _), ast.TypeRef.Perm(_, _, _, _), ast.TypeRef.Func(_, _), ast.TypeRef.Spread(_, _): false
+        case ast.TypeRef.Any(_, _): false
+        case _: true
+    }
+}
+
+fn (p mut Program&) byPointer(t types.TypeId) Bool {
+    match p.T.KindOf(t) {
+        case types.Kind.Array {
+            e := p.T.Elem(t)
+            return not (p.T.IsNumber(e) or e == types.BoolT)
+        }
+        case types.Kind.Named {
+            k := p.T.DeclKindOf(p.T.DeclOf(t))
+            if k == types.DeclKind.Struct: return not p.cabi
+            if k != types.DeclKind.Over or not p.Body(t): return false
+            b := p.T.Base(t)
+            for _ in range 16 {
+                if p.T.KindOf(b) != types.Kind.Named or p.T.DeclKindOf(p.T.DeclOf(b)) != types.DeclKind.Over or not p.Body(b) { break }
+                b = p.T.Base(b)
+            }
+            return p.T.KindOf(b) == types.Kind.Array
+        }
+        case _ { return false }
+    }
+}
 
 # "mut"/"own" before a type: a reference's permission (T25b, T25e), a variable's where it is bound to a reference (T2);
 # before a value type it says nothing the type holds (the checker's D9/D11a)
@@ -911,7 +959,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         shares.Push(types.OwnScope)
     }
     for prm in s.Params {
-        ps.Push(p.Resolve(c, prm.Ty))
+        ps.Push(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty)))
         shares.Push(p.markedParam(c, prm.Ty!, named, shares))
         named.Push(prm.Name)
     }
@@ -2590,9 +2638,11 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     # function's own, no name the program can write ("a.Len()" in a note), one instance per set of lengths
     levels Vec<I64>
     # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
-    if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.Resolve(c, row.F.Recv!.Ty), true, row.F.Recv!.Name, 0, ns, levels) }
+    wasCabi := p.cabi
+    p.cabi = p.FnIsExtern(f) or row.F.Export
+    if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty)), true, row.F.Recv!.Name, 0, ns, levels) }
     for prm in row.F.S.Params {
-        if prm.Ty is not null and not p.FnIsExtern(f) { p.lengthLevels(p.Resolve(c, prm.Ty), true, prm.Name, 0, ns, levels) }
+        if prm.Ty is not null and not p.FnIsExtern(f) { p.lengthLevels(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty)), true, prm.Name, 0, ns, levels) }
     }
     p.addVars(owner, ns.ToArray())
     i64 := p.T.Prim("I64")
@@ -2607,10 +2657,11 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     recv := types.UnknownT
     recvName := source.NameId(0)
     if row.F.Recv is not null {
-        recv = p.Resolve(c, row.F.Recv!.Ty)
+        recv = p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty))
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    p.cabi = wasCabi
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
