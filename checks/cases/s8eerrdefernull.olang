@@ -1,0 +1,15 @@
+# check: fail error[T2c]: 'p' is a Node?&, which may be null
+# S8e, S19e: errdefer code runs after the block's later statements too - the narrowing "p = null" ends does not hold in it
+import "std/io"
+
+type Node struct(V I64) { V }
+type E error { BAD }
+
+fn work(p Node?&) ? E {
+    if p is null { return }
+    errdefer io.Println("errdefer reads " $p.V)!
+    p = null
+    error E.BAD
+}
+
+fn main() { try work(Node(7)) catch { } }

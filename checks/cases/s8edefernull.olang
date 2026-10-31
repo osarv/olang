@@ -1,0 +1,16 @@
+# check: fail error[T2c]: 'p' is a Node?&, which may be null
+# S8e, S19: deferred code runs as its block closes, after the block's later statements - a null narrowing a later
+# statement ends ("p = null") does not hold in it
+import "std/io"
+
+type Node struct(V I64) { V }
+
+fn show(p Node?&) {
+    if p is not null {
+        defer io.Println("deferred reads " $p.V)!
+        p = null
+        io.Println("assigned null")!
+    }
+}
+
+fn main() { show(Node(7)) }

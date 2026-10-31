@@ -4754,6 +4754,47 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
     fr.restAt = wasAt
 }
 
+# deferred code (S19, S19e): pending until its block is left - an errdefer's too, the same list, its code checked alike
+fn (c mut Checker&) deferStmt(sp source.Span, inner ast.Stmt&, onError Bool) {
+    # S20: pending until its block is left
+    c.fr().deferBlocks.Push(c.fr().Block)
+    # S8d, S8e, T20: it runs as its block closes, after every later statement of the block, so a narrowing whose local
+    # one of them assigns does not hold in it
+    held := c.factsCopied()
+    if c.fr().restAt < c.fr().rest.Len() {
+        later := c.fr().rest[c.fr().restAt:c.fr().rest.Len()]
+        c.killAssigned(factsMark(0, 0, 0), later)
+    }
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.ErrDefer if onError else typed.BlockKind.Defer, sp)
+    # S19b: deferred code runs while its block is left - nothing may leave it
+    was := c.fr().DeferLoops
+    wasJ := c.fr().DeferJoins
+    c.fr().DeferLoops = c.fr().loops.Len()
+    c.fr().DeferJoins = c.fr().joins.Len()
+    c.stmt(inner)
+    c.fr().DeferLoops = was
+    c.fr().DeferJoins = wasJ
+    b := c.close(id, outer, mark, from)
+    c.factsRestored(held)
+    c.emit(typed.Stmt.Defer(sp, b))
+}
+
+# the narrowings holding now, kept to be put back (deferred code is checked under fewer)
+type factsCopy struct(Nulls Vec<nullNarrow>, Cases Vec<narrowed>, Errs Vec<errNarrow>) { Nulls, Cases, Errs }
+
+fn (c mut Checker&) factsCopied() factsCopy {
+    fr := c.fr()
+    return factsCopy(fr.nulls.Clone(), fr.narrows.Clone(), fr.errNarrows.Clone())
+}
+
+fn (c mut Checker&) factsRestored(f factsCopy) {
+    fr := c.fr()
+    fr.nulls = f.Nulls
+    fr.narrows = f.Cases
+    fr.errNarrows = f.Errs
+}
+
 # a new block entered: its id, the block it is in, and the undo mark to leave it by (close)
 fn (c mut Checker&) open(kind typed.BlockKind, sp source.Span) I64, I64, I64 {
     fr := c.fr()
@@ -15161,22 +15202,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
             }
         }
         case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
-        case ast.Stmt.Defer(sp, inner, onError) {
-            # S20: pending until its block is left - an errdefer's too (S19e: the same list, its code checked alike)
-            c.fr().deferBlocks.Push(c.fr().Block)
-            from := c.stmts.Len()
-            id, outer, mark := c.open(typed.BlockKind.ErrDefer if onError else typed.BlockKind.Defer, sp)
-            # S19b: deferred code runs while its block is left - nothing may leave it
-            was := c.fr().DeferLoops
-            wasJ := c.fr().DeferJoins
-            c.fr().DeferLoops = c.fr().loops.Len()
-            c.fr().DeferJoins = c.fr().joins.Len()
-            c.stmt(inner)
-            c.fr().DeferLoops = was
-            c.fr().DeferJoins = wasJ
-            b := c.close(id, outer, mark, from)
-            c.emit(typed.Stmt.Defer(sp, b))
-        }
+        case ast.Stmt.Defer(sp, inner, onError) { c.deferStmt(sp, inner, onError) }
         case ast.Stmt.Block(sp, body) { c.emit(typed.Stmt.Block(sp, c.blockOf(body, typed.BlockKind.Plain, sp))) }
         case ast.Stmt.Join(sp, j) { c.joinStmt(sp, j) }
         case ast.Stmt.Spawn(sp, targets, call) { c.spawnStmt(sp, targets, call) }

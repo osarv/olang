@@ -4763,8 +4763,8 @@ and one whose evaluation reaches what aborts the program (K1), is a compile-time
 its body reaches it - every run but those a failed check, `unreachable` or `!` ends: the assert stands among its body's
 statements, or in a block, a loop's body or a join's block among them, and no statement before it at any level may
 leave the block it is in (a `return`; a `break` or `continue` of a loop it is not in; an error raised, re-raised or
-passed on by a `try` whose clauses do not take everything its operand fails with; a clause or arm doing one of these; a
-`yield`). One that some run passes by - in a branch the build does not decide (a branch it decides, B9c, S8b, G35, is
+passed on by a `try` whose clauses do not take everything its operand fails with; a call of a `noreturn` function, D8e - `os.Exit`
+ends a run normally; a clause or arm doing one of these; a `yield`). One that some run passes by - in a branch the build does not decide (a branch it decides, B9c, S8b, G35, is
 the only one there), an arm, a clause, deferred code, a post clause, after a statement that may leave - stays a check at
 run time, failing there only where it is reached. The error carries the assert's message (S17), rendered as the run time
 renders it where that can be computed while compiling - by the evaluator, or from what reflection knows of the instance

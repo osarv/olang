@@ -1,0 +1,15 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# S8d, S19: a case narrowing a later statement of the block ends ("e = Shape.Sq(2.0)") does not hold in deferred code,
+# which runs after it
+import "std/io"
+
+type Shape enum { Circle(r F64), Sq(s F64) }
+
+fn show(e Shape) {
+    if e == Shape.Circle {
+        defer io.Println("deferred r " $e.r)!
+        e = Shape.Sq(2.0)
+    }
+}
+
+fn main() { show(Shape.Circle(1.5)) }

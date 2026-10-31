@@ -1,0 +1,23 @@
+# check: run
+# S8d, S8e, S19: deferred code sees a narrowing no later statement of its block ends - a null test and a case test,
+# the local assigned only after the block
+import "std/io"
+
+type Node struct(V I64) { V }
+type Shape enum { Circle(r F64), Sq(s F64) }
+
+fn show(p Node?&, e Shape) {
+    if p is not null {
+        defer io.Println("deferred reads " $p.V)!
+        io.Println("in the block")!
+    }
+    if e == Shape.Circle {
+        defer io.Println("deferred r " $e.r)!
+        if e.r > 1.0 { io.Println("large")! }
+    }
+    p = null
+    e = Shape.Sq(1.0)
+    assert p is null and e == Shape.Sq
+}
+
+fn main() { show(Node(7), Shape.Circle(1.5)) }

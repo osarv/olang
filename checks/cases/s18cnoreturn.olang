@@ -1,0 +1,15 @@
+# check: run
+# S18c, D8e: a call of a noreturn function before an assert may leave its block (os.Exit ends a run normally), so an
+# assert after it that is false while compiling is not reached on every run - it stays a check at run time
+import "std/io"
+import "std/os"
+
+fn check(x I64) {
+    if x > 0 { os.Exit(0) }
+    assert false, "only reached for x <= 0"
+}
+
+fn main() {
+    check(1)
+    io.Println("not reached")!
+}

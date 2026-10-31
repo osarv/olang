@@ -1021,8 +1021,9 @@ fn armBreaks(a Arm&, loop BlockId) Bool {
 # the test, by a failed check, "unreachable" or "!", which the evaluator rules out as failures of their own: the assert
 # is among b's statements, or a block's, a loop's body's or a join's code among them, in turn, and no statement before
 # it, at any level, may leave the block it is in - a return, a break or continue of a loop it is not in, an error raised
-# or passed on (a try with no clause taking every error), a yield. One in a branch the build does not decide, an arm, a
-# clause, deferred code, a post clause or an expression is not: some run passes it by
+# or passed on (a try with no clause taking every error), a yield, a call of a noreturn function (os.Exit ends a run
+# normally). One in a branch the build does not decide, an arm, a clause, deferred code, a post clause or an expression
+# is not: some run passes it by
 fn AlwaysReached(b Block?&, sp source.Span) Bool { return reached(b, sp) == 1 }
 
 # 1 the assert is reached on every run of b, -1 some run passes it by, 0 it is not among b's statements or in a block,
@@ -1126,7 +1127,8 @@ fn exprLeaves(x Expr?&, inner mut Vec<BlockId>&) Bool {
         case Expr.Lit(_, _, _), Expr.Data(_, _, _, _), Expr.Fn(_, _, _) => false
         case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p) => placeLeaves(p, inner)
         case Expr.Promote(_, _, pr) => exprLeaves(pr.X, inner)
-        case Expr.Call(_, _, k) => calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
+        # a call of a noreturn function leaves (D8e), as D10a counts it
+        case Expr.Call(_, t, k) => t == types.NoreturnT or calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
         case Expr.Make(_, _, m) => exprsLeave(m.Items, inner) or exprLeaves(m.Length, inner)
         case Expr.Collect(_, _, c) => exprLeaves(c.Reserve, inner) or loopLeaves(c.Loop, null, inner)
         case Expr.Prim(_, _, _, _, args) => exprsLeave(args, inner)
