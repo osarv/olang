@@ -27341,3 +27341,9 @@ Such a result now follows the parameter, as an instance's result follows its arg
 call giving read-only data, writable where the argument is, the parameter itself read-only. The one thing following
 had lost - that `first(n).v = 5` writes through `n` - is recorded at the write (`followedUse`), so D9d does not tell
 `n` to go bare.
+
+Probing the match values the migrated compiler refused (S12b, "every value of this match is Expr?&, found Expr?&")
+found one more hole of the same family, older than this round: a conditional or a match choosing between a writable
+reference and `a.next!` read out of a bare parameter took the writable type, because `roRef` did not look through the
+`Seq` that `x!` reads in - so writing through the choice wrote the caller's node. Fixed, with the match's values made to
+meet read-only (under the switches) where they are one reference type but for permission.

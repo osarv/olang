@@ -1418,6 +1418,13 @@ spelling).
   was refused though `Header`'s fields are never written through. Its own reference fields are now asked read-only
   (`askTypeFields`, the FRO mechanism of 12.1), the store refused only where one of them is written through somewhere.
 
+- **A choice of a writable reference and a bare parameter's view wrote the caller's data** (round 2a): `n := b if k ==
+  0 else a.next!` (or the same as a match) took the choice's type from the writable `b`, and `a.next!` fitted it,
+  since `roRef` did not read through `x!` (a `Seq` around the read) - `n.v = 9` wrote the node `a` reaches
+  (`tests/params/fail/choosesview.olang`). `roRef` reads through it now. A match's values that are one reference type
+  but for permission meet read-only, as S13c's bindings do (S12b had said "every value of this match is Expr?&, found
+  Expr?&").
+
 ### 12.4 Today's path
 
 Without the switches nothing changes: every new path is behind `source.NewParams` (the scope pass's too); `make quick`
