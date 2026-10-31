@@ -610,4 +610,4 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   did-you-mean on near-miss raises, both flag bans (decided), and the compiler's ~60 flag sites moved to
   errors. After wt-opt31 merges. Not under the hold (no scope or signature rework).
 - QUEUED 2026-10-31: array patterns (QBP 10, rest written `...name`) and variadic parameters (QCF: `xs ...T`, `...a`
-  passes an array on; filepath.Join and os.Exec moved) - one batch with or right after the errors batch.
+  passes an array on; filepath.Join and os.Exec moved) and the `**` operator (QCG) - one batch with or right after the errors batch.

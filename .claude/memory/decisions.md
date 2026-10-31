@@ -2048,3 +2048,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   exponents folded - 0, 1, 2, -1, 0.5 (Sqrt with pow's edge cases), small integers by squaring, negatives as 1 over;
   where integer exponents 3+ differ from libm in the last bits, the evaluator computes the same multiplications and
   SPEC states it. Added to wt-opt31. QCG (`**`) still ASKED.
+- QCG DECIDED 2026-10-31 (the user: "Yes add the operator"): `a ** b` calls Pow (E31), tighter than unary minus,
+  right-associative, `**=`; a type declaring Pow gets it. Queued with array patterns and variadic parameters.
