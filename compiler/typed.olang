@@ -506,7 +506,7 @@ type Seq struct(Stmts Array<Stmt&>&, X Expr?&) {
 type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm?&, IsValue Bool) {
     Held
     Arms
-    # what runs when no arm matches, never null: the written nomatch; an empty arm where nothing happens (a statement
+    # what runs when no arm matches, never null: an empty arm where nothing happens (a statement
     # match no arm covers); Exit(Unreachable) where S13a says nothing reaches it but a null reference does (S13a)
     NoMatch
     IsValue

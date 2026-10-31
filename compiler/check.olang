@@ -20191,7 +20191,7 @@ fn (c mut Checker&) altNames(binds Vec<typed.Bind&>&, first mut Vec<source.NameI
     }
 }
 
-# the span of a word written just before a position, past spaces: an "if" before a guard, a "=>" before a value
+# the span of a word written just before a position, past spaces: an "if" before a guard
 fn (c mut Checker&) wordBefore(at I32, w String&) source.Span {
     t := c.P.L.Mods[c.fr().Mi].Src!.Text
     i := I64(at) - 1

@@ -2434,7 +2434,7 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match&p ? Fail {
                 }
             }
             # QY: alternatives on one line are separated by ",", on different lines by the line break - a header goes
-            # on to its "{", "=>" or guard, so a line ending in an alternative continues it
+            # on to its "{", ":" or guard, so a line ending in an alternative continues it
             if p.accept(token.Tok.Comma) { continue }
             if not p.sees(token.Tok.StmtEnd) { break }
             n := p.look(1)

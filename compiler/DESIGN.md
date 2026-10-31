@@ -475,7 +475,7 @@ beside `Value`, for `any Trait&` (planned, PRINCIPLES.md 5).
 | a T29d constructor over a primitive | its body ending in a synthesized `Return(Read(param))` |
 
 **Shapes worth stating.** The default error raised is `Raise(DefaultErrT, 0)` (R15). A `Seq` with no value has a null
-`X` and type `Void` (R21's statement form). `Match.NoMatch` is never null: the written `nomatch`, an empty arm where
+`X` and type `Void` (R21's statement form). `Match.NoMatch` is never null: an empty arm where
 nothing happens, or `Exit(Unreachable)` where S13a holds and only a null reference reaches it. `Callee.Body` reaches a
 lambda called where it is written only when it captures nothing (D16b). `IsCase` on a null reference is false (E32,
 T17d). A `Lit` of an aggregate is all-zero bits and nothing else. A `Render` operand naming an array is a `Borrow`, read

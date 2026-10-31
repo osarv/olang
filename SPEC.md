@@ -1503,9 +1503,20 @@ given); `SkipWhile(keep)`, the values from that first one on; `StepBy(n)`, the f
 `n` a `StepSize` - a declared `I64` whose constructor fails with `StepError.BAD_STEP` below one, a literal checked while
 compiling (T29d) as a `ChunkSize` is; `FlatMap(f)`, the values of the iterator `f` gives for each value, one walk after
 another, each made when the one before it has run out; and `Partition(keep)`, two new `Vec`s as two results (D8c) -
-the values `keep` holds for and the rest, each in order. A type with `At` and `Len` has, beside `Iter()`, the default
-`Reversed()`, a `ReversedIndexIter<T, C>` over positions `Len() - 1` down to `0`, read at each step (so `for x in
-v.Reversed()` walks a `Vec` backward).
+the values `keep` holds for and the rest, each in order. A third round: `Scan(init, f)`, each running value `f` gives
+from `init` (`f(init, x0)`, then `f` of that and `x1` ...; `init` itself not given); `GroupBy(key)`, a new `Map` from
+each key to a new `Vec` of the values that have it, in order, the keys in the order first met (`key` called once per
+value); `ChunkBy(same)`, the runs of consecutive values `same(previous, next)` holds for, each a new `Vec` built where
+its `Next`'s result lands; `Dedup()`, the values with each run of equal ones (`==`, E10) given once; `Unzip()`, a walk
+of `Zipped<A, B>` taken apart into two new `Vec`s as two results; `Product()`, every value multiplied from `1` (a `Number`
+type, wrapping as `*` does; a product of none is `1`); `Last()`, the last value; and `Nth(n)`, the value at position
+`n` counted from `0` - the last two failing with `Exhausted` where there is none (and `Nth` for a negative `n`). A type
+with `At` and `Len` has, beside `Iter()`, the default `Reversed()`, a `ReversedIndexIter<T, C>` over positions
+`Len() - 1` down to `0`, read at each step (so `for x in v.Reversed()` walks a `Vec` backward); `Cycle()`, a
+`CycleIndexIter<T, C>` over positions `0` to `Len() - 1` and round again without end (an empty one gives nothing);
+`LowerBound(x)`, in elements sorted by `<`, the first position whose element is not below `x` (`Len()` where all are) -
+a binary search; and `BinarySearch(x)`, the first position whose element is `==` to `x`, failing with
+`ArrayError.NOT_FOUND` where there is none.
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
@@ -2541,7 +2552,10 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
 U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.OVERFLOW` where
-the true power does not fit (E15a); and every integer of every width (T4a) `Sqrt()`, the
+the true power does not fit (E15a); `x.Mod(n)`, the floored modulo - `x - n * x.DivFloor(n)`, its sign the divisor's
+(`(-7).Mod(3)` is `2`, where `-7 % 3`, `Rem`, is `-1`) - `x.DivFloor(n)` and `x.DivCeil(n)`, the quotient rounded down
+and up (`(-7).DivFloor(2)` is `-4`, `7.DivCeil(2)` is `4`, where `/` truncates), each undefined where `/` is (E6a); and
+every integer of every width (T4a) `Sqrt()`, the
 integer square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
@@ -2695,7 +2709,10 @@ the first, building nothing; `Windows(size)`, every run of `size` consecutive el
 array that lives where the receiver does, `size` a `ChunkSize` as for `Chunks`; `TakeWhile(keep)` and
 `SkipWhile(keep)`, read-only slices of the leading elements `keep` holds for and of the rest from the first it does not
 hold for (`keep` not called past it); `Partition(keep)`, two new arrays as two results, of the elements `keep` holds for
-and of the rest, each in order - these three failing with what `keep` fails with; and `Chunks(size)`, the array cut into consecutive pieces of `size`
+and of the rest, each in order - these three failing with what `keep` fails with; `LowerBound(x)`, `BinarySearch(x)`
+and `Cycle()` as on a type with `At` and `Len` (T35); `ChunkBy(same)`, the array cut into runs of consecutive elements
+`same(previous, next)` holds for, each a read-only slice of its own storage held in an array that lives where the
+receiver does, failing with what `same` fails with; and `Chunks(size)`, the array cut into consecutive pieces of `size`
 elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
 the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
 receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor
@@ -2788,6 +2805,11 @@ Each takes one text: a value is made text where it is written, by `$` and joins 
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
 `io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
 of one is never evaluated while compiling (K1) and is performed under `interpret` (B3e).
+
+Beside them, `fn Show<T>(v T, at Place = Place.Here) T` writes `FILE:LINE:COLUMN: $v` - the place of the call (E40)
+and the value rendered (E11a) - and its line end to the standard error, then gives `v` back, so a value is looked at
+where it stands: `y := io.Show(f(x)) + 1`. A failed write is ignored, the one call of std that does not report one:
+a look that could fail would need a `try` at every use, and a lost look changes nothing the program computes.
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
@@ -4667,7 +4689,10 @@ Nested patterns and literals are refutable, so a clause holding one covers nothi
 **S13e (guards).** `case P if cond` - once an alternative has matched and its names are bound, `cond` (a `Bool`
 expression, which may read them) is evaluated; when it is false the match goes on to the next clause, as though the
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
-guarded clause covers nothing for S13a. A type match (G13) takes no guard: its arm is chosen while compiling.
+guarded clause covers nothing for S13a. What a guard says holds in its clause's body or value, as an `if`'s condition
+does in its block (S8d, S8e): `case Wrap.One(s) if s == Shape.Circle: s.r` reads the payload of the bound `s`, and
+`case _ if p is not null: p.v` reads through `p` - the same narrowing walk, so `and`, `or` and `not` combine as they do
+there. A type match (G13) takes no guard: its arm is chosen while compiling.
 
 **S13g (cases with no values).** A case whose payload holds a value of an enum declaring no case (T18) - by value, or
 by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as

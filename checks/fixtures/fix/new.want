@@ -1,4 +1,5 @@
-# written when a type variable was <T> everywhere, an error set joined by +, and io's error was IoError
+# written when a type variable was <T> everywhere, an error set joined by +, io's error was IoError, and a match gave
+# its values with "=>" and took the rest with "nomatch"
 import "std/io"
 
 type Bad error { WORD }
@@ -10,8 +11,15 @@ fn half(n I64) I64 ? Bad, io.Error {
     return n / 2
 }
 
+fn name(n I64) String {
+    return match n {
+        case 0: "zero"
+        case _: "some"
+    }
+}
+
 fn main() ? io.Error {
     try io.Println("fixed " $id(7))
     r := try half(8) catch Bad default 0
-    try io.Println($r)
+    try io.Println($r " " $name(r))
 }
