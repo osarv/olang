@@ -367,6 +367,7 @@ verify-infer: $(OLANG)
 PARAMS_DIR = build/params
 PARAMS_TESTS = $(shell grep -l '^test ' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang) $(wildcard tests/params/*.olang)
 PARAMS_RUNS = $(addprefix params@,$(PARAMS_TESTS))
+PARAMS_FAILS = $(wildcard tests/params/fail/*.olang)
 PARAMS_ENV = OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
 verify-params: $(OLANG)
 	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params
@@ -374,7 +375,11 @@ verify-params: $(OLANG)
 	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) -j $(PARALLEL) std
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
-	@echo "verify-params: std's tests pass on its migrated copy under the switches"
+	@for f in $(PARAMS_FAILS); do want=$$(sed -n 's/^# check: fail //p' $$f | head -1); \
+		out=$$(cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) compile -output check.o $(CURDIR)/$$f 2>&1); \
+		echo "$$out" | grep -qF "$$want" || { echo "verify-params: $$f did not fail with: $$want"; echo "$$out" | head -5; exit 1; }; \
+	done
+	@echo "verify-params: std's tests pass on its migrated copy under the switches, and tests/params/fail's cases fail"
 $(PARAMS_RUNS): params@%: FORCE
 	@cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) test $* || echo "$*" >> $(CURDIR)/build/failed.txt
 
