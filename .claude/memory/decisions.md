@@ -2105,3 +2105,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   List) still share on `:=` (their value is the handle; `.Clone()` copies); a migration tool rewrites every `:=` whose
   initializer is a reference to `:=&` so no meaning changes; destructor types (reference-only) take `:=&` only.
   Rec: yes, with QCC in the held rework. In effect: `:=` takes e's type.
+- QCH DECLINED 2026-10-31 (the user: "I think we keep := to mean what it does today. 'Whatever is in the right hand
+  side'"): no `:=&`; `x := e` takes e's type - a value copies, a reference or handle names the same instance.
