@@ -280,6 +280,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     retInst I64 = -1          # a value being returned from this function's instance: its result may narrow (permFit)
     retLambda Bool = false    # ... from a lambda whose result is written: its written levels may narrow (permFit)
     localStore Bool = false   # the store being checked lands in a local of this body (followResult)
+    handing Bool = false      # a value being handed back (returned) is being fitted: what a "&" parameter reaches handed
+                              # back makes the result follow it in an instance (round 2c), no deep use
+    storeParam I64 = -1       # ... in a field of what this body's "&" parameter names, its index (round 2c): a reference
+                              # it reaches kept there stays in its own reach - no deep use (refDeep)
     refUsed Map<pair.Pair<I64, I64>, Bool>
     refDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     # ...and the ones used deeply - written or kept through what their referent's references reach, handed back - and
@@ -300,6 +304,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roToResult Map<pair.Pair<I64, I64>, Bool>
     roResults Vec<pair.Pair<I64, typed.Expr&>>
     roDeepNeeds Vec<pair.Pair<I64, typed.Expr&>>
+    # ...and the values lent to a function's "&" parameter (round 2c): a need only where that parameter is used deeply
+    # (refDeep) - a walk's Next writing the iterator's own position asks nothing of what the iterator was made from
+    roDeepLends Vec<roDeepArg>
     roDeepArgs Vec<roDeepArg>
     roRefArgs Vec<roArg>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
@@ -716,6 +723,7 @@ fn (c mut Checker&) reset() {
     c.roToResult = Map<pair.Pair<I64, I64>, Bool>()
     c.roResults = Vec<pair.Pair<I64, typed.Expr&>>()
     c.roDeepNeeds = Vec<pair.Pair<I64, typed.Expr&>>()
+    c.roDeepLends = Vec<roDeepArg>()
     c.roDeepArgs = Vec<roDeepArg>()
     c.roRefArgs = Vec<roArg>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
@@ -10395,7 +10403,58 @@ fn (c mut Checker&) refDeepUse(p typed.Lvalue?&) {
 fn (c mut Checker&) refDeepX(x typed.Expr?&) {
     if x is null { return }
     k := c.refParamOfX(x)
-    if k >= 0 { c.refDeep.Put(pair.Pair(c.fr().Body, k), true) }
+    if k >= 0 and c.handing and c.followRef(k) { return }
+    if k >= 0 and k != c.storeParam { c.refDeep.Put(pair.Pair(c.fr().Body, k), true) }
+}
+
+# a value reached through this instance body's "&" parameter k handed back (round 2c): the result follows that
+# parameter (load.FollowResults) - read-only at a call giving it a read-only argument (followedResult) - rather than the
+# parameter used deeply. Whether it was so taken
+fn (c mut Checker&) followRef(k I64) Bool {
+    if c.retInst < 0 or not c.instanceBody(c.fr().Body): return false
+    ps := c.P.T.Items(c.P.T.Params(c.cur().Ty))
+    if k >= ps.Len() or not c.isRef(ps[k]) or not c.writable(ps[k]) or c.P.T.IsNullable(ps[k]): return false
+    key := $c.retInst ":" $k
+    if not c.P.L.FollowResults.Has(key) {
+        c.P.L.FollowResults.Put($key, true)
+        c.copiesGrew = true
+    }
+    return true
+}
+
+# the "&" parameter of this body whose referent's own field a place is ("it.slot"), or a reference local of this body
+# made from what it reaches is, its index; -1 for none
+fn (c mut Checker&) ownFieldParam(p typed.Lvalue&) I64 {
+    if not source.NewParams: return -1
+    match p {
+        case typed.Lvalue.Local(_, ty, id) {
+            if c.isRef(ty) and c.ownLocal(I64(id)) and c.roFrom.Has(c.roKey(I64(id))): return c.refParamOf(p)
+        }
+        case typed.Lvalue.Field(_, _, base, _) {
+            match base {
+                case typed.Lvalue.Deref(_, _, ref) {
+                    if c.isParamRead(unwrapped(ref)): return c.refParamOf(readPlace(unwrapped(ref)))
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# the "&" parameters used deeply through what they are passed on as (deepDeps), settled
+fn (c mut Checker&) refDeepClose() {
+    for _ in range c.deepDeps.Len() + 1 {
+        moved := false
+        for d in c.deepDeps {
+            if c.refDeep.Has(d.Second) and not c.refDeep.Has(d.First) {
+                c.refDeep.Put(d.First, true)
+                moved = true
+            }
+        }
+        if not moved { break }
+    }
 }
 
 # a read-only copy lent writably to the "&" parameter of a function's body being fitted: recorded for the settle -
@@ -10431,16 +10490,7 @@ fn (c mut Checker&) refSettle() {
         }
         if not moved { break }
     }
-    for _ in range c.deepDeps.Len() + 1 {
-        moved := false
-        for d in c.deepDeps {
-            if c.refDeep.Has(d.Second) and not c.refDeep.Has(d.First) {
-                c.refDeep.Put(d.First, true)
-                moved = true
-            }
-        }
-        if not moved { break }
-    }
+    c.refDeepClose()
     for l in c.roLends {
         if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) { continue }
         rec := c.P.L.Diags.Error(l.At, msgs.ReadOnlyCopyLent(l.Fix))
@@ -10866,17 +10916,25 @@ fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut Vec<I64>&, seen mut 
             if c.isRef(ty) {
                 sig := c.Bodies[id].Ty
                 e := c.P.T.ResultFrom(sig, 0)
-                if e < 0 { return }
                 for k in range cl.Args.Len() {
-                    if (k == e or c.P.T.ShareOf(sig, k) == e) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
+                    if (e >= 0 and (k == e or c.P.T.ShareOf(sig, k) == e) or c.followsAt(id, k)) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
                 }
                 return
             }
             for k in range cl.Args.Len() {
-                if c.roFollows(id, k) or source.NewParams and c.builds(id) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
+                if c.roFollows(id, k) or source.NewParams and c.builds(id) and c.isRef(typeOf(cl.Args[k])) or c.followsAt(id, k) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
             }
         }
         case _ { }
+    }
+}
+
+# whether a call of body id gives a result following its argument k (load.FollowResults)
+fn (c mut Checker&) followsAt(id I64, k I64) Bool {
+    if not source.NewParams or c.P.L.FollowResults.Len() == 0: return false
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): c.P.L.FollowResults.Has($inst ":" $k)
+        case _: false
     }
 }
 
@@ -10993,7 +11051,20 @@ fn (c mut Checker&) roDeepNeed(x typed.Expr?&) {
     t := typeOf(x)
     if c.isRef(t) { t = c.P.T.Referent(t) }
     if not c.namedHolds(t) { return }
+    # (lent to a function's "&" parameter: judged once that parameter's deep use is settled, round 2c)
+    if source.NewParams and c.argRef and c.argBody >= 0 and c.isFnBody(c.argBody) {
+        c.roDeepLends.Push(roDeepArg(c.fr().Body, x, c.argBody, c.argK))
+        return
+    }
     c.roDeepNeeds.Push(pair.Pair(c.fr().Body, x))
+}
+
+# whether a body is a function's or a method's (an instance of one) - no constructor, case, lambda or test
+fn (c mut Checker&) isFnBody(id I64) Bool {
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(_): true
+        case _: false
+    }
 }
 
 # a by-value result of an instance's body holding writable references: the parameters it is copied out of give a call's
@@ -11015,6 +11086,12 @@ fn (c mut Checker&) roSettleResults(id I64) {
 # what instance bodies keep writable of their read-only reference parameters, now every value given a local is known;
 # and the arguments that rest on them
 fn (c mut Checker&) roSettleDeep() {
+    if source.NewParams {
+        c.refDeepClose()
+        for l in c.roDeepLends {
+            if c.refDeep.Has(pair.Pair(l.Callee, l.Param)) { c.roDeepNeeds.Push(pair.Pair(l.Body, l.X)) }
+        }
+    }
     for n in c.roDeepNeeds {
         ps := Vec<I64>()
         c.roDeep(n.First, n.Second, ps)
@@ -17853,9 +17930,12 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     if op == token.Tok.Assign {
         lmark := c.levelsOf(c.levelRoot(p))     # 2.8: a read-only value stored into a level of its local's type
         wasLocal := c.localStore
+        wasParam := c.storeParam
         c.localStore = c.ownLocal(c.levelRoot(p))
+        c.storeParam = c.ownFieldParam(p)
         c.storeInto(sp, p, value, osp, target)
         c.localStore = wasLocal
+        c.storeParam = wasParam
         c.levelOn.Truncate(lmark)
         return
     }
@@ -19752,11 +19832,9 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
         case _ { }
     }
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
-    # (a "&" parameter walked: its Next writes what the copy names - the parameter used as one, D9d)
-    if source.NewParams {
-        c.refUseX(src)
-        c.refDeepX(src)
-    }
+    # (a "&" parameter walked: its Next writes what the copy names - the parameter used as one, D9d - deeply as far as
+    # that Next uses its receiver deeply, round 2c)
+    if source.NewParams { c.refUseX(src) }
     k I64 = -1
     if f.Key != source.NameId(0) {
         k = c.hidden(sp, c.i64())
@@ -19767,6 +19845,7 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
     c.fr().loops.Push(id)
     c.fr().exits.Push(id)
     call := c.loopCall(sp, next, c.readLocal(sp, it), Array<typed.Expr&>(0))
+    if source.NewParams { c.walkDeep(src, call) }
     v := c.exhaustedOrBreak(sp, call, id)
     c.elementLocals(sp, f, k, v)
     c.walkBody(f, cm, ce)
@@ -19774,6 +19853,22 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
     try c.fr().exits.Pop() catch { }
     b := c.close(id, outer, mark, from)
     c.emit(typed.Stmt.Loop(sp, b, c.countPost(sp, k)))
+}
+
+# a "&" parameter walked as itself (a reference to an iterator) is used deeply where the walk's Next uses its receiver
+# deeply (deepDeps); one whose reach is walked, or walked through a call not of a known body, deeply at once
+fn (c mut Checker&) walkDeep(src typed.Expr&, call typed.Expr&) {
+    j := c.refParamOfX(src)
+    if j < 0: return
+    callee := match call {
+        case typed.Expr.Call(_, _, cl): c.bodyOfCallee(cl.Target)
+        case _: -1
+    }
+    if callee >= 0 and c.isParamRead(src) and c.isRef(typeOf(src)) and c.isFnBody(callee) {
+        c.deepDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(callee, 0)))
+        return
+    }
+    c.refDeep.Put(pair.Pair(c.fr().Body, j), true)
 }
 
 # D18e: whether x is a direct call of a generator function - its Generator made right where the walk is, which the
@@ -20373,7 +20468,11 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         # (a value holding writable references handed back from what a "&" parameter reaches: kept - D9d)
         if source.NewParams and not c.isRef(rt) and c.holdsWritable(rt) {
             c.refUseX(x)
+            c.retInst = c.narrowable()
+            c.handing = true
             c.refDeepX(x)
+            c.handing = false
+            c.retInst = -1
         }
         c.emit(typed.Stmt.Return(sp, x))
         return
@@ -20406,7 +20505,9 @@ fn (c mut Checker&) returned(v ast.Expr&, rt types.TypeId) typed.Expr&c {
     e := c.expr(v, rt)
     c.retInst = c.narrowable()
     c.retLambda = source.NewParams and c.fr().resultSites.Len() > 0
+    c.handing = true
     x := c.fit(e, rt, c.argSpan(v))
+    c.handing = false
     c.retInst = -1
     c.retLambda = false
     return x
@@ -20497,6 +20598,9 @@ fn (c mut Checker&) followedResult(target typed.Callee&, args Array<typed.Expr&>
         if not c.P.L.FollowResults.Has($i ":" $k): continue
         ro := c.roRef(a) if c.isRef(typeOf(a)) else c.roValue(a)
         if not ro: continue
+        # (a reference handed back from what a "&" parameter reaches: read-only itself, round 2c)
+        ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
+        if c.isRef(r) and k < ps.Len() and c.isRef(ps[k]) and c.writable(ps[k]): return c.P.ReadOnlyAll(r)
         if c.isRef(r): return c.P.T.Ref(c.P.ReadOnlyAll(c.P.T.Referent(r)), c.P.T.PermOf(r))
         return c.P.ReadOnlyAll(r)
     }
