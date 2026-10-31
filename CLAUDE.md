@@ -1321,6 +1321,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   - 15: every function `nounwind` (nothing unwinds; no unwind tables - regex's binary -4%); a baked global's initializer is never written, nor
     the unused `olang.init.MODULE`; a mutable global whose initializer the evaluator computes to plain data is baked as its
     writable storage's first value (std/time's counters) - nothing at startup. 128-bit division by a constant not built.
+  - 9: a text local copied from a literal, homed in its own block, gets a stack slot (`lower.slotCopy`), not arena storage.
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).

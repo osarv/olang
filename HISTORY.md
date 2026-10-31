@@ -26623,3 +26623,14 @@ multiplies by a magic number at 64 bits. Doing it in emit means a 256-bit multip
 at x86-64-v3, measured on hand IR against `__divti3`'s small-divisor path) and the magic number of a 128-bit divisor
 computed in the compiler with 256-bit arithmetic it does not have; the survey called it rare, and the gain on its probe
 (27.5 against 10.3 Ir an element) is mostly the multiply's. Left for when 128-bit code matters (FPGA, hashing).
+
+**9. A text local from a literal in a stack slot.** `t := "abcdef"` copied the literal into its block's arena every
+turn - an allocation and a copy - where `I64[1, 2, 3, 4]` is fixed storage in registers. Lowering now gives such a
+local's copy a stack slot instead (`lower.slotCopy`): a hidden fixed array of the literal's length in the frame, the
+literal's bytes copied in, the local the pair naming it, as a fixed array a reference names is (T7c). Only where the
+scope pass moved the local nowhere (its home its declaring block, so nothing reaches its storage past that block, which
+a slot reused each turn outlives) and the literal holds at most 256 bytes; a local the program writes is written in its
+slot, and one it never writes LLVM replaces with the constant itself (memory only ever copied from a constant). MIR
+gains nothing new, so the evaluator and `interpret` run it as before. bench/repro/text_local_copy 100000: 7.6M -> 0.3M
+Ir. tests/textslot.olang writes, slices, lends writably, assigns whole and keeps (into a `Vec<String&>`, which the scope
+pass homes elsewhere) such locals, built, `-quick`, `-debug` and `-sanitize`, beside a baked global of the same function.
