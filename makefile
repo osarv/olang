@@ -360,6 +360,24 @@ verify-infer: $(OLANG)
 	cmp build/olang.infer build/olang.infer2
 	@echo "verify-infer: the suite and the self-build pass under OLANG_SCOPES=infer"
 
+# the rework's round 2 (docs/rework.md sections 10-11): std copied into build/params, migrated there by
+# tools/param_migrate.olang (its text, driven and finish phases under the switches), then every test file of std, the
+# prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer. Not part of verify: std is
+# 34 of its 40 test files there (2026-10-31) - the rest wait for 2.8's per-field permission bindings
+PARAMS_DIR = build/params
+PARAMS_TESTS = $(shell grep -l '^test ' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang)
+PARAMS_RUNS = $(addprefix params@,$(PARAMS_TESTS))
+PARAMS_ENV = OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
+verify-params: $(OLANG)
+	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR) && cp -r std $(PARAMS_DIR)/std
+	$(OLANG) build -output $(PARAMS_DIR)/param_migrate tools/param_migrate.olang
+	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) -j $(PARALLEL) std
+	@rm -f build/failed.txt
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
+	@echo "verify-params: std's tests pass on its migrated copy under the switches"
+$(PARAMS_RUNS): params@%: FORCE
+	@cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) test $* || echo "$*" >> $(CURDIR)/build/failed.txt
+
 # the edit-test loop: the same suite as verify on what is already built - build/olang rebuilt by itself when a source
 # of it is newer (one build, the objects and build/rec it left reused), bootstrapped only when there is none. What it
 # leaves out is what only verify checks: a clean build/, the bootstrap from the seed, and the compiler rebuilding itself

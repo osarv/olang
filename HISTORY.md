@@ -27197,3 +27197,56 @@ the next, so a program checked twice reported every named test twice (`check.res
 names resolving `wk.G = v`'s module alias as a value once D9f's walk looked inside targets; Trim made to give a value
 copied in the turn (an early decision of this round) broke checks.olang, which keeps trimmed text in a longer-lived
 map - reverted until the flip.
+
+## The rework, round 2b: permission levels inferred, behind the switches (2026-10-31)
+
+Round 2a (above) ended on one missing piece: a fresh container could not hold read-only references, since every written
+`&` reads writable and T25c's read-only copy is all of a value. Round 2b built 2.8's inferred levels (docs/rework.md
+section 11 has the detail and the numbers), still behind `OLANG_PARAMS=new`, measured with round 1's
+`OLANG_SCOPES=infer` beside it. std went from 19 to 34 of its 40 test files under the switches (`make verify-params`).
+
+**Keyed by where the `&` is written, decided by checking again.** A level is a permission variable named by its
+written position (module and offset - `load.RoLevels`). The checker records a position read-only where a read-only
+value meets it - the refusal it would otherwise say is the cue: a store into a local's level (an initializer, a call on
+or given the local, an assignment), with the local's written levels, its own type's below the top and its
+initializer's constructor's, active while the store is checked - and the program is checked again, as for entry copies
+and R1a's sets. Keying by position, not by type, kept it exact (two `Vec<String&>` locals are two variables) and needed
+no override of the type table. Results narrow by patching the instance's signature (`generic.NarrowResult`): instances
+outlive the checker's attempts, so the narrowing is the record. A first try narrowed a result to read-only at every
+level wherever the body handed back what a bare parameter reaches; std/list's `chunk` - an old `mut Array<T>&s` result
+from a read-only receiver, a writable view used by every writer of the list - then silently became read-only, and the
+writers failed far away. Since old code said "writable result" with `mut`, the tool now keeps a result's `mut` through
+its driven phase (and drops it after), the checker keeps such a result's top writable, and the error at the bare
+receiver makes it `&`. Old shallow permission (a read-only receiver handing out a writable view of what its fields
+hold) is no deep read-only bare parameter's; `listState.chunkIn` is the read-only form a walk now reads.
+
+**Following, generalized.** T25c's generic rule made a by-value result of an instance as read-only as its argument;
+copied into a container the body made (Deque.ToArray, Map.Clone) the elements were refused. Now such a store into a
+local of the body is held as given and the result follows the parameter (`load.FollowResults`): a call giving it a
+read-only argument gets the result read-only below its top. The same reading lets an instance hand back a by-value
+type-variable parameter (`attrGot`) with no writable argument asked.
+
+**Found and fixed on the way:**
+- A function type meant two things (introduced in round 2a): `fn(a T, b T) Bool` resolved in an instance's context
+  bound `T` to a struct and passed it by pointer, while the generic's substitution passed it by value - std/heap's
+  `less` reached its state's constructor with the other ABI, which only the MIR verifier caught. A type variable's
+  parameter now stays by value in every context (`generic.namesVar`), and a lambda holds a bare parameter as its
+  expected type does.
+- An attribute read gave an unknown type with no error once G39's refusal was lifted alone (`attrRead` returned an
+  unknown for a type holding writable references, counting on the refusal) - a silent gap that only lowering noticed.
+- D9d took a `&` parameter walked by a for-in (its Next writes what the walk's copy names) and one captured and written
+  through in a lambda for unused, and a bare parameter that met a trait's `&Name()` for no method at all.
+- The diagnostics behind several refusals named no parameter (a walk's hidden copy, an entry copy, a capture, a
+  deferred lend, a kept reference, an atomic), so the migration tool could not fix them; each now notes the bare one.
+- An extern's C import read `const void *` as writable under the switch (every written `&` writable): a C import
+  keeps C's `const` (X17).
+
+**G29 by the body.** Round 2a passed every bare array by pointer (no instance per length); the coordinator's decision
+for 2b was to keep instances where the body decides on the length. Read from the text (`LengthDecided`), and never
+where the result may hold references - the first version made std's `Windows` a by-value instance and its views of the
+copy died at the return.
+
+**Left** (docs/rework.md 11.3-11.5): read-only nullable parameters have no spelling (283 in compiler/); permission
+bindings per field (an iterator over read-only data is a read-only copy whole) - the class of the 7 std files left;
+the result rule (a view of a bare parameter handed back is read-only here, where QCC said an error naming the value
+result - waiting for the by-pointer handover); compiler/ not migrated; no flip.

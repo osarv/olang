@@ -145,6 +145,7 @@ fn (w mut walker&) walk() {
             case token.Tok.RParen, token.Tok.RBrack, token.Tok.RBrace { if w.stack.Len() > 0: w.stack.Pop()! }
             case token.Tok.Mut { w.onMut(i) }
             case token.Tok.Fn { w.onFn(i) }
+            case token.Tok.Iden { w.onTraitMethod(i) }
             case _ { }
         }
         i++
@@ -204,6 +205,18 @@ fn (w mut walker&) onFn(i I64) {
         w.params(p, pc, w.markerNames(p), ext)
         w.markResult(pc)
     }
+}
+
+# a trait's method, "Name(params) result" in its body (no "fn" there): its parameters as a function's are
+fn (w mut walker&) onTraitMethod(i I64) {
+    if not w.inTrait() or w.kind(i + 1) != token.Tok.LParen: return
+    k := w.kind(i - 1)
+    if not (w.stmtStart(i) or (k == token.Tok.Mut or k == token.Tok.Amp) and w.stmtStart(i - 1)): return
+    c := w.closer(i + 1)
+    if c < 0: return
+    names Vec<String&>
+    w.params(i + 1, c, names, false)
+    w.markResult(c)
 }
 
 # a "mut" right after a parameter list's close: its result's top (onMut)
@@ -356,6 +369,7 @@ test TextPhase "drops mut, makes read-only parameters bare" {
     assert TextPhase("fn first(l List&) Node&l { }\n") == "fn first(l List) Node&l { }\n"
     assert TextPhase("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N) { }\n"
     assert TextPhase("type It trait {\n    mut Next() I64 ? Exhausted\n    Peek() I64\n}\n") == "type It trait {\n    &Next() I64 ? Exhausted\n    Peek() I64\n}\n"
+    assert TextPhase("type L<T> trait { Less(o T&) Bool }\n") == "type L<T> trait { Less(o T) Bool }\n"
     assert TextPhase("fn f(g fn(x T&) I64, h any Shape&) { }\n") == "fn f(g fn(x T) I64, h any Shape&) { }\n"
     assert TextPhase("extern { fn w(fd I32, b Array<U8>&, p Point&) I64 }\n") == "extern { fn w(fd I32, b Array<U8>, p Point&) I64 }\n"
     assert TextPhase("fn f() { xs.Map(fn(a T&) I64 { return 1 }) }\n") == "fn f() { xs.Map(fn(a T) I64 { return 1 }) }\n"

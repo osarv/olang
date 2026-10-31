@@ -1114,3 +1114,119 @@ reading; under round 1's switch alone they are as section 9 left them), the scop
   `ToArray` - a by-hand D9d left by the tool).
 - Check time, std/prelude/tests/text.olang: 28 ms without the switch, 102 ms with it (the extra attempt the copy on
   entry asks for, and D9d's settling).
+
+## 11. Round 2b: inferred permission levels, as far as built
+
+Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and measured together with round 1's
+`OLANG_SCOPES=infer`, 11.2's first decision); without them the compiler checks as before (11.6). Not flipped: std is
+34 of its 40 test files under the switches (11.4), compiler/ not migrated (11.5).
+
+### 11.1 What was built
+
+- **A body's written levels, inferred** (2.8's inferred levels, the piece 10.6 named). Every reference level written in
+  a body below a declaration's top - a local's declared type, a constructor's or a case's type arguments, an array
+  literal's or a comprehension's element type, a constructor's fill or arguments made there - is a permission variable
+  keyed by where its `&` is written (`load.RoLevels`, module and offset; `check.levelSites`, `initSites`). A store
+  reaching a local's level - an initializer, a call on it or given it (receiver and arguments), an assignment into it -
+  that meets a read-only value records the level read-only (`levelRo`, from the refusals that would otherwise be said:
+  T25c's "read-only here", a generic's kept reference, `roRefArgs`), and the program is checked again, as entry copies
+  and R1a's sets are (`copiesGrew`). Then `generic.writtenPerm` reads that `&` read-only there. One level, one record: the
+  rounds end.
+- **Results narrowed** (2.8's results). A function's instance returning a value read-only at a level where its result is
+  not has its result made so (`generic.NarrowResult`, `MeetPerm`: the instance's signature, and a plain function's
+  `fnSig`, patched - instances outlive attempts), at every level where the value is a view of what a bare parameter
+  reaches (`ReadOnlyAll`). A result written `mut` keeps its top writable - unmigrated source, read only during the
+  migration (`mutResult`), so `chunk(k) mut Array<T>&s` reports its bare `s` and the tool makes it `&`.
+- **Fewer writable levels fit** (`check.permFit`): a fresh value (`freshValue`: a Make, a Collect, a constructor's or
+  case's call) where its type is wanted read-only at some level; a reference whose top is read-only at levels as
+  read-only as its own or more (nothing is stored through its top); an argument for a bare parameter - by pointer, or
+  held by value for G29 - whatever its levels; a fixed array widened to a run-time length first. The value is the same:
+  `PrimOp.Convert` between such types lowers as a copy of the operand (`lower`, only where the types differ by
+  permission alone).
+- **Results following their arguments** (T25c's generic rule, generalized): in an instance, a value read through a bare
+  parameter that follows its argument (`roByArg`), stored into a local the body made (`localStore`, `ownLocal`), is held
+  as given and the instance's result follows that parameter (`load.FollowResults`): a call giving it a read-only argument
+  gets the result read-only at every level below its top (`followedResult`). So `Deque.ToArray`, `Map.Clone` of a
+  writable map and the walks copy a bare receiver's elements out as writable as the caller's. An instance's value result
+  copied out of a by-value type-variable parameter follows likewise (roResult), with no writable argument asked.
+- **Bare parameters across the type system.** A type variable's parameter stays by value in every context
+  (`generic.namesVar`: resolving `fn(a T, b T) Bool` in an instance's context bound `T` to a struct and passed it by
+  pointer, while the generic's substitution passed it by value - one function type with two representations, which the
+  MIR verifier caught in std/heap); a lambda holds a bare parameter as its expected type does; a bare by-pointer
+  parameter meets a trait's parameter of its type at any permission (`sameUpToShape`), and a bare receiver meets a
+  trait's `&Name()` (`meets`: a method that writes nothing meets one that may).
+- **G29 by the body** (11.2's second decision). A bare array is passed by pointer, but where the body decides something
+  on its length (`generic.LengthDecided`, read from the body's text: `p.Len()` in an `if`'s, an `assert`'s or a
+  `match`'s line, after a conditional's or guard's `if`, in a `comptime`, as an array's length) and the result holds no
+  reference: then it is held by value, one instance per length, and what the body decides on the length is decided while
+  compiling per instance (G30, S18c). A run-time length is that instance's run-time-length binding.
+- **C imports keep const** (X17): a C import's declarations read `&` without `mut` as read-only (`writtenPerm`), so
+  `write(fd, buf, n)` takes a read-only buffer again.
+- **Diagnostics name the bare parameter behind a refusal** (`NoteBareParam`) where it was missing: behind a walk's hidden
+  copy, an entry copy, a capture in a lambda (`noteOuterBare`), a deferred lend (`roLendRec`), a kept reference
+  (`roArg`), an atomic operation (P9) - so the tool's driven phase makes the right parameter `&`.
+- **D9d's uses**: a walked `&` parameter (its Next writes what the walk's copy names), a capture of one written through
+  in a lambda (`refUseOuter`), a value holding writable references handed back from what one reaches.
+- **Attributes holding references** (G39): under the switch every written `&` may be written, so the attribute's type is
+  no longer refused for one - the read is a read-only copy of constant data (an attribute read gave an unknown type with
+  no error, a silent gap, when the refusal was lifted alone; `attrRead` reads it now).
+- **`tools/param_migrate.olang`**: a read-only parameter named by a scope marker, or written with one (`b N&a`), is made
+  bare too - scopes are inferred, so the marker no longer pins a reference; a `mut` at a result's top is kept through the
+  driven phase and dropped by a finish phase (`FinishPhase`).
+- **std**: `listState.chunkIn`, the read-only form of `chunk` a walk reads (old code handed a writable view out of a
+  read-only receiver - shallow permission - which deep read-only bare parameters cannot).
+
+### 11.2 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **Round 2 is developed and flipped together with round 1's inferred scopes.** A bare parameter named by a scope
+   marker (`Split(t String) Array<String&>&t`) is what views of a bare parameter need, and only inferred scopes read it.
+2. **G29 per-length instances only where the body decides on the length** (the coordinator's decision for this round),
+   read from the text, and only where the result holds no reference.
+3. **A result handing back a view of what a bare parameter reaches is read-only**, at every level, rather than an error
+   naming the value result (QCC's "a `T&` result hands back only storage reached through a `&` parameter, a global or a
+   shared field"): without the "handed over by pointer" value results (not built), every getter (`Trim`, `Dir`, `View`,
+   `RunFrom`, json's `At` - 25 in std, 279 in compiler/) would copy. It is today's borrowed result, the old code's
+   meaning; the top-level rule waits for the handover. Direction question 1 in the report.
+4. **A body's written inner levels are inferred even where a type is written** (`pieces Array<String&> = ...`): 2.8 had
+   a written local type fix writable levels; inferring them is what lets old code migrate as written. Writes through a
+   level so made read-only are refused where they are written, so nothing becomes writable that was not.
+5. **A nullable parameter (`p T?&`) is left as written** (writable under the switch): 283 such parameters in
+   compiler/, none written `mut`; read-only nullable parameters have no spelling under QCC. Open point 6 below.
+
+### 11.3 Open points added
+
+6. **Read-only nullable parameters.** Old `p Lvalue?&` (read-only, may be null) has no new spelling: `?&` is writable,
+   and read-only is said by a value, which has no null. Options: (a) a `?&` parameter's permission inferred from its
+   body (read-only where it writes nothing through it) and shown by doc/explain/hover; (b) a bare `p T?` - a value that
+   may be absent, passed by pointer, for parameters only. Recommended (a): no new spelling, the source unchanged.
+7. **Permission bindings** (2.8's per-field form). An instance a constructor makes from read-only arguments is a
+   read-only copy whole (Rule P), so an iterator over read-only data (`ArrayIter`, `MapIter`, regex's `Match` and
+   searcher) cannot be returned as a writable value or advanced by a method writing more than its plain fields. 2.8's
+   design - each reference field bound where the instance is made, carried with it, methods allowed where they write
+   nothing through a read-only-bound field - is what the 7 std files left need (11.4).
+
+### 11.4 std under the switches
+
+The cycle: std copied, `param_migrate` run over it (text phase, driven phase, finish phase), then every std, prelude and
+prelude-test file tested under `OLANG_PARAMS=new OLANG_SCOPES=infer`:
+
+| | round 2a (10.4) | round 2b |
+|---|---|---|
+| test files compiling and passing | 19 of 40 | 34 of 40 |
+| distinct errors left | ~190 | 22 |
+
+Left (`make verify-params` runs this cycle): std/regex (its searcher and `Match` built from read-only text - 11.3 point 7), std/set and the Map test (`Str`
+walking a bare receiver through a read-only copy of its iterator), std/prop and the iterator test (an `ArrayIter` over a
+captured array returned from a lambda; `Reversed()` lent read-only), std/order (`ByFields` as a function value: a
+parameter of it is taken to need a writable argument), and Map.Clone's slot made from a read-only entry - all point 7's
+class but ByFields.
+
+### 11.5 compiler/ under the switches
+
+Not migrated this round: the 283 read-only nullable parameters (point 6) and point 7's class come first; the tool's text
+phase alone was measured in 10.5.
+
+### 11.6 Today's path
+
+Without the switches the compiler checks as before; every change is behind `source.NewParams` but std/list's `chunkIn`
+(the same meaning in both) and the tool.

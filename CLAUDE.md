@@ -407,8 +407,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter nothing reads afterwards is an error naming `p T&` (the forgotten `&`). A stored reference cannot be
   declared read-only (accepted; revisit if code wants it). **Begun behind `OLANG_PARAMS=new`** (2026-10-31, `wt-rework`,
   docs/rework.md section 10): a bare struct or array is passed as a read-only reference written bare (a copy on entry
-  where its body writes it), D9d-D9f, `&Name()` in traits, `tools/param_migrate.olang`; std 19 of 40 test files under it,
-  compiler/ not migrated - per-level permission (2.8's inferred levels) is the piece left before the flip. The entry
+  where its body writes it), D9d-D9f, `&Name()` in traits, `tools/param_migrate.olang`; **round 2b** (docs/rework.md
+  section 11): a body's written reference levels inferred (read-only where a read-only value is stored into one,
+  `load.RoLevels`), results narrowed or following their arguments, G29 instances only where a body decides on a
+  length - std 34 of 40 test files under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`), compiler/ not migrated; left before the
+  flip: read-only nullable parameters, per-field permission bindings (2.8), the by-pointer value results. The entry
   below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
