@@ -75,23 +75,23 @@ fn rowOf(c change&) String {
 # the directory a side's tree is at: the directory named, or a commit's tree written into at
 fn side(name String&, at String&, d mut diag.Diagnostics&) String ? Unread {
     if os.IsDir(name) { return $name }
-    commit := try git(String&["git", "rev-parse", "--verify", "--quiet", $name "^{commit}"])
+    commit := try git("git", "rev-parse", "--verify", "--quiet", $name "^{commit}")
     if commit == "" {
         d.Error(diag.Where.Nowhere, msgs.ApiNoSide(name))
         error Unread.Side
     }
-    top := try git(String&["git", "rev-parse", "--show-toplevel"])
-    prefix := try git(String&["git", "rev-parse", "--show-prefix"])
+    top := try git("git", "rev-parse", "--show-toplevel")
+    prefix := try git("git", "rev-parse", "--show-prefix")
     try os.MkDirAll(at) catch os.Error { error Unread.Side }
     tar := $at ".tar"
-    try git(String&["git", "-C", top, "archive", "--format=tar", "-o", tar, commit])
-    try git(String&["tar", "-xf", tar, "-C", at])
+    try git("git", "-C", top, "archive", "--format=tar", "-o", tar, commit)
+    try git("tar", "-xf", tar, "-C", at)
     return filepath.Join(at, prefix)
 }
 
 # what a command writes, its last line break taken off; "" where it fails
-fn git(args Array<String&>&) String ? Unread {
-    o := try os.Exec(args) catch os.Error { error Unread.Side }
+fn git(args ...String&) String ? Unread {
+    o := try os.Exec(...args) catch os.Error { error Unread.Side }
     if o.Status != 0 { return "" }
     return $o.Stdout.TrimEnd()
 }
