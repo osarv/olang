@@ -2097,3 +2097,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   covers handles too. ASKED: (a) the narrow key check (reference and handle keys compared by contents refused), (b)
   `immut` on type declarations (deep; Map/Set keys must be immut or plain values), (c) (b) with String immutable
   (shared text without copies; in-place edits move to Array<Char>/Vec<Char>/StringBuilder). In effect: none.
+- QCH ASKED 2026-10-31 (the user: "We could make one := for 'this as a value' and :=& for 'this as a reference'?"):
+  `x := e` always gives x a value of its own (e's referent copied out when e is a reference - the copy written where
+  it is declared), `x :=& e` gives a reference to e's instance (an lvalue or a reference borrowed, a call's result
+  built where x lives). Fits QCC (`&` written where a value is held shared - a local is such a place); today's
+  typed form (`x T& = e`, `x T = ref`) already makes the choice, `:=&` is its short form. Costs: handles (Vec, Map,
+  List) still share on `:=` (their value is the handle; `.Clone()` copies); a migration tool rewrites every `:=` whose
+  initializer is a reference to `:=&` so no meaning changes; destructor types (reference-only) take `:=&` only.
+  Rec: yes, with QCC in the held rework. In effect: `:=` takes e's type.
