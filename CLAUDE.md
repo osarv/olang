@@ -420,7 +420,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   mine), a nullable parameter written through what it reaches made writable and one only handed back followed (its
   result read-only where its argument is); fixed on the way: a permission conversion and `x!` had hidden a bare
   parameter's view (a writable instance over the caller's text, a choice writing the caller's node), the evaluator read
-  an aggregate converted to itself as a zero; compiler/'s migrated root down to 347 distinct errors, most of them
+  an aggregate converted to itself as a zero; compiler/'s migrated root down to 326 distinct errors, most of them
   readers handing back a view of a `&` parameter given bare data - the by-pointer value results' job. Left before
   the flip: compiler/'s migration finished, the by-pointer value results, the scope phase's field loop. The entry
   below is today's rule until it lands.
