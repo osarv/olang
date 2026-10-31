@@ -2055,6 +2055,21 @@ fn (fe mut fnEm&) let(text String&) String {
 
 fn (fe mut fnEm&) load(ty String&, at String&, tag String& = "") String { return fe.let("load " $ty ", ptr " $at $tag) }
 
+# an enum's tag load's range: one of its n cases
+fn (fe fnEm&) tagRange(w String&, n I64) String { return "" if n < 1 else $", !range !{" $w " 0, " $w " " $n "}" }
+
+# a value of type ty, loaded as LLVM type lt: where it is an enum with no payload - its tag alone - the range of its
+# cases (tagRange), so a match on it needs no test for a case it does not have
+fn (fe mut fnEm&) caseRange(ty types.TypeId, lt String&) String {
+    if lt != "i32" { return "" }
+    t := fe.E.T
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k != types.Kind.Named and k != types.Kind.AnonEnum { return "" }
+    if k == types.Kind.Named and t.Cases(r) == types.ListId(0) { return "" }
+    return fe.tagRange("i32", t.Items(fe.casesList(r)).Len())
+}
+
 fn (fe mut fnEm&) store(ty String&, v String&, at String&, tag String& = "") { fe.w("store " $ty " " $v ", ptr " $at $tag) }
 
 fn blockName(b mir.BlockId) String { return "bb" $b }
@@ -3196,7 +3211,8 @@ fn (fe mut fnEm&) val(x mir.Operand, want types.TypeId = types.UnknownT) String 
         case mir.Operand.None { return "undef" }
         case mir.Operand.Copy(p) {
             at, ty := fe.addr(p)
-            return fe.load(fe.ty(ty), at, fe.tagAt)
+            lt := fe.ty(ty)
+            return fe.load(lt, at, $fe.tagAt $fe.caseRange(ty, lt))
         }
         case mir.Operand.Const(ty, bits) {
             k := ty
@@ -4018,9 +4034,12 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Prim(op, ty, args) { return fe.prim(op, ty, args) }
         case mir.Rvalue.Overflows(op, ty, args) { return fe.overflows(op, ty, args) }
         case mir.Rvalue.Tag(p) {
+            # the tag is one of the cases' (only a case's construction writes it), which LLVM is told (!range), so
+            # a match's compare chain needs no last test before its exhaustiveness trap and becomes a switch
             at, pty := fe.addr(p)
-            if fe.E.enumWords(pty) { return fe.load("i64", at) }
-            return fe.let("sext i32 " $fe.load("i32", at) " to i64")
+            n := t.Items(fe.casesList(t.Repr(pty))).Len()
+            if fe.E.enumWords(pty) { return fe.load("i64", at, fe.tagRange("i64", n)) }
+            return fe.let("sext i32 " $fe.load("i32", at, fe.tagRange("i32", n)) " to i64")
         }
         case mir.Rvalue.Aggregate(ty, tag, args) { return fe.aggregate(ty, tag, args) }
         case mir.Rvalue.New(s, x, ty) {

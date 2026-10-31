@@ -26647,3 +26647,11 @@ buffer, an empty comprehension, text of no bytes. A struct of no fields still ge
 `__olang_scope_alloc_a` (a reference to one compares by identity). A loop making a Vec, pushing twice and making an
 `Array<I64>(0)` each turn, 100,000 turns: 17.3M -> 16.2M Ir. SPEC E27's "an empty array with storage of its own"
 reworded.
+
+**13. A match's tag test told its range.** LLVM already turns a match's chain of tag compares into a jump table; what
+was left is the exhaustiveness trap before it (`cmp $7; ja trap` for eight cases): nothing told LLVM a tag can only be
+one of the cases. Emit now puts `!range !{i32 0, i32 N}` on every load of a payload-less enum's value (its tag alone)
+and on every tag load of an enum with payloads (`Rvalue.Tag`, i32 or a word) - a fact, since only a case's construction
+writes a tag, and an enum's zero value is its first case - so the last compare folds and the trap goes. An eight-case
+`match` over an array of 1M operations, 10 passes: 161.7M -> 141.7M Ir; dispatch's enum row (three cases with
+payloads) 21.9M -> 21.4M. No new MIR; the evaluator unchanged.

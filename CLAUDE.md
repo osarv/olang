@@ -1324,6 +1324,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
     writable storage's first value (std/time's counters) - nothing at startup. 128-bit division by a constant not built.
   - 9: a text local copied from a literal, homed in its own block, gets a stack slot (`lower.slotCopy`), not arena storage.
   - 14: an empty array's storage is `@__olang_empty_array` - no allocation (an `Array<T>(0)`, a Vec's first buffer).
+  - 13: every enum tag load carries `!range` over its cases, so a match's exhaustiveness trap folds (8-way -12%).
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
