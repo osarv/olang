@@ -2043,3 +2043,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `2 ** 9`, as in mathematics and Python); `**=` with it; a user type declaring Pow gets it. Rec: yes - formulas in data
   and AI code read as written on paper (`a ** 2 + b ** 2`), a symbol earning its place (principle 3), no new rule. QBV's
   folding of constant exponents 2 (and 3 if exact) still applies, to both spellings. In effect: `x.Pow(y)` only.
+- QBV ANSWERED 2026-10-31 (the user: "Folding the exponents where that is beneficial should be done yes ... you don't
+  need my permission for. Wrap all the exponents that you think would gain from it. Not just 2 and 3"): constant
+  exponents folded - 0, 1, 2, -1, 0.5 (Sqrt with pow's edge cases), small integers by squaring, negatives as 1 over;
+  where integer exponents 3+ differ from libm in the last bits, the evaluator computes the same multiplications and
+  SPEC states it. Added to wt-opt31. QCG (`**`) still ASKED.
