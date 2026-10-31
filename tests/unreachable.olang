@@ -8,8 +8,8 @@ fn pick(s String&, b Bool) String&s { return s if b else unreachable "never " $b
 
 fn area(sh Shape) F64 {
     return match sh {
-        case Shape.Circle(r) => r * r * 3.0
-        case Shape.Square(s) => s * s if s > 0.0 else unreachable
+        case Shape.Circle(r): r * r * 3.0
+        case Shape.Square(s): s * s if s > 0.0 else unreachable
     }
 }
 
@@ -29,9 +29,9 @@ fn twice(x I64) I64 { return x * 2 }
 
 fn sign(n I64) I64 {
     return match n {
-        case 0 => 0
-        case 1 => 1
-        nomatch => unreachable "a sign is 0 or 1"
+        case 0: 0
+        case 1: 1
+        case _: unreachable "a sign is 0 or 1"
     }
 }
 

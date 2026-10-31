@@ -7,7 +7,7 @@ fn f2(p mut Node&, q Node&, c Bool) {
     (p if c else q).v = 92
 }
 fn f3(p mut Node&, q Node&, k I32) {
-    (match k { case 1 => p  nomatch => q }).v = 93
+    (match k { case 1: p  case _: q }).v = 93
 }
 fn main() ? {
     b Node& = Node(2)

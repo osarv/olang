@@ -26,7 +26,7 @@ type Either<A, B> enum {
 # Right never holds a value: a match of Left alone is exhaustive
 fn only(e Either<I64, Nothing>) I64 {
     return match e {
-        case Either.Left(v) => v
+        case Either.Left(v): v
     }
 }
 

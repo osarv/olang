@@ -46,7 +46,7 @@ fn main() ? {
                 x := $Big(6) "m"
                 try io.Println(x)
             }
-            nomatch { }
+            case _ { }
         }
     }
     h := Holder(7)

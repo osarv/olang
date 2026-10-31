@@ -1,10 +1,10 @@
-# check: fail error[R11b]: a match on an error value giving a value gives it with '=> v' in every case
-# R11b: a value match on a caught error gives its values with "=>"
+# check: fail error[R11b]: a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement
+# R11b: a value match on a caught error is the conditional it is, so each clause gives a value
 type P error { A, B }
 fn f() I64 ? P { error P.A }
 fn main() {
     x := try f() catch e default (match e {
-        case P.A => 1
-        case P.B { return }
+        case P.A: 1
+        case P.B: return
     })
 }

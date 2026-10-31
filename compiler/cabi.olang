@@ -283,9 +283,9 @@ fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
     r := Result(t, arch, ty)
     regs := Regs(6, 8)
     ret := match r.Kind {
-        case Pass.Direct => $t.Llvm(ty)
-        case Pass.Parts => PartsType(r)
-        case _ => "void"
+        case Pass.Direct: $t.Llvm(ty)
+        case Pass.Parts: PartsType(r)
+        case _: "void"
     }
     ps := StringBuilder()
     if r.Kind == Pass.Sret {
@@ -294,11 +294,11 @@ fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
     }
     p := Param(t, arch, ty, regs)
     ps.Push(match p.Kind {
-        case Pass.Direct => $t.Llvm(ty)
-        case Pass.Parts => PartsList(p)
-        case Pass.Byval => "byval"
-        case Pass.Copy => "ptr"
-        case Pass.Sret => "?"
+        case Pass.Direct: $t.Llvm(ty)
+        case Pass.Parts: PartsList(p)
+        case Pass.Byval: "byval"
+        case Pass.Copy: "ptr"
+        case Pass.Sret: "?"
     })
     return $ret "(" $ps.ToString() ")"
 }

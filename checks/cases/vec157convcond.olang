@@ -6,7 +6,7 @@ fn pickc(k I64, a Array<Char>&) String&a {
     return String(a if k > 0 else a[0:1])
 }
 fn pickm(k I64, a Array<Char>&) String&a {
-    return String(match k { case 1 => a nomatch => a[0:1] })
+    return String(match k { case 1: a case _: a[0:1] })
 }
 fn main() ? {
     w := Array<Char>(3, 'w')

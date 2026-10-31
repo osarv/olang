@@ -1,0 +1,321 @@
+# match_migrate - S12, S12b, S13f (2026-10-27, the user's QBQ and QBR): "nomatch" is gone, the catch-all being
+# "case _"; a match used as a value gives each clause's value as "case P: v", "=>" gone from the language; a clause of
+# such a match that leaves is "case P: return x", a block there an error. So "nomatch {" becomes "case _ {", "nomatch
+# => v" "case _: v", "case P => v" "case P: v", and in a match used as a value a clause's block holding one statement
+# ("case P { return 0 }") becomes "case P: return 0"; a block of several statements there, or one holding a comment, is
+# listed for a person ("by hand:"). A match is used as a value unless "match" begins a statement. Nothing of the new
+# form is touched, so running the tool again changes nothing. Comments and string literals are left alone (programs
+# written inside strings are migrated by hand). Files are rewritten in place and a count printed; --check writes nothing
+# and the exit status says whether anything would change. A Markdown file has its "```olang" blocks migrated.
+#
+#     $OLANG build tools/match_migrate.olang && build/tools_match_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+# an edit: the source from Start to End replaced by Text
+type edit struct(Start I64, End I64, Text String&) { Start, End, Text }
+
+# what a file's migration did: its edits, and the lines left for a person
+type result struct() {
+    edits Vec<edit>
+    hand Vec<String&>
+}
+
+# a bracket open where the walk is: its kind, whether it is a match's body, and whether that match is used as a value
+type open struct(Kind token.Tok, Match Bool, Value Bool) { Kind, Match, Value }
+
+type walker struct(src String&, ts Array<token.Token>&) {
+    src
+    ts
+    stack Vec<open>
+    pending I64 = -1        # the depth a "match" was read at, until its body's "{"
+    pendingValue Bool = false
+    r result = result()
+}
+
+fn (w walker&) kind(i I64) token.Tok {
+    if i < 0 or i >= w.ts.Len(): return token.Tok.Eof
+    return w.ts[i].Kind
+}
+
+fn (w walker&) text(i I64) String&w { return w.src[I64(w.ts[i].Start):I64(w.ts[i].End)] }
+
+# whether the tokens at i and i + 1 are "=>" as the old syntax wrote it, an "=" touching a ">"
+fn (w walker&) arrowAt(i I64) Bool {
+    return w.kind(i) == token.Tok.Assign and w.kind(i + 1) == token.Tok.Gt and w.ts[i].End == w.ts[i + 1].Start
+}
+
+# whether the token at i begins a statement: first, first on its line, or after an end of one or a brace
+fn (w walker&) stmtStart(i I64) Bool {
+    k := w.kind(i - 1)
+    return i == 0 or w.ts[i].Has(token.LineBreak) or k == token.Tok.StmtEnd or k == token.Tok.LBrace or k == token.Tok.RBrace or k == token.Tok.Defer or
+           k == token.Tok.ErrDefer
+}
+
+# the innermost open bracket, if it is a match's body: whether the walk is at that match's top level
+fn (w walker&) inMatch() Bool {
+    if w.stack.Len() == 0: return false
+    top := w.stack[w.stack.Len() - 1]
+    return top.Match
+}
+
+fn (w walker&) inValueMatch() Bool {
+    if not w.inMatch(): return false
+    return w.stack[w.stack.Len() - 1].Value
+}
+
+# the bracket closing the one opened at i, or -1
+fn (w walker&) closer(i I64) I64 {
+    depth I64 = 0
+    for j in range i, w.ts.Len() {
+        k := w.kind(j)
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace: depth++
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace: depth--
+        if depth == 0: return j
+    }
+    return -1
+}
+
+fn (w mut walker&) say(i I64, what String&) {
+    w.r.hand.Push($lineOf(w.src, I64(w.ts[i].Start)) ": " $what)
+}
+
+# the line, from 1, the byte at holds
+fn lineOf(src String&, at I64) I64 {
+    n I64 = 1
+    for c in src[0:at] {
+        if c == '\n': n++
+    }
+    return n
+}
+
+# a value match's clause written as a block, its "{" at i: one statement there written after a ":" instead
+fn (w mut walker&) valueBlock(i I64) {
+    j := w.closer(i)
+    if j < 0: return
+    first := i + 1
+    last := j - 1
+    if w.kind(last) == token.Tok.StmtEnd: last--
+    if last < first {
+        w.say(i, "a clause of a match used as a value with an empty block - give it a value, 'case P: v'")
+        return
+    }
+    depth I64 = 0
+    for k in range first, last + 1 {
+        t := w.kind(k)
+        if t == token.Tok.LParen or t == token.Tok.LBrack or t == token.Tok.LBrace: depth++
+        if t == token.Tok.RParen or t == token.Tok.RBrack or t == token.Tok.RBrace: depth--
+        if depth == 0 and t == token.Tok.StmtEnd {
+            w.say(i, "a clause of a match used as a value runs a block of several statements - write it 'case P: v'")
+            return
+        }
+    }
+    fk := w.kind(first)
+    if fk == token.Tok.If or fk == token.Tok.For or fk == token.Tok.Do or fk == token.Tok.Match or fk == token.Tok.Join or
+       fk == token.Tok.Defer or fk == token.Tok.ErrDefer or fk == token.Tok.LBrace or w.kind(first + 1) == token.Tok.Define {
+        w.say(i, "a clause of a match used as a value runs a block - write it 'case P: v'")
+        return
+    }
+    s0 := I64(w.ts[first].Start)
+    s1 := I64(w.ts[last].End)
+    if w.src[I64(w.ts[i].End):s0].Contains("#") or w.src[s1:I64(w.ts[j].Start)].Contains("#") {
+        w.say(i, "a clause of a match used as a value runs a block holding a comment - write it 'case P: v'")
+        return
+    }
+    w.r.edits.Push(edit(I64(w.ts[i - 1].End), s0, ": "))
+    w.r.edits.Push(edit(s1, I64(w.ts[j].End), ""))
+}
+
+# the tokens walked once: each "match" read as a statement or a value, each bracket opened and closed, and in a
+# match's body its old forms rewritten
+fn (w mut walker&) walk() {
+    for i in range w.ts.Len() {
+        k := w.kind(i)
+        if k == token.Tok.Match {
+            w.pending = w.stack.Len()
+            w.pendingValue = not w.stmtStart(i)
+            continue
+        }
+        if w.inMatch() { w.inBody(i) }
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            m := k == token.Tok.LBrace and w.pending == w.stack.Len()
+            w.stack.Push(open(k, m, w.pendingValue and m))
+            if m: w.pending = -1
+            continue
+        }
+        if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and w.stack.Len() > 0: w.stack.Pop()!
+    }
+}
+
+# a token at a match body's top level: "nomatch", "=>" and a value match's clause block
+fn (w mut walker&) inBody(i I64) {
+    k := w.kind(i)
+    if k == token.Tok.Iden and w.text(i) == "nomatch" and (w.kind(i + 1) == token.Tok.LBrace or w.arrowAt(i + 1)) {
+        w.r.edits.Push(edit(I64(w.ts[i].Start), I64(w.ts[i].End), "case _"))
+        return
+    }
+    if w.arrowAt(i) {
+        at := I64(w.ts[i].Start)
+        prev := I64(w.ts[i - 1].End)
+        if w.src[prev:at].Contains("\n"): prev = at
+        w.r.edits.Push(edit(prev, I64(w.ts[i + 1].End), ":"))
+        return
+    }
+    if k == token.Tok.LBrace and w.pending != w.stack.Len() and w.inValueMatch() and w.clauseHeader(i): w.valueBlock(i)
+}
+
+# whether the "{" at i opens a clause's block: the clause's "case" (or "nomatch") is the first word of its statement,
+# with no bracket open between them
+fn (w walker&) clauseHeader(i I64) Bool {
+    depth I64 = 0
+    for j := i - 1, j >= 0, j-- {
+        k := w.kind(j)
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace: depth++
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            if depth == 0: return false
+            depth--
+        }
+        if depth > 0: continue
+        if k == token.Tok.StmtEnd: return false
+        if k == token.Tok.Case or (k == token.Tok.Iden and w.text(j) == "nomatch"): return true
+    }
+    return false
+}
+
+# a source's migration: the text with its edits made, and what was left for a person
+fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
+    w := walker(src, scan.Scan(src).Toks)
+    w.walk()
+    for h in w.r.hand { hand.Push($path ":" $h) }
+    if w.r.edits.Len() == 0: return src
+    es := w.r.edits
+    es.Sort(fn(a edit, b edit): return a.Start < b.Start)
+    out := StringBuilder()
+    at I64 = 0
+    for e in es {
+        if e.Start < at: continue
+        out.Push(src[at:e.Start])
+        out.Push(e.Text)
+        at = e.End
+    }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks migrated, the rest kept
+fn migrateMarkdown(src String&, hand mut Vec<String&>&, path String&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    inBlock := false
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), hand, path))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if inBlock: out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths Vec<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_match_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    hand Vec<String&>
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")): continue
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("match_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrateMarkdown(src, hand, path) if path.EndsWith(".md") else migrate(src, hand, path)
+        if out == src: continue
+        changed++
+        if verbose: srcmask.Say(path)
+        if check: continue
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("match_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    for h in hand { srcmask.Say("by hand: " $h) }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files")
+    if check and changed > 0: os.Exit(1)
+}
+
+fn mig(src String&) String {
+    hand Vec<String&>
+    return migrate(src, hand, "t")
+}
+
+test "nomatch becomes case _, => becomes :" {
+    assert mig("fn f() {\n    match x {\n        case 1 { g() }\n        nomatch { }\n    }\n}\n") == "fn f() {\n    match x {\n        case 1 { g() }\n        case _ { }\n    }\n}\n"
+    assert mig("y := match x {\n    case 1 => 2\n    nomatch => 3\n}\n") == "y := match x {\n    case 1: 2\n    case _: 3\n}\n"
+    assert mig("return match x {\n    case A.B(n) => n * 2\n    case _ => 0\n}\n") == "return match x {\n    case A.B(n): n * 2\n    case _: 0\n}\n"
+}
+
+test "a value match's one-statement block is written after a colon; several statements are listed" {
+    assert mig("y := match x {\n    case 1 => 2\n    nomatch { return 0 }\n}\n") == "y := match x {\n    case 1: 2\n    case _: return 0\n}\n"
+    assert mig("y := match x {\n    case 1 {\n        error E.X\n    }\n    nomatch => 3\n}\n") == "y := match x {\n    case 1: error E.X\n    case _: 3\n}\n"
+    hand Vec<String&>
+    src := "y := match x {\n    case 1 {\n        g()\n        return 0\n    }\n    nomatch => 3\n}\n"
+    assert migrate(src, hand, "t") == "y := match x {\n    case 1 {\n        g()\n        return 0\n    }\n    case _: 3\n}\n"
+    assert hand.Len() == 1 and hand[0].StartsWith("t:2:")
+}
+
+test "a match on one line" {
+    assert mig("x := match n { case 1 => 1 nomatch => 2 }\n") == "x := match n { case 1: 1 case _: 2 }\n"
+}
+
+test "a match giving a clause's value is no block of that clause" {
+    src := "return match x {\n    case A.B(v) => match v {\n        case 1 => true\n        nomatch => false\n    }\n    case _ => false\n}\n"
+    assert mig(src) == "return match x {\n    case A.B(v): match v {\n        case 1: true\n        case _: false\n    }\n    case _: false\n}\n"
+}
+
+test "a statement match keeps its blocks; nested matches are read on their own" {
+    src := "fn f() {\n    match x {\n        case 1 { return }\n        case _ { y := match z {\n            case 2 => 3\n            nomatch => 4\n        } }\n    }\n}\n"
+    assert mig(src) == "fn f() {\n    match x {\n        case 1 { return }\n        case _ { y := match z {\n            case 2: 3\n            case _: 4\n        } }\n    }\n}\n"
+}
+
+test "code of the new form, comments and strings are left; running it twice changes nothing" {
+    src := "y := match x {\n    case 1: 2  # was => 2\n    case _: f(\"nomatch => 1\")\n}\nnomatch := 3\n"
+    assert mig(src) == src
+    once := mig("y := match x {\n    case 1 => 2\n    nomatch { return 0 }\n}\n")
+    assert mig(once) == once
+}

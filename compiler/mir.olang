@@ -80,10 +80,10 @@ type Key enum {
 
 fn (k Key) Text() String {
     return match k {
-        case Key.Assert(b, sp) => "assert B" $b " " $sp.Start ":" $sp.End
-        case Key.Global(m, n) => "global " $m ":" $n
-        case Key.Literal(b, s) => "literal B" $b " site " $s
-        case Key.Zero(ty) => "zero T" $ty
+        case Key.Assert(b, sp): "assert B" $b " " $sp.Start ":" $sp.End
+        case Key.Global(m, n): "global " $m ":" $n
+        case Key.Literal(b, s): "literal B" $b " site " $s
+        case Key.Zero(ty): "zero T" $ty
     }
 }
 
@@ -324,18 +324,18 @@ type ExitKind enum {
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
 fn ExitText(k ExitKind) String& {
     return match k {
-        case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped => ""
-        case ExitKind.Abort => "aborted"
-        case ExitKind.Unreachable => "unreachable reached"
-        case ExitKind.NullReached => "null reached"
-        case ExitKind.NullError => "raised a null error"
-        case ExitKind.Assert => "assertion failed"
-        case ExitKind.SliceBounds => "slice bounds out of range"
-        case ExitKind.ArrayLength => "array length out of range"
-        case ExitKind.As => "'as' named what the value is not"
-        case ExitKind.FixedLength => "array length does not match its fixed storage"
-        case ExitKind.LaneLength => "lane lengths differ"
-        case ExitKind.GenRunning => "a generator asked for its next value inside its own walk"
+        case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped: ""
+        case ExitKind.Abort: "aborted"
+        case ExitKind.Unreachable: "unreachable reached"
+        case ExitKind.NullReached: "null reached"
+        case ExitKind.NullError: "raised a null error"
+        case ExitKind.Assert: "assertion failed"
+        case ExitKind.SliceBounds: "slice bounds out of range"
+        case ExitKind.ArrayLength: "array length out of range"
+        case ExitKind.As: "'as' named what the value is not"
+        case ExitKind.FixedLength: "array length does not match its fixed storage"
+        case ExitKind.LaneLength: "lane lengths differ"
+        case ExitKind.GenRunning: "a generator asked for its next value inside its own walk"
     }
 }
 
@@ -556,9 +556,9 @@ fn (f mut Fn&) AddItems(xs Array<typed.Item>&) Range {
 # a typed constant, flattened into this function's tables: its index in Consts
 fn (f mut Fn&) AddConst(c typed.Const&) I32 {
     node := match c {
-        case typed.Const.Bits(v) => ConstNode.Bits(v)
-        case typed.Const.Bytes(b) => ConstNode.Bytes(f.addBytes(b))
-        case typed.Const.Items(xs) => ConstNode.Items(f.addConstItems(xs))
+        case typed.Const.Bits(v): ConstNode.Bits(v)
+        case typed.Const.Bytes(b): ConstNode.Bytes(f.addBytes(b))
+        case typed.Const.Items(xs): ConstNode.Items(f.addConstItems(xs))
     }
     f.Consts.Push(node)
     return I32(f.Consts.Len() - 1)
@@ -585,10 +585,10 @@ fn (f mut Fn&) addConstItems(xs Array<typed.Const&>&) Range {
 fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId {
     r := t.Ref(ty, types.ReadOnly)
     return match kind {
-        case HelperKind.Render => t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
-        case HelperKind.Equal => t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
-        case HelperKind.Hash => t.Func(t.List1(r), I64T, types.ListId(0))
-        case HelperKind.Zero => t.Func(types.ListId(0), ty, types.ListId(0))
+        case HelperKind.Render: t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
+        case HelperKind.Equal: t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
+        case HelperKind.Hash: t.Func(t.List1(r), I64T, types.ListId(0))
+        case HelperKind.Zero: t.Func(types.ListId(0), ty, types.ListId(0))
     }
 }
 
@@ -599,11 +599,11 @@ I64T types.TypeId = types.TypeId(6)
 # (its builder), Equal and Hash none - and an extern's none
 fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
     return match c {
-        case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _) => 1
-        case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _) => 0
-        case Callee.Extern(_, _) => 0
-        case Callee.Dispatch(_, sl, _) if sl < 0 => 1     # $'s rendering, through the table: a Render helper's builder
-        case _ => t.ScopeVarsOf(ty).Len()
+        case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _): 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _): 0
+        case Callee.Extern(_, _): 0
+        case Callee.Dispatch(_, sl, _) if sl < 0: 1     # $'s rendering, through the table: a Render helper's builder
+        case _: t.ScopeVarsOf(ty).Len()
     }
 }
 
@@ -972,14 +972,14 @@ fn (v mut verifier&) termShape(t Term) {
 fn (v mut verifier&) succs(t Term) Array<BlockId> {
     f := v.F
     return match t {
-        case Term.Goto(b) => BlockId[b]
-        case Term.Branch(_, y, n) => BlockId[y, n]
-        case Term.Switch(_, r, o) => v.switchSuccs(r, o)
-        case Term.Call(_, c) => (BlockId[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
+        case Term.Goto(b): BlockId[b]
+        case Term.Branch(_, y, n): BlockId[y, n]
+        case Term.Switch(_, r, o): v.switchSuccs(r, o)
+        case Term.Call(_, c): (BlockId[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
                                  else BlockId[f.Calls[I64(c)].Ok, f.Calls[I64(c)].Err])
-        case Term.Wait(_, _, ok, _, failed) => BlockId[ok] if failed == NoBlock else BlockId[ok, failed]
-        case Term.Suspend(_, _, b, _) => BlockId[b]
-        case _ => BlockId[]
+        case Term.Wait(_, _, ok, _, failed): BlockId[ok] if failed == NoBlock else BlockId[ok, failed]
+        case Term.Suspend(_, _, b, _): BlockId[b]
+        case _: BlockId[]
     }
 }
 
@@ -1133,9 +1133,9 @@ fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l
 fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
     t := v.T
     ty := match p.B {
-        case Base.Local(l) => v.localType(l)
-        case Base.Global(_, _, gt) => gt
-        case Base.None => types.UnknownT
+        case Base.Local(l): v.localType(l)
+        case Base.Global(_, _, gt): gt
+        case Base.None: types.UnknownT
     }
     for i in range p.Path.N {
         if ty == types.UnknownT { return ty }
@@ -1198,9 +1198,9 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
 
 fn (v mut verifier&) operandType(x Operand) types.TypeId {
     return match x {
-        case Operand.None => types.VoidT
-        case Operand.Copy(p) => v.placeType(p)
-        case Operand.Const(ty, _), Operand.Data(ty, _, _, _) => ty
+        case Operand.None: types.VoidT
+        case Operand.Copy(p): v.placeType(p)
+        case Operand.Const(ty, _), Operand.Data(ty, _, _, _): ty
     }
 }
 
@@ -1243,12 +1243,12 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
             xt := v.operandType(x)
             r := t.Repr(xt)
             good := match how {
-                case WriteKind.Bytes, WriteKind.Quoted => v.isText(xt)
-                case WriteKind.Char, WriteKind.QuotedChar => r == types.TypeId(7)
-                case WriteKind.Int => t.IsInt(r) and not t.IsUnsigned(r)
-                case WriteKind.Uint => t.IsUnsigned(r)
-                case WriteKind.Float => t.IsFloat(r)
-                case WriteKind.Bool => r == types.BoolT
+                case WriteKind.Bytes, WriteKind.Quoted: v.isText(xt)
+                case WriteKind.Char, WriteKind.QuotedChar: r == types.TypeId(7)
+                case WriteKind.Int: t.IsInt(r) and not t.IsUnsigned(r)
+                case WriteKind.Uint: t.IsUnsigned(r)
+                case WriteKind.Float: t.IsFloat(r)
+                case WriteKind.Bool: r == types.BoolT
             }
             if not good { v.bad("a " $short($how) " write of a " $v.canon(xt)) }
         }
@@ -1296,30 +1296,30 @@ fn (v mut verifier&) isText(ty types.TypeId) Bool {
 # a scope a Write or a Text reads: a builder this function opened, or its builder variable
 fn (v mut verifier&) builder(b ScopeRef) {
     good := match b {
-        case ScopeRef.Scope(s) => v.F.Scopes[I64(s)].Kind == ScopeKind.Builder
-        case ScopeRef.Var(i) => v.F.Vars[i] == VarKind.Builder
-        case _ => false
+        case ScopeRef.Scope(s): v.F.Scopes[I64(s)].Kind == ScopeKind.Builder
+        case ScopeRef.Var(i): v.F.Vars[i] == VarKind.Builder
+        case _: false
     }
     if not good { v.bad("a text builder that is none") }
 }
 
 fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
     return match rv {
-        case Rvalue.Use(x) => v.operandType(x)
-        case Rvalue.Ref(p, ty) => v.refType(v.placeType(p), ty)
-        case Rvalue.Take(p) => v.takeType(v.placeType(p))
-        case Rvalue.Prim(op, ty, r) => v.primType(op, ty, r)
-        case Rvalue.Overflows(op, ty, r) => v.overflowsType(op, ty, r)
-        case Rvalue.Tag(p) => v.tagType(v.placeType(p))
-        case Rvalue.Aggregate(ty, tag, r) => v.aggregateType(ty, tag, r)
-        case Rvalue.New(_, x, ty) => v.refType(v.operandType(x), ty)
-        case Rvalue.NewArray(_, ty, n, fill) => v.newArrayType(ty, n, fill)
-        case Rvalue.Slice(p, lo, hi, ty) => v.sliceType(v.placeType(p), lo, hi, ty)
-        case Rvalue.Closure(_, ty, _, _, _) => v.closureType(ty)
-        case Rvalue.Recode(x, _, _) => v.intOf(v.operandType(x), I32T, "an error code")
-        case Rvalue.Text(b, _, ty) => v.textType(b, ty)
-        case Rvalue.Region(_) => I64T
-        case Rvalue.RegionOr(x, _) => v.regionOrType(v.operandType(x))
+        case Rvalue.Use(x): v.operandType(x)
+        case Rvalue.Ref(p, ty): v.refType(v.placeType(p), ty)
+        case Rvalue.Take(p): v.takeType(v.placeType(p))
+        case Rvalue.Prim(op, ty, r): v.primType(op, ty, r)
+        case Rvalue.Overflows(op, ty, r): v.overflowsType(op, ty, r)
+        case Rvalue.Tag(p): v.tagType(v.placeType(p))
+        case Rvalue.Aggregate(ty, tag, r): v.aggregateType(ty, tag, r)
+        case Rvalue.New(_, x, ty): v.refType(v.operandType(x), ty)
+        case Rvalue.NewArray(_, ty, n, fill): v.newArrayType(ty, n, fill)
+        case Rvalue.Slice(p, lo, hi, ty): v.sliceType(v.placeType(p), lo, hi, ty)
+        case Rvalue.Closure(_, ty, _, _, _): v.closureType(ty)
+        case Rvalue.Recode(x, _, _): v.intOf(v.operandType(x), I32T, "an error code")
+        case Rvalue.Text(b, _, ty): v.textType(b, ty)
+        case Rvalue.Region(_): I64T
+        case Rvalue.RegionOr(x, _): v.regionOrType(v.operandType(x))
     }
 }
 
@@ -1359,12 +1359,12 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     t := v.T
     n := I64(r.N)
     want := match op {
-        case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
-        case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance => 1
-        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap => 1
-        case typed.PrimOp.Holds => -1
-        case typed.PrimOp.AtomicCompareSwap => 3
-        case _ => 2
+        case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast: 1
+        case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance: 1
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap: 1
+        case typed.PrimOp.Holds: -1
+        case typed.PrimOp.AtomicCompareSwap: 3
+        case _: 2
     }
     if want < 0 {
         v.bad($short($op) " is a check: a test and a branch in MIR")
@@ -1484,9 +1484,9 @@ fn (v mut verifier&) sameArgs(op typed.PrimOp, r Range, ty types.TypeId) {
 fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) types.TypeId {
     t := v.T
     good := match op {
-        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div => r.N == I32(2)
-        case typed.PrimOp.Neg, typed.PrimOp.Convert => r.N == I32(1)
-        case _ => false
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div: r.N == I32(2)
+        case typed.PrimOp.Neg, typed.PrimOp.Convert: r.N == I32(1)
+        case _: false
     }
     if not good {
         v.bad("no overflow test for " $short($op) " of " $r.N " operands")
@@ -1575,9 +1575,9 @@ fn (v mut verifier&) textType(b ScopeRef, ty types.TypeId) types.TypeId {
 
 fn (v mut verifier&) calleeType(c Callee) types.TypeId {
     ty := match c {
-        case Callee.Fn(_, ty), Callee.Extern(_, ty) => ty
-        case Callee.Value(x) => v.operandType(x)
-        case Callee.Dispatch(_, _, ty) => ty
+        case Callee.Fn(_, ty), Callee.Extern(_, ty): ty
+        case Callee.Value(x): v.operandType(x)
+        case Callee.Dispatch(_, _, ty): ty
     }
     match c {
         case Callee.Dispatch(x, _, _) {
@@ -1604,8 +1604,8 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
     t := v.T
     ps := t.Items(t.Params(ty))
     isExtern := match c {
-        case Callee.Extern(_, _) => true
-        case _ => false
+        case Callee.Extern(_, _): true
+        case _: false
     }
     # X21: an extern's variable arguments after its parameters
     if ps.Len() != I64(args.N) and not (isExtern and I64(args.N) > ps.Len()) {
@@ -2154,29 +2154,29 @@ fn (w mut dumper&) list(l types.ListId) String {
 
 fn (w mut dumper&) key(k FnKey) String {
     return match k {
-        case FnKey.Body(b) => "B" $b
-        case FnKey.Adapter(b) => "adapter B" $b
-        case FnKey.Helper(kind, ty) => $short($kind) " " $w.T.Canon(ty)
-        case FnKey.Init(m) => "init " $m
-        case FnKey.AnyRender(ti, top) => "any render table " $ti $(" top" if top else "")
+        case FnKey.Body(b): "B" $b
+        case FnKey.Adapter(b): "adapter B" $b
+        case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
+        case FnKey.Init(m): "init " $m
+        case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")
     }
 }
 
 fn (w mut dumper&) varKind(k VarKind) String {
     return match k {
-        case VarKind.Param(i) => "param " $i
-        case VarKind.Capture(i) => "capture " $i
-        case _ => $short($k)
+        case VarKind.Param(i): "param " $i
+        case VarKind.Capture(i): "capture " $i
+        case _: $short($k)
     }
 }
 
 fn (w mut dumper&) ref(s ScopeRef) String {
     return match s {
-        case ScopeRef.Scope(x) => "S" $x
-        case ScopeRef.Var(i) => "V" $i
-        case ScopeRef.Program => "program"
-        case ScopeRef.Frame => "frame"
-        case ScopeRef.Held(l) => "held(L" $l ")"
+        case ScopeRef.Scope(x): "S" $x
+        case ScopeRef.Var(i): "V" $i
+        case ScopeRef.Program: "program"
+        case ScopeRef.Frame: "frame"
+        case ScopeRef.Held(l): "held(L" $l ")"
     }
 }
 
@@ -2201,18 +2201,18 @@ fn (w mut dumper&) place(p Lvalue) String {
 
 fn (w mut dumper&) operand(x Operand) String {
     return match x {
-        case Operand.None => "none"
-        case Operand.Copy(p) => "copy " $w.place(p)
-        case Operand.Const(ty, bits) => "const " $w.T.Canon(ty) " " $bits
-        case Operand.Data(ty, c, file, sp) => "data " $w.T.Canon(ty) " " $w.constant(c) " @" $file ":" $sp.Start
+        case Operand.None: "none"
+        case Operand.Copy(p): "copy " $w.place(p)
+        case Operand.Const(ty, bits): "const " $w.T.Canon(ty) " " $bits
+        case Operand.Data(ty, c, file, sp): "data " $w.T.Canon(ty) " " $w.constant(c) " @" $file ":" $sp.Start
     }
 }
 
 fn (w mut dumper&) constant(c I32) String {
     return match w.F.Consts[I64(c)] {
-        case ConstNode.Bits(v) => $v
-        case ConstNode.Bytes(r) => "text " $r.N
-        case ConstNode.Items(r) => w.constItems(r)
+        case ConstNode.Bits(v): $v
+        case ConstNode.Bytes(r): "text " $r.N
+        case ConstNode.Items(r): w.constItems(r)
     }
 }
 
@@ -2239,52 +2239,52 @@ fn (w mut dumper&) refs(r Range) String {
 fn (w mut dumper&) rvalue(rv Rvalue) String {
     t := w.T
     return match rv {
-        case Rvalue.Use(x) => w.operand(x)
-        case Rvalue.Ref(p, ty) => "ref " $w.place(p) ": " $t.Canon(ty)
-        case Rvalue.Take(p) => "take " $w.place(p)
-        case Rvalue.Prim(op, ty, r) => $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
-        case Rvalue.Overflows(op, ty, r) => "overflows " $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
-        case Rvalue.Tag(p) => "tag " $w.place(p)
-        case Rvalue.Aggregate(ty, tag, r) => "make " $t.Canon(ty) $(" #" $tag if tag > 0 else "") "(" $w.operands(r) ")"
-        case Rvalue.New(s, x, ty) => "new in " $w.ref(s) " " $w.operand(x) ": " $t.Canon(ty)
-        case Rvalue.NewArray(s, ty, n, fill) => ("newarray in " $w.ref(s) " " $t.Canon(ty) "(" $w.operand(n) ", "
+        case Rvalue.Use(x): w.operand(x)
+        case Rvalue.Ref(p, ty): "ref " $w.place(p) ": " $t.Canon(ty)
+        case Rvalue.Take(p): "take " $w.place(p)
+        case Rvalue.Prim(op, ty, r): $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
+        case Rvalue.Overflows(op, ty, r): "overflows " $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
+        case Rvalue.Tag(p): "tag " $w.place(p)
+        case Rvalue.Aggregate(ty, tag, r): "make " $t.Canon(ty) $(" #" $tag if tag > 0 else "") "(" $w.operands(r) ")"
+        case Rvalue.New(s, x, ty): "new in " $w.ref(s) " " $w.operand(x) ": " $t.Canon(ty)
+        case Rvalue.NewArray(s, ty, n, fill): ("newarray in " $w.ref(s) " " $t.Canon(ty) "(" $w.operand(n) ", "
                                                  $w.operand(fill) ")")
-        case Rvalue.Slice(p, lo, hi, ty) => ("slice " $w.place(p) "[" $w.operand(lo) " : " $w.operand(hi) "]: "
+        case Rvalue.Slice(p, lo, hi, ty): ("slice " $w.place(p) "[" $w.operand(lo) " : " $w.operand(hi) "]: "
                                              $t.Canon(ty))
-        case Rvalue.Closure(code, ty, s, r, cs) => ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) ")"
+        case Rvalue.Closure(code, ty, s, r, cs): ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) ")"
                                                     $(" captures " $w.refs(cs) if cs.N > I32(0) else "") ": " $t.Canon(ty))
-        case Rvalue.Recode(x, from, to) => "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
-        case Rvalue.Text(b, into, ty) => "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
-        case Rvalue.Region(s) => "region in " $w.ref(s)
-        case Rvalue.RegionOr(x, s) => "region of " $w.operand(x) " or " $w.ref(s)
+        case Rvalue.Recode(x, from, to): "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
+        case Rvalue.Text(b, into, ty): "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
+        case Rvalue.Region(s): "region in " $w.ref(s)
+        case Rvalue.RegionOr(x, s): "region of " $w.operand(x) " or " $w.ref(s)
     }
 }
 
 fn (w mut dumper&) stmt(s Stmt&) String {
     return match s {
-        case Stmt.Assign(_, p, rv) => $w.place(p) " = " $w.rvalue(rv)
-        case Stmt.Live(_, l) => "live L" $l
-        case Stmt.Dead(_, l) => "dead L" $l
-        case Stmt.Open(_, x) => "open S" $x
-        case Stmt.Close(_, x) => "close S" $x
-        case Stmt.Give(_, x) => "give S" $x
-        case Stmt.RegisterDtor(_, sc, ty, x) => "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
-        case Stmt.RegisterOwner(_, sc, p) => "register owner " $w.place(p) " in " $w.ref(sc)
-        case Stmt.Release(_, p) => "release " $w.place(p)
-        case Stmt.Write(_, b, how, x) => "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
-        case Stmt.CopyElems(_, d, src, n) => "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
-        case Stmt.Spawn(_, j, k) => "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
-        case Stmt.Raised(_) => "raised"
-        case Stmt.Deferred(_, x, e) => "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
+        case Stmt.Assign(_, p, rv): $w.place(p) " = " $w.rvalue(rv)
+        case Stmt.Live(_, l): "live L" $l
+        case Stmt.Dead(_, l): "dead L" $l
+        case Stmt.Open(_, x): "open S" $x
+        case Stmt.Close(_, x): "close S" $x
+        case Stmt.Give(_, x): "give S" $x
+        case Stmt.RegisterDtor(_, sc, ty, x): "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
+        case Stmt.RegisterOwner(_, sc, p): "register owner " $w.place(p) " in " $w.ref(sc)
+        case Stmt.Release(_, p): "release " $w.place(p)
+        case Stmt.Write(_, b, how, x): "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
+        case Stmt.CopyElems(_, d, src, n): "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
+        case Stmt.Spawn(_, j, k): "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
+        case Stmt.Raised(_): "raised"
+        case Stmt.Deferred(_, x, e): "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
     }
 }
 
 fn (w mut dumper&) callee(c Callee) String {
     return match c {
-        case Callee.Fn(key, _) => w.key(key)
-        case Callee.Extern(fx, _) => "extern " $fx
-        case Callee.Value(x) => "(" $w.operand(x) ")"
-        case Callee.Dispatch(x, k, _) => "dispatch#" $k " (" $w.operand(x) ")"
+        case Callee.Fn(key, _): w.key(key)
+        case Callee.Extern(fx, _): "extern " $fx
+        case Callee.Value(x): "(" $w.operand(x) ")"
+        case Callee.Dispatch(x, k, _): "dispatch#" $k " (" $w.operand(x) ")"
     }
 }
 
@@ -2313,19 +2313,19 @@ fn (w mut dumper&) task(k Task) String {
 fn (w mut dumper&) term(term Term) String {
     f := w.F
     return match term {
-        case Term.None => "(no terminator)"
-        case Term.Goto(b) => "goto bb" $b
-        case Term.Branch(c, y, n) => "branch " $w.operand(c) " bb" $y " bb" $n
-        case Term.Switch(x, r, o) => "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
-        case Term.Call(_, k) => w.call(f.Calls[I64(k)])
-        case Term.Tail(_, k) => "become " $w.call(f.Calls[I64(k)])
-        case Term.Return(_, x) => "return" $(" " $w.operand(x) if x != Operand.None else "")
-        case Term.Raise(_, x) => "raise " $w.operand(x)
-        case Term.Suspend(_, x, b, held) => "suspend " $w.operand(x) " then bb" $b " holding " $held.N
-        case Term.Wait(_, j, ok, code, failed) => ("wait S" $j " then bb" $ok
+        case Term.None: "(no terminator)"
+        case Term.Goto(b): "goto bb" $b
+        case Term.Branch(c, y, n): "branch " $w.operand(c) " bb" $y " bb" $n
+        case Term.Switch(x, r, o): "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
+        case Term.Call(_, k): w.call(f.Calls[I64(k)])
+        case Term.Tail(_, k): "become " $w.call(f.Calls[I64(k)])
+        case Term.Return(_, x): "return" $(" " $w.operand(x) if x != Operand.None else "")
+        case Term.Raise(_, x): "raise " $w.operand(x)
+        case Term.Suspend(_, x, b, held): "suspend " $w.operand(x) " then bb" $b " holding " $held.N
+        case Term.Wait(_, j, ok, code, failed): ("wait S" $j " then bb" $ok
                                                   $(" failed L" $code " bb" $failed if failed != NoBlock else ""))
-        case Term.Exit(_, kind, msg) => "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")
-        case Term.Resume(_) => "resume"
+        case Term.Exit(_, kind, msg): "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")
+        case Term.Resume(_): "resume"
     }
 }
 

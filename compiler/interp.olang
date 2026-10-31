@@ -179,7 +179,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
 fn condSaid(d diag.Diagnostics&, at diag.Where) Bool {
     match at {
         case diag.Where.Span(f, s, e) { return d.ErrorWithin(f, s, e, d.Count()) }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -483,7 +483,7 @@ fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) diag.Where, S
             }
             return use, ""
         }
-        nomatch { return use, "" }
+        case _ { return use, "" }
     }
 }
 
@@ -666,19 +666,19 @@ fn staleNotes(x mut Exec&, d mut diag.Diagnostics&, rec I64, file I64, sp source
 # why an evaluation that reached an exit aborts the program, as K1 says it (stage 0's words)
 fn AbortWhy(k mir.ExitKind) String& {
     return match k {
-        case mir.ExitKind.Unreachable => "it reaches unreachable code, which aborts the program"
-        case mir.ExitKind.NullReached => "a '!' in it meets a null, which aborts the program"
-        case mir.ExitKind.NullError => "it raises a null error, which aborts the program"
-        case mir.ExitKind.Assert => "an assertion in it fails, which aborts the program"
-        case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
-        case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"
-        case mir.ExitKind.FixedLength => "it copies an array of another length into fixed storage, which aborts the program"
-        case mir.ExitKind.LaneLength => "a lane operation in it meets arrays of different lengths, which aborts the program"
-        case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
-        case mir.ExitKind.GenRunning => "it asks a generator for its next value from inside the generator's own walk, which aborts the program"
-        case mir.ExitKind.Error => "an error reaches '!', which ends the program"
-        case mir.ExitKind.Escaped => "an error leaves the test, which ends it"
-        nomatch => "it ends the test or the process"
+        case mir.ExitKind.Unreachable: "it reaches unreachable code, which aborts the program"
+        case mir.ExitKind.NullReached: "a '!' in it meets a null, which aborts the program"
+        case mir.ExitKind.NullError: "it raises a null error, which aborts the program"
+        case mir.ExitKind.Assert: "an assertion in it fails, which aborts the program"
+        case mir.ExitKind.SliceBounds: "it slices out of range, which aborts the program"
+        case mir.ExitKind.ArrayLength: "it makes an array of a length out of range, which aborts the program"
+        case mir.ExitKind.FixedLength: "it copies an array of another length into fixed storage, which aborts the program"
+        case mir.ExitKind.LaneLength: "a lane operation in it meets arrays of different lengths, which aborts the program"
+        case mir.ExitKind.As: "an 'as' that does not hold aborts the program"
+        case mir.ExitKind.GenRunning: "it asks a generator for its next value from inside the generator's own walk, which aborts the program"
+        case mir.ExitKind.Error: "an error reaches '!', which ends the program"
+        case mir.ExitKind.Escaped: "an error leaves the test, which ends it"
+        case _: "it ends the test or the process"
     }
 }
 
@@ -850,8 +850,8 @@ fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
 fn writtenMut(v ast.VarDecl?&) Bool {
     if v is null or v.Ty is null { return false }
     return match v.Ty {
-        case ast.TypeRef.Perm(_, _, w, _) => w
-        case _ => false
+        case ast.TypeRef.Perm(_, _, w, _): w
+        case _: false
     }
 }
 

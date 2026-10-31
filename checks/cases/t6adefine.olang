@@ -6,7 +6,7 @@ fn kind<T>(v T) I32 {
     match T {
         case I32 { return 32 }
         case I64 { return 64 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() ? {

@@ -3,7 +3,7 @@
 fn f<T>(v T) I32 {
     match T {
         case I32 if v > 0 { return 1 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() ? {

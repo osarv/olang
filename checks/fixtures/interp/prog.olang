@@ -22,11 +22,11 @@ type Expr enum {
 }
 fn fold(e Expr&) Expr&e {
     return match e {
-        case Expr.Add(Expr.Lit(a), Expr.Lit(b)) => Expr.Lit(a + b)
-        case Expr.Add(a, b) => Expr.Add(fold(a), fold(b))
-        case Expr.Neg(Expr.Lit(v)) => Expr.Lit(-v)
-        case Expr.Neg(x) => Expr.Neg(fold(x))
-        nomatch => e
+        case Expr.Add(Expr.Lit(a), Expr.Lit(b)): Expr.Lit(a + b)
+        case Expr.Add(a, b): Expr.Add(fold(a), fold(b))
+        case Expr.Neg(Expr.Lit(v)): Expr.Lit(-v)
+        case Expr.Neg(x): Expr.Neg(fold(x))
+        case _: e
     }
 }
 

@@ -415,6 +415,164 @@ fn (it mut ReversedIndexIter<T, C>&) Next() T ? Exhausted {
 # what its body stores at the positions still ahead of it
 fn (c C&) Reversed<C Indexable<T>, T>() ReversedIndexIter<T, C> { return ReversedIndexIter<T, C>(c) }
 
+# ---- walks, round 3: running totals, groups and runs, duplicates, pairs taken apart, a product, the last and n-th ----
+
+# each running value of f, from init: the first f(init, x0), then f of that and x1, and so on - "it.Scan(0, fn(a, x):
+# return a + x)" gives the running sums; init itself is not given
+type ScanIter<I, T, U ? E> struct(of I, init U, f fn(acc U, x T) U ? E) {
+    it I = of
+    acc U = init
+    step fn(acc U, x T) U ? E = f
+}
+
+fn (s mut ScanIter<I, T, U ? E>&) Next() U ? E, Exhausted {
+    x := try s.it.Next()
+    s.acc = try s.step(s.acc, x)
+    return s.acc
+}
+
+fn (it mut I&) Scan<I Iterator<T ? E>, T, U ? E>(init U, f fn(acc U, x T) U ? E) ScanIter<I, T, U ? E> {
+    return ScanIter<I, T, U ? E>(it, init, f)
+}
+
+# the values grouped by their key: a new Map - in the caller's scope - from each key to a Vec of the values that have
+# it, in the order they came, the keys in the order first met; key called once per value
+fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? E) Map<K, Vec<T>>& ? E {
+    out mut Map<K, Vec<T>>&return = Map<K, Vec<T>>()
+    for x in try it {
+        k := try key(x)
+        if not out.Has(k): out.Put(k, Vec<T>())
+        g := try out.Get(k) catch MapError { continue }
+        g.Push(x)
+    }
+    return out
+}
+
+# the values in runs: each run a new Vec of consecutive values same holds for, called on each value and the one before
+# it - "for run in it.ChunkBy(fn(a, b): return b == a + 1)" walks the runs of counting numbers. A run ends where same
+# says no; each is built where its Next's result lands, so a for-in's run is reclaimed with its turn
+type ChunkByIter<I, T ? E> struct(of I, same fn(a T, b T) Bool ? E) {
+    it I = of
+    pred fn(a T, b T) Bool ? E = same
+    next Vec<T>         # the value that began the next run, read past the end of the last one (a Vec, since T may
+                        # have no zero value, D13c)
+}
+
+fn (c mut ChunkByIter<I, T ? E>&) Next() Vec<T> ? E, Exhausted {
+    run := Vec<T>()
+    if c.next.Len() > 0 {
+        run.Push(c.next[0])
+        c.next.Clear()
+    } else {
+        run.Push(try c.it.Next())
+    }
+    for {
+        x := try c.it.Next() catch Exhausted { return run }
+        if not try c.pred(run[run.Len() - 1], x) {
+            c.next.Push(x)
+            return run
+        }
+        run.Push(x)
+    }
+}
+
+fn (it mut I&) ChunkBy<I Iterator<T ? E>, T ? E>(same fn(a T, b T) Bool ? E) ChunkByIter<I, T ? E> {
+    return ChunkByIter<I, T ? E>(it, same)
+}
+
+# the values with each run of equal ones ("==", E10) given once: 1, 1, 2, 1 gives 1, 2, 1 - a value equal to one
+# further back, not the one before it, is given again
+type DedupIter<I, T ? E> struct(of I) {
+    it I = of
+    last Vec<T>         # the value given last: none before the first (a Vec, since T may have no zero value, D13c)
+}
+
+fn (d mut DedupIter<I, T ? E>&) Next() T ? E, Exhausted {
+    for {
+        x := try d.it.Next()
+        if d.last.Len() > 0 and d.last[0] == x: continue
+        d.last.Clear()
+        d.last.Push(x)
+        return x
+    }
+}
+
+fn (it mut I&) Dedup<I Iterator<T ? E>, T ? E>() DedupIter<I, T ? E> { return DedupIter<I, T ? E>(it) }
+
+# a walk of pairs (Zip's) taken apart: two new Vecs - in the caller's scope - of the first parts and of the second
+fn (it mut I&) Unzip<I Iterator<Zipped<A, B> ? E>, A, B ? E>() Vec<A>&, Vec<B>& ? E {
+    firsts mut Vec<A>&return = Vec<A>()
+    seconds mut Vec<B>&return = Vec<B>()
+    for z in try it {
+        firsts.Push(z.First)
+        seconds.Push(z.Second)
+    }
+    return firsts, seconds
+}
+
+# every value multiplied together, from 1 - wrapping as "*" does for integers (E6c); a product of none is 1
+fn (it mut I&) Product<I Iterator<T ? E>, T Number ? E>() T ? E {
+    acc T = 1
+    for x in try it { acc = acc * x }
+    return acc
+}
+
+# the last value, the walk run to its end - failing with Exhausted when there is none
+fn (it mut I&) Last<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
+    last := try it.Next()
+    for x in try it { last = x }
+    return last
+}
+
+# the value at position n, counted from 0 - the n before it read and dropped - failing with Exhausted where the walk
+# has no more than n values, and for a negative n
+fn (it mut I&) Nth<I Iterator<T ? E>, T ? E>(n I64) T ? E, Exhausted {
+    if n < 0: error Exhausted.END
+    for _ in range n { try it.Next() }
+    return try it.Next()
+}
+
+# ---- the same on a collection with positions: a Vec, or any type with At and Len (an array's own are in array.olang)
+
+# the first position whose element is not below x ("<"), in a collection sorted by "<": where x would go to keep it
+# sorted, Len() where every element is below x - a binary search, log2 n reads
+fn (c C&) LowerBound<C Indexable<T>, T>(x T) I64 {
+    lo I64 = 0
+    hi := c.Len()
+    for lo < hi {
+        mid := lo + (hi - lo) / 2
+        if c.At(mid) < x { lo = mid + 1 } else { hi = mid }
+    }
+    return lo
+}
+
+# the first position whose element is equal to x ("==", E10), in a collection sorted by "<" - a binary search, failing
+# with ArrayError.NOT_FOUND where there is none
+fn (c C&) BinarySearch<C Indexable<T>, T>(x T) I64 ? ArrayError.NOT_FOUND {
+    i := c.LowerBound(x)
+    if i < c.Len() and c.At(i) == x: return i
+    error ArrayError.NOT_FOUND
+}
+
+# a collection with positions walked from its first element to its last and round again, without end - an empty one
+# gives nothing
+type CycleIndexIter<T, C Indexable<T>> struct(of C&) {
+    c C&of = of
+    i I64 = 0
+}
+
+fn (it mut CycleIndexIter<T, C>&) Next() T ? Exhausted {
+    n := it.c.Len()
+    if n == 0: error Exhausted.END
+    if it.i >= n: it.i = 0
+    it.i++
+    return it.c.At(it.i - 1)
+}
+
+# the elements over and over: "for x in v.Cycle().Take(10)" - the position read at each step, so a walk sees what its
+# body stores
+fn (c C&) Cycle<C Indexable<T>, T>() CycleIndexIter<T, C> { return CycleIndexIter<T, C>(c) }
+
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
 
@@ -422,6 +580,12 @@ if TestBuild {
     # what the walks below fail with when a callback does
     type walkBad error {
         NO
+    }
+
+    # a count of the odd values so far, failing as walkOdd does
+    fn walkCount(n I64, x I64) I64 ? walkBad {
+        if try walkOdd(x): return n + 1
+        return n
     }
 
     fn walkOdd(x I64) Bool ? walkBad {
@@ -450,6 +614,54 @@ if TestBuild {
     test Iterator.FlatMap "the values of each value's walk, one walk after another" {
         a := I64[1, 2, 3]
         assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[x - 1:].Iter() }).ToVec().ToArray() == I64[1, 2, 3, 2, 3, 3]
+    }
+    test Iterator.Scan "each running value, from a start not given" {
+        assert I64[1, 2, 3, 4].Iter().Scan(0, fn(a, x): return a + x).ToVec().ToArray() == I64[1, 3, 6, 10]
+        assert (try I64[1, 3, 4].Iter().Scan(0, walkCount).ToVec().Len() catch walkBad default -1) == -1
+        assert (try I64[1, 2, 3].Iter().Scan(0, walkCount).ToVec().ToArray() catch walkBad default I64[]) == I64[1, 1, 2]
+    }
+    test Iterator.GroupBy "the values by their key, the keys in the order first met" {
+        g := I64[1, 2, 3, 4, 5].Iter().GroupBy(fn(x): return x % 2)
+        assert g.Len() == 2 and (try g.Get(1)).ToArray() == I64[1, 3, 5] and (try g.Get(0)).ToArray() == I64[2, 4]
+        assert (try I64[1, 3, 4].Iter().GroupBy(walkOdd).Len() catch walkBad default -1) == -1
+    }
+    test Iterator.ChunkBy "the runs a test holds for between neighbours, each a Vec" {
+        sums := Vec<I64>()
+        for run in I64[1, 2, 3, 7, 8, 4].Iter().ChunkBy(fn(a, b): return b == a + 1) { sums.Push(run.Len() * 100 + run.View().Sum()) }
+        assert sums.ToArray() == I64[306, 215, 104]
+        n := 0
+        for _ in I64[].Iter().ChunkBy(fn(a, b): return a == b) { n++ }
+        assert n == 0
+    }
+    test Iterator.Dedup "each run of equal values once" {
+        assert I64[1, 1, 2, 2, 2, 1, 3, 3].Iter().Dedup().ToVec().ToArray() == I64[1, 2, 1, 3]
+    }
+    test Iterator.Unzip "pairs taken apart" {
+        a, b := I64[1, 2, 3].Iter().Zip(String&["x", "y", "z"].Iter()).Unzip()
+        assert a.ToArray() == I64[1, 2, 3] and b.Len() == 3 and b[2] == "z"
+    }
+    test Iterator.Product "every value multiplied together" {
+        assert I64[2, 3, 4].Iter().Product() == 24 and I64[].Iter().Product() == 1 and F64[0.5, 4.0].Iter().Product() == 2.0
+    }
+    test Iterator.Last "the last value, Exhausted when there is none" {
+        assert (try I64[4, 5, 6].Iter().Last() catch default -1) == 6 and (try I64[].Iter().Last() catch Exhausted default -1) == -1
+    }
+    test Iterator.Nth "the value at a position counted from 0" {
+        it := I64[4, 5, 6].Iter()
+        assert (try it.Nth(1) catch default -1) == 5 and (try it.Nth(0) catch default -1) == 6
+        assert (try I64[4].Iter().Nth(3) catch Exhausted default -1) == -1 and (try I64[4].Iter().Nth(-1) catch default -1) == -1
+    }
+    test Indexable.BinarySearch "the position of an element of a sorted Vec" {
+        v := Vec<I64>()
+        for x in I64[1, 3, 3, 5, 8] { v.Push(x) }
+        assert (try v.BinarySearch(3) catch default -1) == 1 and (try v.BinarySearch(4) catch default -1) == -1
+        assert v.LowerBound(4) == 3 and v.LowerBound(9) == 5
+    }
+    test Indexable.Cycle "a Vec's elements over and over" {
+        v := Vec<I64>()
+        v.Push(1)
+        v.Push(2)
+        assert v.Cycle().Take(5).ToVec().ToArray() == I64[1, 2, 1, 2, 1] and Vec<I64>().Cycle().Take(2).ToVec().Len() == 0
     }
     test Indexable.Reversed "a Vec from its last element to its first" {
         v := Vec<I64>()

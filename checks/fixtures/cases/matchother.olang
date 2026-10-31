@@ -4,6 +4,6 @@ fn main() ? {
   d := lib.Dir.North
   match d {
     case lib.Other.Dir.North { }
-    nomatch { }
+    case _ { }
   }
 }

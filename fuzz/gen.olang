@@ -347,7 +347,7 @@ fn (g Gen&) matches(k I64, want I32, mode I32) Bool {
         case 25 { return isList(t) and isNum(t - 500) and not g.walked(k) and g.vmut[k] }  # a List of numbers to change
         case 26 { return g.writable(k) }                                    # an array whose elements may be written
         case 27 { return isFRef(t) }                                        # a fixed-length reference
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -903,7 +903,7 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
         b.Push("match " $g.use(e) " { ")
         all := true
         for c in range g.en[et] {
-            if g.chance(12) { b.Push("case _ if " $g.ex(TBool, d - 1) " => " $g.typed(t, d - 1) " ") }   # S13f
+            if g.chance(12) { b.Push("case _ if " $g.ex(TBool, d - 1) ": " $g.typed(t, d - 1) " ") }   # S13f
             if g.chance(20) {
                 all = false
             } else {
@@ -928,11 +928,11 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
                     all = false
                     b.Push(" if " $g.ex(TBool, d - 1))
                 }
-                b.Push(" => " $g.typed(t, d - 1) " ")
+                b.Push(": " $g.typed(t, d - 1) " ")
                 g.nv = save
             }
         }
-        if not all { b.Push($g.catchAll() " => " $g.typed(t, d - 1) " ") }
+        if not all { b.Push($g.catchAll() ": " $g.typed(t, d - 1) " ") }
         b.Push("}")
         return "(" $b.ToString() ")"
     }
@@ -954,10 +954,10 @@ fn (g mut Gen&) matchVal(t I32, d I64) String& {
             b.Push(", " $v2)
         }
         if g.chance(20) { b.Push(" if " $g.ex(TBool, d - 1)) }
-        b.Push(" => " $g.typed(t, d - 1) " ")
-        if g.chance(15) { b.Push("case _ if " $g.ex(TBool, d - 1) " => " $g.typed(t, d - 1) " ") }
+        b.Push(": " $g.typed(t, d - 1) " ")
+        if g.chance(15) { b.Push("case _ if " $g.ex(TBool, d - 1) ": " $g.typed(t, d - 1) " ") }
     }
-    b.Push($g.catchAll() " => " $g.typed(t, d - 1) " }")
+    b.Push($g.catchAll() ": " $g.typed(t, d - 1) " }")
     return "(" $b.ToString() ")"
 }
 
@@ -1447,11 +1447,8 @@ fn (g mut Gen&) arrayDecl(d I64, ind String&) String& {
     return $ind "x" $x " Array<" $Prims[t] "> = " $b.ToString() "\n"
 }
 
-# the clause taking every value left: nomatch, or an unguarded "case _" (S13f)
-fn (g mut Gen&) catchAll() String& {
-    if g.chance(50) { return "nomatch" }
-    return "case _"
-}
+# the clause taking every value left: an unguarded "case _" (S13f)
+fn (g mut Gen&) catchAll() String& { return "case _" }
 
 # a match statement on an integer
 fn (g mut Gen&) matchStmt(d I64, ind String&) String& {
@@ -2181,14 +2178,14 @@ fn (g mut Gen&) constVal(t I32, d I64) String& {
     b.Push("(match " $g.use(a) ".Len() { ")
     n I64 = 1 + g.r(3)
     for c in range n {
-        b.Push("case " $c " => ")
+        b.Push("case " $c ": ")
         if c > 0 and convertible(et, t) and g.chance(60) {
             b.Push($Prims[t] "(" $g.use(a) "[" $(c - 1) "]) ")
         } else {
             b.Push($g.typed(t, d - 1) " ")
         }
     }
-    b.Push("case _ => " $g.typed(t, d - 1) " })")
+    b.Push("case _: " $g.typed(t, d - 1) " })")
     return b.ToString()
 }
 

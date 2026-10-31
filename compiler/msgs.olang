@@ -210,6 +210,8 @@ type Diag enum {
     UnknownNumberType
     UnknownName
     UnknownNameMeant
+    TypedHole
+    TypedHoleUntyped
     TypeNotAValue
     UnknownFunction
     UnknownFunctionMeant
@@ -625,10 +627,8 @@ type Diag enum {
     AltBindingType
     CaseValueType
     PatternArity
-    ArrowInStatement
-    ArrowLeaves
+    ValueCaseBlock
     LineStartsWithOperator
-    CaseBlockStays
     GuardNotBool
     UnknownTypeVar
     TypeMatchGuard
@@ -636,7 +636,7 @@ type Diag enum {
     MatchValueNone
     MatchValueTypes
     MatchNotExhaustive
-    MatchValueNeedsNomatch
+    MatchValueUncovered
     MatchValueOne
     WildcardNotAlone
     CaseAfterWildcard
@@ -1267,6 +1267,12 @@ fn UnknownName(tok String&) Msg { return Msg(Diag.UnknownName, "", "unknown name
 # ERR_UNKNOWN_NAME_MEANT
 fn UnknownNameMeant(tok String&, text String&) Msg { return Msg(Diag.UnknownNameMeant, "", "unknown name " $tok " - did you mean '" $text "'?") }
 
+# ERR_TYPED_HOLE
+fn TypedHole(ty String&, fits String&) Msg { return Msg(Diag.TypedHole, "E41", "'_' holds the place of a value of type " $ty $(" - nothing in scope has that type" if fits.Len() == 0 else " - in scope: " $fits)) }
+
+# ERR_TYPED_HOLE_UNTYPED
+fn TypedHoleUntyped() Msg { return Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
+
 # ERR_TYPE_NOT_A_VALUE
 fn TypeNotAValue(tok String&) Msg { return Msg(Diag.TypeNotAValue, "", $tok " is a type, not a value") }
 
@@ -1330,7 +1336,7 @@ fn ReraiseWordNotInSet(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReraiseWo
 fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
 
 # ERR_CAUGHT_MATCH_BLOCK
-fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value giving a value gives it with '=> v' in every case") }
+fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement") }
 
 # ERR_CAUGHT_CASE_NEVER
 fn CaughtCaseNever(tok String&) Msg { return Msg(Diag.CaughtCaseNever, "R11b", "this case is never reached: the cases before it take every error " $tok " can be") }
@@ -1339,7 +1345,7 @@ fn CaughtCaseNever(tok String&) Msg { return Msg(Diag.CaughtCaseNever, "R11b", "
 fn CaughtCaseForm() Msg { return Msg(Diag.CaughtCaseForm, "R11b", "a case of an error value names an error word, an error type, a named set or null") }
 
 # ERR_CAUGHT_MATCH_MISSING
-fn CaughtMatchMissing(text String&) Msg { return Msg(Diag.CaughtMatchMissing, "R11b", "this match does not cover " $text " - add a case for it, or 'nomatch'") }
+fn CaughtMatchMissing(text String&) Msg { return Msg(Diag.CaughtMatchMissing, "R11b", "this match does not cover " $text " - add a case for it, or 'case _'") }
 
 # ERR_ERROR_SET_HOLDS_ITSELF
 fn ErrorSetHoldsItself(tok String&, text String&) Msg { return Msg(Diag.ErrorSetHoldsItself, "T19a", $tok " reaches itself through its member '" $text "' - a set holds its members' errors, never itself") }
@@ -2659,17 +2665,11 @@ fn CaseValueType(ty1 String&, ty2 String&) Msg { return Msg(Diag.CaseValueType, 
 # ERR_PATTERN_ARITY
 fn PatternArity(text String&, n I64) Msg { return Msg(Diag.PatternArity, "S13b", "case " $text " holds " $n " fields, and a pattern names each - write '_' for one not wanted") }
 
-# ERR_ARROW_IN_STATEMENT
-fn ArrowInStatement() Msg { return Msg(Diag.ArrowInStatement, "S12b", "'=>' gives a value, which only a match used as a value takes - a statement's case runs a block") }
-
-# ERR_ARROW_LEAVES
-fn ArrowLeaves(tok String&, text String&) Msg { return Msg(Diag.ArrowLeaves, "S12b", "'=>' gives a value, and " $tok " gives none - a clause that leaves is a block: '{ " $text " }'") }
+# ERR_VALUE_CASE_BLOCK
+fn ValueCaseBlock() Msg { return Msg(Diag.ValueCaseBlock, "S12b", "a block gives no value - a clause of a match used as a value is 'case P: v', or 'case P: return x' to leave") }
 
 # ERR_LINE_STARTS_WITH_OPERATOR
 fn LineStartsWithOperator(tok1 String&, tok2 String&) Msg { return Msg(Diag.LineStartsWithOperator, "L18", "a line cannot begin with " $tok1 " - the line before ended its statement; end that line with " $tok2 ", or put the expression in parentheses") }
-
-# ERR_CASE_BLOCK_STAYS
-fn CaseBlockStays() Msg { return Msg(Diag.CaseBlockStays, "S12b", "this block can finish without leaving - give the value with '=> v'") }
 
 # ERR_GUARD_NOT_BOOL
 fn GuardNotBool(ty String&) Msg { return Msg(Diag.GuardNotBool, "S13e", "a guard is a Bool, found " $ty) }
@@ -2681,20 +2681,20 @@ fn UnknownTypeVar(text String&) Msg { return Msg(Diag.UnknownTypeVar, "", "unkno
 fn TypeMatchGuard() Msg { return Msg(Diag.TypeMatchGuard, "S13e", "a type match chooses its case while compiling, so it takes no guard - test the value inside the case") }
 
 # ERR_TYPE_MATCH_UNCOVERED
-fn MatchValueNone() Msg { return Msg(Diag.MatchValueNone, "G30", "no clause of this match gives a value at this instance's length - add one, or 'nomatch'") }
-fn TypeMatchUncovered(ty String&) Msg { return Msg(Diag.TypeMatchUncovered, "G15", "no case covers " $ty ", which this generic is instantiated with - add one, or 'nomatch'") }
+fn MatchValueNone() Msg { return Msg(Diag.MatchValueNone, "G30", "no clause of this match gives a value at this instance's length - add one, or 'case _'") }
+fn TypeMatchUncovered(ty String&) Msg { return Msg(Diag.TypeMatchUncovered, "G15", "no case covers " $ty ", which this generic is instantiated with - add one, or 'case _'") }
 
 # ERR_MATCH_VALUE_TYPES
 fn MatchValueTypes(ty1 String&, ty2 String&) Msg { return Msg(Diag.MatchValueTypes, "S12b", "every value of this match is " $ty1 ", found " $ty2) }
 
 # ERR_MATCH_NOT_EXHAUSTIVE
-fn MatchNotExhaustive(text String&, ty String&) Msg { return Msg(Diag.MatchNotExhaustive, "S13a", "case " $text " of " $ty " is not covered - add it, or 'nomatch { }'") }
+fn MatchNotExhaustive(text String&, ty String&) Msg { return Msg(Diag.MatchNotExhaustive, "S13a", "case " $text " of " $ty " is not covered - add it, or 'case _ { }'") }
 
-# ERR_MATCH_VALUE_NEEDS_NOMATCH
-fn MatchValueNeedsNomatch(ty String&) Msg { return Msg(Diag.MatchValueNeedsNomatch, "S12b", "a match over " $ty " gives a value only when its cases cover every value - add 'nomatch => v'") }
+# ERR_MATCH_VALUE_UNCOVERED
+fn MatchValueUncovered(ty String&) Msg { return Msg(Diag.MatchValueUncovered, "S12b", "a match over " $ty " gives a value only when its cases cover every value - add 'case _: v'") }
 
 # ERR_MATCH_VALUE_ONE
-fn MatchValueOne() Msg { return Msg(Diag.MatchValueOne, "S12b, D8c", "a match gives one value - to give several, return them from each case of a match statement: 'case P { return a, b }'") }
+fn MatchValueOne() Msg { return Msg(Diag.MatchValueOne, "S12b, D8c", "a match gives one value - to give several, return them from each case of a match statement: 'case P: return a, b'") }
 
 # ERR_WILDCARD_NOT_ALONE
 fn WildcardNotAlone() Msg { return Msg(Diag.WildcardNotAlone, "S13f", "'_' matches every value, so it is its case's only alternative") }

@@ -676,10 +676,10 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             kind := KindClass
             if td.Body is not null {
                 kind = match td.Body {
-                    case ast.TypeBody.Struct(_) => KindStruct
-                    case ast.TypeBody.Enum(_, _) => KindEnum
-                    case ast.TypeBody.Trait(_, _, _) => KindInterface
-                    case _ => KindClass
+                    case ast.TypeBody.Struct(_): KindStruct
+                    case ast.TypeBody.Enum(_, _): KindEnum
+                    case ast.TypeBody.Trait(_, _, _): KindInterface
+                    case _: KindClass
                 }
             }
             w.open(b, name, kind, I64(sp.Start), I64(sp.End), s, s + name.Len(), "")
@@ -1051,7 +1051,7 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
 }
 
 Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
-    "else", "for", "in", "range", "match", "case", "nomatch", "return", "break", "continue", "error", "try", "catch"
+    "else", "for", "in", "range", "match", "case", "return", "break", "continue", "error", "try", "catch"
     "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "become", "comptime", "assert", "unreachable", "noreturn", "mut"
     "and", "or", "not", "xor", "is", "as", "null", "true", "false", "destruct"]
 

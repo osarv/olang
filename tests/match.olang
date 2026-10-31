@@ -1,0 +1,102 @@
+# The match forms of 2026-10-27/31 (S12, S12b, S13e, S13f; QBQ, QBR, QBP 1): "case _" the one catch-all, a value match's
+# clauses "case P: v" (or one statement that leaves), a statement match's "case P: stmt", and a guard's test narrowing
+# in its clause as an if's condition does. Each has a run-time test and a global the evaluator bakes beside it (K2).
+
+type Shape enum {
+    Circle(r F64)
+    Rect(w F64, h F64)
+    Dot
+}
+
+type Wrap enum {
+    One(s Shape)
+    None
+}
+
+fn area(s Shape) F64 {
+    return match s {
+        case Shape.Circle(r): 3.0 * r *
+            r
+        case Shape.Rect(w, h): w * h
+        case _: 0.0
+    }
+}
+
+fn sign(n I64) I64 {
+    s := match n {
+        case 0: 0
+        case _ if n < 0: -1
+        case _: return 100
+    }
+    return s * 10
+}
+
+fn kind(x I64) String {
+    n := ""
+    match x {
+        case 1: n = "one"
+        case 2, 3 { n = "few" }
+        case _: n = "many"
+    }
+    return n
+}
+
+# a guard's case test narrows the bound payload in its clause (S13e, S8d)
+fn inner(w Wrap) F64 {
+    return match w {
+        case Wrap.One(s) if s == Shape.Circle: s.r
+        case Wrap.One(s) if s == Shape.Rect and s.w > 1.0: s.w + s.h
+        case _: -1.0
+    }
+}
+
+type Node struct(v I64, next Node?&) { v, next }
+
+# a guard's null test narrows too
+fn second(n Node&) I64 {
+    p := n.next
+    return match n.v {
+        case _ if p is not null: p.v
+        case _: -1
+    }
+}
+
+# the matched local itself narrowed by a guard
+fn radius(s Shape) F64 {
+    match s {
+        case _ if s == Shape.Circle { return s.r }
+        case _ { }
+    }
+    return 0.0
+}
+
+Areas := F64[area(Shape.Circle(1.0)), area(Shape.Rect(2.0, 3.0)), area(Shape.Dot)]
+Signs := I64[sign(0), sign(-5), sign(5)]
+Inner := F64[inner(Wrap.One(Shape.Circle(2.5))), inner(Wrap.One(Shape.Rect(2.0, 3.0))), inner(Wrap.One(Shape.Rect(1.0, 3.0))), inner(Wrap.None)]
+Kinds := String&[kind(1), kind(3), kind(9)]
+
+test "a value match's clauses give their values after ':', a value running on over lines" {
+    assert area(Shape.Circle(1.0)) == 3.0 and area(Shape.Rect(2.0, 3.0)) == 6.0 and area(Shape.Dot) == 0.0
+}
+
+test "a clause of a value match may leave instead, one statement after its ':'" {
+    assert sign(0) == 0 and sign(-5) == -10 and sign(5) == 100
+}
+
+test "a statement match's clauses are blocks or one statement after ':'" {
+    assert kind(1) == "one" and kind(3) == "few" and kind(9) == "many"
+}
+
+test "a guard's test narrows in its clause" {
+    assert inner(Wrap.One(Shape.Circle(2.5))) == 2.5
+    assert inner(Wrap.One(Shape.Rect(2.0, 3.0))) == 5.0 and inner(Wrap.One(Shape.Rect(1.0, 3.0))) == -1.0
+    assert inner(Wrap.None) == -1.0 and radius(Shape.Circle(4.0)) == 4.0 and radius(Shape.Dot) == 0.0
+    assert second(Node(1, Node(2, null))) == 2 and second(Node(1, null)) == -1
+}
+
+test "the evaluator agrees: globals baked from the same matches" {
+    assert Areas[0] == 3.0 and Areas[1] == 6.0 and Areas[2] == 0.0
+    assert Signs[0] == 0 and Signs[1] == -10 and Signs[2] == 100
+    assert Inner[0] == 2.5 and Inner[1] == 5.0 and Inner[2] == -1.0 and Inner[3] == -1.0
+    assert Kinds[0] == "one" and Kinds[1] == "few" and Kinds[2] == "many"
+}

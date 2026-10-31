@@ -1,0 +1,4 @@
+# check: fail error[E41]: '_' holds the place of a value of type Bool - nothing in scope has that type
+# E41: a hole nothing in scope fills
+fn f(n I64) Bool { return n > 0 and _ }
+fn main() ? { }

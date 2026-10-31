@@ -4,9 +4,9 @@ import "lib"
 import "std/io"
 fn which(d lib.Dir) I32 {
   return match d {
-    case lib.Dir.North => 1
-    case lib.Dir.Hold(v) => 10 + v
-    nomatch => 3
+    case lib.Dir.North: 1
+    case lib.Dir.Hold(v): 10 + v
+    case _: 3
   }
 }
 fn main() ? {

@@ -251,7 +251,7 @@ fn alone<T>(x T) T, Bool { return x, false }
 fn typeWritten<T>(a Array<T>&) String {
     match T {
         case Char { return "Char" }                            # an array of Char renders as text
-        nomatch { }
+        case _ { }
     }
     r := $a[0:0]                                               # "T[]"
     return $r[:r.Len() - 2]

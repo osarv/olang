@@ -19,7 +19,7 @@ fn main() ? {
         if i == 0 { b = Box.Two(outer, inner) }
         match b {
             case Box.Two(x, _), Box.Has(x) { keep = x }
-            nomatch { }
+            case _ { }
         }
     }
 }

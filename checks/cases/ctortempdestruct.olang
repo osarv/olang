@@ -39,8 +39,8 @@ fn main() ? {
         id(Wrap(local))
         h := kept(Wrap(local))
         m := match k {
-            case 42 => Wrap(local)
-            nomatch => Wrap(local)
+            case 42: Wrap(local)
+            case _: Wrap(local)
         }
         peek(Wrap(local) if c else Wrap(local))
         assert Count == 0

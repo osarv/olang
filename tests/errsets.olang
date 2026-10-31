@@ -43,16 +43,16 @@ fn kind(n I64) I64 {
             case ParseErr { return 200 }
             case LoadErr.TIMEOUT { return 300 }
             case NetErr { return 400 }
-            nomatch { return 500 }
+            case _ { return 500 }
         }
     }
 }
 
 fn kindValue(n I64) I64 {
     return try fetch(n) catch e default (match e {
-        case ParseErr => 1
-        case LoadErr.TIMEOUT, NetErr.DOWN => 2
-        case os.Error => 3
+        case ParseErr: 1
+        case LoadErr.TIMEOUT, NetErr.DOWN: 2
+        case os.Error: 3
     })
 }
 

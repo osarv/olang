@@ -30,8 +30,8 @@ type Wrap<T> enum {
 
 fn (t Tree<T>&) Size() I64 {
     return match t {
-        case Tree.Leaf(_) => 1
-        case Tree.Node(l, r) => l.Size() + r.Size()
+        case Tree.Leaf(_): 1
+        case Tree.Node(l, r): l.Size() + r.Size()
     }
 }
 
@@ -48,23 +48,23 @@ fn depth<T>(t Tree<T>&) I64 {
 
 fn firstLeaf<T>(t Tree<T>&) T {
     return match t {
-        case Tree.Leaf(v) => v
-        case Tree.Node(l, _) => firstLeaf(l)
+        case Tree.Leaf(v): v
+        case Tree.Node(l, _): firstLeaf(l)
     }
 }
 
 # a nested pattern through a reference, and a case of the instance named with its arguments
 fn leftLeaf<T>(t Tree<T>&) Opt<T> {
     return match t {
-        case Tree.Node(Tree.Leaf(a), _) => Opt.Some(a)
-        case _ => Opt<T>.None
+        case Tree.Node(Tree.Leaf(a), _): Opt.Some(a)
+        case _: Opt<T>.None
     }
 }
 
 fn (o Opt<T>) Or(d T) T {
     return match o {
-        case Opt.Some(v) => v
-        case Opt.None => d
+        case Opt.Some(v): v
+        case Opt.None: d
     }
 }
 
@@ -75,15 +75,15 @@ fn build(n I64) Tree<I64>& {
 
 fn side(e Either<I64, String&>) String {
     return match e {
-        case Either.Left(a) => $"left " $a
-        case Either.Right(b) => $"right " $b
+        case Either.Left(a): $"left " $a
+        case Either.Right(b): $"right " $b
     }
 }
 
 fn wrapSum(w Wrap<I64>) I64 {
     return match w {
-        case Wrap.One(x) => x
-        case Wrap.Two(a, b) => a + b
+        case Wrap.One(x): x
+        case Wrap.Two(a, b): a + b
     }
 }
 

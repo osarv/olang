@@ -653,7 +653,7 @@ fn (l List<T>&) Str() String {
                 b.Push(charLiteral(c))
             }
         }
-        nomatch {
+        case _ {
             b.Push("List<" $typeWritten(Array<T>(0)) ">[")
             at I64 = 0
             for {

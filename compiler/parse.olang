@@ -182,9 +182,9 @@ fn (p Parser&) here() I32 {
 fn (p Parser&) messageHere() Bool {
     if p.breakBefore() { return false }
     return match p.peek() {
-        case token.Tok.StrLit, token.Tok.Dollar, token.Tok.Iden, token.Tok.LParen, token.Tok.IntLit => true
-        case token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit => true
-        nomatch => false
+        case token.Tok.StrLit, token.Tok.Dollar, token.Tok.Iden, token.Tok.LParen, token.Tok.IntLit: true
+        case token.Tok.FloatLit, token.Tok.CharLit, token.Tok.BoolLit, token.Tok.NullLit: true
+        case _: false
     }
 }
 
@@ -639,7 +639,7 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
             try p.endStmt()
             return ast.Decl.Global(sp, v)
         }
-        nomatch { try p.fail("a declaration") }
+        case _ { try p.fail("a declaration") }
     }
     unreachable
 }
@@ -663,7 +663,7 @@ fn (p mut Parser&) attributed() ast.Decl?&p ? Fail {
             p.declareAttrs(attrs)
             return ast.Decl.Type(sp, ast.TypeDecl(td.Name, td.Params, td.Extends, td.Body, attrs))
         }
-        nomatch { return d }
+        case _ { return d }
     }
 }
 
@@ -964,7 +964,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
             p.advance()
             return ast.TypeBody.Trait(methods.ToArray(), exts, members)
         }
-        nomatch {
+        case _ {
             base := try p.typeExpr()
             if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
                 cat := p.advance()
@@ -1029,7 +1029,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
         case ast.TypeRef.Perm(_, of, _, _) {
             if of is not null { p.receiverVars(of, inArgs) }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -1394,7 +1394,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
         }
         # QW: a variable is introduced in the list after a function's name, never as "<T>" in a parameter's type
         case token.Tok.Lt { try p.fail("a name") }
-        nomatch { try p.fail("a type") }
+        case _ { try p.fail("a type") }
     }
     unreachable
 }
@@ -1408,8 +1408,8 @@ fn (p Parser&) anyHere() Bool {
 
 fn isFuncType(t ast.TypeRef&) Bool {
     return match t {
-        case ast.TypeRef.Func(_, _) => true
-        case _ => false
+        case ast.TypeRef.Func(_, _): true
+        case _: false
     }
 }
 
@@ -1421,7 +1421,7 @@ fn (p Parser&) grouped(t ast.TypeRef&) Bool {
             if s.Results.Len() > 1 or s.Errors.Len() > 1 { return true }
             return not s.HasErrors and p.sees(token.Tok.Question)
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -1579,7 +1579,7 @@ fn (p mut Parser&) exprAsType(x ast.Expr&p) ast.TypeRef&p ? Fail {
                 p.ids.Push(n)
                 e = b
             }
-            nomatch {
+            case _ {
                 p.ids.Truncate(from)
                 try p.fail("an element type before the [, as in I32[...]")
             }
@@ -1688,7 +1688,7 @@ fn (p mut Parser&) fieldAttrs(s ast.Stmt&p, attrs Array<ast.Attr&>&p) ast.Stmt&p
                 return s
             }
         }
-        nomatch { }
+        case _ { }
     }
     p.attrRefused(attrs)
     return s
@@ -1719,7 +1719,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             return ast.Stmt.DoFor(sp, body, cond)
         }
         case token.Tok.Match {
-            m := try p.matchBody()
+            m := try p.matchBody(false)
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.MatchS(sp, m)
@@ -1831,7 +1831,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         }
         case token.Tok.Try { return try p.tryStmt() }
         case token.Tok.Iden { return try p.idenStmt() }
-        nomatch { return try p.exprStmt() }
+        case _ { return try p.exprStmt() }
     }
     unreachable
 }
@@ -1839,11 +1839,11 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
 # L9a: the keywords a field may be named by
 fn keywordNamesField(k token.Tok) Bool {
     return match k {
-        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or => true
-        case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Nomatch, token.Tok.Type, token.Tok.Struct => true
-        case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test => true
-        case token.Tok.Extern, token.Tok.Default => true
-        nomatch => false
+        case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or: true
+        case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Type, token.Tok.Struct: true
+        case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test: true
+        case token.Tok.Extern, token.Tok.Default: true
+        case _: false
     }
 }
 
@@ -2010,10 +2010,10 @@ fn (p Parser&) one(n source.NameId, sp source.Span) NameList&p {
 
 fn isAssignOp(k token.Tok) Bool {
     return match k {
-        case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq => true
-        case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq => true
-        case token.Tok.CaretEq => true
-        nomatch => false
+        case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq: true
+        case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq: true
+        case token.Tok.CaretEq: true
+        case _: false
     }
 }
 
@@ -2070,7 +2070,7 @@ fn (p mut Parser&) namesOf(targets Array<ast.Expr&>&) NameList&p ? Fail {
                 names[i] = n
                 sps[i] = sp
             }
-            nomatch { try p.fail(token.Tok.Assign.Describe()) }
+            case _ { try p.fail(token.Tok.Assign.Describe()) }
         }
     }
     return NameList(names, sps)
@@ -2119,7 +2119,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
                 return ast.Stmt.TryStore(sp, inner, cl)
             }
         }
-        nomatch { }
+        case _ { }
     }
     # E24: the whole expression the postfix begins, then the clauses
     x = try p.binaryFrom(x, 1)
@@ -2255,14 +2255,14 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>&p ? Fail {
 # what a one-line body may not begin with (S1b), as its error names it; "" for a simple statement's start
 fn lineBodyRefused(k token.Tok) String {
     return match k {
-        case token.Tok.If => "an if"
-        case token.Tok.For, token.Tok.Do => "a loop"
-        case token.Tok.Match => "a match"
-        case token.Tok.LBrace => "a block (a block takes no ':')"
-        case token.Tok.Join => "a join"
-        case token.Tok.Defer => "a defer"
-        case token.Tok.ErrDefer => "an errdefer"
-        case _ => ""
+        case token.Tok.If: "an if"
+        case token.Tok.For, token.Tok.Do: "a loop"
+        case token.Tok.Match: "a match"
+        case token.Tok.LBrace: "a block (a block takes no ':')"
+        case token.Tok.Join: "a join"
+        case token.Tok.Defer: "a defer"
+        case token.Tok.ErrDefer: "an errdefer"
+        case _: ""
     }
 }
 
@@ -2363,7 +2363,7 @@ fn (p mut Parser&) simpleStmt() ast.Stmt&p ? Fail {
 }
 
 # "match" subject "{" cases "}" - a statement, or a value (S12b); "match T" on an introduced type variable takes types
-fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
+fn (p mut Parser&) matchBody(value Bool) ast.Match&p ? Fail {
     at := try p.want(token.Tok.Match)
     onType := false
     if p.sees(token.Tok.Iden) and p.look(1) == token.Tok.LBrace {
@@ -2401,17 +2401,10 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
     wasSkip := p.skip
     p.skip = false
     cases mut Vec<ast.Case&>&p = Vec<ast.Case&>()
-    noMatch ast.Case?&p = null
     for {
         p.skipEnds()
         if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
         cat := p.here()
-        if p.accept(token.Tok.Nomatch) {
-            body, value := try p.caseBody()
-            noMatch = ast.Case(p.from(cat), Array<ast.Pattern&>(0), Array<ast.TypeRef&>(0), null, body, value)
-            if p.sees(token.Tok.StmtEnd) { p.advance() }
-            continue
-        }
         try p.want(token.Tok.Case)
         pfrom := p.pats.Len()
         tfrom := p.tys.Len()
@@ -2441,12 +2434,12 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
                 }
             }
             # QY: alternatives on one line are separated by ",", on different lines by the line break - a header goes
-            # on to its "{", "=>" or guard, so a line ending in an alternative continues it
+            # on to its "{", ":" or guard, so a line ending in an alternative continues it
             if p.accept(token.Tok.Comma) { continue }
             if not p.sees(token.Tok.StmtEnd) { break }
             n := p.look(1)
-            if n == token.Tok.LBrace or n == token.Tok.Arrow or n == token.Tok.If or n == token.Tok.RBrace or
-               n == token.Tok.Case or n == token.Tok.Nomatch or n == token.Tok.Eof {
+            if n == token.Tok.LBrace or n == token.Tok.Colon or n == token.Tok.If or n == token.Tok.RBrace or
+               n == token.Tok.Case or n == token.Tok.Eof {
                 break
             }
             p.advance()
@@ -2455,14 +2448,14 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
         types := gather(p.tys, tfrom)
         guard ast.Expr?&p = null
         if p.accept(token.Tok.If) { guard = try p.expr() }
-        body, value := try p.caseBody()
-        cases.Push(ast.Case(p.from(cat), alts, types, guard, body, value))
+        body, v := try p.caseBody(value)
+        cases.Push(ast.Case(p.from(cat), alts, types, guard, body, v))
         if p.sees(token.Tok.StmtEnd) { p.advance() }
     }
     try p.want(token.Tok.RBrace)
     p.brackets = wasBrackets
     p.skip = wasSkip
-    return ast.Match(p.from(at), subject, onType, cases.ToArray(), noMatch)
+    return ast.Match(p.from(at), subject, onType, cases.ToArray())
 }
 
 # a case of "match T" on a type variable: a type (G15)
@@ -2470,14 +2463,39 @@ fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
     return try p.typeExpr()
 }
 
-# a case's block, or "=> value"
-fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
-    if p.accept(token.Tok.Arrow) {
+# a case's body (S12, S12b, S1b): in a match used as a value "case P: v" - the value, its expression running on as a
+# statement does - or "case P: return x", one statement that leaves; in a match statement a block or "case P: stmt"
+fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
+    if p.sees(token.Tok.Colon) and (not value or leavingWord(p.look(1))) {
+        st := try p.lineBody()
+        return st, null
+    }
+    if p.sees(token.Tok.Colon) {
+        colon := p.tk()
+        p.advance()
+        t := p.tk()
+        if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
+            p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
+            error Fail.SYNTAX
+        }
         v := try p.expr()
         return Array<ast.Stmt&>(0), v
     }
+    if value {
+        # S12b: a block gives no value - read past it, so what follows is still read
+        at := p.here()
+        try p.block()
+        p.report(at, at + 1, msgs.ValueCaseBlock())
+        return Array<ast.Stmt&>(0), ast.Expr.Unreachable(p.from(at), null)
+    }
     body := try p.block()
     return body, null
+}
+
+# a statement that leaves, which a value match's clause may be in place of its value (S12b): return, break, continue,
+# error
+fn leavingWord(k token.Tok) Bool {
+    return k == token.Tok.Return or k == token.Tok.Break or k == token.Tok.Continue or k == token.Tok.Error
 }
 
 # an alternative, read as an expression, as the pattern it is (DESIGN.md point 13): at the top a path, a case with its
@@ -2504,7 +2522,7 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
                                 return ast.Pattern.Value(sp, x)
                             }
                         }
-                        nomatch { }
+                        case _ { }
                     }
                     p.pats.Push(sub)
                 }
@@ -2512,7 +2530,7 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
             }
             return ast.Pattern.Value(sp, x)
         }
-        nomatch { return ast.Pattern.Value(x.Span(), x) }
+        case _ { return ast.Pattern.Value(x.Span(), x) }
     }
 }
 
@@ -2524,7 +2542,7 @@ fn pathIds(x ast.Expr&, out mut Vec<source.NameId>&) {
             pathIds(b, out)
             out.Push(n)
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -2536,30 +2554,30 @@ fn (p mut Parser&) reflListPath(x ast.Expr&) Bool {
             w := p.names.Text(n)
             return w == "Fields" or w == "Cases" or w == "Params" or w == "Results"
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
 fn isTypeCasePath(x ast.Expr&) Bool {
     return match x {
-        case ast.Expr.Generic(_, gx, _) => isPath(gx)
-        case _ => isPath(x)
+        case ast.Expr.Generic(_, gx, _): isPath(gx)
+        case _: isPath(x)
     }
 }
 
 fn isPath(x ast.Expr&) Bool {
     return match x {
-        case ast.Expr.Name(_, _) => true
-        case ast.Expr.Member(_, b, _) => isPath(b)
-        nomatch => false
+        case ast.Expr.Name(_, _): true
+        case ast.Expr.Member(_, b, _): isPath(b)
+        case _: false
     }
 }
 
 fn isLiteral(x ast.Expr&) Bool {
     return match x {
-        case ast.Expr.Lit(_, _) => true
-        case ast.Expr.Unary(_, op, v) => op == token.Tok.Minus and isLiteral(v)
-        nomatch => false
+        case ast.Expr.Lit(_, _): true
+        case ast.Expr.Unary(_, op, v): op == token.Tok.Minus and isLiteral(v)
+        case _: false
     }
 }
 
@@ -2637,19 +2655,19 @@ fn (p mut Parser&) condFrom(a ast.Expr&p) ast.Expr&p ? Fail {
 # shift is none: it would reach across the list's own ">" (G8)
 fn (p Parser&) prec(k token.Tok) I64 {
     return match k {
-        case token.Tok.Or => 1
-        case token.Tok.Xor => 2
-        case token.Tok.And => 3
-        case token.Tok.Pipe => 4 if p.OldBitwise else 6
-        case token.Tok.Caret => 5 if p.OldBitwise else 7
-        case token.Tok.Amp => 6 if p.OldBitwise else 8
-        case token.Tok.EqEq, token.Tok.NotEq => 7 if p.OldBitwise else 4
-        case token.Tok.In, token.Tok.Is, token.Tok.Not => 8 if p.OldBitwise else 5
-        case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => 0 if p.noGt else (8 if p.OldBitwise else 5)
-        case token.Tok.Shl, token.Tok.Shr => 0 if p.noGt else 9
-        case token.Tok.Plus, token.Tok.Minus => 10
-        case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => 11
-        nomatch => 0
+        case token.Tok.Or: 1
+        case token.Tok.Xor: 2
+        case token.Tok.And: 3
+        case token.Tok.Pipe: 4 if p.OldBitwise else 6
+        case token.Tok.Caret: 5 if p.OldBitwise else 7
+        case token.Tok.Amp: 6 if p.OldBitwise else 8
+        case token.Tok.EqEq, token.Tok.NotEq: 7 if p.OldBitwise else 4
+        case token.Tok.In, token.Tok.Is, token.Tok.Not: 8 if p.OldBitwise else 5
+        case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge: 0 if p.noGt else (8 if p.OldBitwise else 5)
+        case token.Tok.Shl, token.Tok.Shr: 0 if p.noGt else 9
+        case token.Tok.Plus, token.Tok.Minus: 10
+        case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: 11
+        case _: 0
     }
 }
 
@@ -2662,7 +2680,7 @@ fn comparison(x ast.Expr&) Bool {
         case ast.Expr.Chain(_, _), ast.Expr.NotIn(_, _, _), ast.Expr.Is(_, _, _, _), ast.Expr.IsType(_, _, _, _) {
             return true
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -2804,7 +2822,7 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) { p.exprs.Push(try p.piece()) }
             return ast.Expr.Join(p.from(at), gather(p.exprs, from))
         }
-        nomatch { return try p.postfix() }
+        case _ { return try p.postfix() }
     }
     unreachable
 }
@@ -2906,7 +2924,7 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                 args := try p.args()
                 x = ast.Expr.ScopeCall(p.from(start), x, scope, args)
             }
-            nomatch { return x }
+            case _ { return x }
         }
     }
 }
@@ -3104,7 +3122,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             return ast.Expr.Lambda(p.from(at), ast.Func(p.from(at), null, source.NameId(0), s, body))
         }
         case token.Tok.Match {
-            m := try p.matchBody()
+            m := try p.matchBody(true)
             return ast.Expr.MatchE(p.from(at), m)
         }
         case token.Tok.Unreachable {
@@ -3163,7 +3181,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
         }
         # a bracket with no element type before it (E19): a literal states its element type once
         case token.Tok.LBrack { try p.fail("an element type before the [, as in I32[...]") }
-        nomatch { try p.fail("an expression") }
+        case _ { try p.fail("an expression") }
     }
     unreachable
 }
@@ -3192,7 +3210,7 @@ fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&p) ast.Expr&p ? Fail {
                         p.ids.Push(n)
                         e = b
                     }
-                    nomatch { break }
+                    case _ { break }
                 }
             }
             parts := gather(p.ids, from)
@@ -3202,7 +3220,7 @@ fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&p) ast.Expr&p ? Fail {
             elem := p.markers(at, nt)
             return try p.arrayLit(at, elem)
         }
-        nomatch { return x }
+        case _ { return x }
     }
 }
 
@@ -3320,10 +3338,10 @@ fn (p mut Parser&) reportAt(i I64, m msgs.Msg) {
 
 fn isJoiningOp(k token.Tok) Bool {
     return match k {
-        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => true
-        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le => true
-        case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr => true
-        nomatch => false
+        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
+        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le: true
+        case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr: true
+        case _: false
     }
 }
 
@@ -3336,7 +3354,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     pk := p.kindAt(pr)
     pl := p.lineAt(pr)
     # L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
-    if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Arrow {
+    if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Colon {
         p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
         return true
     }
@@ -3350,17 +3368,6 @@ fn (p mut Parser&) hint(want String&) Bool {
         (fk == token.Tok.Iden and (pk == token.Tok.Break or pk == token.Tok.Continue or pk == token.Tok.Unreachable or
                                    pk == token.Tok.Join))) {
         p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
-        return true
-    }
-    # S12b: "nomatch => return 0" - a clause that leaves gives no value, so it is a block ("=> unreachable" is a value,
-    # S16e)
-    if pk == token.Tok.Arrow and (fk == token.Tok.Return or fk == token.Tok.Break or fk == token.Tok.Continue or
-                                  fk == token.Tok.Error) {
-        from := I64(p.ts.Toks[f].Start)
-        end := from
-        for end < p.src.Text.Len() and p.src.Text[end] != '\n' { end++ }
-        for end > from and (p.src.Text[end - 1] == ' ' or p.src.Text[end - 1] == '\t') { end-- }
-        p.reportAt(f, msgs.ArrowLeaves(p.named(f), p.src.Text[from:end]))
         return true
     }
     # "fn join(", "x I32, done I32" - a keyword where a name was wanted
@@ -3410,7 +3417,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     return false
 }
 
-# S12b/D8c: "case P => a, b" - a comma after a case's value on its line, outside every bracket
+# S12b/D8c: "case P: a, b" - a comma after a case's value on its line, outside every bracket
 fn (p Parser&) caseValueComma(f I64) Bool {
     if p.kindAt(f) != token.Tok.Comma { return false }
     line := p.lineAt(f)
@@ -3423,12 +3430,20 @@ fn (p Parser&) caseValueComma(f I64) Bool {
         } else if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
             if depth == 0 { return false }
             depth--
-        } else if k == token.Tok.Arrow and depth == 0 {
-            return true
+        } else if k == token.Tok.Colon and depth == 0 {
+            return p.lineStartsCase(t)
         }
         t--
     }
     return false
+}
+
+# whether the line of token t begins with "case"
+fn (p Parser&) lineStartsCase(t I64) Bool {
+    line := p.lineAt(t)
+    s := t
+    for s > 0 and p.lineAt(s - 1) == line { s-- }
+    return p.kindAt(s) == token.Tok.Case
 }
 
 fn isOperandEndTok(k token.Tok) Bool {
@@ -3671,10 +3686,10 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
                     case ast.TypeBody.Trait(ms, _, _) {
                         for m in ms { b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name)) }
                     }
-                    nomatch { }
+                    case _ { }
                 }
             }
-            nomatch { b.Push("decl") }
+            case _ { b.Push("decl") }
         }
     }
     for s in diags.AllSaid() { b.Push(" !" $s.Rule) }
@@ -3683,29 +3698,29 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
 
 fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
     return match s {
-        case ast.Stmt.ExprS(_, x) => shapeExpr(x, names, text)
-        case ast.Stmt.Return(_, vs) => "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
-        case ast.Stmt.Become(_, x) => "become " $shapeExpr(x, names, text)
-        case ast.Stmt.Var(_, v) => "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty is not null else "")
-        case ast.Stmt.Multi(_, m) => "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
-        case ast.Stmt.If(_, i) => "if" $(" else" if i.Else is not null else "")
-        nomatch => "stmt"
+        case ast.Stmt.ExprS(_, x): shapeExpr(x, names, text)
+        case ast.Stmt.Return(_, vs): "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
+        case ast.Stmt.Become(_, x): "become " $shapeExpr(x, names, text)
+        case ast.Stmt.Var(_, v): "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty is not null else "")
+        case ast.Stmt.Multi(_, m): "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
+        case ast.Stmt.If(_, i): "if" $(" else" if i.Else is not null else "")
+        case _: "stmt"
     }
 }
 
 fn shapeExpr(x ast.Expr&, names source.Names&, text String&) String {
     return match x {
-        case ast.Expr.Name(_, n) => $names.Text(n)
-        case ast.Expr.Lit(sp, _) => $text[sp.Start:sp.End]
-        case ast.Expr.Paren(_, y) => shapeExpr(y, names, text)
-        case ast.Expr.Unary(_, op, y) => "(" $op.Text() " " $shapeExpr(y, names, text) ")"
-        case ast.Expr.Binary(_, op, a, b) => "(" $op.Text() " " $shapeExpr(a, names, text) " " $shapeExpr(b, names, text) ")"
-        case ast.Expr.Chain(_, c) => "(chain " $c.Ops.Len() ")"
-        case ast.Expr.Cond(_, a, c, b) => ("(if " $shapeExpr(c, names, text) " " $shapeExpr(a, names, text) " "
+        case ast.Expr.Name(_, n): $names.Text(n)
+        case ast.Expr.Lit(sp, _): $text[sp.Start:sp.End]
+        case ast.Expr.Paren(_, y): shapeExpr(y, names, text)
+        case ast.Expr.Unary(_, op, y): "(" $op.Text() " " $shapeExpr(y, names, text) ")"
+        case ast.Expr.Binary(_, op, a, b): "(" $op.Text() " " $shapeExpr(a, names, text) " " $shapeExpr(b, names, text) ")"
+        case ast.Expr.Chain(_, c): "(chain " $c.Ops.Len() ")"
+        case ast.Expr.Cond(_, a, c, b): ("(if " $shapeExpr(c, names, text) " " $shapeExpr(a, names, text) " "
                                            $shapeExpr(b, names, text) ")")
-        case ast.Expr.Call(_, f, args) => "(call " $shapeExpr(f, names, text) " " $args.Len() ")"
-        case ast.Expr.Generic(_, y, args) => "(generic " $shapeExpr(y, names, text) " " $args.Len() ")"
-        nomatch => "expr"
+        case ast.Expr.Call(_, f, args): "(call " $shapeExpr(f, names, text) " " $args.Len() ")"
+        case ast.Expr.Generic(_, y, args): "(generic " $shapeExpr(y, names, text) " " $args.Len() ")"
+        case _: "expr"
     }
 }
 

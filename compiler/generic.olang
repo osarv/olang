@@ -381,7 +381,7 @@ fn genElemOf(p Program&, fd ast.Func&) I64 {
             a := args[0]
             match a {
                 case ast.TypeRef.Perm(_, of, _, _) { if of is not null { a = of } }
-                nomatch { }
+                case _ { }
             }
             match a {
                 case ast.TypeRef.Ref(_, _, sc, _) {
@@ -398,10 +398,10 @@ fn genElemOf(p Program&, fd ast.Func&) I64 {
                     }
                     return GenBadScope
                 }
-                nomatch { return GenPerTurn }
+                case _ { return GenPerTurn }
             }
         }
-        nomatch { return GenPerTurn }
+        case _ { return GenPerTurn }
     }
 }
 
@@ -611,14 +611,14 @@ fn (p mut Program&) ErrsHeld(have types.ListId, want types.ListId) Bool {
 fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
     if t is null { return types.UnknownT }
     return match t {
-        case ast.TypeRef.Named(sp, path, args) => p.named(c, sp, path, args)
-        case ast.TypeRef.Func(sp, s) => p.funcType(c, sp, s)
-        case ast.TypeRef.Shape(_, body) => p.shape(c, body)
-        case ast.TypeRef.Ref(sp, of, _, nullable) => p.refType(c, sp, p.Resolve(c, of), nullable)
-        case ast.TypeRef.Perm(_, of, writable, owned) => p.perm(p.Resolve(c, of), writable, owned)
+        case ast.TypeRef.Named(sp, path, args): p.named(c, sp, path, args)
+        case ast.TypeRef.Func(sp, s): p.funcType(c, sp, s)
+        case ast.TypeRef.Shape(_, body): p.shape(c, body)
+        case ast.TypeRef.Ref(sp, of, _, nullable): p.refType(c, sp, p.Resolve(c, of), nullable)
+        case ast.TypeRef.Perm(_, of, writable, owned): p.perm(p.Resolve(c, of), writable, owned)
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
-        case ast.TypeRef.Any(_, of) => p.T.Any(p.Resolve(c, of))
-        case ast.TypeRef.Errs(_, _) => types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
+        case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
+        case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
     }
 }
 
@@ -644,9 +644,9 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
 fn (p mut Program&) perm(t types.TypeId, writable Bool, owned Bool) types.TypeId {
     bits := (types.Writable if writable else types.ReadOnly) | (types.Owning if owned else types.ReadOnly)
     return match p.T.KindOf(t) {
-        case types.Kind.Ref => p.T.Ref(p.T.Referent(t), p.T.PermOf(t) | bits)
-        case types.Kind.Var => p.T.Var(p.T.A(t), p.T.B(t), p.T.C(t) | bits)
-        case _ => t
+        case types.Kind.Ref: p.T.Ref(p.T.Referent(t), p.T.PermOf(t) | bits)
+        case types.Kind.Var: p.T.Var(p.T.A(t), p.T.B(t), p.T.C(t) | bits)
+        case _: t
     }
 }
 
@@ -697,7 +697,7 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
             }
             return p.Apply(c, d, args)
         }
-        nomatch { return types.UnknownT }
+        case _ { return types.UnknownT }
     }
 }
 
@@ -747,8 +747,8 @@ fn IsErrsArgOf(t ast.TypeRef&) Bool { return isErrsArg(t) }
 
 fn isErrsArg(t ast.TypeRef&) Bool {
     return match t {
-        case ast.TypeRef.Errs(_, _) => true
-        case _ => false
+        case ast.TypeRef.Errs(_, _): true
+        case _: false
     }
 }
 
@@ -763,7 +763,7 @@ fn (p mut Program&) errsArg(c Context&, t ast.TypeRef&) types.TypeId {
             }
             return p.ErrSetOf(p.T.List(flat.ToArray()))
         }
-        nomatch { return p.ErrSetOf(types.ListId(0)) }
+        case _ { return p.ErrSetOf(types.ListId(0)) }
     }
 }
 
@@ -802,7 +802,7 @@ fn (p mut Program&) expand(t types.TypeId, depth I64) {
         case types.Kind.Ref { p.expand(p.T.Referent(t), depth + 1) }
         case types.Kind.Array { p.expand(p.T.Elem(t), depth + 1) }
         case types.Kind.Tuple, types.Kind.Record { p.expandList(p.T.Parts(t), depth + 1) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -934,9 +934,9 @@ fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named Vec<source.Nam
 # the span of a written type's outermost reference marker, whose scope name ends it
 fn (p mut Program&) markSpan(t ast.TypeRef&) source.Span {
     return match t {
-        case ast.TypeRef.Ref(sp, _, _, _) => sp
-        case ast.TypeRef.Perm(_, of, _, _) => p.markSpan(of) if of is not null else source.Span(0, 0)
-        case _ => source.Span(0, 0)
+        case ast.TypeRef.Ref(sp, _, _, _): sp
+        case ast.TypeRef.Perm(_, of, _, _): p.markSpan(of) if of is not null else source.Span(0, 0)
+        case _: source.Span(0, 0)
     }
 }
 
@@ -944,9 +944,9 @@ fn (p mut Program&) markSpan(t ast.TypeRef&) source.Span {
 fn (p mut Program&) markOf(t ast.TypeRef?&) source.NameId {
     if t is null { return source.NameId(0) }
     return match t {
-        case ast.TypeRef.Ref(_, _, sc, _) => sc
-        case ast.TypeRef.Perm(_, of, _, _) => p.markOf(of)
-        case _ => source.NameId(0)
+        case ast.TypeRef.Ref(_, _, sc, _): sc
+        case ast.TypeRef.Perm(_, of, _, _): p.markOf(of)
+        case _: source.NameId(0)
     }
 }
 
@@ -1147,8 +1147,8 @@ fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
     e := p.errorDecl(d)
     if e is null { return Array<source.NameId>(0) }
     return match e {
-        case ast.Decl.Errors(_, _, words, _) => words
-        case _ => Array<source.NameId>(0)
+        case ast.Decl.Errors(_, _, words, _): words
+        case _: Array<source.NameId>(0)
     }
 }
 
@@ -1157,8 +1157,8 @@ fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>&p {
     e := p.errorDecl(d)
     if e is null { return Array<ast.Path&>(0) }
     return match e {
-        case ast.Decl.Errors(_, _, _, members) => members
-        case _ => Array<ast.Path&>(0)
+        case ast.Decl.Errors(_, _, _, members): members
+        case _: Array<ast.Path&>(0)
     }
 }
 
@@ -1178,7 +1178,7 @@ fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?&ds {
                 e := errorDeclInIf(ti, name)
                 if e is not null { return e }
             }
-            nomatch { }
+            case _ { }
         }
     }
     return null
@@ -1208,9 +1208,9 @@ fn (p mut Program&) aliasStep(mi I64, alias source.NameId) I64 {
 # an anonymous type written in place: an enum's cases, or a struct's fields (T27)
 fn (p mut Program&) shape(c Context&, body ast.TypeBody&) types.TypeId {
     return match body {
-        case ast.TypeBody.Enum(cases, _) => p.anonEnum(c, cases)
-        case ast.TypeBody.Struct(s) => p.T.Record(p.paramTypes(c, s.Params))
-        case _ => types.UnknownT
+        case ast.TypeBody.Enum(cases, _): p.anonEnum(c, cases)
+        case ast.TypeBody.Struct(s): p.T.Record(p.paramTypes(c, s.Params))
+        case _: types.UnknownT
     }
 }
 
@@ -1301,16 +1301,16 @@ fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
             if k == names.What.Local and p.T.KindOf(try c.Vars.Get(n) catch default types.UnknownT) == types.Kind.Const { return false }
             return k == names.What.Local or k == names.What.None
         }
-        nomatch { }
+        case _ { }
     }
     return match e {
-        case ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
-        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _) => p.readsLocal(c, x)
-        case ast.Expr.Binary(_, _, a, b) => p.readsLocal(c, a) or p.readsLocal(c, b)
-        case ast.Expr.Cond(_, a, k, b) => p.readsLocal(c, a) or p.readsLocal(c, k) or p.readsLocal(c, b)
-        case ast.Expr.Call(_, f, args) => not p.instanceLen(c, f, args) and (p.readsLocal(c, f) or p.anyReadsLocal(c, args))
-        case ast.Expr.Index(_, x, items) => p.readsLocal(c, x) or p.anyReadsLocal(c, items)
-        case _ => true
+        case ast.Expr.Lit(_, _), ast.Expr.Default(_): false
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _): p.readsLocal(c, x)
+        case ast.Expr.Binary(_, _, a, b): p.readsLocal(c, a) or p.readsLocal(c, b)
+        case ast.Expr.Cond(_, a, k, b): p.readsLocal(c, a) or p.readsLocal(c, k) or p.readsLocal(c, b)
+        case ast.Expr.Call(_, f, args): not p.instanceLen(c, f, args) and (p.readsLocal(c, f) or p.anyReadsLocal(c, args))
+        case ast.Expr.Index(_, x, items): p.readsLocal(c, x) or p.anyReadsLocal(c, items)
+        case _: true
     }
 }
 
@@ -1378,10 +1378,10 @@ fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeI
 # whether an expression is a literal, or a sign before one: its value adapts (E4a), whatever type its digits read as
 fn litOnly(e ast.Expr&) Bool {
     return match e {
-        case ast.Expr.Lit(_, _) => true
-        case ast.Expr.Unary(_, _, x) => litOnly(x)
-        case ast.Expr.Paren(_, x) => litOnly(x)
-        case _ => false
+        case ast.Expr.Lit(_, _): true
+        case ast.Expr.Unary(_, _, x): litOnly(x)
+        case ast.Expr.Paren(_, x): litOnly(x)
+        case _: false
     }
 }
 
@@ -1470,14 +1470,14 @@ fn (p mut Program&) numberOf(t types.TypeId) types.TypeId {
 # their operands meet at (T6b, E6d), wrapping where the program wraps (E6c)
 fn (p mut Program&) eval(c Context&, e ast.Expr&) folded {
     return match e {
-        case ast.Expr.Lit(sp, kind) => p.evalLit(c.Mi, sp, kind)
-        case ast.Expr.Paren(_, x) => p.eval(c, x)
-        case ast.Expr.Name(sp, n) => p.foldPath(c, sp, Array<source.NameId>(1, n))
-        case ast.Expr.Unary(_, op, x) => p.evalUnary(c, op, x)
-        case ast.Expr.Binary(_, op, a, b) => p.evalBinary(c, op, a, b)
-        case ast.Expr.Cond(_, a, k, b) => p.evalCond(c, a, k, b)
-        case ast.Expr.Call(_, f, args) => p.evalCall(c, f, args)
-        case _ => unfolded()
+        case ast.Expr.Lit(sp, kind): p.evalLit(c.Mi, sp, kind)
+        case ast.Expr.Paren(_, x): p.eval(c, x)
+        case ast.Expr.Name(sp, n): p.foldPath(c, sp, Array<source.NameId>(1, n))
+        case ast.Expr.Unary(_, op, x): p.evalUnary(c, op, x)
+        case ast.Expr.Binary(_, op, a, b): p.evalBinary(c, op, a, b)
+        case ast.Expr.Cond(_, a, k, b): p.evalCond(c, a, k, b)
+        case ast.Expr.Call(_, f, args): p.evalCall(c, f, args)
+        case _: unfolded()
     }
 }
 
@@ -1505,7 +1505,7 @@ fn (p mut Program&) LenKey(f ast.Expr&, args Array<ast.Expr&>&) String {
             k := p.lenPath(y, 0)
             return "" if k == "" else $k ".Len()"
         }
-        nomatch { return "" }
+        case _ { return "" }
     }
 }
 
@@ -1519,7 +1519,7 @@ fn (p mut Program&) lenPath(y ast.Expr&, depth I64) String {
             k := p.lenPath(z, depth + 1)
             return "" if k == "" else $k "[0]"
         }
-        nomatch { return "" }
+        case _ { return "" }
     }
 }
 
@@ -1534,7 +1534,7 @@ fn (p mut Program&) evalLit(mi I64, sp source.Span, kind token.Tok) folded {
             return folded(Folded, v, types.UnknownT)
         }
         case token.Tok.BoolLit { return folded(Folded, 1 if txt == "true" else 0, types.BoolT) }
-        nomatch { return unfolded() }
+        case _ { return unfolded() }
     }
 }
 
@@ -1593,7 +1593,7 @@ fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?&p {
                     if v.Names[k] == n and not mutableGlobal(v) { return v }
                 }
             }
-            nomatch { }
+            case _ { }
         }
     }
     return null
@@ -1602,8 +1602,8 @@ fn (p mut Program&) globalDecl(mi I64, n source.NameId) ast.VarDecl?&p {
 fn mutableGlobal(v ast.VarDecl&) Bool {
     if v.Ty is null { return false }
     return match v.Ty {
-        case ast.TypeRef.Perm(_, _, writable, _) => writable
-        case _ => false
+        case ast.TypeRef.Perm(_, _, writable, _): writable
+        case _: false
     }
 }
 
@@ -1619,7 +1619,7 @@ fn (p mut Program&) evalConversion(c Context&, f ast.Expr&, args Array<ast.Expr&
             if x.St != Folded { return x }
             return folded(Folded, p.wrap(x.V, t), t)
         }
-        nomatch { return unfolded() }
+        case _ { return unfolded() }
     }
 }
 
@@ -1627,10 +1627,10 @@ fn (p mut Program&) evalUnary(c Context&, op token.Tok, x ast.Expr&) folded {
     f := p.eval(c, x)
     if f.St != Folded { return f }
     return match op {
-        case token.Tok.Minus => folded(Folded, p.wrap(-f.V, f.Ty), f.Ty)
-        case token.Tok.Tilde => folded(Folded, p.wrap(~f.V, f.Ty), f.Ty)
-        case token.Tok.Not => folded(Folded, 1 - f.V, types.BoolT)
-        case _ => unfolded()
+        case token.Tok.Minus: folded(Folded, p.wrap(-f.V, f.Ty), f.Ty)
+        case token.Tok.Tilde: folded(Folded, p.wrap(~f.V, f.Ty), f.Ty)
+        case token.Tok.Not: folded(Folded, 1 - f.V, types.BoolT)
+        case _: unfolded()
     }
 }
 
@@ -1686,12 +1686,12 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
        op == token.Tok.Ge {
         less := (U64(x) < U64(y)) if unsigned else x < y
         r := match op {
-            case token.Tok.EqEq => x == y
-            case token.Tok.NotEq => x != y
-            case token.Tok.Lt => less
-            case token.Tok.Le => less or x == y
-            case token.Tok.Gt => not less and x != y
-            case _ => not less
+            case token.Tok.EqEq: x == y
+            case token.Tok.NotEq: x != y
+            case token.Tok.Lt: less
+            case token.Tok.Le: less or x == y
+            case token.Tok.Gt: not less and x != y
+            case _: not less
         }
         return folded(Folded, 1 if r else 0, types.BoolT)
     }
@@ -1722,7 +1722,7 @@ fn (p mut Program&) evalBinary(c Context&, op token.Tok, a ast.Expr&, b ast.Expr
             }
         }
         case token.Tok.Xor { v = 1 if (x != 0) != (y != 0) else 0 }
-        nomatch { return unfolded() }
+        case _ { return unfolded() }
     }
     if op == token.Tok.Xor { return folded(Folded, v, types.BoolT) }
     return folded(Folded, p.wrap(v, t) if t != types.UnknownT else v, t)
@@ -1784,7 +1784,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args), p.T.ShapeFields(t)) }
         # T32: an any's trait written with the owner's variables ("any Iterator<T>&")
         case types.Kind.Any { return p.T.Any(p.Subst(p.T.AnyTrait(t), owner, args)) }
-        nomatch { return t }
+        case _ { return t }
     }
 }
 
@@ -1815,7 +1815,7 @@ fn (p mut Program&) unsubst(t types.TypeId, owner I64, xs Array<types.TypeId>&) 
         case types.Kind.Array { return p.T.Array(p.unsubst(p.T.Elem(t), owner, xs), p.unsubst(p.T.Length(t), owner, xs)) }
         case types.Kind.Ref { return p.T.Ref(p.unsubst(p.T.Referent(t), owner, xs), p.T.PermOf(t)) }
         case types.Kind.Any { return p.T.Any(p.unsubst(p.T.AnyTrait(t), owner, xs)) }
-        nomatch { return t }
+        case _ { return t }
     }
 }
 
@@ -1845,7 +1845,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             case types.DeclKind.Struct { p.T.SetStructBody(t, p.substList(p.T.Fields(self), owner, args), p.T.Destructs(self)) }
             case types.DeclKind.Enum { p.T.SetEnumBody(t, p.T.CaseNames(self), p.substList(p.T.Cases(self), owner, args)) }
             case types.DeclKind.Over { p.T.SetOverBody(t, p.Subst(p.T.Base(self), owner, args)) }
-            nomatch { p.T.SetEmptyBody(t) }
+            case _ { p.T.SetEmptyBody(t) }
         }
         # G17: the instances its parts name are made too, as far as they nest - a field instantiating the type with a
         # larger argument is a chain that never ends
@@ -1853,7 +1853,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             match p.T.DeclKindOf(d) {
                 case types.DeclKind.Struct { p.expandList(p.T.Fields(t), 0) }
                 case types.DeclKind.Enum { p.expandList(p.T.Cases(t), 0) }
-                nomatch { }
+                case _ { }
             }
         }
         return true
@@ -1912,7 +1912,7 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
                     out.Push(ft)
                 }
             }
-            nomatch { }
+            case _ { }
         }
     }
     return p.T.List(out.ToArray())
@@ -1923,18 +1923,18 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
 fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x ast.Expr?&) types.TypeId {
     if x is null { return types.UnknownT }
     return match x {
-        case ast.Expr.Lit(_, kind) => p.literalType(kind)
-        case ast.Expr.Paren(_, y) => p.Infer(c, known, y)
-        case ast.Expr.Unary(_, op, y) => p.unaryType(c, known, op, y)
-        case ast.Expr.Join(_, _) => p.textType()
-        case ast.Expr.Name(sp, n) => try known.Get(n) catch default p.nameType(c, sp, n)
-        case ast.Expr.ArrayLit(_, elem, items) => p.T.Array(p.itemsElem(c, known, p.Resolve(c, elem), items), p.T.Const(p.T.Prim("I64"), items.Len()))
-        case ast.Expr.Index(_, y, items) => p.literalOf(c, y, items)
-        case ast.Expr.Call(_, f, cargs) => p.madeType(c, known, f, cargs)
-        case ast.Expr.Try(_, y, _) => p.Infer(c, known, y)
-        case ast.Expr.As(_, _, t) => p.Resolve(c, t)
-        case ast.Expr.Binary(_, op, a, b) => p.binaryType(c, known, op, a, b)
-        case _ => types.UnknownT
+        case ast.Expr.Lit(_, kind): p.literalType(kind)
+        case ast.Expr.Paren(_, y): p.Infer(c, known, y)
+        case ast.Expr.Unary(_, op, y): p.unaryType(c, known, op, y)
+        case ast.Expr.Join(_, _): p.textType()
+        case ast.Expr.Name(sp, n): try known.Get(n) catch default p.nameType(c, sp, n)
+        case ast.Expr.ArrayLit(_, elem, items): p.T.Array(p.itemsElem(c, known, p.Resolve(c, elem), items), p.T.Const(p.T.Prim("I64"), items.Len()))
+        case ast.Expr.Index(_, y, items): p.literalOf(c, y, items)
+        case ast.Expr.Call(_, f, cargs): p.madeType(c, known, f, cargs)
+        case ast.Expr.Try(_, y, _): p.Infer(c, known, y)
+        case ast.Expr.As(_, _, t): p.Resolve(c, t)
+        case ast.Expr.Binary(_, op, a, b): p.binaryType(c, known, op, a, b)
+        case _: types.UnknownT
     }
 }
 
@@ -1960,7 +1960,7 @@ fn (p mut Program&) literalOf(c Context&, y ast.Expr&, items Array<ast.Expr&>&) 
             if el == types.UnknownT { return types.UnknownT }
             return p.T.Array(el, p.T.Const(p.T.Prim("I64"), items.Len()))
         }
-        nomatch { return types.UnknownT }
+        case _ { return types.UnknownT }
     }
 }
 
@@ -1982,10 +1982,10 @@ fn (p mut Program&) madeType(c Context&, known Map<source.NameId, types.TypeId>&
                         return p.T.Array(el, p.FoldLength(c, args[0]))
                     }
                 }
-                nomatch { }
+                case _ { }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return t
 }
@@ -2038,7 +2038,7 @@ fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.
                 v := p.globalInIf(mi, ti, p.L.Chosen(mi, ti.Cond!.Span().Start), 0, n)
                 if v is not null { return v }
             }
-            nomatch { }
+            case _ { }
         }
     }
     return null
@@ -2060,12 +2060,12 @@ fn (p mut Program&) unaryType(c Context&, known Map<source.NameId, types.TypeId>
 
 fn (p mut Program&) literalType(kind token.Tok) types.TypeId {
     return match kind {
-        case token.Tok.IntLit => p.T.Prim("I64")
-        case token.Tok.FloatLit => p.T.Prim("F64")
-        case token.Tok.BoolLit => types.BoolT
-        case token.Tok.StrLit => p.textType()
-        case token.Tok.CharLit => p.preludeType("std/prelude/text", "Char")
-        case _ => types.UnknownT
+        case token.Tok.IntLit: p.T.Prim("I64")
+        case token.Tok.FloatLit: p.T.Prim("F64")
+        case token.Tok.BoolLit: types.BoolT
+        case token.Tok.StrLit: p.textType()
+        case token.Tok.CharLit: p.preludeType("std/prelude/text", "Char")
+        case _: types.UnknownT
     }
 }
 
@@ -2110,7 +2110,7 @@ fn (p mut Program&) callType(c Context&, known Map<source.NameId, types.TypeId>&
             sig := p.MethodSig(m, recv)
             return types.UnknownT if sig == types.UnknownT else p.T.Result(sig)
         }
-        nomatch { return types.UnknownT }
+        case _ { return types.UnknownT }
     }
 }
 
@@ -2149,7 +2149,7 @@ fn (p mut Program&) genericCall(c Context&, g ast.Expr&, args Array<ast.TypeRef&
             }
         }
         case ast.Expr.Member(sp, _, _) { ref = p.R.Member(p.file(c.Mi), sp.End) }
-        nomatch { }
+        case _ { }
     }
     if ref.Kind != names.What.Type or ref.Index < 0 { return types.UnknownT }
     d := p.DeclFor(ref.Module, ref.Index)
@@ -2254,7 +2254,7 @@ fn (p mut Program&) addFns(mi I64, ds Array<ast.Decl&>&) {
             case ast.Decl.Extern(f) { p.addFn(mi, f, true) }
             case ast.Decl.ExternBlock(_, _, xs) { p.addFns(mi, xs) }
             case ast.Decl.If(_, ti) { p.addFnsIf(mi, ti, p.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
-            nomatch { }
+            case _ { }
         }
     }
 }
@@ -2316,7 +2316,7 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) Vec<I64> 
                     if p.MethodOf(x, m.Name) < 0 { ok = false }
                 }
             }
-            nomatch { }
+            case _ { }
         }
         if ok { out.Push(f) }
     }
@@ -2341,7 +2341,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
                             return keyTrait(p.DeclFor(kref.Module, kref.Index))
                         }
                     }
-                    nomatch { }
+                    case _ { }
                 }
                 return -1
             }
@@ -2354,7 +2354,7 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
             }
             return -1
         }
-        nomatch { return -1 }
+        case _ { return -1 }
     }
 }
 
@@ -2362,11 +2362,11 @@ fn (p mut Program&) recvKey(mi I64, t ast.TypeRef?&, tps Array<ast.TypeParam&>&)
 fn (p mut Program&) typeKey(t types.TypeId) I64 {
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     return match p.T.KindOf(x) {
-        case types.Kind.Named => keyDecl(p.T.DeclOf(x))
-        case types.Kind.Array => ArrayKey
+        case types.Kind.Named: keyDecl(p.T.DeclOf(x))
+        case types.Kind.Array: ArrayKey
         case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16
-             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int => keyPrim(x)
-        case _ => -1
+             types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64, types.Kind.Int: keyPrim(x)
+        case _: -1
     }
 }
 
@@ -2628,7 +2628,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
             }
             return false
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -2650,15 +2650,15 @@ fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, 
             }
             p.lengthLevels(p.T.Elem(t), true, n, depth + 1, ns, out)
         }
-        nomatch { }
+        case _ { }
     }
 }
 
 fn (p mut Program&) levelCount(t types.TypeId, byValue Bool) I64 {
     return match p.T.KindOf(t) {
-        case types.Kind.Ref => p.levelCount(p.T.Referent(t), false)
-        case types.Kind.Array => (1 if byValue and p.T.Length(t) == types.TypeId(0) else 0) + p.levelCount(p.T.Elem(t), true)
-        case _ => 0
+        case types.Kind.Ref: p.levelCount(p.T.Referent(t), false)
+        case types.Kind.Array: (1 if byValue and p.T.Length(t) == types.TypeId(0) else 0) + p.levelCount(p.T.Elem(t), true)
+        case _: 0
     }
 }
 
@@ -2671,7 +2671,7 @@ fn (p mut Program&) withLengths(t types.TypeId, byValue Bool, owner I64, k I64) 
             el := p.withLengths(p.T.Elem(t), true, owner, k + (1 if here else 0))
             return p.T.Array(el, p.T.Var(owner, k, types.ReadOnly) if here else p.T.Length(t))
         }
-        nomatch { return t }
+        case _ { return t }
     }
 }
 
@@ -2698,7 +2698,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.Nam
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -2716,7 +2716,7 @@ fn errIntroductions(t ast.TypeRef?&, out mut Vec<source.NameId>&) {
                 if e.Parts.Len() == 1 { out.Push(e.Parts[0]) }
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -2907,7 +2907,7 @@ fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     if td is not null and td.Body is not null and (td.Params.Len() == 0) {
         match td.Body {
             case ast.TypeBody.Struct(s) { tps = s.TypeParams }
-            nomatch { }
+            case _ { }
         }
     }
     if tps.Len() > 0 {
@@ -2949,7 +2949,7 @@ fn (p mut Program&) CtorSigAt(t types.TypeId, args types.ListId) types.TypeId {
             if ctor is null { return types.UnknownT }
             return p.paramsSig(c, ctor.S.Params, ctor.S, t)
         }
-        nomatch { return types.UnknownT }
+        case _ { return types.UnknownT }
     }
 }
 
@@ -2965,7 +2965,7 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
             if ps.Len() == 0 { return p.T.Func(types.ListId(0), t, types.ListId(0)) }
             return p.paramsSig(p.InstanceContext(t), ps, null, t)
         }
-        nomatch { return types.UnknownT }
+        case _ { return types.UnknownT }
     }
 }
 
@@ -3033,7 +3033,7 @@ fn (p mut Program&) bodiesOf(t types.TypeId) {
                 if x != types.TypeId(0) { p.bodiesOf(x) }
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -3087,7 +3087,7 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
         }
         # T32: an any's trait's arguments ("any Iterator<T>&" meeting "any Iterator<I64>&")
         case types.Kind.Any { return p.Unify(p.T.AnyTrait(pat), p.T.AnyTrait(actual), b, false, receiver) }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -3226,7 +3226,7 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
                 if p.errsHaveVar(p.T.Errors(want), b) { p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) }
             }
         }
-        nomatch { }
+        case _ { }
     }
     for i in range b.N {
         if before[i] != b.Vals[i] { return true }
@@ -3300,7 +3300,7 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
             }
             return met()
         }
-        nomatch { return Unmet(0, tr, source.NameId(0), false, false) }
+        case _ { return Unmet(0, tr, source.NameId(0), false, false) }
     }
 }
 
@@ -3337,7 +3337,7 @@ fn (p mut Program&) members(tr types.TypeId, out mut Vec<types.TypeId>&, depth I
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -3353,7 +3353,7 @@ fn (p mut Program&) Extended(tr types.TypeId) Array<types.TypeId> {
             c := p.declContext(d)
             for e in exts { out.Push(p.Subst(p.Resolve(c, e), DeclOwner(d), p.T.Args(tr))) }
         }
-        nomatch { }
+        case _ { }
     }
     return out.ToArray()
 }
@@ -3365,7 +3365,7 @@ fn (p mut Program&) IsClosedTrait(t types.TypeId) Bool {
     if td is null or td.Body is null { return false }
     match td.Body {
         case ast.TypeBody.Trait(_, _, ms) { return ms.Len() > 0 }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -3498,7 +3498,7 @@ fn (p mut Program&) hasHash(t types.TypeId, depth I64) Bool {
             if dk == types.DeclKind.Over and p.T.KindOf(p.T.Base(t)) == types.Kind.Array { return p.hasHash(p.T.Base(t), depth + 1) }
             return false
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -3608,7 +3608,7 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
                     out.Push(AnySlot(m.Name, tr, k, -1, writes, p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))))
                 }
             }
-            nomatch { }
+            case _ { }
         }
     }
     for i in range p.defaultFns.Len() {
@@ -3707,7 +3707,7 @@ fn (p mut Program&) mentionsVar(t types.TypeId, owner I64, v I64, depth I64) Boo
         case types.Kind.Func {
             return p.mentionsList(p.T.Params(t), owner, v, depth) or p.mentionsVar(p.T.Result(t), owner, v, depth + 1)
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -3756,7 +3756,7 @@ fn (p mut Program&) HoldsVarByValue(t types.TypeId, owner I64, v I64, depth I64)
             }
             return false
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -3830,12 +3830,12 @@ type Desc struct(K I64, Of types.TypeId, Case I64, At I64) {
 
 fn descName(k I64) String {
     return match k {
-        case 1 => "FieldInfo"
-        case 2 => "CaseInfo"
-        case 3 => "ParamInfo"
-        case 4 => "ResultInfo"
-        case 5 => "FuncInfo"
-        case _ => ""
+        case 1: "FieldInfo"
+        case 2: "CaseInfo"
+        case 3: "ParamInfo"
+        case 4: "ResultInfo"
+        case 5: "FuncInfo"
+        case _: ""
     }
 }
 
@@ -3971,12 +3971,12 @@ fn (p mut Program&) ReflKind(t types.TypeId) I64 {
     if p.T.IsInt(r) { return 2 }
     if p.T.IsFloat(r) { return 3 }
     return match p.T.KindOf(r) {
-        case types.Kind.Array => 5
-        case types.Kind.Ref => 6
-        case types.Kind.Func => 7
-        case types.Kind.Named => 0 if p.isStructT(r) else (1 if p.isEnumT(r) else -1)
-        case types.Kind.ErrVal => 8
-        case _ => -1
+        case types.Kind.Array: 5
+        case types.Kind.Ref: 6
+        case types.Kind.Func: 7
+        case types.Kind.Named: 0 if p.isStructT(r) else (1 if p.isEnumT(r) else -1)
+        case types.Kind.ErrVal: 8
+        case _: -1
     }
 }
 
@@ -4082,7 +4082,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
                 if es.Len() != 1 { b.PushChar('}') }
             }
         }
-        nomatch { b.Push(p.T.Canon(t)) }
+        case _ { b.Push(p.T.Canon(t)) }
     }
 }
 
@@ -4102,12 +4102,12 @@ fn (p mut Program&) FieldNames(t types.TypeId) Array<source.NameId> {
                                 for vn in v.Names { out.Push(vn) }
                             }
                         }
-                        nomatch { }
+                        case _ { }
                     }
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return out.ToArray()
 }
@@ -4124,7 +4124,7 @@ fn (p mut Program&) CaseFieldNames(t types.TypeId, cs I64) Array<source.NameId> 
                 for f in cases[cs].Payload { out.Push(f.Name) }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return out.ToArray()
 }
@@ -4140,7 +4140,7 @@ fn (p mut Program&) CtorParams(t types.TypeId) Array<ast.Param&>&p {
         case ast.TypeBody.Over(_, ctor) {
             if ctor is not null { return ctor.S.Params }
         }
-        nomatch { }
+        case _ { }
     }
     return none
 }
@@ -4198,7 +4198,7 @@ fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>&p {
                             k++
                         }
                     }
-                    nomatch { }
+                    case _ { }
                 }
             }
         }
@@ -4207,7 +4207,7 @@ fn (p mut Program&) AttrsOf(t types.TypeId) I64, Array<ast.Attr&>&p {
             if ds.K == DescCase { return mi, cases[ds.Case].Attrs }
             if ds.At < cases[ds.Case].Payload.Len() { return mi, cases[ds.Case].Payload[ds.At].Attrs }
         }
-        nomatch { }
+        case _ { }
     }
     return -1, none
 }

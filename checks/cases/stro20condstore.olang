@@ -23,8 +23,8 @@ fn main() ? {
     for i in range 1 {
         local P& = P(42)
         h.f = match i {
-            case 0 => local
-            nomatch => P(7)
+            case 0: local
+            case _: P(7)
         }
     }
     churn()

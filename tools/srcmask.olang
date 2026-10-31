@@ -271,19 +271,19 @@ fn OpAt(t String&) String {
 # the conditional's "if" 0, looser than all
 fn Prec(op String&) I64 {
     return match op {
-        case "if" => 0
-        case "or" => 2
-        case "xor" => 4
-        case "and" => 6
-        case "not" => 7
-        case "==", "!=" => 8
-        case "<", "<=", ">", ">=", "in", "is" => 10
-        case "|" => 12
-        case "^" => 14
-        case "&" => 16
-        case "<<", ">>" => 18
-        case "+", "-" => 20
-        case _ => 22
+        case "if": 0
+        case "or": 2
+        case "xor": 4
+        case "and": 6
+        case "not": 7
+        case "==", "!=": 8
+        case "<", "<=", ">", ">=", "in", "is": 10
+        case "|": 12
+        case "^": 14
+        case "&": 16
+        case "<<", ">>": 18
+        case "+", "-": 20
+        case _: 22
     }
 }
 

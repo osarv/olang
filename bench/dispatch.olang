@@ -31,9 +31,9 @@ type Fig enum {
 
 fn area(f Fig&) I64 {
     return match f {
-        case Fig.S(s) => s * s
-        case Fig.R(w, h) => w * h
-        case Fig.T(b, h) => b * h / 2
+        case Fig.S(s): s * s
+        case Fig.R(w, h): w * h
+        case Fig.T(b, h): b * h / 2
     }
 }
 

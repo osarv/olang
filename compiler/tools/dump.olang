@@ -91,7 +91,7 @@ fn run(mode String&, args Array<String&>&) ? io.Error {
             case "speed" { speed(out, src) }
             case "ast" { astDump(out, src, std, prelude) }
             case "roundtrip" { roundTrip(out, src, std, prelude) }
-            nomatch { parseSpeed(out, src, std, prelude) }
+            case _ { parseSpeed(out, src, std, prelude) }
         }
     }
     try out.Flush() catch io.Error { os.Exit(1) }
@@ -444,7 +444,7 @@ fn (w mut walker&) decl(d ast.Decl&) {
                 case ast.TypeBody.Over(_, ctor) {
                     if ctor is not null { w.func(ctor) }
                 }
-                nomatch { }
+                case _ { }
             }
         }
         case ast.Decl.Global(sp, v) {
@@ -531,7 +531,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
                 case ast.Expr.Try(_, _, cl) {
                     if cl.Len() > 0 { kind = "TRY" }
                 }
-                nomatch { }
+                case _ { }
             }
             w.line(kind, sp)
             w.expr(x)
@@ -552,7 +552,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             match inner {
                 case ast.Stmt.Assign(_, _, _, _) { w.stmt(inner) }
                 case ast.Stmt.ExprS(_, x) { w.expr(x) }
-                nomatch { }
+                case _ { }
             }
             w.clauses(cl)
         }
@@ -568,7 +568,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
                         w.stmt(i.Else)
                     }
                 }
-                nomatch { w.stmt(i.Else) }
+                case _ { w.stmt(i.Else) }
             }
         }
         case ast.Stmt.Forever(sp, body) {
@@ -616,9 +616,9 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
         }
         case ast.Stmt.Jump(sp, k, msg) {
             kind := match k {
-                case token.Tok.Break => "BREAK"
-                case token.Tok.Continue => "CONTINUE"
-                case _ => "UNREACHABLE"
+                case token.Tok.Break: "BREAK"
+                case token.Tok.Continue: "CONTINUE"
+                case _: "UNREACHABLE"
             }
             w.line(kind, sp)
             if msg is not null { w.expr(msg) }
@@ -643,7 +643,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             w.line("ERRDEFER" if onError else "DEFER", sp)
             match inner {
                 case ast.Stmt.Block(_, body) { w.stmts(body) }
-                nomatch { w.stmt(inner) }
+                case _ { w.stmt(inner) }
             }
         }
         case ast.Stmt.Block(sp, body) {
@@ -656,7 +656,6 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
 fn (w mut walker&) match(m ast.Match&) {
     w.expr(m.Subject)
     for c in m.Cases { w.case(c, "CASE") }
-    if m.NoMatch is not null { w.case(m.NoMatch!, "NOMATCH") }
 }
 
 fn (w mut walker&) case(c ast.Case&, kind String&) {
@@ -726,7 +725,7 @@ fn (w mut walker&) expr(x ast.Expr?&) {
             w.line("MATCH", sp)
             w.match(m)
         }
-        nomatch { }
+        case _ { }
     }
 }
 

@@ -31,16 +31,16 @@ fn mk(s String&) String { return $s "-made" }
 
 fn byMatch(t String&, k K) E {
     e := E($t, match k {
-        case K.One => mk(t)
-        case K.Two => ""
+        case K.One: mk(t)
+        case K.Two: ""
     })
     return e
 }
 
 fn allNew(t String&, k K) E {
     return E($t, match k {
-        case K.One => mk(t)
-        case K.Two => $t "-two"
+        case K.One: mk(t)
+        case K.Two: $t "-two"
     })
 }
 

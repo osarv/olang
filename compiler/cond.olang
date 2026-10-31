@@ -194,13 +194,13 @@ fn (c Consts&) Fits(name String&, ty String&) Bool {
     v := c.values[i]
     big := c.big[i]
     return match ty {
-        case "Bool" => v.Kind == ValueKind.Bool
-        case "String" => v.Kind == ValueKind.Text
-        case "I32" => v.Kind == ValueKind.Int and not big and fits(v.I, 32, false)
-        case "I64" => v.Kind == ValueKind.Int and not big
-        case "U64" => v.Kind == ValueKind.Int and (big or v.I >= 0)
-        case "F64" => v.Kind == ValueKind.Float or (v.Kind == ValueKind.Int and not big)
-        case _ => false
+        case "Bool": v.Kind == ValueKind.Bool
+        case "String": v.Kind == ValueKind.Text
+        case "I32": v.Kind == ValueKind.Int and not big and fits(v.I, 32, false)
+        case "I64": v.Kind == ValueKind.Int and not big
+        case "U64": v.Kind == ValueKind.Int and (big or v.I >= 0)
+        case "F64": v.Kind == ValueKind.Float or (v.Kind == ValueKind.Int and not big)
+        case _: false
     }
 }
 
@@ -408,22 +408,22 @@ fn (e Eval&) isLocal(n source.NameId) Bool {
 fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
     if c is null { return false }
     return match c {
-        case ast.Expr.Name(_, n) => e.isLocal(n)
-        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
-        case ast.Expr.Binary(_, _, a, b) => e.mentionsLocal(a) or e.mentionsLocal(b)
-        case ast.Expr.Call(_, f, args) => e.mentionsLocal(f) or e.anyLocal(args)
-        case ast.Expr.Index(_, x, items) => e.mentionsLocal(x) or e.anyLocal(items)
-        case ast.Expr.Chain(_, ch) => e.anyLocal(ch.Xs)
-        case ast.Expr.Cond(_, a, k, b) => e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
+        case ast.Expr.Name(_, n): e.isLocal(n)
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _): e.mentionsLocal(x)
+        case ast.Expr.Binary(_, _, a, b): e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.Call(_, f, args): e.mentionsLocal(f) or e.anyLocal(args)
+        case ast.Expr.Index(_, x, items): e.mentionsLocal(x) or e.anyLocal(items)
+        case ast.Expr.Chain(_, ch): e.anyLocal(ch.Xs)
+        case ast.Expr.Cond(_, a, k, b): e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
         case ast.Expr.Postfix(_, _, x), ast.Expr.IsType(_, x, _, _), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
-             ast.Expr.Try(_, x, _) => e.mentionsLocal(x)
-        case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => e.mentionsLocal(a) or e.mentionsLocal(b)
-        case ast.Expr.ScopeCall(_, f, _, args) => e.mentionsLocal(f) or e.anyLocal(args)
-        case ast.Expr.Slice(_, x, lo, hi) => e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items) => e.anyLocal(items)
+             ast.Expr.Try(_, x, _): e.mentionsLocal(x)
+        case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.ScopeCall(_, f, _, args): e.mentionsLocal(f) or e.anyLocal(args)
+        case ast.Expr.Slice(_, x, lo, hi): e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items): e.anyLocal(items)
         # what declares names of its own is the running program's whatever it reads
-        case ast.Expr.Compr(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _) => true
-        case _ => false
+        case ast.Expr.Compr(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _): true
+        case _: false
     }
 }
 
@@ -437,24 +437,24 @@ fn (e Eval&) anyLocal(xs Array<ast.Expr&>&) Bool {
 # the span of an expression's first token
 fn (e Eval&) first(x ast.Expr&) source.Span {
     return match x {
-        case ast.Expr.Binary(_, _, a, _) => e.first(a)
-        case ast.Expr.Chain(_, ch) => e.first(ch.Xs[0])
-        case ast.Expr.Cond(_, a, _, _) => e.first(a)
-        case ast.Expr.Call(_, f, _), ast.Expr.Member(_, f, _), ast.Expr.Index(_, f, _) => e.first(f)
-        case ast.Expr.Is(_, f, _, _), ast.Expr.IsType(_, f, _, _), ast.Expr.As(_, f, _) => e.first(f)
-        case ast.Expr.Lit(sp, _), ast.Expr.Name(sp, _) => sp
-        case _ => e.tokenAt(x.Span().Start)
+        case ast.Expr.Binary(_, _, a, _): e.first(a)
+        case ast.Expr.Chain(_, ch): e.first(ch.Xs[0])
+        case ast.Expr.Cond(_, a, _, _): e.first(a)
+        case ast.Expr.Call(_, f, _), ast.Expr.Member(_, f, _), ast.Expr.Index(_, f, _): e.first(f)
+        case ast.Expr.Is(_, f, _, _), ast.Expr.IsType(_, f, _, _), ast.Expr.As(_, f, _): e.first(f)
+        case ast.Expr.Lit(sp, _), ast.Expr.Name(sp, _): sp
+        case _: e.tokenAt(x.Span().Start)
     }
 }
 
 fn (e mut Eval&) expr(x ast.Expr&) Value {
     return match x {
-        case ast.Expr.Lit(sp, k) => e.literal(sp, k)
-        case ast.Expr.Name(sp, n) => e.name(sp, n)
-        case ast.Expr.Paren(_, inner) => e.expr(inner)
-        case ast.Expr.Unary(sp, op, inner) => e.unary(sp, op, inner)
-        case ast.Expr.Binary(sp, op, a, b) => e.binary(sp, op, a, b)
-        case _ => e.defer(e.first(x))
+        case ast.Expr.Lit(sp, k): e.literal(sp, k)
+        case ast.Expr.Name(sp, n): e.name(sp, n)
+        case ast.Expr.Paren(_, inner): e.expr(inner)
+        case ast.Expr.Unary(sp, op, inner): e.unary(sp, op, inner)
+        case ast.Expr.Binary(sp, op, a, b): e.binary(sp, op, a, b)
+        case _: e.defer(e.first(x))
     }
 }
 
@@ -475,7 +475,7 @@ fn (e mut Eval&) literal(sp source.Span, k token.Tok) Value {
             return Value(ValueKind.Float, 0, f, 0, 0, false)
         }
         case token.Tok.StrLit { return Value(ValueKind.Text, 0, 0.0, e.addText(scan.LiteralText(t)), 0, false) }
-        nomatch { return e.defer(sp) }
+        case _ { return e.defer(sp) }
     }
 }
 
@@ -506,10 +506,10 @@ fn (e mut Eval&) name(sp source.Span, n source.NameId) Value {
 # B10c: a type a -D value can have - Bool, I32, I64, U64, F64 or String
 fn buildType(v Value) Bool {
     return match v.Kind {
-        case ValueKind.Bool, ValueKind.Text => true
-        case ValueKind.Float => v.Bits == 64
-        case ValueKind.Int => v.Bits == 64 if v.Uns else (v.Bits == 32 or v.Bits == 64)
-        case _ => false
+        case ValueKind.Bool, ValueKind.Text: true
+        case ValueKind.Float: v.Bits == 64
+        case ValueKind.Int: v.Bits == 64 if v.Uns else (v.Bits == 32 or v.Bits == 64)
+        case _: false
     }
 }
 
@@ -595,11 +595,11 @@ fn (e mut Eval&) asDeclared(sp source.Span, g Global&, v Value) Value {
     }
     dk, bits, uns := declaredKind(g.Declared)
     return match dk {
-        case ValueKind.Int => e.intDeclared(sp, v, bits, uns)
-        case ValueKind.Float => e.floatDeclared(sp, v, bits)
-        case ValueKind.Bool => v if v.Kind == ValueKind.Bool else e.defer(sp)
-        case ValueKind.Text => v if v.Kind == ValueKind.Text else e.defer(sp)
-        case _ => v if v.Kind == ValueKind.Text or v.Kind == ValueKind.Bool else e.defer(sp)
+        case ValueKind.Int: e.intDeclared(sp, v, bits, uns)
+        case ValueKind.Float: e.floatDeclared(sp, v, bits)
+        case ValueKind.Bool: v if v.Kind == ValueKind.Bool else e.defer(sp)
+        case ValueKind.Text: v if v.Kind == ValueKind.Text else e.defer(sp)
+        case _: v if v.Kind == ValueKind.Text or v.Kind == ValueKind.Bool else e.defer(sp)
     }
 }
 
@@ -689,7 +689,7 @@ fn (e mut Eval&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&) 
         case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent {
             return e.arith(opSp, op, e.expr(a), e.expr(b))
         }
-        nomatch {
+        case _ {
             e.expr(a)
             return e.defer(opSp)
         }
@@ -736,7 +736,7 @@ fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
                 r = a.I * b.I
                 over = a.I != 0 and (r / a.I != b.I or (a.I == -1 and b.I == -9223372036854775807 - 1))
             }
-            nomatch {
+            case _ {
                 # E6a: a zero divisor, and MIN / -1, are undefined - compile-time evaluation says so where it is written
                 if b.I == 0 or (a.I == -9223372036854775807 - 1 and b.I == -1) { return e.defer(opSp) }
                 r = a.I / b.I if op == token.Tok.Slash else a.I % b.I
@@ -802,12 +802,12 @@ fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value
         return e.fail(opSp, msgs.CondTypes(e.tokText(opSp)))
     }
     return match op {
-        case token.Tok.EqEq => boolValue(order == 0)
-        case token.Tok.NotEq => boolValue(order != 0)
-        case token.Tok.Lt => boolValue(order < 0)
-        case token.Tok.Le => boolValue(order <= 0)
-        case token.Tok.Gt => boolValue(order > 0)
-        case _ => boolValue(order >= 0)
+        case token.Tok.EqEq: boolValue(order == 0)
+        case token.Tok.NotEq: boolValue(order != 0)
+        case token.Tok.Lt: boolValue(order < 0)
+        case token.Tok.Le: boolValue(order <= 0)
+        case token.Tok.Gt: boolValue(order > 0)
+        case _: boolValue(order >= 0)
     }
 }
 

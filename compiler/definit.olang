@@ -109,8 +109,8 @@ fn (w mut Walker&) stmts(ss Array<typed.Stmt&>&, s State) State {
 
 fn (w mut Walker&) isL(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => id == w.L
-        case _ => false
+        case typed.Lvalue.Local(_, _, id): id == w.L
+        case _: false
     }
 }
 
@@ -325,8 +325,8 @@ fn (w mut Walker&) place(p typed.Lvalue&, s State) State {
 # a Bool literal's value: 1, 0, or -1 for an expression that is none
 fn litBool(x typed.Expr&) I64 {
     return match x {
-        case typed.Expr.Lit(_, ty, bits) => (1 if bits != 0 else 0) if ty == types.BoolT else -1
-        case _ => -1
+        case typed.Expr.Lit(_, ty, bits): (1 if bits != 0 else 0) if ty == types.BoolT else -1
+        case _: -1
     }
 }
 
@@ -381,15 +381,15 @@ fn (w mut heldWalker&) block(bl typed.Block?&, armed Bool) {
 
 fn (w mut heldWalker&) readsG(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Read(_, _, p, _) => w.isG(p)
-        case _ => false
+        case typed.Expr.Read(_, _, p, _): w.isG(p)
+        case _: false
     }
 }
 
 fn (w mut heldWalker&) isG(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => id == w.g
-        case _ => false
+        case typed.Lvalue.Local(_, _, id): id == w.g
+        case _: false
     }
 }
 

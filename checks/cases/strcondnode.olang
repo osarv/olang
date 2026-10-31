@@ -23,8 +23,8 @@ type Bag struct(head mut Node&, name String&, k I64) {
 fn (b Bag&) Str() String {
     x := b.head if b.k == 0 else Node(1, null)
     y := match b.k {
-        case 0 => b.head
-        nomatch => Node(2, null)
+        case 0: b.head
+        case _: Node(2, null)
     }
     return $x.v " " $y.v
 }

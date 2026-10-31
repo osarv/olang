@@ -13,9 +13,9 @@ fn halt<T Stopper>(q T&, n I64) I64 {
     return n
 }
 fn pick<T>(a T, b T) T { return a }
-fn c(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => 2 } }
-fn d(x I64) I64 { return match x { case 1 => 7 case _ => os.Exit(5) } }
-fn e(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => os.Exit(6) } }
+fn c(x I64) I64 { return match x { case 1: os.Exit(5) case _: 2 } }
+fn d(x I64) I64 { return match x { case 1: 7 case _: os.Exit(5) } }
+fn e(x I64) I64 { return match x { case 1: os.Exit(5) case _: os.Exit(6) } }
 fn main() {
     a := pick(3, os.Exit(1) if Big > 9 else 4)
     b := pick(os.Exit(1), 5) if Big > 9 else 6

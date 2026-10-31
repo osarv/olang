@@ -5,6 +5,6 @@ type Rec struct(Fields Array<I64>&) { Fields }
 fn main() {
     r := Rec(I64[1, 2])
     for f in r.Fields {
-        match f.Type { nomatch { } }
+        match f.Type { case _ { } }
     }
 }

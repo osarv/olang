@@ -99,14 +99,14 @@ fn (s mut source&) float() F64 {
     w := s.byte()
     if w >= 248 {
         return match w {
-            case 248 => F64.Inf
-            case 249 => -F64.Inf
-            case 250 => F64.NaN
-            case 251 => F64.Max
-            case 252 => -F64.Max
-            case 253 => F64.SmallestNormal
-            case 254 => -0.0
-            case _ => F64.Epsilon
+            case 248: F64.Inf
+            case 249: -F64.Inf
+            case 250: F64.NaN
+            case 251: F64.Max
+            case 252: -F64.Max
+            case 253: F64.SmallestNormal
+            case 254: -0.0
+            case _: F64.Epsilon
         }
     }
     return F64(s.integer()) / F64(1 << I64(s.byte() % 16))
@@ -135,7 +135,7 @@ fn gen<T>(s mut source&) T ? skip {
             for s.more() { v.Push(try gen<E>(s)) }
             return v
         }
-        nomatch {
+        case _ {
             if T.Kind == TypeKind.Integer {
                 return T(s.integer())
             } else if T.Kind == TypeKind.Float {

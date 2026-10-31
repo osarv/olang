@@ -1,0 +1,15 @@
+# check: run
+# S12b: a clause of a match used as a value may leave instead of giving a value - one statement after its ':', as an
+# if's one-line body is ("case _: return 0"); "case P: unreachable" gives a value that never arrives (S16e)
+fn sign(n I64) I64 {
+    s := match n {
+        case 0: 0
+        case 1: 1
+        case 7: unreachable "seven never comes"
+        case _: return -1
+    }
+    return s * 10
+}
+fn main() ? {
+    assert sign(0) == 0 and sign(1) == 10 and sign(5) == -1
+}

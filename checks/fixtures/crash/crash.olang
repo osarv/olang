@@ -37,6 +37,6 @@ fn main() ? {
             try io.Println("deep " $c.v)
         }
         case "shallow" { c.v = deep(1000000) }
-        nomatch { try io.Println("nothing") }
+        case _ { try io.Println("nothing") }
     }
 }

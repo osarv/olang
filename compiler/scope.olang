@@ -62,13 +62,13 @@ fn (s mut Scoper&) holdsDtorIn(ty types.TypeId, seen mut Map<types.TypeId, Bool>
     if seen.Has(r) { return try seen.Get(r) catch default false }
     seen.Put(r, false)
     out := match t.KindOf(r) {
-        case types.Kind.Ref => s.holdsDtorIn(t.Referent(r), seen)
-        case types.Kind.Any, types.Kind.Var => true
-        case types.Kind.Array => s.holdsDtorIn(t.Elem(r), seen)
-        case types.Kind.Tuple, types.Kind.Record => s.someHoldsDtor(t.Items(t.Parts(r)), seen)
-        case types.Kind.Named => not t.HasBody(r) or t.Destructs(r) or s.someHoldsDtor(t.Items(t.Fields(r)), seen) or
+        case types.Kind.Ref: s.holdsDtorIn(t.Referent(r), seen)
+        case types.Kind.Any, types.Kind.Var: true
+        case types.Kind.Array: s.holdsDtorIn(t.Elem(r), seen)
+        case types.Kind.Tuple, types.Kind.Record: s.someHoldsDtor(t.Items(t.Parts(r)), seen)
+        case types.Kind.Named: not t.HasBody(r) or t.Destructs(r) or s.someHoldsDtor(t.Items(t.Fields(r)), seen) or
                                  s.someHoldsDtor(t.Items(t.Cases(r)), seen)
-        case _ => false
+        case _: false
     }
     seen.Put(r, out)
     return out
@@ -84,24 +84,24 @@ fn (s mut Scoper&) someHoldsDtor(ts Array<types.TypeId>&, seen mut Map<types.Typ
 # whether a term is a block's scope - the frame's or one nested in it (S21)
 fn isBlockTerm(t Term) Bool {
     return match t {
-        case Term.Block(_) => true
-        case _ => false
+        case Term.Block(_): true
+        case _: false
     }
 }
 
 # whether a term exists at run time, so that something can be built in it (2.3)
 fn (t Term) Runs() Bool {
     return match t {
-        case Term.Block(_), Term.Var(_), Term.Program => true
-        case _ => false
+        case Term.Block(_), Term.Var(_), Term.Program: true
+        case _: false
     }
 }
 
 # whether a term can be part of an obligation: a scope variable, a derived scope or the program's (O10b)
 fn (t Term) Relatable() Bool {
     return match t {
-        case Term.Var(_), Term.Derived(_, _), Term.Program => true
-        case _ => false
+        case Term.Var(_), Term.Derived(_, _), Term.Program: true
+        case _: false
     }
 }
 
@@ -749,7 +749,7 @@ fn (s mut Scoper&) storeThrough(t types.TypeId) Bool {
         }
         case types.Kind.Func { return false }
         case types.Kind.Named, types.Kind.Tuple, types.Kind.Record, types.Kind.Array, types.Kind.AnonEnum { }
-        nomatch { return false }
+        case _ { return false }
     }
     state := try s.stTypes.Get(t) catch default 0
     if state != 0 { return state == 3 }
@@ -791,7 +791,7 @@ fn (s mut Scoper&) admitsAt(t types.TypeId, writable Bool) Bool {
                 if s.partAdmits(p, writable) { r = true }
             }
         }
-        nomatch { }
+        case _ { }
     }
     s.asTypes.Put(k, 3 if r else 2)
     return r
@@ -819,7 +819,7 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
                 }
                 case types.DeclKind.Over { return s.assignableHolds(s.P.T.Base(t)) }
                 case types.DeclKind.Enum { return s.storeThrough(t) }
-                nomatch { return false }
+                case _ { return false }
             }
         }
         case types.Kind.Array { return s.holds(s.P.T.Elem(t)) }
@@ -830,7 +830,7 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
             return false
         }
         case types.Kind.Var { return true }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -853,7 +853,7 @@ fn (s mut Scoper&) parts(t types.TypeId) Vec<types.TypeId> {
                     }
                 }
                 case types.DeclKind.Over { out.Push(s.P.T.Base(t)) }
-                nomatch { }
+                case _ { }
             }
         }
         case types.Kind.Array { out.Push(s.P.T.Elem(t)) }
@@ -867,7 +867,7 @@ fn (s mut Scoper&) parts(t types.TypeId) Vec<types.TypeId> {
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return out
 }
@@ -875,8 +875,8 @@ fn (s mut Scoper&) parts(t types.TypeId) Vec<types.TypeId> {
 # the body of a function a callee reaches, -1 where there is none (an extern, a helper, a function value)
 fn (s mut Scoper&) bodyOf(c typed.Callee&) I64 {
     return match c {
-        case typed.Callee.Body(id) => I64(id)
-        case _ => -1
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
     }
 }
 
@@ -914,8 +914,8 @@ fn walkBody(s mut Scoper&, b I64) walked {
 # a local a place is, the whole of it: -1 for any other place
 fn wholeLocal(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => I64(id)
-        case _ => -1
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case _: -1
     }
 }
 
@@ -1238,9 +1238,9 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
 # whether an expression is a conditional or a match (E28, S12b)
 fn (s mut Scoper&) choiceOfRefs(x typed.Expr&) Bool {
     return match s.unAway(x) {
-        case typed.Expr.Cond(_, _, _), typed.Expr.Match(_, _, _) => true
-        case typed.Expr.Seq(_, _, q) => q.X is not null and s.choiceOfRefs(q.X!)
-        case _ => false
+        case typed.Expr.Cond(_, _, _), typed.Expr.Match(_, _, _): true
+        case typed.Expr.Seq(_, _, q): q.X is not null and s.choiceOfRefs(q.X!)
+        case _: false
     }
 }
 
@@ -1297,8 +1297,8 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     if loc.Kind == typed.LocalKind.Held { return }
     # a constructor's own top level is its instance's scope (C2g); a block inside it moves nothing there
     ctor := match s.B!.Of {
-        case typed.BodyOf.Ctor(_, _) => true
-        case _ => false
+        case typed.BodyOf.Ctor(_, _): true
+        case _: false
     }
     # a for-in's own variable is the loop's copy, never moved: it is no declaration of the program's (O26a)
     if s.qualifiesMove(loc, x) and not ctor and not s.loopElement(I64(l)) {
@@ -1410,8 +1410,8 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
 
 fn (s mut Scoper&) isData(x typed.Expr&) Bool {
     return match s.unAway(x) {
-        case typed.Expr.Data(_, _, _, _) => true
-        case _ => false
+        case typed.Expr.Data(_, _, _, _): true
+        case _: false
     }
 }
 
@@ -1451,19 +1451,19 @@ fn (s mut Scoper&) madeHere(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
         # an array a call given a scope argument builds is where that says, not here (E25, T7b)
-        case typed.Expr.Call(_, ty, c) => not typed.ScopedCall(c) or not s.arenaValue(ty)
-        case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _) => true
-        case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _) => true
-        case typed.Expr.Lit(_, ty, _) => s.holds(ty)
-        case typed.Expr.Try(_, _, t) => s.madeHere(t.X)
-        case typed.Expr.Away(_, _, y) => s.madeHere(y)
-        case typed.Expr.Seq(_, _, q) => s.madeHere(q.X)
-        case typed.Expr.Prim(_, _, op, _, args) => typed.PassesRefs(op) and args.Len() > 0 and s.madeHere(args[0])
-        case typed.Expr.Read(_, ty, p, _) => s.heldPart(p) or s.constCopy(p, ty)
+        case typed.Expr.Call(_, ty, c): not typed.ScopedCall(c) or not s.arenaValue(ty)
+        case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _): true
+        case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _): true
+        case typed.Expr.Lit(_, ty, _): s.holds(ty)
+        case typed.Expr.Try(_, _, t): s.madeHere(t.X)
+        case typed.Expr.Away(_, _, y): s.madeHere(y)
+        case typed.Expr.Seq(_, _, q): s.madeHere(q.X)
+        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and s.madeHere(args[0])
+        case typed.Expr.Read(_, ty, p, _): s.heldPart(p) or s.constCopy(p, ty)
         # a conditional or a value match each of whose values makes it (E28, S12b; stage 0's copiesExistingRefs)
-        case typed.Expr.Cond(_, _, c) => s.madeHere(c.A) and s.madeHere(c.B)
-        case typed.Expr.Match(_, _, m) => s.matchMadeHere(m)
-        case _ => false
+        case typed.Expr.Cond(_, _, c): s.madeHere(c.A) and s.madeHere(c.B)
+        case typed.Expr.Match(_, _, m): s.matchMadeHere(m)
+        case _: false
     }
 }
 
@@ -1473,8 +1473,8 @@ fn (s mut Scoper&) constCopy(p typed.Lvalue&, ty types.TypeId) Bool {
     match p {
         case typed.Lvalue.Deref(_, _, r) {
             return match s.unAway(r) {
-                case typed.Expr.Data(_, _, _, _) => true
-                case _ => false
+                case typed.Expr.Data(_, _, _, _): true
+                case _: false
             }
         }
         case _ { return false }
@@ -1506,10 +1506,10 @@ fn (s mut Scoper&) heldPart(p typed.Lvalue&) Bool {
 fn (s mut Scoper&) callOf(x typed.Expr?&) typed.Call?&x {
     if x is null { return null }
     return match x {
-        case typed.Expr.Call(_, _, c) => c
-        case typed.Expr.Try(_, _, t) => s.callOf(t.X)
-        case typed.Expr.Away(_, _, y) => s.callOf(y)
-        case _ => null
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Try(_, _, t): s.callOf(t.X)
+        case typed.Expr.Away(_, _, y): s.callOf(y)
+        case _: null
     }
 }
 
@@ -1517,19 +1517,19 @@ fn (s mut Scoper&) callOf(x typed.Expr?&) typed.Call?&x {
 fn (s mut Scoper&) partCallOf(x typed.Expr?&) typed.Call?&x {
     if x is null { return null }
     return match x {
-        case typed.Expr.Read(_, _, p, _) => s.placeCallOf(p)
-        case typed.Expr.Away(_, _, y) => s.partCallOf(y)
-        case _ => null
+        case typed.Expr.Read(_, _, p, _): s.placeCallOf(p)
+        case typed.Expr.Away(_, _, y): s.partCallOf(y)
+        case _: null
     }
 }
 
 fn (s mut Scoper&) placeCallOf(p typed.Lvalue&) typed.Call?&p {
     return match p {
-        case typed.Lvalue.Field(_, _, b, _) => s.placeCallOf(b)
-        case typed.Lvalue.Elem(_, _, e) => s.placeCallOf(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.placeCallOf(pl.Base)
-        case typed.Lvalue.Temp(_, _, v, _) => s.callOf(v) if s.isFresh(v) else null
-        case _ => null
+        case typed.Lvalue.Field(_, _, b, _): s.placeCallOf(b)
+        case typed.Lvalue.Elem(_, _, e): s.placeCallOf(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.placeCallOf(pl.Base)
+        case typed.Lvalue.Temp(_, _, v, _): s.callOf(v) if s.isFresh(v) else null
+        case _: null
     }
 }
 
@@ -1711,10 +1711,10 @@ fn (s mut Scoper&) landTerm(a typed.Expr&) Term {
 fn (s mut Scoper&) peekTerm(a typed.Expr?&) Term {
     if a is null { return Term.None }
     return match a {
-        case typed.Expr.Read(_, ty, p, _) => s.peekPlace(p, true) if s.holds(ty) else Term.None
-        case typed.Expr.Borrow(_, _, p) => s.peekBorrow(p)
-        case typed.Expr.Away(_, _, y) => s.peekTerm(y)
-        case _ => Term.None
+        case typed.Expr.Read(_, ty, p, _): s.peekPlace(p, true) if s.holds(ty) else Term.None
+        case typed.Expr.Borrow(_, _, p): s.peekBorrow(p)
+        case typed.Expr.Away(_, _, y): s.peekTerm(y)
+        case _: Term.None
     }
 }
 
@@ -1735,15 +1735,15 @@ fn (s mut Scoper&) peekBorrow(p typed.Lvalue&) Term {
 # a place's parts' term (parts) or its storage's, as partsTerm and storOf give them, where that needs no judging
 fn (s mut Scoper&) peekPlace(p typed.Lvalue&, parts Bool) Term {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => s.whereLives(id) if parts else s.stors[I64(id)]
-        case typed.Lvalue.Global(_, _, _, _) => Term.Program
-        case typed.Lvalue.Field(_, _, base, _) => s.peekPlace(base, parts)
-        case typed.Lvalue.Payload(_, _, pl) => s.peekPlace(pl.Base, parts)
-        case typed.Lvalue.Elem(_, _, e) => s.peekPlace(e.Base, parts or s.runLength(e.Base.Type()))
-        case typed.Lvalue.Deref(_, _, r) => s.peekTerm(r)
+        case typed.Lvalue.Local(_, _, id): s.whereLives(id) if parts else s.stors[I64(id)]
+        case typed.Lvalue.Global(_, _, _, _): Term.Program
+        case typed.Lvalue.Field(_, _, base, _): s.peekPlace(base, parts)
+        case typed.Lvalue.Payload(_, _, pl): s.peekPlace(pl.Base, parts)
+        case typed.Lvalue.Elem(_, _, e): s.peekPlace(e.Base, parts or s.runLength(e.Base.Type()))
+        case typed.Lvalue.Deref(_, _, r): s.peekTerm(r)
         # a temporary judged already: where its value's references are (tempTerm)
-        case typed.Lvalue.Temp(_, _, _, site) => (try s.temps.Get(I64(site)) catch default Term.None) if parts else Term.None
-        case _ => Term.None
+        case typed.Lvalue.Temp(_, _, _, site): (try s.temps.Get(I64(site)) catch default Term.None) if parts else Term.None
+        case _: Term.None
     }
 }
 
@@ -1837,11 +1837,11 @@ fn (s mut Scoper&) soleStmt(st typed.Stmt?&) {
 # whether a place is the local's own storage, or a part of it held in place
 fn (s mut Scoper&) soleRooted(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => I64(id) == s.soleOf
-        case typed.Lvalue.Field(_, _, b, _) => s.soleRooted(b)
-        case typed.Lvalue.Elem(_, _, e) => s.soleRooted(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.soleRooted(pl.Base)
-        case _ => false
+        case typed.Lvalue.Local(_, _, id): I64(id) == s.soleOf
+        case typed.Lvalue.Field(_, _, b, _): s.soleRooted(b)
+        case typed.Lvalue.Elem(_, _, e): s.soleRooted(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.soleRooted(pl.Base)
+        case _: false
     }
 }
 
@@ -2098,8 +2098,8 @@ fn (s mut Scoper&) flStmt(st typed.Stmt?&) {
             # (O25h), so the source flows too: "p.Lengths = lengths" then "return Checker(p)"; only a copy taking a
             # local's whole place is the copy's own
             whole := match p {
-                case typed.Lvalue.Local(_, _, _) => true
-                case _ => false
+                case typed.Lvalue.Local(_, _, _): true
+                case _: false
             }
             s.flInto(r, p.Type(), x, flThroughRef(p) or r < 0 or s.outside(r), whole)
         }
@@ -2390,8 +2390,8 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
 # whether t is a derived scope of parameter j (O23a)
 fn derivedOf(t Term, j I64) Bool {
     return match t {
-        case Term.Derived(p, _) => p == j
-        case _ => false
+        case Term.Derived(p, _): p == j
+        case _: false
     }
 }
 
@@ -2516,12 +2516,12 @@ fn (s mut Scoper&) carriedPlace(p typed.Lvalue&, out mut Vec<I64>&) {
 # c.cur() names stores into what c reaches
 fn (s mut Scoper&) flPlaceRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Field(_, _, b, _) => s.flPlaceRoot(b)
-        case typed.Lvalue.Elem(_, _, e) => s.flPlaceRoot(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.flPlaceRoot(pl.Base)
-        case typed.Lvalue.Deref(_, _, r) => s.flExprRoot(r)
-        case typed.Lvalue.Temp(_, _, v, _) => s.flExprRoot(v)
-        case _ => flRoot(p)
+        case typed.Lvalue.Field(_, _, b, _): s.flPlaceRoot(b)
+        case typed.Lvalue.Elem(_, _, e): s.flPlaceRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.flPlaceRoot(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): s.flExprRoot(r)
+        case typed.Lvalue.Temp(_, _, v, _): s.flExprRoot(v)
+        case _: flRoot(p)
     }
 }
 
@@ -2541,41 +2541,41 @@ fn (s mut Scoper&) flExprRoot(x typed.Expr?&) I64 {
 
 fn flRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => I64(id)
-        case typed.Lvalue.Field(_, _, b, _) => flRoot(b)
-        case typed.Lvalue.Elem(_, _, e) => flRoot(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => flRoot(pl.Base)
-        case typed.Lvalue.Deref(_, _, r) => flRootExpr(r)
-        case _ => -1
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Field(_, _, b, _): flRoot(b)
+        case typed.Lvalue.Elem(_, _, e): flRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): flRoot(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): flRootExpr(r)
+        case _: -1
     }
 }
 
 fn flRootExpr(x typed.Expr?&) I64 {
     if x is null { return -1 }
     return match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) => flRoot(p)
-        case typed.Expr.Away(_, _, y) => flRootExpr(y)
-        case _ => -1
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p): flRoot(p)
+        case typed.Expr.Away(_, _, y): flRootExpr(y)
+        case _: -1
     }
 }
 
 # whether a place goes through a reference: what it names is not its root's own storage
 fn flThroughRef(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Deref(_, _, _) => true
-        case typed.Lvalue.Field(_, _, b, _) => flThroughRef(b)
-        case typed.Lvalue.Elem(_, _, e) => flThroughRef(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => flThroughRef(pl.Base)
-        case _ => false
+        case typed.Lvalue.Deref(_, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): flThroughRef(b)
+        case typed.Lvalue.Elem(_, _, e): flThroughRef(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): flThroughRef(pl.Base)
+        case _: false
     }
 }
 
 fn flThroughRefExpr(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        case typed.Expr.Read(_, _, p, _) => flThroughRef(p)
-        case typed.Expr.Borrow(_, _, p) => flThroughRef(p)
-        case _ => false
+        case typed.Expr.Read(_, _, p, _): flThroughRef(p)
+        case typed.Expr.Borrow(_, _, p): flThroughRef(p)
+        case _: false
     }
 }
 
@@ -2621,8 +2621,8 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
 
 fn (s mut Scoper&) isLambda(b typed.Body&) Bool {
     return match b.Of {
-        case typed.BodyOf.Lambda(_) => true
-        case _ => false
+        case typed.BodyOf.Lambda(_): true
+        case _: false
     }
 }
 
@@ -2645,18 +2645,18 @@ fn (s mut Scoper&) regionOf(p typed.Lvalue&) I64 {
 # the instance's binding, a derived scope (O23a) - never the storage or the references of the value it starts from
 fn (s mut Scoper&) throughDerived(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Deref(_, _, r) => s.throughDerivedExpr(r) or s.derivedRead(r)
-        case typed.Lvalue.Field(_, _, b, _) => s.throughDerived(b)
-        case typed.Lvalue.Elem(_, _, e) => s.throughDerived(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.throughDerived(pl.Base)
-        case _ => false
+        case typed.Lvalue.Deref(_, _, r): s.throughDerivedExpr(r) or s.derivedRead(r)
+        case typed.Lvalue.Field(_, _, b, _): s.throughDerived(b)
+        case typed.Lvalue.Elem(_, _, e): s.throughDerived(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.throughDerived(pl.Base)
+        case _: false
     }
 }
 
 fn (s mut Scoper&) throughDerivedExpr(x typed.Expr&) Bool {
     return match s.unAway(x) {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => s.throughDerived(p)
-        case _ => false
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): s.throughDerived(p)
+        case _: false
     }
 }
 
@@ -2668,8 +2668,8 @@ fn (s mut Scoper&) derivedRead(x typed.Expr&) Bool {
                 case typed.Lvalue.Field(_, _, b, i) {
                     if not s.isStruct(b.Type()) { return false }
                     return match s.fieldMark(b.Type(), i) {
-                        case typed.Mark.Of(_) => true
-                        case _ => false
+                        case typed.Mark.Of(_): true
+                        case _: false
                     }
                 }
                 case _ { }
@@ -3292,11 +3292,11 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
 # elements of fixed arrays (parts of that storage, not of another); -1 for none
 fn regionRoot(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Deref(_, _, r) => regionLocal(r)
-        case typed.Lvalue.Field(_, _, b, _) => regionRoot(b)
-        case typed.Lvalue.Payload(_, _, pl) => regionRoot(pl.Base)
-        case typed.Lvalue.Elem(_, _, e) => regionRoot(e.Base)
-        case _ => -1
+        case typed.Lvalue.Deref(_, _, r): regionLocal(r)
+        case typed.Lvalue.Field(_, _, b, _): regionRoot(b)
+        case typed.Lvalue.Payload(_, _, pl): regionRoot(pl.Base)
+        case typed.Lvalue.Elem(_, _, e): regionRoot(e.Base)
+        case _: -1
     }
 }
 
@@ -3409,11 +3409,11 @@ fn (s mut Scoper&) unAway(x typed.Expr?&) typed.Expr&x {
 # the value a place is part of, held in a temporary place - reached through fields, elements and payloads, no reference
 fn tempOf(p typed.Lvalue&) typed.Expr?&p {
     return match p {
-        case typed.Lvalue.Temp(_, _, v, _) => v
-        case typed.Lvalue.Field(_, _, b, _) => tempOf(b)
-        case typed.Lvalue.Elem(_, _, e) => tempOf(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => tempOf(pl.Base)
-        case _ => null
+        case typed.Lvalue.Temp(_, _, v, _): v
+        case typed.Lvalue.Field(_, _, b, _): tempOf(b)
+        case typed.Lvalue.Elem(_, _, e): tempOf(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): tempOf(pl.Base)
+        case _: null
     }
 }
 
@@ -4350,9 +4350,9 @@ fn (s mut Scoper&) noteResBind(x typed.Expr&) {
         if from >= 0 and from + w < s.bindTerms.Len() {
             t = s.bindTerms[from + w]
             ok := match t {
-                case Term.Var(_), Term.Program => true
-                case Term.Derived(p, _) => p >= 0
-                case _ => false
+                case Term.Var(_), Term.Program: true
+                case Term.Derived(p, _): p >= 0
+                case _: false
             }
             if not ok { t = Term.Untraced }
         }
@@ -4536,8 +4536,8 @@ fn (s mut Scoper&) noteFieldRecs(sm mut summary&) {
         for w in range n {
             t := s.bindTerms[from + w]
             ok := match t {
-                case Term.Var(_), Term.Program => true
-                case _ => false
+                case Term.Var(_), Term.Program: true
+                case _: false
             }
             sm.FieldTerms.Push(t if ok else Term.Untraced)
         }
@@ -4547,8 +4547,8 @@ fn (s mut Scoper&) noteFieldRecs(sm mut summary&) {
 # the value a promotion makes a reference of, else the expression itself
 fn (s mut Scoper&) unPromoted(x typed.Expr&) typed.Expr&x {
     return match s.unAway(x) {
-        case typed.Expr.Promote(_, _, pr) => pr.X
-        case _ => x
+        case typed.Expr.Promote(_, _, pr): pr.X
+        case _: x
     }
 }
 
@@ -4556,22 +4556,22 @@ fn (s mut Scoper&) unPromoted(x typed.Expr&) typed.Expr&x {
 # value holding nothing none
 fn (s mut Scoper&) valTerm(v Val, built Term) Term {
     return match v.K {
-        case ValKind.Fresh => v.T
-        case ValKind.Existing => v.T
-        case ValKind.Null => built
-        case ValKind.Plain => built
-        case ValKind.Static => Term.Program
+        case ValKind.Fresh: v.T
+        case ValKind.Existing: v.T
+        case ValKind.Null: built
+        case ValKind.Plain: built
+        case ValKind.Static: Term.Program
     }
 }
 
 # the term a mark names for a local declared in block in (O25a): None where the local takes its initializer's
 fn (s mut Scoper&) markTerm(m typed.Mark, inb typed.BlockId) Term {
     return match m {
-        case typed.Mark.Bare => s.blockTerm(inb)
-        case typed.Mark.Of(x) => s.whereLives(x)
-        case typed.Mark.Global(_, _) => Term.Program
-        case typed.Mark.Return => Term.Var(s.resultVar) if s.resultVar >= 0 else Term.Untraced
-        case _ => Term.None
+        case typed.Mark.Bare: s.blockTerm(inb)
+        case typed.Mark.Of(x): s.whereLives(x)
+        case typed.Mark.Global(_, _): Term.Program
+        case typed.Mark.Return: Term.Var(s.resultVar) if s.resultVar >= 0 else Term.Untraced
+        case _: Term.None
     }
 }
 
@@ -4685,8 +4685,8 @@ fn (s mut Scoper&) bindingUnknown(p typed.Lvalue&, slot Term) Bool {
                 case _ { return false }
             }
             return match slot {
-                case Term.Derived(q, _) => q < 0
-                case _ => false
+                case Term.Derived(q, _): q < 0
+                case _: false
             }
         }
         case _ { return false }
@@ -4697,8 +4697,8 @@ fn (s mut Scoper&) bindingUnknown(p typed.Lvalue&, slot Term) Bool {
 # run-time scope to build in (C2d, O23a)
 fn (s mut Scoper&) unknownBinding(t Term) Bool {
     return match t {
-        case Term.Derived(q, _) => q >= 0 or (-q - 1 < s.underElem.Len() and s.underElem[-q - 1])
-        case _ => false
+        case Term.Derived(q, _): q >= 0 or (-q - 1 < s.underElem.Len() and s.underElem[-q - 1])
+        case _: false
     }
 }
 
@@ -4776,12 +4776,12 @@ fn (s mut Scoper&) slotOf(p typed.Lvalue&) Term, Bool, I64 {
 
 fn (s mut Scoper&) slotKind(base typed.Lvalue&) I64 {
     return match base {
-        case typed.Lvalue.Global(_, _, _, _) => FitGlobal
-        case typed.Lvalue.Field(_, _, b, _) => s.slotKind(b)
-        case typed.Lvalue.Elem(_, _, e) => s.slotKind(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.slotKind(pl.Base)
-        case typed.Lvalue.Local(_, _, _) => FitValue
-        case _ => FitField
+        case typed.Lvalue.Global(_, _, _, _): FitGlobal
+        case typed.Lvalue.Field(_, _, b, _): s.slotKind(b)
+        case typed.Lvalue.Elem(_, _, e): s.slotKind(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.slotKind(pl.Base)
+        case typed.Lvalue.Local(_, _, _): FitValue
+        case _: FitField
     }
 }
 
@@ -4850,21 +4850,21 @@ fn (s mut Scoper&) derivedThroughElem(t Term, c typed.Call&) Bool {
 
 fn throughElem(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Elem(_, _, _) => true
-        case typed.Lvalue.Field(_, _, b, _) => throughElem(b)
-        case typed.Lvalue.Payload(_, _, pl) => throughElem(pl.Base)
-        case typed.Lvalue.Deref(_, _, r) => throughElemExpr(r)
-        case typed.Lvalue.Temp(_, _, _, _) => true
-        case _ => false
+        case typed.Lvalue.Elem(_, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): throughElem(b)
+        case typed.Lvalue.Payload(_, _, pl): throughElem(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): throughElemExpr(r)
+        case typed.Lvalue.Temp(_, _, _, _): true
+        case _: false
     }
 }
 
 fn throughElemExpr(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => throughElem(p)
-        case typed.Expr.Away(_, _, y) => throughElemExpr(y)
-        case _ => false
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): throughElem(p)
+        case typed.Expr.Away(_, _, y): throughElemExpr(y)
+        case _: false
     }
 }
 
@@ -4960,24 +4960,24 @@ fn (s mut Scoper&) frameHere() Term {
 fn (s mut Scoper&) tailStorageGiven(a typed.Expr&) Bool {
     x := s.unAway(a)
     return match x {
-        case typed.Expr.Data(_, _, _, _) => true
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p) => s.givenPlace(p)
-        case typed.Expr.Borrow(_, _, p) => s.givenPlace(p)
-        case typed.Expr.Slice(_, _, sl) => s.givenPlace(sl.Base)
-        case typed.Expr.Prim(_, _, op, _, args) => typed.PassesRefs(op) and args.Len() > 0 and s.tailStorageGiven(args[0])
-        case _ => false
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Take(_, _, p): s.givenPlace(p)
+        case typed.Expr.Borrow(_, _, p): s.givenPlace(p)
+        case typed.Expr.Slice(_, _, sl): s.givenPlace(sl.Base)
+        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and s.tailStorageGiven(args[0])
+        case _: false
     }
 }
 
 fn (s mut Scoper&) givenPlace(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => s.givenLocal(I64(id))
-        case typed.Lvalue.Global(_, _, _, _) => true
-        case typed.Lvalue.Field(_, _, b, _) => s.givenPlace(b)
-        case typed.Lvalue.Elem(_, _, e) => s.givenPlace(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.givenPlace(pl.Base)
-        case typed.Lvalue.Deref(_, _, r) => s.givenRef(r)
-        case _ => false
+        case typed.Lvalue.Local(_, _, id): s.givenLocal(I64(id))
+        case typed.Lvalue.Global(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): s.givenPlace(b)
+        case typed.Lvalue.Elem(_, _, e): s.givenPlace(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.givenPlace(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): s.givenRef(r)
+        case _: false
     }
 }
 
@@ -5009,8 +5009,8 @@ fn localRead(x typed.Expr&) I64 {
 
 fn termGiven(t Term) Bool {
     return match t {
-        case Term.Program, Term.Var(_) => true
-        case _ => false
+        case Term.Program, Term.Var(_): true
+        case _: false
     }
 }
 
@@ -5159,8 +5159,8 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     }
     m := s.resultMark(k)
     built := match m {
-        case typed.Mark.Of(_), typed.Mark.TypeVar => false
-        case _ => s.isRef(t) and not s.isFunc(t)
+        case typed.Mark.Of(_), typed.Mark.TypeVar: false
+        case _: s.isRef(t) and not s.isFunc(t)
     }
     # a read-only reference to existing storage returned as a built result, which is new and writable (T25c, O14)
     if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and s.readOnlyAsBuilt(x) { return }
@@ -5198,13 +5198,13 @@ fn (s mut Scoper&) builtFromParam(x typed.Expr&, t Term) Bool {
     if not s.report { return false }
     u := s.unAway(x)
     param := match t {
-        case Term.Var(k) => k < s.B!.Vars.Len() and s.isParamVar(s.B!.Vars[k])
-        case Term.Derived(p, _) => p >= 0
-        case _ => false
+        case Term.Var(k): k < s.B!.Vars.Len() and s.isParamVar(s.B!.Vars[k])
+        case Term.Derived(p, _): p >= 0
+        case _: false
     }
     lvalue := match u {
-        case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _) => true
-        case _ => false
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _): true
+        case _: false
     }
     if param and lvalue {
         s.err(s.opTok(x), msgs.ReturnBorrowAsBuilt())
@@ -5241,8 +5241,8 @@ fn (s mut Scoper&) handsBackExisting(x typed.Expr&) Bool {
 
 fn (s mut Scoper&) isParamVar(v typed.ScopeVar) Bool {
     return match v {
-        case typed.ScopeVar.Param(_) => true
-        case _ => false
+        case typed.ScopeVar.Param(_): true
+        case _: false
     }
 }
 
@@ -5559,20 +5559,20 @@ fn (s mut Scoper&) landHeld() {
 fn (s mut Scoper&) isFresh(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _) => true
-        case typed.Expr.Text(_, _, _) => true
+        case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _): true
+        case typed.Expr.Text(_, _, _): true
         # a call given a scope argument builds its result where that says, not where it stands (E25)
-        case typed.Expr.Call(_, ty, c) => s.callBuilds(c, ty) and not typed.ScopedCall(c)
-        case typed.Expr.Seq(_, _, q) => s.isFresh(q.X)
-        case typed.Expr.Away(_, _, y) => s.isFresh(y)
-        case typed.Expr.Try(_, _, t) => s.isFresh(t.X)
+        case typed.Expr.Call(_, ty, c): s.callBuilds(c, ty) and not typed.ScopedCall(c)
+        case typed.Expr.Seq(_, _, q): s.isFresh(q.X)
+        case typed.Expr.Away(_, _, y): s.isFresh(y)
+        case typed.Expr.Try(_, _, t): s.isFresh(t.X)
         # a conditional or a value match giving new values and constants only (E28, S12b): a temporary, every new value
         # built where it lands - a constant (text data, null) lives anywhere a new value would
-        case typed.Expr.Cond(_, _, c) => s.newOrConst(c.A) and s.newOrConst(c.B) and (s.isFresh(c.A) or s.isFresh(c.B))
-        case typed.Expr.Match(_, _, m) => s.matchFresh(m)
-        case typed.Expr.Prim(_, _, op, _, args) => typed.PassesRefs(op) and args.Len() > 0 and s.isFresh(args[0])
-        case typed.Expr.Fn(_, _, f) => s.fnFresh(f)
-        case _ => false
+        case typed.Expr.Cond(_, _, c): s.newOrConst(c.A) and s.newOrConst(c.B) and (s.isFresh(c.A) or s.isFresh(c.B))
+        case typed.Expr.Match(_, _, m): s.matchFresh(m)
+        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and s.isFresh(args[0])
+        case typed.Expr.Fn(_, _, f): s.fnFresh(f)
+        case _: false
     }
 }
 
@@ -5581,10 +5581,10 @@ fn (s mut Scoper&) newOrConst(x typed.Expr?&) Bool {
     if x is null { return true }
     if s.isFresh(x) or s.isNullLit(x) or s.staticLiteral(x) { return true }
     return match x {
-        case typed.Expr.Data(_, _, _, _) => true
-        case typed.Expr.Away(_, _, y) => s.newOrConst(y)
-        case typed.Expr.Cond(_, _, c) => s.newOrConst(c.A) and s.newOrConst(c.B)
-        case _ => false
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Away(_, _, y): s.newOrConst(y)
+        case typed.Expr.Cond(_, _, c): s.newOrConst(c.A) and s.newOrConst(c.B)
+        case _: false
     }
 }
 
@@ -5607,8 +5607,8 @@ fn (s mut Scoper&) matchFresh(m typed.Match&) Bool {
 
 fn (s mut Scoper&) fnFresh(f typed.FnVal&) Bool {
     return match f {
-        case typed.FnVal.Lambda(_, caps, _) => s.capturesNothing(caps)
-        case _ => false
+        case typed.FnVal.Lambda(_, caps, _): s.capturesNothing(caps)
+        case _: false
     }
 }
 
@@ -5631,10 +5631,10 @@ fn (s mut Scoper&) callBuilds(c typed.Call&, ty types.TypeId) Bool {
 
 fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
     return match c.Target {
-        case typed.Callee.Body(id) => s.Bodies[I64(id)].Ty
-        case typed.Callee.Value(x) => x.Type()
-        case typed.Callee.Dispatch(_, _, sig) => sig
-        case _ => types.UnknownT
+        case typed.Callee.Body(id): s.Bodies[I64(id)].Ty
+        case typed.Callee.Value(x): x.Type()
+        case typed.Callee.Dispatch(_, _, sig): sig
+        case _: types.UnknownT
     }
 }
 
@@ -5778,13 +5778,13 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
 # temporary or constant data built or living anywhere a known scope is - null always
 fn (s mut Scoper&) defaultFits(cv Val, dv Val) Bool {
     known := match cv.T {
-        case Term.Set(_), Term.Untraced => false
-        case _ => true
+        case Term.Set(_), Term.Untraced: false
+        case _: true
     }
     return match dv.K {
-        case ValKind.Existing => known and cv.T != Term.None and dv.T == cv.T
-        case ValKind.Fresh, ValKind.Static => known
-        case _ => true
+        case ValKind.Existing: known and cv.T != Term.None and dv.T == cv.T
+        case ValKind.Fresh, ValKind.Static: known
+        case _: true
     }
 }
 
@@ -5816,9 +5816,9 @@ fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Lvalue?&x {
 # the kind of slot an item of a value made is (fit)
 fn (s mut Scoper&) itemKind(k typed.MakeKind) I64 {
     return match k {
-        case typed.MakeKind.Case => FitPayload
-        case typed.MakeKind.Array, typed.MakeKind.Fill => FitElem
-        case _ => FitField
+        case typed.MakeKind.Case: FitPayload
+        case typed.MakeKind.Array, typed.MakeKind.Fill: FitElem
+        case _: FitField
     }
 }
 
@@ -5854,13 +5854,13 @@ fn (s mut Scoper&) partLand(p typed.Lvalue&, ty types.TypeId, dest Term) I64 {
 # holds, or of a held local it initializes (D8d) - -1 for none
 fn (s mut Scoper&) partCall(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Field(_, _, b, _) => s.partCall(b)
-        case typed.Lvalue.Elem(_, _, e) => s.partCall(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => s.partCall(pl.Base)
-        case typed.Lvalue.Deref(_, _, r) => s.builtCall(r)
-        case typed.Lvalue.Temp(_, _, v, _) => s.builtCall(v)
-        case typed.Lvalue.Local(_, _, id) => s.builtCall(try s.held.Get(I64(id)) catch default null)
-        case _ => -1
+        case typed.Lvalue.Field(_, _, b, _): s.partCall(b)
+        case typed.Lvalue.Elem(_, _, e): s.partCall(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.partCall(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): s.builtCall(r)
+        case typed.Lvalue.Temp(_, _, v, _): s.builtCall(v)
+        case typed.Lvalue.Local(_, _, id): s.builtCall(try s.held.Get(I64(id)) catch default null)
+        case _: -1
     }
 }
 
@@ -5868,13 +5868,13 @@ fn (s mut Scoper&) partCall(p typed.Lvalue&) I64 {
 # - read off its arguments without judging them - outlives t (as stage 0 lands it only there)
 fn (s mut Scoper&) partOK(p typed.Lvalue&, t Term) Bool {
     return match p {
-        case typed.Lvalue.Field(_, _, b, _) => s.partOK(b, t)
-        case typed.Lvalue.Elem(_, _, e) => s.partOK(e.Base, t)
-        case typed.Lvalue.Payload(_, _, pl) => s.partOK(pl.Base, t)
-        case typed.Lvalue.Deref(_, _, r) => s.builtOK(r, t)
-        case typed.Lvalue.Temp(_, _, v, _) => s.builtOK(v, t)
-        case typed.Lvalue.Local(_, _, id) => s.builtOK(try s.held.Get(I64(id)) catch default null, t)
-        case _ => false
+        case typed.Lvalue.Field(_, _, b, _): s.partOK(b, t)
+        case typed.Lvalue.Elem(_, _, e): s.partOK(e.Base, t)
+        case typed.Lvalue.Payload(_, _, pl): s.partOK(pl.Base, t)
+        case typed.Lvalue.Deref(_, _, r): s.builtOK(r, t)
+        case typed.Lvalue.Temp(_, _, v, _): s.builtOK(v, t)
+        case typed.Lvalue.Local(_, _, id): s.builtOK(try s.held.Get(I64(id)) catch default null, t)
+        case _: false
     }
 }
 
@@ -6231,8 +6231,8 @@ fn (s mut Scoper&) onFrameAt(site typed.SiteId) {
 # whether a term is one of this body's scope variables nothing may be built into (E11c)
 fn (s mut Scoper&) noBuildTerm(t Term) Bool {
     return match t {
-        case Term.Var(k) => k < s.noBuild.Len() and s.noBuild[k]
-        case _ => false
+        case Term.Var(k): k < s.noBuild.Len() and s.noBuild[k]
+        case _: false
     }
 }
 
@@ -6489,8 +6489,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v := vals[i]
             if landed[i] or v.K != ValKind.Existing or s.lastsUntil(v.T, j) { continue }
             byRef := match ua {
-                case typed.Expr.Borrow(_, _, _) => false
-                case _ => s.isRef(ua.Type()) or (i < ps.Len() and s.isRef(ps[i]))
+                case typed.Expr.Borrow(_, _, _): false
+                case _: s.isRef(ua.Type()) or (i < ps.Len() and s.isRef(ps[i]))
             }
             s.err(s.opTok(a), msgs.SpawnArgTooShort() if byRef and not s.isFunc(ua.Type()) else msgs.SpawnArgHoldsShort())
         }
@@ -6720,16 +6720,16 @@ fn (s mut Scoper&) buildsIntoSet(c typed.Call&, i I64, pt types.TypeId, v I64, t
 # other type is put in the box as it is, its parts judged as its own kind's (T17c's payload, a field)
 fn anyArrayBox(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Make(_, _, m) => m.Kind == typed.MakeKind.Tuple and m.Items.Len() == 1
-        case _ => false
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Tuple and m.Items.Len() == 1
+        case _: false
     }
 }
 
 # the promotion an argument is, of a value into a reference parameter (E12c); null for none
 fn (s mut Scoper&) promoted(a typed.Expr&) typed.Promote?&a {
     return match a {
-        case typed.Expr.Promote(_, _, pr) => pr
-        case _ => null
+        case typed.Expr.Promote(_, _, pr): pr
+        case _: null
     }
 }
 
@@ -6783,10 +6783,10 @@ fn (s mut Scoper&) oldValue(x typed.Expr&) Bool {
 fn within(p typed.Lvalue&, q typed.Lvalue&) Bool {
     if samePlace(p, q) { return true }
     return match p {
-        case typed.Lvalue.Field(_, _, b, _) => within(b, q)
-        case typed.Lvalue.Elem(_, _, e) => within(e.Base, q)
-        case typed.Lvalue.Payload(_, _, pl) => within(pl.Base, q)
-        case _ => false
+        case typed.Lvalue.Field(_, _, b, _): within(b, q)
+        case typed.Lvalue.Elem(_, _, e): within(e.Base, q)
+        case typed.Lvalue.Payload(_, _, pl): within(pl.Base, q)
+        case _: false
     }
 }
 
@@ -7029,8 +7029,8 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
 # binding after it, and whether it agrees (argsAgree)
 fn (s mut Scoper&) isCtor() Bool {
     return match s.B!.Of {
-        case typed.BodyOf.Ctor(_, _) => true
-        case _ => false
+        case typed.BodyOf.Ctor(_, _): true
+        case _: false
     }
 }
 
@@ -7047,11 +7047,11 @@ fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) Term, Bool, Bool
     }
     # two of this function's scope variables: the instance must not outlive either, kept by the obligations
     both := match t {
-        case Term.Var(_) => match bt {
-            case Term.Var(_) => true
-            case _ => false
+        case Term.Var(_): match bt {
+            case Term.Var(_): true
+            case _: false
         }
-        case _ => false
+        case _: false
     }
     return bt, bx, both
 }
@@ -7298,13 +7298,13 @@ fn (s mut Scoper&) madePlace(p typed.Lvalue&, depth I64) I64 {
             }
             if init is null { return l }
             follows := match s.unAway(init) {
-                case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _) => true
-                case typed.Expr.Call(_, _, c) => s.P.T.ResultFrom(s.calleeType(c), 0) >= 0
-                case _ => false
+                case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _): true
+                case typed.Expr.Call(_, _, c): s.P.T.ResultFrom(s.calleeType(c), 0) >= 0
+                case _: false
             }
             isSlice := match s.unAway(init) {
-                case typed.Expr.Slice(_, _, _) => true
-                case _ => false
+                case typed.Expr.Slice(_, _, _): true
+                case _: false
             }
             if not follows or (not s.isRef(loc.Ty) and not isSlice) { return l }
             deeper := s.madeLocal(init, depth + 1)
@@ -7473,10 +7473,10 @@ fn (s mut Scoper&) argOfVar(c typed.Call&, t Term) I64 {
 # a callee's term in the caller's, through a call's bindings; hi where it is to outlive the other side of a relation
 fn (s mut Scoper&) through(t Term, beta Array<Term>&, c typed.Call&, hi Bool) Term {
     return match t {
-        case Term.Var(i) => beta[i] if i < beta.Len() else Term.Untraced
-        case Term.Program => Term.Program
-        case Term.Derived(p, w) => s.derivedAt(p, w, c, hi, beta)
-        case _ => Term.Untraced
+        case Term.Var(i): beta[i] if i < beta.Len() else Term.Untraced
+        case Term.Program: Term.Program
+        case Term.Derived(p, w): s.derivedAt(p, w, c, hi, beta)
+        case _: Term.Untraced
     }
 }
 
@@ -7502,9 +7502,9 @@ fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Te
 # the local an argument is, read or borrowed whole: -1 for any other argument
 fn (s mut Scoper&) argLocal(a typed.Expr&) I64 {
     return match s.unAway(a) {
-        case typed.Expr.Borrow(_, _, p) => wholeLocal(p)
-        case typed.Expr.Read(_, _, p, _) => wholeLocal(p)
-        case _ => -1
+        case typed.Expr.Borrow(_, _, p): wholeLocal(p)
+        case typed.Expr.Read(_, _, p, _): wholeLocal(p)
+        case _: -1
     }
 }
 
@@ -7596,8 +7596,8 @@ fn (s mut Scoper&) noteDisagree(rec I64, a typed.Expr&, at Term, b typed.Expr&, 
 fn (s mut Scoper&) order(a Term, b Term) I64 {
     if a == b {
         return match a {
-            case Term.Set(_), Term.Untraced, Term.None => FailsUnknown
-            case _ => Holds
+            case Term.Set(_), Term.Untraced, Term.None: FailsUnknown
+            case _: Holds
         }
     }
     # an underestimate is shown to outlive what the term it stands above does, and is never shown to be outlived
@@ -7654,8 +7654,8 @@ fn (s mut Scoper&) captureTerm(t Term) Bool {
         case Term.Var(k) {
             if k >= s.B!.Vars.Len() { return false }
             return match s.B!.Vars[k] {
-                case typed.ScopeVar.Capture(_) => true
-                case _ => false
+                case typed.ScopeVar.Capture(_): true
+                case _: false
             }
         }
         case _ { return false }
@@ -7810,22 +7810,22 @@ fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
 
 fn isDerived(t Term) Bool {
     return match t {
-        case Term.Derived(_, _) => true
-        case _ => false
+        case Term.Derived(_, _): true
+        case _: false
     }
 }
 
 fn (s mut Scoper&) derivedTerm(t Term) Bool {
     return match t {
-        case Term.Derived(p, _) => p >= 0
-        case _ => false
+        case Term.Derived(p, _): p >= 0
+        case _: false
     }
 }
 
 fn (s mut Scoper&) isBlock(t Term) Bool {
     return match t {
-        case Term.Block(_) => true
-        case _ => false
+        case Term.Block(_): true
+        case _: false
     }
 }
 
@@ -7914,11 +7914,11 @@ fn unWidened(x typed.Expr&) typed.Expr&x {
 
 fn throughTemp(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Temp(_, _, _, _) => true
-        case typed.Lvalue.Field(_, _, b, _) => throughTemp(b)
-        case typed.Lvalue.Elem(_, _, e) => throughTemp(e.Base)
-        case typed.Lvalue.Payload(_, _, pl) => throughTemp(pl.Base)
-        case _ => false
+        case typed.Lvalue.Temp(_, _, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): throughTemp(b)
+        case typed.Lvalue.Elem(_, _, e): throughTemp(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): throughTemp(pl.Base)
+        case _: false
     }
 }
 
@@ -8016,10 +8016,10 @@ fn (s mut Scoper&) buildsThrough(t Term, sp source.Span, callee I64, v I64) {
 # a term as the plan says it: Inert for one nothing exists for at run time
 fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
     return match t {
-        case Term.Block(b) => typed.Scope.Block(b)
-        case Term.Var(i) => typed.Scope.Var(i)
-        case Term.Program => typed.Scope.Program
-        case _ => typed.Scope.Inert
+        case Term.Block(b): typed.Scope.Block(b)
+        case Term.Var(i): typed.Scope.Var(i)
+        case Term.Program: typed.Scope.Program
+        case _: typed.Scope.Inert
     }
 }
 
@@ -8200,9 +8200,9 @@ fn (s Scoper&) VarRels(b I64) Array<I64> {
 
 fn relVar(t Term) I64 {
     return match t {
-        case Term.Var(i) => i
-        case Term.Program => -1
-        case _ => -2
+        case Term.Var(i): i
+        case Term.Program: -1
+        case _: -2
     }
 }
 
@@ -8221,19 +8221,19 @@ fn (s Scoper&) Obligations(b I64, nm source.Names&) Array<String&> {
 fn (s Scoper&) termName(b I64, t Term, nm source.Names&) String {
     body := s.Bodies[b]
     return match t {
-        case Term.Var(i) => s.varName(body, body.Vars[i], nm)
-        case Term.Program => "the program"
-        case Term.Derived(p, _) => $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
-        case _ => $t
+        case Term.Var(i): s.varName(body, body.Vars[i], nm)
+        case Term.Program: "the program"
+        case Term.Derived(p, _): $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
+        case _: $t
     }
 }
 
 fn (s Scoper&) varName(body typed.Body&, v typed.ScopeVar, nm source.Names&) String {
     return match v {
-        case typed.ScopeVar.Param(l), typed.ScopeVar.Capture(l) => s.localName(body, l, nm)
-        case typed.ScopeVar.Result => "return"
-        case typed.ScopeVar.Instance => "the instance"
-        case typed.ScopeVar.Closing => "the closing scope"
+        case typed.ScopeVar.Param(l), typed.ScopeVar.Capture(l): s.localName(body, l, nm)
+        case typed.ScopeVar.Result: "return"
+        case typed.ScopeVar.Instance: "the instance"
+        case typed.ScopeVar.Closing: "the closing scope"
     }
 }
 

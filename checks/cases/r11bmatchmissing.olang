@@ -1,4 +1,4 @@
-# check: fail error[R11b]: this match does not cover P.B - add a case for it, or 'nomatch'
+# check: fail error[R11b]: this match does not cover P.B - add a case for it, or 'case _'
 # R11b: a match on a caught error covers every error it can be
 type P error { A, B }
 fn f() ? P { error P.A }

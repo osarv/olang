@@ -6,7 +6,7 @@ type Either<A, B> enum {
 }
 fn only(e Either<I64, Bool>) I64 {
     return match e {
-        case Either.Left(v) => v
+        case Either.Left(v): v
     }
 }
 fn main() { assert only(Either<I64, Bool>.Left(1)) == 1 }

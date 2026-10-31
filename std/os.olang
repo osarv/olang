@@ -53,7 +53,7 @@ fn raise(code I32) ? Error {
         case 4 { error Error.NOT_DIR }
         case 5 { error Error.IS_DIR }
         case 6 { error Error.NOT_EMPTY }
-        nomatch { error Error.FAILED }
+        case _ { error Error.FAILED }
     }
 }
 

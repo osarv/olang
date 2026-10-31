@@ -10,10 +10,10 @@ import "std/json"
 import "std/io"
 fn kind(j Json&) String {
     return match j {
-        case Json.Null => "null"
-        case Json.Num(v) => "number " $v
-        case Json.Str(s) => "text " $s
-        nomatch => "other"
+        case Json.Null: "null"
+        case Json.Num(v): "number " $v
+        case Json.Str(s): "text " $s
+        case _: "other"
     }
 }
 fn nested(j json.Json&) Bool {

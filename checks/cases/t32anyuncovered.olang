@@ -1,4 +1,4 @@
-# check: fail case aSlider of any aWidget& is not covered - add it, or 'nomatch { }'
+# check: fail case aSlider of any aWidget& is not covered - add it, or 'case _ { }'
 # S13a: run-time trait values
 type aWidget trait for aButton, aSlider {
     Draw() I64

@@ -148,11 +148,11 @@ fn parenIsList(v Vec<VT>&, i I64) Bool {
 fn movable(t VT&) Bool {
     if t.half { return false }
     return match t.k {
-        case token.Tok.Plus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => true
-        case token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr => true
-        case token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => true
-        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.In, token.Tok.Is, token.Tok.As => true
-        nomatch => false
+        case token.Tok.Plus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
+        case token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr: true
+        case token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge: true
+        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.In, token.Tok.Is, token.Tok.As: true
+        case _: false
     }
 }
 

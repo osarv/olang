@@ -63,90 +63,90 @@ NaN F64 = U64(0x7FF8000000000000).F64FromBits()
 # the square root - correctly rounded, as IEEE 754 requires; NaN below zero, and (-0.0).Sqrt() is -0.0
 fn (x T) Sqrt<T Float>() T {
     return match T {
-        case F64 => cmath.sqrt(x)
-        case F32 => cmath.sqrtf(x)
-        case F16 => F16(cmath.sqrtf(x))
-        case BF16 => BF16(cmath.sqrtf(x))
+        case F64: cmath.sqrt(x)
+        case F32: cmath.sqrtf(x)
+        case F16: F16(cmath.sqrtf(x))
+        case BF16: BF16(cmath.sqrtf(x))
     }
 }
 
 # the cube root, negative for a negative x
 fn (x T) Cbrt<T Float>() T {
     return match T {
-        case F64 => cmath.cbrt(x)
-        case F32 => cmath.cbrtf(x)
-        case F16 => F16(cmath.cbrtf(x))
-        case BF16 => BF16(cmath.cbrtf(x))
+        case F64: cmath.cbrt(x)
+        case F32: cmath.cbrtf(x)
+        case F16: F16(cmath.cbrtf(x))
+        case BF16: BF16(cmath.cbrtf(x))
     }
 }
 
 # e to the power x
 fn (x T) Exp<T Float>() T {
     return match T {
-        case F64 => cmath.exp(x)
-        case F32 => cmath.expf(x)
-        case F16 => F16(cmath.expf(x))
-        case BF16 => BF16(cmath.expf(x))
+        case F64: cmath.exp(x)
+        case F32: cmath.expf(x)
+        case F16: F16(cmath.expf(x))
+        case BF16: BF16(cmath.expf(x))
     }
 }
 
 # 2 to the power x
 fn (x T) Exp2<T Float>() T {
     return match T {
-        case F64 => cmath.exp2(x)
-        case F32 => cmath.exp2f(x)
-        case F16 => F16(cmath.exp2f(x))
-        case BF16 => BF16(cmath.exp2f(x))
+        case F64: cmath.exp2(x)
+        case F32: cmath.exp2f(x)
+        case F16: F16(cmath.exp2f(x))
+        case BF16: BF16(cmath.exp2f(x))
     }
 }
 
 # x.Exp() - 1, accurate where x is near zero and the subtraction would lose it
 fn (x T) Expm1<T Float>() T {
     return match T {
-        case F64 => cmath.expm1(x)
-        case F32 => cmath.expm1f(x)
-        case F16 => F16(cmath.expm1f(x))
-        case BF16 => BF16(cmath.expm1f(x))
+        case F64: cmath.expm1(x)
+        case F32: cmath.expm1f(x)
+        case F16: F16(cmath.expm1f(x))
+        case BF16: BF16(cmath.expm1f(x))
     }
 }
 
 # the natural logarithm: -Inf at zero, NaN below it
 fn (x T) Log<T Float>() T {
     return match T {
-        case F64 => cmath.log(x)
-        case F32 => cmath.logf(x)
-        case F16 => F16(cmath.logf(x))
-        case BF16 => BF16(cmath.logf(x))
+        case F64: cmath.log(x)
+        case F32: cmath.logf(x)
+        case F16: F16(cmath.logf(x))
+        case BF16: BF16(cmath.logf(x))
     }
 }
 
 # the base-2 logarithm
 fn (x T) Log2<T Float>() T {
     return match T {
-        case F64 => cmath.log2(x)
-        case F32 => cmath.log2f(x)
-        case F16 => F16(cmath.log2f(x))
-        case BF16 => BF16(cmath.log2f(x))
+        case F64: cmath.log2(x)
+        case F32: cmath.log2f(x)
+        case F16: F16(cmath.log2f(x))
+        case BF16: BF16(cmath.log2f(x))
     }
 }
 
 # the base-10 logarithm
 fn (x T) Log10<T Float>() T {
     return match T {
-        case F64 => cmath.log10(x)
-        case F32 => cmath.log10f(x)
-        case F16 => F16(cmath.log10f(x))
-        case BF16 => BF16(cmath.log10f(x))
+        case F64: cmath.log10(x)
+        case F32: cmath.log10f(x)
+        case F16: F16(cmath.log10f(x))
+        case BF16: BF16(cmath.log10f(x))
     }
 }
 
 # (1 + x).Log(), accurate where x is near zero and the addition would lose it
 fn (x T) Log1p<T Float>() T {
     return match T {
-        case F64 => cmath.log1p(x)
-        case F32 => cmath.log1pf(x)
-        case F16 => F16(cmath.log1pf(x))
-        case BF16 => BF16(cmath.log1pf(x))
+        case F64: cmath.log1p(x)
+        case F32: cmath.log1pf(x)
+        case F16: F16(cmath.log1pf(x))
+        case BF16: BF16(cmath.log1pf(x))
     }
 }
 
@@ -154,184 +154,184 @@ fn (x T) Log1p<T Float>() T {
 # x to a power that is not a whole number is NaN
 fn (x T) Pow<T Float>(y T) T {
     return match T {
-        case F64 => cmath.pow(x, y)
-        case F32 => cmath.powf(x, y)
-        case F16 => F16(cmath.powf(x, y))
-        case BF16 => BF16(cmath.powf(x, y))
+        case F64: cmath.pow(x, y)
+        case F32: cmath.powf(x, y)
+        case F16: F16(cmath.powf(x, y))
+        case BF16: BF16(cmath.powf(x, y))
     }
 }
 
 # the length of the vector (x, y) - (x * x + y * y).Sqrt() without overflowing or underflowing on the way
 fn (x T) Hypot<T Float>(y T) T {
     return match T {
-        case F64 => cmath.hypot(x, y)
-        case F32 => cmath.hypotf(x, y)
-        case F16 => F16(cmath.hypotf(x, y))
-        case BF16 => BF16(cmath.hypotf(x, y))
+        case F64: cmath.hypot(x, y)
+        case F32: cmath.hypotf(x, y)
+        case F16: F16(cmath.hypotf(x, y))
+        case BF16: BF16(cmath.hypotf(x, y))
     }
 }
 
 # x * a + b, rounded once - an F16 or a BF16 in F64, whose 53 bits hold their product exactly
 fn (x T) Fma<T Float>(a T, b T) T {
     return match T {
-        case F64 => cmath.fma(x, a, b)
-        case F32 => cmath.fmaf(x, a, b)
-        case F16 => F16(cmath.fma(x, a, b))
-        case BF16 => BF16(cmath.fma(x, a, b))
+        case F64: cmath.fma(x, a, b)
+        case F32: cmath.fmaf(x, a, b)
+        case F16: F16(cmath.fma(x, a, b))
+        case BF16: BF16(cmath.fma(x, a, b))
     }
 }
 
 fn (x T) Sin<T Float>() T {
     return match T {
-        case F64 => cmath.sin(x)
-        case F32 => cmath.sinf(x)
-        case F16 => F16(cmath.sinf(x))
-        case BF16 => BF16(cmath.sinf(x))
+        case F64: cmath.sin(x)
+        case F32: cmath.sinf(x)
+        case F16: F16(cmath.sinf(x))
+        case BF16: BF16(cmath.sinf(x))
     }
 }
 
 fn (x T) Cos<T Float>() T {
     return match T {
-        case F64 => cmath.cos(x)
-        case F32 => cmath.cosf(x)
-        case F16 => F16(cmath.cosf(x))
-        case BF16 => BF16(cmath.cosf(x))
+        case F64: cmath.cos(x)
+        case F32: cmath.cosf(x)
+        case F16: F16(cmath.cosf(x))
+        case BF16: BF16(cmath.cosf(x))
     }
 }
 
 fn (x T) Tan<T Float>() T {
     return match T {
-        case F64 => cmath.tan(x)
-        case F32 => cmath.tanf(x)
-        case F16 => F16(cmath.tanf(x))
-        case BF16 => BF16(cmath.tanf(x))
+        case F64: cmath.tan(x)
+        case F32: cmath.tanf(x)
+        case F16: F16(cmath.tanf(x))
+        case BF16: BF16(cmath.tanf(x))
     }
 }
 
 # the angle whose sine is x, in -Pi/2 .. Pi/2; NaN outside -1 .. 1
 fn (x T) Asin<T Float>() T {
     return match T {
-        case F64 => cmath.asin(x)
-        case F32 => cmath.asinf(x)
-        case F16 => F16(cmath.asinf(x))
-        case BF16 => BF16(cmath.asinf(x))
+        case F64: cmath.asin(x)
+        case F32: cmath.asinf(x)
+        case F16: F16(cmath.asinf(x))
+        case BF16: BF16(cmath.asinf(x))
     }
 }
 
 # the angle whose cosine is x, in 0 .. Pi; NaN outside -1 .. 1
 fn (x T) Acos<T Float>() T {
     return match T {
-        case F64 => cmath.acos(x)
-        case F32 => cmath.acosf(x)
-        case F16 => F16(cmath.acosf(x))
-        case BF16 => BF16(cmath.acosf(x))
+        case F64: cmath.acos(x)
+        case F32: cmath.acosf(x)
+        case F16: F16(cmath.acosf(x))
+        case BF16: BF16(cmath.acosf(x))
     }
 }
 
 # the angle whose tangent is x, in -Pi/2 .. Pi/2
 fn (x T) Atan<T Float>() T {
     return match T {
-        case F64 => cmath.atan(x)
-        case F32 => cmath.atanf(x)
-        case F16 => F16(cmath.atanf(x))
-        case BF16 => BF16(cmath.atanf(x))
+        case F64: cmath.atan(x)
+        case F32: cmath.atanf(x)
+        case F16: F16(cmath.atanf(x))
+        case BF16: BF16(cmath.atanf(x))
     }
 }
 
 # the angle of the point (x, y) from the positive x axis, in -Pi .. Pi: y.Atan2(x) - y first, as in C
 fn (y T) Atan2<T Float>(x T) T {
     return match T {
-        case F64 => cmath.atan2(y, x)
-        case F32 => cmath.atan2f(y, x)
-        case F16 => F16(cmath.atan2f(y, x))
-        case BF16 => BF16(cmath.atan2f(y, x))
+        case F64: cmath.atan2(y, x)
+        case F32: cmath.atan2f(y, x)
+        case F16: F16(cmath.atan2f(y, x))
+        case BF16: BF16(cmath.atan2f(y, x))
     }
 }
 
 fn (x T) Sinh<T Float>() T {
     return match T {
-        case F64 => cmath.sinh(x)
-        case F32 => cmath.sinhf(x)
-        case F16 => F16(cmath.sinhf(x))
-        case BF16 => BF16(cmath.sinhf(x))
+        case F64: cmath.sinh(x)
+        case F32: cmath.sinhf(x)
+        case F16: F16(cmath.sinhf(x))
+        case BF16: BF16(cmath.sinhf(x))
     }
 }
 
 fn (x T) Cosh<T Float>() T {
     return match T {
-        case F64 => cmath.cosh(x)
-        case F32 => cmath.coshf(x)
-        case F16 => F16(cmath.coshf(x))
-        case BF16 => BF16(cmath.coshf(x))
+        case F64: cmath.cosh(x)
+        case F32: cmath.coshf(x)
+        case F16: F16(cmath.coshf(x))
+        case BF16: BF16(cmath.coshf(x))
     }
 }
 
 fn (x T) Tanh<T Float>() T {
     return match T {
-        case F64 => cmath.tanh(x)
-        case F32 => cmath.tanhf(x)
-        case F16 => F16(cmath.tanhf(x))
-        case BF16 => BF16(cmath.tanhf(x))
+        case F64: cmath.tanh(x)
+        case F32: cmath.tanhf(x)
+        case F16: F16(cmath.tanhf(x))
+        case BF16: BF16(cmath.tanhf(x))
     }
 }
 
 # the error function, 2/Pi.Sqrt() times the integral of (-t*t).Exp() from 0 to x - the normal distribution's, and GELU's
 fn (x T) Erf<T Float>() T {
     return match T {
-        case F64 => cmath.erf(x)
-        case F32 => cmath.erff(x)
-        case F16 => F16(cmath.erff(x))
-        case BF16 => BF16(cmath.erff(x))
+        case F64: cmath.erf(x)
+        case F32: cmath.erff(x)
+        case F16: F16(cmath.erff(x))
+        case BF16: BF16(cmath.erff(x))
     }
 }
 
 # 1 - x.Erf(), accurate where x.Erf() is near 1
 fn (x T) Erfc<T Float>() T {
     return match T {
-        case F64 => cmath.erfc(x)
-        case F32 => cmath.erfcf(x)
-        case F16 => F16(cmath.erfcf(x))
-        case BF16 => BF16(cmath.erfcf(x))
+        case F64: cmath.erfc(x)
+        case F32: cmath.erfcf(x)
+        case F16: F16(cmath.erfcf(x))
+        case BF16: BF16(cmath.erfcf(x))
     }
 }
 
 # the largest whole number not above x
 fn (x T) Floor<T Float>() T {
     return match T {
-        case F64 => cmath.floor(x)
-        case F32 => cmath.floorf(x)
-        case F16 => F16(cmath.floorf(x))
-        case BF16 => BF16(cmath.floorf(x))
+        case F64: cmath.floor(x)
+        case F32: cmath.floorf(x)
+        case F16: F16(cmath.floorf(x))
+        case BF16: BF16(cmath.floorf(x))
     }
 }
 
 # the smallest whole number not below x
 fn (x T) Ceil<T Float>() T {
     return match T {
-        case F64 => cmath.ceil(x)
-        case F32 => cmath.ceilf(x)
-        case F16 => F16(cmath.ceilf(x))
-        case BF16 => BF16(cmath.ceilf(x))
+        case F64: cmath.ceil(x)
+        case F32: cmath.ceilf(x)
+        case F16: F16(cmath.ceilf(x))
+        case BF16: BF16(cmath.ceilf(x))
     }
 }
 
 # x without its fraction - toward zero
 fn (x T) Trunc<T Float>() T {
     return match T {
-        case F64 => cmath.trunc(x)
-        case F32 => cmath.truncf(x)
-        case F16 => F16(cmath.truncf(x))
-        case BF16 => BF16(cmath.truncf(x))
+        case F64: cmath.trunc(x)
+        case F32: cmath.truncf(x)
+        case F16: F16(cmath.truncf(x))
+        case BF16: BF16(cmath.truncf(x))
     }
 }
 
 # the nearest whole number, a half away from zero: 2.5.Round() is 3, (-2.5).Round() is -3 - as C, Go and Rust round
 fn (x T) Round<T Float>() T {
     return match T {
-        case F64 => cmath.round(x)
-        case F32 => cmath.roundf(x)
-        case F16 => F16(cmath.roundf(x))
-        case BF16 => BF16(cmath.roundf(x))
+        case F64: cmath.round(x)
+        case F32: cmath.roundf(x)
+        case F16: F16(cmath.roundf(x))
+        case BF16: BF16(cmath.roundf(x))
     }
 }
 
@@ -339,50 +339,50 @@ fn (x T) Round<T Float>() T {
 # which leaves no bias over many values, so the one a quantizer wants
 fn (x T) RoundEven<T Float>() T {
     return match T {
-        case F64 => cmath.roundeven(x)
-        case F32 => cmath.roundevenf(x)
-        case F16 => F16(cmath.roundevenf(x))
-        case BF16 => BF16(cmath.roundevenf(x))
+        case F64: cmath.roundeven(x)
+        case F32: cmath.roundevenf(x)
+        case F16: F16(cmath.roundevenf(x))
+        case BF16: BF16(cmath.roundevenf(x))
     }
 }
 
 # x's magnitude with the sign of s - its sign bit, so 1.0.CopySign(-0.0) is -1.0
 fn (x T) CopySign<T Float>(s T) T {
     return match T {
-        case F64 => cmath.copysign(x, s)
-        case F32 => cmath.copysignf(x, s)
-        case F16 => F16(cmath.copysignf(x, s))
-        case BF16 => BF16(cmath.copysignf(x, s))
+        case F64: cmath.copysign(x, s)
+        case F32: cmath.copysignf(x, s)
+        case F16: F16(cmath.copysignf(x, s))
+        case BF16: BF16(cmath.copysignf(x, s))
     }
 }
 
 # whether x's sign bit is set - true for -0.0 and for a NaN with a sign, which x < 0.0 is not
 fn (x T) SignBit<T Float>() Bool {
     return match T {
-        case F64 => x.Bits() >> 63 == 1
-        case F32 => x.Bits() >> 31 == 1
-        case F16, BF16 => x.Bits() >> 15 == 1
+        case F64: x.Bits() >> 63 == 1
+        case F32: x.Bits() >> 31 == 1
+        case F16, BF16: x.Bits() >> 15 == 1
     }
 }
 
 # whether x is a NaN - the one value not equal to itself
 fn (x T) IsNan<T Float>() Bool {
     return match T {
-        case F64, F32, F16, BF16 => x != x
+        case F64, F32, F16, BF16: x != x
     }
 }
 
 # whether x is an infinity, of either sign
 fn (x T) IsInf<T Float>() Bool {
     return match T {
-        case F64, F32, F16, BF16 => x.Abs() == Inf
+        case F64, F32, F16, BF16: x.Abs() == Inf
     }
 }
 
 # whether x is a number - neither an infinity nor a NaN
 fn (x T) IsFinite<T Float>() Bool {
     return match T {
-        case F64, F32, F16, BF16 => x.Abs() < Inf
+        case F64, F32, F16, BF16: x.Abs() < Inf
     }
 }
 
@@ -395,12 +395,12 @@ fn (x T) IsFinite<T Float>() Bool {
 # which for the most negative one is itself, as negation wraps (E6c); an unsigned integer as it is
 fn (x T) Abs<T Number>() T {
     return match T {
-        case F64 => cmath.fabs(x)
-        case F32 => cmath.fabsf(x)
-        case F16 => F16(cmath.fabsf(x))
-        case BF16 => BF16(cmath.fabsf(x))
-        case U8, U16, U32, U64 => x
-        nomatch => -x if x < 0 else x
+        case F64: cmath.fabs(x)
+        case F32: cmath.fabsf(x)
+        case F16: F16(cmath.fabsf(x))
+        case BF16: BF16(cmath.fabsf(x))
+        case U8, U16, U32, U64: x
+        case _: -x if x < 0 else x
     }
 }
 
@@ -413,7 +413,7 @@ fn (a T) Min<T Number>(b T) T {
             if a != a or b != b { return a + b }        # a NaN: the sum is one
             if a == b { return a if a.SignBit() else b } # -0.0 and 0.0 are equal and differ only there
         }
-        nomatch { }
+        case _ { }
     }
     return b if b < a else a
 }
@@ -425,7 +425,7 @@ fn (a T) Max<T Number>(b T) T {
             if a != a or b != b { return a + b }
             if a == b { return b if a.SignBit() else a }
         }
-        nomatch { }
+        case _ { }
     }
     return b if a < b else a
 }
@@ -464,6 +464,30 @@ fn (x T) Pow<T Integer>(n U32) T {
         if e > 0 { b = b * b }
     }
     return r
+}
+
+# x modulo n, floored (Knuth's, Python's "%"): x - n * x.DivFloor(n), its sign the divisor's (or zero) - where "%"
+# (Rem) truncates, its sign the dividend's: (-7).Mod(3) is 2, -7 % 3 is -1. A zero n is undefined, as for "/" (E6a)
+fn (x T) Mod<T Integer>(n T) T {
+    r := x % n
+    if r != 0 and (r < 0) != (n < 0): return r + n
+    return r
+}
+
+# x divided by n, rounded down (toward negative infinity): (-7).DivFloor(2) is -4, where "/" truncates to -3. A zero
+# n, and an integer's least value divided by -1, are undefined, as for "/" (E6a)
+fn (x T) DivFloor<T Integer>(n T) T {
+    q := x / n
+    if x % n != 0 and (x < 0) != (n < 0): return q - 1
+    return q
+}
+
+# x divided by n, rounded up (toward positive infinity): 7.DivCeil(2) is 4, where "/" truncates to 3 - the count of
+# n-sized pieces x needs. A zero n, and an integer's least value divided by -1, are undefined, as for "/" (E6a)
+fn (x T) DivCeil<T Integer>(n T) T {
+    q := x / n
+    if x % n != 0 and (x < 0) == (n < 0): return q + 1
+    return q
 }
 
 # the largest whole number whose square is not above n - the floor of its square root, exact for every U64: the

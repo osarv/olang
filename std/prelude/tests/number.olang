@@ -193,3 +193,22 @@ test "methods on number literals" {
     x := 2.0.Sqrt()
     assert x.Sqrt() == F64(2).Sqrt().Sqrt()                       # an F64, the literal's own type
 }
+
+minusSeven mut I64 = -7
+seven mut I64 = 7
+bakedMod I64 = I64(-7).Mod(3)
+bakedDivFloor I64 = I64(-7).DivFloor(2)
+bakedDivCeil I64 = I64(7).DivCeil(2)
+bakedDivs := I64[I64(7).Mod(-3), I64(-7).DivCeil(2), I64(-6).DivFloor(2), I64(-6).DivCeil(-2), I64(6).Mod(3)]
+
+test "Mod is floored, its sign the divisor's; DivFloor and DivCeil round down and up, where % and / truncate" {
+    assert bakedMod == 2 and minusSeven.Mod(3) == 2 and minusSeven % 3 == -1
+    assert bakedDivFloor == -4 and minusSeven.DivFloor(2) == -4 and minusSeven / 2 == -3
+    assert bakedDivCeil == 4 and seven.DivCeil(2) == 4 and seven / 2 == 3
+    assert seven.Mod(-3) == -2 and minusSeven.Mod(-3) == -1 and seven.Mod(3) == 1
+    assert minusSeven.DivCeil(2) == -3 and seven.DivFloor(-2) == -4 and seven.DivCeil(-2) == -3
+    assert bakedDivs[0] == -2 and bakedDivs[1] == -3 and bakedDivs[2] == -3 and bakedDivs[3] == 3 and bakedDivs[4] == 0
+    assert U8(250).Mod(7) == 5 and U8(7).DivCeil(2) == 4 and U8(7).DivFloor(2) == 3 and U32(10).DivCeil(5) == 2
+    assert I8(-128).Mod(3) == 1 and I8(-128).DivFloor(3) == -43 and I3(-3).Mod(2) == 1 and U128(10).DivCeil(3) == 4
+    assert I128(-7).DivFloor(2) == -4
+}

@@ -1130,7 +1130,7 @@ neither.
     the call builds it where the target's own storage is, never in the join block, which closes at the join; of several
     targets the longest-lived storage, which outlives each. A discarded target (`_`) has none.
 51. **A value match's arm value is the match's**, built where the match stands (S12b, O18a), never in the arm's own
-    block, which closes as the arm ends (`name := match r { case A(i) => $f(i) ... }`, compiler/views.olang's `where`).
+    block, which closes as the arm ends (`name := match r { case A(i): $f(i) ... }`, compiler/views.olang's `where`).
 52. **C2d at a store of a constructed local** (b6elemvalue): a local a constructor call made, stored whole where an
     argument its instance holds - made in a block of this function that closes first - does not outlive the slot, is
     C2d at that argument, as stage 0 says it, and nothing more is said of the store. Not a landing: the instance stays

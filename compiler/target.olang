@@ -425,12 +425,12 @@ fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
         return true
     }
     level := match cpu {
-        case "x86-64" => 1
-        case "x86-64-v2" => 2
-        case "x86-64-v3" => 3
-        case "x86-64-v4" => 4
-        case "native" => X86Level(flags)
-        case _ => 0
+        case "x86-64": 1
+        case "x86-64-v2": 2
+        case "x86-64-v3": 3
+        case "x86-64-v4": 4
+        case "native": X86Level(flags)
+        case _: 0
     }
     if level == 0 { return false }
     t.Cpu = "x86-64" if level == 1 else $"x86-64-v" $level

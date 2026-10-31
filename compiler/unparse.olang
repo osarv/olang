@@ -22,8 +22,8 @@ fn Unparse(decls Array<ast.Decl&>&, names source.Names&, text String&, diags dia
 # whether a declaration is the hidden global the parser declares beside an attribute (G39): written as the attribute
 fn hidden(d ast.Decl&) Bool {
     return match d {
-        case ast.Decl.Global(_, v) => v.Hidden
-        case _ => false
+        case ast.Decl.Global(_, v): v.Hidden
+        case _: false
     }
 }
 
@@ -96,7 +96,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
                         w.put("type ")
                         w.name(t.Name)
                     }
-                    nomatch { }
+                    case _ { }
                 }
             }
             w.ind--
@@ -271,15 +271,15 @@ fn (w mut writer&) contract(s ast.Sig&) {
 fn (w mut writer&) contractItem(st ast.Stmt&) {
     match st {
         case ast.Stmt.Assert(_, c, _) { w.expr(c) }
-        nomatch { }
+        case _ { }
     }
 }
 
 # whether a type is a function type with no error set of its own
 fn noErrorsOf(t ast.TypeRef&) Bool {
     return match t {
-        case ast.TypeRef.Func(_, s) => not s.HasErrors
-        case _ => false
+        case ast.TypeRef.Func(_, s): not s.HasErrors
+        case _: false
     }
 }
 
@@ -330,7 +330,7 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
             w.name(t.Name)
             return
         }
-        nomatch { }
+        case _ { }
     }
     w.put("type ")
     w.name(t.Name)
@@ -476,7 +476,7 @@ fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
                 }
                 continue
             }
-            nomatch { }
+            case _ { }
         }
         if i > 0 { w.put(", ") }
         w.ty(t)
@@ -798,11 +798,6 @@ fn (w mut writer&) match(m ast.Match&) {
         }
         w.caseBody(c)
     }
-    if m.NoMatch is not null {
-        w.nl()
-        w.put("nomatch")
-        w.caseBody(m.NoMatch!)
-    }
     w.ind--
     w.nl()
     w.put("}")
@@ -810,12 +805,11 @@ fn (w mut writer&) match(m ast.Match&) {
 
 fn (w mut writer&) caseBody(c ast.Case&) {
     if c.Value is not null {
-        w.put(" => ")
+        w.put(": ")
         w.expr(c.Value!)
         return
     }
-    w.put(" ")
-    w.block(c.Body)
+    w.body(c.Body)
 }
 
 fn (w mut writer&) pattern(p ast.Pattern&) {
@@ -1041,13 +1035,13 @@ fn (w mut writer&) expr(x ast.Expr&) {
 # whether an expression is written starting with "-": "- -x" must keep its space
 fn startsWithMinus(x ast.Expr&) Bool {
     return match x {
-        case ast.Expr.Unary(_, op, _) => op == token.Tok.Minus or op == token.Tok.Dec
-        case ast.Expr.Lit(_, _) => false
-        case ast.Expr.Binary(_, _, a, _) => startsWithMinus(a)
-        case ast.Expr.Postfix(_, _, a) => startsWithMinus(a)
-        case ast.Expr.Call(_, a, _) => startsWithMinus(a)
-        case ast.Expr.Member(_, a, _) => startsWithMinus(a)
-        case ast.Expr.Index(_, a, _) => startsWithMinus(a)
-        nomatch => false
+        case ast.Expr.Unary(_, op, _): op == token.Tok.Minus or op == token.Tok.Dec
+        case ast.Expr.Lit(_, _): false
+        case ast.Expr.Binary(_, _, a, _): startsWithMinus(a)
+        case ast.Expr.Postfix(_, _, a): startsWithMinus(a)
+        case ast.Expr.Call(_, a, _): startsWithMinus(a)
+        case ast.Expr.Member(_, a, _): startsWithMinus(a)
+        case ast.Expr.Index(_, a, _): startsWithMinus(a)
+        case _: false
     }
 }

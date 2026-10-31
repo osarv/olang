@@ -55,11 +55,11 @@ fn reraised(e LoadErr) I64 ? ParseErr {
 # a match on an error value - null among its cases - giving a value
 fn kind(e AnyErr) I64 {
     return match e {
-        case null => 0
-        case ParseErr.EMPTY => 1
-        case ParseErr => 2
-        case os.Error => 3
-        case NetErr => 4
+        case null: 0
+        case ParseErr.EMPTY: 1
+        case ParseErr: 2
+        case os.Error: 3
+        case NetErr: 4
     }
 }
 

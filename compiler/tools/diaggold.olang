@@ -140,7 +140,7 @@ fn check(c golden&) String {
         if i + 1 < rows.Len() and isExcerpt(rows[i]) {
             match where {
                 case diag.Where.Span(f, s, _) { where = diag.Where.Span(f, s, spanEnd(g.texts[f], s, rows[i + 1])) }
-                nomatch { }
+                case _ { }
             }
             i += 2
         }

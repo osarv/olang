@@ -1045,11 +1045,11 @@ fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
 fn (e mut Emitter&) sym(k mir.FnKey) String {
     t := e.T
     return match k {
-        case mir.FnKey.Body(id) => e.bodySym(I64(id))
-        case mir.FnKey.Helper(kind, ty) => types.Symbol("olang." $kind "." $(t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)))
-        case mir.FnKey.Adapter(call) => $e.bodySym(I64(call)) "_adapter"
-        case mir.FnKey.Init(m) => types.Symbol("olang.init." $e.P.L.Mods[m].Identity)
-        case mir.FnKey.AnyRender(ti, top) => types.Symbol($"olang.anyrender" $(".top" if top else "") "." $e.tableName(ti))
+        case mir.FnKey.Body(id): e.bodySym(I64(id))
+        case mir.FnKey.Helper(kind, ty): types.Symbol("olang." $kind "." $(t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)))
+        case mir.FnKey.Adapter(call): $e.bodySym(I64(call)) "_adapter"
+        case mir.FnKey.Init(m): types.Symbol("olang.init." $e.P.L.Mods[m].Identity)
+        case mir.FnKey.AnyRender(ti, top): types.Symbol($"olang.anyrender" $(".top" if top else "") "." $e.tableName(ti))
     }
 }
 
@@ -1057,17 +1057,17 @@ fn (e mut Emitter&) bodySym(id I64) String {
     t := e.T
     b := e.Lw.Bodies[id]
     return match b.Of {
-        case typed.BodyOf.Fn(inst) => $e.P.InstanceName(inst)
-        case typed.BodyOf.Ctor(ty, twin) => types.Symbol($t.Canon(ty) ".ctor" $("" if twin == types.ListId(0) else $"<" $t.CanonList(twin) ">"))
-        case typed.BodyOf.Dtor(ty) => types.Symbol($t.Canon(ty) ".dtor")
-        case typed.BodyOf.Lambda(_) => "olang_lambda_" $id
-        case typed.BodyOf.Test(_) => e.testSym(id)
-        case typed.BodyOf.Global(m, n) => types.Symbol($e.P.L.Mods[m].Identity "." $e.text(n) ".init")
-        case typed.BodyOf.Case(_, _) => "olang_case_" $id
-        case typed.BodyOf.Cond(_, _) => "olang_cond_" $id
-        case typed.BodyOf.Contract(of, kind, i) => types.Symbol($e.bodySym(I64(of)) ".contract." $kind "." $i)
-        case typed.BodyOf.Thunk(ti, k) => types.Symbol($"olang.slot." $e.tableName(ti) "." $k)
-        case typed.BodyOf.Slot(tr, k) => types.Symbol($"olang.traitslot." $e.canonOf(tr) "." $k)
+        case typed.BodyOf.Fn(inst): $e.P.InstanceName(inst)
+        case typed.BodyOf.Ctor(ty, twin): types.Symbol($t.Canon(ty) ".ctor" $("" if twin == types.ListId(0) else $"<" $t.CanonList(twin) ">"))
+        case typed.BodyOf.Dtor(ty): types.Symbol($t.Canon(ty) ".dtor")
+        case typed.BodyOf.Lambda(_): "olang_lambda_" $id
+        case typed.BodyOf.Test(_): e.testSym(id)
+        case typed.BodyOf.Global(m, n): types.Symbol($e.P.L.Mods[m].Identity "." $e.text(n) ".init")
+        case typed.BodyOf.Case(_, _): "olang_case_" $id
+        case typed.BodyOf.Cond(_, _): "olang_cond_" $id
+        case typed.BodyOf.Contract(of, kind, i): types.Symbol($e.bodySym(I64(of)) ".contract." $kind "." $i)
+        case typed.BodyOf.Thunk(ti, k): types.Symbol($"olang.slot." $e.tableName(ti) "." $k)
+        case typed.BodyOf.Slot(tr, k): types.Symbol($"olang.traitslot." $e.canonOf(tr) "." $k)
     }
 }
 
@@ -1127,11 +1127,11 @@ fn (e mut Emitter&) globalSym(m I64, n source.NameId) String {
 
 fn (e mut Emitter&) isGlobalInit(k mir.FnKey) Bool {
     return match k {
-        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
-            case typed.BodyOf.Global(_, _) => true
-            case _ => false
+        case mir.FnKey.Body(id): match e.Lw.Bodies[I64(id)].Of {
+            case typed.BodyOf.Global(_, _): true
+            case _: false
         }
-        case _ => false
+        case _: false
     }
 }
 
@@ -1159,16 +1159,16 @@ fn (e mut Emitter&) capVars(k mir.FnKey) I64 {
 
 fn (e mut Emitter&) hasEnv(k mir.FnKey) Bool {
     return match k {
-        case mir.FnKey.Adapter(_) => true
-        case mir.FnKey.Body(id) => e.isLambda(I64(id))
-        case _ => false
+        case mir.FnKey.Adapter(_): true
+        case mir.FnKey.Body(id): e.isLambda(I64(id))
+        case _: false
     }
 }
 
 fn (e mut Emitter&) isLambda(id I64) Bool {
     return match e.Lw.Bodies[id].Of {
-        case typed.BodyOf.Lambda(_) => true
-        case _ => false
+        case typed.BodyOf.Lambda(_): true
+        case _: false
     }
 }
 
@@ -1449,11 +1449,11 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
                             }
                         }
                     }
-                    nomatch { }
+                    case _ { }
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return out
 }
@@ -1465,13 +1465,13 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
     match k {
         case mir.FnKey.Body(id) {
             return match e.Lw.Bodies[I64(id)].Of {
-                case typed.BodyOf.Fn(inst) => $e.text(e.P.FnDecl(e.P.InstanceFn(inst)).Name)
-                case typed.BodyOf.Ctor(ty, _) => $t.Canon(ty)
-                case typed.BodyOf.Dtor(ty) => $t.Canon(ty) ".dtor"
-                case typed.BodyOf.Lambda(_) => "lambda"
-                case typed.BodyOf.Test(_) => "test"
-                case typed.BodyOf.Global(_, n) => $e.text(n) ".init"
-                case _ => e.sym(k)
+                case typed.BodyOf.Fn(inst): $e.text(e.P.FnDecl(e.P.InstanceFn(inst)).Name)
+                case typed.BodyOf.Ctor(ty, _): $t.Canon(ty)
+                case typed.BodyOf.Dtor(ty): $t.Canon(ty) ".dtor"
+                case typed.BodyOf.Lambda(_): "lambda"
+                case typed.BodyOf.Test(_): "test"
+                case typed.BodyOf.Global(_, n): $e.text(n) ".init"
+                case _: e.sym(k)
             }
         }
         case _ { return e.sym(k) }
@@ -1486,14 +1486,14 @@ fn (e mut Emitter&) ProfName(k mir.FnKey) String {
     match k {
         case mir.FnKey.Body(id) {
             return match e.Lw.Bodies[I64(id)].Of {
-                case typed.BodyOf.Fn(inst) => e.instanceProfName(inst)
-                case typed.BodyOf.Ctor(ty, _) => e.readableTypes(t.Canon(ty))
-                case typed.BodyOf.Dtor(ty) => $e.readableTypes(t.Canon(ty)) ".destruct"
-                case typed.BodyOf.Lambda(parent) => $e.ProfName(mir.FnKey.Body(parent)) ".lambda"
-                case typed.BodyOf.Test(_) => "test"
-                case typed.BodyOf.Global(m, n) => $load.ErrQualifier(e.P.L.Mods[m].Identity, m == e.P.L.Root) $e.text(n) ".init"
-                case typed.BodyOf.Contract(of, _, _) => $e.ProfName(mir.FnKey.Body(of)) ".contract"
-                case _ => e.sym(k)
+                case typed.BodyOf.Fn(inst): e.instanceProfName(inst)
+                case typed.BodyOf.Ctor(ty, _): e.readableTypes(t.Canon(ty))
+                case typed.BodyOf.Dtor(ty): $e.readableTypes(t.Canon(ty)) ".destruct"
+                case typed.BodyOf.Lambda(parent): $e.ProfName(mir.FnKey.Body(parent)) ".lambda"
+                case typed.BodyOf.Test(_): "test"
+                case typed.BodyOf.Global(m, n): $load.ErrQualifier(e.P.L.Mods[m].Identity, m == e.P.L.Root) $e.text(n) ".init"
+                case typed.BodyOf.Contract(of, _, _): $e.ProfName(mir.FnKey.Body(of)) ".contract"
+                case _: e.sym(k)
             }
         }
         case mir.FnKey.Adapter(call) { return $e.ProfName(mir.FnKey.Body(call)) ".adapter" }
@@ -1616,19 +1616,19 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
 
 fn stmtSpan(s mir.Stmt&) source.Span {
     return match s {
-        case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _) => sp
-        case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _) => sp
-        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _) => sp
-        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp) => sp
-        case mir.Stmt.Deferred(sp, _, _) => sp
+        case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _): sp
+        case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _): sp
+        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _): sp
+        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp): sp
+        case mir.Stmt.Deferred(sp, _, _): sp
     }
 }
 
 fn termSpan(tm mir.Term) source.Span {
     return match tm {
-        case mir.Term.Call(sp, _), mir.Term.Return(sp, _), mir.Term.Raise(sp, _) => sp
-        case mir.Term.Wait(sp, _, _, _, _), mir.Term.Exit(sp, _, _), mir.Term.Tail(sp, _) => sp
-        case _ => source.Span(I32(0), I32(0))
+        case mir.Term.Call(sp, _), mir.Term.Return(sp, _), mir.Term.Raise(sp, _): sp
+        case mir.Term.Wait(sp, _, _, _, _), mir.Term.Exit(sp, _, _), mir.Term.Tail(sp, _): sp
+        case _: source.Span(I32(0), I32(0))
     }
 }
 
@@ -2213,11 +2213,11 @@ fn (e mut Emitter&) walkStub(k mir.FnKey, ty types.TypeId, symbol String&, passe
 # function a call runs to make the walk, not the walk's Next
 fn (e mut Emitter&) isGenFn(k mir.FnKey) Bool {
     return match k {
-        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
-            case typed.BodyOf.Fn(i) => e.P.IsGenerator(e.P.InstanceFn(i))
-            case _ => false
+        case mir.FnKey.Body(id): match e.Lw.Bodies[I64(id)].Of {
+            case typed.BodyOf.Fn(i): e.P.IsGenerator(e.P.InstanceFn(i))
+            case _: false
         }
-        case _ => false
+        case _: false
     }
 }
 
@@ -2361,8 +2361,8 @@ fn (e mut Emitter&) coroDecls() {
 # whether a function is a generator's Next (D18)
 fn (e mut Emitter&) isGen(k mir.FnKey) Bool {
     return match k {
-        case mir.FnKey.Body(id) => e.Lw.Bodies[I64(id)].Gen
-        case _ => false
+        case mir.FnKey.Body(id): e.Lw.Bodies[I64(id)].Gen
+        case _: false
     }
 }
 
@@ -2970,8 +2970,8 @@ fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
 
 fn (fe mut fnEm&) baseIs(p mir.Lvalue, l mir.LocalId) Bool {
     return match p.B {
-        case mir.Base.Local(k) => k == l
-        case _ => false
+        case mir.Base.Local(k): k == l
+        case _: false
     }
 }
 
@@ -3117,9 +3117,9 @@ fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& =
 fn (fe mut fnEm&) fieldList(r types.TypeId) types.ListId {
     t := fe.E.T
     return match t.KindOf(r) {
-        case types.Kind.Tuple, types.Kind.Record => t.Parts(r)
-        case types.Kind.Named => t.Fields(r)
-        case _ => types.ListId(0)
+        case types.Kind.Tuple, types.Kind.Record: t.Parts(r)
+        case types.Kind.Named: t.Fields(r)
+        case _: types.ListId(0)
     }
 }
 
@@ -3132,9 +3132,9 @@ fn (fe mut fnEm&) casesList(r types.TypeId) types.ListId {
 fn (fe mut fnEm&) placeType(p mir.Lvalue) types.TypeId {
     t := fe.E.T
     ty := match p.B {
-        case mir.Base.Local(l) => fe.localType(l)
-        case mir.Base.Global(_, _, gt) => gt
-        case mir.Base.None => types.UnknownT
+        case mir.Base.Local(l): fe.localType(l)
+        case mir.Base.Global(_, _, gt): gt
+        case mir.Base.None: types.UnknownT
     }
     for i in range p.Path.N {
         r := t.Repr(ty)
@@ -3150,9 +3150,9 @@ fn (fe mut fnEm&) placeType(p mir.Lvalue) types.TypeId {
 
 fn (fe mut fnEm&) otype(x mir.Operand) types.TypeId {
     return match x {
-        case mir.Operand.None => types.VoidT
-        case mir.Operand.Copy(p) => fe.placeType(p)
-        case mir.Operand.Const(ty, _), mir.Operand.Data(ty, _, _, _) => ty
+        case mir.Operand.None: types.VoidT
+        case mir.Operand.Copy(p): fe.placeType(p)
+        case mir.Operand.Const(ty, _), mir.Operand.Data(ty, _, _, _): ty
     }
 }
 
@@ -3342,8 +3342,8 @@ fn (fe mut fnEm&) program() String {
 
 fn (fe mut fnEm&) isFrame(r mir.ScopeRef) Bool {
     return match r {
-        case mir.ScopeRef.Frame => true
-        case _ => false
+        case mir.ScopeRef.Frame: true
+        case _: false
     }
 }
 
@@ -3502,15 +3502,15 @@ fn (fe mut fnEm&) findDirect() {
             for j < n and fe.plainWrite(bb.Stmts[j], sc) { j++ }
             if j + 1 >= n { continue }
             textOk := match bb.Stmts[j] {
-                case mir.Stmt.Assign(_, _, rv) => match rv {
-                    case mir.Rvalue.Text(b, _, _) => fe.refIs(b, sc)
-                    case _ => false
+                case mir.Stmt.Assign(_, _, rv): match rv {
+                    case mir.Rvalue.Text(b, _, _): fe.refIs(b, sc)
+                    case _: false
                 }
-                case _ => false
+                case _: false
             }
             closeOk := match bb.Stmts[j + 1] {
-                case mir.Stmt.Close(_, s1) => I64(s1) == sc
-                case _ => false
+                case mir.Stmt.Close(_, s1): I64(s1) == sc
+                case _: false
             }
             if textOk and closeOk { fe.direct.Put(sc, true) }
         }
@@ -3592,8 +3592,8 @@ fn (fe mut fnEm&) findWalks() {
         c := I64(f.WalkCalls[i])
         w := I64(f.WalkScopes[i])
         gen := match f.Calls[c].Target {
-            case mir.Callee.Fn(k, _) => fe.E.isGenFn(k)
-            case _ => false
+            case mir.Callee.Fn(k, _): fe.E.isGenFn(k)
+            case _: false
         }
         if not gen { continue }
         by.Put(w, -1 if by.Has(w) else c)
@@ -3775,25 +3775,25 @@ fn (fe mut fnEm&) useRef(r mir.ScopeRef, used mut Array<Bool>&) Bool {
 
 fn (fe mut fnEm&) plainWrite(st mir.Stmt&, sc I64) Bool {
     return match st {
-        case mir.Stmt.Write(_, b, how, _) => fe.refIs(b, sc) and match how {
-            case mir.WriteKind.Bytes, mir.WriteKind.Char, mir.WriteKind.Int, mir.WriteKind.Uint, mir.WriteKind.Bool => true
-            case _ => false
+        case mir.Stmt.Write(_, b, how, _): fe.refIs(b, sc) and match how {
+            case mir.WriteKind.Bytes, mir.WriteKind.Char, mir.WriteKind.Int, mir.WriteKind.Uint, mir.WriteKind.Bool: true
+            case _: false
         }
-        case _ => false
+        case _: false
     }
 }
 
 fn (fe mut fnEm&) refIs(r mir.ScopeRef, sc I64) Bool {
     return match r {
-        case mir.ScopeRef.Scope(s0) => I64(s0) == sc
-        case _ => false
+        case mir.ScopeRef.Scope(s0): I64(s0) == sc
+        case _: false
     }
 }
 
 fn (fe mut fnEm&) directRef(r mir.ScopeRef) Bool {
     return match r {
-        case mir.ScopeRef.Scope(s0) => fe.direct.Has(I64(s0))
-        case _ => false
+        case mir.ScopeRef.Scope(s0): fe.direct.Has(I64(s0))
+        case _: false
     }
 }
 
@@ -4106,8 +4106,8 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     cnt := fe.index(fe.val(n), fe.otype(n))
     bytes := fe.let("mul i64 " $cnt ", " $fe.size(el))
     zero := match fill {
-        case mir.Operand.Const(_, b) => b == 0
-        case _ => false
+        case mir.Operand.Const(_, b): b == 0
+        case _: false
     }
     sc := fe.scope(s)
     p := ""
@@ -4263,8 +4263,8 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.AnyMake {
             # T32a: the instance with its table - a null instance a null any
             ti := match fe.arg(args, 1) {
-                case mir.Operand.Const(_, v) => v
-                case _ => -1
+                case mir.Operand.Const(_, v): v
+                case _: -1
             }
             if ti < 0 {
                 fe.gap("an any with no table")
@@ -4358,12 +4358,12 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         # library (T4)
         a, b := fe.widenBF16(x, "float"), fe.widenBF16(y, "float")
         w := match op {
-            case typed.PrimOp.Add => "fadd"
-            case typed.PrimOp.Sub => "fsub"
-            case typed.PrimOp.Mul => "fmul"
-            case typed.PrimOp.Div => "fdiv"
-            case typed.PrimOp.Rem => "frem"
-            case _ => ""
+            case typed.PrimOp.Add: "fadd"
+            case typed.PrimOp.Sub: "fsub"
+            case typed.PrimOp.Mul: "fmul"
+            case typed.PrimOp.Div: "fdiv"
+            case typed.PrimOp.Rem: "frem"
+            case _: ""
         }
         if w != "" { return fe.narrowBF16(fe.let($w " float " $a ", " $b)) }
         match op {
@@ -4442,23 +4442,23 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
     lt := fe.ty(r)
     if t.IsFloat(r) {
         c := match op {
-            case typed.PrimOp.Eq => "oeq"
-            case typed.PrimOp.Ne => "une"
-            case typed.PrimOp.Lt => "olt"
-            case typed.PrimOp.Le => "ole"
-            case typed.PrimOp.Gt => "ogt"
-            case _ => "oge"
+            case typed.PrimOp.Eq: "oeq"
+            case typed.PrimOp.Ne: "une"
+            case typed.PrimOp.Lt: "olt"
+            case typed.PrimOp.Le: "ole"
+            case typed.PrimOp.Gt: "ogt"
+            case _: "oge"
         }
         return fe.let("fcmp " $c " " $lt " " $x ", " $y)
     }
     un := t.IsUnsigned(r) or r == types.BoolT
     c := match op {
-        case typed.PrimOp.Eq => "eq"
-        case typed.PrimOp.Ne => "ne"
-        case typed.PrimOp.Lt => "ult" if un else "slt"
-        case typed.PrimOp.Le => "ule" if un else "sle"
-        case typed.PrimOp.Gt => "ugt" if un else "sgt"
-        case _ => "uge" if un else "sge"
+        case typed.PrimOp.Eq: "eq"
+        case typed.PrimOp.Ne: "ne"
+        case typed.PrimOp.Lt: "ult" if un else "slt"
+        case typed.PrimOp.Le: "ule" if un else "sle"
+        case typed.PrimOp.Gt: "ugt" if un else "sgt"
+        case _: "uge" if un else "sge"
     }
     # a pair (an array reference, a function value) is equal to another, null among them, when both its words are
     if lt == "{ i64, ptr }" or lt == "{ ptr, ptr }" {
@@ -4645,9 +4645,9 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul {
             y := fe.val(fe.arg(args, 1), t0)
             name := match op {
-                case typed.PrimOp.Add => "add"
-                case typed.PrimOp.Sub => "sub"
-                case _ => "mul"
+                case typed.PrimOp.Add: "add"
+                case typed.PrimOp.Sub: "sub"
+                case _: "mul"
             }
             intr := "llvm." $("u" if un else "s") $name ".with.overflow.i" $bits
             fe.E.declare(intr, "{ " $lt ", i1 } @" $intr "(" $lt ", " $lt ")")
@@ -4747,8 +4747,8 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             if j < I64(caps.N) {
                 r := fe.F.Refs[I64(caps.At) + j]
                 isProg := match r {
-                    case mir.ScopeRef.Program => true
-                    case _ => false
+                    case mir.ScopeRef.Program: true
+                    case _: false
                 }
                 if not isProg { sc = fe.scope(r) }
             }
@@ -4799,9 +4799,9 @@ fn (e mut Emitter&) codeFor(code mir.FnKey, ty types.TypeId) String {
 # a function's own type, as lowering gives it
 fn (e mut Emitter&) codeType(k mir.FnKey) types.TypeId {
     return match k {
-        case mir.FnKey.Body(id) => e.Lw.Bodies[I64(id)].Ty
-        case mir.FnKey.Helper(kind, t) => mir.HelperType(e.T, kind, t)
-        case _ => e.Lw.LowerKey(k).Ty
+        case mir.FnKey.Body(id): e.Lw.Bodies[I64(id)].Ty
+        case mir.FnKey.Helper(kind, t): mir.HelperType(e.T, kind, t)
+        case _: e.Lw.LowerKey(k).Ty
     }
 }
 
@@ -5343,7 +5343,7 @@ fn (fe mut fnEm&) tailCall(c mir.Call) {
             target = "@" $fe.E.sym(k)
             if fe.E.hasEnv(k) { fe.gap("a become's call of a function with an environment") }
         }
-        nomatch {
+        case _ {
             fe.gap("a become's call of anything but a function")
             fe.w("unreachable")
             return
@@ -5500,9 +5500,9 @@ fn (e mut Emitter&) cHeader(ty types.TypeId) String {
     e.P.Layout(r)
     w := cabi.Result(e.T, e.Arch, r)
     return match w.Kind {
-        case cabi.Pass.Direct => $($w.Attr " " if w.Attr != "" else "") $e.ty(r)
-        case cabi.Pass.Parts => cabi.PartsType(w)
-        case _ => "void"
+        case cabi.Pass.Direct: $($w.Attr " " if w.Attr != "" else "") $e.ty(r)
+        case cabi.Pass.Parts: cabi.PartsType(w)
+        case _: "void"
     }
 }
 
@@ -5546,10 +5546,10 @@ fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime B
     e.P.Layout(p)
     w := cabi.Param(e.T, e.Arch, p, regs)
     return match w.Kind {
-        case cabi.Pass.Direct => $e.ty(p) $(" " $w.Attr if w.Attr != "" else "")
-        case cabi.Pass.Parts => cabi.PartsList(w)
-        case cabi.Pass.Byval => $"ptr byval(" $e.ty(p) ") align " $(t.Align(p).Max(8))
-        case _ => "ptr"
+        case cabi.Pass.Direct: $e.ty(p) $(" " $w.Attr if w.Attr != "" else "")
+        case cabi.Pass.Parts: cabi.PartsList(w)
+        case cabi.Pass.Byval: $"ptr byval(" $e.ty(p) ") align " $(t.Align(p).Max(8))
+        case _: "ptr"
     }
 }
 
@@ -5944,9 +5944,9 @@ fn (e mut Emitter&) exportEntry(i I64) {
         head = "i64"
     } else if hasRes {
         head = match rw.Kind {
-            case cabi.Pass.Direct => $($rw.Attr " " if rw.Attr != "" else "") $e.ty(res)
-            case cabi.Pass.Parts => cabi.PartsType(rw)
-            case _ => "void"
+            case cabi.Pass.Direct: $($rw.Attr " " if rw.Attr != "" else "") $e.ty(res)
+            case cabi.Pass.Parts: cabi.PartsType(rw)
+            case _: "void"
         }
     }
     b := StringBuilder()
@@ -6122,18 +6122,18 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
     if r == types.BoolT { return "bool" }
     if t.IsNumber(r) {
         return match t.KindOf(r) {
-            case types.Kind.I8 => "int8_t"
-            case types.Kind.I16 => "int16_t"
-            case types.Kind.I32 => "int32_t"
-            case types.Kind.I64 => "int64_t"
-            case types.Kind.U8 => "uint8_t"
-            case types.Kind.U16 => "uint16_t"
-            case types.Kind.U32 => "uint32_t"
-            case types.Kind.U64 => "uint64_t"
-            case types.Kind.F16 => "_Float16"
-            case types.Kind.BF16 => "__bf16"
-            case types.Kind.F32 => "float"
-            case _ => "double"
+            case types.Kind.I8: "int8_t"
+            case types.Kind.I16: "int16_t"
+            case types.Kind.I32: "int32_t"
+            case types.Kind.I64: "int64_t"
+            case types.Kind.U8: "uint8_t"
+            case types.Kind.U16: "uint16_t"
+            case types.Kind.U32: "uint32_t"
+            case types.Kind.U64: "uint64_t"
+            case types.Kind.F16: "_Float16"
+            case types.Kind.BF16: "__bf16"
+            case types.Kind.F32: "float"
+            case _: "double"
         }
     }
     if t.IsRef(r) {

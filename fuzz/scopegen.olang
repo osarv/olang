@@ -507,8 +507,8 @@ fn (g mut SG&) condOp(a String&, ind String&) String& {
         return $ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = " $q " if Run > 0 else " $a ".next\n" $ind "}\n"
     }
     if k == 2 {
-        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = match Run { case 1 => " $q
-                " case _ => pickNode(" $a ") }\n" $ind "}\n")
+        return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $a ".next = match Run { case 1: " $q
+                " case _: pickNode(" $a ") }\n" $ind "}\n")
     }
     if k == 3 { return $ind $q " mut Node& = " $g.newNode() "\n" $ind $a ".next = " $q " if Run > 0 else pickNode(" $a ")\n" }
     if k == 4 {    # passed on: an argument whose values live in different scopes
@@ -523,7 +523,7 @@ fn (g mut SG&) condOp(a String&, ind String&) String& {
         return ($ind "{\n" $ind "    " $q " mut Node& = " $g.newNode() "\n" $ind "    " $c " mut Node& = " $q " if Run > 0 else pickNode(" $a ")\n"
                 $ind "    " $c ".next = " $g.newNode() "\n" $ind "}\n")
     }
-    return $ind $a ".next = match Run { case 1 => " $g.newNode() " case _ => " $a ".next }\n"
+    return $ind $a ".next = match Run { case 1: " $g.newNode() " case _: " $a ".next }\n"
 }
 
 # a statement storing through the node a by spawned calls that may fail - failing, a task's default standing in for its
@@ -841,7 +841,7 @@ fn (g mut SG&) anyOp(b String&, ind String&) String& {
         texts := $ind "{\n" $ind "    " $q " := \"t\" $" $v " \"-\" $(" $v " * 3)\n" $ind "    " $q2 " := \"o\" $" $v "\n"
         item := ""
         if k == 16 { item = $"Lab(" $q " if Run > 0 else " $q2 ")" }
-        if k == 17 { item = $"Lab(match Run { case 0 => " $q2 " case _ => " $q " })" }
+        if k == 17 { item = $"Lab(match Run { case 0: " $q2 " case _: " $q " })" }
         if k == 18 { item = $"Lab(try textFail(" $v ") catch default " $q ")" }
         list := ".anys"
         if k == 19 {
@@ -933,7 +933,7 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     if k == 4 { field = "    y String& = $n \"-new-text-in-the-instance\"\n" }
     if k == 5 { field = "    y String& = (p if n >= 0 else $n \"-new-text-in-the-instance\")\n" }
     if k == 6 {
-        field = "    y String& = match n >= 0 {\n        case true => p\n        case false => $n \"-new-text-in-the-instance\"\n    }\n"
+        field = "    y String& = match n >= 0 {\n        case true: p\n        case false: $n \"-new-text-in-the-instance\"\n    }\n"
     }
     if k >= 7 {
         field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
@@ -965,7 +965,7 @@ fn (g mut SG&) ctorChoiceArgOp(a String&, ind String&, k I64) String& {
     hh := g.name("hh")
     tt := g.name("tt")
     choice := $mk "(t, n) if n != -77777 else \"\""
-    if k == 11 { choice = "match n == -77777 {\n        case true => \"\"\n        case false => " $mk "(t, n)\n    }" }
+    if k == 11 { choice = "match n == -77777 {\n        case true: \"\"\n        case false: " $mk "(t, n)\n    }" }
     if k == 13 { choice = "\"\" if n == -77777 else " $mk "(t, n)" }
     body := "    e := " $ty "(" $choice ", n)\n    return e\n"
     if k == 11 { body = "    return " $ty "(" $choice ", n)\n" }
@@ -1025,12 +1025,12 @@ fn (g mut SG&) strOp(ind String&) String& {
             e := g.name("e")
             return $ind "for " $y " in r.l { acc += " $y ".v }\n" $ind "for " $e " in r.m { acc += " $e ".Value.v }\n"
         }
-        if k == 15 { return $ind "acc += match Run { case 1 => r.n.v case _ => " $v " }\n" }
+        if k == 15 { return $ind "acc += match Run { case 1: r.n.v case _: " $v " }\n" }
         return $ind "if r.l.Len() > 0 { r.l[0].v = r.l[0].v + " $v " }\n"    # a number written through an element
     }
     k := g.r(18)
     if k == 0 { return $ind "r.n.next = mkNode(" $v ") if Run > 0 else r.n.next\n" }
-    if k == 1 { return $ind "r.n.next = match Run { case 1 => mkNode(" $v ") case _ => r.n.next }\n" }
+    if k == 1 { return $ind "r.n.next = match Run { case 1: mkNode(" $v ") case _: r.n.next }\n" }
     if k == 2 { return $ind "r.n.next = try borrowF(r.n) catch default mkNode(" $v ")\n" }
     if k == 3 { return $ind "r.n.next = try r.m.Get(3) catch default mkNode(" $v ")\n" }
     if k == 4 { return $ind "r.n.next = try r.a.Get(Run * 9) catch default mkNode(" $v ")\n" }
@@ -1289,7 +1289,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
         probe = "    keep := Vec<String&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
     } else if kind == 11 {
         # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
-        ret String& = String&["p if i > 0 else q", "match i { case 0 => p case _ => q }", "try textNo&p(i) catch default q"][g.r(3)]
+        ret String& = String&["p if i > 0 else q", "match i { case 0: p case _: q }", "try textNo&p(i) catch default q"][g.r(3)]
         head = "fn " $f "(p String&, q String&, i I64) String { return " $ret " }\n"
         probe = ("    s := \"abc\" $i\n    u := \"def\" $i\n    x := " $f "(s, u, i)\n    x[0] = 'Q'\n"
                  "    return $s \" \" $u \" \" $x\n")

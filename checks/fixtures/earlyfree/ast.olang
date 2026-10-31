@@ -30,9 +30,9 @@ fn build(d I64) Expr& {
 
 fn count(e Expr&) I64 {
     return match e {
-        case Expr.Lit(_) => 1
-        case Expr.Neg(a) => 1 + count(a)
-        case Expr.Add(a, b) => 1 + count(a) + count(b)
+        case Expr.Lit(_): 1
+        case Expr.Neg(a): 1 + count(a)
+        case Expr.Add(a, b): 1 + count(a) + count(b)
     }
 }
 

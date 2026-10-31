@@ -13,8 +13,8 @@ fn wrap(i I64) E { return E.A($i "-payload") }
 fn main() ? io.Error {
     e := wrap(1)
     m := match e {
-        case E.A(s) => $s
-        case _ => "none"
+        case E.A(s): $s
+        case _: "none"
     }
     try io.Println(m)
 }

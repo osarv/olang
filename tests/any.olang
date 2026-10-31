@@ -347,7 +347,7 @@ fn chosen(n I64) String {
         s := "s" $i
         u := "u" $i
         xs.Push(Label(s if s.Len() > 1 else u))
-        xs.Push(Label(match s.Len() { case 0 => u case _ => s }))
+        xs.Push(Label(match s.Len() { case 0: u case _: s }))
         xs.Push(Label(try chBad(i) catch default s))
     }
     churn()
@@ -362,7 +362,7 @@ fn chosenBump(k I64) String {
     d := "dflt"
     a mut any Bump& = BLab(s if k > 0 else u)
     a.Bump()
-    b mut any Bump& = BLab(match k { case 0 => u case _ => m })
+    b mut any Bump& = BLab(match k { case 0: u case _: m })
     b.Bump()
     c mut any Bump& = BLab(try chBad(k) catch default d)
     c.Bump()
@@ -976,7 +976,7 @@ fn cvCond(i I64) CvLab {
 }
 fn cvMatch(i I64) CvLab {
     s := "match" $i
-    return match i { case 0 => CvLab(s) case _ => CvLab(s) }
+    return match i { case 0: CvLab(s) case _: CvLab(s) }
 }
 fn cvBad(k I64) CvLab ? ChOops {
     if k < 100 { error ChOops.BAD }
@@ -1025,7 +1025,7 @@ test "T29a: a conversion of a place to a type over String names its storage" {
 # T7b, K1 (the fifth any review, 4): a returned conditional, match or catch default of a parameter's array is a copy
 # while compiling as at run time
 fn evPick(p String&, q String&, c Bool) String { return p if c else q }
-fn evPickM(p String&, k I64) String { return match k { case 0 => p case _ => p } }
+fn evPickM(p String&, k I64) String { return match k { case 0: p case _: p } }
 fn evPickT(p String&, k I64) String { return try chBad(k) catch default p }
 fn evalCopies(i I64) String {
     s := "cond" $i

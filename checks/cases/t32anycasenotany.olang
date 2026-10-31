@@ -11,7 +11,7 @@ fn (s aSlider&) Draw() I64 { return s.at }
 fn f(x aButton&) I64 {
     match x {
         case aButton b { return b.n }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() { }

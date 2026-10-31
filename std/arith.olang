@@ -22,7 +22,7 @@ fn Add<T Number>(a T, b T) T ? {
     r := a + b
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
-        nomatch {
+        case _ {
             if (r < a) != (b < 0) { error Error.OVERFLOW }
         }
     }
@@ -34,7 +34,7 @@ fn Sub<T Number>(a T, b T) T ? {
     r := a - b
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
-        nomatch {
+        case _ {
             if (r > a) != (b < 0) { error Error.OVERFLOW }
         }
     }
@@ -49,7 +49,7 @@ fn Mul<T Number>(a T, b T) T ? {
             try floatResult(a, b, r)
             return r
         }
-        nomatch {
+        case _ {
             if a == 0 or b == 0 { return 0 }
             if T.Min < 0 {
                 # the least value times -1 does not fit, and "r / b" would divide it by -1 (E6a)
@@ -71,7 +71,7 @@ fn Div<T Number>(a T, b T) T ? {
             try floatResult(a, b, r)
             return r
         }
-        nomatch {
+        case _ {
             if b == 0 { error Error.DIVIDE_BY_ZERO }
             if T.Min < 0 {
                 if a == T.Min and b == -1 { error Error.OVERFLOW }
@@ -95,7 +95,7 @@ fn Rem<T Integer>(a T, b T) T ? {
 fn Neg<T Number>(a T) T ? {
     match T {
         case F16, BF16, F32, F64 { return -a }
-        nomatch {
+        case _ {
             if T.Min < 0 {
                 if a == T.Min { error Error.OVERFLOW }
                 return -a

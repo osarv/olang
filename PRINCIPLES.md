@@ -22,7 +22,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    assignment someone wrote.
 3. **Natural language, as much as possible.** Prefer a word you can say aloud to a symbol: `for x in a`, `and`/`or`/
    `not`, `a if c else b`, `x in c`, `x is T`, `x as T`, `noreturn`, `unreachable`, `extends`. A symbol earns its
-   place when a word would be longer to read without being clearer (`+`, `[]`, `=>`).
+   place when a word would be longer to read without being clearer (`+`, `[]`, `:=`).
 4. **Minimal syntax.** One way to write each thing. No semicolons; blocks always have braces; conditions have no
    parentheses; one loop keyword (`for`); one spelling of an error set (`?`); `mut` only where it decides something.
    Reuse a construct before adding one. A spelling that is removed is simply gone, not kept alive by a diagnostic.

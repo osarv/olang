@@ -1,4 +1,4 @@
-# check: fail error[S13a]: case None of Opt<I64> is not covered - add it, or 'nomatch { }'
+# check: fail error[S13a]: case None of Opt<I64> is not covered - add it, or 'case _ { }'
 # G6b, S13a: exhaustiveness is judged per instance, over its cases
 type Opt<T> enum {
     None
@@ -6,7 +6,7 @@ type Opt<T> enum {
 }
 fn get(o Opt<I64>) I64 {
     return match o {
-        case Opt.Some(v) => v
+        case Opt.Some(v): v
     }
 }
 fn main() ? { assert get(Opt.Some(1)) == 1 }

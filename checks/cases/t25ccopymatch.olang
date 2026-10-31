@@ -14,6 +14,6 @@ GO Opt = Opt.Some(Box(Array<I64>(2)))
 fn main() ? {
     match GO {
         case Opt.Some(b) { b.P[0] = 1 }
-        nomatch { }
+        case _ { }
     }
 }

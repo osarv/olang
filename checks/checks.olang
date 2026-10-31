@@ -470,7 +470,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "generators" { try generators(r) }
         case "frameenv" { try frameenv(r) }
         case "testends" { try testends(r) }
-        nomatch {
+        case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
         }
@@ -2370,7 +2370,7 @@ fn fixing(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s o.olang new.want") == 0, "fix's result", dir)
     try r.expect(sh(dir, "cmp -s p.olang prog.keep") == 0, "a file of today changed", dir)
     try r.expect(sh(dir, $env "\"$OLANG\" fix -check o.olang p.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "", "fixed twice", dir)
-    try r.expect(sh(dir, "\"$OLANG\" o.olang > out.txt 2>&1") == 0 and outOf(dir) == "fixed 7\n4\n", "the fixed program runs", dir)
+    try r.expect(sh(dir, "\"$OLANG\" o.olang > out.txt 2>&1") == 0 and outOf(dir) == "fixed 7\n4 some\n", "the fixed program runs", dir)
     try r.expect(sh(dir, "\"$OLANG\" fix -debug o.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("-debug applies to"), "fix -debug", dir)
     try r.expect(sh(dir, "\"$OLANG\" fix missing.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("missing.olang: cannot be read"), "a missing file", dir)
     # the lang25 review: what fix cannot settle from the text is listed and the status is 1; what it rewrites computes

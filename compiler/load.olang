@@ -948,7 +948,7 @@ fn (l mut Loader&) groups(mi I64, decls Array<ast.Decl&>&) {
                 chosen := l.Chosen(mi, ti.Cond!.Span().Start)
                 l.chainGroups(mi, ti, chosen, 0)
             }
-            nomatch { }
+            case _ { }
         }
     }
 }
@@ -996,7 +996,7 @@ fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut Vec<String&>&, 
                 if link.End > I32(0) { l.addLink(mi, link, out, seen) }
             }
             case ast.Decl.If(_, ti) { l.linksIf(mi, ti, l.Chosen(mi, ti.Cond!.Span().Start), 0, out, seen) }
-            nomatch { }
+            case _ { }
         }
     }
 }

@@ -345,8 +345,8 @@ type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check, Exa
 # never where the call stands - so it is no temporary there, and is judged where it is put as existing storage is
 fn ScopedCall(c Call&) Bool {
     return match c.Scoped {
-        case Mark.Of(_), Mark.Return => true
-        case _ => false
+        case Mark.Of(_), Mark.Return: true
+        case _: false
     }
 }
 
@@ -354,11 +354,11 @@ fn ScopedCall(c Call&) Bool {
 # scope argument says (E25), never built where the expression stands
 fn ScopedArray(x Expr&) Bool {
     return match x {
-        case Expr.Call(_, _, c) => ScopedCall(c)
-        case Expr.Prim(_, _, op, _, args) => PassesRefs(op) and args.Len() > 0 and ScopedArray(args[0])
-        case Expr.Away(_, _, y) => ScopedArray(y)
-        case Expr.Seq(_, _, q) => q.X is not null and ScopedArray(q.X!)
-        case _ => false
+        case Expr.Call(_, _, c): ScopedCall(c)
+        case Expr.Prim(_, _, op, _, args): PassesRefs(op) and args.Len() > 0 and ScopedArray(args[0])
+        case Expr.Away(_, _, y): ScopedArray(y)
+        case Expr.Seq(_, _, q): q.X is not null and ScopedArray(q.X!)
+        case _: false
     }
 }
 
@@ -506,7 +506,7 @@ type Seq struct(Stmts Array<Stmt&>&, X Expr?&) {
 type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm?&, IsValue Bool) {
     Held
     Arms
-    # what runs when no arm matches, never null: the written nomatch; an empty arm where nothing happens (a statement
+    # what runs when no arm matches, never null: an empty arm where nothing happens (a statement
     # match no arm covers); Exit(Unreachable) where S13a says nothing reaches it but a null reference does (S13a)
     NoMatch
     IsValue
@@ -724,8 +724,8 @@ fn (b mut Body&) SetVars(vars Array<I64>&) {
             b.Vars.Push(ScopeVar.Closing)
         } else if v == types.ResultVar {
             ctor := match b.Of {
-                case BodyOf.Ctor(_, _), BodyOf.Case(_, _) => true
-                case _ => false
+                case BodyOf.Ctor(_, _), BodyOf.Case(_, _): true
+                case _: false
             }
             b.Vars.Push(ScopeVar.Instance if ctor else ScopeVar.Result)
         } else {
@@ -829,45 +829,45 @@ fn (pl Plan&) Passed(site SiteId, i I64) Scope {
 
 fn (x Expr&) Span() source.Span {
     return match x {
-        case Expr.Lit(sp, _, _), Expr.Data(sp, _, _, _), Expr.Read(sp, _, _, _), Expr.Borrow(sp, _, _) => sp
-        case Expr.Take(sp, _, _), Expr.Promote(sp, _, _), Expr.Call(sp, _, _), Expr.Make(sp, _, _) => sp
-        case Expr.Collect(sp, _, _), Expr.Prim(sp, _, _, _, _), Expr.Slice(sp, _, _), Expr.Cond(sp, _, _) => sp
-        case Expr.Seq(sp, _, _), Expr.Match(sp, _, _), Expr.Try(sp, _, _), Expr.Fn(sp, _, _), Expr.Text(sp, _, _) => sp
-        case Expr.Away(sp, _, _) => sp
+        case Expr.Lit(sp, _, _), Expr.Data(sp, _, _, _), Expr.Read(sp, _, _, _), Expr.Borrow(sp, _, _): sp
+        case Expr.Take(sp, _, _), Expr.Promote(sp, _, _), Expr.Call(sp, _, _), Expr.Make(sp, _, _): sp
+        case Expr.Collect(sp, _, _), Expr.Prim(sp, _, _, _, _), Expr.Slice(sp, _, _), Expr.Cond(sp, _, _): sp
+        case Expr.Seq(sp, _, _), Expr.Match(sp, _, _), Expr.Try(sp, _, _), Expr.Fn(sp, _, _), Expr.Text(sp, _, _): sp
+        case Expr.Away(sp, _, _): sp
     }
 }
 
 fn (x Expr&) Type() types.TypeId {
     return match x {
-        case Expr.Lit(_, ty, _), Expr.Data(_, ty, _, _), Expr.Read(_, ty, _, _), Expr.Borrow(_, ty, _) => ty
-        case Expr.Take(_, ty, _), Expr.Promote(_, ty, _), Expr.Call(_, ty, _), Expr.Make(_, ty, _) => ty
-        case Expr.Collect(_, ty, _), Expr.Prim(_, ty, _, _, _), Expr.Slice(_, ty, _), Expr.Cond(_, ty, _) => ty
-        case Expr.Seq(_, ty, _), Expr.Match(_, ty, _), Expr.Try(_, ty, _), Expr.Fn(_, ty, _), Expr.Text(_, ty, _) => ty
-        case Expr.Away(_, _, y) => y.Type()
+        case Expr.Lit(_, ty, _), Expr.Data(_, ty, _, _), Expr.Read(_, ty, _, _), Expr.Borrow(_, ty, _): ty
+        case Expr.Take(_, ty, _), Expr.Promote(_, ty, _), Expr.Call(_, ty, _), Expr.Make(_, ty, _): ty
+        case Expr.Collect(_, ty, _), Expr.Prim(_, ty, _, _, _), Expr.Slice(_, ty, _), Expr.Cond(_, ty, _): ty
+        case Expr.Seq(_, ty, _), Expr.Match(_, ty, _), Expr.Try(_, ty, _), Expr.Fn(_, ty, _), Expr.Text(_, ty, _): ty
+        case Expr.Away(_, _, y): y.Type()
     }
 }
 
 fn (p Lvalue&) Type() types.TypeId {
     return match p {
-        case Lvalue.Local(_, ty, _), Lvalue.Global(_, ty, _, _), Lvalue.Deref(_, ty, _), Lvalue.Field(_, ty, _, _) => ty
-        case Lvalue.Elem(_, ty, _), Lvalue.Payload(_, ty, _), Lvalue.Temp(_, ty, _, _), Lvalue.Target(_, ty) => ty
+        case Lvalue.Local(_, ty, _), Lvalue.Global(_, ty, _, _), Lvalue.Deref(_, ty, _), Lvalue.Field(_, ty, _, _): ty
+        case Lvalue.Elem(_, ty, _), Lvalue.Payload(_, ty, _), Lvalue.Temp(_, ty, _, _), Lvalue.Target(_, ty): ty
     }
 }
 
 fn (p Lvalue&) Span() source.Span {
     return match p {
-        case Lvalue.Local(sp, _, _), Lvalue.Global(sp, _, _, _), Lvalue.Deref(sp, _, _), Lvalue.Field(sp, _, _, _) => sp
-        case Lvalue.Elem(sp, _, _), Lvalue.Payload(sp, _, _), Lvalue.Temp(sp, _, _, _), Lvalue.Target(sp, _) => sp
+        case Lvalue.Local(sp, _, _), Lvalue.Global(sp, _, _, _), Lvalue.Deref(sp, _, _), Lvalue.Field(sp, _, _, _): sp
+        case Lvalue.Elem(sp, _, _), Lvalue.Payload(sp, _, _), Lvalue.Temp(sp, _, _, _), Lvalue.Target(sp, _): sp
     }
 }
 
 fn (s Stmt&) Span() source.Span {
     return match s {
-        case Stmt.Let(sp, _, _), Stmt.Assign(sp, _, _), Stmt.Eval(sp, _), Stmt.If(sp, _), Stmt.Loop(sp, _, _) => sp
-        case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _, _), Stmt.Assert(sp, _, _) => sp
-        case Stmt.Reraise(sp, _, _) => sp
-        case Stmt.Block(sp, _), Stmt.Defer(sp, _), Stmt.Join(sp, _), Stmt.Spawn(sp, _), Stmt.Yield(sp, _) => sp
-        case Stmt.Suspend(sp, _) => sp
+        case Stmt.Let(sp, _, _), Stmt.Assign(sp, _, _), Stmt.Eval(sp, _), Stmt.If(sp, _), Stmt.Loop(sp, _, _): sp
+        case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _, _), Stmt.Assert(sp, _, _): sp
+        case Stmt.Reraise(sp, _, _): sp
+        case Stmt.Block(sp, _), Stmt.Defer(sp, _), Stmt.Join(sp, _), Stmt.Spawn(sp, _), Stmt.Yield(sp, _): sp
+        case Stmt.Suspend(sp, _): sp
     }
 }
 
@@ -892,19 +892,19 @@ fn stmtsBreak(ss Array<Stmt&>&, loop BlockId) Bool {
 
 fn stmtBreaks(s Stmt&, loop BlockId) Bool {
     return match s {
-        case Stmt.Jump(_, kind, l) => kind == JumpKind.Break and l == loop
-        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x) => exprBreaks(x, loop)
-        case Stmt.Assign(_, p, x) => placeBreaks(p, loop) or exprBreaks(x, loop)
-        case Stmt.If(_, i) => exprBreaks(i.Test, loop) or BreaksOut(i.Then, loop) or BreaksOut(i.Else, loop)
-        case Stmt.Loop(_, body, post) => BreaksOut(body, loop) or BreaksOut(post, loop)
-        case Stmt.Return(_, x), Stmt.Suspend(_, x) => exprBreaks(x, loop)
-        case Stmt.Raise(_, _, _) => false
-        case Stmt.Reraise(_, x, _) => exprBreaks(x, loop)
-        case Stmt.Exit(_, _, msg) => exprBreaks(msg, loop)
-        case Stmt.Assert(_, c, msg) => exprBreaks(c, loop) or exprBreaks(msg, loop)
-        case Stmt.Block(_, inner), Stmt.Defer(_, inner) => BreaksOut(inner, loop)
-        case Stmt.Join(_, j) => BreaksOut(j.Code, loop) or clausesBreak(j.Clauses, loop)
-        case Stmt.Spawn(_, sp) => targetsBreak(sp.Targets, loop) or exprBreaks(sp.Task, loop)
+        case Stmt.Jump(_, kind, l): kind == JumpKind.Break and l == loop
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x): exprBreaks(x, loop)
+        case Stmt.Assign(_, p, x): placeBreaks(p, loop) or exprBreaks(x, loop)
+        case Stmt.If(_, i): exprBreaks(i.Test, loop) or BreaksOut(i.Then, loop) or BreaksOut(i.Else, loop)
+        case Stmt.Loop(_, body, post): BreaksOut(body, loop) or BreaksOut(post, loop)
+        case Stmt.Return(_, x), Stmt.Suspend(_, x): exprBreaks(x, loop)
+        case Stmt.Raise(_, _, _): false
+        case Stmt.Reraise(_, x, _): exprBreaks(x, loop)
+        case Stmt.Exit(_, _, msg): exprBreaks(msg, loop)
+        case Stmt.Assert(_, c, msg): exprBreaks(c, loop) or exprBreaks(msg, loop)
+        case Stmt.Block(_, inner), Stmt.Defer(_, inner): BreaksOut(inner, loop)
+        case Stmt.Join(_, j): BreaksOut(j.Code, loop) or clausesBreak(j.Clauses, loop)
+        case Stmt.Spawn(_, sp): targetsBreak(sp.Targets, loop) or exprBreaks(sp.Task, loop)
     }
 }
 
@@ -927,29 +927,29 @@ fn exprsBreak(xs Array<Expr&>&, loop BlockId) Bool {
 fn exprBreaks(x Expr?&, loop BlockId) Bool {
     if x is null { return false }
     return match x {
-        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) => false
-        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p) => placeBreaks(p, loop)
-        case Expr.Promote(_, _, pr) => exprBreaks(pr.X, loop)
-        case Expr.Call(_, _, k) => calleeBreaks(k.Target, loop) or exprsBreak(k.Args, loop)
-        case Expr.Make(_, _, m) => exprsBreak(m.Items, loop) or exprBreaks(m.Length, loop)
-        case Expr.Collect(_, _, c) => exprBreaks(c.Reserve, loop) or BreaksOut(c.Loop, loop)
-        case Expr.Prim(_, _, _, _, args) => exprsBreak(args, loop)
-        case Expr.Slice(_, _, sl) => placeBreaks(sl.Base, loop) or exprBreaks(sl.Lo, loop) or exprBreaks(sl.Hi, loop)
-        case Expr.Cond(_, _, k) => exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
-        case Expr.Seq(_, _, q) => stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
-        case Expr.Match(_, _, m) => stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _): false
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): placeBreaks(p, loop)
+        case Expr.Promote(_, _, pr): exprBreaks(pr.X, loop)
+        case Expr.Call(_, _, k): calleeBreaks(k.Target, loop) or exprsBreak(k.Args, loop)
+        case Expr.Make(_, _, m): exprsBreak(m.Items, loop) or exprBreaks(m.Length, loop)
+        case Expr.Collect(_, _, c): exprBreaks(c.Reserve, loop) or BreaksOut(c.Loop, loop)
+        case Expr.Prim(_, _, _, _, args): exprsBreak(args, loop)
+        case Expr.Slice(_, _, sl): placeBreaks(sl.Base, loop) or exprBreaks(sl.Lo, loop) or exprBreaks(sl.Hi, loop)
+        case Expr.Cond(_, _, k): exprBreaks(k.C, loop) or exprBreaks(k.A, loop) or exprBreaks(k.B, loop)
+        case Expr.Seq(_, _, q): stmtsBreak(q.Stmts, loop) or exprBreaks(q.X, loop)
+        case Expr.Match(_, _, m): stmtsBreak(m.Held, loop) or armsBreak(m.Arms, loop) or
                                     (m.NoMatch is not null and armBreaks(m.NoMatch!, loop))
-        case Expr.Try(_, _, t) => exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
-        case Expr.Fn(_, _, f) => fnBreaks(f, loop)
-        case Expr.Text(_, _, t) => piecesBreak(t.Pieces, loop)
-        case Expr.Away(_, _, y) => exprBreaks(y, loop)
+        case Expr.Try(_, _, t): exprBreaks(t.X, loop) or clausesBreak(t.Clauses, loop)
+        case Expr.Fn(_, _, f): fnBreaks(f, loop)
+        case Expr.Text(_, _, t): piecesBreak(t.Pieces, loop)
+        case Expr.Away(_, _, y): exprBreaks(y, loop)
     }
 }
 
 fn calleeBreaks(c Callee&, loop BlockId) Bool {
     return match c {
-        case Callee.Value(x) => exprBreaks(x, loop)
-        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _) => false
+        case Callee.Value(x): exprBreaks(x, loop)
+        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _): false
     }
 }
 
@@ -979,12 +979,12 @@ fn piecesBreak(ps Array<Piece&>&, loop BlockId) Bool {
 
 fn placeBreaks(p Lvalue&, loop BlockId) Bool {
     return match p {
-        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) => false
-        case Lvalue.Deref(_, _, r) => exprBreaks(r, loop)
-        case Lvalue.Field(_, _, base, _) => placeBreaks(base, loop)
-        case Lvalue.Elem(_, _, e) => placeBreaks(e.Base, loop) or exprBreaks(e.Index, loop)
-        case Lvalue.Payload(_, _, pl) => placeBreaks(pl.Base, loop)
-        case Lvalue.Temp(_, _, v, _) => exprBreaks(v, loop)
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _): false
+        case Lvalue.Deref(_, _, r): exprBreaks(r, loop)
+        case Lvalue.Field(_, _, base, _): placeBreaks(base, loop)
+        case Lvalue.Elem(_, _, e): placeBreaks(e.Base, loop) or exprBreaks(e.Index, loop)
+        case Lvalue.Payload(_, _, pl): placeBreaks(pl.Base, loop)
+        case Lvalue.Temp(_, _, v, _): exprBreaks(v, loop)
     }
 }
 
@@ -1042,18 +1042,18 @@ fn reached(b Block?&, sp source.Span) I64 {
 
 fn isAssertAt(s Stmt&, sp source.Span) Bool {
     return match s {
-        case Stmt.Assert(asp, _, _) => asp.Start == sp.Start and asp.End == sp.End
-        case _ => false
+        case Stmt.Assert(asp, _, _): asp.Start == sp.Start and asp.End == sp.End
+        case _: false
     }
 }
 
 # the block a statement runs whenever it is reached: a block's, a loop's body (run once at least), a join's code
 fn within(s Stmt&) Block?&s {
     return match s {
-        case Stmt.Block(_, b) => b
-        case Stmt.Loop(_, body, _) => body
-        case Stmt.Join(_, j) => j.Code
-        case _ => null
+        case Stmt.Block(_, b): b
+        case Stmt.Loop(_, body, _): body
+        case Stmt.Join(_, j): j.Code
+        case _: null
     }
 }
 
@@ -1070,18 +1070,18 @@ fn holds(b Block?&, sp source.Span) Bool {
 # own breaks and continues leave nothing. A lambda's body is another body
 fn stmtLeaves(s Stmt&, inner mut Vec<BlockId>&) Bool {
     return match s {
-        case Stmt.Return(_, _), Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Suspend(_, _) => true
-        case Stmt.Jump(_, _, l) => not inner.Has(l)
-        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x) => exprLeaves(x, inner)
-        case Stmt.Assign(_, p, x) => placeLeaves(p, inner) or exprLeaves(x, inner)
-        case Stmt.If(_, i) => exprLeaves(i.Test, inner) or blockLeaves(i.Then, inner) or blockLeaves(i.Else, inner)
-        case Stmt.Loop(_, body, post) => loopLeaves(body, post, inner)
-        case Stmt.Exit(_, _, _), Stmt.Assert(_, _, _) => false
-        case Stmt.Block(_, b) => openLeaves(b, inner)
-        case Stmt.Defer(_, b) => blockLeaves(b, inner)
-        case Stmt.Join(_, j) => (j.Tried and not clausesTakeAll(j.Clauses)) or blockLeaves(j.Code, inner) or
+        case Stmt.Return(_, _), Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Suspend(_, _): true
+        case Stmt.Jump(_, _, l): not inner.Has(l)
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x): exprLeaves(x, inner)
+        case Stmt.Assign(_, p, x): placeLeaves(p, inner) or exprLeaves(x, inner)
+        case Stmt.If(_, i): exprLeaves(i.Test, inner) or blockLeaves(i.Then, inner) or blockLeaves(i.Else, inner)
+        case Stmt.Loop(_, body, post): loopLeaves(body, post, inner)
+        case Stmt.Exit(_, _, _), Stmt.Assert(_, _, _): false
+        case Stmt.Block(_, b): openLeaves(b, inner)
+        case Stmt.Defer(_, b): blockLeaves(b, inner)
+        case Stmt.Join(_, j): (j.Tried and not clausesTakeAll(j.Clauses)) or blockLeaves(j.Code, inner) or
                                 clausesLeave(j.Clauses, inner)
-        case Stmt.Spawn(_, sp) => exprLeaves(sp.Task, inner)
+        case Stmt.Spawn(_, sp): exprLeaves(sp.Task, inner)
     }
 }
 
@@ -1124,31 +1124,31 @@ fn exprsLeave(xs Array<Expr&>&, inner mut Vec<BlockId>&) Bool {
 fn exprLeaves(x Expr?&, inner mut Vec<BlockId>&) Bool {
     if x is null { return false }
     return match x {
-        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _), Expr.Fn(_, _, _) => false
-        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p) => placeLeaves(p, inner)
-        case Expr.Promote(_, _, pr) => exprLeaves(pr.X, inner)
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _), Expr.Fn(_, _, _): false
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): placeLeaves(p, inner)
+        case Expr.Promote(_, _, pr): exprLeaves(pr.X, inner)
         # a call of a noreturn function leaves (D8e), as D10a counts it
-        case Expr.Call(_, t, k) => t == types.NoreturnT or calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
-        case Expr.Make(_, _, m) => exprsLeave(m.Items, inner) or exprLeaves(m.Length, inner)
-        case Expr.Collect(_, _, c) => exprLeaves(c.Reserve, inner) or loopLeaves(c.Loop, null, inner)
-        case Expr.Prim(_, _, _, _, args) => exprsLeave(args, inner)
-        case Expr.Slice(_, _, sl) => placeLeaves(sl.Base, inner) or exprLeaves(sl.Lo, inner) or exprLeaves(sl.Hi, inner)
-        case Expr.Cond(_, _, k) => exprLeaves(k.C, inner) or exprLeaves(k.A, inner) or exprLeaves(k.B, inner)
-        case Expr.Seq(_, _, q) => stmtsLeave(q.Stmts, inner) or exprLeaves(q.X, inner)
-        case Expr.Match(_, _, m) => stmtsLeave(m.Held, inner) or armsLeave(m.Arms, inner) or
+        case Expr.Call(_, t, k): t == types.NoreturnT or calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
+        case Expr.Make(_, _, m): exprsLeave(m.Items, inner) or exprLeaves(m.Length, inner)
+        case Expr.Collect(_, _, c): exprLeaves(c.Reserve, inner) or loopLeaves(c.Loop, null, inner)
+        case Expr.Prim(_, _, _, _, args): exprsLeave(args, inner)
+        case Expr.Slice(_, _, sl): placeLeaves(sl.Base, inner) or exprLeaves(sl.Lo, inner) or exprLeaves(sl.Hi, inner)
+        case Expr.Cond(_, _, k): exprLeaves(k.C, inner) or exprLeaves(k.A, inner) or exprLeaves(k.B, inner)
+        case Expr.Seq(_, _, q): stmtsLeave(q.Stmts, inner) or exprLeaves(q.X, inner)
+        case Expr.Match(_, _, m): stmtsLeave(m.Held, inner) or armsLeave(m.Arms, inner) or
                                     (m.NoMatch is not null and armLeaves(m.NoMatch!, inner))
         # what no clause takes is passed on - out of the body, or to the try around it, which is in the walk too
-        case Expr.Try(_, _, t) => (not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
+        case Expr.Try(_, _, t): (not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
                                   exprLeaves(t.X, inner) or clausesLeave(t.Clauses, inner)
-        case Expr.Text(_, _, t) => piecesLeave(t.Pieces, inner)
-        case Expr.Away(_, _, y) => exprLeaves(y, inner)
+        case Expr.Text(_, _, t): piecesLeave(t.Pieces, inner)
+        case Expr.Away(_, _, y): exprLeaves(y, inner)
     }
 }
 
 fn calleeLeaves(c Callee&, inner mut Vec<BlockId>&) Bool {
     return match c {
-        case Callee.Value(x) => exprLeaves(x, inner)
-        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _) => false
+        case Callee.Value(x): exprLeaves(x, inner)
+        case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _): false
     }
 }
 
@@ -1165,12 +1165,12 @@ fn piecesLeave(ps Array<Piece&>&, inner mut Vec<BlockId>&) Bool {
 
 fn placeLeaves(p Lvalue&, inner mut Vec<BlockId>&) Bool {
     return match p {
-        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _) => false
-        case Lvalue.Deref(_, _, r) => exprLeaves(r, inner)
-        case Lvalue.Field(_, _, base, _) => placeLeaves(base, inner)
-        case Lvalue.Elem(_, _, e) => placeLeaves(e.Base, inner) or exprLeaves(e.Index, inner)
-        case Lvalue.Payload(_, _, pl) => placeLeaves(pl.Base, inner)
-        case Lvalue.Temp(_, _, v, _) => exprLeaves(v, inner)
+        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _): false
+        case Lvalue.Deref(_, _, r): exprLeaves(r, inner)
+        case Lvalue.Field(_, _, base, _): placeLeaves(base, inner)
+        case Lvalue.Elem(_, _, e): placeLeaves(e.Base, inner) or exprLeaves(e.Index, inner)
+        case Lvalue.Payload(_, _, pl): placeLeaves(pl.Base, inner)
+        case Lvalue.Temp(_, _, v, _): exprLeaves(v, inner)
     }
 }
 
@@ -1290,33 +1290,33 @@ fn (w mut printer&) expr(x Expr?&) String {
     if x is null { return "_" }
     ty := w.T.Canon(x.Type())
     return match x {
-        case Expr.Lit(_, _, v) => "(lit " $ty " " $v ")"
-        case Expr.Data(_, _, f, c) => "(data " $ty " " $f " " $constText(c) ")"
-        case Expr.Read(_, _, p, site) => "(read " $w.place(p) $(" site " $site if site >= SiteId(0) else "") ")"
-        case Expr.Borrow(_, _, p) => "(borrow " $ty " " $w.place(p) ")"
-        case Expr.Take(_, _, p) => "(take " $w.place(p) ")"
-        case Expr.Promote(_, _, pr) => "(promote " $ty " " $w.expr(pr.X) " site " $pr.Site ")"
-        case Expr.Call(_, _, c) => "(call " $w.callee(c.Target) " " $w.exprs(c.Args) " site " $c.Site ")"
-        case Expr.Make(_, _, m) => "(make " $short($m.Kind) " " $ty " " $w.exprs(m.Items) ")"
-        case Expr.Collect(_, _, c) => "(collect " $ty " site " $c.Site ")"
-        case Expr.Prim(_, _, op, ck, args) => "(" $short($op) $(" " $short($ck) if ck != Check.None else "") " " $ty " " $w.exprs(args) ")"
-        case Expr.Slice(_, _, s) => "(slice " $w.place(s.Base) " " $w.expr(s.Lo) " " $w.expr(s.Hi) ")"
-        case Expr.Cond(_, _, c) => "(cond " $w.expr(c.C) " " $w.expr(c.A) " " $w.expr(c.B) ")"
-        case Expr.Seq(_, _, s) => "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"
-        case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch!.Code!.Stmts.Len() ")"
-        case Expr.Try(_, _, t) => "(try " $w.expr(t.X) " " $t.Clauses.Len() " clauses)"
-        case Expr.Fn(_, _, _) => "(fn " $ty ")"
-        case Expr.Text(_, _, t) => "(text " $t.Pieces.Len() " site " $t.Site ")"
-        case Expr.Away(_, file, y) => "(away " $file " " $w.expr(y) ")"
+        case Expr.Lit(_, _, v): "(lit " $ty " " $v ")"
+        case Expr.Data(_, _, f, c): "(data " $ty " " $f " " $constText(c) ")"
+        case Expr.Read(_, _, p, site): "(read " $w.place(p) $(" site " $site if site >= SiteId(0) else "") ")"
+        case Expr.Borrow(_, _, p): "(borrow " $ty " " $w.place(p) ")"
+        case Expr.Take(_, _, p): "(take " $w.place(p) ")"
+        case Expr.Promote(_, _, pr): "(promote " $ty " " $w.expr(pr.X) " site " $pr.Site ")"
+        case Expr.Call(_, _, c): "(call " $w.callee(c.Target) " " $w.exprs(c.Args) " site " $c.Site ")"
+        case Expr.Make(_, _, m): "(make " $short($m.Kind) " " $ty " " $w.exprs(m.Items) ")"
+        case Expr.Collect(_, _, c): "(collect " $ty " site " $c.Site ")"
+        case Expr.Prim(_, _, op, ck, args): "(" $short($op) $(" " $short($ck) if ck != Check.None else "") " " $ty " " $w.exprs(args) ")"
+        case Expr.Slice(_, _, s): "(slice " $w.place(s.Base) " " $w.expr(s.Lo) " " $w.expr(s.Hi) ")"
+        case Expr.Cond(_, _, c): "(cond " $w.expr(c.C) " " $w.expr(c.A) " " $w.expr(c.B) ")"
+        case Expr.Seq(_, _, s): "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"
+        case Expr.Match(_, _, m): "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch!.Code!.Stmts.Len() ")"
+        case Expr.Try(_, _, t): "(try " $w.expr(t.X) " " $t.Clauses.Len() " clauses)"
+        case Expr.Fn(_, _, _): "(fn " $ty ")"
+        case Expr.Text(_, _, t): "(text " $t.Pieces.Len() " site " $t.Site ")"
+        case Expr.Away(_, file, y): "(away " $file " " $w.expr(y) ")"
     }
 }
 
 # a constant as text: a number, "text N" for N bytes of text, "[...]" for an array's elements
 fn constText(c Const&) String {
     return match c {
-        case Const.Bits(v) => $v
-        case Const.Bytes(b) => "text " $b.Len()
-        case Const.Items(xs) => constItems(xs)
+        case Const.Bits(v): $v
+        case Const.Bytes(b): "text " $b.Len()
+        case Const.Items(xs): constItems(xs)
     }
 }
 
@@ -1339,24 +1339,24 @@ fn short(t String&) String&t {
 
 fn (w mut printer&) callee(c Callee&) String {
     return match c {
-        case Callee.Body(id) => "B" $id
-        case Callee.Extern(f) => "extern " $f
-        case Callee.Value(x) => $w.expr(x)
-        case Callee.Helper(k, t) => $short($k) " " $w.T.Canon(t)
-        case Callee.Dispatch(r, k, _) => "dispatch " $w.T.Canon(r) "#" $k
+        case Callee.Body(id): "B" $id
+        case Callee.Extern(f): "extern " $f
+        case Callee.Value(x): $w.expr(x)
+        case Callee.Helper(k, t): $short($k) " " $w.T.Canon(t)
+        case Callee.Dispatch(r, k, _): "dispatch " $w.T.Canon(r) "#" $k
     }
 }
 
 fn (w mut printer&) place(p Lvalue&) String {
     return match p {
-        case Lvalue.Local(_, _, id) => "L" $id
-        case Lvalue.Global(_, _, m, n) => "G" $m ":" $n
-        case Lvalue.Deref(_, _, r) => "*" $w.expr(r)
-        case Lvalue.Field(_, _, base, i) => $w.place(base) "." $i
-        case Lvalue.Elem(_, _, e) => $w.place(e.Base) "[" $w.expr(e.Index) "]"
-        case Lvalue.Payload(_, _, pl) => $w.place(pl.Base) " as " $pl.Tag
-        case Lvalue.Temp(_, _, v, site) => "tmp " $w.expr(v) " site " $site
-        case Lvalue.Target(_, _) => "target"
+        case Lvalue.Local(_, _, id): "L" $id
+        case Lvalue.Global(_, _, m, n): "G" $m ":" $n
+        case Lvalue.Deref(_, _, r): "*" $w.expr(r)
+        case Lvalue.Field(_, _, base, i): $w.place(base) "." $i
+        case Lvalue.Elem(_, _, e): $w.place(e.Base) "[" $w.expr(e.Index) "]"
+        case Lvalue.Payload(_, _, pl): $w.place(pl.Base) " as " $pl.Tag
+        case Lvalue.Temp(_, _, v, site): "tmp " $w.expr(v) " site " $site
+        case Lvalue.Target(_, _): "target"
     }
 }
 

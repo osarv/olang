@@ -103,7 +103,7 @@ fn opposite(d Direction) Direction {
         case Direction.WEST {
             result = Direction.EAST
         }
-        nomatch {
+        case _ {
             result = Direction.NORTH
         }
     }
@@ -119,7 +119,7 @@ fn describe(n I32) I32 {
         case 2 {
             result = 200
         }
-        nomatch {
+        case _ {
             result = -1
         }
     }
@@ -137,7 +137,7 @@ fn classifyPoint(p Point) I32 {
         case Point(3, 4) {
             result = 200
         }
-        nomatch {
+        case _ {
             result = -1
         }
     }
@@ -866,7 +866,7 @@ test "E4a: an expression built only from literals adapts to its target as one li
     match U8(n) + 2 {                                       # S13: a case value adapts as beside it in "=="
         case 1 + 1 { unreachable }
         case 3 { }
-        nomatch { unreachable }
+        case _ { unreachable }
     }
 }
 
@@ -2322,19 +2322,19 @@ type Either enum {
 fn readSmall(e Either) I32 {
     match e {
         case Either.Small(a) { return a }
-        nomatch { return -1 }
+        case _ { return -1 }
     }
 }
 fn readBig(e Either) I64 {
     match e {
         case Either.Big(b) { return b }
-        nomatch { return -1 }
+        case _ { return -1 }
     }
 }
 fn readFrac(e Either) F64 {
     match e {
         case Either.Frac(c) { return c }
-        nomatch { return -1.0 }
+        case _ { return -1.0 }
     }
 }
 
@@ -2743,9 +2743,9 @@ fn firstOf<T>(xs Array<T>&, keep fn(x T) Bool) T ? {
 }
 fn widthOf<T>(v T) I32 {
     return match T {
-        case I32 => 32
-        case I64 => 64
-        nomatch => 0
+        case I32: 32
+        case I64: 64
+        case _: 0
     }
 }
 TrioBaked I64 = Trio<I64>(1, 2, 3).Sum()        # baked while compiling
@@ -3772,7 +3772,7 @@ fn oneLineBlocks(a I32) I32 {
 
 fn oneLineMatch(n I32) I32 {
     r I32 = 0
-    match n { case 6 { r = 60 } nomatch { r = 9 } }
+    match n { case 6 { r = 60 } case _ { r = 9 } }
     return r
 }
 
@@ -5186,7 +5186,7 @@ test "assigning a different case overwrites the payload entirely" {
 fn isRound(s Figure) I32 {
     match s {
         case Figure.Circle(_) { return 1 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
     return -1
 }
@@ -5385,7 +5385,7 @@ fn mtSmall(n I64) I32 {
     match n {
         case 1, 2, 3 { return 1 }
         case 4, 5 { return 2 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 
@@ -5421,7 +5421,7 @@ fn mtPick(n I32, limit I32) I32 {
     match n {
         case 1 if mtCounted(n < limit) { return 10 }
         case 1, 2 if mtCounted(true) { return 20 }
-        nomatch { return 30 }
+        case _ { return 30 }
     }
 }
 
@@ -5488,9 +5488,9 @@ test "a payload position may hold a nested case or a literal" {
 # I64 was "case value must have the same type" before
 fn mtWidths(a I64, b U8, f F64) I32 {
     r I32 = 0
-    match a { case 3 { r += 1 } nomatch { } }
-    match b { case 200 { r += 10 } nomatch { } }
-    match f { case 1.5 { r += 100 } nomatch { } }
+    match a { case 3 { r += 1 } case _ { } }
+    match b { case 200 { r += 10 } case _ { } }
+    match f { case 1.5 { r += 100 } case _ { } }
     return r
 }
 
@@ -5514,7 +5514,7 @@ test "the matched value is evaluated once" {
         case 2 if r == 0 { r = 2 }
         case 1 if r > 0 { r = 9 }
         case 1, 3 { r = 1 }
-        nomatch { r = -1 }
+        case _ { r = -1 }
     }
     assert r == 1 and mtNextCalls == 1
 }
@@ -5524,7 +5524,7 @@ fn mtWidth<T>(v T) I32 {
     match T {
         case I32, U32 { return 32 }
         case I64, U64 { return 64 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 
@@ -5618,11 +5618,11 @@ type Ast enum {
 
 fn astEval(e Ast&, x I64) I64 {
     return match e {
-        case Ast.Num(v) => v
-        case Ast.Var(_) => x
-        case Ast.Add(a, b) => astEval(a!, x) + astEval(b, x)
-        case Ast.Mul(a, b) => astEval(a, x) * astEval(b, x)
-        case Ast.Neg(a) => -astEval(a, x)
+        case Ast.Num(v): v
+        case Ast.Var(_): x
+        case Ast.Add(a, b): astEval(a!, x) + astEval(b, x)
+        case Ast.Mul(a, b): astEval(a, x) * astEval(b, x)
+        case Ast.Neg(a): -astEval(a, x)
     }
 }
 
@@ -5630,23 +5630,23 @@ fn astEval(e Ast&, x I64) I64 {
 # borrowed from n (O13) - built where n lives, or a part of n handed back as it is
 fn astSimplify(n Ast&) Ast&n {
     return match n {
-        case Ast.Add(Ast.Num(a), Ast.Num(b)) => Ast.Num(a + b)
-        case Ast.Mul(Ast.Num(a), Ast.Num(b)) => Ast.Num(a * b)
-        case Ast.Add(a, Ast.Num(0)) => a!
-        case Ast.Add(Ast.Num(0), a), Ast.Mul(a, Ast.Num(1)), Ast.Mul(Ast.Num(1), a) => a
-        case Ast.Mul(_, Ast.Num(0)), Ast.Mul(Ast.Num(0), _) => Ast.Num(0)
-        case Ast.Neg(Ast.Num(v)) => Ast.Num(-v)
-        case Ast.Neg(Ast.Neg(a)) => a
-        nomatch => n
+        case Ast.Add(Ast.Num(a), Ast.Num(b)): Ast.Num(a + b)
+        case Ast.Mul(Ast.Num(a), Ast.Num(b)): Ast.Num(a * b)
+        case Ast.Add(a, Ast.Num(0)): a!
+        case Ast.Add(Ast.Num(0), a), Ast.Mul(a, Ast.Num(1)), Ast.Mul(Ast.Num(1), a): a
+        case Ast.Mul(_, Ast.Num(0)), Ast.Mul(Ast.Num(0), _): Ast.Num(0)
+        case Ast.Neg(Ast.Num(v)): Ast.Num(-v)
+        case Ast.Neg(Ast.Neg(a)): a
+        case _: n
     }
 }
 
 fn astFold(e Ast&) Ast&e {
     return match e {
-        case Ast.Add(a, b) => astSimplify(Ast.Add(astFold(a!), astFold(b)))
-        case Ast.Mul(a, b) => astSimplify(Ast.Mul(astFold(a), astFold(b)))
-        case Ast.Neg(a) => astSimplify(Ast.Neg(astFold(a)))
-        nomatch => e
+        case Ast.Add(a, b): astSimplify(Ast.Add(astFold(a!), astFold(b)))
+        case Ast.Mul(a, b): astSimplify(Ast.Mul(astFold(a), astFold(b)))
+        case Ast.Neg(a): astSimplify(Ast.Neg(astFold(a)))
+        case _: e
     }
 }
 
@@ -5707,7 +5707,7 @@ test "T17d: a tree baked into a global, matched through its references" {
     assert $AstTree == "Ast.Add(Ast.Var(\"x\"), Ast.Mul(Ast.Num(2), Ast.Var(\"y\")))"
     match AstTree {
         case Ast.Add(Ast.Var(n), Ast.Mul(_, Ast.Var(m))) { assert n == "x" and m == "y" }
-        nomatch { unreachable }
+        case _ { unreachable }
     }
     assert astEval(AstTree, 3) == 3 + 2 * 3
 }
@@ -5716,16 +5716,16 @@ test "T17d: a null reference to an enum holds no case" {
     none Ast?& = null
     assert not (none == Ast.Num) and none is null
     r I64 = match none {
-        case Ast.Num(v) => v
-        case null => -1
-        nomatch => -2
+        case Ast.Num(v): v
+        case null: -1
+        case _: -2
     }
     assert r == -1
     half Ast& = Ast.Add(null, Ast.Num(1))
     k I64 = match half {
-        case Ast.Add(Ast.Num(a), _) => a           # a null operand is not a number...
-        case Ast.Add(null, Ast.Num(b)) => 100 + b  # ...but it is null
-        nomatch => 0
+        case Ast.Add(Ast.Num(a), _): a           # a null operand is not a number...
+        case Ast.Add(null, Ast.Num(b)): 100 + b  # ...but it is null
+        case _: 0
     }
     assert k == 101
     assert $half == "Ast.Add(null, Ast.Num(1))"
@@ -5736,11 +5736,11 @@ test "T17d: a null reference to an enum holds no case" {
 # function's own scope instead, freed at its return
 fn astCopy(e Ast&) Ast& {
     return match e {
-        case Ast.Add(a, b) => Ast.Add(astCopy(a!), astCopy(b))
-        case Ast.Mul(a, b) => Ast.Mul(astCopy(a), astCopy(b))
-        case Ast.Neg(a) => Ast.Neg(astCopy(a))
-        case Ast.Num(v) => Ast.Num(v)
-        case Ast.Var(n) => Ast.Var(n)
+        case Ast.Add(a, b): Ast.Add(astCopy(a!), astCopy(b))
+        case Ast.Mul(a, b): Ast.Mul(astCopy(a), astCopy(b))
+        case Ast.Neg(a): Ast.Neg(astCopy(a))
+        case Ast.Num(v): Ast.Num(v)
+        case Ast.Var(n): Ast.Var(n)
     }
 }
 
@@ -5780,7 +5780,7 @@ type AstSlot struct() {
 test "T17d: zero values hold null references" {
     s := AstSlot()
     assert s.tree is null and s.hole == AstHole.Gap
-    assert match s.hole { case AstHole.Gap(null) => true  nomatch => false }
+    assert match s.hole { case AstHole.Gap(null): true  case _: false }
     s.tree = Ast.Num(3)                            # built where s lives
     s.hole = AstHole.Gap(s.tree)
     assert astEval((s.hole as AstHole.Gap)!, 0) == 3
@@ -5798,15 +5798,15 @@ type AstStmt enum {
 }
 fn (s AstStmt&) Size() I64 {
     return match s {
-        case AstStmt.Let(d) => astSize(d.body)
-        case AstStmt.Show(e) => astSize(e)
+        case AstStmt.Let(d): astSize(d.body)
+        case AstStmt.Show(e): astSize(e)
     }
 }
 fn astSize(e Ast&) I64 {
     return match e {
-        case Ast.Add(a, b), Ast.Mul(a, b) => 1 + astSize(a!) + astSize(b)
-        case Ast.Neg(a) => 1 + astSize(a)
-        nomatch => 1
+        case Ast.Add(a, b), Ast.Mul(a, b): 1 + astSize(a!) + astSize(b)
+        case Ast.Neg(a): 1 + astSize(a)
+        case _: 1
     }
 }
 test "T17d: structs and enums holding each other by reference" {
@@ -5822,19 +5822,19 @@ test "T17d: structs and enums holding each other by reference" {
 # guards, nested patterns). It covers every enum case its unguarded clauses do, or ends with "nomatch => v"
 fn mtArea(s MtShape) I32 {
     return match s {
-        case MtShape.Circle(r) => 3 * r * r
-        case MtShape.Rect(w, h) => w * h
-        case MtShape.Square(n) => n * n
-        case MtShape.Dot => 0
+        case MtShape.Circle(r): 3 * r * r
+        case MtShape.Rect(w, h): w * h
+        case MtShape.Square(n): n * n
+        case MtShape.Dot: 0
     }
 }
 
 fn mtWord(n I64) String {
     return match n {
-        case 0 => "none"
-        case 1, 2, 3 if n < 3 => "few"
-        case 3 => $n
-        nomatch => "many"
+        case 0: "none"
+        case 1, 2, 3 if n < 3: "few"
+        case 3: $n
+        case _: "many"
     }
 }
 
@@ -5843,9 +5843,9 @@ fn mtWord(n I64) String {
 fn mtFirstBig(xs Array<I32>&) I32 {
     for x in xs {
         v I32 = match x {
-            case 0 { continue }
-            case -1 { return -1 }
-            nomatch => x * 10
+            case 0: continue
+            case -1: return -1
+            case _: x * 10
         }
         if v > 20 { return v }
     }
@@ -5855,9 +5855,9 @@ fn mtFirstBig(xs Array<I32>&) I32 {
 # a type match gives a value the same way, its arm chosen while compiling
 fn mtBytes<T>(v T) I64 {
     return match T {
-        case I32, U32 => 4
-        case I64, U64 => 8
-        nomatch => 0
+        case I32, U32: 4
+        case I64, U64: 8
+        case _: 0
     }
 }
 
@@ -5869,22 +5869,22 @@ test "a match used as a value" {
     assert mtFirstBig(I32[0, -1, 5]) == -1
     assert mtFirstBig(I32[1, 2]) == 0
     assert mtBytes(I32(1)) == 4 and mtBytes(1) == 8 and mtBytes(U64(1)) == 8 and mtBytes(true) == 0
-    k I32 = match MtShape.Square(4) { case MtShape.Square(n) if n > 3 => n nomatch => 0 }
+    k I32 = match MtShape.Square(4) { case MtShape.Square(n) if n > 3: n case _: 0 }
     assert k == 4
-    w := match mtRuntimeZero { case 0 => "zero" nomatch => "other" }        # every value text: a String
+    w := match mtRuntimeZero { case 0: "zero" case _: "other" }        # every value text: a String
     assert w == "zero"
 }
 
 # a value built in a case - text, a constructor call - is built where the match's value lands, as a conditional's is
 fn mtLabel(k I32) String& {
     return match k {
-        case 1 => "one"
-        case 2 => $k " two"
-        nomatch => $k "+" $(k * 2)
+        case 1: "one"
+        case 2: $k " two"
+        case _: $k "+" $(k * 2)
     }
 }
 fn mtCrate(k I32) Crate& {
-    return match k { case 1 => Crate(10) nomatch => Crate(k) }
+    return match k { case 1: Crate(10) case _: Crate(k) }
 }
 
 test "a match's value is built where it lands" {
@@ -7812,7 +7812,7 @@ fn fzChain(x U64, y U64) Bool { return 5 > x >= 2 and x < 9 <= y }
 fn fzIndex(k I64) I64 {
     a := I64[10, 20, 30]
     u := U64(k)
-    return a[(match k { case 1 => U64(2) case _ => u })] + a[(U64(1) if k > 0 else u)]
+    return a[(match k { case 1: U64(2) case _: u })] + a[(U64(1) if k > 0 else u)]
 }
 fn fzLeast() String { return $(-9223372036854775808) " " $((-9223372036854775808)) }
 fn fzArrays(k I64) Bool {
@@ -7877,7 +7877,7 @@ test "E30: a chain's literal is typed beside each comparison's other operand, as
 
 # S12b (the third any review, finding 8): a value match whose only clause is its nomatch has that value's type
 fn nmOnly(x0 I8) I8 {
-    a := match x0 { nomatch => I8(x0) }
+    a := match x0 { case _: I8(x0) }
     return a
 }
 NmOnlyBaked I8 = nmOnly(100)
@@ -8808,7 +8808,7 @@ test "T7d: a fixed-length field is borrowed as an ordinary array" {
 fn c2eCap<T>(a Array<T>&) I64 {
     match T {
         case I32 { return 2 }
-        nomatch { return 5 }
+        case _ { return 5 }
     }
 }
 type C2eBuf<T> struct() {
@@ -10049,14 +10049,14 @@ fn eqMatch(l EqLabel) I32 {
     match l {
         case EqLabel("x") { return 1 }
         case EqLabel("yy") { return 2 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn eqWords(s String&) I32 {
     match s {
         case "ab" { return 1 }
         case "cd" { return 2 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn eqAll() Bool {
@@ -10214,8 +10214,8 @@ fn caWrap(a CaExpr&) CaExpr&a { return CaExpr.Neg(a) }
 fn caSimplify(e CaExpr?&) CaExpr&e { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
 fn caSimplifyM(e CaExpr&, k I64) CaExpr&e {
     return match k {
-        case 0 => caWrap(e)
-        nomatch => CaExpr.Num(F64(k))
+        case 0: caWrap(e)
+        case _: CaExpr.Num(F64(k))
     }
 }
 fn caDepth(e CaExpr&) I64 {
@@ -10784,7 +10784,7 @@ fn dfMatch(l mut DfLog&, n I64) I64 {
             defer l.Note(1)
             return 10
         }
-        nomatch { defer l.Note(2) }
+        case _ { defer l.Note(2) }
     }
     return 20
 }
@@ -11103,8 +11103,8 @@ type CgRes struct(id I64) {
 }
 fn cgMatchBlocks(k I64) I64 {
     v I64 = match k {
-        case 0 => I64[cgResId(CgRes(x + 1)) for x in range 3].Len()
-        nomatch => 0
+        case 0: I64[cgResId(CgRes(x + 1)) for x in range 3].Len()
+        case _: 0
     }
     return cgResLog * 10 + v           # every element's resource was released before the match finished
 }
@@ -11168,8 +11168,8 @@ fn cgBigAll<T>(n I64, z T) I64 {
     s2 := cgBigBoth(h, cgBigTouch(h))
     e CgBig = cgBigMk(1) if n > 0 else cgBigMk(2)
     g CgBig = match n {
-        case 2 => cgBigMk(4)
-        nomatch => cgBigMk(5)
+        case 2: cgBigMk(4)
+        case _: cgBigMk(5)
     }
     return s1 + q + f(a) + m(cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag + z.tag
 }
@@ -11628,7 +11628,7 @@ test "O18a: a field, an element, a slice or a payload of a call's built result l
 fn sfLit(v I64) Array<mut SfNode&>& { return SfNode&[SfNode(v)] }
 fn sfCond(v I64, c Bool) SfBox& { return SfBox(SfNode(v)) if c else SfBox(SfNode(1)) }
 fn sfPayload(v I64) SfPk { return SfPk.Has(SfNode(v)) }
-fn sfMatch(v I64) SfBox& { return match v { case 1 => SfBox(SfNode(1))  nomatch => SfBox(SfNode(v)) } }
+fn sfMatch(v I64) SfBox& { return match v { case 1: SfBox(SfNode(1))  case _: SfBox(SfNode(v)) } }
 fn sfFillBoxes(v I64) Array<mut SfBox&>& { return Array<mut SfBox&>(1, SfBox(SfNode(v))) }
 fn sfFillNodes(v I64) Array<mut SfNode&>& { return Array<mut SfNode&>(2, SfNode(v)) }
 
@@ -11668,7 +11668,7 @@ test "E28/S12b: a conditional or match of a reference and a new value is a refer
     m SfNode& = n
     for i in range 2 {
         m = SfNode(i + 40) if i > 0 else n
-        q := match i { case 0 => n  nomatch => SfNode(7) }      #(lives where n does - a bare "q SfNode&" is its block, O25a)
+        q := match i { case 0: n  case _: SfNode(7) }      #(lives where n does - a bare "q SfNode&" is its block, O25a)
         assert q.v == 5 or q.v == 7
     }
     p := sfPick(n, false)
@@ -11878,9 +11878,9 @@ test "E12: a value result read out of a reference is a copy, compared by value w
 # returned after that closed)
 fn evClassify(n I64) String {
     return match n {
-        case 1, 2, 3 => "small"
-        case 7 => "seven"
-        nomatch => "other"
+        case 1, 2, 3: "small"
+        case 7: "seven"
+        case _: "other"
     }
 }
 fn evChurn() I64 {
@@ -12478,15 +12478,15 @@ fn cbSvcCode(x cbSvc) I32 {
 }
 fn cbPaintCode(y cbPaint) I32 {
     return match y {
-        case cbPaint.Paint(cbColor.Red, n) => n
-        case cbPaint.Paint(cbColor.Green, _) => 0
-        case cbPaint.None => -1
+        case cbPaint.Paint(cbColor.Red, n): n
+        case cbPaint.Paint(cbColor.Green, _): 0
+        case cbPaint.None: -1
     }
 }
 fn cbBoolCode(b Bool) I32 {
     return match b {
-        case true => 1
-        case false => 0
+        case true: 1
+        case false: 0
     }
 }
 CbMatchBaked I32 = cbSvcCode(cbSvc.Service(false)) * 100 + cbPaintCode(cbPaint.Paint(cbColor.Red, 4)) * 10 + cbBoolCode(true)
@@ -12928,7 +12928,7 @@ type sbWidget struct(kind sbKind) {
 fn sbBump(w mut sbWidget&) {
     match w.kind {
         case sbKind.Button(t, n) { w.kind = sbKind.Button(t, n + 1) }
-        nomatch { }
+        case _ { }
     }
 }
 test "O25h: an enum field's case rebuilt from its own payload" {
@@ -13213,7 +13213,7 @@ type lbMode enum {
 fn lbRate(m lbMode = LbDefaultMode) F64 {
     match m {
         case lbMode.Fast(r) { return r }
-        nomatch { }
+        case _ { }
     }
     return 0.0
 }
@@ -13515,7 +13515,7 @@ fn kSize(a Array<I32>) String {
     match a.Len() {
         case 0 { return "empty" }
         case 1, 2 { return "small" }
-        nomatch { return "big" }
+        case _ { return "big" }
     }
 }
 fn kPick(a Array<I32>) I64 { return 1 if a.Len() > 2 else 0 }
@@ -13544,12 +13544,12 @@ type KNarrow struct() { }
 type KGrid<L, W> struct() { v I32 = 0 }
 fn (g KGrid<L, W>&) Name() String {
     w := match W {
-        case KWide => true
-        nomatch => false
+        case KWide: true
+        case _: false
     }
     match L {
         case KRow { return "wide row" if w else "row" }
-        nomatch { return "wide col" if w else "col" }
+        case _ { return "wide col" if w else "col" }
     }
 }
 KGridBaked := KGrid<KCol, KWide>().Name()
@@ -13882,8 +13882,8 @@ fn c3PickMatch(i I64) String {
     if i >= 0 {
         a := c3Mk(i)
         return match i % 2 {
-            case 0 => a
-            case _ => c3Mk(i + 200)
+            case 0: a
+            case _: c3Mk(i + 200)
         }
     }
     return "none"
@@ -13928,9 +13928,9 @@ type c3Root enum {
 }
 fn c3Where(r c3Root, path String&) String {
     name := match r {
-        case c3Root.Local(id) => $c3Mk(id)
-        case c3Root.Global(n) => $c3Mk(n + 100)
-        case _ => "?"
+        case c3Root.Local(id): $c3Mk(id)
+        case c3Root.Global(n): $c3Mk(n + 100)
+        case _: "?"
     }
     sbChurn()
     return $name $path
@@ -14023,8 +14023,8 @@ fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
 }
 fn c3Leafs(n c3Node&) I64 {
     return match n {
-        case c3Node.One(s) => s.v
-        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] is null else c3Leafs(items[0]!))
+        case c3Node.One(s): s.v
+        case c3Node.Many(items): items.Len() * 100 + (0 if items[0] is null else c3Leafs(items[0]!))
     }
 }
 test "E28: a conditional of references shares their scope, and is held and passed as one of them" {
@@ -14203,10 +14203,10 @@ test "T7d: a fixed array's reference returned as its value, while compiling and 
 # S13f: "case _" takes every value - with a guard, the multiway test a range or a NaN asks for; with none, the rest
 fn s3Classify(x F64) String {
     return match x {
-        case 0.0 => "zero"
-        case _ if x >= 32767.0 => "big"
-        case _ if x != x => "nan"
-        case _ => "other"
+        case 0.0: "zero"
+        case _ if x >= 32767.0: "big"
+        case _ if x != x: "nan"
+        case _: "other"
     }
 }
 fn s3Saturate(v I64) I64 {
@@ -14236,8 +14236,8 @@ type s3Grid struct(n I64) {
 }
 fn (g s3Grid&) kind() String {
     return match g.cells.Len() {
-        case 1 => "one"
-        case _ => "many"
+        case 1: "one"
+        case _: "many"
     }
 }
 
@@ -14307,9 +14307,9 @@ fn sc3Lex(src String&) Vec<sc3Tok> {
 }
 fn sc3Prec(c Char) I64 {
     return match c {
-        case '+', '-' => 1
-        case '*', '/' => 2
-        nomatch => 0
+        case '+', '-': 1
+        case '*', '/': 2
+        case _: 0
     }
 }
 fn (p mut sc3Parser&) peek() sc3Tok { return p.toks[p.at] }
@@ -14351,17 +14351,17 @@ fn (p mut sc3Parser&) exprTyped(minPrec I64) sc3Expr& {
 }
 fn sc3Eval(e sc3Expr&) I64 {
     return match e {
-        case sc3Expr.Num(v) => v
-        case sc3Expr.Neg(x) => 0 - sc3Eval(x)
-        case sc3Expr.Bin(op, l, r) => sc3Apply(op, sc3Eval(l), sc3Eval(r))
+        case sc3Expr.Num(v): v
+        case sc3Expr.Neg(x): 0 - sc3Eval(x)
+        case sc3Expr.Bin(op, l, r): sc3Apply(op, sc3Eval(l), sc3Eval(r))
     }
 }
 fn sc3Apply(op Char, a I64, b I64) I64 {
     return match op {
-        case '+' => a + b
-        case '-' => a - b
-        case '*' => a * b
-        nomatch => a / b
+        case '+': a + b
+        case '-': a - b
+        case '*': a * b
+        case _: a / b
     }
 }
 fn sc3Parse(src String&) sc3Expr& {
@@ -14719,7 +14719,7 @@ fn c4Sum(n c4Node&) I64 {
             for x in items { t += c4Sum(x) }
             return t
         }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 C4Built := c4Build(5)
@@ -14861,14 +14861,14 @@ fn rvLitCond(k I64) I64 {
     f F32 = 1.5
     g := f * (2.0 if on else 0.5)                    # an F32 product
     gf F32 = g
-    m F32 = (match k { case 0 => 1.0 nomatch => 2.0 }) if on else f
-    z F32 = 0.5 if on else (match k { case 1 => 1.25 nomatch => 0.75 if on else 0.25 })
+    m F32 = (match k { case 0: 1.0 case _: 2.0 }) if on else f
+    z F32 = 0.5 if on else (match k { case 1: 1.25 case _: 0.75 if on else 0.25 })
     y := rvBig(f, 1.0 if on else 3.0)                # rvBig at F32
     yf F32 = y
     s F32 = match k {
-        case 0 => 1.0
-        case 1 => 1.0 if f > 0.0 else 0.0
-        nomatch => f * 2.0
+        case 0: 1.0
+        case 1: 1.0 if f > 0.0 else 0.0
+        case _: f * 2.0
     }
     return wi * 1000 + I64(gf * 4.0) * 100 + I64(m * 4.0) * 10 + I64(z * 4.0) + I64(yf * 2.0) * 10000 +
            I64(s * 2.0) * 100000
@@ -14930,9 +14930,9 @@ type s4dE enum {
 }
 fn s4dEval(e s4dE&) I64 {
     return match e {
-        case s4dE.Lit(v) => v
-        case s4dE.Neg(a) => 0 - s4dEval(a)
-        case s4dE.Add(a, b) => s4dEval(a) + s4dEval(b)
+        case s4dE.Lit(v): v
+        case s4dE.Neg(a): 0 - s4dEval(a)
+        case s4dE.Add(a, b): s4dEval(a) + s4dEval(b)
     }
 }
 fn s4dWrap(e s4dE&) s4dE { return s4dE.Neg(e) }
@@ -15382,17 +15382,17 @@ test "O20: a value copied out of a reference holds what its referent holds" {
 # conditional does
 fn s12bPick(k I64) Array<I64> {
     return match k {
-        case 1 => I64[1, 2, 3]
-        case 2 => I64[7]
-        nomatch => I64[4, 5]
+        case 1: I64[1, 2, 3]
+        case 2: I64[7]
+        case _: I64[4, 5]
     }
 }
 S12bTwo := s12bPick(2)
 test "S12b: array literals of different lengths in a match value" {
     assert s12bPick(1).Len() == 3 and s12bPick(3)[1] == 5 and S12bTwo[0] == 7
     x := match S12bTwo.Len() {
-        case 1 => I64[9, 9]
-        nomatch => I64[0]
+        case 1: I64[9, 9]
+        case _: I64[0]
     }
     assert x.Len() == 2
 }
@@ -15551,8 +15551,8 @@ type rv3X enum {
 }
 fn rv3Eval(e rv3X&) I64 {
     return match e {
-        case rv3X.Lit(v) => v
-        case rv3X.Add(a, b) => rv3Eval(a) + rv3Eval(b)
+        case rv3X.Lit(v): v
+        case rv3X.Add(a, b): rv3Eval(a) + rv3Eval(b)
     }
 }
 fn (a rv3X&) Plus(b rv3X&) rv3X { return rv3X.Add(a, b) }
@@ -16932,7 +16932,7 @@ fn c5DynTotal(v c5Dyn) F64 {
             for e in m { s += c5DynTotal(e.Value) }
             return s
         }
-        nomatch { return 0.0 }
+        case _ { return 0.0 }
     }
 }
 type c5Fn enum {
@@ -16983,7 +16983,7 @@ fn c5Call(f c5Callable&, k I64) I64 {
             c.env.parent = frame
             return local.n + local.parent!.n
         }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 test "C2d/E25: a constructor with a scope argument, declared with ':='" {
@@ -17372,7 +17372,7 @@ test "E28/O12: a conditional of references from different scopes, each value fit
     b.last = B6Text if b6Run > 0 else outer
     sbChurn()
     assert b.last == "global"
-    b.last = match b6Run { case 1 => outer case _ => B6Text }
+    b.last = match b6Run { case 1: outer case _: B6Text }
     sbChurn()
     assert b.last == "outer1"
     for i in range 2 {
@@ -17728,8 +17728,8 @@ test "E35: a postfix '!' gives the value where nothing fails" {
 fn ntHalf<T Float>(x T) T { return x / 2.0 }
 fn ntKind<T Number>(x T) I64 {
     return match T {
-        case F16, BF16, F32, F64 => 1
-        case I8, I16, I32, I64, U8, U16, U32, U64 => 2
+        case F16, BF16, F32, F64: 1
+        case I8, I16, I32, I64, U8, U16, U32, U64: 2
     }
 }
 fn ntNext<T Integer>(x T) T { return x + 1 }
@@ -17835,7 +17835,7 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
     assert d.r == 2.0
     match r {
         case R2Shape.Round(c) { assert c.Area() == 12.0 }
-        nomatch { unreachable }
+        case _ { unreachable }
     }
     t := r2Tree(R2Run)
     assert r2Sum(t) == 10 and t == R2Tree.Pair(_, R2Tree.Leaf(4)) and t != R2Tree.Leaf
@@ -18024,14 +18024,14 @@ fn ucStatic(t String&, at I64) UcPair {
 }
 fn ucMatch(t String&, k UcKind) UcPair {
     return UcPair($t, match k {
-        case UcKind.New => ucMk(t)
-        case UcKind.Empty => ""
+        case UcKind.New: ucMk(t)
+        case UcKind.Empty: ""
     })
 }
 fn ucBoth(t String&, k UcKind) UcPair {
     e := UcPair($t, match k {
-        case UcKind.New => ucMk(t)
-        case UcKind.Empty => $t "-empty"
+        case UcKind.New: ucMk(t)
+        case UcKind.Empty: $t "-empty"
     })
     return e
 }

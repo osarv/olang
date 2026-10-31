@@ -6,6 +6,6 @@ fn main() ? {
     s := Shape.Rect(2, 3)
     match s {
         case Shape.Rect(w, h) { assert w * h == 6 }
-        nomatch { unreachable }
+        case _ { unreachable }
     }
 }

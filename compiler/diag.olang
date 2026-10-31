@@ -258,7 +258,7 @@ fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
         if not d.mayReport(r.group) { continue }
         match r.at {
             case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
-            nomatch { }
+            case _ { }
         }
     }
     return false
@@ -469,7 +469,7 @@ fn (d mut Diagnostics&) written() Array<I64> {
                 line[r] = l
             }
             case Where.File(f) { file[r] = f }
-            nomatch { }
+            case _ { }
         }
         if not d.chosen(rec.group) { continue }
         # one cause several checks meet is one error: the same text at the same place again, or a second of a kind
@@ -523,7 +523,7 @@ fn (d mut Diagnostics&) AllSaid() Vec<Said> {
             case Where.Span(f, s, _) { l.Push(Said($rec.rule, f, s, $rec.text)) }
             case Where.Line(f, _) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
             case Where.File(f) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
-            nomatch { l.Push(Said($rec.rule, -1, -1, $rec.text)) }
+            case _ { l.Push(Said($rec.rule, -1, -1, $rec.text)) }
         }
     }
     return l
@@ -544,10 +544,10 @@ type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I6
 
 fn item(isError Bool, rule String&, at Where, text String&) Item {
     return match at {
-        case Where.Span(f, s, e) => Item(isError, $rule, f, s, e, 0, $text)
-        case Where.Line(f, l) => Item(isError, $rule, f, -1, -1, l, $text)
-        case Where.File(f) => Item(isError, $rule, f, -1, -1, 0, $text)
-        case Where.Nowhere => Item(isError, $rule, -1, -1, -1, 0, $text)
+        case Where.Span(f, s, e): Item(isError, $rule, f, s, e, 0, $text)
+        case Where.Line(f, l): Item(isError, $rule, f, -1, -1, l, $text)
+        case Where.File(f): Item(isError, $rule, f, -1, -1, 0, $text)
+        case Where.Nowhere: Item(isError, $rule, -1, -1, -1, 0, $text)
     }
 }
 
@@ -666,7 +666,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
             start = ss
             end = se
         }
-        nomatch { return }
+        case _ { return }
     }
     text := d.texts[f]
     line, lineStart := d.lineOf(f, start)

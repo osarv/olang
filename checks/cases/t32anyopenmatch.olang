@@ -9,7 +9,7 @@ fn (q aSq&) Area() I64 { return q.s * q.s }
 fn f(x any aShape&) I64 {
     match x {
         case aSq q { return q.s }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() { }
