@@ -813,6 +813,26 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
     try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
 }
 
+# what the rework's inference found (OLANG_SCOPES=infer), where OLANG_SCOPESTATS asks: to the standard error, or with
+# a directory named ("/..."), into a file of its own there headed by the command line - for measuring over many builds
+fn inferStats(sc mut scope.Scoper&) {
+    to := try os.Env("OLANG_SCOPESTATS") catch default ""
+    if to == "" { return }
+    b := StringBuilder()
+    b.Push($"olang: " $sc.InferStats() "\n")
+    b.Push($"olang: " $sc.FoldStats() "\n")
+    for f in sc.PromotedFields() { b.Push($"olang: promoted " $f "\n") }
+    for f in sc.Unplaced { b.Push($"olang: unplaced " $f "\n") }
+    if to[0] != '/' {
+        try io.PrintErr(b.ToString()) catch io.Error { }
+        return
+    }
+    head := StringBuilder()
+    for a in os.Args() { head.Push($a " ") }
+    path := try os.MkTemp(to, "stats") catch os.Error { return }
+    try os.WriteFile(path, $head.ToString() "\n" $b.ToString()) catch os.Error { }
+}
+
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, destroys Bool = true) mut free.Free&cfg {
@@ -822,13 +842,7 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1, des
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Trace = source.InferScopes and (try os.Env("OLANG_INFERDUMP") catch default "") != ""
     sc.Run()
-    # what the rework's inference found (OLANG_SCOPES=infer), where OLANG_SCOPESTATS asks
-    if source.InferScopes and (try os.Env("OLANG_SCOPESTATS") catch default "") != "" {
-        try io.PrintErr($"olang: " $sc.InferStats() "\n") catch io.Error { }
-        try io.PrintErr($"olang: " $sc.FoldStats() "\n") catch io.Error { }
-        for f in sc.PromotedFields() { try io.PrintErr($"olang: promoted " $f "\n") catch io.Error { } }
-        for f in sc.Unplaced { try io.PrintErr($"olang: unplaced " $f "\n") catch io.Error { } }
-    }
+    if source.InferScopes { inferStats(sc) }
     for t in sc.TraceLog { try io.PrintErr($t "\n") catch io.Error { } }
     # and early freeing's decisions written into its plans (O8d), for a program at its root
     fr mut free.Free&cfg = free.Free(c.P, c.Bodies, sc)

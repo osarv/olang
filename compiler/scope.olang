@@ -4291,8 +4291,9 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         # own (C2d, O23)
         match v.T {
             case Term.Derived(p, _) {
-                if p < 0 and -p - 1 < s.underElem.Len() and s.underElem[-p - 1] and s.report {
-                    s.err(s.lastName(x!.Span()), msgs.BuildThroughUnknownScope())
+                if p < 0 and -p - 1 < s.underElem.Len() and s.underElem[-p - 1] {
+                    s.giveBack(s.fieldDecl(x!))
+                    if s.report { s.err(s.lastName(x!.Span()), msgs.BuildThroughUnknownScope()) }
                 }
             }
             case _ { }
@@ -4787,6 +4788,7 @@ fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Lvalue&, slot Term) 
     match slot {
         case Term.Derived(_, _) {
             if s.unknownBinding(slot) {
+                s.giveBack(s.placeDecl(p))
                 if s.report { s.err(s.eqAfter(p.Span()), msgs.BuildThroughUnknownScope()) }
                 return
             }
@@ -7090,9 +7092,21 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # the inference: an argument whose local's claim is too short for what the callee keeps of it whole proposes a
         # longer one - the local the call's result lands for, where the result is what is too short (2.4, O27)
         if s.liftGather and k == FailsBlock and not r.View { s.liftAtCall(c, r, lo) }
-        # the field inference: an instance a callee makes holding its argument, which this call cannot place (C2d) -
-        # its type's fields may want bindings of their own (2.6)
-        if k != Obliged and s.fieldGather and s.onResult(c, r) { s.wantPromotionOf(s.P.T.Result(s.calleeType(c))) }
+        # the field inference (2.6): an instance a call makes required to live as long as what it holds - a bare field
+        # storing its argument exactly (st) - is met by the field's own binding, never by landing the instance longer.
+        # A constructor's asks in every judging of the field inference, not only the converged one - also passed up as
+        # the obligation of a constructor building it into a field of its own instance; any other callee's (a function
+        # returning such an instance) where the converged judging still refuses it
+        if s.onResult(c, r.Hi) {
+            res := s.P.T.Result(s.calleeType(c))
+            if r.Why == WhyHolds and (k != Obliged or s.instanceRel(hi, Term.None)) { s.wantExact(res) }
+            if k != Obliged and not s.isRef(res) { s.wantPromotionOf(res) }
+        }
+        # ... and a promoted field's binding a refusal reads through, given back (2.6, step 4)
+        if k != Obliged {
+            s.giveBackDerived(hi)
+            s.giveBackDerived(lo)
+        }
         if k == Obliged {
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
             # where it is called as such
@@ -8519,6 +8533,8 @@ fn (s mut Scoper&) promoteDecl(d I64) Bool {
             key := pair.Pair<I64, I64>(d, i)
             f := I64(body.Fields[i])
             if s.demotedF.Has(key) or body.Locals[f].Marked != typed.Mark.Bare or not s.isRef(body.Locals[f].Ty) { continue }
+            # a field the constructor builds lives with its instance: nothing to bind
+            if s.builtField(body, f) { continue }
             q := s.bindingParam(body, f)
             if q < 0 {
                 note := $"field " $i " of " $s.P.L.Names.Text(s.P.T.DeclName(types.DeclId(I32(d)))) ": no constructor parameter to bind to"
@@ -8545,6 +8561,20 @@ fn (s mut Scoper&) setFieldMark(d I64, i I64, m typed.Mark) {
             case _ { }
         }
     }
+}
+
+# whether field f of a constructor body is given storage its constructor builds (a call's result, an array made)
+fn (s mut Scoper&) builtField(body typed.Body&, f I64) Bool {
+    if body.Root is null { return false }
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, l, x) {
+                if I64(l) == f { return s.isFresh(unPassed(s.unAway(x))) }
+            }
+            case _ { }
+        }
+    }
+    return false
 }
 
 # the constructor parameter field f of a constructor body holds what was given: the parameter its initializer reads, else
@@ -8580,15 +8610,38 @@ fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
     if d >= 0 { s.wantDecl.Put(d, true) }
 }
 
-# whether a callee's relation r, at call c, names the callee's result scope
-fn (s mut Scoper&) onResult(c typed.Call&, r rel) Bool {
+# whether term t of a callee's relation, at call c, is the callee's result scope
+fn (s mut Scoper&) onResult(c typed.Call&, t Term) Bool {
     rv := s.resultVarOf(s.calleeType(c))
-    return rv >= 0 and (r.Hi == Term.Var(rv) or r.Lo == Term.Var(rv))
+    return rv >= 0 and t == Term.Var(rv)
 }
 
 # ... of the declaration a value of type t is
 fn (s mut Scoper&) wantPromotionOf(t types.TypeId) {
     if not s.fieldGather or not s.finalQuiet or t == types.UnknownT { return }
+    d := s.declOf(t)
+    if d >= 0 { s.wantDecl.Put(d, true) }
+}
+
+# the field inference: declaration d's promoted fields built through, or claimed, where their binding is not known -
+# given back to their container's scope, for good (2.6, step 4)
+fn (s mut Scoper&) giveBack(d I64) {
+    if s.fieldGather and s.finalQuiet and not s.standIn and d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
+}
+
+# ... the declaration of the parameter whose "&p" field derived term t reads
+fn (s mut Scoper&) giveBackDerived(t Term) {
+    match t {
+        case Term.Derived(p, _) {
+            if p >= 0 and p < s.B!.Params.Len() { s.giveBack(s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)) }
+        }
+        case _ { }
+    }
+}
+
+# ... asked by an exact relation on a call's result, in any judging of the field inference
+fn (s mut Scoper&) wantExact(t types.TypeId) {
+    if not s.fieldGather or t == types.UnknownT { return }
     d := s.declOf(t)
     if d >= 0 { s.wantDecl.Put(d, true) }
 }
@@ -8674,15 +8727,12 @@ fn (s mut Scoper&) buildSite(site typed.SiteId, t Term, sp source.Span) {
 # - a callee's own, for a build through a call
 fn (s mut Scoper&) buildsInto(t Term, sp source.Span, file I64, at source.Span) {
     match t {
-        case Term.Derived(p, _) {
+        case Term.Derived(_, _) {
             # a derived scope exists at no run time: nothing is built into it (C2d, O23a) - a task's stand-in for it is
             # made where the instance whose field it reads lives, which it outlives (O23)
             if s.report and not s.standIn { s.err(sp, msgs.BuildThroughUnknownScope()) }
             # the field inference: a promoted field built through goes back to its container's scope (2.6, step 4)
-            if s.fieldGather and s.finalQuiet and not s.standIn and p >= 0 and p < s.B!.Params.Len() {
-                d := s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)
-                if d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
-            }
+            s.giveBackDerived(t)
         }
         case Term.Var(k) {
             if k < s.buildsVar.Len() and not s.buildsVar[k] {
