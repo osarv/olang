@@ -329,7 +329,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
     fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
-    landLocal I64 = -1                     # the local the call judged lands for (a ":=" of it), -1 none
+    promoteLocal I64 = -1                  # the local the temporary judged next is declared as (a Promote), -1 none
     obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
     Trace Bool = false                     # OLANG_INFERDUMP: every lift written to TraceLog, for a person
     TraceLog Vec<String&>
@@ -4233,13 +4233,12 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
         # ... where the inference lifted it, its value built or its call landed there (2.4)
         dest := lift if lift != Term.None else s.blockTerm(loc.In)
+        s.promoteLocal = I64(l) if source.InferScopes else -1
         s.landing = land and not part and lift == Term.None
         if part { s.tempLand = 1 if land and lift == Term.None else 0 }
         s.lastGenArg = Term.None
-        savedLand := s.landLocal
-        s.landLocal = I64(l)
         v := s.val(x, dest)
-        s.landLocal = savedLand
+        s.promoteLocal = -1
         s.landing = false
         s.tempLand = -1
         s.noteOrigin(I64(l), x!, v)
@@ -4325,6 +4324,9 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
 fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     if not source.InferScopes or l >= s.origin.Len() or s.origin[l] == -2 { return }
     if v.K != ValKind.Existing { return }
+    # a call the inference landed where the local's uses need is the local's own, as a call landing at the local is
+    c := s.callOf(unPassed(s.unAway(x)))
+    if c is not null and s.siteLift(I64(c.Site)) != Term.None { return }
     r := s.wholeRoot(x)
     ok := r >= 0 and r != l and (s.liftable(r) or s.held.Has(r) or s.heldCall(r) >= 0)
     s.origin[l] = r if ok else -2
@@ -4646,10 +4648,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     savedLand, savedLandSp := s.landSite, s.landSp
     ac := s.callOf(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
-    savedLandLocal := s.landLocal
-    s.landLocal = wholeLocal(p)
     v := s.val(x, slot if slot.Runs() else s.here())
-    s.landLocal = savedLandLocal
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
@@ -5714,6 +5713,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         case typed.Expr.Promote(_, _, pr) {
             box := s.anyBox
             s.anyBox = false
+            # the inference: a temporary a local is declared as, whose value is too short-lived for where it is built,
+            # proposes a longer claim for that local (2.4)
+            owner := s.promoteLocal
+            s.promoteLocal = -1
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
             pv := s.val(pr.X, d)
@@ -5729,7 +5732,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             # in d, its references still naming what they did: what they refer to outlives d, as an array literal's
             # elements do (O25c)
             if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
+                s.fitTarget = owner
                 s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
+                s.fitTarget = -1
             }
             return fresh(d)
         }
@@ -6341,6 +6346,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     s.landing = false
     # the inference's landing for it (2.4): where its uses need its result
     sl := s.siteLift(I64(c.Site))
+    want := dest
     if sl != Term.None {
         dest = s.joinTerm(dest, sl) if dest.Runs() else sl
         land = false
@@ -6629,6 +6635,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             if spawned { s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = true, s.opTok(a), t, false }
             vals[i] = s.val(a, t)
             s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = savedTemp, savedAt, savedSlot, savedFunc
+            # a call the inference landed elsewhere than its variable is bound: judged there as existing storage (2.4)
+            if vals[i].K == ValKind.Existing and t.Runs() and s.liftedCall(a) {
+                s.fit(vals[i].T, t, i < ps.Len() and s.storeThrough(ps[i]), a, FitValue)
+            }
             if spawned and vals[i].K == ValKind.Existing and not s.lastsUntil(vals[i].T, j) and s.report {
                 s.err(s.opTok(a), msgs.SpawnArgHoldsShort())
             }
@@ -6734,7 +6744,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         }
         s.siteRec.Put(I64(c.Site), s.ctorFrom)
         if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
-        return fresh(beta[rv] if rv >= 0 else here)
+        return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
     }
     # D18c: a generator whose elements borrow from parameter p: where p's argument lives, for the walk it may make
     if callee >= 0 {
@@ -6765,7 +6775,20 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # a result a scope argument put where it says (E25) is existing storage there - judged where it is stored, passed,
     # returned or made an any as the same value declared first would be ("x := f&t(); h.p = x", O25h)
     if typed.ScopedCall(c) and rv >= 0 { return existing(beta[rv]) }
-    return fresh(beta[rv] if rv >= 0 else here)
+    return s.liftedVal(fresh(beta[rv] if rv >= 0 else here), sl, want)
+}
+
+# whether x is a call the inference landed (a site lift)
+fn (s mut Scoper&) liftedCall(x typed.Expr&) Bool {
+    c := s.callOf(unPassed(s.unAway(x)))
+    return c is not null and s.siteLift(I64(c.Site)) != Term.None
+}
+
+# a call's value where the inference landed it elsewhere than where it was wanted (a site lift, 2.4): existing storage
+# there, which what it is put into judges as any (exactly where something can be stored through it, O25g)
+fn (s mut Scoper&) liftedVal(v Val, sl Term, want Term) Val {
+    if sl == Term.None or not want.Runs() or v.T == want { return v }
+    return existing(v.T)
 }
 
 # whether an argument living at t, one of several scopes (O11, O12), is lent for parameter type pt whose scope variable v
@@ -7834,7 +7857,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
     # local's that the value outlives, a longer claim for that local
     if s.liftGather and k == FailsBlock {
-        if s.Trace { s.TraceLog.Push($"fails @" $x.Span().Start " body " $s.Id " root " $s.wholeRoot(x) " kind " $kind) }
+        if s.Trace { s.TraceLog.Push($"fails root " $s.wholeRoot(x) " kind " $kind " | " $s.traceAt(x.Span().Start)) }
         s.propose(x, slot)
     }
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
@@ -7851,6 +7874,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         }
     }
     if k == Holds { return }
+    if s.Trace and s.report and k != Obliged { s.TraceLog.Push($"fit fails " $t " into " $slot " exact " $exact " kind " $kind " | " $s.traceAt(x.Span().Start)) }
     # a global holds only what lives as long as the program: what lives where a scope variable says is no obligation
     # on the callers - stored into a global, it is O1b's error at the value, as stage 0 has it
     if k == Obliged and kind == FitGlobal {
@@ -7929,6 +7953,7 @@ fn (s mut Scoper&) isBlock(t Term) Bool {
 
 fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
+    if s.Trace { s.TraceLog.Push($"fit error kind " $kind " slot " $s.fitSlot " exact " $exact " narrow " $s.fitNarrow " | " $s.traceAt(x.Span().Start)) }
     # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
     # O26's
     if kind == FitReturn and (s.isRef(x.Type()) or s.isFunc(x.Type())) and not s.capsDiffer(x) { kind = FitOwn }
@@ -8197,7 +8222,7 @@ fn (s mut Scoper&) proposeSite(site I64, t Term) {
     if nt == cur { return }
     s.siteLifts.Put(key, nt)
     s.liftGrew = true
-    if s.Trace { s.TraceLog.Push($"lift site " $site " in body " $s.Id ": " $nt) }
+    if s.Trace { s.TraceLog.Push($"lift site " $site " to " $nt " | " $s.traceAt(s.B!.Sites[site].Sp.Start)) }
 }
 
 # where the inference lands the call at site, None for where its obligations or where it stands put it
@@ -8240,7 +8265,7 @@ fn (s mut Scoper&) heldCall(l I64) I64 {
 fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
-            s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " @" $s.B!.Locals[l].Sp.Start " to " $t " (origin " $s.origin[l] ")")
+            s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " to " $t " (origin " $s.origin[l] ") | " $s.traceAt(s.B!.Locals[l].Sp.Start))
         }
         return
     }
@@ -8260,7 +8285,7 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     s.liftGrew = true
     if s.Trace {
         loc := s.B!.Locals[l]
-        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " @" $loc.Sp.Start " in body " $s.Id " (file " $s.B!.File "): " $nt $(" with its storage" if stor else ""))
+        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " to " $nt $(" with its storage" if stor else "") " | " $s.traceAt(loc.Sp.Start))
     }
 }
 
@@ -8273,7 +8298,7 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
         return
     }
     rv := s.resultVarOf(s.calleeType(c))
-    if rv >= 0 and r.Hi == Term.Var(rv) { s.proposeLocal(s.landLocal, lo, false) }
+    if rv >= 0 and r.Hi == Term.Var(rv) { s.proposeSite(I64(c.Site), lo) }
 }
 
 # body b's claims inferred (2.4): judged quietly, gathering lifts, until no claim grows
@@ -8286,6 +8311,21 @@ fn (s mut Scoper&) inferClaims(b I64) {
         s.liftGather = false
         if not s.liftGrew { break }
     }
+}
+
+# where offset at is in the body being judged's file, for the trace: its line's number and text
+fn (s mut Scoper&) traceAt(at I32) String {
+    text := try s.texts.Get(s.B!.File) catch default ""
+    if at < I32(0) or I64(at) > text.Len() { return "?" }
+    start := I64(at)
+    for start > 0 and text[start - 1] != '\n' { start-- }
+    end := I64(at)
+    for end < text.Len() and text[end] != '\n' { end++ }
+    line := 1
+    for k in range start {
+        if text[k] == '\n' { line++ }
+    }
+    return $"line " $line ": " $text[start:end].Trim()
 }
 
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
