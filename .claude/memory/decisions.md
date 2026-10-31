@@ -1975,3 +1975,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   words declared in the signature (`? NotFound`) - rejected by me (a second way to declare an error type); (5) a flag
   result that callers ignore caught by D3b already (`v, ok :=` with ok unread is an error; only `_` discards it).
   Recommended (1) + (2) + (3) together. ASKED.
+- QBZ, the user's design 2026-10-31 ("declaring error words where they are used ... just name errors when we throw them
+  and alternatively in the signature too if we don't want to infer the errors"). PROPOSED (Zig's error.Name, made
+  module-scoped): `error NotFound` with no declaration declares an error of its module named NotFound (a type of one
+  value - `catch NotFound`, `e == NotFound`, `$e` `lex.NotFound` outside its module; capitalized exported, lowercase
+  private, M6); the same name raised anywhere in the module is the same error; a signature may name it (`? NotFound`,
+  a promise as R1a's) or leave the set inferred; a name raised and declared otherwise (a type, a function) is D2/D3a's
+  error. Declared error types stay for groups (`type IoError error { FULL, DENIED }`, `catch IoError`), named sets
+  unchanged. Typos: a clause naming what the call never raises is already R14's error (`the call does not fail
+  with ...`), and a raised name one edit away from an error of the module gets did-you-mean as an error unless written
+  in the signature too (mine). With it: the Bool/out-parameter bans (QBZ ideas 1, 2) stay recommended, a prelude
+  `Missing` is unneeded. ASKED.
