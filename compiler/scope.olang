@@ -3303,8 +3303,22 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
             return s.sums[cb].Keeps[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
+        case typed.Callee.Value(_) { return not s.valueKeepsNothing(c, k) }
         case _ { return true }
     }
+}
+
+# the rework's round 2c: whether a call through a function value keeps nothing of its argument k - a bare parameter
+# (a read-only reference, 2.10) of a function type whose result holds no reference: what the function is keeps no view
+# of it past the call but in its result (no function type relates its parameters' scopes, T22a, and a capture outlives
+# no parameter), and writes nothing through it
+fn (s mut Scoper&) valueKeepsNothing(c typed.Call&, k I64) Bool {
+    if not source.NewParams: return false
+    fty := s.calleeType(c)
+    if fty == types.UnknownT or s.P.T.KindOf(fty) != types.Kind.Func: return false
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    if k >= ps.Len() or s.P.T.KindOf(ps[k]) != types.Kind.Ref or (s.P.T.PermOf(ps[k]) & types.Writable) != 0: return false
+    return not s.P.T.HoldsRefs(s.P.T.Result(fty))
 }
 
 # whether a callee may store into what its argument k names itself, or by a callee that does (O17b)

@@ -28,6 +28,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `intwidths.olang` - integers of every width, I1 to I128 and U1 to U128 (T4a), at compile time and at run time.
 - `attrs.olang`, `attrmod.olang` - typed attributes (G39, G40) on every declaration they take and functions reflected
   (G41): a router and a command table collected while compiling from `attrmod`'s handlers, baked beside the run time.
+- `params/` - the scoping and parameters rework's tests, written in its spelling (a bare parameter read-only, `&` may
+  write) and run only by `make verify-params`, under `OLANG_PARAMS=new OLANG_SCOPES=infer` (docs/rework.md section
+  12); `make verify` leaves them out until the switches become the default.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

@@ -1850,7 +1850,7 @@ aeee3bb29f3f1dfd b74c8070ae532e54 checks/fixtures/vecalias/p3.olang
 964e31a8bba79921 cfa0d0daabf2c53c compiler/bindgen.olang
 cd6ce9c4496ddb31 7035884d2ec57055 compiler/build.olang
 d31e1ac25d3903b0 aafdaa4ada8b4216 compiler/cabi.olang
-20aed53b66a6c08b 0058be63310c3722 compiler/check.olang
+699d5f955a43562b 304c0cdffb32eae6 compiler/check.olang
 a167e14f1874795b 8fa6fe368850baaf compiler/cond.olang
 18fe289a60e0ce53 9a2c2eacf5e1c306 compiler/definit.olang
 95395ef569786b41 4b09eeebf28c1acd compiler/diag.olang
@@ -1878,7 +1878,7 @@ e96d6c8f08ffed5c 14470cd118159e1c compiler/needs.olang
 c2e198ec2ff42263 de36647d62895f16 compiler/profile.olang
 672b63f9a00d870a 9d2c759018457eed compiler/runtime.olang
 818e0599fdebdac0 97aaffe89d89e6e9 compiler/scan.olang
-95f69e4d96e26037 587b2ccc707231e9 compiler/scope.olang
+2b45c4f02507b790 2e99687de6bf3300 compiler/scope.olang
 c48e236ce54a6fe5 9004f90ca230aae0 compiler/session.olang
 182c39e9ac5daf15 d08ca205a93509b6 compiler/source.olang
 4a5f439a56f65569 25ca6a5bbdda1a5f compiler/target.olang
@@ -2029,6 +2029,7 @@ e3212b4e8e50fcbe 7f381d66e8003dbe tests/intsweep.olang
 01227125303fd596 1f455e64d65b9972 tests/lanes.olang
 40636abdae398d1a 7be174276287b27b tests/match.olang
 8cd8b0233e814379 d989c9d96d8314da tests/namedargs.olang
+ff5d38f0efbb77f2 52a1c31116f8962c tests/params/fields.olang
 6dce307eebf2f318 0a0350a20b4c5e00 tests/place.olang
 56939543bb7c6442 e180cd78410e85bd tests/power.olang
 b2142c1bc62b2fe2 d0c514490482c8da tests/raised.olang
