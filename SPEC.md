@@ -1764,7 +1764,7 @@ a method, whatever its first parameter's type.
 
 ```
 param-list      ::= list(param)                         (L18a)
-param           ::= { attribute } IDEN type-expr [ "=" expr ]   (attribute: G39 - not on a receiver)
+param           ::= { attribute } IDEN ( type-expr | "..." type-expr ) [ "=" expr ]   (attribute: G39 - not on a receiver; "...": D8g)
 ret-type        ::= result { "," result }                (on one line; several results, D8c)
 result          ::= type-expr
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
@@ -1870,6 +1870,25 @@ G16) share the one made for them, which is a function of that module's code wher
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
+
+**D8g (variadic parameters).** A parameter written `xs ...T` is **variadic**: a call gives it any number of arguments
+of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`, `sum(1, 2, 3)` - and inside the body
+`xs` is a read-only `Array<T>&` holding them in order (T25b), its length the count given. It is the last of its
+function's parameters but the defaulted ones (D8b), which then follow it and are given by name (E14b) -
+`fn Exec(args ...String&, dir String& = "")` is called `Exec("ls", "-l", dir = "/tmp")` - so a function has at most one,
+it has no default, and the parameters before it are required. Every argument by position from its place on, up to the
+first argument by name, is one of its arguments; each is checked against `T` as an argument is (E12, a literal adapting
+as it would there, T6). They are evaluated in the order written, after the arguments before them and before those by
+name (S4, E14b), and held as a **fixed array in the caller's frame** (T7c) - no storage made, lent to the call (E12) for
+as long as it runs. An existing array of `T` - of a known length or not, a slice, `v.View()` of a `Vec` - is passed on
+whole with `...a` written as all of the variadic parameter's arguments: `sum(...xs)`; `...a` beside other arguments
+there, or anywhere but a variadic parameter's place, is a compile-time error. A generic's `T` is inferred from the
+arguments as from any (G9: `fn largest<T>(first T, rest ...T) T` gives `largest(3, 9, 2)` an `I64` and
+`largest("b", "a")` a `String`). A method, a lambda and a function type may have one (`fn(xs ...I64) I64`, T21); a
+function type's says how a call through it is written, and the value either way is a function taking the array, so a
+function fits a function type of either form (T22). A constructor, an enum case's payload and an `extern fn` (whose
+variable arguments are C's `...`, X21) have none - a compile-time error naming an array parameter. `explain`, `doc` and
+`$` of a function type write it `...T`.
 
 ### 3.4.1 Contracts
 

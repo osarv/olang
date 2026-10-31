@@ -518,6 +518,10 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             w.put("any ")
             w.ty(of)
         }
+        case ast.TypeRef.Spread(_, of) {
+            w.put("...")
+            w.ty(of)
+        }
         case ast.TypeRef.Errs(_, items) {
             w.put("? ")
             for k, e in items {
@@ -1028,6 +1032,16 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.name(n)
             w.put(" = ")
             w.expr(y)
+        }
+        case ast.Expr.Spread(_, y) {
+            w.put("...")
+            w.expr(y)
+        }
+        case ast.Expr.Variadic(_, items) {
+            for k, it in items {
+                if k > 0 { w.put(", ") }
+                w.expr(it)
+            }
         }
     }
 }

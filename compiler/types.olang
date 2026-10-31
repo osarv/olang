@@ -90,6 +90,7 @@ ReadOnly I64 = 0
 Writable I64 = 1
 Owning I64 = 2
 Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless its type says so
+Spread I64 = 8      # "xs ...T": a variadic parameter's read-only array, as its function's signature holds it (D8g)
 
 # a type's key: its kind and operands - what it is, and so what it is interned by
 type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0) {
@@ -556,6 +557,21 @@ fn (t mut Table&) NonNull(id TypeId) TypeId {
 fn (t mut Table&) OrNull(id TypeId) TypeId {
     if t.KindOf(id) != Kind.Ref or t.IsNullable(id) or t.ArrayRef(id) { return id }
     return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
+}
+# D8g: a variadic parameter's type ("xs ...T"), the same read-only array reference as its body holds it, and which of a
+# function type's parameters is variadic (-1 for none)
+fn (t Table&) IsSpread(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Spread) != 0 }
+fn (t mut Table&) Unspread(id TypeId) TypeId {
+    if not t.IsSpread(id) { return id }
+    return t.Ref(t.Referent(id), t.PermOf(id) & ~Spread)
+}
+fn (t Table&) SpreadAt(f TypeId) I64 {
+    if t.KindOf(f) != Kind.Func { return -1 }
+    ps := t.Items(t.Params(f))
+    for i in range ps.Len() {
+        if t.IsSpread(ps[i]) { return i }
+    }
+    return -1
 }
 # whether a reference names an array - never null: its zero value is the empty array (T2c)
 fn (t Table&) ArrayRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Repr(t.Referent(id))) == Kind.Array }
@@ -1261,6 +1277,12 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         }
         case Kind.Ref {
             p := t.PermOf(id)
+            if (p & Spread) != 0 {
+                # D8g: a variadic parameter's array, as it is written
+                b.Push("...")
+                t.canon(b, t.Elem(t.Referent(id)))
+                return
+            }
             if (p & Owning) != 0 { b.Push("own ") }
             if (p & Writable) != 0 { b.Push("mut ") }
             t.canon(b, t.Referent(id))

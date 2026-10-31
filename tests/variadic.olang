@@ -1,0 +1,107 @@
+# D8g: a variadic parameter, "xs ...T" - its function's last but defaulted ones (given by name) - is a read-only array
+# inside; a call gives any number of T there, held as a fixed array in the caller's frame, or passes an existing array
+# on with "...a". Functions, methods, generics, lambdas and function values. Each computation is a global the
+# evaluator bakes and an assert it decides (K2, S18c), and on an input it cannot see (Live), at run time
+
+Live mut I64 = 0
+
+fn sum(xs ...I64) I64 {
+    t := 0
+    for x in xs { t += x }
+    return t
+}
+
+fn joined(sep String&, parts ...String&, upper Bool = false) String {
+    b := StringBuilder()
+    for i, p in parts {
+        if i > 0 { b.Push(sep) }
+        b.Push(p.ToUpper() if upper else p)
+    }
+    return b.ToString()
+}
+
+fn largest<T>(first T, rest ...T) T {
+    m := first
+    for x in rest {
+        if m < x: m = x
+    }
+    return m
+}
+
+type Tally struct(n I64) { n }
+
+fn (t mut Tally&) Add(xs ...I64) { for x in xs { t.n += x } }
+
+fn calls(z I64) String {
+    a := I64[4, 5, 6 + z]
+    v := Vec<I64>()
+    v.Push(10)
+    v.Push(20)
+    t := Tally(z)
+    t.Add(1, 2)
+    t.Add()
+    t.Add(...a)
+    g := sum
+    h fn(xs ...I64) I64 = sum
+    f := fn(xs ...String&) I64 { return xs.Len() }
+    return $sum() " " $sum(1 + z) " " $sum(1, 2, 3) " " $sum(...a) " " $sum(...v.View()) " " $t.n " " $g(7, 8) " " $h() " " $f("a", "b")
+}
+
+CallsBaked := calls(0)
+
+fn texts(z I64) String {
+    w := "w" if z == 0 else "?"
+    return $joined("-", "a", w, "c") " " $joined(",") " " $joined(",", "x", "y", upper = true) " " $largest(3, 9, 2) " " $largest(1.5, 0.5) " " $largest("b", "a", "c")
+}
+
+TextsBaked := texts(0)
+
+# the arguments are evaluated in the order they are written, the variadic ones last but defaulted ones by name
+Log mut String = ""
+
+fn note(s String&, v I64) I64 {
+    Log = $Log $s
+    return v
+}
+
+fn tag(head I64, xs ...I64, tail I64 = 0) I64 { return head * 100 + sum(...xs) * 10 + tail }
+
+fn order(z I64) String {
+    Log = ""
+    r := tag(note("h", 1 + z), note("a", 2), note("b", 3), tail = note("t", 4))
+    return $r " " $Log
+}
+
+OrderBaked := order(0)
+
+test "D8g: a variadic parameter takes any number of arguments, or an array passed on" {
+    want := "0 1 6 15 30 18 15 0 2"
+    assert calls(Live) == want and CallsBaked == want
+    assert calls(0) == want    # decided while compiling (S18c)
+}
+
+test "D8g: before and after it, generics infer from its arguments" {
+    want := "a-w-c  X,Y 9 1.5 c"
+    assert texts(Live) == want and TextsBaked == want
+}
+
+fn countAll(xs Array<I64>&) I64 { return xs.Len() }
+
+# the variadic parameter says how a call is written; the value is the array either way, so a function fits a function
+# type of either form (T22)
+fn forms(z I64) String {
+    f fn(xs Array<I64>&) I64 = sum
+    g fn(xs ...I64) I64 = countAll
+    return $f(I64[1, 2 + z]) " " $g(5, 6, 7)
+}
+
+FormsBaked := forms(0)
+
+test "D8g, T22: a function fits a function type taking the array, or the arguments" {
+    assert forms(Live) == "3 3" and FormsBaked == "3 3"
+}
+
+test "D8g: arguments evaluated in the order written" {
+    want := "154 habt"
+    assert order(Live) == want and OrderBaked == want
+}

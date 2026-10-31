@@ -1,0 +1,8 @@
+# check: fail error[D8g]: '...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'
+# D8g: a parameter of an array type takes the array itself
+fn count(xs Array<I64>&) I64 { return xs.Len() }
+
+fn main() {
+    a := I64[1, 2]
+    assert count(...a) == 2
+}

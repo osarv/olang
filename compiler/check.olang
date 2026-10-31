@@ -338,6 +338,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     reflTouched Bool = false    # G35: the condition being folded read a reflected member
     reflSaid Bool = false       # G35, S18c: the message reflText last rendered read a reflected member
+    spreadSaid Map<pair.Pair<I64, I64>, Bool>   # D8g: the "...a" said not to stand alone, by file and position
     spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
     testKeys StringBuilder      # B7a: the root's tests of a target, each target and description between zero bytes
     namedBad Bool = false       # E14b: arguments by name that do not give the parameters, said (the call is unknown)
@@ -830,7 +831,7 @@ fn (c mut Checker&) readsFixed(x ast.Expr?&) Bool {
     }
     return match x {
         case ast.Expr.Lit(_, _), ast.Expr.Default(_): true
-        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.readsFixed(a)
+        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Spread(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.readsFixed(a)
         case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _): c.readsFixed(a)
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): c.readsFixed(a) and c.readsFixed(b)
         case ast.Expr.Cond(_, a, k, b): c.readsFixed(a) and c.readsFixed(k) and c.readsFixed(b)
@@ -839,7 +840,7 @@ fn (c mut Checker&) readsFixed(x ast.Expr?&) Bool {
         case ast.Expr.ScopeCall(_, f, _, args): c.readsFixed(f) and c.allFixed(args)
         case ast.Expr.Index(_, a, items): c.readsFixed(a) and c.allFixed(items)
         case ast.Expr.Slice(_, a, lo, hi): c.readsFixed(a) and c.readsFixed(lo) and c.readsFixed(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items)
         case ast.Expr.Try(_, a, clauses): c.readsFixed(a) and (clauses.Len() == 0)
         case ast.Expr.Unreachable(_, msg): msg is null or c.readsFixed(msg)
         case _: false
@@ -2494,7 +2495,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
     if x is null { return false }
     return match x {
         case ast.Expr.Name(_, _), ast.Expr.Lit(_, _), ast.Expr.Default(_): false
-        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.declaresNames(a)
+        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Spread(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.declaresNames(a)
         case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _): c.declaresNames(a)
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): c.declaresNames(a) or c.declaresNames(b)
         case ast.Expr.Cond(_, a, k, b): c.declaresNames(a) or c.declaresNames(k) or c.declaresNames(b)
@@ -2502,7 +2503,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
         case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args): c.declaresNames(f) or c.anyDeclaresNames(args)
         case ast.Expr.Index(_, a, items): c.declaresNames(a) or c.anyDeclaresNames(items)
         case ast.Expr.Slice(_, a, lo, hi): c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.anyDeclaresNames(items)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.anyDeclaresNames(items)
         case ast.Expr.Try(_, a, clauses): c.declaresNames(a) or (clauses.Len() > 0)
         case ast.Expr.Unreachable(_, msg): c.declaresNames(msg)
         case _: true
@@ -3263,7 +3264,7 @@ fn (c mut Checker&) mutParam(tr ast.TypeRef&, t types.TypeId) {
 
 fn (c mut Checker&) param(n source.NameId, sp source.Span, t types.TypeId, i I64, tr ast.TypeRef?& = null) {
     mark := c.cur().ParamMark(c.P.T, i)
-    id := c.local(n, sp, t, typed.LocalKind.Param, mark)
+    id := c.local(n, sp, c.P.T.Unspread(t), typed.LocalKind.Param, mark)   # D8g: a variadic one a read-only array
     c.cur().Params.Push(typed.LocalId(I32(id)))
     if tr is not null { c.fr().typeAt.Put(id, c.typeWrittenAt(tr)) }
 }
@@ -4328,7 +4329,7 @@ fn storedExprs(xs Array<ast.Expr&>&, out mut Map<source.NameId, Bool>&) {
 fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
     if x is null { return }
     match x {
-        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Unary(_, _, y), ast.Expr.Postfix(_, _, y), ast.Expr.Member(_, y, _) { storedExpr(y, out) }
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Spread(_, y), ast.Expr.Unary(_, _, y), ast.Expr.Postfix(_, _, y), ast.Expr.Member(_, y, _) { storedExpr(y, out) }
         case ast.Expr.Unreachable(_, msg) { storedExpr(msg, out) }
         case ast.Expr.IsType(_, y, _, _), ast.Expr.As(_, y, _), ast.Expr.Generic(_, y, _) { storedExpr(y, out) }
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
@@ -4350,7 +4351,7 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
             storedExpr(lo, out)
             storedExpr(hi, out)
         }
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) { storedExprs(items, out) }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) { storedExprs(items, out) }
         case ast.Expr.Try(_, y, cs) {
             storedExpr(y, out)
             storedCatches(cs, out)
@@ -5550,6 +5551,11 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         }
         case types.Kind.Ref {
             perm := c.P.T.PermOf(t)
+            if (perm & types.Spread) != 0 {
+                b.Push("...")     # D8g: a variadic parameter's, as it is written
+                c.spell(b, c.P.T.Elem(c.P.T.Referent(t)), false)
+                return
+            }
             if (perm & types.Owning) != 0 { b.Push("own ") }
             if not top and (perm & types.Writable) != 0 { b.Push("mut ") }
             c.spell(b, c.P.T.Referent(t), false)
@@ -7316,6 +7322,13 @@ fn (c mut Checker&) expr1(x ast.Expr?&, want types.TypeId, accept Bool) typed.Ex
             if ex.Len() == 0 { return c.unknown(sp) }
             return c.fnValue(sp, c.genericFn(g), ex)
         }
+        case ast.Expr.Spread(sp, y) {
+            # D8g: "...a" is a call's variadic arguments, or an array pattern's rest (S13h) - nothing else
+            if not c.spreadSaid.Has(pair.Pair(c.fr().File, I64(sp.Start))) { c.err(sp, msgs.SpreadNotHere()) }
+            c.expr(y, types.UnknownT)
+            return c.unknown(sp)
+        }
+        case ast.Expr.Variadic(sp, items) { return c.variadicArray(sp, items, types.UnknownT) }
         case ast.Expr.Named(sp, _, y) {
             # E14b: a name given a value outside a call that names parameters - its value checked for its own errors
             c.err(sp, msgs.NamedArgNotHere())
@@ -11168,6 +11181,8 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         c.gap(nsp, "a function the checker cannot find")
         return c.unknown(sp)
     }
+    # D8g: a variadic parameter's arguments gathered into one, before any are put where their parameters are
+    args = c.gatherVariadic(c.P.T.SpreadAt(c.P.Sig(f)) - (1 if recv is not null else 0), args, sp)
     # E14b: arguments by name put where their parameters are
     ord := Array<I64>(0)
     if hasNamed(args) {
@@ -11194,7 +11209,8 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         return c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, pre)
     }
     # G9: each argument's type unified with its parameter's, its value checked first
-    ps := c.P.T.Items(c.P.T.Params(sig))
+    spreadAt := c.P.T.SpreadAt(sig)
+    ps := c.unspreadAll(c.P.T.Items(c.P.T.Params(sig)))
     b := generic.Binding(owner, nv)
     # G12: the variables written type arguments name are theirs, whatever the arguments are
     if explicit.Len() > 0 {
@@ -11218,6 +11234,9 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         e typed.Expr?&c = null
         if pre.Len() > 0 and i < pre.Len() {
             e = pre[i]
+        } else if k == spreadAt and args[i].IsGathered() {
+            # D8g: a variadic parameter's arguments, each unified with its element
+            e = c.variadicUnify(args[i], ps[k], b)
         } else {
             v := c.fold(args[i])
             if v.Ok or c.litLike(args[i]) {
@@ -11543,7 +11562,11 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.dropArgs(args)
         return c.unknown(sp)
     }
-    ps := c.P.T.Items(c.P.T.Params(sig))
+    # D8g: a variadic parameter's arguments gathered into one (a call through a function value; invoke did it for a
+    # function's), the parameter taken as the read-only array it is
+    if pre.Len() == 0 { args = c.gatherVariadic(c.P.T.SpreadAt(sig) - (1 if recv is not null else 0), args, sp) }
+    spreadParam := c.P.T.SpreadAt(sig)
+    ps := c.unspreadAll(c.P.T.Items(c.P.T.Params(sig)))
     sfrom := c.stmts.Len()
     spreadAt := source.Span(-1, -1)
     if pre.Len() == 0 and args.Len() > 0 and args.Len() == 1 and ps.Len() - (1 if recv is not null else 0) > 1 and callLike(args[0]) {
@@ -11573,6 +11596,13 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.exprs.Truncate(from)
         return c.unknown(sp)
     }
+    if spreadParam >= 0 and n < spreadParam - k {
+        # D8g: fewer than the parameters before the variadic one, each required (D8b)
+        need := spreadParam - k
+        c.err(sp, msgs.VariadicArgCount(need, "" if need == 1 else "s", n))
+        c.exprs.Truncate(from)
+        return c.unknown(sp)
+    }
     for i in range n {
         if k >= ps.Len() {
             # X21: a variable argument, as C's default promotions make it
@@ -11587,7 +11617,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         if pre.Len() > 0 and i < pre.Len() and pre[i] != c.hole {
             wasPre := c.nullDecl
             c.nullDecl = c.paramAt(target, f, k)    # T2c: where the parameter's type is written
-            e = c.fit(pre[i], ps[k], asp)
+            e = c.fit(c.heldArray(from, pre[i]) if k == spreadParam else pre[i], ps[k], asp)
             c.nullDecl = wasPre
         } else if args.Len() > 0 and i < args.Len() {
             isDefault := false
@@ -11597,6 +11627,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             }
             if isDefault {
                 e = c.callDefault(nsp, sp, target, f, k, recv is not null, ps[k])
+            } else if k == spreadParam and args[i].IsGathered() {
+                e = c.fit(c.heldArray(from, c.variadicValue(args[i], ps[k])), ps[k], args[i].Span())   # D8g
             } else {
                 e = c.litCtor(args[i], ps[k])
                 if e is null { e = c.expr(args[i], ps[k]) }
@@ -11668,6 +11700,135 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
+}
+
+# ---- variadic parameters (D8g) ----
+
+# a call's arguments with those its variadic parameter, at si among them, is given gathered into one: a "...a" alone
+# passing an array on, else a Variadic of them all - every argument by position from si on, up to the first by name.
+# Unchanged where there is none (si -1), they are gathered already, or fewer are given than the parameters before it
+fn (c mut Checker&) gatherVariadic(si I64, args Array<ast.Expr&>&, sp source.Span) Array<ast.Expr&>&args {
+    if si < 0 or args.Len() < si { return args }
+    if args.Len() > si and args[si].IsGathered() and not args[si].IsSpread() { return args }
+    end := si
+    for end < args.Len() and not args[end].IsNamed() { end++ }
+    items := args[si:end]
+    if items.Len() == 1 and items[0].IsSpread() { return args }
+    for it in items {
+        if not it.IsSpread() { continue }
+        c.err(it.Span(), msgs.SpreadAlone())
+        c.spreadSaid.Put(pair.Pair(c.fr().File, I64(it.Span().Start)), true)
+    }
+    vsp := source.Span(items[0].Span().Start, items[items.Len() - 1].Span().End) if items.Len() > 0 else source.Span(sp.End, sp.End)
+    out := Vec<ast.Expr&>()
+    for i in range si { out.Push(args[i]) }
+    out.Push(ast.Expr.Variadic(vsp, items))
+    for i in range end, args.Len() { out.Push(args[i]) }
+    return out.ToArray()
+}
+
+# a variadic parameter's argument, of the parameter's type pt (a read-only array): "...a" the array a, else an array of
+# the arguments built where the call is, of their known count (T7c)
+fn (c mut Checker&) variadicValue(x ast.Expr&, pt types.TypeId) typed.Expr&c {
+    match x {
+        case ast.Expr.Spread(_, y) { return c.expr(y, pt) }
+        case ast.Expr.Variadic(sp, items) { return c.variadicArray(sp, items, c.P.T.Elem(c.deref(pt))) }
+        case _ { return c.expr(x, pt) }
+    }
+}
+
+# the arguments a variadic parameter is given, as an array of elem - where elem is not known (a generic's still), of
+# what the first that is no literal is, a literal-only list of its literals' own type (T6a)
+fn (c mut Checker&) variadicArray(sp source.Span, items Array<ast.Expr&>&, elem types.TypeId) typed.Expr&c {
+    if elem != types.UnknownT and c.P.T.Closed(elem) { return c.arrayLit(sp, elem, items) }
+    ys := Array<typed.Expr?&>(items.Len())
+    et := types.UnknownT
+    for i in range items.Len() {
+        if c.litLike(items[i]) { continue }
+        ys[i] = c.value(c.expr(items[i], types.UnknownT), items[i].Span())
+        t := c.bindType(ys[i]!)
+        et = t if et == types.UnknownT or not c.isNumber(t) or c.P.Meet(et, t) < types.TypeId(0) else c.P.Meet(et, t)
+    }
+    if et == types.UnknownT and items.Len() > 0 { return c.arrayLit(sp, typeOf(c.expr(items[0], types.UnknownT)), items) }
+    from := c.exprs.Len()
+    for i in range items.Len() {
+        x := c.fit(ys[i]!, et, items[i].Span()) if ys[i] is not null else c.exprTo(items[i], et)
+        if not c.isRef(et) { c.roStore(x, items[i].Span(), RoStored) }   # T25c: an element is writable storage
+        c.exprs.Push(x)
+    }
+    at := c.P.T.Array(et, c.P.T.Const(c.i64(), items.Len()))
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, gather(c.exprs, from), null, c.site(typed.SiteKind.Make, sp)
+                                              typed.Check.None))
+}
+
+# G9, D8g: a generic's variadic parameter's arguments (of parameter type pt) unified with its element - a literal as
+# a literal argument is, the others as one array of what they are, which is then the argument; null where every one is
+# a literal, checked once the call is bound
+fn (c mut Checker&) variadicUnify(x ast.Expr&, pt types.TypeId, b mut generic.Binding&) typed.Expr?&c {
+    match x {
+        case ast.Expr.Spread(_, y) {
+            e := c.expr(y, types.UnknownT)
+            if typeOf(e) != types.UnknownT { c.unify(pt, c.bindType(e), b, false, false) }
+            return e
+        }
+        case ast.Expr.Variadic(sp, items) {
+            et := c.P.T.Elem(c.deref(pt))
+            literal := true
+            for it in items {
+                if not c.litLike(it) { literal = false }
+            }
+            if not literal {
+                e := c.variadicArray(sp, items, types.UnknownT)
+                if typeOf(e) != types.UnknownT { c.unify(pt, c.bindType(e), b, false, false) }
+                return e
+            }
+            for it in items { c.unify(et, c.P.T.Prim("F64") if c.litFloat(it) else c.i64(), b, true, false) }
+            return null
+        }
+        case _ { return null }
+    }
+}
+
+# D8g: a variadic parameter's array of arguments v held in a hidden local of the caller's - fixed storage in its frame,
+# lent to the call (T7c, E12) - the arguments before it, from in exprs on, first held in order where they could change
+# what it reads (S4, E14b's written order); v as it is where it holds no argument
+fn (c mut Checker&) heldArray(from I64, v typed.Expr&c) typed.Expr&c {
+    still := true   # whether every argument it holds is a literal or a place read, changing nothing
+    match v {
+        case typed.Expr.Make(_, _, mk) {
+            if mk.Kind != typed.MakeKind.Array or mk.Items.Len() == 0 { return v }
+            for it in mk.Items {
+                if not (pureRead(it) or isLit(it)) { still = false }
+            }
+        }
+        case _ { return v }
+    }
+    for j in range from, c.exprs.Len() {
+        x := c.exprs[j]
+        if still or isLit(x) { continue }
+        h := c.hidden(x.Span(), typeOf(x))
+        c.stmts.Push(typed.Stmt.Let(x.Span(), typed.LocalId(I32(h)), x))
+        c.exprs[j] = c.readLocal(x.Span(), h)
+    }
+    sp := v.Span()
+    h := c.hidden(sp, typeOf(v))
+    c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(h)), v))
+    return c.readLocal(sp, h)
+}
+
+fn isLit(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Lit(_, _, _) { return true }
+        case _ { return false }
+    }
+}
+
+# a signature's parameter types with a variadic one's as the read-only array its body holds (D8g)
+fn (c mut Checker&) unspreadAll(ps Array<types.TypeId>&) Array<types.TypeId>&ps {
+    if ps.Len() == 0 { return ps }
+    out := Array<types.TypeId>(ps.Len())
+    for i in range ps.Len() { out[i] = c.P.T.Unspread(ps[i]) }
+    return out
 }
 
 # X21: a variable argument of a variadic extern - a literal at C's type for it (an integer an I32 where it fits, else an
@@ -17100,7 +17261,7 @@ fn (c mut Checker&) constCond(x ast.Expr&) I64 {
 fn (c mut Checker&) readsConst(x ast.Expr?&) Bool {
     if x is null { return false }
     match x {
-        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Member(_, a, _) { return c.readsConst(a) }
+        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Spread(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Member(_, a, _) { return c.readsConst(a) }
         case ast.Expr.Call(_, f, args) { return c.paramLen(f, args) >= 0 }
         case ast.Expr.Binary(_, _, a, b) { return c.readsConst(a) or c.readsConst(b) }
         case ast.Expr.Chain(_, ch) {
@@ -21093,7 +21254,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
             if (op == token.Tok.Inc or op == token.Tok.Dec) and hitsPath(y, n) { return true }
             return exprAssigns(y, n)
         }
-        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Member(_, y, _), ast.Expr.Generic(_, y, _) {
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Spread(_, y), ast.Expr.Member(_, y, _), ast.Expr.Generic(_, y, _) {
             return exprAssigns(y, n)
         }
         case ast.Expr.IsType(_, y, _, _), ast.Expr.As(_, y, _) { return exprAssigns(y, n) }
@@ -21106,7 +21267,7 @@ fn exprAssigns(x ast.Expr?&, n Array<source.NameId>&) Bool {
             return exprAssigns(f, n) or exprsAssign(args, n)
         }
         case ast.Expr.Slice(_, y, lo, hi) { return exprAssigns(y, n) or exprAssigns(lo, n) or exprAssigns(hi, n) }
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
             return exprsAssign(items, n)
         }
         case ast.Expr.Compr(_, cm) {

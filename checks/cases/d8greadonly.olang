@@ -1,0 +1,7 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# D8g: a variadic parameter is a read-only array - its elements are the caller's arguments
+fn bump(xs ...I64) { xs[0] = 1 }
+
+fn main() {
+    bump(0)
+}

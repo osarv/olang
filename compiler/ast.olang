@@ -24,6 +24,8 @@ type TypeRef enum {
     Any(sp source.Span, of TypeRef&)
     # "? A, B" closing a type-argument list (G8, QAH): the error set given for the type's error-set parameter
     Errs(sp source.Span, items Array<Path&>&)
+    # "...T", a variadic parameter's type (D8g): a read-only array of T, given as the call's arguments
+    Spread(sp source.Span, of TypeRef&)
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
@@ -114,6 +116,11 @@ type Expr enum {
     Default(sp source.Span)                            # "default" as an argument (E14a)
     Named(sp source.Span, name source.NameId, x Expr&)   # "name = x" as an argument, a defaulted parameter by name (E14b)
     Unreachable(sp source.Span, msg Expr?&)            # "unreachable [why]" where a value is expected (S16d)
+    # "...x": an array passed on as a call's variadic arguments (D8g), the rest of an array pattern (S13h) - a bare
+    # "..." there holds the name "_"
+    Spread(sp source.Span, x Expr&)
+    # the arguments a call gives its variadic parameter (D8g), gathered by the checker - never parsed
+    Variadic(sp source.Span, items Array<Expr&>&)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -385,7 +392,28 @@ fn (e Expr&) Span() source.Span {
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
         case Expr.Default(sp): sp
-        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _): sp
+        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _), Expr.Spread(sp, _), Expr.Variadic(sp, _): sp
+    }
+}
+
+# D8g: whether an argument is a variadic parameter's arguments gathered ("...a", or the checker's Variadic of them), or
+# a "...a" alone, or one given by name (E14b)
+fn (e Expr&) IsGathered() Bool {
+    match e {
+        case Expr.Spread(_, _), Expr.Variadic(_, _) { return true }
+        case _ { return false }
+    }
+}
+fn (e Expr&) IsSpread() Bool {
+    match e {
+        case Expr.Spread(_, _) { return true }
+        case _ { return false }
+    }
+}
+fn (e Expr&) IsNamed() Bool {
+    match e {
+        case Expr.Named(_, _, _) { return true }
+        case _ { return false }
     }
 }
 
@@ -393,7 +421,7 @@ fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
         case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _): sp
-        case TypeRef.Errs(sp, _): sp
+        case TypeRef.Errs(sp, _), TypeRef.Spread(sp, _): sp
     }
 }
 
@@ -487,14 +515,14 @@ fn yieldInExprs(xs Array<Expr&>&) source.Span {
 fn yieldInExpr(x Expr?&) source.Span {
     if x is null { return NoYield }
     return match x {
-        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
+        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Spread(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
         case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
         case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _): yieldOr(yieldInExpr(a), yieldInExpr(b))
         case Expr.Cond(_, a, k, b): yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
         case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
         case Expr.Call(_, f, args), Expr.ScopeCall(_, f, _, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
         case Expr.Slice(_, y, lo, hi): yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
-        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
+        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Variadic(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
         case Expr.Try(_, y, cs): yieldOr(yieldInExpr(y), yieldInCatches(cs))
         case Expr.MatchE(_, m): yieldInMatch(m)
         case Expr.Compr(_, k): yieldOr(yieldOr(yieldInExpr(k.Value), yieldInExpr(k.Source)), yieldInExpr(k.Filter))

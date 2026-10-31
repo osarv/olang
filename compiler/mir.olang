@@ -697,7 +697,9 @@ fn (v mut verifier&) shape() Bool {
         if v.local(f.Params[i]) {
             l := f.Locals[I64(f.Params[i])]
             if l.Kind != LocalKind.Param { v.bad("parameter " $i " is local L" $f.Params[i] ", not a Param") }
-            if i < ps.Len() and not v.T.Same(l.Ty, ps[i]) {
+            # D8g: a variadic parameter's local is the read-only array its type's "...T" is
+            spread := i < ps.Len() and v.T.IsSpread(ps[i]) and v.T.IsRef(l.Ty) and v.T.Same(v.T.Referent(l.Ty), v.T.Referent(ps[i]))
+            if i < ps.Len() and not v.T.Same(l.Ty, ps[i]) and not spread {
                 v.bad("parameter " $i " is a " $v.T.Canon(l.Ty) ", its type says " $v.T.Canon(ps[i]))
             }
         }
@@ -1055,8 +1057,9 @@ fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
     if v.sameRepr(from, to) { return true }
     if from == types.NullT { return t.IsRef(to) or t.KindOf(to) == types.Kind.Func }
     if t.IsRef(from) and t.IsRef(to) {
-        # T2c: never null into may be null too - one representation, and a narrowed read the other way
-        pf, pt := t.PermOf(from) | types.Nullable, t.PermOf(to)
+        # T2c: never null into may be null too - one representation, and a narrowed read the other way; D8g: a variadic
+        # parameter's array is the read-only one its argument is
+        pf, pt := t.PermOf(from) | types.Nullable, t.PermOf(to) & ~types.Spread
         return v.sameRepr(t.Referent(from), t.Referent(to)) and (pf | pt) == pf
     }
     return false

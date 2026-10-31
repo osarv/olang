@@ -622,6 +622,8 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
         case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
+        # D8g: a variadic parameter's, a read-only array of what it is written as - "...T" its spelling (Spread)
+        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.Resolve(c, of), types.TypeId(0)), types.Spread)
     }
 }
 
@@ -1338,7 +1340,7 @@ fn (p mut Program&) readsLocal(c Context&, e ast.Expr?&) Bool {
     }
     return match e {
         case ast.Expr.Lit(_, _), ast.Expr.Default(_): false
-        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _): p.readsLocal(c, x)
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Spread(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _): p.readsLocal(c, x)
         case ast.Expr.Binary(_, _, a, b): p.readsLocal(c, a) or p.readsLocal(c, b)
         case ast.Expr.Cond(_, a, k, b): p.readsLocal(c, a) or p.readsLocal(c, k) or p.readsLocal(c, b)
         case ast.Expr.Call(_, f, args): not p.instanceLen(c, f, args) and (p.readsLocal(c, f) or p.anyReadsLocal(c, args))
@@ -2654,7 +2656,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
         }
         case ast.TypeRef.Ref(_, of, _, _) { return mentionsName(of, n) }
         case ast.TypeRef.Perm(_, of, _, _) { return mentionsName(of, n) }
-        case ast.TypeRef.Any(_, of) { return mentionsName(of, n) }
+        case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { return mentionsName(of, n) }
         case ast.TypeRef.Errs(_, items) {
             for e in items {
                 if e.Parts.Len() == 1 and e.Parts[0] == n { return true }
@@ -2722,7 +2724,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut Vec<source.Nam
         }
         case ast.TypeRef.Ref(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
-        case ast.TypeRef.Any(_, of) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { p.introductions(mi, of, ns, inArgs) }
         # QAH: "? E" among a receiver's arguments introduces its error-set variable
         case ast.TypeRef.Errs(_, items) {
             for e in items {

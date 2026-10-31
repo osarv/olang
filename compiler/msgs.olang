@@ -524,6 +524,12 @@ type Diag enum {
     UnhandledFallibleCall
     OperatorCallFails
     PowNone
+    VariadicNotLast
+    VariadicHere
+    VariadicDefault
+    SpreadNotHere
+    SpreadAlone
+    VariadicArgCount
     IsOnlyNull
     IsCaseWritten
     IsNullOfValue
@@ -2338,6 +2344,24 @@ fn JoinPieceCalled() Msg { return Msg(Diag.JoinPieceCalled, "E11b", "'(' after a
 fn UnhandledFallibleCall() Msg { return Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 
 # ERR_OPERATOR_CALL_FAILS
+# ERR_VARIADIC_NOT_LAST
+fn VariadicNotLast() Msg { return Msg(Diag.VariadicNotLast, "D8g", "a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name") }
+
+# ERR_VARIADIC_HERE
+fn VariadicHere(what String&) Msg { return Msg(Diag.VariadicHere, "D8g", "a variadic parameter is a function's, not " $what) }
+
+# ERR_VARIADIC_DEFAULT
+fn VariadicDefault() Msg { return Msg(Diag.VariadicDefault, "D8g", "a variadic parameter takes no default - a call giving it no argument gives it the empty array") }
+
+# ERR_SPREAD_NOT_HERE
+fn SpreadNotHere() Msg { return Msg(Diag.SpreadNotHere, "D8g", "'...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'") }
+
+# ERR_SPREAD_ALONE
+fn SpreadAlone() Msg { return Msg(Diag.SpreadAlone, "D8g", "'...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it") }
+
+# ERR_VARIADIC_ARG_COUNT
+fn VariadicArgCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
+
 # ERR_POW_NONE
 fn PowNone(ty String&, hint String&) Msg { return Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }
 

@@ -1,0 +1,7 @@
+# check: fail error[D8g]: a variadic parameter is the last one but defaulted ones
+# D8g: one variadic parameter
+fn tag(xs ...I64, ys ...I64) I64 { return xs.Len() + ys.Len() }
+
+fn main() {
+    assert tag(1, 2) == 2
+}

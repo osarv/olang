@@ -459,6 +459,13 @@ fn (f formatter&) keyword(j I64) Bool {
 }
 
 # the space the file had between two tokens, written as one space or none
+# whether the "." at index b begins "...": two more after it, nothing between them, and no "." before it
+fn (f formatter&) ellipsisAt(b I64) Bool {
+    if b + 2 >= f.toks.Len() or (b > 0 and f.kind(b - 1) == token.Tok.Dot) { return false }
+    if f.kind(b + 1) != token.Tok.Dot or f.kind(b + 2) != token.Tok.Dot { return false }
+    return not f.toks[b + 1].Has(token.Space) and not f.toks[b + 2].Has(token.Space)
+}
+
 fn (f formatter&) asWritten(b I64) String& {
     return " " if f.toks[b].Has(token.Space) else ""
 }
@@ -538,6 +545,8 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
         pa := f.real[rb - 2]
         if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space) { return f.asWritten(b) }
     }
+    # "..." (D8g, S13h, X21): a space before it, as before a prefix operator, none inside or after it
+    if kb == token.Tok.Dot and f.ellipsisAt(b) { return " " }
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
     if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a]) { return " " }
