@@ -6,6 +6,7 @@
 # Ordinary olang over the C library's time.h imported (§11 X17), as chan and io are.
 
 import ctime "time.h"
+import "time"
 
 # why a wait gave up
 type Stopped error {
@@ -17,12 +18,9 @@ type Stopped error {
 ClockRealtime I32 = 0
 ClockMonotonic I32 = 1
 
-# now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set
-fn NowNs() I64 {
-    ts := ctime.timespec()
-    ctime.clock_gettime(ClockMonotonic, ts)
-    return ts.tv_sec * 1000000000 + ts.tv_nsec
-}
+# now on the monotonic clock, in nanoseconds - never jumps when the wall clock is set; inside time.Virtual the virtual
+# clock, so a deadline fires on it
+fn NowNs() I64 { return time.Now() }
 
 # the wall clock in nanoseconds - only what pthread_cond_timedwait measures its deadlines against
 fn wallNs() I64 {
@@ -68,9 +66,18 @@ fn (t Token&) Reason() ? Stopped {
 }
 
 # the wall-clock time, as a timespec, a wait should next wake at: the deadline if it is near, else soon enough
-# to notice a Cancel() - which no wait can be woken for directly, since the token does not know who is waiting
+# to notice a Cancel() - which no wait can be woken for directly, since the token does not know who is waiting.
+# Inside time.Virtual a deadline is reached at once - the virtual clock moved to it - and the wait gives what it waits
+# for a millisecond to come first
 PollNs I64 = 10000000
 fn (t Token&) WakeAt(ts mut Array<I64>&) {
+    if t.deadline != 0 and time.IsVirtual() {
+        time.Reach(t.deadline)
+        at I64 = wallNs() + 1000000
+        ts[0] = at / 1000000000
+        ts[1] = at % 1000000000
+        return
+    }
     wait I64 = PollNs
     if t.deadline != 0 {
         left I64 = t.deadline - NowNs()
@@ -99,6 +106,22 @@ test "a token with a deadline fires by itself" {
     for not t.Cancelled() { }
     assert NowNs() - start >= 20000000
     try t.Reason() catch Stopped.TIMED_OUT { return }
+}
+
+# inside time.Virtual a deadline fires on the virtual clock: when a task sleeps past it, and at once for a wait
+test After "a deadline fires on the virtual clock" {
+    time.Virtual(fn() {
+        t := After(20000)
+        assert not t.Cancelled()
+        time.Sleep(time.Seconds(19))
+        assert not t.Cancelled()
+        time.Sleep(time.Seconds(1))
+        assert t.Cancelled()
+        u := After(500)
+        ts := Array<I64>(2)
+        u.WakeAt(ts)
+        assert u.Cancelled()
+    })
 }
 
 # a task doing work checks the token itself, at points where stopping is safe. It counts atomically, so the spawner

@@ -11103,6 +11103,9 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         vals[i] = e
         c.P.InferThroughBounds(b)
     }
+    # G9e: a parameter left off whose type is a variable of the call nothing else bound takes its default's type
+    c.defaultBinds(nsp, f, owner, ps, k, recv is not null, b)
+    c.P.InferThroughBounds(b)
     # QAH: an error-set variable nothing fallible bound is the empty set - its instance cannot fail by it
     for i in range nv {
         if b.Vals[i] == types.UnknownT and c.P.ErrVarAt(owner, i) { b.Vals[i] = c.P.ErrSetOf(types.ListId(0)) }
@@ -11839,6 +11842,28 @@ fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want 
     return x
 }
 
+# G9e: each parameter from the k-th on - the ones the call leaves off - whose type is one of owner's variables (or a
+# reference to one), unbound
+# yet, bound to the type of its default, checked in the declaration's context with no instance's arguments. What is
+# wrong with the default is said where the call is given it (callDefault), not here
+fn (c mut Checker&) defaultBinds(nsp source.Span, f I64, owner I64, ps Array<types.TypeId>&, k I64, hasRecv Bool
+                                 b mut generic.Binding&) {
+    fd := c.P.FnDecl(f)
+    off := 1 if hasRecv or fd.Recv is not null else 0
+    d := c.P.L.Diags
+    for pk in range k, ps.Len() {
+        p := ps[pk]
+        v := c.deref(p)
+        if c.P.T.KindOf(v) != types.Kind.Var or c.P.T.A(v) != owner or b.Vals[c.P.T.B(v)] != types.UnknownT { continue }
+        i := pk - off
+        if i < 0 or i >= fd.S.Params.Len() or fd.S.Params[i].Dflt is null { continue }
+        mark := d.Count()
+        x := c.defaultArg(nsp, f, pk, hasRecv, types.UnknownT, types.ListId(0))
+        d.Forget(mark)
+        if typeOf(x) != types.UnknownT { c.unify(p, c.bindType(x), b, false, false) }
+    }
+}
+
 # D8a: a default is computed while compiling - a mutable global it reads has the running program's value (said once,
 # at the global's name in the declaration)
 fn (c mut Checker&) defaultReads(x typed.Expr?&) {
@@ -11877,7 +11902,12 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
         }
     }
     if ps.Len() == 0 or k >= ps.Len() or ps[k].Dflt is null {
-        c.err(sp, msgs.ArgCount(k, "" if k == 1 else "s", k - 1))
+        # E14: how many it takes - from those with no default to all - and the k given
+        need I64 = 0
+        for i, p in ps {
+            if p.Dflt is null { need = i + 1 }
+        }
+        if need == ps.Len() { c.err(sp, msgs.ArgCount(need, "" if need == 1 else "s", k)) } else { c.err(sp, msgs.ArgCountRange(need, ps.Len(), k)) }
         return c.unknown(sp)
     }
     mi := c.P.T.DeclModule(c.P.T.DeclOf(t))
@@ -15415,7 +15445,10 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
                 if cb >= 0 or rd == 0 {
                     cw, ct := c.P.L.Diags.TopContext()
                     # G30/G16b: the instance it is about, where its condition or its message reads one
-                    if not c.readsConst(k) and rd < 0 and not (saidOk and c.reflSaid) { ct = "" }
+                    # ... and the call that asked for it where the assert is the standard library's: the program's
+                    # mistake is the call (time.Virtual outside a test build)
+                    lib := c.P.L.Mods[fr.Mi].Identity.StartsWith("std/")
+                    if not c.readsConst(k) and rd < 0 and not (saidOk and c.reflSaid) and not lib { ct = "" }
                     c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray(), cw, $ct
                                                 saidOk, $said, $written))
                 }
@@ -19733,7 +19766,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     covered mut Vec<Bool>&c = Vec<Bool>()
     et := c.deref(st)
     if c.isEnum(et) {
-        for _ in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
+        # S13g: a case carrying a value of a type with none is never the value matched - covered by nothing written
+        for k in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(c.noValueCase(et, k)) }
     } else if c.P.T.KindOf(et) == types.Kind.Any and c.P.IsClosedTrait(c.P.T.AnyTrait(et)) {
         # T34: a closed trait's "any" covered by a type case for each type the trait lists
         for _ in range c.P.Members(c.P.T.AnyTrait(et)).Len() { covered.Push(false) }
@@ -19993,10 +20027,24 @@ fn (c mut Checker&) anyAs(sp source.Span, x typed.Expr&c, a ast.Expr&, tr ast.Ty
     return c.anyInstance(sp, x, mt, c.failOp(types.TypeId[c.wrongCase()], c.between(a.Span(), tr.Span(), 2), true))
 }
 
+# S13g: whether case k of enum t carries a value of a type that has none - an enum declaring no case, held by value or
+# by a reference never null - so no value of t is that case
+fn (c mut Checker&) noValueCase(t types.TypeId, k I64) Bool {
+    sig := c.P.CaseSig(t, k)
+    if sig == types.UnknownT { return false }
+    for p in c.P.T.Items(c.P.T.Params(sig)) {
+        if c.P.T.IsNullable(p) { continue }
+        q := c.deref(p)
+        if c.isEnum(q) and c.P.T.Items(c.P.T.Cases(q)).Len() == 0 { return true }
+    }
+    return false
+}
+
 # the first of an enum's cases the unguarded rows do not cover (S13a), -1 for none
 fn (c mut Checker&) firstUncovered(rows Vec<Array<ast.Pattern&>&>&, t types.TypeId) I64 {
     n := c.P.T.Items(c.P.T.Cases(t)).Len()
     for k in range n {
+        if c.noValueCase(t, k) { continue }   # S13g
         sig := c.P.CaseSig(t, k)
         ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
         sub mut Vec<Array<ast.Pattern&>&>&rows = Vec<Array<ast.Pattern&>&>()
@@ -20132,6 +20180,7 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
         # the cases column 0 names: where some case is named nowhere only a wildcard covers it, so the rest of the rows
         # with a wildcard there decide (Maranget's default matrix) - each case checked only where all are named
         named := Array<Bool>(n, false)
+        for k in range n { named[k] = c.noValueCase(t, k) }   # S13g
         for r in rows {
             match r[0] {
                 case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
@@ -20157,6 +20206,7 @@ fn (c mut Checker&) coversRows(rows Vec<Array<ast.Pattern&>&>&, ts Array<types.T
             return c.coversRows(sub, rest, depth + 1)
         }
         for k in range n {
+            if c.noValueCase(t, k) { continue }   # S13g
             sig := c.P.CaseSig(t, k)
             ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
             nts Vec<types.TypeId>

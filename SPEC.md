@@ -974,7 +974,10 @@ bound through the methods of the type its constrained variable is bound to (G9c)
 
 A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
 
-**T18.** An enum type must declare at least one case; case names must be unique within the type. A
+**T18.** Case names must be unique within an enum type. An enum declaring **no case** (`type Never enum { }`) has no
+values: nothing makes one, it has no zero value (D13c), so a local, field or global of it cannot be read, and a case
+of another enum carrying one is never the value matched (S13g) - what a generic's parameter left unused can be bound to
+(std/chan's Select). A
 enum's zero value (D13) is its **first declared case**, by representation: a zero tag selects it, and any
 reference in a later case's payload is unreachable without a `match` whose tag test selects that case
 (S13b). A first case carrying no payload therefore makes the type's zero value a complete, meaningful one —
@@ -4559,7 +4562,8 @@ expression position (E1) evaluates to the value of the clause that is selected. 
 `case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
 `return`, `error`, `break`, `continue`, `unreachable` or a `noreturn` call, as D10a decides it with `break`
 and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
-error. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
+error. `case P => unreachable` and `case P => os.Exit(2)` give a value (S16e, D8e), one that never arrives; a
+statement that leaves (`return`, `error`, `break`, `continue`) after `=>` is a compile-time error naming the block. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
 has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
 counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
@@ -4647,6 +4651,11 @@ Nested patterns and literals are refutable, so a clause holding one covers nothi
 expression, which may read them) is evaluated; when it is false the match goes on to the next clause, as though the
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
 guarded clause covers nothing for S13a. A type match (G13) takes no guard: its arm is chosen while compiling.
+
+**S13g (cases with no values).** A case whose payload holds a value of an enum declaring no case (T18) - by value, or
+by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as
+covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
+given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
 
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the
@@ -8021,6 +8030,14 @@ that application's variables through the methods that make it satisfy the trait 
 parameter types and result are matched against those of the method the type supplies under the same name. So a
 `ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
 constraint's check (G19).
+
+**G9e (a default binds what nothing else does).** A parameter the call leaves off (D8a) whose type is one of the
+call's variables, or a reference to one, that no argument, receiver, constraint or lambda bound, binds that variable to
+its default's type - the default checked as the declaration writes it, before any instance is known: `fn
+f<A Named, B Named>(a A, b B = Idle()) String` called as `f(x)` is `f` at `B = Idle`, the default then given as D8a
+gives it. A variable G9c reaches through such a binding's constraint binds then too (std/chan's `Select(a, b)` binding
+its third and fourth cases' types to the defaults' never-ready case). A default that does not say a type (`null`) binds
+nothing, and G4 says what is missing.
 
 **G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
 variable to a reference to its type, writable as any built value is (T25c) - never to the value type. C11 holds no

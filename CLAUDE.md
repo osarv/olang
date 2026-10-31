@@ -1228,6 +1228,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   generator cannot yield references its inner walks hold); an array method or an Iterator default could not be a B7a
   target (only a named type's method could then), so the examples named the adapter types - they name the methods since
   the checker batch (`Iterator.TakeWhile`, `Array.Reversed`).
+- **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31,
+  details mine).** `time.Virtual(fn() { ... })` runs its body on a virtual clock: `Now`/`Wall` read it (from
+  `VirtualStart`, 2000-01-01), `Sleep(d)` moves it on by d at once, std/cancel's deadlines (`NowNs` is `time.Now` now)
+  and `time.After`'s timers fire on it, tasks spawned inside share it (one atomic counter: sleeps add up); a wait with a
+  deadline and nothing to take moves the clock to the deadline and gives what it waits for 1 ms of real time (Go's
+  synctest approximated). Test builds only: elsewhere a call is S18c's false assert at the call's instance (the note
+  now kept for an assert in std), and `if TestBuild` keeps it out of Now/Wall/Sleep. `chan.Select(a, b[, c, d])` takes
+  the first ready of two to four cases in the order given - a channel received from, `SendOf(c, v)`, a `time.Timer`
+  (`time.After(d)`) - as `Ready<A, B, C, D>.First(v)`..`Fourth`, failing with what a case fails with (CLOSED); the
+  cases meet `chan.Case<T ? E>` (`TryNow() T ? E, Exhausted`, `Due() I64`), so time needs no import of chan; it polls
+  (spins, then sleeps to 1 ms, waking for its earliest timer). Two language rules came with it: **G9e** (a parameter
+  left off binds its variable to its default's type: Select's unused cases) and **S13g** (a case carrying a value of an
+  enum of no cases, T18 now allowing one, needs no clause: a match of two clauses over a two-case Select's `Ready` is
+  exhaustive). Limit: a `SendOf(c, v)` written inside a join block is refused by C2d (a local made before it works).
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.

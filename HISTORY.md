@@ -26396,3 +26396,49 @@ of the outer one, a round later. `break` leaves the walk, `continue` the copy. A
 name can be decided (S18c). tests/comptime.olang (run time, baked globals and decided asserts agreeing); checks cases
 comptimelocal, comptimebudget, comptimeglobal, comptimefortry, comptimeforelem, comptimeformany, comptimeforsource,
 comptimeforfails, comptimeforwhile.
+
+## `time.Virtual` and `chan.Select`; defaults binding variables and cases with no values (G9e, S13g, T18, survey2 items 10 and 12, 2026-10-31)
+
+**time.Virtual (item 10).** The user decided on 2026-10-27 ("maybe dont need the trait for it? its not like we are gonna
+be mixing testclocks and normal clocks?") a virtual clock for tests with no clock parameter threaded through the code
+under test, Go's synctest. Built (mine): `time.Virtual<? E>(f fn() ? E) ? E` runs f with `Now()` and `Wall()` reading a
+virtual counter that starts at `VirtualStart` (2000-01-01 00:00 UTC, the same every run) and `Sleep(d)` adding d to it
+and returning; the counter and the depth of running Virtual calls are two mutable globals touched only atomically, so
+tasks spawned inside share the clock. Time passes only as it is slept, and several tasks sleeping at once each move
+the one clock (no per-task time - nothing in the runtime knows which tasks are blocked). A wait with a deadline and
+nothing to take - std/cancel's `WakeAt` (RecvUntil, SendUntil), Select's pause with a timer case - moves the clock to
+the deadline (`time.Reach`) and gives what it waits for one millisecond of real time to arrive: Go's "every other
+goroutine durably blocked" approximated by a quiet millisecond. std/cancel reads `time.Now()` for its deadlines (it had
+its own clock_gettime). Test builds only: every use is behind `if TestBuild` (a local if the build decides, S8b), so
+Now, Wall and Sleep compile to what they were; and Virtual's body begins with `assert TestBuild, ...`, decided false
+while compiling in any other build - an error at the instance the call asked for (Virtual is generic over its error set,
+so only a call checks its body). For that note to reach the program's call, check now keeps the instantiation's note on
+a decided assert in the standard library even where the condition reads nothing of the instance (it was dropped).
+
+**chan.Select (item 12, revised the same day to "build select in std/chan as well").** Decided (mine): `Select(a, b[, c,
+d])`, two to four cases; a case is anything meeting `chan.Case<T ? E>` - `mut TryNow() T ? E, Exhausted` (take it now,
+Exhausted for "not ready", E for a failure) and `Due() I64` (the clock reading it is ready by itself at, 0 for none). A
+channel is one (its `TryNow` is a non-blocking receive, `Error.CLOSED` once closed and drained), so is `SendOf(c, v)`
+(a send, never waiting for room; on a rendezvous channel only when a receiver is waiting - Chan counts its blocked
+receivers now, `waiting`) and `time.Timer` (`time.After(d)`), which std/time declares without importing chan since a
+trait is met implicitly and the error set is a parameter (std/time had no business depending on chan, and chan
+imports time). The result is `Ready<A, B, C, D>`, `First(v A)` to `Fourth(v D)`, the first ready in the order given -
+deterministic; no fairness beyond position. It polls, holding no lock: 64 rounds of spinning, then sleeps doubling from
+10 us to 1 ms, cut to the earliest timer's due time; inside Virtual it reaches that time at once. Its errors are the
+union of its cases' (G1a), so a Select over channels fails with `chan.Error` and one over timers alone cannot fail.
+
+Two language rules made the optional cases possible. **G9e:** `fn Select<..., K Case<C ? E>, ...>(..., c mut K& =
+idle(), ...)` - a parameter the call leaves off had no way to bind K, so `Select(a, b)` was G4's "cannot be inferred".
+Now a left-off parameter whose type is an unbound variable of the call (or a reference to one) binds it to its
+default's type, the default checked in the declaration's context before any instance (its diagnostics forgotten there -
+the fill says them), and G9c's inference through constraints then runs again so C binds through K's. **S13g / T18:**
+with C and D bound to a never-ready case, `Ready` still had four cases and a match of the two that can fire was not
+exhaustive. T18 said an enum declares at least one case, which nothing enforced; it now allows none - a type with no
+values, no zero value, never made - and a case whose payload holds such a value (by value or by a reference never
+null) is never matched, so S13a asks no clause for it (`noValueCase`, in the flat check, `firstUncovered` and
+Maranget's matrix). Rust's empty-enum rule. Found on the way: a constructor called with too few arguments said
+"expected 0 arguments, found -1" (ctorDefault passed the missing index twice) - now it names how many it takes and how
+many were given. Limit: `Select(SendOf(r, 9), ...)` written inside a join block is refused by C2d (the temporary holding
+the channel's reference); a SendOf made in a local before the join works. Tests: std/time's, std/cancel's and std/chan's
+own (Select over receives, sends, a rendezvous, a timer on the virtual clock and the real one, a closed channel),
+tests/defaultbinds.olang; checks cases timevirtualbuild, s13gnovalue.

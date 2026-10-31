@@ -6,7 +6,9 @@
 # at), and private, their bytes pthread's: no module but this one names them, and this one only hands them to pthread.
 
 import "cancel"
+import "time"
 import pthread "pthread.h"
+import ctime "time.h"
 
 
 # This type synchronises its own state, which is exactly what no compile-time rule could know. It used to
@@ -44,6 +46,7 @@ type Chan<T> struct(cap I64) {
     sent I64 = 0
     taken I64 = 0
     closed Bool = false
+    waiting I64 = 0     # the receivers blocked waiting for a value: what a rendezvous send of Select's hands its value to
     lock pthread.pthread_mutex_t
     notEmpty pthread.pthread_cond_t
     notFull pthread.pthread_cond_t
@@ -142,9 +145,11 @@ fn Send<T>(c mut Chan<T>&, v T) ? Error {
 # channel is closed and everything sent before has been taken
 fn Recv<T>(c mut Chan<T>&) T ? Error {
     pthread.pthread_mutex_lock(c.lock)
+    c.waiting++
     for c.count == 0 and not c.closed {
         pthread.pthread_cond_wait(c.notEmpty, c.lock)
     }
+    c.waiting--
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
         error Error.CLOSED
@@ -204,7 +209,9 @@ fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
             try tok.Reason()
         }
         tok.WakeAt(ts)
+        c.waiting++
         pthread.pthread_cond_timedwait(c.notEmpty, c.lock, ts)
+        c.waiting--
     }
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
@@ -468,4 +475,235 @@ test "a channel's capacity is an I64" {
     total I64 = 0
     for _ in range items.Len() { total += try Recv(c) catch Error { unreachable } }
     assert total == 15
+}
+
+# ---- select ----
+
+# what Select waits on (a channel to receive from, SendOf for a send, time.After's timer): TryNow takes what is ready
+# without waiting - failing with Exhausted where nothing is, with E where the case has failed (a closed channel) - and
+# Due is the clock reading (time.Now's) at which it is ready by itself, 0 where nothing but another task makes it so
+type Case<T ? E> trait {
+    mut TryNow() T ? E, Exhausted
+    Due() I64
+}
+
+# which of Select's cases fired, with what it gave: a received value, a send's nothing (Sent), a timer's reading
+type Ready<A, B, C, D> enum {
+    First(v A)
+    Second(v B)
+    Third(v C)
+    Fourth(v D)
+}
+
+# the value a send case gives when it has fired
+type Sent struct() { }
+
+# a send of v on c, as a case of Select: fires once c takes v - a slot free, or on a rendezvous channel a receiver
+# waiting for it
+type SendOf<T> struct(c mut Chan<T>&, v T) {
+    c
+    v
+}
+
+# what a case Select is not given stands for: never ready, of a value no program can hold
+type unused enum { }
+type idle struct() { }
+fn (i mut idle&) TryNow() unused ? Exhausted { error Exhausted.END }
+fn (i idle&) Due() I64 { return 0 }
+
+# the oldest value, without waiting: Exhausted while the channel is empty and open, Error.CLOSED once it is closed and
+# drained
+fn (c mut Chan<T>&) TryNow() T ? Error, Exhausted {
+    pthread.pthread_mutex_lock(c.lock)
+    if c.count == 0 {
+        closed := c.closed
+        pthread.pthread_mutex_unlock(c.lock)
+        if closed { error Error.CLOSED }
+        error Exhausted.END
+    }
+    v := oldest(c)
+    pthread.pthread_mutex_unlock(c.lock)
+    return v
+}
+
+fn (c Chan<T>&) Due() I64 { return 0 }
+
+# the send, without waiting for room: Exhausted while the channel is full, Error.CLOSED once it is closed
+fn (s mut SendOf<T>&) TryNow() Sent ? Error, Exhausted {
+    c := s.c
+    pthread.pthread_mutex_lock(c.lock)
+    try sendOpen(c)
+    if c.count == c.size or (c.rendezvous and c.waiting == 0) {
+        pthread.pthread_mutex_unlock(c.lock)
+        error Exhausted.END
+    }
+    ticket := place(c, s.v)
+    for c.rendezvous and c.taken <= ticket and not c.closed {
+        pthread.pthread_cond_wait(c.notFull, c.lock)
+    }
+    if c.rendezvous and c.taken <= ticket {
+        withdraw(c)
+        try sendOpen(c)
+    }
+    pthread.pthread_mutex_unlock(c.lock)
+    return Sent()
+}
+
+fn (s SendOf<T>&) Due() I64 { return 0 }
+
+# the first of the cases ready, in the order given, taken - waiting until one is: a received value, a send done, a
+# timer's reading, as the Ready case of its position. Two to four cases; one left off is never ready. Fails with what a
+# case fails with (Error.CLOSED: a channel received from or sent on is closed). No case is given priority but by its
+# position; a wait polls - holding no lock - backing off from a spin to a sleep of a millisecond at most, and wakes for
+# the earliest timer it has
+fn Select<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&
+    c mut K& = idle(), d mut L& = idle()) Ready<A, B, C, D> ? E {
+    round I64 = 0
+    for {
+        r := try pick(a, b, c, d) catch Exhausted {
+            pause(round, earliest(earliest(a.Due(), b.Due()), earliest(c.Due(), d.Due())))
+            round++
+            continue
+        }
+        return r
+    }
+}
+
+# the first case ready, in order, taken; Exhausted where none is
+fn pick<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&, c mut K&
+    d mut L&) Ready<A, B, C, D> ? E, Exhausted {
+    x := try a.TryNow() catch Exhausted {
+        y := try b.TryNow() catch Exhausted {
+            z := try c.TryNow() catch Exhausted { return Ready<A, B, C, D>.Fourth(try d.TryNow()) }
+            return Ready<A, B, C, D>.Third(z)
+        }
+        return Ready<A, B, C, D>.Second(y)
+    }
+    return Ready<A, B, C, D>.First(x)
+}
+
+# the earlier of two clock readings a case is due at, 0 standing for none
+fn earliest(x I64, y I64) I64 {
+    if x == 0: return y
+    if y == 0: return x
+    return x if x < y else y
+}
+
+# a wait between two rounds of Select's: none for the first rounds, then a sleep growing to a millisecond - no longer
+# than until due, the earliest timer's reading (0 for none)
+fn pause(round I64, due I64) {
+    if round < 64: return
+    ns I64 = 10000 << (round - 64 if round - 64 < 7 else 7)
+    if ns > 1000000: ns = 1000000
+    if due > 0 {
+        left := due - time.Now()
+        if left < ns: ns = left if left > 0 else 0
+    }
+    if due > 0 and time.IsVirtual() {
+        # inside time.Virtual the timer's deadline is reached at once, and what the cases wait for given a millisecond
+        time.Reach(due)
+        ns = 1000000
+    }
+    realSleep(ns)
+}
+
+# the thread asleep for ns nanoseconds of real time, whatever clock time.Now reads
+fn realSleep(ns I64) {
+    if ns <= 0: return
+    req := ctime.timespec()
+    req.tv_sec = ns / 1000000000
+    req.tv_nsec = ns % 1000000000
+    rem := ctime.timespec()
+    ctime.nanosleep(req, rem)
+}
+
+fn fill(c mut Chan<I64>&, n I64) {
+    for i in range n: try Send(c, i) catch Error { }
+}
+
+test Select "takes the first case ready, in order" {
+    a := Chan<I64>(4)
+    Init(a)
+    b := Chan<String&>(4)
+    Init(b)
+    try Send(b, "hi")
+    match try Select(a, b) {
+        case Ready.First(_) { unreachable }
+        case Ready.Second(s) { assert s == "hi" }
+    }
+    try Send(a, 7)
+    try Send(b, "later")
+    # both ready: the first given wins
+    match try Select(a, b) {
+        case Ready.First(v) { assert v == 7 }
+        case Ready.Second(_) { unreachable }
+    }
+    join { spawn fill(a, 3) }
+    got I64 = 0
+    for _ in range 4 {
+        match try Select(a, b) {
+            case Ready.First(v) { got += v }
+            case Ready.Second(s) { assert s == "later" }
+        }
+    }
+    assert got == 3
+    try Send(a, 5)
+    r := try Select(a, b)
+    assert r == Ready.First(5) and $r == "Ready.First(5)"
+}
+
+fn take(c mut Chan<I64>&, got mut sumBox&) {
+    got.v = I32(try Recv(c) catch Error default -1)
+}
+
+test Select "sends through SendOf, a rendezvous handing its value to a waiting receiver" {
+    full := Chan<I64>(1)
+    Init(full)
+    try Send(full, 1)
+    room := Chan<I64>(1)
+    Init(room)
+    match try Select(SendOf(full, 2), SendOf(room, 3)) {
+        case Ready.First(_) { unreachable }
+        case Ready.Second(_) { assert (try Recv(room)) == 3 }
+    }
+    r := Chan<I64>(0)
+    Init(r)
+    got mut sumBox& = sumBox(0)
+    hand := SendOf(r, 9)
+    more := SendOf(full, 4)
+    join {
+        spawn take(r, got)
+        match try Select(hand, more) {
+            case Ready.First(_) { }
+            case Ready.Second(_) { unreachable }
+        }
+    }
+    assert got.v == 9
+}
+
+test Select "times out on time.After, on the virtual clock in no time" {
+    c mut Chan<I64>& = Chan<I64>(1)
+    Init(c)
+    time.Virtual(fn() {
+        start := time.Now()
+        match try Select(c, time.After(time.Seconds(30))) catch Error { unreachable } {
+            case Ready.First(_) { unreachable }
+            case Ready.Second(at) { assert at >= start + 30000000000 }
+        }
+    })
+    real := time.Now()
+    match try Select(c, time.After(time.Millis(5))) {
+        case Ready.First(_) { unreachable }
+        case Ready.Second(at) { assert at - real >= 5000000 }
+    }
+}
+
+test Select "fails with CLOSED once a channel it receives from is closed and drained" {
+    a := Chan<I64>(1)
+    Init(a)
+    b := Chan<I64>(1)
+    Init(b)
+    Close(a)
+    try Select(a, b) catch Error.CLOSED { return }
+    unreachable
 }

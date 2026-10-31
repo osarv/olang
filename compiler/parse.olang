@@ -3345,9 +3345,10 @@ fn (p mut Parser&) hint(want String&) Bool {
         p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
         return true
     }
-    # S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block
-    if pk == token.Tok.Arrow and (fk == token.Tok.Unreachable or fk == token.Tok.Return or fk == token.Tok.Break or
-                                  fk == token.Tok.Continue or fk == token.Tok.Error) {
+    # S12b: "nomatch => return 0" - a clause that leaves gives no value, so it is a block ("=> unreachable" is a value,
+    # S16e)
+    if pk == token.Tok.Arrow and (fk == token.Tok.Return or fk == token.Tok.Break or fk == token.Tok.Continue or
+                                  fk == token.Tok.Error) {
         from := I64(p.ts.Toks[f].Start)
         end := from
         for end < p.src.Text.Len() and p.src.Text[end] != '\n' { end++ }

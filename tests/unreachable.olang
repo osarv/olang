@@ -27,6 +27,14 @@ fn first(xs Vec<String&>&) String&xs { return xs[0] if xs.Len() > 0 else unreach
 
 fn twice(x I64) I64 { return x * 2 }
 
+fn sign(n I64) I64 {
+    return match n {
+        case 0 => 0
+        case 1 => 1
+        nomatch => unreachable "a sign is 0 or 1"
+    }
+}
+
 fn half(n I64) I64 { return n / 2 if n % 2 == 0 else unreachable "odd: " $n }
 
 BakedSum I64 = sum(I64[1, 2, 3])
@@ -42,6 +50,7 @@ test "unreachable gives way to the values beside it" {
     v.Push("q")
     assert first(v) == "q"
     assert twice(3 if v.Len() == 1 else unreachable) == 6
+    assert sign(1) == 1 and sign(0) == 0
     io.Println(pick("unreachable: ok", true))!
 }
 
