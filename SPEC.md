@@ -6333,7 +6333,9 @@ whole value's flow lengthens where it is built. A **view** of storage - a slice,
 back of an argument's storage - kept where that storage does not already live (past the loop turn or the block that
 built it, or through a reference result past the function) is a compile-time error naming a copy of what the view
 shows (`$x`, `x.Clone()`): `for k in range n { t := $k "-x"; keep.Push(t[0:1]) }` is refused, `keep.Push($t[0:1])`
-accepted.
+accepted. Likewise a **part** of an instance a local's constructor built - a value read out of its field or element -
+kept longer never lengthens where the instance is built: the field takes the binding of the constructor parameter it
+was given (as a field written `&q`, C2d), or the read is O20's error naming a copy (`$p.last`).
 
 **O13a.** A returned value whose **type** declares scope variables (T17c, or a constructor-bearing struct's
 tagged field) carries whatever those were bound to where the value was built. If one of them was bound to one

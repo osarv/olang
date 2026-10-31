@@ -26958,3 +26958,60 @@ parameter, a global or a shared field; read-only is a value result (or parameter
 caller only reads it and nothing changes the source, copying only what may change otherwise. Functions handing back
 views of their input (Split, Trim, First) take `&` or give values.
 
+## The scoping rework, round 1: scopes inferred behind a switch (2026-10-31)
+
+docs/rework.md section 6's first round, built on `wt-rework` and measured there (section 9 of the note has every
+number). `OLANG_SCOPES=infer` reads every written marker, scope argument and `outlives` as bare and lets the scope
+pass place what they placed; without it the compiler is today's, byte for byte (bench's IR and the compiler's own
+binary compared with master's).
+
+**How it was built.** Not 2.3-2.4's separate solver: the judge proposes. A quiet judging of a component records, at
+every refusal a longer placement would meet, the join of the failing bound into the claim of the local the value came
+from (or the landing of the call that made it), and the component is judged again until nothing grows; the reporting
+judgment is today's, run on the result. That is decision 7.1 ("the constraint walk is the judge's own walk") taken
+literally, and every placement is checked by the unchanged rules - when in doubt the walk proposes nothing and the
+program is refused. The one result form (existing storage returned is an obligation) needed a stand-in for permission
+until round 2: a result written `T&p` is read as built but keeps its written permission at calls (`KeptPerm`).
+Reading results as written instead gave 120 T25c errors in std; reading built results writable broke the prelude's
+read-only borrowed results.
+
+**The field inference took four tries.** Promotion asked only by a converged judging's refusals missed `Map.Iter()`'s
+`MapIter`, whose fields became exact once `st` was fixed (below); asked by any failed relation naming a call's result,
+it promoted the Map's own `mapSlot` and broke the Map everywhere (363 errors in the self-build); asked in every judging
+by an instance required to live as long as what it holds, at constructor calls and through obligations passed up, it
+promoted regex's `machine` and `dfa` exactly as written - where the inference had been meeting the same exactness by
+landing every `searcher` (two DFAs and a Pike VM) in the Regex's scope, once per call, and then refusing the split
+value it made (O17). Then
+the AST's types were promoted by functions returning what they construct, and broke where those nodes sit in vectors:
+the give-back now also takes a promotion read through by any refusal at a derived term, not only one built through,
+and names the declaration it was read through however deep along the path (check.olang's own test build promoted
+`types.Table` and built through `c.P.T.Names`; a destructor's own field). The scope fuzzer's three base programs that
+no longer compiled were the same miss.
+A further experiment - promoting on every read out of a field kept too long, before lifting - was reverted (six new
+errors in the self-build, nothing gained: the lifts it would have saved were claims on existing storage).
+
+**O20 came back.** A program whose instance, made per loop turn, had a field read out and kept past the turn was
+compiling - by lifting the local, so the whole instance was built in the loop's enclosing scope every turn. 2.6 and
+section 3 say that read is O20's error where the field cannot have a binding; it is now (`PartKept`), a part of what a
+local's constructor built never lifting the local. Measured cost: nothing in std, the corpus or compiler/ was lifted so.
+
+**Found: a hole on master.** `storeThrough` called a read-only reference not exact whatever it reached, so a
+read-only reference to a structure of writable references, held in a bare field, let a callee build through an element
+at the container's scope: checks' `derivedcopybuild` with its `&ns` deleted reads freed storage under `-sanitize` on
+master. Fixed under the switch only (where what it reaches holds writable references, it is exact); on master it would
+refuse seven places in compiler/, and round 2's permission rule replaces the reading.
+
+**Found: a second hole, fixed on both paths.** The `-sanitize` run of the checks cases the inference newly accepts
+caught one reading freed storage (`strstorelocal`): the inference had promoted a field, and a lambda capturing the
+instance built through it. Written by hand (`hh mut Node&h = h`), master compiled and ran into freed storage too: in a
+lambda the instance's bindings are not tracked, and the store fell to the scope pass's one gap, which no driver
+reported. It is C2d's `BuildThroughUnknownScope` now, and section 8's gaps stop a build as the checker's do
+(`checks/cases/c2dcapturebuild.olang`; bench's IR and the compiler unchanged).
+
+**What it showed.** No hidden `W` was ever needed; the solver lifts 242 locals and lands 69 calls in the compiler, and
+promotes 15 of its fields; 14 of std's 23 written `&q` fields come out promoted where a program needs them, the other
+9 compile in their containers' scope. The refusals left are by design - O27 at a kept view, T22a for function values
+relating their arguments or handing one back (`T&p` results: a capability the design's contract removes, measured at
+two checks scenarios), D18c's borrowed-element generators (element forms not inferred yet) - and one field shape no
+spelling can save (a field set after construction from one of several parameters, section 9.6). Folding (2.9) was
+counted, not built.

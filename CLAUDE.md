@@ -967,7 +967,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   structural handle on memory left. Optimization (the user: a tiny block's overhead may be skipped): a block whose
   allocations are bounded and small, with no loop between it and the enclosing scope, is folded into that scope (no
   header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). The rules below are
-  today's until it lands.
+  today's until it lands. **Round 1 is built behind `OLANG_SCOPES=infer`** (2026-10-31, `wt-rework`, measured in
+  docs/rework.md section 9; without the switch bench's IR and the compiler are byte-identical).
 - **No scope names (O3, O4a, O13, O14, O26, the user's design 2026-10-05).** A marker is bare `&`, `&x` (lives where
   `x` does) or `&return`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding
   references too; a scope argument `f&x()` (E25). A result is built (`T&`, in the result scope, which lands where the

@@ -796,4 +796,199 @@ Only what a person must decide; each with a recommendation. The rest is section 
    scope and is also built through where no binding is known (2.6, step 4), the program has no spelling left to say
    which (today it writes `&q` and builds elsewhere). **Recommended: nothing now; bring the cases round 1 finds**, each
    with the restructure it needs; a run-time binding (the instance carrying its field's scope, a word per instance) is
-   the fallback if they recur.
+   the fallback if they recur. The user (2026-10-31): no run-time binding; round 1 lists the cases - section 9.6.
+5. **Function values handing back an argument's storage** (found by round 1). 2.7's contract also makes a function
+   whose result is a view of its argument no value - `fn first(a Array<I64>&) Array<I64>&a`, made a value today of a
+   type writing `Array<I64>&a`; measured at two checks scenarios, none in std or compiler/. **Recommended: with round
+   2's rule** (a `T&` result hands back only storage reached through a `&` parameter, a global or a shared field), read
+   a function type's `T&` result as borrowed from its `&` parameters - one fixed convention, no syntax - so such a
+   function fits; until then, call it directly.
+
+## 9. Round 1, measured
+
+Built on `wt-rework` behind `OLANG_SCOPES=infer` (2026-10-31); without the switch the compiler is today's (9.2). `OLANG_SCOPESTATS=1` prints what the inference did (or, given a directory, writes it there per build);
+`OLANG_INFERDUMP=1` lists every lift with its line.
+
+### 9.1 What was built, and where it departs from sections 2 and 6
+
+- **The switch** (`source.InferScopes`): the parser reads every written marker as bare (`&x`, `&return`), a scope
+  argument `f&x()` as a plain call and an `outlives` chain as nothing; the module key holds the mode, so objects of the
+  two never mix. check reads a local named only by an erased marker as read (D3b).
+- **The solver is the judge, iterated** (decision 7.1 taken literally; 2.3-2.4's union-find not built). Each component
+  is judged quietly; every refusal that a longer placement would meet proposes one - a failed FIT lengthens the claim of
+  the local the value comes from (through `:=`, match bindings, held subjects and tuples, conditionals' and matches'
+  arms), a callee obligation failing at a call lengthens the argument's local or lands the call's result there (then
+  existing storage, as O18c's landing), a task's argument and a part of a call's result likewise - each proposal the
+  join on 2.4's order (outermost block; a block and a scope variable at the variable; anything and `P` at `P`). Lifts
+  only grow and terms are finite, so the rounds end; then the unchanged judgment runs on the result and reports. Value
+  locals borrowed whole move their own storage too (a run-time array's elements into an outer block, by
+  `plan.Stored`/`lower.storageOf`); nothing is lifted into a generator's per-Next result scope (D18b); a result that may
+  hold a destructor is never landed longer for what its callee requires (2.5's destructor timing).
+- **`W` was not needed.** A join of two scope variables no obligation orders keeps today's behaviour (the first, with
+  an obligation between them - what `x T&a` forces) and is counted: **0** in std, the corpus, the checks' run cases and
+  the compiler. So no hidden parameter was built (lowering, emit, interp and free.olang unchanged).
+- **One result form** (2.7): existing storage returned is the obligation `t ⊒ R`. A result written borrowed (`T&p`)
+  is read as built for section 8 but keeps its written permission at calls (`types.KeptPerm`; check reads the erased
+  name from the source span) - a stand-in until round 2's permission rule, which replaces it.
+- **O27** (SPEC, provisional, under the switch only): summaries mark a relation that keeps a view (`rel.View`); a view
+  kept past its storage's block or returned through `&` is `ViewKept`/`ViewReturned`, never lifted.
+- **O20 under the inference**: a part (a field, an element) of what a local's constructor built, kept longer, never
+  lifts the local - its field gets a binding of its own, or the read is refused (`PartKept`: "'p.last' lives where 'p'
+  does, which closes first - keep a copy ('$p.last'), or keep what 'p' was made from"). Lifting would build the whole
+  instance longer, every loop turn (9.6's `Later`).
+- **The field inference** (2.6) as an outer loop over dry whole-program judgings (at most 16 rounds). Promotion
+  is asked (a) by a read out of a field, or an O17 split lend, refused in a converged judging; (b) in every judging, by
+  an instance required to live as long as what it holds - a bare field storing its argument exactly (`st`), `R ⊒ V(a)` -
+  at a constructor's call, or passed up from a constructor building it into its own field or a function returning it:
+  met by the field's binding, never by landing the instance longer (regex's `machine`, `List.Iter()`'s `Iter`); (c) by a
+  callee's value result that must outlive something, refused in a converged judging (`Map.Iter()`). A field is given the
+  binding of the parameter its initializer reads (else the constructor's one reference parameter); a field the
+  constructor builds (`m mut machine& = machine(...)`) lives with its instance and is never promoted. **Give-back**: a
+  promoted field built through, stored into, claimed or read through by a refusal where its binding is not known
+  (O23a, C2d's unknown-binding errors, a failed fit or obligation at a derived term) goes back to its container's scope
+  for good.
+- **`st` closes a hole under the switch**: a read-only reference to a structure holding writable references is exact
+  where it is stored (9.7). Without the switch it is unchanged (closing it there refuses seven places in compiler/).
+- **Not built**: folding (2.9) - counted only (9.4); D18c's element forms (a generator yielding borrowed elements is
+  refused, 9.5); `explain`/`doc`/hover showing inferred scopes; the scope fuzzer's own inference cases.
+
+### 9.2 Today's path unchanged
+
+Without the switch: the IR of all 15 `bench/` programs is byte-identical to master's (31a1a8b, built from its own
+sources), and the compiler built by both is the same binary (`-quick`). The one change on this path is 9.7's second
+hole: a program that read freed storage is refused.
+
+### 9.3 Under the switch
+
+| run | result |
+|---|---|
+| std's tests (54 files) | 54 pass |
+| tests/ (37 files) | 36 pass with four lines of shared.olang changed by hand (below); generators.olang refused (D18c) |
+| the compiler building itself | 0 errors; the inferred compiler rebuilds itself to the same binary (fixed point) |
+| compiler/'s and tools/' test files (82) | 79 pass; 3 fail only because the front end they test reads the switch too, on snippets that write markers (scope.olang's plans and C2d/P1g tests, generic.olang's function types, olang.olang's explain) - built under the switch and run without it, all pass |
+| std's and tests/' files under `-sanitize` (90, shared.olang as above) | 90 pass |
+| checks/checks.olang | 66 of its 70 tests pass; the four: the cases (below), `-i` running a program the build refused (it is accepted now), the import-alias scenario (T22a, 9.5) and generators (D18c) |
+| the 102 must-fail cases that compile, run under `-sanitize` | 101 clean; `c2downfieldread` stops at a null it reads on purpose (`h0.kid!`), before anything scopes decide (T2b) |
+| the checks' 255 run cases interpreted, `OLANG_DEADREGIONS=1` | 253 as today (status and output); the 2 others refused (T22a, 9.5) |
+| scope fuzzer (200 programs, 1,046 scenarios) | 0 findings |
+| `fuzz free` (120 programs, 911 scenarios, 1,494 places freed early) | 0 findings, as today |
+
+Of checks/cases' must-fail programs, 102 compile under the switch, 22 more fail only on an unread local (D3b - the
+error they were written for is gone), and 50 fail with another rule's message: 20 T25c (the permission readings round 2
+replaces), 9 D18c or T22a, 2 O27, 19 another section-8 rule saying the same. Of the run cases and scenarios, only
+9.5's fail: `t22sharedscopegeneric`, `vec20byname`, n2 (T22a) and `views` (D18c).
+
+shared.olang's four lines: two `words.Push(t)` of a slice of a turn's text kept past the turn (O27 - `$t`), a test
+asserting a signature's marker spelling (`rdPick(a RdNode&, b RdNode&a) RdNode&a`, which no longer exists), and
+`t22sLink` passed as a function value (T22a, open point 1).
+
+### 9.4 Memory and time
+
+- **The compiler itself**, one cold `-quick` build of compiler/ by each compiler, peak RSS: today's compiler 1.902 GB;
+  the compiler built under the inference, doing the same build, 1.920 GB (+0.9%); the build under the switch 2.158 GB,
+  its scope phase 1.26 s -> 6.43 s (`OLANG_TIMES`, a loaded machine): the field loop judges the whole program again per
+  round. In the compiler the inference lifts 242 locals (11 with their own storage, 2 for a part of them kept - claims
+  on existing storage, nothing built longer), lands 69 calls and needs no `W`.
+- **bench/**: all 50 rows built under the switch give today's output; peak RSS within 276 KB of today's in every row
+  (3.674 GB against 3.675 GB summed; fannkuch 1.95 -> 1.72 MB).
+- **Folding (2.9)** would reach 2,233 of the 4,099 blocks something is built in, in the compiler (plain blocks:
+  branches, arms, `{ }`); not built, and the bound not measured - the plan holds no site sizes yet.
+
+### 9.5 Programs refused, by cause
+
+- **O27** (a view kept past its storage): shared.olang's two `words.Push(t)` (9.3) and two checks cases that expected
+  another rule there.
+- **T22a, function values**: `t22sLink` (tests/), and the checks' `t22sharedscope*`, `vec20byname` and `vecalias`'s n2 -
+  the last two a function returning a view of its argument (`fn first(a Array<I64>&) Array<I64>&a`) made a value. 2.7's
+  contract refuses those too: no function type can say that its result is its argument's, so this is open point 1's
+  loss widened from "relating two arguments" to "handing back an argument's storage" - section 8, point 5.
+- **D18c**: generators yielding borrowed elements (`Iterator<String&t>`, `Iterator<T&return>`) - tests/generators.olang,
+  the checks' `views` scenario and its D18c cases; their element forms are read from the written marker today.
+- **Tests of a marker's spelling**: shared.olang's `RdSig`, generic.olang's "function types carry what their markers
+  say", olang.olang's explain test of a signature's obligations.
+- **O20**: nothing in the repository; 9.6's `Later` is the shape.
+
+### 9.6 Fields
+
+Promoted where some program needed it, of std's 23 written `&q` fields: **14** - `MapIter` (3), `MapKeyIter` (2),
+`MapValueIter` (2), std/list's `Iter` (2), regex's `machine` (2), `dfa` (2), `searcher` (1). Needed by no program
+measured, so left in their containers' scope (each compiles there): csv's `Rows.text`, deque's `Iter.d`, `ArrayIter`,
+`ReversedIter`, `CycleIter`, `LineIter.text`, regex's `parser.t` and `Match.t`, utf8's `RuneIter.t` (9). Promoted with
+no `&q` written: the prelude's `IndexIter`, `ReversedIndexIter`, `CycleIndexIter`, json's `ObItemsIter` and four of
+the corpus's types (these hold read-only references to structures of writable ones, which `st` now makes exact). The
+compiler's own build promotes 15 fields - `MapIter`'s and `MapKeyIter`'s, and `Eval` (4), unparse's `writer` (3),
+`printer`, `DtorWalk`, definit's `Walker` - after 34 given back on the way.
+
+**Fields round 1 cannot place** (open point 4 - the user: no run-time binding; list them). None in std, the corpus or
+the compiler is refused for it. A field cannot be given a binding where its initializer reads no parameter and the
+constructor has none or several reference parameters - it is set after construction: 15 such fields in compiler/ of
+declarations a refusal once asked about (emit's `Emitter` 8 and `fnEm` 3, such as `tagAt String& = ""`, load's
+`Loader` 3, lsp's `worker` 1) and a checks case's `Node.next`, all compiling in their containers' scope. The shape
+that is refused:
+
+```
+type Later struct(a String&, b String&) {
+    x String&a = a
+    y String&b = b
+    last String&a = ""          # set by a method, to a view of what 'a' names
+}
+fn (p mut Later&) take() { p.last = p.x[0:1] }
+fn main() {
+    kept := Vec<String&>()
+    for _ in range 3 {
+        p mut Later& = Later("hello", "world")
+        p.take()
+        kept.Push(p.last)       # O20: 'p.last' lives where 'p' does, which closes first
+    }
+}
+```
+
+Today `last String&a` says where it lives. With `last String& = a` the inference gives it `a`'s binding and the
+program compiles; as written, nothing can say it, and the fix is `kept.Push($p.last)`.
+
+### 9.7 Found on the way
+
+- **A hole on master** (pre-existing, section 8): a read-only reference to a structure holding writable references,
+  stored in a bare field, lets a callee build through an element read out of it at the container's shorter scope -
+  `checks/cases/derivedcopybuild.olang` with its `&ns` deleted runs into freed storage under `-sanitize` on master:
+
+  ```
+  type View struct(ns Array<mut Node&>&) {
+      at Array<mut Node&>& = ns
+  }
+  fn grow(x mut Node&) { x.next = Node(x.v + 100) }
+  fn visit(w View&) {
+      x := w.at[0]
+      grow(x)                   # builds where w's instance lives, which closes before the node's
+  }
+  fn work(a Array<mut Node&>&) { visit(View(a)) }
+  ```
+
+  `storeThrough` called a read-only reference not exact whatever it reached. Under the switch it is exact where what it
+  reaches holds writable references; on master it is left (seven refusals in compiler/ would follow) for round 2, whose
+  permission rule replaces this reading anyway.
+- **A second hole, fixed in both paths**: a lambda capturing an instance built through the instance's `&p` field -
+  inside the lambda the instance's bindings are not tracked, and the store fell to the scope pass's one gap ("a
+  temporary stored where its slot's scope is not known here"), which nothing reported: the new node lived in the frame
+  and was read after it closed (`checks/cases/c2dcapturebuild.olang`, now C2d's `BuildThroughUnknownScope`; found
+  because the inference promoted the field of `strstorelocal.olang`). section 8's gaps now stop a build as the
+  checker's, lowering's and emission's do. bench's IR and the compiler's binary are unchanged by it.
+- **Inference placing less than a marker did**: a reference local holding a constructor's instance whose field is
+  returned (`h mut Holder& = Holder(a, b); return h.x`, called 2M times) takes 82 MB today - the instance outlives the
+  call - and 1.8 MB inferred, the instance in the frame.
+
+### 9.8 What this decides for round 4
+
+- **std and compiler/ migrate mechanically.** Under the switch both compile with every marker read as bare and run as
+  before, so round 4's tool only deletes spellings there; what needs a person is the corpus's four lines (9.3), the
+  borrowed-element generators (until 9.1's D18c forms are inferred), and the function values of 9.5.
+- **The checks are mostly a reclassification**: of today's must-fail cases, 102 compile under the switch (each run
+  under `-sanitize` clean - 9.3) and 22 more fail only on an unread local, so they become run cases or go where
+  they test a marker; 50 more fail with another rule's message, most of them T25c's permission readings (round 2) and
+  D18c's.
+- **Two holes go with round 2**: the `st` reading of read-only references (9.7) is the permission rule's to replace,
+  and KeptPerm with it.
+- **Left for later rounds**: a part kept through a callee - a constructor reading its argument's field
+  (`checks/cases/c2downfieldread.olang`) - still lifts the whole local, where O20 should refuse or promote (one case);
+  the field loop's cost (cache the judgings of components no promotion touches); folding; inferred scopes shown by
+  `explain`, `doc` and hover.
