@@ -26549,3 +26549,23 @@ bench timings (min of 7, interleaved) moved by a geometric mean of 0.994 against
 Vec push's 0.855 -> 0.815 s agreed with its counts. So by the decision's rule the weights stay: every call's error edge
 is written `, !prof !99`, `!99` beside the fixed alias tags in every object. Not weighted: a join's failure edge (rare
 and not in loops), the entry's and harness's (once).
+
+## Optimizations from the survey, built (docs/optsurvey.md, 2026-10-31)
+
+The survey of 2026-10-27 (docs/optsurvey.md) measured fifteen missed optimizations; this batch builds the ones that
+change no meaning, in order of payoff per effort, and leaves out its items 2 and 5 (temporaries on the stack, a result
+copied into a reference parameter): both are placement decisions of section 8, which the held scoping rework (QCB) will
+redo. `x.Pow(2.0)` is not folded (QBV, the user's open question). Measured as the survey measured: callgrind's
+instructions retired (Ir) of builds at `-target x86-64-v3` (valgrind decodes no AVX-512), before with master's compiler
+(1de5612), after with the batch's; the programs are bench/'s at smaller sizes and the survey's reproducers in
+bench/repro/.
+
+**1. The allocator's bump path inlined.** `__olang_scope_alloc_a` was one body holding the ten-instruction bump and
+the whole slow path (a scope's first chunk, the pool's spare, a forwarded stand-in, a region, a new chunk), its inline
+cost ~290 against LLVM's 250, so every allocation was a call. It is now `alwaysinline` with only the bump, and calls
+`__olang_scope_alloc_slow` (`noinline`, the old rest) when the head chunk is missing or full. Nothing else changes: emit
+already copies the runtime's `alwaysinline` bodies into every module as `available_externally`, and an item's
+references are followed, so the slow path's declaration comes with it. Measured (Ir): binary-trees 14 185.0M -> 130.9M
+(the C arena 127.4M); text 200000 100.3M -> 94.7M; k-nucleotide 200000 247.0M -> 243.4M; Vec push 2M 36.5M -> 32.5M;
+regex 1 172.4M -> 165.2M; sha256 and the generator filter unchanged; dispatch's enum row 21.3M -> 22.3M (its setup's
+pushes, laid out differently).

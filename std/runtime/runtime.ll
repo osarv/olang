@@ -977,8 +977,10 @@ entry:
 
 ; bump-allocates size bytes from scope, aligned to aln (a power of two, at least 8), growing (linking on one more
 ; chunk) if the current one doesn't have room. O8a: a struct's or an enum's storage takes its own alignment
-; (cgAllocAlign) - the size class an array's takes would leave a 40-byte struct 64 bytes apart from the next
-define noalias ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) {
+; (cgAllocAlign) - the size class an array's takes would leave a 40-byte struct 64 bytes apart from the next. Only the
+; bump is here, so it is inlined wherever a scope allocates (a dozen instructions); everything else - a scope's first
+; chunk, the spare, forwarding, a region, a new chunk - is __olang_scope_alloc_slow's, never inlined
+define noalias ptr @__olang_scope_alloc_a(ptr %scope, i64 %rawsize, i64 %aln) alwaysinline {
 entry:
   ; every allocation is rounded up to 8 bytes so the NEXT one starts 8-aligned. The bump offset is a
   ; raw byte sum, so without this a 12-byte "Array<I32>(3)" left the following allocation at offset 12 -
@@ -1019,9 +1021,22 @@ bump:
   %newused = add i64 %csaligned, %size
   store i64 %newused, ptr %csusedptr, !tbaa !60
   ret ptr %result
-  ; the pool's spare 4KB chunk when it is there and holds this (O8b) - what a block allocating a little on each pass
-  ; of a loop takes every time, taken here; anything else is __olang_new_chunk's
 needchunk:
+  %slow = tail call ptr @__olang_scope_alloc_slow(ptr %scope, i64 %rawsize, i64 %aln)
+  ret ptr %slow
+}
+
+; __olang_scope_alloc_a where the scope's head chunk is missing or has no room for size bytes: the pool's spare 4KB
+; chunk when it is there and holds this (O8b) - what a block allocating a little on each pass of a loop takes every
+; time, taken here; a forwarded stand-in's scope (P2), a region (O8d); anything else is __olang_new_chunk's
+define noalias ptr @__olang_scope_alloc_slow(ptr %scope, i64 %rawsize, i64 %aln) noinline {
+entry:
+  %sizeup = add i64 %rawsize, 7
+  %size8 = and i64 %sizeup, -8
+  %size0 = icmp eq i64 %size8, 0
+  %size = select i1 %size0, i64 8, i64 %size8
+  %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
+  %head = load ptr, ptr %headptr, !tbaa !59
   %isfwd = icmp eq ptr %head, @__olang_fwd_chunk
   br i1 %isfwd, label %forward, label %notfwd
 forward:

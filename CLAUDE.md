@@ -1312,6 +1312,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   carries the target's CPU and features and `null_pointer_is_valid`; LLVM 18's BF16/F16 bugs are worked around (BF16
   narrowing as integer arithmetic, asm fences on F16 bitcasts, FastISel off in `-debug`, AVX512-BF16 conversions removed -
   T4, E33, B2c, B12c). The arena under `-sanitize` poisons with `0x7FF5...`, protects and holds back closed chunks.
+- **Optimizations from the survey (docs/optsurvey.md; built 2026-10-31, HISTORY.md "Optimizations from the survey,
+  built"; none changes meaning).** Its items 2 and 5 wait for the scoping rework (section 8 placement); `Pow(2.0)` is QBV's.
+  - 1: the arena's bump path `alwaysinline`, the rest `__olang_scope_alloc_slow` (`noinline`) - binary-trees 185 -> 131M Ir.
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
