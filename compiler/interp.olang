@@ -518,6 +518,11 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     for i in x.Globals {
         match x.Bodies[i].Of {
             case typed.BodyOf.Global(m, n) {
+                if writtenMut(c.P.GlobalDecl(m, n)) {
+                    mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
+                    out.Put(i, mimg)
+                    continue
+                }
                 img := try x.M.Image(m, n) catch eval.NotBaked {
                     if c.ComptimeSites.Has(i) {
                         why, _, _ := valueWhy(x.M.Stopped, x.Bodies[i].Sp)
@@ -602,6 +607,7 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
             continue
         }
         kept := eval.Image()
+        kept.Mutable = img.Mutable
         for j in range img.Blobs.Len() {
             if newIdx[j] < 0 { continue }
             b := img.Blobs[j]
@@ -845,6 +851,16 @@ fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
         }
     }
     return types.UnknownT
+}
+
+# a mutable global's first value, where its initializer gives one while compiling (K1) that is plain data - no
+# reference, so nothing it holds is storage of the program's: emit writes it as the writable storage's initial value and
+# runs nothing at startup (std/time's counters). Any other is set at startup, as it was, and says nothing here
+fn (x mut Exec&) bakeMutable(m I64, n source.NameId) eval.Image ? eval.NotBaked {
+    img := try x.M.Image(m, n, true)
+    if img.Blobs.Len() != 1 or img.Blobs[0].At.Len() != 0 { error eval.NotBaked.REFUSED }
+    img.Mutable = true
+    return img
 }
 
 fn writtenMut(v ast.VarDecl?&) Bool {

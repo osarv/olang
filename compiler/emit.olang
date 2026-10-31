@@ -483,9 +483,6 @@ fn (e mut Emitter&) emitAll() {
     p := e.P
     instKeys := e.reusing()
     inits := e.initOrder()
-    for m in inits {
-        if not e.Module or m == p.L.Root { e.want(mir.FnKey.Init(m)) }
-    }
     tests Vec<I64>
     mainBody I64 = -1
     for i in range e.Lw.Bodies.Len() {
@@ -509,6 +506,8 @@ fn (e mut Emitter&) emitAll() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
                 if e.Lw.Bodies[i].Root is null { continue }
+                # K2: a baked global's initializer is never run - its value is its storage's - so it is not written
+                if e.Baked.Has(i) { continue }
                 h := e.homeOf(k)
                 if e.ReusedAt.Has(h) {
                     # a reused module's: declared, for the objects that name it (the entry calls a global's
@@ -519,6 +518,13 @@ fn (e mut Emitter&) emitAll() {
                 }
             }
             case _ { }
+        }
+    }
+    # the root's globals the entry sets at startup (every one K2 did not bake), defined in the root's own object
+    if not e.Module {
+        for i in e.globalOrder(inits) {
+            k := mir.FnKey.Body(typed.BodyId(I32(i)))
+            if not e.Baked.Has(i) and e.homeOf(k) == p.L.Root { e.want(k) }
         }
     }
     for k in instKeys { e.want(k) }
@@ -1746,6 +1752,14 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if b >= 0 and e.Baked.Has(b) {
         img := try e.Baked.Get(b) catch default eval.Image()
         text := e.bakedText(s, img)
+        if img.Mutable {
+            # a mutable global's first value written as its storage's (interp.bakeMutable): plain data, declared
+            # elsewhere as the writable global it is
+            ty := e.ty(t) if t != types.UnknownT else ""
+            ext := $"@" $s " = external global " $ty if ty != "" else $"@" $s " = external global i8"
+            e.item(s, m, text, $ext "\n")
+            return "@" $s
+        }
         at := try text.Find(" = constant ") catch default -1
         end := try text.Find("}>") catch default -1
         decl := $"@" $s " = external constant " $text[at + 12:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
@@ -1770,9 +1784,9 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
         b := img.Blobs[j]
         q I64 = 0       # the next of its references another global's image holds (K2b)
         name := "@" $s if j == 0 else "@" $s ".k" $j
-        # K2: an immutable global's own storage is never written once set - only immutable ones are baked - so it is a
-        # constant, whose loads LLVM folds
-        kind := "constant" if j == 0 else "internal constant" if b.Constant else "internal global"
+        # K2: an immutable global's own storage is never written once set, so it is a constant, whose loads LLVM folds;
+        # a mutable one's first value is its storage's (interp.bakeMutable)
+        kind := ("global" if img.Mutable else "constant") if j == 0 else "internal constant" if b.Constant else "internal global"
         tyText, valText := StringBuilder(), StringBuilder()
         at I64 = 0
         for r in range b.At.Len() + 1 {

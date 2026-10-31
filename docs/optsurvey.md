@@ -28,7 +28,7 @@ of a loop body.
 | 12 | **done 2026-10-31** [Integer `Sqrt` divides twice](#12-integer-sqrt-divides-twice) | `x.Sqrt()` on integers | 47 Ir against F64's 3.6 | prelude | minutes | none |
 | 13 | [`match` is a compare chain with a trap](#13-match-is-a-compare-chain-with-a-trap) | `match` over many cases | 8-way: 13.7M against C's switch 11.1M Ir | emit | hours | none |
 | 14 | [Every empty array is an allocation](#14-every-empty-array-is-an-allocation) | `Vec<T>()`, `Array<T>(0)` | `Vec` + two pushes 150 Ir; one of its three allocations is the empty buffer | runtime, emit | hours | check E10 |
-| 15 | [Small leftovers](#15-small-leftovers) | `nounwind`, I128 division by a constant, baked globals' startup code under `-quick` | regex binary -4%; 27.5 against 10.3 Ir; 6k Ir at startup | emit | minutes each | none |
+| 15 | **done 2026-10-31 (nounwind, startup code; I128 division not built)** [Small leftovers](#15-small-leftovers) | `nounwind`, I128 division by a constant, baked globals' startup code under `-quick` | regex binary -4%; 27.5 against 10.3 Ir; 6k Ir at startup | emit | minutes each | none |
 
 Needs a decision before it is built: `x.Pow(2.0)` as `x * x` (section 16, X8's exactness), and - only if section 7 is
 taken further than proposed - what a stale `View()` reads after a Vec grows in place. Everything else is the

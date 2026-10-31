@@ -26603,3 +26603,23 @@ the runtime's #0 and #1, end in `nounwind`. Instruction counts unchanged (regex 
 regex binary 106,608 -> 102,512 bytes, its `.eh_frame` 0xae8 -> 0x70 bytes. A `-debug` build keeps its frames for a
 debugger in `.debug_frame`. Stated with it: a C++ exception thrown through olang frames (a foreign library's) was
 already never caught there; now it is undefined, as any unwind through a `nounwind` C function is.
+
+**15c. Baked globals' initializers not written; a mutable global's first value baked.** Two findings in one place.
+Every module's `olang.init.MODULE` function (calling each of its globals' initializers) was wanted in every program
+build, though nothing calls it - main, the test harness and a library's start call each global's initializer
+themselves, skipping the baked ones - and it named every initializer, baked or not, so each was compiled and linked
+under `-quick` and compiled for LTO to delete. Emit no longer wants it, writes no initializer of a baked global, and
+wants the root's own unbaked initializers directly. And a mutable global whose initializer the evaluator computes to
+plain data (no reference - a number, a struct of numbers; std/time's virtual clock's counters) is now baked too: its
+value is its writable storage's initial value (`@G = global <{ ... }>`, `eval.Image.Mutable`), so nothing runs for it
+at startup. The evaluator computes such an initializer only for this (`Global(.., baking, mutable)`); every other read
+of a mutable global while compiling is still refused (placeReady), and an initializer it refuses is set at startup and
+says nothing. A three-global probe under `-quick`: 212,488 -> 166,744 bytes, startup Ir level (269k: main had already
+skipped the baked ones). tests/globalstart.olang holds mutable globals of numbers, a struct, a U128 and a reference
+written and read at run time, built, `-quick`, `-debug` and `-sanitize`.
+
+**15b, not built: 128-bit division by a constant.** LLVM calls `__divti3` for an I128 divided by a constant where it
+multiplies by a magic number at 64 bits. Doing it in emit means a 256-bit multiply-high (24 straight-line instructions
+at x86-64-v3, measured on hand IR against `__divti3`'s small-divisor path) and the magic number of a 128-bit divisor
+computed in the compiler with 256-bit arithmetic it does not have; the survey called it rare, and the gain on its probe
+(27.5 against 10.3 Ir an element) is mostly the multiply's. Left for when 128-bit code matters (FPGA, hashing).

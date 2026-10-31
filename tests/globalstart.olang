@@ -1,0 +1,48 @@
+# A mutable global's first value written as its storage's (K2's evaluator, docs/optsurvey.md item 15): where its
+# initializer gives plain data while compiling - a number, a struct of numbers - nothing runs at startup for it, and
+# the program reads and writes it as before; one holding a reference, or one the evaluator cannot compute, is set at
+# startup as it always was. Each read here is at run time, after the value the evaluator gave.
+
+type GsPoint struct(x I64, y F64) {
+    x
+    y
+}
+
+fn gsTwice(n I64) I64 { return n * 2 }
+
+GsBase I64 = 20
+
+GsCount mut I64 = 7
+GsSum mut I64 = gsTwice(GsBase) + 1            # a call and an immutable global, computed while compiling
+GsAt mut GsPoint = GsPoint(3, 1.5)
+GsOn mut Bool = true
+GsWide mut U128 = U128(1) << 100
+GsList mut Array<I64>& = I64[1, 2, 3]          # holds a reference: set at startup
+GsAfter mut I64 = GsBase + 2
+
+fn gsBump() I64 {
+    GsCount++
+    return GsCount
+}
+
+test "a mutable global starts at the value its initializer gives, and is written as any" {
+    assert GsCount == 7 and GsSum == 41 and GsOn and GsAfter == 22
+    assert GsAt.x == 3 and GsAt.y == 1.5 and GsWide == U128(1) << 100
+    assert gsBump() == 8 and gsBump() == 9 and GsCount == 9
+    GsAt.x += 4
+    GsAt = GsPoint(GsAt.x, GsAt.y * 2.0)
+    assert GsAt.x == 7 and GsAt.y == 3.0
+    GsOn = not GsOn
+    assert not GsOn
+    GsList[1] = 5
+    assert GsList[0] + GsList[1] + GsList[2] == 9
+    GsSum = GsSum - 1
+    assert GsSum == 40
+}
+
+# the evaluator's own reading of the same initializers, as a baked immutable global
+GsBaked I64 = gsTwice(GsBase) + 1
+
+test "the evaluator computes the initializer as the run time would" {
+    assert GsBaked == 41
+}
