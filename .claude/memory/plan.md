@@ -630,3 +630,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   regenerated; verified on the merge) and wt-tool40 (fast-forward, verified on its tip): effects under signatures,
   G42 function facts, `explain -caps` (B11c), G18a needs shown and errors at the call, `olang api` (B21), `# not a
   value: why`. Running: rework round 1 (wt-rework), the language batch (wt-lang40), the dependency map (wt-deps).
+- 2026-10-31 CET: rework round 1 merged (2431678, fast-forward, verified on its merge with master): inferred scopes
+  behind OLANG_SCOPES=infer - the default path byte-identical (bench IR, the compiler binary); under the switch std
+  54/54, the self-build a fixed point, sanitizer/fuzzers clean, peak memory 1.920 vs 1.902 GB, bench RSS within 276 KB;
+  0 hidden W parameters needed; 15 fields promoted in compiler/, 14 of std's 23 &q fields; refused: O27 kept views (2
+  in shared.olang), T22a function values, D18c borrowed-element generators. Also fixed: scope-pass gaps now stop a build
+  (a lambda building through an instance's &p field read freed storage). Next: round 2 (& means may write).

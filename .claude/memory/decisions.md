@@ -2154,3 +2154,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   values. ASKED.
 - Read-only by values DECIDED 2026-10-31 (the user: "yes, make it the rule"). In the rework's round 2.
 
+- Rework round 1 (2431678, behind OLANG_SCOPES=infer) - decided by me, user absent: open point 5 YES - in round 2 a
+  function type's `T&` result reads as borrowed from its `&` parameters (so `fn first(a Array<I64>&) Array<I64>&`
+  becomes a value again); the field loop's compile-time cost (scope phase 1.26 -> 6.43 s on the compiler) must come
+  down before the switch becomes the default (round 2 or 4: judge only what a promotion touches); the pre-existing
+  master hole (storeThrough reading any read-only reference as inexact - checks/cases/derivedcopybuild.olang without
+  `&ns` reads freed storage) is closed by round 2's permission rule, and until then stays recorded. For the user on
+  return (their point 4): no field anywhere in the repository needs a run-time scope; the one refused shape is a field
+  set after construction in a struct with several reference parameters (`last String&a = ""` assigned a view of
+  another field later), refused with O20 naming `$p.last` - written `last String& = a` it is inferred.
