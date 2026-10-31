@@ -523,6 +523,7 @@ type Diag enum {
     JoinPieceCalled
     UnhandledFallibleCall
     OperatorCallFails
+    PowNone
     IsOnlyNull
     IsCaseWritten
     IsNullOfValue
@@ -2337,6 +2338,9 @@ fn JoinPieceCalled() Msg { return Msg(Diag.JoinPieceCalled, "E11b", "'(' after a
 fn UnhandledFallibleCall() Msg { return Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 
 # ERR_OPERATOR_CALL_FAILS
+# ERR_POW_NONE
+fn PowNone(ty String&, hint String&) Msg { return Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }
+
 fn OperatorCallFails(text String&) Msg { return Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
 
 # ERR_IS_NOT_REFERENCES

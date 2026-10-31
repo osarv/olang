@@ -1,0 +1,7 @@
+# check: fail error[T6b]: I64 does not flow into U32 - convert it, as U32(x)
+# E5a: an integer's exponent is a U32 (Pow's parameter), a literal adapting to it and a variable converted
+fn main() {
+    k := 3
+    n := 2 ** k
+    assert n == 8
+}

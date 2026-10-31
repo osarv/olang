@@ -1,0 +1,7 @@
+# check: fail error[E5a]: '**' calls Pow, which Bool has none of
+# never: declare
+# E5a: a Bool has no Pow, and a built-in type gets methods only from the prelude (M19d) - nothing to declare
+fn main() {
+    b := true ** 2
+    assert b
+}

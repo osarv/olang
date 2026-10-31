@@ -282,8 +282,8 @@ compile-time errors.
 valid token starting at the current position):
 
 ```
-+  -  *  /  %  ,  .  ?  =  :=
-+=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
++  -  *  **  /  %  ,  .  ?  =  :=
++=  -=  *=  **=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --  !
 ==  !=
 <  <=  >  >=
@@ -2971,7 +2971,8 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | "embed" unary | { unary-op } postfix   (embed: E38)
+unary    ::= "not" binary | text | "embed" unary | { unary-op } power   (embed: E38)
+power    ::= postfix [ "**" unary ]                                    (E5a)
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
@@ -3082,7 +3083,22 @@ The bitwise operators bind tighter than the comparisons and looser than the shif
 is `(x & 1) == 0`, `a | b < c` is `(a | b) < c`.
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
-exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
+exception (E7a), and `**` binds tighter than they do (E5a). The conditional `a if c else b` (E28) binds looser than
+every binary operator.
+
+**E5a (`**`, the power).** `a ** b` is `a` raised to the power `b`: the call of `a`'s type's `Pow` with `b` (E31), so
+on a number it is the prelude's method - `x ** 2.0` is `x.Pow(2.0)` for a float, its exponent of the float's own type,
+and `n ** 3` is `n.Pow(3)` for an integer, its exponent a `U32` (M19d) - and a type declaring `Pow` takes it as it takes
+`+` through `Plus`. It binds **tighter than the prefix operators** and **to the right**, as in mathematics: `-x ** 2`
+is `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`, and the exponent is a `unary`, so `2.0 ** -1.0` needs no parentheses; a
+`$` renders the `postfix` after it, so `$x ** 2` raises the text and `$(x ** 2)` is written. The exponent adapts to
+`Pow`'s parameter as an argument does (T6: a literal, a literal-only expression); a literal base adapts to the number
+type wanted where one is (an initializer's, an operand's beside a typed one, E6d), and is otherwise of its own type
+(T6a), as a literal receiver is (E13c) - so `e F32 = 2.0 ** 3.0` is an `F32` and `2.0 ** f` with `f` an `F32` an
+`F64`. An integer exponent that is no literal is a `U32` or converted to one (`n ** U32(k)`), as `n.Pow(k)` asks. A
+type with no `Pow` - a `Bool`, a struct declaring none - has no power, a compile-time error naming `Pow`. On arrays
+`**` works lane by lane (E39), each lane its element type's `Pow`. `x **= y` is `x = x ** y` (S4), its exponent adapting
+as `**`'s does. `Pow` folds where its exponent is constant (M19d), so `x ** 2.0` is `x * x`.
 
 **E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
 type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
@@ -3844,6 +3860,7 @@ type declares one:
 |---|---|---|
 | `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | `Plus`, `Minus`, `Mul`, `Div`, `Rem` | one operand, a result |
 | `a @ b` | `MatMul` | one operand, a result |
+| `a ** b` | `Pow` | one operand, a result (E5a) |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
 | `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
@@ -4351,7 +4368,7 @@ names written, never by where references lead: storage reached through a referen
 `x = E.Neg(r)`, or `q.a` where `q` and `p` name one instance in `p.a = E.Neg(q.a)` - is the program's own, and makes the
 cycle it says.
 
-**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
+**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "**=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
 corresponding binary operator (§5.2) - or the operator method the target's type declares for it (E31) - and its own
 operand-type requirements, except that the place is evaluated **once**: `a[next()] += 5` calls `next` once, reads that

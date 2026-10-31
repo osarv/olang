@@ -2011,6 +2011,7 @@ fn (p Parser&) one(n source.NameId, sp source.Span) NameList&p {
 fn isAssignOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq: true
+        case token.Tok.StarStarEq: true
         case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq: true
         case token.Tok.CaretEq: true
         case _: false
@@ -2667,6 +2668,7 @@ fn (p Parser&) prec(k token.Tok) I64 {
         case token.Tok.Shl, token.Tok.Shr: 0 if p.noGt else 9
         case token.Tok.Plus, token.Tok.Minus: 10
         case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: 11
+        case token.Tok.StarStar: 12
         case _: 0
     }
 }
@@ -2822,9 +2824,22 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) { p.exprs.Push(try p.piece()) }
             return ast.Expr.Join(p.from(at), gather(p.exprs, from))
         }
-        case _ { return try p.postfix() }
+        case _ { return try p.power() }
     }
     unreachable
+}
+
+# E5a: a postfix expression raised to a power - "x ** y", tighter than a prefix operator ("-x ** 2" is "-(x ** 2)")
+# and right-associative ("2 ** 3 ** 2" is "2 ** 9"): the exponent a unary, so "2 ** -1" is read too
+fn (p mut Parser&) power() ast.Expr&p ? Fail {
+    x := try p.postfix()
+    if not p.sees(token.Tok.StarStar) { return x }
+    p.advance()
+    y := try p.unary()
+    sp := source.Span(x.Span().Start, p.prevEnd)
+    try p.enter()
+    p.leave()
+    return ast.Expr.Binary(sp, token.Tok.StarStar, x, y)
 }
 
 # a piece of text: a literal, or "$" rendering what follows
@@ -3339,6 +3354,7 @@ fn (p mut Parser&) reportAt(i I64, m msgs.Msg) {
 fn isJoiningOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
+        case token.Tok.StarStar: true
         case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le: true
         case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr: true
         case _: false

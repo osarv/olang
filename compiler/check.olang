@@ -1079,7 +1079,7 @@ OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus
     opShape("BitAnd", 1, true, true), opShape("BitOr", 1, true, true), opShape("BitXor", 1, true, true)
     opShape("ShiftLeft", 1, true, true), opShape("ShiftRight", 1, true, true), opShape("BitNot", 0, true, true)
     opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false)
-    opShape("Eq", 1, true, false), opShape("Str", 0, true, false)]
+    opShape("Eq", 1, true, false), opShape("Str", 0, true, false), opShape("Pow", 1, true, true)]
 
 # a function's type variables (G1, G4, G19): none named after a type, each constrained only by a trait; each written in
 # a parameter's type, or in the constraint of one that is, so a call can infer it
@@ -7726,6 +7726,7 @@ fn (c mut Checker&) opnd(op token.Tok, x ast.Expr&, want types.TypeId) typed.Exp
 # a binary operator: "and"/"or" a conditional (E7); on numbers a Prim at the type its operands meet at (T6b, E6d) - a
 # literal adapting to the other operand where it fits it; on Bools "==", "!=" and xor
 fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr&c {
+    if op == token.Tok.StarStar { return c.power(sp, a, b, want) }
     if op == token.Tok.EqEq or op == token.Tok.NotEq {
         # R11b, T20: an error value compared with a word, an error type or a set
         ec := c.errCompare(sp, op, a, b)
@@ -7911,6 +7912,7 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         ta = typeOf(x)
         tb = typeOf(y)
     }
+    if op == token.Tok.StarStar { return c.powValues(sp, opSp, x, y) }
     if compares(op) and op != token.Tok.EqEq and op != token.Tok.NotEq and (c.laneArray(ta) or c.laneArray(tb)) {
         how := "a.LanesLess(b)" if op == token.Tok.Lt else ("b.LanesLess(a)" if op == token.Tok.Gt else ("not b.LanesLess(a)" if op == token.Tok.Le else "not a.LanesLess(b)"))
         c.err(opSp, msgs.LaneCompare(msgs.Tok(op.Text()), how))
@@ -8012,8 +8014,63 @@ fn operatorName(op token.Tok) String& {
         case token.Tok.Caret: "BitXor"
         case token.Tok.Shl: "ShiftLeft"
         case token.Tok.Shr: "ShiftRight"
+        case token.Tok.StarStar: "Pow"
         case _: ""
     }
+}
+
+# ---- the power operator (E5a, E31) ----
+
+# "a ** b": a's type's Pow called with b (E31) - a number's the prelude's. The exponent adapts to Pow's parameter (a
+# float's own type, an integer's U32); a literal base to the number type wanted where one is, else it is its own type
+# (T6a), as a literal receiver is (E13c). On lanes it is lane by lane (E39)
+fn (c mut Checker&) power(sp source.Span, a ast.Expr&, b ast.Expr&, want types.TypeId) typed.Expr&c {
+    opSp := c.between(a.Span(), b.Span(), 2)
+    w := c.deref(want) if want != types.UnknownT else types.UnknownT
+    x := c.value(c.expr(a, c.literalBeside(w) if c.litLike(a) and c.isNumber(w) else types.UnknownT), a.Span())
+    if typeOf(x) == types.UnknownT {
+        c.expr(b, types.UnknownT)
+        return c.unknown(sp)
+    }
+    if c.laneOf(x) >= 0 or c.laneArray(typeOf(x)) {
+        y := c.laneArg(b, c.powExponent(c.laneElemType(x)))
+        return c.laneBinary(sp, opSp, token.Tok.StarStar, x, y)
+    }
+    y := c.value(c.expr(b, c.powExponent(typeOf(x))), b.Span())
+    return c.powValues(sp, opSp, x, y)
+}
+
+# x ** y on two checked values: x's type's Pow called with y (E31), said where it has none
+fn (c mut Checker&) powValues(sp source.Span, opSp source.Span, x typed.Expr&c, y typed.Expr&c) typed.Expr&c {
+    t := c.deref(typeOf(x))
+    if t == types.UnknownT or typeOf(y) == types.UnknownT { return c.unknown(sp) }
+    m := c.powMethod(t, opSp)
+    if m < 0 {
+        hint := " - declare 'fn (x " $c.ty(t) ") Pow(y E) " $c.ty(t) "'" if c.isNamed(t) and not c.isNumber(t) else ""
+        c.err(opSp, msgs.PowNone(c.ty(t), hint))
+        return c.unknown(sp)
+    }
+    c.opCall = c.text(c.P.FnDecl(m).Name)
+    return c.invoke(sp, opSp, m, x, Array<ast.Expr&>(0), c.one(y))
+}
+
+# the Pow "**" calls on a value of type t (E31): a declared type's own (either spelling, M6b), else a default method
+# the prelude gives the numbers; -1 for none
+fn (c mut Checker&) powMethod(t types.TypeId, at source.Span = source.Span(-1, -1)) I64 {
+    d := c.deref(t)
+    if c.isNamed(d) and not (c.isNumber(d) and c.P.Extends(d)) {
+        m := c.roleUse(d, "Pow", 1, at, "'**'") if at.Start >= 0 else c.roleMethod(d, "Pow", 1)
+        if m >= 0 { return m }
+    }
+    ds := c.P.DefaultMethods(d, c.P.L.Names.Intern("Pow"))
+    return ds[0] if ds.Len() == 1 else -1
+}
+
+# the type "**" takes its exponent as on a value of type t: its Pow's parameter (a float's own type, an integer's
+# U32), Unknown where that is not known
+fn (c mut Checker&) powExponent(t types.TypeId) types.TypeId {
+    if t == types.UnknownT { return t }
+    return c.operandParam(c.powMethod(t), c.deref(t))
 }
 
 # x op y through the operator's method on x's type (E31): "a > b" is "b.Less(a)", "a <= b" "not b.Less(a)", "a >= b"
@@ -16315,6 +16372,7 @@ fn compoundOp(op token.Tok) token.Tok {
         case token.Tok.PlusEq: token.Tok.Plus
         case token.Tok.MinusEq: token.Tok.Minus
         case token.Tok.StarEq: token.Tok.Star
+        case token.Tok.StarStarEq: token.Tok.StarStar
         case token.Tok.SlashEq: token.Tok.Slash
         case token.Tok.PercentEq: token.Tok.Percent
         case token.Tok.ShlEq: token.Tok.Shl
@@ -16470,6 +16528,14 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         return
     }
     bop := compoundOp(op)
+    if bop == token.Tok.StarStar and not c.laneArray(t) {
+        # E5a: "x **= y" is "x = x ** y", the exponent adapting to Pow's parameter
+        if t == types.UnknownT { return }
+        y := c.value(c.expr(value, c.powExponent(t)), value.Span())
+        r := c.powValues(sp, osp, c.read(sp, typed.Lvalue.Target(sp, t)), y)
+        c.emit(typed.Stmt.Assign(sp, p, c.fit(r, t, sp)))
+        return
+    }
     if c.laneArray(t) and laneTok(bop) {
         # E39: "a += b" on an array - in place, lane by lane, in one loop
         c.laneAssign(sp, osp, bop, p, value)
@@ -16655,8 +16721,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
         if value is null {
             x = c.lit(sp, pt, floatBits(c.under(pt), 1.0) if c.P.T.IsFloat(c.under(pt)) else 1)
         } else {
-            x = c.value(c.expr(value, pt), vsp)
-            if typeOf(x) != pt and c.isNumber(typeOf(x)) and c.P.Flows(typeOf(x), pt) { x = c.convert(vsp, x!, pt) }
+            x = c.value(c.expr(value, c.powExponent(pt) if op == token.Tok.StarStarEq else pt), vsp)
+            if op != token.Tok.StarStarEq and typeOf(x) != pt and c.isNumber(typeOf(x)) and c.P.Flows(typeOf(x), pt) { x = c.convert(vsp, x!, pt) }
             bop := compoundOp(op)
             if (bop == token.Tok.Shl or bop == token.Tok.Shr) and not c.shiftInRange(pt, x!, vsp) { return true }
         }
@@ -16699,7 +16765,11 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
     } else if laneK >= 0 {
         c.laneStore(sp, osp, compoundOp(op), pt, c.laneTarget(sp, p2), laneK, lanePre)
     } else {
-        if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Lvalue.Target(sp, pt)), v) }
+        if op == token.Tok.StarStarEq {
+            v = c.fit(c.powValues(sp, osp, c.read(sp, typed.Lvalue.Target(sp, pt)), v!), pt, sp)
+        } else if op != token.Tok.Assign {
+            v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Lvalue.Target(sp, pt)), v)
+        }
         c.emit(typed.Stmt.Assign(sp, p2, v!))
     }
     for l in range nl {
@@ -17684,7 +17754,8 @@ LaneMagic I64 = 1 << 40
 fn laneTok(op token.Tok) Bool {
     return op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star or op == token.Tok.Slash or
            op == token.Tok.Percent or op == token.Tok.Amp or op == token.Tok.Pipe or op == token.Tok.Caret or
-           op == token.Tok.Shl or op == token.Tok.Shr or op == token.Tok.Xor or op == token.Tok.And or op == token.Tok.Or
+           op == token.Tok.Shl or op == token.Tok.Shr or op == token.Tok.Xor or op == token.Tok.And or op == token.Tok.Or or
+           op == token.Tok.StarStar
 }
 
 # the methods every array has that take lanes as they are (E39): the totals, the comparisons, the choice
@@ -17799,6 +17870,7 @@ fn (c mut Checker&) laneBinType(op token.Tok, ta types.TypeId, tb types.TypeId) 
     }
     if not c.isNumber(ta) or not c.isNumber(tb) { return types.UnknownT }
     if op == token.Tok.Shl or op == token.Tok.Shr { return ta if c.isInt(ta) and c.isInt(tb) else types.UnknownT }
+    if op == token.Tok.StarStar { return ta if c.powMethod(ta) >= 0 else types.UnknownT }   # E5a: Pow's receiver's type
     m := ta
     if ta != tb { m = c.P.Meet(ta, tb) }
     if m < types.TypeId(0) { return types.UnknownT }

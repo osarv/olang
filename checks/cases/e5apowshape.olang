@@ -1,0 +1,10 @@
+# check: fail error[E31]
+# also: Pow
+# E5a, E31: a method Pow of one parameter is the operator, held to its shape - it gives a result
+type Pt struct(x I64) { x }
+
+fn (p Pt) Pow(n U32) { }
+
+fn main() {
+    Pt(1).Pow(2)
+}

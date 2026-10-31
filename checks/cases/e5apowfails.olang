@@ -1,0 +1,8 @@
+# check: fail error[E31]: this operator calls Pow, which can fail - write 'try' before the expression
+# E5a, E31: a Pow that fails makes "**" fail as written
+import "std/arith"
+
+fn main() {
+    c := arith.Checked(I32(3)) ** 21
+    assert c.Value > 0
+}
