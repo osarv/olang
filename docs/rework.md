@@ -1409,6 +1409,15 @@ spelling).
   path too): a binding of a payload or a reference read out of a parameter wrote "effects: none" for `match h { case
   One(x) { x.v = n } }`; such locals now stand for their parameter (effects.olang's `derive`).
 
+- **A variadic struct's elements were references** (round 2a): `headers ...Header` was gathered into an
+  `Array<Header&>` (the element taken bare, by pointer), which no `Array<Header>&` parameter took - std/http's `Get`
+  did not compile under the switches (it has no tests, so verify-params never saw it). An array element stays an array
+  held by a read-only reference (T7a); a struct is held by value, the gathered array being read-only already
+  (`generic.spreadBare`).
+- **A read-only copy stored where it can be written asked nothing of its fields**: `for i, h in headers { all[i] = h }`
+  was refused though `Header`'s fields are never written through. Its own reference fields are now asked read-only
+  (`askTypeFields`, the FRO mechanism of 12.1), the store refused only where one of them is written through somewhere.
+
 ### 12.4 Today's path
 
 Without the switches nothing changes: every new path is behind `source.NewParams` (the scope pass's too); `make quick`
