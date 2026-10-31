@@ -622,3 +622,44 @@ fn quoted(s String&) String {
     b.PushChar('"')
     return b.ToString()
 }
+
+# ---- what imports reach (B11c) ----
+
+# each module the program loads - the root first, then the others in the order loaded, the prelude and C imports left
+# out - with the classes its code may reach through everything it calls, each with the module where it is reached
+# first; a call through a function value runs code of some module, whose own line says what it reaches
+fn Caps(c mut typecheck.Checker&) String {
+    fx := c.Effects()
+    mods := c.P.L.Mods
+    reach := Array<effects.Facts>(mods.Len(), effects.Facts())
+    for b in range c.Bodies.Len() {
+        mi := fx.ModuleOf(b)
+        if mi >= 0 { effects.Merge(reach[mi], fx.Of(b)) }
+    }
+    ids Vec<String&>
+    for m in mods { ids.Push($m.Identity) }
+    order Vec<I64>
+    order.Push(c.P.L.Root)
+    for mi in range mods.Len() {
+        if mi != c.P.L.Root and capsShown(mods[mi].Identity, mods[mi].Prelude) { order.Push(mi) }
+    }
+    width I64 = 0
+    for mi in order {
+        if ids[mi].Len() > width { width = ids[mi].Len() }
+    }
+    b := StringBuilder()
+    for mi in order {
+        f := reach[mi]
+        for k in range effects.CapCount {
+            if f.Via[k] == mi { f.Via[k] = -1 }     # reached in the module itself: no module to name
+        }
+        text := effects.CapText(f, ids.ToArray())
+        b.Push($ids[mi].PadEnd(width) "   " $(text if text != "" else "none") "\n")
+    }
+    return b.ToString()
+}
+
+# whether a module has a line of its own: not the prelude's, not a C header's or a C file's
+fn capsShown(identity String&, prelude Bool) Bool {
+    return not prelude and not identity.StartsWith("<") and not identity.EndsWith(".h") and not identity.EndsWith(".c")
+}

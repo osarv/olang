@@ -30,6 +30,7 @@ import rt "runtime"
 import "eval"
 import "interp"
 import "explain"
+import "api"
 import "bindgen"
 import "profile"
 import "session"
@@ -65,7 +66,8 @@ ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", 
     "mcp"
     "fix"
     "bindgen"
-    "profile"]
+    "profile"
+    "api"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -80,6 +82,7 @@ Mcp I64 = 10
 Fix I64 = 11
 Bindgen I64 = 12
 Profile I64 = 13
+Api I64 = 14
 
 # what each mode is, for help
 ModeUsage Array<String&> = String&[
@@ -89,7 +92,7 @@ ModeUsage Array<String&> = String&[
     "olang test [OPTION...] FILE.olang..."
     "olang interpret [OPTION...] FILE.olang [ARGUMENT...]"
     "olang format [OPTION...] FILE.olang..."
-    "olang explain RULE | FILE.olang NAME"
+    "olang explain RULE | FILE.olang NAME | -caps FILE.olang"
     "olang help [MODE]"
     "olang doc [OPTION...] FILE.olang [NAME] | -html DIR [FILE.olang...]"
     "olang lsp [OPTION...]"
@@ -97,6 +100,7 @@ ModeUsage Array<String&> = String&[
     "olang fix [OPTION...] FILE.olang|DIR..."
     "olang bindgen [OPTION...] HEADER.h"
     "olang profile [OPTION...] FILE.olang [ARGUMENT...]"
+    "olang api OLD NEW FILE.olang|DIR"
 ]
 ModeWhat Array<String&> = String&[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
@@ -113,14 +117,15 @@ ModeWhat Array<String&> = String&[
     "rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)"
     "writes a C header's declarations as olang declares them, read by clang (X16)"
     "builds the program with a sampling profiler, runs it with the arguments after the file, and reports where its time went, with a flame graph (B20; interpret's runs are not profiled)"
+    "lists what a module's exported interface gained, lost and changed between two versions - commits or directories - each change marked as breaking importers or not (B21)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS"]
-OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8207, 256, 2, 11, 8, 8]
+    "-quick", "-html", "-library", "-memory", "-fuzz", "-fuzztime", "-caps"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", "", "NAME", "SECONDS", ""]
+OptModes Array<I64> = I64[12294, 15, 15, 15, 1887, 10079, 10079, 2080, 8207, 256, 2, 11, 8, 8, 64]
 OptWhat Array<String&> = String&[
     "writes the executable, the object, bindgen's declarations or profile's flame graph to PATH (B3h, X16, B20)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -136,6 +141,7 @@ OptWhat Array<String&> = String&[
     "reports the places that keep what they let go of until their scope closes, and why (B18)"
     "fuzzes the one test NAME names (as test's words do) with libFuzzer, failing inputs saved beside the file (B19)"
     "with -fuzz: stops fuzzing after SECONDS (B19)"
+    "prints what each module the program loads may reach - files, network, processes, environment, threads, C (B11c)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -178,6 +184,7 @@ type CommandLine struct() {
     Output String& = ""
     Check Bool = false
     Html String& = ""
+    Caps Bool = false
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -239,6 +246,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 10 { c.Library = true }
             if o == 11 { c.Memory = true }
             if o == 12 { c.Fuzz = $v }
+            if o == 14 { cl.Caps = true }
             if o == 13 {
                 n := try v.ParseInt(10) catch default -1
                 if n < 1 { try usage(d, msgs.FuzzTimeNotNumber(v)) }
@@ -315,7 +323,12 @@ fn checkOutput(out String&, d mut diag.Diagnostics&) ? Bad {
 fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
     cl := try Parse(args, c, d)
     if cl.Mode == Help { return cl }
-    if cl.Mode == Explain {
+    if cl.Mode == Explain and cl.Caps {
+        # B11c: one program's file, nothing after it
+        if not cl.HasWord or cl.Files.Len() > 0 or not endsWithOlang(cl.Word) { try usage(d, msgs.CapsOneFile()) }
+        cl.Files.Push($cl.Word)
+        cl.Word = ""
+    } else if cl.Mode == Explain {
         if not cl.HasWord { try usage(d, msgs.ExplainNeedsRule()) }
         if cl.Files.Len() == 0 {
             if endsWithOlang(cl.Word) { try usage(d, msgs.ExplainNeedsName(cl.Word)) }
@@ -329,6 +342,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
         try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
+    if cl.Mode == Api and cl.Files.Len() != 3 { try usage(d, msgs.ApiUsage()) }
     if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen or cl.Mode == Profile) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
@@ -342,7 +356,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
     # the tools that only analyze need no clang, as interpret does not (B12)
-    tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp
+    tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp or cl.Mode == Api
     c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp or (tool and c.Clang == ""), d) catch target.Bad {
         error Bad.Usage
     }
@@ -409,6 +423,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         text := try help(cl, d) catch Bad { return said(d) }
         return write(text)
     }
+    if cl.Mode == Explain and cl.Caps { return session.CapsMode(cl.Files[0], c) }
     if cl.Mode == Explain {
         if cl.Files.Len() == 1 {
             return build.Explain(fe, c, cl.Files[0], cl.Word, d)
@@ -423,6 +438,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     }
     if cl.Mode == Bindgen { return bindgen.Run(cl.Files[0], cl.Output, target.FindClang()) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
+    if cl.Mode == Api { return api.Mode(cl.Files[0], cl.Files[1], cl.Files[2], c) }
     if cl.Mode == Lsp { return lsp.Serve(c) }
     if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]) }
     files := cl.Files.ToArray()
@@ -1019,7 +1035,7 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run\n")
+            "interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run\n")
     assert mistake(String&["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(String&["test", "-output", "x", "m.olang"]) ==

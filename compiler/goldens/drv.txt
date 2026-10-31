@@ -216,12 +216,12 @@
 | status 1
 === olang bogus
 | stdout:
-| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run
+| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
-| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run
+| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -398,7 +398,7 @@
 | status 0
 === olang help nope
 | stdout:
-| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run
+| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test

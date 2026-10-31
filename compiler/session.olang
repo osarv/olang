@@ -1064,6 +1064,22 @@ fn Format(path String&, text String&) String ? fmt.Unparsable {
     return try fmt.FileLayout(source.Source($path, text), std, fmt.PreludeTypes(std), false, said)
 }
 
+# ---- explain -caps (B11c) ----
+
+# "olang explain -caps": what each module of the program file is the root of may reach, on the standard output; the
+# status 1 where the program does not check
+fn CapsMode(file String&, cfg mut build.Config&) I32 {
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+    a := Analyze(file, cfg, d, Map<String&, String&>(), false)
+    if d.Errors() > 0 or a.C is null {
+        say(d.Render())
+        say(d.Summary())
+        return 1
+    }
+    say(explain.Caps(a.C!))
+    return 0
+}
+
 # ---- doc (B14) ----
 
 # "olang doc": the documentation of file - of its item word where it is not "" - on the standard output; or, html not

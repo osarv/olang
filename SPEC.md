@@ -7400,9 +7400,10 @@ the file system), `network` (a socket, a connection, a name looked up), `process
 one), `environment` (reading or setting its variables), `threads` (a task started, `spawn` or a thread C makes) and `C`
 (an extern or a C import the module calls itself, outside the standard library); each class with the module where it is
 first reached - `files (std/os)` - or `none`. A class is counted where it is gained, by the C function gaining it:
-reading, writing or closing a descriptor already open (the standard streams among them) gains nothing. A call through a
-function value or an `any` reaches what no reading can say, and is printed as `anything`. The mode reads what the
-checker already holds; no other build computes it.
+reading, writing or closing a descriptor already open (the standard streams among them) gains nothing. A module's line
+covers all of its own code - its functions, lambdas and the instances of its generics the program makes - so what a
+call through a function value or an `any` runs is some module's code, said on that module's line. The prelude and C
+imports have no line. The mode reads what the checker already holds; no other build computes it.
 
 ### 10.8 Formatting
 
@@ -7561,6 +7562,22 @@ anywhere else. The samples themselves are kept in `build/profile/NAME.samples`. 
 build's debug information by `llvm-symbolizer` - beside the clang the build uses (a release's own, B12d), else on
 `PATH`; with none, functions are named by their addresses. Profiling what a program allocates, per site, is not part
 of the mode.
+
+### 10.11 Interface differences
+
+**B21.** `api OLD NEW PATH` lists what the exported interface of each module at `PATH` - a file, or every `.olang`
+file below a directory, its `testdata` and hidden directories aside - gained, lost and changed between two versions:
+`OLD` and `NEW` are each a directory or a commit of the repository the command runs in (whose tree is read relative to
+where the command runs in it). Each side's module is checked as `doc` checks a program (B14) - with this compiler and
+its standard library - and its exported items and members (functions, types, their constructors, fields, cases, words,
+methods and builders, globals, the traits a type meets) are compared by name and by the signature B11b gives them. A
+row is written per change, `breaking` or `ok`, and the count of breaking changes last; the status is 0 where nothing
+breaks, 1 where something does, 2 where a side is neither a directory nor a commit, or a module on it does not check.
+What breaks an importer: a name removed; a signature changed - its parameters, results or receiver, a field's type, a
+constructor's parameters, a global's type; an error set grown (a complete `catch` or match of the old set no longer
+is); an enum's case, an error type's word or a trait's method added (S13a, R14, T31); a trait no longer met. What does
+not: a name added - a function, a type, a method, a field, a global; an error set narrowed; a global's value changed; a
+trait newly met.
 
 ## 11. External Functions
 

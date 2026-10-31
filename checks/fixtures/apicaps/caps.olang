@@ -1,0 +1,8 @@
+# B11c: what the modules of this program may reach
+import "std/io"
+import "std/os"
+
+fn main() ? {
+    try os.WriteFile("/dev/null", "x")
+    try io.Println("written")
+}

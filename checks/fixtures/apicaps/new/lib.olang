@@ -1,0 +1,14 @@
+# a library
+type Color enum { Red, Green, Blue }
+type Point struct(X I64, Y I64) { X, Y }
+type Bad error { Lost, Gone }
+fn (p Point) Sum() I64 { return p.X + p.Y }
+fn (p Point) Max() I64 { return p.X if p.X > p.Y else p.Y }
+fn Load(n I64) I64 ? Bad {
+    if n < 0: error Bad.Lost
+    return n
+}
+fn Same(a I64) I64 { return a }
+fn Grow(a I64, b I64) I64 { return a + b }
+fn New() I64 { return 2 }
+Limit I64 = 4

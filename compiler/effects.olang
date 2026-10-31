@@ -247,7 +247,7 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
     for b in comp { inComp.Put(b, true) }
     cyclic := comp.Len() > 1
     for b in comp {
-        merge(all, e.own[b])
+        Merge(all, e.own[b])
         for w in e.calls[b] {
             if w == b { cyclic = true }
             if inComp.Has(w) { continue }
@@ -255,7 +255,7 @@ fn (e mut Effects&) settle(comp Vec<I64>&) {
                 all.Unchecked = true
                 continue
             }
-            merge(all, e.whole[w])
+            Merge(all, e.whole[w])
         }
     }
     if cyclic { all.Recursive = true }
@@ -288,7 +288,7 @@ fn paramBit(k I64) I64 { return (1 << k) if k >= 0 and k < 63 else 0 }
 fn hasBit(set I64, k I64) Bool { return set & paramBit(k) != 0 }
 
 # what from does added to into: every fact, and each class's first module
-fn merge(into mut Facts&, from Facts&) {
+fn Merge(into mut Facts&, from Facts&) {
     into.Allocates = into.Allocates or from.Allocates
     into.Blocks = into.Blocks or from.Blocks
     into.WritesGlobals = into.WritesGlobals or from.WritesGlobals

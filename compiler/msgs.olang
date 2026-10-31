@@ -883,6 +883,8 @@ type Diag enum {
     FactNoFunction
     ApiNoSide
     ApiNoFiles
+    CapsOneFile
+    ApiUsage
 }
 
 # one function each, under the id it is known by
@@ -942,7 +944,7 @@ fn ReflMatchSubject() Msg { return Msg(Diag.ReflMatchSubject, "G13", "'match' on
 fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
 
 # ERR_NOT_A_MODE
-fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run") }
 
 # ERR_MODE_ONE_FILE
 fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
@@ -3129,6 +3131,12 @@ fn FactUndecided(text String&) Msg { return Msg(Diag.FactUndecided, "G42", "'" $
 
 # ERR_FACT_NO_FUNCTION
 fn FactNoFunction(fact String&) Msg { return Msg(Diag.FactNoFunction, "G42", $fact " is read through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
+
+# ERR_CAPS_ONE_FILE
+fn CapsOneFile() Msg { return Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }
+
+# ERR_API_USAGE
+fn ApiUsage() Msg { return Msg(Diag.ApiUsage, "B21", "api takes two versions and a path, as 'olang api HEAD~1 HEAD std/io.olang' - each version a commit or a directory") }
 
 # ERR_API_NO_SIDE
 fn ApiNoSide(text String&) Msg { return Msg(Diag.ApiNoSide, "B21", "'" $text "' is neither a path nor a commit of the repository here") }
