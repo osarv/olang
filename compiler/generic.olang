@@ -731,6 +731,16 @@ fn LengthDecided(text String&, from I64, to I64, name String&) Bool {
     return false
 }
 
+# whether a written type names a type variable - whose binding stays by value, however it is resolved (an instance's
+# context binds it to a struct: still the variable's representation, so a function type means one thing everywhere)
+fn (p mut Program&) namesVar(c Context&, tr ast.TypeRef?&) Bool {
+    if tr is null or c.Mi < 0: return false
+    return match tr {
+        case ast.TypeRef.Named(sp, path, args): path.Len() == 1 and args.Len() == 0 and p.R.Use(p.L.Mods[c.Mi].File, sp.Start).Kind == names.What.TypeVar
+        case _: false
+    }
+}
+
 # a parameter's written type that is bare: no reference, function type, variadic or any written at its top
 fn WrittenBare(tr ast.TypeRef&) Bool {
     return match tr {
@@ -1021,7 +1031,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         shares.Push(types.OwnScope)
     }
     for prm in s.Params {
-        ps.Push(p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name))
+        ps.Push(p.Resolve(c, prm.Ty) if p.namesVar(c, prm.Ty) else p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name))
         shares.Push(p.markedParam(c, prm.Ty!, named, shares))
         named.Push(prm.Name)
     }

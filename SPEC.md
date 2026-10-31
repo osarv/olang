@@ -1249,6 +1249,33 @@ nothing of this applies.
 This is permission in the type checker only: it changes no value and no run time, and the evaluator (K1) is
 unaffected by it.
 
+**T25c under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** With every written `&` writable (D9's
+round-2 entry), the permission of a reference level that no declaration fixes is **inferred**, never written:
+
+- *A body's written levels.* A reference level written inside a function's body - in a local's declared type below its
+  top, in a constructor's or a case's type arguments, in an array literal's or a comprehension's element type, the fill
+  or arguments of a constructor made there included - is read-only where a read-only value is stored into it, and
+  writable otherwise: `out := Vec<String&>()` then `out.Push(t[0:2])` from a bare `t` makes `out` a `Vec` of read-only
+  views. A write through such a level is then refused as a write through any read-only reference (T25b). The top of a
+  local's own written reference type takes its value's permission (inferred, as before).
+- *A function's result.* A result is read-only at a level where the body hands back a value read-only there - at every
+  level where it hands back a view of what a bare parameter reaches - and every caller holds it so. A result written
+  `mut` (source not yet migrated, read during the migration) keeps its top writable.
+- *Seen at fewer writable levels.* A **fresh** value (an array or a case made there, a comprehension, a constructor's
+  call) fits a type that is the same but read-only at levels where it is writable; so does a reference whose top is
+  read-only (nothing is stored through it); and an argument for a bare parameter - read-only at every level - fits the
+  parameter whatever their levels say. A fixed array widens to a run-time length first (T7c).
+- *Results following their arguments.* In an instance, a value read through a bare parameter (read-only at every level,
+  as the argument a call gives it, T25c's generic rule) may be stored into a local the body made; the instance's result
+  then follows that parameter: a call giving it a read-only argument gets the result read-only at every level below its
+  top. So a container's `Clone`, `ToArray` and walks copy a bare receiver's elements out as writable as the caller's.
+- *Traits.* A trait method written `&Name()` - one that may write its receiver - is met by a method whose receiver is
+  bare as well as by one taking `&`; a bare parameter passed by pointer meets a trait's parameter of the same type at
+  any permission (it is read-only at every level).
+
+A C import's declarations keep C's `const`: a reference written there without `mut` is read-only (X17). Like the rest of
+T25c this changes no value and no run time.
+
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
 compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element, or a
 conditional's or a match's value whose type is a read-only reference, E28/S12b) is the constant data itself: no storage is allocated and nothing is copied, at every evaluation. The
@@ -2049,6 +2076,14 @@ refused as section 8 refuses a view of storage that closes (O26, O17), naming `p
 **D9f (the forgotten `&`; provisional).** A write to a bare parameter's own storage - it or a part assigned - that
 nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a
 type with no reference form.
+
+**G29 under the rework's round 2b (provisional).** A bare array parameter is passed by pointer, one instance for every
+length - but where its body decides something on its length: `p.Len()` in an `if`'s, an `assert`'s or a `match`'s
+condition, after a conditional's or a guard's `if`, in a `comptime` or as the length of an array the body makes. Such a
+parameter is held by value, one instance per length (G29, G30: what is decided on the length is decided while
+compiling per instance), unless the function's result may hold references (then it may hand back views of the
+parameter, which must be the caller's storage). The test reads the body's text: a length first held in a local decides
+at run time - only what is decided while compiling changes, never a meaning.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 

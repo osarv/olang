@@ -3574,6 +3574,32 @@ fn (c mut Checker&) ownLocal(id I64) Bool {
     return k == typed.LocalKind.Var or k == typed.LocalKind.Held
 }
 
+# a note naming the bare parameter of a body around this lambda that a capture of name n is - whether there is one
+fn (c mut Checker&) noteOuterBare(rec I64, n source.NameId) Bool {
+    f := c.fr().Parent
+    for f >= 0 and f < c.frames.Len() {
+        fr := c.frames[f]
+        id := try fr.bound.Get(n) catch default -1
+        if id >= 0 {
+            l := c.Bodies[fr.Body].Local(typed.LocalId(I32(id)))
+            if l.Kind != typed.LocalKind.Param: return false
+            c.P.L.Diags.Note(rec, diag.Where.Span(fr.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteBareParam(c.text(n)))
+            return true
+        }
+        f = fr.Parent
+    }
+    return false
+}
+
+# whether a local is a named parameter of this body, or a bare one's copy on entry (a copy of its own named after itself,
+# holding the same references) - what a note names as the bare parameter
+fn (c mut Checker&) bareNamed(id I64) Bool {
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if l.Name == source.NameId(0): return false
+    if l.Kind == typed.LocalKind.Param: return true
+    return l.Kind == typed.LocalKind.Var and (try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)) == l.Name
+}
+
 # a local's levels made the levels a store being checked reaches (levelRo) - how many were before, to truncate back to
 fn (c mut Checker&) levelsOf(id I64) I64 {
     n := c.levelOn.Len()
@@ -10069,7 +10095,12 @@ fn (c mut Checker&) noteWritable(rec I64, ref typed.Expr&) {
 
 fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     id := c.roRoot(p)
-    if id < 0 { return }
+    if id < 0 {
+        # (a capture: read-only as the lambda holds it - a bare parameter's around, named)
+        q := c.levelRoot(p)
+        if source.NewParams and q >= 0 and c.cur().Local(typed.LocalId(I32(q))).Kind == typed.LocalKind.Capture { c.noteOuterBare(rec, c.cur().Local(typed.LocalId(I32(q))).Name) }
+        return
+    }
     l := c.cur().Local(typed.LocalId(I32(id)))
     if l.Name == source.NameId(0) {
         # a hidden copy (a walk's source): the bare parameter it copies, if one
@@ -10083,6 +10114,8 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     # the rework's round 2: what a bare parameter reaches is read-only - the note names it, where it is declared (its
     # copy on entry too, which holds the same references: a copy of its own named after itself)
     entry := l.Kind == typed.LocalKind.Var and (try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)) == l.Name
+    # a capture of a bare parameter of a body around: that parameter named
+    if source.NewParams and l.Kind == typed.LocalKind.Capture and c.noteOuterBare(rec, l.Name) { return }
     if source.NewParams and (l.Kind == typed.LocalKind.Param or entry) {
         c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteBareParam(c.text(l.Name)))
         return
@@ -10196,6 +10229,30 @@ fn (c mut Checker&) refParamOf(p typed.Lvalue?&) I64 {
 fn (c mut Checker&) refUse(p typed.Lvalue?&) {
     k := c.refParamOf(p)
     if k >= 0 { c.refUsed.Put(pair.Pair(c.fr().Body, k), true) }
+    if k < 0 and source.NewParams { c.refUseOuter(p, false) }
+}
+
+# a place a lambda reaches through its capture of a "&" parameter of a body around it, used as one: that parameter used
+# (D9d) - deeply where deep
+fn (c mut Checker&) refUseOuter(p typed.Lvalue?&, deep Bool) {
+    r := c.levelRoot(p)
+    if r < 0 or c.cur().Local(typed.LocalId(I32(r))).Kind != typed.LocalKind.Capture: return
+    n := c.cur().Local(typed.LocalId(I32(r))).Name
+    f := c.fr().Parent
+    for f >= 0 and f < c.frames.Len() {
+        fr := c.frames[f]
+        id := try fr.bound.Get(n) catch default -1
+        if id >= 0 {
+            b := c.Bodies[fr.Body]
+            for i in range b.Params.Len() {
+                if I64(b.Params[i]) != id: continue
+                c.refUsed.Put(pair.Pair(fr.Body, i), true)
+                if deep: c.refDeep.Put(pair.Pair(fr.Body, i), true)
+            }
+            return
+        }
+        f = fr.Parent
+    }
 }
 
 # a reference value used so: what it is read, borrowed or sliced from, either of a conditional's
@@ -10299,6 +10356,7 @@ fn (c mut Checker&) refPlaceWritten(p typed.Lvalue?&) {
 fn (c mut Checker&) refDeepUse(p typed.Lvalue?&) {
     k := c.refParamOf(p)
     if k >= 0 { c.refDeep.Put(pair.Pair(c.fr().Body, k), true) }
+    if k < 0 and source.NewParams { c.refUseOuter(p, true) }
 }
 
 fn (c mut Checker&) refDeepX(x typed.Expr?&) {
@@ -10316,7 +10374,7 @@ fn (c mut Checker&) lendLater(sp source.Span, fix String&, p typed.Lvalue?& = nu
         case _ { return false }
     }
     id := c.roRoot(p)
-    if id >= 0 and c.cur().Local(typed.LocalId(I32(id))).Kind == typed.LocalKind.Param and c.cur().Local(typed.LocalId(I32(id))).Name != source.NameId(0) {
+    if id >= 0 and c.bareNamed(id) {
         l := c.cur().Local(typed.LocalId(I32(id)))
         c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, c.at(l.Sp), $c.text(l.Name)))
         return true
@@ -10455,7 +10513,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
         if not tv and not c.namedHolds(r) { return }
         if c.roRef(e) or tv and (c.P.T.PermOf(typeOf(e)) & types.Writable) == 0 {
             bp := c.roRoot(readPlace(e))
-            if source.NewParams and bp >= 0 and c.cur().Local(typed.LocalId(I32(bp))).Kind == typed.LocalKind.Param and c.cur().Local(typed.LocalId(I32(bp))).Name != source.NameId(0) {
+            if source.NewParams and bp >= 0 and c.bareNamed(bp) {
                 bl := c.cur().Local(typed.LocalId(I32(bp)))
                 c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), c.at(bl.Sp), $c.text(bl.Name)))
             } else {
@@ -13654,7 +13712,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
         if op != typed.PrimOp.AtomicLoad and source.NewParams { c.refPlaceWritten(p) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
-            c.err(c.operandAt(x), msgs.AtomicNotWritable())
+            c.noteRo(c.err(c.operandAt(x), msgs.AtomicNotWritable()), p)
             return c.unknown(sp)
         }
         if args.Len() != want {
@@ -18630,7 +18688,11 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     pts := Array<types.TypeId>(n)
     for i in range n {
         if ps[i].Ty is not null {
-            pts[i] = c.P.BareRef(ps[i].Ty, c.resolve(ps[i].Ty))
+            pts[i] = c.resolve(ps[i].Ty) if c.namesTypeVar(ps[i].Ty) else c.P.BareRef(ps[i].Ty, c.resolve(ps[i].Ty))
+            # the rework's round 2: a bare parameter the expected type holds by value (a type variable's binding, which
+            # stays by value) is held so here too - the two are one function type, passed alike
+            if source.NewParams and i < wps.Len() and c.isRef(pts[i]) and not c.writable(pts[i]) and not c.isRef(wps[i]) and
+               c.P.T.SameButPerm(c.P.T.Referent(pts[i]), wps[i]) { pts[i] = wps[i] }
             # D9a: a lambda is a function type's value, which carries no length - its array parameter written by value is
             # an error (one whose type is left out is the expected type's)
             if not source.NewParams and not c.isRef(pts[i]) and c.P.T.KindOf(c.under(pts[i])) == types.Kind.Array and not c.namesTypeVar(ps[i].Ty) {
