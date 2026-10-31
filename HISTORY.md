@@ -27013,6 +27013,8 @@ items and members written as key, kind and signature, compared by key. An error 
 ` ? `: a subset is narrower (ok), anything else wider (breaking). A commit's tree comes from `git archive` and `tar`,
 run without a shell.
 
-**Measured.** The compiler's self-build (`OLANG_TIMES`, a warm build of compiler/olang.olang): check 1514 ms before;
-after - see PROGRESS (recorded at the end of the batch). `olang api` over two small directories 0.35 s; `explain -caps`
-of a program using std/net, std/http and std/json 0.45 s.
+**Measured.** The self-build computes no summary: the master compiler and this one checking the same source
+(master's compiler/olang.olang, `OLANG_TIMES`, on a machine loaded by other builds) took 1.54 and 1.33 s against 1.27
+and 1.12 s - no cost beyond noise; this tree's own, larger source checks in 1.76-2.02 s, the new modules' share.
+`olang api` over two small directories 0.35 s; `explain -caps` of a program using std/net, std/http and std/json 0.45 s;
+tests/facts.olang (facts read, so the program is checked twice) builds in 1.7 s.
