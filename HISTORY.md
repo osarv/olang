@@ -27153,3 +27153,47 @@ relating their arguments or handing one back (`T&p` results: a capability the de
 two checks scenarios), D18c's borrowed-element generators (element forms not inferred yet) - and one field shape no
 spelling can save (a field set after construction from one of several parameters, section 9.6). Folding (2.9) was
 counted, not built.
+
+## The rework, round 2 begun: `&` on a parameter means it may write, behind a switch (2026-10-31)
+
+QCC's half of the rework (docs/rework.md section 10 has the detail and the numbers), built on `wt-rework` behind
+`OLANG_PARAMS=new`; without it the compiler is today's, and the suite passes on it. Not flipped: std is part migrated
+and compiler/ not at all, for one reason found on the way (below).
+
+**Values first, then pointers.** The first version made a bare parameter a value held as a read-only copy (T25c's
+machinery, deep), with D9a and D9c off and a run-time length bound for arrays. It checked, but a view of a bare
+parameter could never be handed back in what the function makes - an iterator over a bare map, Split's views - since
+section 8 saw a frame's copy, and every large value paid a copy. 2.10 had said what to do: pass by pointer to the
+caller's storage. The cheapest faithful form turned out to be the one the compiler already had: **a bare struct or
+array parameter is typed, inside, as a read-only reference written bare** (`generic.BareRef`), so callers lend their
+argument as to a read-only reference today, section 8 gives it a scope variable (2.10's storage variable), and lowering,
+emit, the evaluator and `interpret` needed nothing. Reading through it is deep read-only (the rework's rule, T25c's
+read-only copies), and a body that writes it gets a copy on entry - found by names where it assigns the parameter or
+a part, and by the checker where it lends it where it may be written, the program then checked again as R1a does when
+a set grows. So old code's `p T&` (read-only) migrates to `p T` and means what it meant; old `p mut T&` becomes `p T&`.
+
+**Numbers' arrays by pointer too.** 2.10 kept G29's instances per length for small arrays by value. Migrated, both old
+`xs Array<U8>&` and old `xs Array<U8>` read `xs Array<U8>`, and every function taking bytes became one instance per
+literal length passed (std/os's Exec, through its `input Array<U8> = ""`, failed this way first). Every bare array
+now passes by pointer.
+
+**The migration tool's rounds cascade on what the checker cannot yet say.** The driven phase makes `&` what a note
+calls bare and wanted writable, and bare what D9d calls unused; each wrong reading of the checker's sent std's
+signatures round a loop (At made `&` because one caller wrote through an element; D9d calling a generic's receiver
+unused because the instances of that program took another `match I` arm - so D9d now never judges a generic, as S3
+judges no generic body; an atomic store not counted as a use). Fixed one by one, std reached 19 of its 40 test files
+compiling and passing under the switch (106 tests).
+
+**What is left is one piece: per-level permission.** Every written `&` is writable, at every level, so `Vec<String&>`
+and `Map<String&, V>` hold writable references; a fresh container given read-only views (Split's result, a map keyed by
+literals, Clone and ToVec of a read-only collection) has no level that can say so - T25c's read-only copy is all of a
+value, which also refuses the container's own `Push`. 2.8 says how (each inferred level a permission variable); it
+is the next piece, before compiler/ (1,904 errors after the tool's text phase alone, most of them this cause and D9d's
+mechanical moves) can migrate. Recorded in section 10.6 with the other pieces not built (function types' `T&` results,
+KeptPerm, the caller-side copy, the field loop's time).
+
+**Found and fixed, reachable without the switch:** B7a's test keys were kept from one attempt of checking the program to
+the next, so a program checked twice reported every named test twice (`check.reset`). Introduced on the way and fixed:
+names resolving `wk.G = v`'s module alias as a value once D9f's walk looked inside targets; Trim made to give a value
+copied in the turn (an early decision of this round) broke checks.olang, which keeps trimmed text in a longer-lived
+map - reverted until the flip.

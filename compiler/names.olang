@@ -760,8 +760,23 @@ fn (r mut Resolver&) target(x ast.Expr&) {
             if ref.Kind == What.Local and r.bareParams.Has(ref.Index) { r.bareWritten(ref.Index, sp) }
         }
         case ast.Expr.Paren(_, y) { r.target(y) }
-        case ast.Expr.Member(_, _, _), ast.Expr.Index(_, _, _) { r.targetPart(x) }
+        case ast.Expr.Member(_, _, _), ast.Expr.Index(_, _, _) {
+            if r.bareRoot(x) { r.targetPart(x) } else { r.expr(x) }
+        }
         case _ { r.expr(x) }
+    }
+}
+
+# whether a place written is a part of a bare parameter (D9f) - "p.f", "p[i]" with p one; anything else (a module's
+# global "lib.G", a reference's field) resolved as the expression it is
+fn (r mut Resolver&) bareRoot(x ast.Expr&) Bool {
+    if not source.NewParams { return false }
+    return match x {
+        case ast.Expr.Member(_, b, _): r.bareRoot(b)
+        case ast.Expr.Index(_, b, _): r.bareRoot(b)
+        case ast.Expr.Paren(_, y): r.bareRoot(y)
+        case ast.Expr.Name(_, n): r.lookup(n).Kind == What.Local and r.bareParams.Has(r.lookup(n).Index)
+        case _: false
     }
 }
 

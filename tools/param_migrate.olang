@@ -271,11 +271,11 @@ fn (w mut walker&) param(s I64, e I64, names Vec<String&>&, ext Bool) {
     w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
 }
 
-# whether the type at t is text or an array: "String", "Array<...>", "CStr"
+# whether the type at t is text or an array: "String", "Array<...>" (an extern type such as CStr is held by reference, X10)
 fn (w mut walker&) textOrArray(t I64) Bool {
     if w.kind(t) != token.Tok.Iden: return false
     n := w.text(t)
-    return n == "String" or n == "Array" or n == "CStr"
+    return n == "String" or n == "Array"
 }
 
 # the text with the edits applied

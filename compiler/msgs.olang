@@ -1946,10 +1946,7 @@ fn ReadOnlyToWritable() Msg { return Msg(Diag.ReadOnlyToWritable, "T25c", "a rea
 fn ReadOnlyHere() Msg { return Msg(Diag.ReadOnlyHere, "T25c", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and is wanted where it may be written: give a copy of its own ('$x', 'x.Clone()'), or take the parameter as 'p T&'") }
 
 # ERR_BARE_DEAD_WRITE
-fn BareDeadWrite(name String&, ty String&, number Bool) Msg {
-    if number { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - return the new value instead") }
-    return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - take it as '" $name " " $ty "&' to change the caller's")
-}
+fn BareDeadWrite(name String&, ty String&, number Bool) Msg { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - " $("return the new value instead" if number else $("take it as '" $name " " $ty "&' to change the caller's"))) }
 
 # ERR_REF_NEVER_USED
 fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D9d", "'" $name "' is never written, handed where it may be written, or kept - take it as '" $name " " $ty "'") }

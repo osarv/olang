@@ -524,6 +524,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print(fr.Report()) catch io.Error { } }
+    # the rework's round 2 (2.10): bare parameters passed by pointer whose bodies write them, given a copy on entry
+    if cfg.Memory and d.Errors() == 0 and source.NewParams {
+        for line in c.EntryCopied { try io.Println(line) catch io.Error { } }
+        try io.Println($c.EntryCopied.Len() " bare parameters copied on entry") catch io.Error { }
+    }
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)

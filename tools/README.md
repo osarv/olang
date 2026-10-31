@@ -45,6 +45,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `unused_migrate.olang` | D3b, M5a: a local never read and an import nothing is reached through - a loop's, a binding's or one of several results' name made `_`, a declaration left out (its value kept as a statement where it is one call, a `try`'s kept without the `try` declaration), an unused import's line removed - from the compiler's diagnostics, in rounds; what it cannot do safely (a value with a `catch ... default`, a name used again in its block) listed `by hand:`; `--bare` makes only the `_` renames and removes imports (for files that must fail as written) | `build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE\|DIR...` |
 | `errorcase_rename.olang` | R3 (QBZ): every error name is CamelCase - an upper-case word of an error type becomes its parts capitalized (`IoError.FULL` -> `IoError.Full`, `ListError.OUT_OF_RANGE` -> `ListError.OutOfRange`), in its declaration and wherever it is written qualified (code, comments, strings, Markdown); the words are read from the files' declarations and, with `--std`, std's; idempotent | `build/tools_errorcase_rename [--std DIR] [--check] [-v] FILE\|DIR...` |
 | `variadic_migrate.olang` | D8g: std's functions taking an array of their variable arguments moved onto a variadic parameter - `os.Exec(String&["ls", "-l"], "", false)` -> `os.Exec("ls", "-l", capture = false)`, an array a call gives passed on (`...args.ToArray()`), ExecUntil's token first; os.Exec/Start/ExecUntil/ExecInPlace, http.Get/Post, csv.Record; a plain name listed `by hand:` (status 1); re-runnable | `build/tools_variadic_migrate [--check] [-v] FILE\|DIR...` |
+| `param_migrate.olang` | D9, D9d-D9f, T25b (QCC, the rework's round 2 - under `OLANG_PARAMS=new` until the flip): `&` on a parameter means it may write - `mut T&` becomes `T&` everywhere but a global's `mut`, a read-only `&` parameter or receiver becomes bare (not a `?&`, an `any`, a function type, a variadic or a marker-named one; in an extern or export fn only text and arrays), a trait's `mut Name(` becomes `&Name(`; then, in rounds over the compiler's diagnostics, a parameter a note calls bare and wanted writable made `&`, one D9d says is never used made bare (unless pinned), constant data handed to a `&` parameter copied (`$t`, `.Clone()`); what it cannot do listed `by hand:` | `build/tools_param_migrate [--check] [--text] [-v] [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -96,7 +97,9 @@ so `unused_migrate` runs last: D3b is said only of a file with no other error).
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
 `io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
 forms are lost), and `precedence_migrate` (E5: it reads every `a & b == c` as written for the old precedence and wraps
-the comparison). Run them by hand, on a tree written under the old rule, as before.
+the comparison). Run them by hand, on a tree written under the old rule, as before. `param_migrate` is not run by `fix`
+yet either: it migrates to the rework's round 2, which is behind `OLANG_PARAMS=new` until the flip (docs/rework.md
+section 10), when it joins the table.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
 are olang programs now, run by their make targets - `compiler/README.md`); the benchmark drivers are in `bench/`

@@ -2029,6 +2029,27 @@ may not be a read-only copy (T25c). Whether a call writes to the caller's value 
 signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. A parameter's reference marker may
 name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
 
+**D9 under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** With the switch, `&` on a parameter or
+receiver says it may write the caller's instance, and every written `&` is writable (`mut` before a reference is read
+as nothing); a bare parameter never affects the caller. One whose type is a struct or an array (text included) is
+passed by pointer to the caller's storage - a read-only reference written bare: it, and everything reached through
+it, is read-only in the body; a body that writes its own storage, or lends it where it may be written, works on a
+copy of its own made on entry. Numbers, enums, function values and a type variable's binding are passed by value, and
+an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable but where the same call also
+writes that storage through another route. A trait method that may write its receiver is written `&Name()`.
+
+**D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
+passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error
+naming the bare form `p T`. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
+reference, an extern, an export fn or a generic's parameter (its instances differ by program).
+
+**D9e (a bare parameter kept; provisional).** A bare parameter, or a view of it, kept where it outlives the call is
+refused as section 8 refuses a view of storage that closes (O26, O17), naming `p T&` (share the caller's) or a copy.
+
+**D9f (the forgotten `&`; provisional).** A write to a bare parameter's own storage - it or a part assigned - that
+nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a
+type with no reference form.
+
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```

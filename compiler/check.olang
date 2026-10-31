@@ -244,6 +244,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     factPresets Map<String&, Bool>
     Attempts I64 = 0
     entryCopies I64 = 0     # the rework's round 2: bare parameters given a copy on entry (2.10), counted for -memory
+    EntryCopied Vec<String&> # ... each, "FILE:LINE:COL: copied on entry: NAME", once per parameter, for -memory
+    copiedSaid Map<pair.Pair<I64, I64>, Bool>
     copiesGrew Bool = false # ... a body found writing one passed by pointer: the program checked again, it copied
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
     # T25c: the locals that are read-only copies, by (body, local), each with the name of what it copies (0 for none);
@@ -594,6 +596,8 @@ fn (c mut Checker&) CheckProgram() {
         mark := c.P.L.Diags.Count()
         c.copiesGrew = false
         c.entryCopies = 0
+        c.EntryCopied = Vec<String&>()
+        c.copiedSaid = Map<pair.Pair<I64, I64>, Bool>()
         c.attempt()
         c.settleUnset()
         c.settleHeldWalks()
@@ -3426,6 +3430,10 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
     if deep { c.roCopies.Put(c.roKey(id), n) }
     c.fr().entryLets.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), c.fit(c.readLocal(sp, hid), v, sp)))
     c.entryCopies++
+    key := pair.Pair(c.fr().File, I64(sp.Start))
+    if c.copiedSaid.Has(key) { return }
+    c.copiedSaid.Put(key, true)
+    c.EntryCopied.Push($c.P.L.Diags.Locate(c.fr().File, I64(sp.Start)) ": copied on entry: " $c.text(n) " " $c.ty(v) " - its body writes it")
 }
 
 # a bare parameter passed by pointer (2.10) whose own storage a place is - reached from it through its fields, payloads
@@ -10042,6 +10050,21 @@ fn (c mut Checker&) isParamRead(x typed.Expr&) Bool {
     return false
 }
 
+# a place written other than by mustWrite (an atomic operation, P9): the "&" parameter it is reached through used (D9d)
+fn (c mut Checker&) refPlaceWritten(p typed.Lvalue?&) {
+    if p is null { return }
+    match p {
+        case typed.Lvalue.Field(_, _, base, _) { c.refPlaceWritten(base) }
+        case typed.Lvalue.Elem(_, _, e) { c.refPlaceWritten(e.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { c.refPlaceWritten(pl.Base) }
+        case typed.Lvalue.Deref(_, _, ref) {
+            c.refUse(readPlace(unwrapped(ref)))
+            if not c.isParamRead(unwrapped(ref)) { c.refDeepUse(readPlace(unwrapped(ref))) }
+        }
+        case _ { }
+    }
+}
+
 fn (c mut Checker&) refDeepUse(p typed.Lvalue?&) {
     k := c.refParamOf(p)
     if k >= 0 { c.refDeep.Put(pair.Pair(c.fr().Body, k), true) }
@@ -13369,6 +13392,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             return c.unknown(sp)
         }
         if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
+        if op != typed.PrimOp.AtomicLoad and source.NewParams { c.refPlaceWritten(p) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.err(c.operandAt(x), msgs.AtomicNotWritable())
             return c.unknown(sp)

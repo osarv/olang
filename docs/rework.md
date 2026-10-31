@@ -992,3 +992,125 @@ program compiles; as written, nothing can say it, and the fix is `kept.Push($p.l
   (`checks/cases/c2downfieldread.olang`) - still lifts the whole local, where O20 should refuse or promote (one case);
   the field loop's cost (cache the judgings of components no promotion touches); folding; inferred scopes shown by
   `explain`, `doc` and hover.
+
+## 10. Round 2, as far as built
+
+Built on `wt-rework` behind `OLANG_PARAMS=new` (`source.NewParams`, in the module key, beside round 1's switch);
+without it the compiler is today's (10.3). Not flipped: std is part migrated (10.4), compiler/ not (10.5).
+
+### 10.1 What was built
+
+- **Spelling.** A written `&` is writable everywhere (`generic.writtenRef`); `mut` before a reference is read and
+  ignored, so old and new spellings both parse while the corpus moves (the grammar change waits for the flip). A trait
+  method that may write its receiver is written `&Name()` (parse). A variadic's elements are read-only references.
+- **A bare parameter is passed by pointer** (2.10) where it is a struct or an array, text included
+  (`generic.BareRef`): its signature's type is a read-only reference written bare, so the caller lends its argument as
+  it lends one to a read-only reference today (E12c - an lvalue in place, a temporary where the parameter's scope is),
+  section 8 sees a reference parameter with a scope variable of its own (2.10's storage variable), and lowering, emit,
+  the evaluator and `interpret` needed nothing. Numbers, enums, function values and a type variable's binding stay by
+  value; an extern's and an export fn's struct keep C's by-value convention (X11). Lambdas' written parameters and
+  function types are wrapped alike, so a function fits its own type. Constructors' parameters are not (a pun field
+  takes its parameter's type, which would become a reference): they stay by value, a view of one kept in the instance
+  is refused by section 8 as today - `&` there (10.6).
+- **Read through as the value it names.** A bare parameter so passed is marked (`check.bareLocals`) and, where its
+  type holds writable references, a read-only copy at every level (T25c's `roCopies`, deep under the switch). A
+  read-only reference parameter follows its argument in an instance as T25c's generic rule always said (`roByArg`),
+  so `At`, `First` and the walks give their element as writable as the collection they are called on.
+- **The copy on entry** (2.10, D9b generalized). A body that writes a bare parameter's own storage - assigns it or a
+  part (names, syntactically: `load.BareWritten`), or lends it or a part where it may be written (the checker:
+  `wantCopy`, after which the program is checked again, as R1a does when a set grows) - gets a hidden parameter and a
+  value local of the parameter's name initialized from it (`typed.Stmt.Let` before the body; `check.bareByPointer`).
+  Never for a generator's (its walk holds the parameter). `-memory` lists each (`FILE:LINE: copied on entry: p T`).
+- **The three checks.** D9d (`&` never written, passed on writably, stored or handed out - `refSettle` over the call
+  graph; not for `?&`, `any`, extern and destructor types, type variables, externs, export fns, and never for a
+  generic's parameters, since which `match T` arm writes differs per program); D9e is section 8's refusal of a kept
+  view (O26/O17, worded as today); D9f (names: a write to a bare parameter nothing reads after). T25d's constant data
+  handed to a `&` parameter names `$t` or `.Clone()`. New wordings: `ReadOnlyHere` with the note `NoteBareParam`.
+- **Permission bindings, coarse** (2.8): an instance a constructor builds from read-only arguments is a read-only copy
+  (Rule P - `argCtor`, `roCallCopy`); a written reference local takes read-only from its value; a for-in's borrowed
+  collection and a membership test's operand are as read-only as what they read; a read-only copy lent to a `&`
+  parameter whose body writes only its own plain parts is allowed (`lendLater`, settled with D9d).
+- **`Array.Clone()`** in the prelude (a value array of its own), named by the new diagnostics.
+- **`tools/param_migrate.olang`**: a text phase (`mut T&` to `T&`, a read-only `&` parameter bare unless `?&`, `any`,
+  a function type, a variadic or marker-named; a trait's `mut Name(` to `&Name(`; a global's `mut` kept; an extern's
+  or export fn's only for text and arrays) and a driven phase (up to 60 rounds over the compiler's diagnostics: a note
+  "is a bare parameter" makes the parameter `&`, D9d makes it bare unless pinned, T25d gives `$`/`.Clone()`, O26 on a
+  call's result makes that call's bare arguments' parameters `&`). Not yet in `olang fix`'s table (it is for the flip).
+
+### 10.2 Decided here (mine, to object to)
+
+1. **Every bare array passes by pointer, numbers' included** - no bare parameter makes G29's instances per length.
+   2.10 kept them for arrays of at most 128 bytes; but old `xs Array<I64>&` and old `xs Array<I64>` both migrate to
+   `xs Array<I64>`, and keeping G29 made every function taking bytes one instance per literal length a program passes
+   (`w.Write("...")`). A length is still known where an array is made; a function's asserts on `a.Len()` run where they
+   are called (contracts and S18c decide what they can).
+2. **Constructors' parameters stay by value** (10.1); a constructor keeping a view of its parameter takes it `&`.
+3. **D9d never judges a generic's parameters** (as S3 judges no generic's body).
+4. **Split and Lines keep `&` receivers** (their result's elements are views of the text, and a fresh array holding
+   read-only views has no permission level to say so - 10.6); `Trim`, `TrimStart`, `TrimEnd` stay views for now:
+   giving a value copied in the turn broke old-mode code storing the trimmed text in a longer-lived map
+   (checks.olang), so the source keeps today's form until the flip, when the rule (a view of a bare parameter returned
+   as `T&` is an error naming the value result) and the "handed over by pointer" result land together.
+5. **A written bare parameter's copy is found by the checker and the program checked again** (10.1) rather than
+   predicted from names' syntax alone: a method with a `&` receiver called on it, or an argument lent where it may be
+   written, is only known with types. One more attempt per program that has such a body.
+
+### 10.3 Today's path
+
+Without the switch the compiler checks as before; `make quick` passes (10.7). Two pre-existing bugs found and fixed on
+the way, both reachable without the switch: B7a's test keys were kept from one attempt to the next, so a program
+checked twice (R1a) reported every named test twice; and names resolved the base of a part assigned (`wk.G = v`)
+as a bare value once D9f's walk looked at targets (introduced and fixed here).
+
+### 10.4 std under the switch
+
+`build/r2/cycle.sh`-style runs: std copied, migrated by the tool (text phase 43 files; driven phase converges in two
+or three rounds), then every std test file and prelude test file checked and run under the switch.
+
+| | files | tests |
+|---|---|---|
+| compile and pass | 19 of 40 | 106, all passing |
+| refused | 21 of 40 | ~190 distinct errors |
+
+The refusals by cause (distinct lines): T25c read-only here or read-only copy lent (~85) - nearly all one cause,
+10.6; containers keyed or filled by read-only text (`Map<String&, V>` given a literal or a view: `$` copies, which
+the tool writes); C pointers (`CVoid?&`) given a bare buffer (X22 - the tool does not move those to `&` yet); a few
+D9d by-hand cases where the tool's rounds cascade (a `&` added for one caller, then unused); the `Str`/`Eq` receivers
+(E11c, E10a) where what they call takes `&`.
+
+### 10.5 compiler/ under the switch
+
+The text phase alone over a copy of compiler/ (67 files changed) leaves **1,904 errors**: D9d ~600 (functions whose
+`c mut Checker&`, `s mut Scoper&` receivers only read - the tool makes them bare mechanically), T25c ~830 (what those
+bare receivers then reach through their references - the same cause as std's, 10.6), section 8 ~140 (O17, O10c: a
+receiver now passed by pointer that was by value), and 50 E35 (a `!` on what std's migrated signatures no longer make
+fallible). The driven phase was not run over compiler/ (each round checks the compiler, ~2 s, and the rounds cascade
+through 10.6's cause); the self-build, bench and the seed under the switch are therefore not measured.
+
+### 10.6 What is missing: per-level permission (2.8's inferred levels)
+
+The cause behind most refusals left is one: **a fresh container cannot hold read-only references**. Every written `&`
+is writable at every level, so `Vec<String&>`, `Map<String&, V>` and `Array<Node&>` hold writable references; a value
+read through a bare parameter, constant data or an immutable global is read-only; and the only read-only level the
+checker can give a fresh value is all of it (a read-only copy - T25c's granularity), which also refuses the
+container's own growth (`Push` writes through the record). 2.8 describes the fix: every inferred level a permission
+variable - a local's type argument read-only where a read-only value is stored into it, a result's level following
+the argument it came from. Built, Split, Clone, ToVec, Map/Filter, a map keyed by literals and the compiler's tables of
+views all migrate as written; without it each needs a `&` cascade or a copy. **This is the next piece of round 2**,
+before the compiler can migrate.
+
+Also not built: function types' `T&` results read as borrowed from their `&` parameters (open point 5), "not a value"
+reasons beyond today's, the caller-side copy of 2.10 (a bare argument read in place while the same call writes the
+same storage through another argument, a function value or an `any` - observable, not unsound; open point 2), the
+"handed over by pointer" value results, `KeptPerm`'s replacement and the `st` hole (they need the flip's permission
+reading; under round 1's switch alone they are as section 9 left them), the scope phase's field loop cost (9.8), SPEC,
+`olang fix`'s table, the flip, the seed.
+
+### 10.7 Measured
+
+- Value semantics hold: a bare struct written in the callee is the callee's (`moved(a)` leaves `a`), built, under
+  `interpret`, and in a global the evaluator bakes with a top-level assert decided while compiling.
+- Copies on entry in std's own code under the switch: one (`StringBuilder.ToString`, which lends its record to a `&`
+  `ToArray` - a by-hand D9d left by the tool).
+- Check time, std/prelude/tests/text.olang: 28 ms without the switch, 102 ms with it (the extra attempt the copy on
+  entry asks for, and D9d's settling).

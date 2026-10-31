@@ -624,7 +624,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
         case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
         # D8g: a variadic parameter's, a read-only array of what it is written as - "...T" its spelling (Spread)
-        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.spreadElem(p.Resolve(c, of)), types.TypeId(0)), types.Spread)
+        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.spreadElem(p.BareRef(of, p.Resolve(c, of))), types.TypeId(0)), types.Spread)
     }
 }
 
@@ -658,9 +658,9 @@ fn (p Program&) writtenRef() I64 { return types.Writable if source.NewParams els
 
 # the rework's round 2 (D9, docs/rework.md 2.10): a bare parameter is passed by pointer to the caller's storage where it
 # is a struct or an array, text included - held as a read-only reference, its body's own copy made on entry where the
-# body writes it (check); one of numbers or Bools stays by value, for G29's instances per length, as do an enum, a
-# number, a function value and a type variable's binding; an extern's and an export fn's struct keep C's by-value
-# convention (X11). t is what tr resolved to
+# body writes it (check); an enum, a number, a function value and a type variable's binding stay by value, and an
+# extern's and an export fn's struct keep C's by-value convention (X11). An array of numbers too, so no bare parameter
+# makes G29's instances per length (one per literal length a program passes would be made). t is what tr resolved to
 fn (p mut Program&) BareRef(tr ast.TypeRef?&, t types.TypeId) types.TypeId {
     if not source.NewParams or tr is null or t == types.UnknownT or not WrittenBare(tr) { return t }
     return p.T.Ref(t, types.ReadOnly) if p.byPointer(t) else t
@@ -677,10 +677,7 @@ fn WrittenBare(tr ast.TypeRef&) Bool {
 
 fn (p mut Program&) byPointer(t types.TypeId) Bool {
     match p.T.KindOf(t) {
-        case types.Kind.Array {
-            e := p.T.Elem(t)
-            return not (p.T.IsNumber(e) or e == types.BoolT)
-        }
+        case types.Kind.Array { return true }
         case types.Kind.Named {
             k := p.T.DeclKindOf(p.T.DeclOf(t))
             if k == types.DeclKind.Struct: return not p.cabi

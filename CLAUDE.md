@@ -405,7 +405,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (the user's "Yes do them"): a `&` parameter the body never writes, passes to a `&` parameter or stores shared is an
   error naming `p T`; a bare parameter stored shared is an error naming `p T&` or `.Clone()`; a write to a bare
   parameter nothing reads afterwards is an error naming `p T&` (the forgotten `&`). A stored reference cannot be
-  declared read-only (accepted; revisit if code wants it). The entry
+  declared read-only (accepted; revisit if code wants it). **Begun behind `OLANG_PARAMS=new`** (2026-10-31, `wt-rework`,
+  docs/rework.md section 10): a bare struct or array is passed as a read-only reference written bare (a copy on entry
+  where its body writes it), D9d-D9f, `&Name()` in traits, `tools/param_migrate.olang`; std 19 of 40 test files under it,
+  compiler/ not migrated - per-level permission (2.8's inferred levels) is the piece left before the flip. The entry
   below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
