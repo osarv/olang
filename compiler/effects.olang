@@ -153,6 +153,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     curCalls Vec<I64>
     curLinks Vec<link>
     paramAt Map<I64, I64>
+    derived Map<I64, I64>         # by local: the parameters (Writes bits) what it holds is read out of (round 2c)
     bounded Map<I64, Bool>
     curMod I64 = -1
 }
@@ -317,6 +318,7 @@ fn (e mut Effects&) walk(b I64) {
     e.curCalls = Vec<I64>()
     e.curLinks = Vec<link>()
     e.paramAt = Map<I64, I64>()
+    e.derived = Map<I64, I64>()
     for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
     e.bounded = Map<I64, Bool>()
     for id in body.Bounded { e.bounded.Put(I64(id), true) }
@@ -343,7 +345,11 @@ fn (e mut Effects&) block(b typed.Block?&) {
 
 fn (e mut Effects&) stmt(st typed.Stmt&) {
     match st {
-        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
+        case typed.Stmt.Let(_, id, x) {
+            e.expr(x)
+            e.derive(I64(id), x)
+        }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
         case typed.Stmt.Assign(_, t, v) {
             e.place(t, true)
             e.expr(v)
@@ -450,7 +456,10 @@ fn (e mut Effects&) expr(x typed.Expr?&) {
 fn (e mut Effects&) arm(a typed.Arm&) {
     for alt in a.Alts {
         e.expr(alt.Test)
-        for bd in alt.Binds { e.expr(bd.From) }
+        for bd in alt.Binds {
+            e.expr(bd.From)
+            e.derive(I64(bd.To), bd.From)
+        }
     }
     e.expr(a.Guard)
     e.block(a.Code)
@@ -554,9 +563,38 @@ fn (e mut Effects&) store(p typed.Lvalue&) {
     if r.Local >= 0 and r.Through { e.through(r.Local) }
 }
 
+# a local made from what a parameter reaches - a reference read out of it, a binding of its payload, a copy holding its
+# references: a store through it is one through that parameter (writes through a payload binding went unsaid)
+fn (e mut Effects&) derive(id I64, x typed.Expr&) {
+    if not e.P.T.HoldsRefs(x.Type()) and not e.P.T.IsRef(x.Type()): return
+    bits := e.rootBits(x, 0)
+    if bits != 0: e.derived.Put(id, bits)
+}
+
+# the parameters a value may be read out of, as Writes bits: a conditional's or a match's either value too
+fn (e mut Effects&) rootBits(x typed.Expr&, depth I64) I64 {
+    if depth > 16: return 0
+    match x {
+        case typed.Expr.Cond(_, _, cd) {
+            a := e.rootBits(cd.A!, depth + 1) if cd.A is not null else 0
+            return a | e.rootBits(cd.B, depth + 1)
+        }
+        case typed.Expr.Match(_, _, m) {
+            bits I64 = 0
+            for a in m.Arms {
+                if a.Value is not null: bits = bits | e.rootBits(a.Value!, depth + 1)
+            }
+            return bits
+        }
+        case _ { }
+    }
+    l := e.exprRoot(x)
+    return paramBit(try e.paramAt.Get(l) catch default -1) | (try e.derived.Get(l) catch default 0)
+}
+
 fn (e mut Effects&) through(local I64) {
     k := try e.paramAt.Get(local) catch default -1
-    e.cur.Writes = e.cur.Writes | paramBit(k)
+    e.cur.Writes = e.cur.Writes | paramBit(k) | (try e.derived.Get(local) catch default 0)
 }
 
 # whether a place is part of a global's own storage: the global, its fields and elements, none of it through a reference
@@ -592,6 +630,7 @@ fn (e mut Effects&) exprRoot(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return e.placeRoot(p).Local }
         case typed.Expr.Away(_, _, y) { return e.exprRoot(y) }
+        case typed.Expr.Seq(_, _, q) { return e.exprRoot(q.X!) if q.X is not null else -1 }    # "x!" (E35)
         case _ { return -1 }
     }
 }

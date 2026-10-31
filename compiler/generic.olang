@@ -657,7 +657,7 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Any(_, of): p.T.Any(p.Resolve(c, of))
         case ast.TypeRef.Errs(_, _): types.UnknownT     # only where Apply reads it, a list's last argument (G1a)
         # D8g: a variadic parameter's, a read-only array of what it is written as - "...T" its spelling (Spread)
-        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.spreadElem(p.BareRef(of, p.Resolve(c, of))), types.TypeId(0)), types.Spread)
+        case ast.TypeRef.Spread(_, of): p.T.Ref(p.T.Array(p.spreadElem(p.spreadBare(of, p.Resolve(c, of))), types.TypeId(0)), types.Spread)
     }
 }
 
@@ -690,6 +690,14 @@ fn (p Program&) writtenPerm(c Context&, sp source.Span) I64 {
 
 # a variadic parameter's element, as its arguments are held (D8g): under the rework's round 2 its references read-only
 # - a variadic list is the callee's to read, as a bare parameter is - so data written in the program fits as it is
+# a variadic parameter's element written bare, under the rework's round 2: an array (text included) held by a read-only
+# reference, as T7a holds an array inside an array; a struct by value, the array it is gathered into being read-only
+# already (round 2c: "headers ...Header" was an Array<Header&>, which no Array<Header>& parameter took)
+fn (p mut Program&) spreadBare(of ast.TypeRef&, t types.TypeId) types.TypeId {
+    if p.T.KindOf(p.T.Repr(t)) != types.Kind.Array: return t
+    return p.BareRef(of, t)
+}
+
 fn (p mut Program&) spreadElem(t types.TypeId) types.TypeId {
     if not source.NewParams or p.T.KindOf(t) != types.Kind.Ref { return t }
     return p.T.Ref(p.T.Referent(t), p.T.PermOf(t) & ~types.Writable)

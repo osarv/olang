@@ -1,0 +1,25 @@
+# check: doc Put
+# also: # effects: writes through 'h', 'g'; allocates nothing; never blocks; always ends; may be computed while compiling
+# B11b: a write through a binding of a parameter's payload, or through a choice of two parameters' reaches, is a write
+# through those parameters (the effects line had said "none")
+type Node struct(v I64) {
+    v
+}
+
+type Holder enum {
+    One(n mut Node&)
+}
+
+fn Put(h Holder&, g mut Node&, k I64) {
+    match h {
+        case Holder.One(x) { x.v = k }
+    }
+    n := g if k > 0 else g
+    n.v = k
+}
+
+fn main() {
+    a := Node(1)
+    b := Node(2)
+    Put(Holder.One(a), b, 3)
+}

@@ -27273,3 +27273,77 @@ marker with a D9d request (`d T&cfg`).
 whole) - the class of the 5 std files left and of compiler/'s O17 rest; the result rule (a view of a bare parameter
 handed back is read-only here, where QCC said an error naming the value result - waiting for the by-pointer handover);
 compiler/'s migration finished (a driven run with fresh pins, then by hand); the scope phase's field loop; no flip.
+
+## The rework, round 2c: permission per field, behind the switches (2026-10-31)
+
+Round 2b left five std files, all one class: an instance made from read-only data - an iterator over a captured array, a
+map's key walk, regex's searcher and DFA - was a read-only copy whole (Rule P), so it could not be returned as a
+writable value or lent to a method writing anything but its plain fields. The coordinator's decision was per-field
+bindings carried by each instance. Built instead, first, at the granularity of a struct type (docs/rework.md section
+12, the decision recorded there for the user's review): a reference field no code writes through is read-only, as a
+field written `T&` was before QCC made every written `&` writable. The reason is a function value: `FlatMap(fn(x I64)
+ArrayIter<I64> { return a[:x].Iter() })` hands an iterator through a function type, which carries no per-instance
+binding, and old code's meaning was the type's anyway.
+
+**How it is decided.** As entry copies and inferred levels are - by checking again. A field a read-only value is stored
+into is asked read-only; a write through a reference read out of a field marks it written; an attempt reads the asked
+less the written read-only. In that attempt anything resting on such a field that would be refused - written through,
+handed where it may be written, a copy made from it lent where it is used deeply - marks the field written instead of
+being said, and the program is checked again. Both sets grow only, so it ends; and no program round 2b accepted is
+refused for a field made read-only. A constructor's argument counts as kept only where its fields' initializers put it
+(a view into a reference field, into a nested constructor's fields; a fresh array, or a plain function's writable
+result given it for a bare parameter, keeps nothing), so regex's searcher - holding a machine and two DFAs built from
+the program and the text - is a writable instance whose text and program fields are read-only.
+
+**The lends made precise.** Three readings of round 2b's deep use were too coarse for iterators: a value lent to a
+function's `&` parameter needed a writable argument whatever the callee did with it (now: as deep as that parameter is
+used, settled after refDeep); a walked `&` parameter was deep at once (now: as deep as its Next); a reference a `&`
+parameter reaches stored into its own field or a local made from it counted as kept elsewhere (now: within its own
+reach). A reference handed back from what a `&` parameter of an instance reaches makes the result follow that
+parameter, so a key walk over a read-only map gives read-only keys and asks nothing of the map. And a function value's
+bare parameter keeps nothing of its argument when its type's result holds no reference - regex's `ReplaceFunc` lends a
+loop's Match to `f`.
+
+**Found and fixed on the way** (all reachable only under the switches):
+- A permission conversion hid a bare parameter's view: a read-only argument for a constructor's `&` parameter is
+  converted to the writable type, and `roRef` read that type - `fn mk(t String) holder { return holder(t) }` returned a
+  writable holder over the caller's text, and writing through it changed the caller's string. By-pointer passing was
+  observable, against 2.10's whole premise. `roRef` reads through a permission conversion now; `String.Lines()` had
+  been passing only through it (its `LineIter` now holds its text read-only, its lines narrowed read-only).
+- `:=` of a read-only nullable reference made the local never-null (its type rebuilt keeping only `Owning`).
+- The bare parameters were remembered across attempts by body id; once an attempt made other instances, an instance's
+  `&` receiver read as bare.
+
+**Measured**: std 40 of 40 under the switches (round 2b 35); `tests/params/fields.olang` added, run by
+`make verify-params`. Left: compiler/'s migration (param_migrate made idempotent, a finishing D9d round), the
+by-pointer value-result handover and QCC's `T&` result error, open point 5, the remaining not-a-value reasons, KeptPerm
+and the storeThrough hole, the caller-side copy, the scope phase's field loop.
+
+**The migrated compiler's O17s, and what they turned up.** compiler/'s migration stalled at O17: the text phase made
+`x typed.Expr` parameters bare, a bare enum is a copy held by value (only structs and arrays go by pointer), and every
+such copy lent to a reader handing back a borrow of it (`s.unAway(x)`, a result `typed.Expr&x`) is a split value -
+its references live where the caller's do, its own storage in the frame - which O17 refuses. Passing enums by pointer
+too was tried and reverted (a generic binding a type variable to an enum then saw a reference: std/json's Str). What
+went in instead is docs/scope-model.md 3.3's other binding, written down in 2026-10-18 and held back then for parity
+with stage 0: a split value lent by its storage where the callee puts nothing into what it reaches - sound by "not
+reg", the kept result held to the copy's scope. A probe storing a local node through such a copy is still refused, and
+so is one storing through a loop turn's copy (`tests/params/fail/putsunder.olang`). The probes around it found four
+older holes, all fixed: a nullable parameter written through a binding of its payload or a reference read out of it
+was never made writable, so a bare parameter's reach was written (`nullwrites.olang`); `x!` and a reference converted
+to a nullable one hid which parameter it came from; a refusal at a bare parameter's reach was let through by marking
+an inferred field written; and the evaluator read a struct or an enum converted to itself as a scalar - `interpret`
+walked `expr.lit(0)` where the run time had the tree, so a decided assert over the probe's depth was refused as false.
+The effects line, too, missed a write through a payload binding (on the default path as well).
+
+Closing the nullable hole made the commonest reader in the compiler expensive: `fn (s Scoper) unAway(x typed.Expr?&)
+typed.Expr&x` hands `x` back in a writable result, so `x` became writable and every caller with a bare `x` was refused.
+Such a result now follows the parameter, as an instance's result follows its argument since round 2b: read-only at a
+call giving read-only data, writable where the argument is, the parameter itself read-only. The one thing following
+had lost - that `first(n).v = 5` writes through `n` - is recorded at the write (`followedUse`), so D9d does not tell
+`n` to go bare.
+
+Probing the match values the migrated compiler refused (S12b, "every value of this match is Expr?&, found Expr?&")
+found one more hole of the same family, older than this round: a conditional or a match choosing between a writable
+reference and `a.next!` read out of a bare parameter took the writable type, because `roRef` did not look through the
+`Seq` that `x!` reads in - so writing through the choice wrote the caller's node. Fixed, with the match's values made to
+meet read-only (under the switches) where they are one reference type but for permission.

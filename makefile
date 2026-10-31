@@ -362,19 +362,24 @@ verify-infer: $(OLANG)
 
 # the rework's round 2 (docs/rework.md sections 10-11): std copied into build/params, migrated there by
 # tools/param_migrate.olang (its text, driven and finish phases under the switches), then every test file of std, the
-# prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer. Not part of verify: std is
-# 34 of its 40 test files there (2026-10-31) - the rest wait for 2.8's per-field permission bindings
+# prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer, and tests/params (written in
+# the rework's spelling). Not part of verify until the flip (round 4): std is 40 of its 40 test files there (round 2c)
 PARAMS_DIR = build/params
-PARAMS_TESTS = $(shell grep -l '^test ' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang)
+PARAMS_TESTS = $(shell grep -l '^test ' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang) $(wildcard tests/params/*.olang)
 PARAMS_RUNS = $(addprefix params@,$(PARAMS_TESTS))
+PARAMS_FAILS = $(wildcard tests/params/fail/*.olang)
 PARAMS_ENV = OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
 verify-params: $(OLANG)
-	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR) && cp -r std $(PARAMS_DIR)/std
+	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params
 	$(OLANG) build -output $(PARAMS_DIR)/param_migrate tools/param_migrate.olang
 	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) -j $(PARALLEL) std
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
-	@echo "verify-params: std's tests pass on its migrated copy under the switches"
+	@for f in $(PARAMS_FAILS); do want=$$(sed -n 's/^# check: fail //p' $$f | head -1); \
+		out=$$(cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) compile -output check.o $(CURDIR)/$$f 2>&1); \
+		echo "$$out" | grep -qF "$$want" || { echo "verify-params: $$f did not fail with: $$want"; echo "$$out" | head -5; exit 1; }; \
+	done
+	@echo "verify-params: std's tests pass on its migrated copy under the switches, and tests/params/fail's cases fail"
 $(PARAMS_RUNS): params@%: FORCE
 	@cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) test $* || echo "$*" >> $(CURDIR)/build/failed.txt
 

@@ -1285,3 +1285,223 @@ Without the switches the compiler checks as before; every change is behind `sour
 - **Compile time** under `OLANG_SCOPES=infer` stands as round 1 left it: the scope phase's field loop is not made
   incremental (check 2.7 s, scope 8.0 s on the compiler, measured beside a migration run; 1.3 s without the switch) -
   left for round 2c (10.7, "the field loop").
+
+## 12. Round 2c: permission per field, as far as built
+
+Built on `wt-rework` behind the same switches; without them the compiler checks as before (12.4). std is 40 of its 40
+test files under the switches (`make verify-params`, which now runs `tests/params/` too, written in the rework's
+spelling).
+
+### 12.1 What was built
+
+- **Reference fields read-only by inference** (2.8's permission binding, at the granularity of a struct type - an
+  instance of a generic is a type of its own). A reference field no code writes through - nothing written through what
+  it names, nothing it reaches handed where it may be written - is read-only, as a written `T&` field was before every
+  written `&` became writable: an instance holding read-only data there is no read-only copy, so it is returned, lent
+  and walked as any value (an `ArrayIter` over a captured array returned from a lambda, regex's searcher and `Match`
+  built from a bare parameter's text, `LineIter`). Decided by attempts as entry copies and inferred levels are: a field
+  a read-only value is stored into is asked read-only (`fieldWant`, a constructor's argument or an assignment into it)
+  unless it is written through (`fieldWrit`, every write through a reference read out of a field, recorded where
+  mustWrite and an atomic operation write); an attempt's read-only fields are the first set less the second; in it what
+  is read through one is read-only (`roRef`, `roFieldX`), and a refusal resting on one - a write through it, a view of
+  it handed where it may be written, a read-only copy made from it lent to a body using it deeply - marks the field
+  written and checks again, instead of saying the error. Both sets only grow, so the attempts end. A constructor's
+  argument is kept where its fields' initializers put it (`ctorSinks`: a view of the parameter into a reference field,
+  into what a nested constructor builds, a fresh array or a plain function's fresh result keeping nothing; anything
+  else unknown, today's whole read-only copy); every field it lands in read-only, the instance is no read-only copy
+  (`sinksRo`, which also asks the fields). Where a view read through such a field is handed back: a plain function's
+  result is narrowed read-only (the field is the type's, so are its views: `LineIter.Next`'s lines of a bare `t`'s
+  text), an instance's field is marked written first (its result follows its arguments).
+- **Deep use, made precise for lends.** A value lent to a function's `&` parameter in an instance needs a writable
+  argument only where that parameter is used deeply (`roDeepLends`, judged once refDeep is settled) - a walk's Next
+  writing the iterator's position asks nothing of the map it was made from; a walked `&` parameter is as deep as that
+  walk's Next (`walkDeep`, a dependency, not deep at once); a reference a `&` parameter reaches kept in that
+  parameter's own field, or in a local made from what it reaches, stays within its reach (`storeParam`); a reference
+  handed back from what a `&` parameter of an instance reaches makes the result follow that parameter
+  (`followRef`, load.FollowResults) - read-only, at its top too, at a call giving it a read-only argument.
+- **A function value's bare parameter keeps nothing** (scope.olang, `valueKeepsNothing`): a call through a function
+  value whose parameter is a bare one (a read-only reference, 2.10) and whose result holds no reference keeps nothing
+  of the argument past the call - no function type relates its parameters' scopes (T22a), a capture outlives no
+  parameter, and nothing is written through a read-only one - so regex's `ReplaceFunc(t, f fn(m Match) String)` lends
+  a loop's `Match` to `f` (O17 had refused it).
+
+- **A split value lent by its storage** (scope.olang, `lentByStorage`, O17, behind the switches). A value whose
+  references live elsewhere than its own storage - most often a bare enum parameter, this function's copy held by
+  value (only structs and arrays go by pointer) - lent to a callee that keeps something of it (a result borrowed from
+  it: `unAway(x Expr?&) Expr&x`) had been refused (O17: one scope variable cannot say both places). Now it is lent by
+  its storage where the callee puts nothing into what it reaches - no store into it or through it (`Stores`, `Puts`)
+  and no obligation needing something to outlive its scope variable (`putsUnder`: a relation whose lower side is it, an
+  exact one naming it, a term the summary cannot place). That binding is sound by docs/scope-model.md 3.3's "not reg":
+  what the callee keeps of the argument is held to the copy's scope, the shorter one, and judged there as any result
+  is (`return unAway(x)` from the copy's function is O26). It is what compiler/'s migrated `fn (s Scoper)
+  choiceOfRefs(x typed.Expr)` needs: the migration had made such parameters bare, and every one lent to a reader
+  handing back a borrow was an O17. An O17 at a bare parameter now notes the parameter (`splitErr`), so the
+  migration's driven phase can make it `&` where the callee does put into it.
+
+- **A nullable parameter handed back is followed, not widened** (check.olang, `followNull`). `fn unAway(x Expr?&)
+  Expr&x` hands back `x` (or a reference read out of it) as a writable `T&`; round 2b made `x` writable for it
+  (wantWritable), so every caller had to give a writable argument - the migrated compiler's `s.unAway(x)` over a bare
+  `x` was the commonest T25c left. Now such a result follows the parameter, as an instance's does (load.FollowResults):
+  read-only at a call giving a read-only argument, writable where the argument is, and the parameter stays read-only.
+  A write through such a result uses the argument's `&` parameter (`followedUse`, D9d), so `fn bump(n Node&) {
+  first(n).v = 5 }` keeps its `&`. A function whose result follows is no function value (FollowsAny, as before).
+
+### 12.2 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **Per struct type, not per instance.** The coordinator's brief asked for bindings per instance (an instance made
+   from read-only arguments recording which fields are bound read-only, methods judged per field, results carrying the
+   binding as roToResult does). Built instead at the type's granularity first, because a binding carried by an
+   instance does not survive a function value or an `any` (iterator.olang's `FlatMap(fn(x I64) ArrayIter<I64> {...})`
+   returns one through a function type that cannot say it), and because the old code's meaning was exactly this - a
+   field written `T&` was read-only for every instance. Per-instance refinement (a field one body writes through, read
+   only for instances made from read-only data) is additive where real code needs it; std and the compiler have not
+   yet.
+2. **A refusal resting on an inferred field marks it written** rather than being said - the field goes back to
+   writable and the program is checked again - so no program the round-2b checker accepted is refused for a field made
+   read-only (the regression check: every std file still passes).
+3. **A view through such a field handed back from a plain function narrows the result**; from an instance it marks the
+   field written (12.1). Narrowing an instance's result changes it for every caller of that instance type (an
+   `ArrayIter<String&>` walked over writable text), which following does not.
+4. **A split value lent by its storage** (12.1): docs/scope-model.md 3.3's second binding, held back in 2026-10-18 for
+   parity with stage 0, taken now that stage 0 is gone - only behind the switches, never to a constructor, and refused
+   wherever the callee's summary cannot say it puts nothing there. A section-8 relaxation: the next bulk review's.
+5. **A nullable parameter written through what it reaches, or kept, is made writable; one only handed back is followed**
+   (12.1). The first closes a hole (12.3); the second keeps the common reader (`unAway`) callable with read-only data.
+
+### 12.3 Found and fixed on the way
+
+- **A permission conversion hid a bare parameter's view** (round 2a/2b): a read-only argument for a constructor's `&`
+  parameter is converted to the writable type "as given" (argCtor), and `roRef` read the conversion's writable type -
+  so `fn mk(t String) holder { return holder(t) }` returned a writable `holder` over the caller's text, and a write
+  through it changed the caller's string, observably (`xbc` for `abc`: by-pointer passing was visible). `roRef` now
+  reads through a permission conversion. It was what had let `String.Lines()` return a writable `LineIter`.
+- **`:=` of a read-only `T?&` dropped its null** (round 2a): the local's type was rebuilt keeping only `Owning`, so a
+  nullable reference read through a read-only copy became never-null (`s := it.slot` in MapKeyIter.Next: "s is never
+  null").
+- **Bare parameters were remembered across attempts** by body id (`bareLocals` was never reset), so when an attempt
+  made other instances, a stale entry made an instance's `&` receiver a "bare parameter" (`for x in try it` in
+  `ToVec`, refused as read-only).
+- **A constructor wrote through a read-only argument** (round 2a/2b): a read-only value given a constructor's `&`
+  parameter was taken as given whatever the constructor did with it, so `type popper struct(v Vec<I64>&) { v; n I64 =
+  first(v) }` with `first` pushing onto `v`, built in `fn take(xs Vec<I64>)`, grew the caller's Vec. Such an argument
+  is now recorded (`roCtorArgs`) and refused where the constructor uses that parameter deeply - a constructor's own
+  field keeping it is no deep use (it holds it as given), and a constructor's parameter handed on is as deep as the
+  callee uses it (refArg, a dependency, no longer deep at once).
+
+- **A nullable parameter written through what it reaches stayed read-only** (round 2a): `p T?&` is read-only unless
+  its body writes through it (wantWritable), but only a write through `p` itself was seen - a write through a
+  reference read out of it or a binding of its payload (`match h! { case One(x) { x.v = n } }`) went through a
+  writable-typed local and widened nothing, so a bare parameter - read-only all the way down - was handed to it and the
+  caller's node written. Now a nullable parameter its body uses as a `&` one once the uses are settled (refUsed, after
+  refSettle's fixed point) is made writable and the program checked again (`widenUsed`).
+- **`x!` and a conversion hid where a reference came from**: a local made from `h!` (a pure read under a test) had no
+  origin (`roTrack` reads through `unwrapped`), and a reference converted to a nullable one for a `?&` parameter
+  (`Convert`, T2c) named no parameter for D9d (`refConverted`, in refParamOfX and refUseX) - `fn mk(h holder&) { v :=
+  h; put(v, 5) }` was told to take `h` bare.
+- **A refusal at a bare parameter's reach rested on inferred fields** (this round): fieldsWritAll let a lend, a store
+  or a constructor's argument through by marking the field written, though a bare parameter's reach is read-only
+  whatever its fields say (QCC); such refusals now rest on no field (`bareRooted`).
+- **The evaluator read a struct or an enum converted to itself as a scalar** (round 2a): the checker gives a bare
+  parameter's argument copied out of a reference as `Convert` of the value, which the evaluator computed through its
+  scalar path - a zero, `expr.lit(0)` for `expr.away(...)` - so `interpret` and a baked global disagreed with the run
+  time (`depth` walking a tree gave 1 for 2). It now copies the record, as emit does.
+- **The effects line missed writes through a local made from a parameter's reach** (the tooling batch, on the default
+  path too): a binding of a payload or a reference read out of a parameter wrote "effects: none" for `match h { case
+  One(x) { x.v = n } }`, and so did a write through a conditional's or a match's choice of two parameters' reaches;
+  such locals now stand for every parameter they may be read out of (effects.olang's `derive`, `rootBits`;
+  `checks/cases/b11beffectsbind.olang`).
+
+- **A variadic struct's elements were references** (round 2a): `headers ...Header` was gathered into an
+  `Array<Header&>` (the element taken bare, by pointer), which no `Array<Header>&` parameter took - std/http's `Get`
+  did not compile under the switches (it has no tests, so verify-params never saw it). An array element stays an array
+  held by a read-only reference (T7a); a struct is held by value, the gathered array being read-only already
+  (`generic.spreadBare`).
+- **A read-only copy stored where it can be written asked nothing of its fields**: `for i, h in headers { all[i] = h }`
+  was refused though `Header`'s fields are never written through. Its own reference fields are now asked read-only
+  (`askTypeFields`, the FRO mechanism of 12.1), the store refused only where one of them is written through somewhere.
+
+- **A choice of a writable reference and a bare parameter's view wrote the caller's data** (round 2a): `n := b if k ==
+  0 else a.next!` (or the same as a match) took the choice's type from the writable `b`, and `a.next!` fitted it,
+  since `roRef` did not read through `x!` (a `Seq` around the read) - `n.v = 9` wrote the node `a` reaches
+  (`tests/params/fail/choosesview.olang`). `roRef` reads through it now. A match's values that are one reference type
+  but for permission meet read-only, as S13c's bindings do (S12b had said "every value of this match is Expr?&, found
+  Expr?&").
+
+### 12.4 Today's path
+
+Without the switches nothing changes: every new path is behind `source.NewParams` (the scope pass's too); `make quick`
+passed but for the token and tree goldens of the edited files, recaptured. Two fixes of this round reach the default
+path, on purpose: the evaluator's identity conversion of a struct or an enum (no default program produced one) and the
+effects line (explain, doc and hover only - nothing decides by it).
+
+### 12.5 Measured
+
+- std under the switches: 40 of 40 test files (round 2b: 35), and `tests/params/fields.olang` (a cursor over a bare
+  parameter's text returned and walked, an instance holding a fresh one made from read-only text, a global baked while
+  compiling and a top-level assert decided on it beside the run time), `tests/params/lend.olang` (a bare enum lent by
+  its storage, walked recursively; a baked global and a top-level assert beside the run time), and six must-fail
+  cases in `tests/params/fail/` (a constructor writing through what it is given, a view held by a holder, the
+  storeThrough shape, a nullable parameter written through a payload binding, a loop turn's copy lent to a callee
+  storing into its reach, a choice of a writable reference and a bare parameter's view). The migration leaves 9
+  errors in std's own modules (25 before this round's fixes), all of a module checked alone (`time.Virtual`'s decided
+  assert outside a test build), none in a test.
+
+- `make verify` passes on wt-rework at the round's end (the default path: the suite, the bootstrap, the goldens -
+  tokens, trees and the checker's record layouts recaptured for the files this round changed).
+
+### 12.6 Left, in order, with what each needs
+
+1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands: 326
+   distinct errors on the root, most of them readers handing back a view of a `&` parameter given bare data - which
+   item 2 removes; then the unpinned settling's oscillation, which pins nothing in its own stage).
+2. **The by-pointer value-result handover, then QCC's `T&` error** (the coordinator's decision 1). What it needs, as
+   found here: the copy a value result makes of a view (`fn (m Match) Text() String { return m.t[a:b] }` copies at the
+   return today) moves from the callee to the caller - the callee hands back the view, marked in its summary as "may
+   be a view of bare parameter k"; at each call the caller copies the result unless the view is only read before the
+   statement ends (passed to a bare parameter, rendered, compared, measured, indexed or sliced to be read) and nothing
+   in that statement writes the argument for k; a result kept (a local, a field, a return) is copied at the call, so
+   section 8 never sees a view outlive its source. Then a `T&` result handing back a view of a bare parameter is an
+   error naming the value result (and `KeptPerm`, live under the switches through the 32 result markers std keeps -
+   `Trim() String&t` - goes with it), with `param_migrate` turning such results into values.
+3. **Open point 5** (a function type's `T&` result read as borrowed from its `&` parameters): measured at two checks
+   scenarios, none in std or compiler/; a section-8 change (the result of a call through a function value read as
+   existing storage where its `&` arguments are) for the bulk review to look at.
+4. **The caller-side copy of 2.10** (a bare argument read in place while the same call may write its storage through a
+   `&` argument, a mutable global, a function value or an `any`): needs the storage-type write summary per body,
+   views.olang's growth summary generalized.
+5. **The scope phase's field loop.** Merging its last quiet judging with the reporting one was tried and reverted: the
+   scope pass has control flow that depends on whether it reports (`if not s.report { return }` at several refusals),
+   so a reporting judging is not a quiet one and the promotions found changed. What is left is incremental judging -
+   only the components a promotion touches and their callers - which needs the pass's memo maps (`trMemo`, `useMemo`,
+   the lift maps) kept per body. Measured: 3 field rounds and the report on tests/shared.olang, the scope phase 362 ms
+   against 143 ms without the switch.
+6. **The storeThrough hole** (checks/cases/derivedcopybuild.olang without `&ns`): refused under the switches (O25h,
+   with and without `OLANG_PARAMS=new`); on the default path it still reads freed storage - master's hole, closed by
+   the flip.
+
+### 12.7 compiler/'s migration, where it stands
+
+`param_migrate` over a copy of compiler/ (build/cmig, 81 files, each compiled whole by the round's compiler under both
+switches against the migrated std): the text phase changes 67 files; the driven rounds (pinned: a parameter made `&`
+again is never made bare after) converge at their seventh round. Measured on the compiler's root (compiler/olang.olang,
+every module it loads), distinct errors after the pinned rounds:
+
+| round 2c state | distinct errors | T25c | D9d | O17 | S12b |
+|---|---|---|---|---|---|
+| at its start (olang.d, the pinned stage of the first run) | 658 | 114 | 280 | 114 | 27 |
+| the storage lend and the nullable widening (olang.i, a snapshot mid-run) | 410 | 179 | 93 | 7 | 29 |
+| following, the variadic element, the stored copy (olang.m's migration, olang.i's check, the pinned tree) | 347 | 189 | 27 | 6 | 22 |
+| the same after five unpinned rounds, the match values met (olang.i's check) | 326 | 197 | 20 | 6 | 1 |
+
+The unpinned settling no longer runs away (27, 15, 2, 1, 1 edits) but ends in one parameter flipping each round (bare
+by D9d, `&` again by its callers' notes) and was stopped there. Root check: 16 s, 1.47 GB peak (the default-path
+compile of compiler/ is the self-build's check, ~1.9 GB peak with its objects). The self-build under the switches is
+therefore not reached: stage 2 needs the root to check.
+
+What the 326 are: T25c's ~160 "read-only here" are nearly all one shape - a reader taking a `&` parameter it only hands
+back, `fn unPassed(x typed.Expr&) typed.Expr&x`, `fn (s Scoper) callOf(x typed.Expr&) typed.Call?&x`, given a bare
+parameter's value (`unPassed(s.unAway(x))`). Under QCC such a reader takes its argument bare and gives a value - the
+by-pointer value-result handover (12.6 item 2) - so the remaining class waits for it, not for more inference; making
+those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are parameters the
+pinned stage keeps `&` (made so by a note, then never used as one - what the unpinned settling would bare); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
+copy refusals of views a bare parameter now gives, to be read again once value results hand over by pointer.
