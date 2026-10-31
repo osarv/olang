@@ -10019,10 +10019,14 @@ fn (c mut Checker&) typedHole(sp source.Span, want types.TypeId) typed.Expr&c {
         c.err(sp, msgs.TypedHoleUntyped())
         return c.unknown(sp)
     }
-    fits Vec<String&>
+    # the locals in the order they were declared - their ids - whatever order the map of bound names keeps
+    ids Vec<I64>
     for b in c.fr().bound {
-        if c.text(b.Key) != "_" and c.holeFits(c.localType(b.Value), want): fits.Push($c.text(b.Key))
+        if c.text(b.Key) != "_" and c.holeFits(c.localType(b.Value), want): ids.Push(b.Value)
     }
+    ids.Sort(fn(a I64, b I64): return a < b)
+    fits Vec<String&>
+    for id in ids { fits.Push($c.text(c.cur().Locals[id].Name)) }
     for e in c.P.R.Tables[c.fr().Mi].Entries {
         if e.Kind == names.What.Global and c.holeFits(c.globalType(c.fr().Mi, e.Name), want): fits.Push($c.text(e.Name))
     }

@@ -2535,7 +2535,7 @@ e38undecided.olang:5:15: error[E38]: this embed's path cannot be computed while 
       |               ^~~~~~~
 compilation failed with 1 error
 === e41hole.olang
-e41hole.olang:9:17: error[E41]: '_' holds the place of a value of type F64 - in scope: x, h, Scale
+e41hole.olang:9:17: error[E41]: '_' holds the place of a value of type F64 - in scope: h, x, Scale
     9 |     return area(_, h) + x + F64(n)
       |                 ^
 compilation failed with 1 error
