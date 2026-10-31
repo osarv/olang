@@ -6,6 +6,11 @@
 
 import "std/os"
 
+# the scoping rework's round 1 (docs/rework.md section 6): OLANG_SCOPES=infer reads every written scope marker, scope
+# argument and "outlives" as bare, and the scope pass infers what they said (scope.olang's inference). Unset, nothing
+# changes
+InferScopes := (try os.Env("OLANG_SCOPES") catch default "") == "infer"
+
 # a stretch of a file's text, [Start, End) as byte offsets
 type Span struct(Start I32, End I32) {
     Start

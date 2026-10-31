@@ -1171,7 +1171,9 @@ fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
     p.skipEnds()
     for not p.sees(token.Tok.RBrack) {
         if p.outlivesHere() {
-            chains.Push(try p.outlives())
+            # the rework's round 1: an "outlives" chain read as nothing, the obligations inferred from the body
+            ch := try p.outlives()
+            if not source.InferScopes: chains.Push(ch)
         } else {
             iat := p.here()
             x := try p.expr()
@@ -1438,7 +1440,8 @@ fn (p mut Parser&) markers(at I32, t ast.TypeRef&p) ast.TypeRef&p {
         if (k == token.Tok.Iden or k == token.Tok.Return) and not p.breakBefore() {
             nt := p.tk()
             p.advance()
-            scope = p.names.Intern(p.text(nt))
+            # the rework's round 1: a written marker read as bare, the scope pass inferring what it said
+            if not source.InferScopes: scope = p.names.Intern(p.text(nt))
         }
         r = ast.TypeRef.Ref(p.from(at), r, scope, nullable)
     }
@@ -2922,7 +2925,8 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                 p.advance()
                 scope := p.names.Intern(p.text(n))
                 args := try p.args()
-                x = ast.Expr.ScopeCall(p.from(start), x, scope, args)
+                # the rework's round 1: a scope argument read as none, the call landing where its uses say
+                x = ast.Expr.Call(p.from(start), x, args) if source.InferScopes else ast.Expr.ScopeCall(p.from(start), x, scope, args)
             }
             case _ { return x }
         }

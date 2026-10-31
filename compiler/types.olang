@@ -117,6 +117,9 @@ RoleDtor I64 = 2
 # an index - the earlier parameter whose variable a parameter shares ("&x", O4b), or a result is borrowed from ("T&p")
 OwnScope I64 = -1
 FromTypeVar I64 = -2
+# the rework's round 1 (OLANG_SCOPES=infer): a result written borrowed from a parameter ("T&p"), its marker read as bare
+# - built, in the result scope, for section 8, and keeping its written permission at a call as a borrowed one did
+KeptPerm I64 = -3
 
 # what ScopeVarsOf gives besides a parameter's index: the result scope (a constructor's instance), the closing scope
 ResultVar I64 = -1
@@ -798,7 +801,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     rs := t.Results(f)
     for k in range rs.Len() {
         e := t.ResultFrom(f, k)
-        if (e == OwnScope or e == FromTypeVar) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
+        if (e == OwnScope or e == FromTypeVar or e == KeptPerm) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
     }
     if built { out.Push(ResultVar) }
     return out.ToArray()

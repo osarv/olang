@@ -890,6 +890,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         rs[i] = p.Resolve(c, s.Results[i])
         from[i] = p.markedParam(c, s.Results[i], named, shares)
         if from[i] == types.OwnScope and p.T.KindOf(rs[i]) == types.Kind.Var { from[i] = types.FromTypeVar }
+        if from[i] == types.OwnScope and source.InferScopes and p.erasedParam(c, s.Results[i], named) { from[i] = types.KeptPerm }
     }
     if s.Results.Len() == 1 {
         result = rs[0]
@@ -929,6 +930,22 @@ fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named Vec<source.Nam
         p.L.Diags.ErrorOncePerLine(p.at(c.Mi, nsp), msgs.UnknownScopeName(msgs.Tok(text), near.Hint()))
     }
     return types.OwnScope
+}
+
+# the rework's round 1 (OLANG_SCOPES=infer): whether a result's marker, read as bare, named an earlier parameter - the
+# result then keeps its written permission at a call, as a borrowed one did, and section 8 infers the rest (KeptPerm)
+fn (p mut Program&) erasedParam(c Context&, t ast.TypeRef&, named Vec<source.NameId>&) Bool {
+    sp := p.markSpan(t)
+    src := p.L.Mods[c.Mi].Src
+    if src is null or sp.End <= sp.Start { return false }
+    text := src.Text[sp.Start:sp.End]
+    i := text.Len()
+    for i > 0 and (text[i - 1].IsLetter() or text[i - 1].IsDigit() or text[i - 1] == '_') { i-- }
+    if i == text.Len() or i == 0 or text[i - 1] != '&' { return false }
+    for nm in named {
+        if p.L.Names.Text(nm) == text[i:] { return true }
+    }
+    return false
 }
 
 # the span of a written type's outermost reference marker, whose scope name ends it

@@ -107,12 +107,13 @@ fn (t Term) Relatable() Bool {
 
 # a relation of a body's obligations (O10b): Hi outlives Lo, both relatable terms of the body; Exact where it is one half
 # of an equality (O25b, O25c); At the statement of the body that required it, for the note O10c's error gives
-type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64) {
+type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64, View Bool = false) {
     Hi
     Lo
     Exact
     At
     Why      # a constructor's: WhyHolds where its instance holds an argument (C2d), WhyField where a "&q" field names one
+    View     # the inference's (OLANG_SCOPES=infer): what Lo's slot keeps of Hi is a view of storage, never lifted (O27)
 }
 
 WhyHolds I64 = 1
@@ -343,6 +344,20 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     atDest Bool = false                    # the choice val judges next builds its new values at its destination (E28)
     landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
     landSp source.Span = source.Span(0, 0)
+    # the rework's round 1 (OLANG_SCOPES=infer, docs/rework.md 2.3-2.5): quiet judgings gathering what each local's uses
+    # need of it - a fit or a callee's obligation the local's claim fails proposing a longer one, liftGrew set where a
+    # proposal lengthened one - then the judging that reports, with the claims the gathering found
+    liftGather Bool = false
+    liftGrew Bool = false
+    lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
+    liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
+    wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
+    origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
+    fitTarget I64 = -1                     # the local whose claim the slot of the fit judged is, -1 none
+    landLocal I64 = -1                     # the local the call judged lands for (a ":=" of it), -1 none
+    obligeView Bool = false                # the obligation recorded next keeps a view of storage, not a whole value (O27)
+    Trace Bool = false                     # OLANG_INFERDUMP: every lift written to TraceLog, for a person
+    TraceLog Vec<String&>
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
@@ -528,11 +543,14 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
                 before := s.sums[b].Rels.Len()
                 built := s.facts(b)
                 s.judge(b, false)
+                s.inferClaims(b)
                 if s.sums[b].Rels.Len() != before or s.facts(b) != built { grew = true }
             }
             if not grew { break }
         }
     }
+    # the inference's claims (OLANG_SCOPES=infer), then the judging that reports
+    for b in comp { s.inferClaims(b) }
     for b in comp { s.judge(b, true) }
     for b in comp {
         s.sums[b].Done = true
@@ -584,6 +602,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.Id = b
     s.terms.Clear()
     s.stors.Clear()
+    s.origin.Clear()
     s.copied.Clear()
     s.blocks.Clear()
     s.joins.Clear()
@@ -654,10 +673,8 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         for _ in range pushed { s.P.L.Diags.PopContext() }
         s.P.L.Diags.ContextBase(base)
     }
-    # the obligations only grow: what a round found is kept for the next
-    for r in s.gamma {
-        if not hasRel(s.sums[b].Rels, r) { s.sums[b].Rels.Push(r) }
-    }
+    # the obligations only grow: what a round found is kept for the next - one a round found whole stays whole (O27)
+    for r in s.gamma { keepRel(s.sums[b].Rels, r) }
     sm := s.sums[b]
     s.noteFieldRecs(sm)
     sm.ResBind.Clear()
@@ -720,6 +737,16 @@ fn (s mut Scoper&) strReceiver() {
         }
         return
     }
+}
+
+# r added to rs unless rs has it, a view relation becoming whole where r is (O27)
+fn keepRel(rs mut Vec<rel>&, r rel) {
+    for k in range rs.Len() {
+        if rs[k].Hi != r.Hi or rs[k].Lo != r.Lo or rs[k].Exact != r.Exact { continue }
+        if not r.View: rs[k].View = false
+        return
+    }
+    rs.Push(r)
 }
 
 fn hasRel(rs Vec<rel>&, r rel) Bool {
@@ -1159,9 +1186,10 @@ fn (s mut Scoper&) visit(v I64) {
 
 fn (s mut Scoper&) run() {
     b := s.B
-    for _ in range b!.Locals.Len() {
+    for k in range b!.Locals.Len() {
         s.terms.Push(Term.None)
         s.stors.Push(Term.Block(typed.BlockId(0)))
+        s.origin.Push(-1 if b!.Locals[k].Kind == typed.LocalKind.Var or b!.Locals[k].Kind == typed.LocalKind.Hidden else -2)
     }
     for k in range b!.Vars.Len() {
         match b!.Vars[k] {
@@ -4112,6 +4140,11 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     s.moveTo = Term.None
     s.landOK = false
     s.landPart = false
+    # the inference's claim (2.4) - its storage with it, a value local kept whole, as O26a moves a returned one
+    lift := s.liftOf(I64(l))
+    if lift != Term.None and s.liftStor.Has(pair.Pair<I64, I64>(s.Id, I64(l))) {
+        moved = s.joinTerm(moved, lift) if moved != Term.None else lift
+    }
     s.stors[I64(l)] = s.blockTerm(loc.In)
     if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and s.borrowed(I64(l)) and loc.In == typed.BlockId(0) {
         # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
@@ -4178,6 +4211,9 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         return
     }
     claim := s.markTerm(loc.Marked, loc.In)
+    if lift != Term.None and claim != Term.None { claim = lift }
+    # the inference: a local written with a bare "&" is a ":=" of what it is given, its claim lifted where its uses need
+    if source.InferScopes and loc.Kind == typed.LocalKind.Var and loc.Marked == typed.Mark.Bare { claim = Term.None }
     match loc.Marked {
         case typed.Mark.Of(y) {
             match claim {
@@ -4220,17 +4256,23 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
     if claim == Term.None {
         # ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
         # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
-        s.landing = land and not part
-        if part { s.tempLand = 1 if land else 0 }
+        # ... where the inference lifted it, its value built or its call landed there (2.4)
+        dest := lift if lift != Term.None else s.blockTerm(loc.In)
+        s.landing = land and not part and lift == Term.None
+        if part { s.tempLand = 1 if land and lift == Term.None else 0 }
         s.lastGenArg = Term.None
-        v := s.val(x, s.blockTerm(loc.In))
+        savedLand := s.landLocal
+        s.landLocal = I64(l)
+        v := s.val(x, dest)
+        s.landLocal = savedLand
         s.landing = false
         s.tempLand = -1
+        s.noteOrigin(I64(l), x!, v)
         # D18c: a walk of a generator whose elements borrow from a parameter - each element lives where its argument does
         if s.lastGenArg.Runs() and s.walkLocal(I64(l)) { s.walkElem.Put(I64(l), s.lastGenArg) }
         s.lastGenArg = Term.None
         s.bindLocal(l, x!)
-        s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
+        s.terms[I64(l)] = s.valTerm(v, dest)
         h := try s.splitHome.Get(I64(l)) catch default Term.None
         if h != Term.None { s.terms[I64(l)] = h }
         # a "&p" field read through an element: only its container's scope is known, which the local would claim as its
@@ -4295,9 +4337,21 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
             kind = FitField if exact else FitDecl
             s.why = WhyHolds
         }
+        s.fitTarget = I64(l)
         s.fit(v.T, claim, exact, x!, kind)
+        s.fitTarget = -1
         s.why = 0
     }
+}
+
+# the inference: whose claim local l's is, declared from x (2.4) - its own where x is new storage built where it lands;
+# the local x is the whole of, where x is that local's storage or what it refers to; none to lift where x is other
+# existing storage (a parameter's, a global's, a view)
+fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
+    if not source.InferScopes or l >= s.origin.Len() or s.origin[l] == -2 { return }
+    if v.K != ValKind.Existing { return }
+    r, _ := s.wholeRoot(x)
+    s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2
 }
 
 # a local initialized by a constructor call, or by a call whose result is an instance of known bindings (O13c), and
@@ -4615,7 +4669,10 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     savedLand, savedLandSp := s.landSite, s.landSp
     ac := s.callOf(x)
     if ac is not null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
+    savedLandLocal := s.landLocal
+    s.landLocal = wholeLocal(p)
     v := s.val(x, slot if slot.Runs() else s.here())
+    s.landLocal = savedLandLocal
     s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
@@ -4634,7 +4691,9 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         # an assignment's own fit is said at its "=" (B11), a global's at the value (O1b)
         savedAt, savedSp := s.fitAt, s.fitSp
         s.fitAt, s.fitSp = kind != FitGlobal, s.eqAfter(p.Span())
+        s.fitTarget = wholeLocal(p)
         s.fit(v.T, slot, exact, x, kind)
+        s.fitTarget = -1
         s.fitAt, s.fitSp = savedAt, savedSp
     }
     if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None { s.freshIntoUnknown(sp, p, slot) }
@@ -5163,7 +5222,9 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
         case _: s.isRef(t) and not s.isFunc(t)
     }
     # a read-only reference to existing storage returned as a built result, which is new and writable (T25c, O14)
-    if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and s.readOnlyAsBuilt(x) { return }
+    # ... unless the result keeps its written permission, as a borrowed one did (the inference's KeptPerm)
+    kept := s.P.T.KindOf(s.B!.Ty) == types.Kind.Func and s.P.T.ResultFrom(s.B!.Ty, k) == types.KeptPerm
+    if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and not kept and s.readOnlyAsBuilt(x) { return }
     if v.K != ValKind.Existing { return }
     exact := s.storeThrough(t)
     match m {
@@ -5175,6 +5236,16 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
         }
         case typed.Mark.TypeVar { s.fit(v.T, dest, exact, x, FitReturn) }
         case _ {
+            # the inference's one result form (docs/rework.md 2.7): existing storage handed back is the obligation that
+            # it outlive the result scope, exactly where something can be stored through it - O14's error has nothing
+            # to say, and the result is as writable as it is written
+            if source.InferScopes {
+                # a read-only reference returned through a result its callers write (T25c) - one written borrowed from a
+                # parameter kept its written permission (KeptPerm)
+                if s.report and not kept and v.T != dest and s.isRef(t) and not s.isFunc(t) and s.readOnlyAsBuilt(x) { return }
+                s.fit(v.T, dest, exact, x, FitReturn)
+                return
+            }
             # a built result: a value whose scope is the result scope (O26), else an obligation where the language
             # allows one - a function value (O14a), a value holding references (O14c). A reference to the program's
             # storage - a global's, constant data - is none: the caller may write a built result (T25c), so it would
@@ -6114,9 +6185,13 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
             s.stors[l] = s.blockTerm(s.B!.Locals[l].In)
             if flHas(bound, l) and s.terms[l] != v.T and s.terms[l] != Term.None and v.T != Term.None {
                 s.terms[l] = s.setOf(s.terms[l], v.T)
+                if l < s.origin.Len() { s.origin[l] = -2 }
             } else if not flHas(bound, l) {
                 s.terms[l] = v.T
                 bound.Push(l)
+                # the inference: a binding's claim is its subject's, which a lift of the binding lengthens (2.4)
+                r, _ := s.wholeRoot(bd.From)
+                if l < s.origin.Len() { s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2 }
             }
         }
     }
@@ -6930,10 +7005,14 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         if hi == Term.None or lo == Term.None { continue }
         k := s.judgeOut(hi, lo)
         if k == Holds { continue }
+        # the inference: an argument whose local's claim is too short for what the callee keeps of it whole proposes a
+        # longer one - the local the call's result lands for, where the result is what is too short (2.4, O27)
+        if s.liftGather and k == FailsBlock and not r.View { s.liftAtCall(c, r, lo) }
         if k == Obliged {
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
             # where it is called as such
             saved := s.why
+            s.obligeView = r.View
             if r.Why != 0 and s.instanceRel(hi, lo) {
                 s.why = r.Why
             } else if r.Why != 0 and s.resultVar >= 0 and lo == Term.Var(s.resultVar) and not s.isCtor() {
@@ -6942,6 +7021,7 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             }
             s.oblige(hi, lo, r.Exact)
             s.why = saved
+            s.obligeView = false
             continue
         }
         if not s.report { continue }
@@ -7722,7 +7802,15 @@ fn (s mut Scoper&) oblige(hi Term, lo Term, exact Bool) {
 }
 
 fn (s mut Scoper&) addRel(r rel) {
-    if not hasRel(s.gamma, r) { s.gamma.Push(r) }
+    r.View = s.obligeView
+    for k in range s.gamma.Len() {
+        g := s.gamma[k]
+        if g.Hi != r.Hi or g.Lo != r.Lo or g.Exact != r.Exact { continue }
+        # one keeping the whole value as well as a view of it keeps the whole (2.5): a caller may lift it
+        if not r.View: s.gamma[k].View = false
+        return
+    }
+    s.gamma.Push(r)
 }
 
 # a value of existing storage living at t put into a slot of term slot (FIT, 3.1): it must outlive the slot, and be
@@ -7745,6 +7833,12 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         return
     }
     k := s.order(t, slot)
+    # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
+    # local's that the value outlives, a longer claim for that local
+    if s.liftGather and k == FailsBlock { s.propose(x, slot) }
+    if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
+        s.proposeLocal(s.fitTarget, t, false)
+    }
     if k == Holds and exact and t != slot {
         k = s.order(slot, t)
         if k == FailsBlock and s.isBlock(slot) {
@@ -7763,11 +7857,14 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         return
     }
     if k == Obliged {
+        # what the slot keeps is a view of storage, never lifted at a call (O27)
+        s.obligeView = source.InferScopes and s.viewRoot(x) >= 0
         s.oblige(t, slot, false)
         if exact and t != slot {
             o := s.order(slot, t)
             if o == Obliged { s.oblige(slot, t, false) }
         }
+        s.obligeView = false
         return
     }
     s.fitError(x, kind, exact)
@@ -7957,6 +8054,154 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
         m = msgs.ValueRefsOutlived()
     }
     return s.err(sp, m)
+}
+
+# ---- the inference (OLANG_SCOPES=infer, the rework's round 1, docs/rework.md 2.3-2.5) ----
+#
+# The judgment stays; only who proposes a local's claim changes. With every written marker read as bare, a local's claim
+# starts where a written "&" put it - its block, or its initializer's term for ":=" - and quiet judgings of the body
+# gather what its uses need: a fit the claim fails, or a callee's obligation it fails, proposes the join of the claim
+# and the slot (2.4's least solution, a step at a time). The body is judged again with the longer claims until none
+# grows, then judged reporting, the judgment disposing as for a written claim. Only a whole value's flow lifts: a view of
+# storage - a slice, a borrow of a part, what a callee hands back of its argument's storage - proposes nothing, and kept
+# too long it is O27's error naming a copy
+
+# whether local l's claim is the inference's: a local or a for-in's hidden one, never a parameter, a capture, a
+# constructor's field or a held temporary
+fn (s mut Scoper&) liftable(l I64) Bool {
+    if not source.InferScopes or l < 0 or l >= s.B!.Locals.Len() { return false }
+    k := s.B!.Locals[l].Kind
+    return k == typed.LocalKind.Var or k == typed.LocalKind.Hidden
+}
+
+# the term the inference gives local l's claim, None for none
+fn (s mut Scoper&) liftOf(l I64) Term {
+    if not s.liftable(l) { return Term.None }
+    return try s.lifts.Get(pair.Pair<I64, I64>(s.Id, l)) catch default Term.None
+}
+
+# the longer-lived of two run-time terms (2.4's join): blocks lie on one chain, a scope variable outlives every block, the
+# program's every term. Of two scope variables no obligation orders, the first - a hidden variable W would stand for
+# both (counted by the caller); the fit to the second is then the obligation a written marker gave
+fn (s mut Scoper&) joinTerm(a Term, b Term) Term {
+    if a == Term.None or a == b { return b }
+    if a == Term.Program or b == Term.Program { return Term.Program }
+    match a {
+        case Term.Block(ab) {
+            match b {
+                case Term.Block(bb) { return a if s.B!.Encloses(ab, bb) else b }
+                case _ { return b }
+            }
+        }
+        case _ { }
+    }
+    if isBlockTerm(b) { return a }
+    if s.order(b, a) == Holds { return b }
+    return a
+}
+
+# the local value x is the whole of (2.3's whole edges) and whether its own storage is what is kept: a local read or
+# borrowed whole, a reference read out of a part of one (what it names lives where the local's referent or references
+# do, O20, O25h); -1 for a view of storage (a slice, a borrow of a part) or no local's
+fn (s mut Scoper&) wholeRoot(x typed.Expr&) I64, Bool {
+    match s.unAway(x) {
+        case typed.Expr.Read(_, _, p, _) { return flRoot(p), false }
+        case typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Lvalue.Local(_, _, id) { return I64(id), not s.isRef(s.B!.Locals[I64(id)].Ty) }
+                case typed.Lvalue.Deref(_, _, r) { return flRootExpr(r), false }
+                case _ { return -1, false }
+            }
+        }
+        case typed.Expr.Promote(_, _, pr) {
+            l, _ := s.wholeRoot(pr.X)
+            return l, false
+        }
+        case _ { return -1, false }
+    }
+}
+
+# the local whose storage value x is a view of (O27): a slice of a place rooted at it, a borrow of a part of it; -1 none
+fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
+    match unWidened(s.unAway(x)) {
+        case typed.Expr.Slice(_, _, sl) { return flRoot(sl.Base) }
+        case typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Lvalue.Local(_, _, _), typed.Lvalue.Deref(_, _, _) { return -1 }
+                case _ { return flRoot(p) }
+            }
+        }
+        case _ { return -1 }
+    }
+}
+
+# a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
+fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
+    l, stor := s.wholeRoot(x)
+    s.proposeLocal(l, t, stor)
+}
+
+# a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
+# with it where stor: lowering homes a local's storage in its frame, a scope variable or the program's (O26a), so its
+# storage goes only to one of those
+fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
+    for _ in range s.origin.Len() {
+        if l < 0 or l >= s.origin.Len() or s.origin[l] < 0 { break }
+        l = s.origin[l]
+    }
+    if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
+        if s.Trace and l >= 0 and l < s.origin.Len() {
+            s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " @" $s.B!.Locals[l].Sp.Start " to " $t " (origin " $s.origin[l] ")")
+        }
+        return
+    }
+    key := pair.Pair<I64, I64>(s.Id, l)
+    cur := try s.lifts.Get(key) catch default s.terms[l]
+    nt := s.joinTerm(cur, t) if cur.Runs() else t
+    if not isBlockTerm(cur) and not isBlockTerm(t) and cur != t and nt == cur and s.order(cur, t) != Holds {
+        s.wLocals.Put(key, true)
+    }
+    grows := nt != cur
+    if stor and not isBlockTerm(nt) and not s.liftStor.Has(key) {
+        s.liftStor.Put(key, true)
+        grows = true
+    }
+    if not grows { return }
+    s.lifts.Put(key, nt)
+    s.liftGrew = true
+    if s.Trace {
+        loc := s.B!.Locals[l]
+        s.TraceLog.Push($"lift " $s.P.L.Names.Text(loc.Name) " @" $loc.Sp.Start " in body " $s.Id " (file " $s.B!.File "): " $nt $(" with its storage" if stor else ""))
+    }
+}
+
+# the lift a callee's relation r failed at call c proposes (2.4): of the argument determining its outliving side, else of
+# the local the call's result lands for where that side is the callee's result scope
+fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
+    ai := s.argOfVar(c, r.Hi)
+    if ai >= 0 {
+        s.propose(c.Args[ai], lo)
+        return
+    }
+    rv := s.resultVarOf(s.calleeType(c))
+    if rv >= 0 and r.Hi == Term.Var(rv) { s.proposeLocal(s.landLocal, lo, false) }
+}
+
+# body b's claims inferred (2.4): judged quietly, gathering lifts, until no claim grows
+fn (s mut Scoper&) inferClaims(b I64) {
+    if not source.InferScopes { return }
+    for {
+        s.liftGather = true
+        s.liftGrew = false
+        s.judge(b, false)
+        s.liftGather = false
+        if not s.liftGrew { break }
+    }
+}
+
+# what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
+fn (s Scoper&) InferStats() String {
+    return $"inferred: " $s.lifts.Len() " locals lifted, " $s.liftStor.Len() " with their storage, " $s.wLocals.Len() " needing a W"
 }
 
 # ---- placement ----
