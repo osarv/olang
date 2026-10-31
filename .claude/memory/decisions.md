@@ -1966,3 +1966,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QCC enforcement DECIDED 2026-10-31 (the user: "Yes do them"): checks (1)-(3) as proposed, the read-only stored
   reference given up. Built with QCC in the held rework.
 - QCB bare blocks DECIDED 2026-10-31 (the user: "yes, keep blocks as scopes"): a block stays a scope under inference.
+- QBZ ideas 2026-10-31 (the user: "we need some way to force error usage yes, give me ideas. Is this really a good
+  way?"): answered - banning `T, Bool` alone is a narrow patch (a flag moves to an I64 code, a two-case enum or an
+  out-parameter); flags were written because the error side costs a declared type while the call side already costs
+  what a flag does (`x := try find(k) catch { return }`). Ideas laid out: (1) ban Bool among several results; (2) a
+  success Bool with a written `&` parameter an error (the out-parameter form; follows QCC's `&`); (3) a prelude
+  `Missing` error (`? Missing`, `error Missing.NONE`), as `Exhausted` is for walks - absence costs one word; (4) error
+  words declared in the signature (`? NotFound`) - rejected by me (a second way to declare an error type); (5) a flag
+  result that callers ignore caught by D3b already (`v, ok :=` with ok unread is an error; only `_` discards it).
+  Recommended (1) + (2) + (3) together. ASKED.
