@@ -331,6 +331,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (E12c), a temporary is built in the target's scope. No primitive references (the user's call: assignment to a
   reference repoints, and a number has no field to write through). Write-through assignment was rejected: `x = y` must
   imply `x == y`.
+- **`&` on a parameter means it may write (QCC, the user's decision 2026-10-31; not built yet - held with the scoping
+  rework).** A parameter or receiver `p T&` may write the caller's instance; a bare `p T` can never affect the caller
+  (it may write its own copy), passed by value or pointer as the compiler chooses, unobservably (a pointer only where
+  nothing the call reaches writes storage of that type). No `mut` on parameters, receivers or references; a view taken
+  from a bare parameter or constant data is read-only by inference, never written. `&` stays on fields, elements, type
+  arguments, `?&` and a result handing back an existing instance. Globals: open (decisions.md). The entry below is
+  today's rule until it lands.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at

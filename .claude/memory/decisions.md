@@ -1943,3 +1943,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   not be passed to a `&` parameter or written through; constant data passed to a `&` parameter is an error naming
   `.Clone()`/`$t`. ASKED: (1) take it (rec yes); (2) globals keep `mut` as the one place it is written (the user's
   2026-10-31 "globals shouldn't be mut unless you say so") (rec yes). In effect: today's `mut`.
+- QCC DECIDED 2026-10-31 (the user: "1) yes"): `&` on a parameter or receiver means it may write the caller's
+  instance, a bare parameter can never affect the caller (value or pointer the compiler's choice), no `mut` on
+  parameters/receivers/references, views from bare parameters and constant data read-only by inference. Held with the
+  scoping rework. (2) the user: "should we maybe do 'const' as a keyword instead?" - ASKED: globals immutable by default
+  with the rare writable one marked (`mut`, or `var`), or mutable by default with `const` marking immutable ones. Rec:
+  keep immutable the default (the common, safe case: baked while compiling, no races, readable by the evaluator; 7
+  writable globals in compiler/ and std), and mark the writable one - `var` if `mut` reads odd as the last place it is
+  written. In effect: `mut` globals.
+

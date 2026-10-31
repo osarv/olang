@@ -26549,3 +26549,18 @@ bench timings (min of 7, interleaved) moved by a geometric mean of 0.994 against
 Vec push's 0.855 -> 0.815 s agreed with its counts. So by the decision's rule the weights stay: every call's error edge
 is written `, !prof !99`, `!99` beside the fixed alias tags in every object. Not weighted: a join's failure edge (rare
 and not in loops), the entry's and harness's (once).
+
+## `&` on a parameter means it may write (QCC, 2026-10-31)
+
+Laid out three ways for references in signatures (keep; no `&` in signatures with `mut x T` for writes; no references
+at all), I recommended the second. The user proposed instead to drop `mut` there and let `&` say it: "If it is a
+reference, it can be mutated so the caller is affected and if it isn't a reference then it can't be. The compiler still
+decides if we pass by value or ptr?" - and took it ("yes"). One marker keeps what the user wanted from `mut` (a
+signature says whether a call can change what you pass). A bare parameter is the callee's own value in meaning; the
+compiler passes a pointer only where its effect summaries prove nothing the call reaches writes storage of that type,
+so no aliasing is visible. Soundness needs one inferred permission: what is taken out of a bare parameter or out of
+constant data (slices, Split's pieces, a returned element) is read-only - not written anywhere, inferred from origin as
+copies' permission already is (QC); writing through it, passing it to a `&` parameter, or passing constant data to one,
+is an error naming `.Clone()`/`$t`. Not built: held with the scoping rework, built as one rework of section 8 and the
+signatures. Open: how a mutable global is written.
+
