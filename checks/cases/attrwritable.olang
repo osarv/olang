@@ -1,0 +1,16 @@
+# check: fail error[G39]: an attribute's value is read-only data, baked while compiling, and Holder holds a 'mut' reference
+# never: attrGot
+# G39, T25c: an attribute is constant data read as a read-only copy, so a type holding a mut reference is no
+# attribute's - said where the attribute is written, not at a reader
+import "std/io"
+
+type Cell struct(n I64) { n }
+type Holder struct(c mut Cell&) { c }
+
+@Holder(Cell(1))
+type T struct(x I64) { x }
+
+fn main() {
+    h := T.Attr<Holder>()!
+    io.Println("attr cell " $h.c.n)!
+}

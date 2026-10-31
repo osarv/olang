@@ -3421,7 +3421,12 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         ax := c.attrCall(v.Values[k])
         x = c.attrExpr(ax)
         want = c.inferred(ax, x, true)
-        if want != types.UnknownT and not c.attrTypeOk(want) { c.err(ax.Span(), msgs.AttrType(c.ty(want))) }
+        if want != types.UnknownT and not c.attrTypeOk(want) {
+            c.err(ax.Span(), msgs.AttrType(c.ty(want)))
+        } else if want != types.UnknownT and c.holdsWritable(want) {
+            # an attribute is read as a read-only copy of constant data (G39, T25c)
+            c.err(ax.Span(), msgs.AttrWritable(c.ty(want)))
+        }
     } else if k < v.Values.Len() {
         x = c.exprTo(v.Values[k], want)
         if v.Ty is null { want = c.inferred(v.Values[k], x, true) }
@@ -3594,6 +3599,8 @@ fn (c mut Checker&) attrRead(sp source.Span, g ast.Expr&, targs Array<ast.TypeRe
     mi, gn := c.attrFound(holder, a)
     if name == "HasAttr" { return c.lit(sp, types.BoolT, 1 if mi >= 0 else 0) }
     if mi < 0 { return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrMissing"), null, Array<ast.Expr&>(0), Array<typed.Expr&>(0), Array<types.TypeId>(1, a)) }
+    # an attribute of a type holding a "mut" reference is an error where it is written (G39), and nothing more here
+    if c.holdsWritable(c.globalType(mi, gn)) { return c.unknown(sp) }
     v := c.read(sp, typed.Lvalue.Global(sp, c.globalType(mi, gn), mi, gn))
     return c.invoke(sp, nsp, c.P.PreludeFn("std/prelude/reflect", "attrGot"), null, Array<ast.Expr&>(0), typed.Expr&[v])
 }

@@ -851,6 +851,7 @@ type Diag enum {
     AttrType
     AttrTwice
     AttrNotBuilt
+    AttrWritable
     AttrRead
     ReflFnList
     ReflFnCall
@@ -900,6 +901,7 @@ fn AttrPlace() Msg { return Msg(Diag.AttrPlace, "G39", "an attribute is written 
 fn AttrPun(name String&) Msg { return Msg(Diag.AttrPun, "G39", $"field '" $name "' is a pun of its parameter, and has the parameter's attributes - write the attribute on the parameter") }
 fn AttrType(ty String&) Msg { return Msg(Diag.AttrType, "G39", $"an attribute is a value of a declared type - a struct, an enum's case or a declared number type - and this is " $ty) }
 fn AttrTwice(ty String&) Msg { return Msg(Diag.AttrTwice, "G39", $"a declaration takes one attribute of each type, and this is its second " $ty) }
+fn AttrWritable(ty String&) Msg { return Msg(Diag.AttrWritable, "G39", $"an attribute's value is read-only data, baked while compiling, and " $ty " holds a 'mut' reference no reader could write through - give its type read-only references ('T&')") }
 fn AttrNotBuilt(why String&) Msg { return Msg(Diag.AttrNotBuilt, "G39", $"an attribute's value is built while compiling, and this one cannot be: " $why) }
 fn AttrRead(name String&) Msg { return Msg(Diag.AttrRead, "G40", $"'" $name "' takes the attribute's type and no arguments - '" $name "<json.Key>()'") }
 fn ReflFnList(what String&) Msg { return Msg(Diag.ReflFnList, "G41", $what " - 'Functions' is read through an import's alias ('handlers.Functions'), 'Methods' through a type") }

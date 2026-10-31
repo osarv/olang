@@ -8372,7 +8372,9 @@ type User struct(@json.Key("id") UserID I64, @json.Skip Cache I64 = 0) {
   case (`@Level.High`, `@Tag("x")`); written with no arguments, `@json.Skip` is the constructor called with none, `@Level.Low`
   the case. Its type is a struct, an enum or a declared number type a program declares (§2.4, §2.5, T29), never a
   built-in one nor the prelude's (`@I64(3)`, `@"x"` are errors): an attribute is found by its type, and only a library's
-  own type says what one means. A declaration has at most one attribute of each type (a second is an error).
+  own type says what one means. A declaration has at most one attribute of each type (a second is an error). Its
+  value is read-only data (K2, T25d), read as a read-only copy (T25c): a type holding a `mut` reference among its
+  fields, payloads or fixed arrays' elements (§2.4) is no attribute's - an error where the attribute is written.
 - It is checked where it is written as a global's initializer is, in its module's context - so it reads globals and
   constants, never a declaration's own parameters or type variables - and **built while compiling** (K1): a value the
   evaluator cannot build is a compile-time error saying why, and what its building can fail with (a constructor's
