@@ -586,7 +586,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   beside the language batch only where files allow (scope.olang is its own; check.olang's marker parsing waits).
 - HELD 2026-10-30 (the user: "hold off on the refactor until we have decided all things about how the language is to
   work"): the scoping rework (QCB) and the nesting refactor (QCA) wait until QCC (references
-  in signatures) and the rest of the ledger are answered (`mut` stays - its removal was reversed 2026-10-31) - one rework of section 8 and the
+  in signatures, decided 2026-10-31, with values guaranteeing their own copy - QCE) and the rest of the ledger are answered (`mut` stays - its removal was reversed 2026-10-31) - one rework of section 8 and the
   signatures then, not two; the nesting refactor after it. The decided features batch and bulk review 4 run meanwhile.
 - 2026-10-31 CET: bulk review 4 (1dd87cf..f0e0743, /home/user/review/bulk4) and its fixes merged (bfix4 294f3d1,
   verified; fast-forward): become refuses unscoped views of a closing scope (tailStorageGiven) and results that may hold

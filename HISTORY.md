@@ -26867,3 +26867,18 @@ it comes from - in every build and in the evaluator (`llvm.is.constant` would ma
 `Pow` with a constant exponent already folds to the same multiplications as a hand-written product (I64 Pow(3) 9.3M =
 hand 9.3M, Pow(13) 12.3M = hand 12.3M): LLVM unrolls its squaring loop, so it is left as it is. SPEC's math paragraph
 states which exponents are computed how.
+
+## A guarantee is declared by holding a value (2026-10-31)
+
+Found while discussing immutable types: `Map<String, V>` was refused (T7a: text inside a structure is held by
+reference), so every text key was `String&`, the map held the caller's text, and `k := $"abc"; m.Put(k, 1); k[0] =
+'x'` left an entry `{"xbc": 1}` that neither `Get("abc")` nor `Get("xbc")` found. Offered a key copy in Map or an
+immutable String, the user chose a general rule instead: "things which want to guarantee no external process may
+modify them, simply declare their data to be by value and then there is a copy on entry. This would require us to
+relax the max size argument for passing parameters as values. So a Map that takes string keys declares Map<String, V>
+and that is that." No immutable types: `&` already says "shared", a value says "mine". Consequences (mine): a value
+array can be held by value inside a struct, an element or a type argument, its storage with its container and a store
+copying into it; a run-time-length array can be passed by value; D9c's 128-byte cap goes - under QCC a bare parameter
+is passed by pointer as the compiler chooses and copied only where the callee keeps or writes it, so a large value
+costs a copy only where a copy is the point. Built with QCC's rework (both change how parameters are passed).
+

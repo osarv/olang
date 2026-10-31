@@ -352,6 +352,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   parameter nothing reads afterwards is an error naming `p T&` (the forgotten `&`). A stored reference cannot be
   declared read-only (accepted; revisit if code wants it). The entry
   below is today's rule until it lands.
+- **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
+  must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
+  its own key text (a copy at Put of a new key, none on an update or a lookup); `Map<String&, V>` shares the caller's,
+  which the `&` says. So a value array may be a field, an element or a type argument by value (T7a/T7d relaxed: its
+  storage lives with its container, a store copies into it), a run-time-length array may be passed by value (D9a/QP3's
+  error goes) and the 128-byte cap on by-value parameters goes (D9c): a bare parameter is passed by pointer as the
+  compiler chooses, copied only where the callee keeps or writes it. The entries below are today's rules until it
+  lands.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at

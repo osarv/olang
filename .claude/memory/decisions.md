@@ -2115,3 +2115,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   key at Put, none on an update or a lookup, as C++'s and Rust's maps own their string keys), or (c) String immutable
   (no copy needed; text shared freely; in-place edits move to Array<Char>/Vec<Char>/StringBuilder). Rec (a') now -
   small, closes the hole - and (c) only if text should be shared without copies generally. ASKED.
+- QCE DECIDED 2026-10-31 (the user: "things which want to guarantee no external process may modify them, simply
+  declared their data to be by value and then there is a copy on entry ... relax the max size argument for passing
+  parameters as values. So a Map that takes string keys declares Map<String, V> and that is that"): no immutable
+  types; value arrays held by value in structures (T7a/T7d relaxed), run-time-length arrays passed by value (D9a/QP3),
+  D9c's cap removed; copies only where kept or written. Held with QCC's rework. std's text-keyed maps move to
+  Map<String, V> where they need the guarantee (json, flags, ...).
+
