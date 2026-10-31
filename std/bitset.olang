@@ -12,9 +12,20 @@
 
 type Error error { OUT_OF_RANGE }
 
-type BitSet<T> struct(bits U64 = 0) {
+# made from case-index bits: bits past the last case fail the call with ArgumentError.INVALID (D17), so a walk of the set
+# never meets a case that does not exist (std ends no program on a caller's mistake, R22); FromBits fails with
+# Error.OUT_OF_RANGE instead, and Empty, Full and Of cannot fail
+type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
     check<T>()
     bits
+}
+
+# the set of the case-index bits b, which hold no bit past the last case: the module's own way to a BitSet, which
+# cannot fail
+fn of<T>(b U64) BitSet<T> {
+    s BitSet<T>
+    s.bits = b
+    return s
 }
 
 # the check every instance makes: an enum, at most 64 cases, none with a payload
@@ -52,14 +63,14 @@ fn mask<T>() U64 {
 }
 
 # the empty set
-fn Empty<T>() BitSet<T> { return BitSet<T>(0) }
+fn Empty<T>() BitSet<T> { return of<T>(0) }
 
 # every case
-fn Full<T>() BitSet<T> { return BitSet<T>(mask<T>()) }
+fn Full<T>() BitSet<T> { return of<T>(mask<T>()) }
 
 # the set of the cases in a
 fn Of<T>(a Array<T>&) BitSet<T> {
-    s := BitSet<T>(0)
+    s := of<T>(0)
     for x in a { s.bits |= U64(1) << index(x) }
     return s
 }
@@ -67,13 +78,13 @@ fn Of<T>(a Array<T>&) BitSet<T> {
 # the set whose case-index bits are b; bits past the last case fail
 fn FromBits<T>(b U64) BitSet<T> ? Error.OUT_OF_RANGE {
     if b & ~mask<T>() != 0 { error Error.OUT_OF_RANGE }
-    return BitSet<T>(b)
+    return of<T>(b)
 }
 
 # the cases whose raw value (T17e, an integer) is not zero and lies wholly in w: a C flag word read as a set
 fn FromFlags<T>(w U64) BitSet<T> {
     check<T>()
-    s := BitSet<T>(0)
+    s := of<T>(0)
     for k, c in T.Cases {
         r := U64(c().Value())
         if r != 0 and r & w == r { s.bits |= U64(1) << k }
@@ -117,19 +128,19 @@ fn (s BitSet<T>&) Flags() U64 {
 }
 
 # the cases in s or in o
-fn (s BitSet<T>&) BitOr(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits | o.bits) }
+fn (s BitSet<T>&) BitOr(o BitSet<T>&) BitSet<T> { return of<T>(s.bits | o.bits) }
 
 # the cases in both
-fn (s BitSet<T>&) BitAnd(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits & o.bits) }
+fn (s BitSet<T>&) BitAnd(o BitSet<T>&) BitSet<T> { return of<T>(s.bits & o.bits) }
 
 # the cases in s and not in o
-fn (s BitSet<T>&) Minus(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits & ~o.bits) }
+fn (s BitSet<T>&) Minus(o BitSet<T>&) BitSet<T> { return of<T>(s.bits & ~o.bits) }
 
 # the cases in exactly one of s and o
-fn (s BitSet<T>&) BitXor(o BitSet<T>&) BitSet<T> { return BitSet<T>(s.bits ^ o.bits) }
+fn (s BitSet<T>&) BitXor(o BitSet<T>&) BitSet<T> { return of<T>(s.bits ^ o.bits) }
 
 # the cases not in s
-fn (s BitSet<T>&) Complement() BitSet<T> { return BitSet<T>(mask<T>() & ~s.bits) }
+fn (s BitSet<T>&) Complement() BitSet<T> { return of<T>(mask<T>() & ~s.bits) }
 
 # whether every case of s is in o
 fn (s BitSet<T>&) IsSubset(o BitSet<T>&) Bool { return s.bits & ~o.bits == 0 }
@@ -207,6 +218,20 @@ test BitSet "flag words from raw values" {
     s := Of(Perm[Perm.READ, Perm.EXEC])
     assert s.Flags() == 5
     assert FromFlags<Perm>(6) == Of(Perm[Perm.WRITE, Perm.EXEC]) and FromFlags<Perm>(0) == Empty<Perm>()
+}
+
+# whether the constructor makes a set of the bits b
+fn madeFrom(b U64) Bool {
+    try BitSet<Color>(b) catch ArgumentError.INVALID { return false }
+    return true
+}
+BakedRefused := not madeFrom(12) and madeFrom(5)
+
+test BitSet "its constructor refuses bits past the last case" {
+    assert not madeFrom(12) and not madeFrom(8) and madeFrom(5) and madeFrom(0)
+    assert BakedRefused, "the evaluator agrees"
+    s := try BitSet<Color>(5) catch { return }
+    assert s.Len() == 2 and s == Of(Color[Color.Red, Color.Blue])
 }
 
 # computed while compiling (K2): the evaluator agrees with the run time

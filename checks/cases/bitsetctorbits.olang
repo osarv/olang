@@ -1,0 +1,12 @@
+# check: fail error[D17e]: this call breaks BitSet's requirement 'bits & ~mask<T>() == 0'
+# R22, D17: bitset.BitSet<T>(bits) with a bit past the last case fails with ArgumentError.INVALID (here decided while
+# compiling) - a walk of such a set would meet a case that does not exist
+import "std/io"
+import "std/bitset"
+
+type Color enum { Red, Green, Blue }
+
+fn main() {
+    s := bitset.BitSet<Color>(12)!
+    for c in s { io.Println($c)! }
+}
