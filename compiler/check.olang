@@ -7288,8 +7288,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 if source.NewParams {
                     if c.followResult(x) { return c.convert(sp, x, want) }
+                    # a level the body writes is made read-only before a copy is made: no copy where none is needed
+                    if c.levelRo(want) { return x }
                     if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return x }
-                    c.levelRo(want)
                     c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
                     return x
                 }
@@ -9916,13 +9917,13 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
         }
         if source.NewParams {
             if c.followResult(x) { return true }
+            if c.levelRo(typeOf(x)) { return false }
             if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return false }
             # a view of what a bare parameter reaches handed back: the result read-only, at every level (2.8)
             if c.retInst >= 0 and c.Attempts < 19 and c.P.NarrowResult(c.retInst, c.P.ReadOnlyAll(typeOf(x))) {
                 c.copiesGrew = true
                 return true
             }
-            c.levelRo(typeOf(x))
             c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
             return false
         }
