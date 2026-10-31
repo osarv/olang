@@ -452,7 +452,10 @@ fn checkFixTools(p mut Problems&) {
     for f in files {
         if not has(shared, f) and not has(rows, f) { p.Add("tools/README.md has no table row for tools/" $f ".olang") }
     }
-    order := readmeList("`bare_typevars`")
+    order := Vec<String&>()
+    for w in readmeList("`bare_typevars`") {
+        if has(files, w) and not has(order, w) { order.Push($w) }
+    }
     compare(p, " (the order paragraph of tools/README.md)", "compiler/fix.olang's table", names, "tools/README.md", order)
     if joinedInOrder(names) != joinedInOrder(order) {
         p.Add("tools/README.md lists the fix tools in another order than compiler/fix.olang's table")
