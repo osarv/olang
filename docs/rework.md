@@ -1446,32 +1446,6 @@ effects line (explain, doc and hover only - nothing decides by it).
   errors in std's own modules (25 before this round's fixes), all of a module checked alone (`time.Virtual`'s decided
   assert outside a test build), none in a test.
 
-### 12.7 compiler/'s migration, where it stands
-
-`param_migrate` over a copy of compiler/ (build/cmig, 81 files, each compiled whole by the round's compiler under both
-switches against the migrated std): the text phase changes 67 files; the driven rounds (pinned: a parameter made `&`
-again is never made bare after) converge at their seventh round. Measured on the compiler's root (compiler/olang.olang,
-every module it loads), distinct errors after the pinned rounds:
-
-| round 2c state | distinct errors | T25c | D9d | O17 | S12b |
-|---|---|---|---|---|---|
-| at its start (olang.d, the pinned stage of the first run) | 658 | 114 | 280 | 114 | 27 |
-| the storage lend and the nullable widening (olang.i, a snapshot mid-run) | 410 | 179 | 93 | 7 | 29 |
-| following, the variadic element, the stored copy (olang.m's migration, olang.i's check) | 347 | 189 | 27 | 6 | 22 |
-
-The unpinned settling still oscillates (a parameter made bare by D9d, `&` again by the note its callers' errors give)
-and was stopped each time; the tree measured is the pinned one. Root check: 16 s, 1.47 GB peak (the default-path
-compile of compiler/ is the self-build's check, ~1.9 GB peak with its objects). The self-build under the switches is
-therefore not reached: stage 2 needs the root to check.
-
-What the 347 are: T25c's 157 "read-only here" are nearly all one shape - a reader taking a `&` parameter it only hands
-back, `fn unPassed(x typed.Expr&) typed.Expr&x`, `fn (s Scoper) callOf(x typed.Expr&) typed.Call?&x`, given a bare
-parameter's value (`unPassed(s.unAway(x))`). Under QCC such a reader takes its argument bare and gives a value - the
-by-pointer value-result handover (12.6 item 2) - so the remaining class waits for it, not for more inference; making
-those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are the
-unpinned stage's (bare where the pinned stage kept `&`); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
-copy refusals of views a bare parameter now gives, to be read again once value results hand over by pointer.
-
 ### 12.6 Left, in order, with what each needs
 
 1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands: 347
@@ -1501,3 +1475,29 @@ copy refusals of views a bare parameter now gives, to be read again once value r
 6. **The storeThrough hole** (checks/cases/derivedcopybuild.olang without `&ns`): refused under the switches (O25h,
    with and without `OLANG_PARAMS=new`); on the default path it still reads freed storage - master's hole, closed by
    the flip.
+
+### 12.7 compiler/'s migration, where it stands
+
+`param_migrate` over a copy of compiler/ (build/cmig, 81 files, each compiled whole by the round's compiler under both
+switches against the migrated std): the text phase changes 67 files; the driven rounds (pinned: a parameter made `&`
+again is never made bare after) converge at their seventh round. Measured on the compiler's root (compiler/olang.olang,
+every module it loads), distinct errors after the pinned rounds:
+
+| round 2c state | distinct errors | T25c | D9d | O17 | S12b |
+|---|---|---|---|---|---|
+| at its start (olang.d, the pinned stage of the first run) | 658 | 114 | 280 | 114 | 27 |
+| the storage lend and the nullable widening (olang.i, a snapshot mid-run) | 410 | 179 | 93 | 7 | 29 |
+| following, the variadic element, the stored copy (olang.m's migration, olang.i's check) | 347 | 189 | 27 | 6 | 22 |
+
+The unpinned settling still oscillates (a parameter made bare by D9d, `&` again by the note its callers' errors give)
+and was stopped each time; the tree measured is the pinned one. Root check: 16 s, 1.47 GB peak (the default-path
+compile of compiler/ is the self-build's check, ~1.9 GB peak with its objects). The self-build under the switches is
+therefore not reached: stage 2 needs the root to check.
+
+What the 347 are: T25c's 157 "read-only here" are nearly all one shape - a reader taking a `&` parameter it only hands
+back, `fn unPassed(x typed.Expr&) typed.Expr&x`, `fn (s Scoper) callOf(x typed.Expr&) typed.Call?&x`, given a bare
+parameter's value (`unPassed(s.unAway(x))`). Under QCC such a reader takes its argument bare and gives a value - the
+by-pointer value-result handover (12.6 item 2) - so the remaining class waits for it, not for more inference; making
+those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are the
+unpinned stage's (bare where the pinned stage kept `&`); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
+copy refusals of views a bare parameter now gives, to be read again once value results hand over by pointer.
