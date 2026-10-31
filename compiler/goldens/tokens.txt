@@ -1842,7 +1842,7 @@ e973b3051708b87b 6e59f03c3f046fb5 compiler/profile.olang
 672b63f9a00d870a 2f96a413518788c8 compiler/runtime.olang
 17f8b19ab2c97e50 a8be36aed91cf414 compiler/scan.olang
 95bed5f64bf38dc2 9ebcb347f16df0ac compiler/scope.olang
-c871784f558a589b 9257b9fefb47ed34 compiler/session.olang
+acb8a72e5fd6e3da 23fa6a21ce6002af compiler/session.olang
 0a272b7c32f03280 b452304dcb94902e compiler/source.olang
 5e3aa5aba674338b 4bb51ff6003bcba7 compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
@@ -1864,6 +1864,7 @@ f9de58eefdf5f316 7bbabe4a029a6065 compiler/token.olang
 d0efe8f6c000bd4d fd6c9e7b9bb0abfe compiler/tools/astdiff.olang
 5b243c5f95fda6f9 35af6359c86f11ff compiler/tools/checkdiff.olang
 76605eec52e1eb50 1ce194e8102c52a9 compiler/tools/checkdump.olang
+f5362ef236833c0c 1de2ebcc1720cd8d compiler/tools/consistency.olang
 c4fe092716cc0ee1 569bfa5d75e6e8b9 compiler/tools/diaggold.olang
 739ea162eda95d17 98a601474444096e compiler/tools/diaggold_capture.olang
 e416a5b3135d7d49 05598332d641b505 compiler/tools/drvdiff.olang
