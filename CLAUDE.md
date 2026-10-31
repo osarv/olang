@@ -919,7 +919,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   after a type is a syntax error like any unknown form, not a diagnostic about scopes. Markers are optional only inside
   the rework's branch, as its measuring step; master goes from today's markers straight to none. A block stays a scope (the
   user, 2026-10-31): what a block built that nothing outside keeps is freed at its close, guaranteed - the one
-  structural handle on memory left. The rules below are
+  structural handle on memory left. Optimization (the user: a tiny block's overhead may be skipped): a block whose
+  allocations are bounded and small, with no loop between it and the enclosing scope, is folded into that scope (no
+  header, no close) - its memory freed at most one scope later, by a bounded amount (mine: the bound and the rule). The rules below are
   today's until it lands.
 - **No scope names (O3, O4a, O13, O14, O26, the user's design 2026-10-05).** A marker is bare `&`, `&x` (lives where
   `x` does) or `&return`. Every reference parameter has an implicit scope (O4b), a by-value parameter holding

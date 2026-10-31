@@ -26578,4 +26578,9 @@ Asked whether a bare `{ }` should still reclaim what it built once no scope is w
 works per function and loop turn only, blocks being grouping), the user kept blocks as scopes. With the no-extension
 rule, what a block built that nothing outside keeps is freed at its close in every program: a kept value is built where
 it is kept from the start, and a kept view of the block's storage is a compile error. `x.Destroy()` stays: it ends one
-value a long-lived structure held, which no block can.
+value a long-lived structure held, which no block can. The user added: "do some optimization if you can prove the block is tiny and the
+overhead isn't worth it" - so a block whose total allocation is known while compiling to be small (a bound set by
+measurement), with no loop between it and the scope it would join, is folded into that scope: no header and no close,
+its memory freed when that scope closes. The guarantee then reads: freed at the block's close, or for such a tiny block
+at the enclosing scope's, never later and never by more than the bound. A block nothing allocates in already costs
+nothing (idle scopes get no header).
