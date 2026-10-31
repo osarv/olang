@@ -177,6 +177,11 @@ attrtwice.olang:4:25: error[G39]: a declaration takes one attribute of each type
     4 | type P struct(@Key("a") @Key("b") x I64) { x }
       |                         ^~~~~~~~~
 compilation failed with 1 error
+=== attrwritable.olang
+attrwritable.olang:10:2: error[G39]: an attribute's value is read-only data, baked while compiling, and Holder holds a 'mut' reference no reader could write through - give its type read-only references ('T&')
+   10 | @Holder(Cell(1))
+      |  ^~~~~~~~~~~~~~~
+compilation failed with 1 error
 === atundeclared.olang
 atundeclared.olang:8:11: error[E31]: Bag& declares SetAt but not At, which reading x[i] calls
     8 |     y := b[0]
@@ -415,6 +420,38 @@ baseintodeclared.olang:6:16: error[T6b]: I32 does not flow into Meters - convert
     6 |     m Meters = a
       |                ^
 compilation failed with 1 error
+=== becomearenaarray.olang
+becomearenaarray.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+   10 |     become walk(b, n - 1)
+      |                 ^
+becomearenaarray.olang:15:17: note: instantiated here, with T = Array<I64>
+   15 |     io.Println($walk(a, 3))!
+      |                 ^~~~
+compilation failed with 1 error
+=== becomearenacall.olang
+becomearenacall.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+   10 |     become walk(mk(n + 2), n - 1)
+      |                 ^~~~~~~~~
+becomearenacall.olang:13:25: note: instantiated here, with T = Array<I64>
+   13 | fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }
+      |                         ^~~~
+compilation failed with 1 error
+=== becomearenacopied.olang
+becomearenacopied.olang:10:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+   10 |     become walk(a, n - 1)
+      |                 ^
+becomearenacopied.olang:13:25: note: instantiated here, with T = Array<I64>
+   13 | fn main() { io.Println($walk(Array<I64>(os.Args().Len() + 3, 1), 2))! }
+      |                         ^~~~
+compilation failed with 1 error
+=== becomearenatext.olang
+becomearenatext.olang:7:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
+    7 |     become walk($n " text", n - 1)
+      |                 ^~~~~~~~~~
+becomearenatext.olang:10:25: note: instantiated here, with T = String
+   10 | fn main() { io.Println($walk("abc", 2))! }
+      |                         ^~~~
+compilation failed with 1 error
 === becomeborrows.olang
 becomeborrows.olang:6:17: error[S21]: 'become' closes this function's scopes before the call, and this argument is storage made in one of them - pass what the function was given, a global, or a value; or write 'return'
     6 |     become walk(b, i + 1)
@@ -435,11 +472,33 @@ becomedtor.olang:10:5: note: here
 becomedtor.olang:12:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
    12 |     become f(n - 1)
       |            ^
+becomedtor.olang:10:10: note: here
+   10 |     r := Res(n)
+      |          ^~~
 compilation failed with 2 errors
+=== becomedtorpayload.olang
+becomedtorpayload.olang:17:16: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
+   17 |         become f(n - 1)
+      |                ^
+becomedtorpayload.olang:16:13: note: here
+   16 |     if size(mk(n)) > 0 {
+      |             ^~
+compilation failed with 1 error
+=== becomedtorresult.olang
+becomedtorresult.olang:17:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
+   17 |     become f(k - 1)
+      |            ^
+becomedtorresult.olang:16:15: note: here
+   16 |     k := peek(mkw(n))
+      |               ^~~
+compilation failed with 1 error
 === becomedtortemp.olang
 becomedtortemp.olang:13:12: error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then, before the call - write 'return' and the call
    13 |     become f(m - 1)
       |            ^
+becomedtortemp.olang:12:10: note: here
+   12 |     m := Res(n).n
+      |          ^~~
 compilation failed with 1 error
 === becomeerrors.olang
 becomeerrors.olang:11:5: error[S21]: 'become' makes the callee's failure this function's own, and this one fails with A.X, B, the callee with B - give them one error set, in one order, or write 'return try' and the call
@@ -491,28 +550,36 @@ becomevalue.olang:6:12: error[S21]: 'become' takes a call of a function or a met
     6 |     become k(n)
       |            ^~~~
 compilation failed with 1 error
+=== bitsetctorbits.olang
+bitsetctorbits.olang:10:10: error[D17e]: this call breaks BitSet's requirement 'bits & ~mask<T>() == 0'
+   10 |     s := bitset.BitSet<Color>(12)!
+      |          ^~~~~~~~~~~~~
+$ROOT/std/bitset.olang:18:38: note: the condition
+   18 | type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
+      |                                      ^~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === bitsetnotenum.olang
-$ROOT/std/bitset.olang:22:19: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
-   22 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
+$ROOT/std/bitset.olang:29:19: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over an enum's cases
+   29 |     assert T.Kind == TypeKind.Enum, "a BitSet is over an enum's cases"
       |                   ^~
-$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = P
-   16 |     check<T>()
+$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = P
+   19 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsetpayload.olang
-$ROOT/std/bitset.olang:25:31: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
-   25 |         assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
+$ROOT/std/bitset.olang:32:31: error[S18c]: this assertion is false, evaluated while compiling: a BitSet is over cases that carry no payload
+   32 |         assert c.Fields.Len() == 0, "a BitSet is over cases that carry no payload"
       |                               ^~
-$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Shape
-   16 |     check<T>()
+$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Shape
+   19 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === bitsettoomany.olang
-$ROOT/std/bitset.olang:23:26: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
-   23 |     assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
+$ROOT/std/bitset.olang:30:26: error[S18c]: this assertion is false, evaluated while compiling: a BitSet holds at most 64 cases
+   30 |     assert T.Cases.Len() <= 64, "a BitSet holds at most 64 cases"
       |                          ^~
-$ROOT/std/bitset.olang:16:5: note: instantiated here, with T = Big
-   16 |     check<T>()
+$ROOT/std/bitset.olang:19:5: note: instantiated here, with T = Big
+   19 |     check<T>()
       |     ^~~~~~~~
 compilation failed with 1 error
 === blockcomment.olang
@@ -5678,8 +5745,28 @@ s8dassigned.olang:9:22: error[S8d]: Shape is an enum - its payload's 'r' is read
     9 |         assert t + s.r == 4
       |                      ^
 compilation failed with 1 error
+=== s8ddefercase.olang
+s8ddefercase.olang:10:43: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
+   10 |         defer io.Println("deferred r " $e.r)!
+      |                                           ^
+compilation failed with 1 error
+=== s8dnarrowlentfield.olang
+s8dnarrowlentfield.olang:12:9: error[S8d]: a narrowed payload field is read, never written or lent writably - 'e' is narrowed to Shape.Box, and what it reads there is a copy of the payload: assign the whole case, 'e = Shape.Box(...)', or change a copy a match binds and assign the case back
+   12 |         e.c.Grow()
+      |         ^~~
+compilation failed with 1 error
+=== s8dnarrowlentmethod.olang
+s8dnarrowlentmethod.olang:14:9: error[S8d]: a narrowed payload field is read, never written or lent writably - 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload: assign the whole case, 'e = Shape.Round(...)', or change a copy a match binds and assign the case back
+   14 |         e.Grow()
+      |         ^
+compilation failed with 1 error
+=== s8dnarrowlentparam.olang
+s8dnarrowlentparam.olang:12:14: error[S8d]: a narrowed payload field is read, never written or lent writably - 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload: assign the whole case, 'e = Shape.Round(...)', or change a copy a match binds and assign the case back
+   12 |         grow(e)
+      |              ^
+compilation failed with 1 error
 === s8dnarrowwrite.olang
-s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)
+s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written or lent writably - 's' is narrowed to Shape.Ring, and what it reads there is a copy of the payload: assign the whole case, 's = Shape.Ring(...)', or change a copy a match binds and assign the case back
     9 |     if s == Shape.Ring { s.c.r = 5 }
       |                              ^
 compilation failed with 1 error
@@ -5702,6 +5789,16 @@ compilation failed with 1 error
 s8dwideor.olang:4:53: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', until it is assigned
     4 | fn wide(s Shape) Bool { return s == Shape.Ring or s.r > 2 }
       |                                                     ^
+compilation failed with 1 error
+=== s8edefernull.olang
+s8edefernull.olang:10:45: error[T2c]: 'p' is a Node?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+   10 |         defer io.Println("deferred reads " $p.V)!
+      |                                             ^
+compilation failed with 1 error
+=== s8eerrdefernull.olang
+s8eerrdefernull.olang:10:44: error[T2c]: 'p' is a Node?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+   10 |     errdefer io.Println("errdefer reads " $p.V)!
+      |                                            ^
 compilation failed with 1 error
 === samevalue.olang
 samevalue.olang:6:14: error[E10c]: 'is' tests for null and nothing else - compare with '=='

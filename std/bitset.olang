@@ -20,13 +20,9 @@ type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
     bits
 }
 
-# the set of the case-index bits b, which hold no bit past the last case: the module's own way to a BitSet, which
-# cannot fail
-fn of<T>(b U64) BitSet<T> {
-    s BitSet<T>
-    s.bits = b
-    return s
-}
+# the set of the case-index bits b, which hold no bit past the last case: the module's own way to a BitSet - every
+# caller's bits are within the cases, so the requirement holds and "!" never ends anything
+fn of<T>(b U64) BitSet<T> { return BitSet<T>(b)! }
 
 # the check every instance makes: an enum, at most 64 cases, none with a payload
 fn check<T>() {

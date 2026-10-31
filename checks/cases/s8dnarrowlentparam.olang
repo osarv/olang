@@ -1,4 +1,5 @@
-# check: fail error[S8d]: 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload
+# check: fail error[S8d]: a narrowed payload field is read, never written or lent writably
+# also: 'e' is narrowed to Shape.Round, and what it reads there is a copy of the payload
 # S8d: a narrowed payload written whole, lent to a mut reference parameter - through a mut Shape& parameter too, the
 # copy is what the callee would write
 type Circle struct(r F64) { r }

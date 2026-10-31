@@ -26385,8 +26385,9 @@ the statements that may leave (`typed.exprLeaves`, a Call whose type is noreturn
 
 **F6: `bitset.BitSet<T>(bits)` (R22).** The constructor took any bits, and a walk then met `caseAt`'s `unreachable`.
 It has a contract now, `[bits & ~mask<T>() == 0]`, so bits past the last case fail with `ArgumentError.INVALID` (a
-constant one is D17e's error at the call); the module builds its own sets through `of<T>`, a zero value given its bits,
-so Empty, Full, Of and the operators need no `try`. std test (the evaluator agreeing through a baked global) and case
+constant one is D17e's error at the call); the module builds its own sets through `of<T>`, the constructor with `!`
+on bits it knows are within the cases, so Empty, Full, Of and the operators need no `try` (a zero value given its
+bits was tried first: for a T that is no enum it added D13c's "no zero value" to check<T>'s one error). std test (the evaluator agreeing through a baked global) and case
 `bitsetctorbits`.
 
 **G1: an attribute holding a `mut` reference (G39, T25c; a diagnostic).** `@Holder(Cell(1))` with `Holder(c mut
