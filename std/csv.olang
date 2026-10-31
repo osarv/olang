@@ -244,7 +244,7 @@ fn cell<V>(x V) String {
 
 # the records of a text whose first is its header, each built as a T through its constructor (G37): a parameter from
 # the column its name (or "@csv.Column") names, read as its type; a column missing, or a parameter "@csv.Skip" leaves out,
-# its default. Fails with what Rows fails with, NO_COLUMN where a parameter with no default has no column and BAD_VALUE
+# its default. Fails with what Rows fails with, NoColumn where a parameter with no default has no column and BadValue
 # where a field is no value of its type - and with what the constructor fails with
 fn Decode<T>(text String&, sep Char = ',') Vec<T> ? {
     assert T.Kind == TypeKind.Struct, "csv reads a struct's fields as columns"

@@ -3,14 +3,14 @@
 #
 #     checked a[i]           ->  try a.Get(i)                 (E16d: fails with ArrayError.OutOfRange)
 #     checked a[lo:hi]       ->  try a.SliceOf(lo, hi)        (E16c; an absent bound 0 or a.Len())
-#     checked T(x)           ->  try x.Narrow<T>()            (E26b: NumberError.Overflow and INVALID), T a number
+#     checked T(x)           ->  try x.Narrow<T>()            (E26b: NumberError.Overflow and Invalid), T a number
 #     checked f(x)           ->  try f(x)                     (D17: a contract is checked on entry, ArgumentError.Invalid)
 #     (checked ...)!         ->  ...!                         the same, with "!" in place of the try
 #
 # The try is parenthesized - "(try a.Get(n))" - where an operator goes on after it: checked bound as tightly as old
 # "try", and a try now reads to the end of its expression, so "2 * checked a[n] + 1" is "2 * (try a.Get(n)) + 1". And
-# CheckError's words are renamed where they name what such a rewrite now fails with: OUT_OF_BOUNDS is
-# ArrayError.OutOfRange, OVERFLOW and INVALID of a narrowing NumberError's, WRONG_CASE CaseError's, CONTRACT
+# CheckError's words are renamed where they name what such a rewrite now fails with: OutOfBounds is
+# ArrayError.OutOfRange, Overflow and Invalid of a narrowing NumberError's, WrongCase CaseError's, CONTRACT
 # ArgumentError.Invalid. Everything else - "checked (a + b)", a checked store or step, a checked call to a Checked form,
 # CheckError left over - is listed for a person: arithmetic that must not overflow goes through std/arith (try
 # arith.Checked(a) + b, try arith.Add(a, b)), and an "as" fails as written now (try e as C, (e as C)!), which the
@@ -339,7 +339,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
     }
     out.Push(src[at:])
     res := out.ToString()
-    # CheckError's WRONG_CASE is CaseError's wherever it is written; whatever else of it is left is listed
+    # CheckError's WrongCase is CaseError's wherever it is written; whatever else of it is left is listed
     if res.Contains($OldError ".WRONG_CASE") {
         res = res.Replace($OldError ".WRONG_CASE", "CaseError.WrongCase")
         c.changes++

@@ -81,7 +81,7 @@ fn Has(name String&) Bool {
 # calls the C function "name" with the arguments "words" holds, as "kinds" describes them, and gives its result's bits
 # - the result coded "result", 0 for none: an integer extended to 64 bits as its type extends, a float's IEEE bits
 # (F64FromBits, F32FromBits). What the function writes into an array argument is in "words" after the call. Fails with
-# NOT_FOUND when there is no such function, UNSUPPORTED for a kind nothing can pass, and BAD_ARGUMENTS for kinds
+# NotFound when there is no such function, UNSUPPORTED for a kind nothing can pass, and BadArguments for kinds
 # holding a 0 or words holding less than the kinds describe; the prototype the kinds describe is the
 # program's word, as an extern declaration's is (X1a): a wrong one is undefined behaviour
 fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0, fixed I64 = -1) U64 ? Error {

@@ -4329,7 +4329,7 @@ test "'T[expr]' arena-allocates an array sized at runtime, own scope by default"
     assert e.Len() == 0
 }
 
-# D14b: a NEGATIVE runtime length aborts. It cannot be written as a running test, so it is named here:
+# D14b: a Negative runtime length aborts. It cannot be written as a running test, so it is named here:
 #   neg I32 = -4
 #   a I32[neg]
 # Before the check this was silent heap corruption rather than an error. A negative length multiplies out

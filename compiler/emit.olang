@@ -4715,7 +4715,7 @@ fn (fe mut fnEm&) narrowBF16(f String&) String {
     return fe.let("bitcast i16 " $tr " to bfloat")
 }
 
-# whether op over args, typed ty, has a true result ty cannot hold (E15a's OVERFLOW)
+# whether op over args, typed ty, has a true result ty cannot hold (E15a's Overflow)
 fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
     t := fe.E.T
     a0 := fe.arg(args, 0)

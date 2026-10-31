@@ -814,30 +814,42 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   call). `error T.WORD` raises; a bare unhandled fallible call is a compile error; coverage is judged at the callee's
   set. Locally scoped codes: `{i32 code, T}`, the code packing (type ordinal << 16) | word ordinal from the function's
   own list, so no whole-program numbering exists and propagation re-encodes.
-- **Errors declared where raised; `?` always written (the user's decision 2026-10-31; not built yet).** `error NotFound`
-  with nothing declared declares an error of its module (one value: `catch NotFound`, `e == NotFound`, `lex.NotFound`
-  outside); the same name raised anywhere in the module is the same error; no type is needed to write one. Named sets
-  list them (`type LookupError error NotFound, Ambiguous`), braces still declare a set's own (`IoError.Full`). Every
-  error name is CamelCase, exported capitalized and private lower case (`notFound`) - words included (`ListError.Empty`,
-  migrated by a tool); a private error a caller outside cannot name. A function that can fail writes `?` - bare to infer
-  the set, or the set as a promise; no function fails without it (contract functions and `main` included). A raised name
-  one edit from an error of the module is an error with did-you-mean unless the signature names it. Flags are
-  banned (the user, 2026-10-31: "ban both flag shapes"): a `Bool` among several results, and a function giving a `Bool`
-  that also writes a `&` parameter, are compile errors naming `? E`. The entry below is
-  today's rule until it lands.
+- **Errors declared where raised; `?` always written; no flags (R3b, R1d, R23, R23a, T19; the user's decisions
+  2026-10-31, QBZ; built 2026-10-31).** `error NotFound` with nothing of that name declared, and no local of it in scope,
+  declares an error of its module (one value: `catch NotFound`, `? NotFound`, `e == NotFound`, held as T20 allows, `$e`
+  `NotFound`, `lex.NotFound` outside); the same name raised anywhere in the module is the same error; capitalized
+  exported, lower case private (M6). Named sets list them (`type LookupError error NotFound, Ambiguous`), braces still
+  declare a set's own (`IoError.Full`). Every error name is CamelCase, words included (`ListError.Empty`),
+  `tools/errorcase_rename.olang` (in `olang fix`) migrated the repository. A function that can fail writes `?` (R1d) -
+  contract functions and `main` included; a trait method with conditions names `ArgumentError`. A raised name one edit
+  from another error of the module is an error with did-you-mean unless a function raising it names it after its `?`.
+  A `Bool` among several results (R23) and a `Bool` result beside a `mut T&` parameter (R23a) are errors naming `? E`.
+  Decided (mine): the resolver walks a module's bodies once before resolving them (`names.surveyBodies`, diagnostics
+  quiet) to find the raised names, each then a synthesized `Decl.Errors` of one word, its own name
+  (`generic.IsRaisedError`) - so codes (R6), lowering, emit, the evaluator and `interpret` needed nothing new, and
+  `generic.ErrorWordName` prints it alone; `NotFound.NotFound` names nothing and `type NotFound error { NotFound }` is
+  refused naming `error NotFound` (the tool turns such declarations into raised errors); the prelude raises none by
+  name (its names are reserved everywhere); "one edit" is case-insensitive distance at most 1 within B11's third,
+  against declared error types and sets and names raised more often (as often and first); R23a exempts the receiver
+  (what a method acts on: `s.Add(x)` saying whether it changed), `extern fn` and `export fn` (C's conventions), and
+  applies to function types. The compiler's ~90 sites moved: success flags to errors raised by name (`p.Unify` fails
+  with `Mismatch`, `cond.meet` with `NoMeet`, `x.Text(b)` with `NoValue` ...), data Bools into small structs
+  (`cond.Decision`, `definit.Verdict`, `signMag`), "whether it changed" into counts (`free.addTo`, `unifyBound`),
+  accumulators into receivers (`typed.leaveWalk`, `types.DtorWalk`); std/json's whole numbers to an I128. Found on the
+  way (pre-existing): `error IoError` - a declared type written whole - raised nothing and said nothing (now R3's error).
 - **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).**
   A bare `?` is what the body can fail with - a least fixed point over calls, cycles included, ordered canonically
   (owner module, then name) so separately compiled modules agree; it may come out empty, and in a generic differ per
   instantiation. `? E` is a promise the body is held to. A function type and a trait method write their set (R1b); a
   named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
-  gone (the user: "error should always require an actual error"). `main` may have no `?` at all (B4). Stage 0 checks
+  gone (the user: "error should always require an actual error"). `main` writes `?` when it can fail (R1d). Stage 0 checks
   the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
   attempts' memory; a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
   **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one word, so a function
   promises exactly what it raises and `catch ListError.EMPTY` is complete (R14 judges word by word); inferred sets carry
   words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/
-  `Last` EMPTY, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OUT_OF_RANGE, `IndexOf`/`Find*` NOT_FOUND, `ShortestDecimal`
-  NOT_FINITE). A lambda infers with nothing written, in the canonical order (D16b).
+  `Last` Empty, `RemoveAt`/`Insert`/`TakeAt`/`Swap*` OutOfRange, `IndexOf`/`Find*` NotFound, `ShortestDecimal`
+  NotFinite). A lambda infers with nothing written, in the canonical order (D16b).
 - **`try` handles what fails as written, and nothing else is checked (R8, E15a, E24, the user's design; `checked`
   removed 2026-10-25, the user: "one error system: try").** A `try` takes the whole expression after it, up to its
   end or the first `catch` (E24, the user's call 2026-10-25; it took a postfix expression): `try a.Get(i) + b.Get(j)`,
@@ -851,10 +863,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `!` where it reads a plain chain, else listed - a listing makes `olang fix` end with status 1 (2026-10-25, the review:
   fix must never change what old code computes silently). What `checked` checked is now a
   call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OutOfRange`, a List's and a Vec's `Get`
-  their own errors), `try x.Narrow<I32>()` (`NumberError.Overflow`/`INVALID`, supplied by the compiler for every number
+  their own errors), `try x.Narrow<I32>()` (`NumberError.Overflow`/`Invalid`, supplied by the compiler for every number
   type), `as` failing as written (`CaseError.WrongCase`), and arithmetic in `std/arith` (not the prelude): `try
   arith.Add(a, b)`, `Sub Mul Div Rem Neg ShiftLeft ShiftRight Pow`, and `Checked<T>` whose operators are those
-  (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DIVIDE_BY_ZERO INVALID`, each function's set inferred per
+  (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DivideByZero INVALID`, each function's set inferred per
   number type (an integer's Add fails with OVERFLOW alone; `Rem` by -1 is 0, never OVERFLOW). Plain `/ %`, indexing and conversions stay unchecked; a
   plain slice still aborts once per slice (E16b). `for x in try c` and `try join` stay. No `try { block }`.
   `tools/checked_migrate.olang` rewrites the mechanical uses and lists the rest; `tools/as_migrate.olang` makes an
@@ -867,12 +879,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   declare errors, making the operator fallible as written (`try a - b`, `try x[i]`, `try x[i] = v`). The checked forms
   (`CheckedAt`, `CheckedPlus` ...) went with `checked` (2026-10-25): a method of that name is an ordinary method.
 - **The prelude's errors of the language's own operations (R20, 2026-10-25; `CheckError` removed with `checked`):**
-  `ArrayError.OutOfRange` (`Get`, `SliceOf`), `NumberError.Overflow`/`INVALID` (`Narrow`), `CaseError.WrongCase`
+  `ArrayError.OutOfRange` (`Get`, `SliceOf`), `NumberError.Overflow`/`Invalid` (`Narrow`), `CaseError.WrongCase`
   (`as`), `ArgumentError.Invalid` (a false contract condition, D17);
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
-  may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.Missing`, `TextError`
-  (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
+  may ever exit").** `ListError`/`VecError` (`Empty NotFound OutOfRange`), `MapError.Missing`, `TextError`
+  (`NotFound BadBase NotFinite`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
   `TextError.BadBase`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NotFound`, `ChanError.CLOSED` on a Send,
   `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.Negative` (a signed integer's `Sqrt`). Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
@@ -1250,7 +1262,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `RWLock<T>` (`Read`/`Write`), `Once`; each a handle over pthread words that start zeroed, `-race` clean. `std/time`:
   `Duration extends I64` (`Millis(5)`, `d.Seconds()`, `$d` as Go's `1h2m3.5s`), `Sleep`, `Date` with RFC 3339
   `Format`/`Parse` (fixed offsets only - no zone database). `std/net`: blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`
-  with `Read` failing `CLOSED` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
+  with `Read` failing `Closed` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
   5952 text), destructors closing descriptors; names resolved by `Lookup`/`Resolve` over getaddrinfo (X10/X11) - X6's
   `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), handles all.
   Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy` (empty: `Exhausted`); the second

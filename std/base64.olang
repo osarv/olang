@@ -81,13 +81,13 @@ fn decodeWith(t String&, url Bool) Array<U8> ? Error.Invalid {
 # data in the standard alphabet, padded with '='
 fn Encode(data Array<U8>&) String { return encodeWith(data, standard, true) }
 
-# what Encode wrote, back as bytes - failing with INVALID for anything else
+# what Encode wrote, back as bytes - failing with Invalid for anything else
 fn Decode(t String&) Array<U8> ? Error.Invalid { return try decodeWith(t, false) }
 
 # data in the URL-safe alphabet, with no padding
 fn EncodeURL(data Array<U8>&) String { return encodeWith(data, urlSafe, false) }
 
-# what EncodeURL wrote, back as bytes - failing with INVALID for anything else ('=' included)
+# what EncodeURL wrote, back as bytes - failing with Invalid for anything else ('=' included)
 fn DecodeURL(t String&) Array<U8> ? Error.Invalid { return try decodeWith(t, true) }
 
 if TestBuild {

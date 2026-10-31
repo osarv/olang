@@ -108,7 +108,7 @@ fn (m mut Map<K, V>&) Update(key K, init V, f fn(v V) V) {
     s.add(i, key, f(init))
 }
 
-# the value for key - failing with MISSING when there is none, so a miss is never read as a value:
+# the value for key - failing with Missing when there is none, so a miss is never read as a value:
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<K, V>&) Get(key K) V ? MapError {
     s := m.s
@@ -146,7 +146,7 @@ fn (m mut Map<K, V>&) Remove(key K) Bool {
     return false
 }
 
-# removes key and gives its value - Get and Remove in one, failing with MISSING when there is none. Its slot is kept for
+# removes key and gives its value - Get and Remove in one, failing with Missing when there is none. Its slot is kept for
 # the next key put
 fn (m mut Map<K, V>&) Take(key K) V ? MapError {
     s := m.s

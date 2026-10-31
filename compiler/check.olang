@@ -6037,8 +6037,8 @@ fn (c mut Checker&) failOp(fails Array<types.TypeId>&, at source.Span, isAs Bool
     return typed.Check.Try
 }
 
-# what a narrowing between numbers can fail with (E26b): a float to an integer NaN or out of range (INVALID, OVERFLOW),
-# a narrowing float infinite, an integer changing value (OVERFLOW) - nothing where every value fits
+# what a narrowing between numbers can fail with (E26b): a float to an integer NaN or out of range (Invalid, Overflow),
+# a narrowing float infinite, an integer changing value (Overflow) - nothing where every value fits
 fn (c mut Checker&) convWords(from types.TypeId, to types.TypeId) Array<types.TypeId>& {
     f := c.under(from)
     t := c.under(to)

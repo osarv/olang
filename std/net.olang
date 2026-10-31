@@ -32,13 +32,13 @@ ipv6V6only I32 = 26
 msgNosignal I32 = 0x4000
 shutWr I32 = 1
 
-# why a network call failed. REFUSED: nothing listens at the address dialed; IN_USE: the address to listen at is taken;
-# TIMEOUT: a timeout set on the socket passed, or the connection attempt timed out; RESET: the other side reset or
+# why a network call failed. REFUSED: nothing listens at the address dialed; InUse: the address to listen at is taken;
+# Timeout: a timeout set on the socket passed, or the connection attempt timed out; RESET: the other side reset or
 # closed the connection while this side was writing; UNREACHABLE: no route to the network or host; ADDRESS: text that
 # is no address, a port outside 0-65535, or an address this machine does not have (an IPv6 one where IPv6 is off);
-# UNKNOWN_HOST: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
-# CLOSED: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
-# did; DENIED: not permitted (a port below 1024, say); FAILED: any other reason
+# UnknownHost: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
+# Closed: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
+# did; Denied: not permitted (a port below 1024, say); Failed: any other reason
 type Error error {
     Refused
     InUse
@@ -355,7 +355,7 @@ fn lookupFailed(rc I32) ? Error.UnknownHost, Error.Unreachable, Error.Failed {
 }
 
 # every address a name has - the C library's answer (its hosts file, then DNS), in its order, each once. A name that is
-# an address already is that address, asked of no one; an empty name or one with no address fails with UNKNOWN_HOST
+# an address already is that address, asked of no one; an empty name or one with no address fails with UnknownHost
 fn Lookup(host String&) Array<IP> ? Error.UnknownHost, Error.Unreachable, Error.Failed {
     if host == "" { error Error.UnknownHost }
     if host != "localhost" {
@@ -447,7 +447,7 @@ fn (l mut Listener&) Accept() Conn& ? Error {
     unreachable
 }
 
-# a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, TIMEOUT when the system gives up
+# a connection to a - failing with REFUSED when nothing listens there, UNREACHABLE, Timeout when the system gives up
 fn Dial(a Addr&) Conn& ? Error {
     fd := try open(a, sockStream)
     sa := sockaddr(a)
@@ -460,8 +460,8 @@ fn Dial(a Addr&) Conn& ? Error {
 }
 
 # what arrives next, up to buf's length, read into the front of buf and handed back as that front - a borrow of buf -
-# waiting until something does. Fails with CLOSED once the other side has closed and everything it sent has been read,
-# TIMEOUT when a timeout set by SetTimeout passes first, RESET when the connection was reset
+# waiting until something does. Fails with Closed once the other side has closed and everything it sent has been read,
+# Timeout when a timeout set by SetTimeout passes first, RESET when the connection was reset
 fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
     if buf.Len() == 0 { return buf[:0] }
     for {
@@ -474,7 +474,7 @@ fn (c Conn&) Read(buf mut Array<U8>&) Array<U8>&buf ? Error {
 }
 
 # all of data written, however many sends it takes - failing with RESET when the other side has gone (never a signal:
-# the send asks for none, MSG_NOSIGNAL), TIMEOUT when a timeout set by SetTimeout passes
+# the send asks for none, MSG_NOSIGNAL), Timeout when a timeout set by SetTimeout passes
 fn (c Conn&) Write(data Array<U8>&) ? Error {
     sent I64 = 0
     for sent < data.Len() {
@@ -487,10 +487,10 @@ fn (c Conn&) Write(data Array<U8>&) ? Error {
     }
 }
 
-# says no more will be written: the other side reads to the end (CLOSED), and may still write back
+# says no more will be written: the other side reads to the end (Closed), and may still write back
 fn (c Conn&) CloseWrite() { sock.shutdown(c.fd, shutWr) }
 
-# a Read or Write waiting longer than d fails with TIMEOUT from now on; 0 waits for ever (the default)
+# a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
 fn (c Conn&) SetTimeout(d time.Duration) {
     tv := Array<U8>(16)
     sec := I64(d) / 1000000000
@@ -550,7 +550,7 @@ fn (u UDP&) RecvFrom(buf mut Array<U8>&) Array<U8>&buf, Addr ? Error {
     unreachable
 }
 
-# a RecvFrom waiting longer than d fails with TIMEOUT from now on; 0 waits for ever
+# a RecvFrom waiting longer than d fails with Timeout from now on; 0 waits for ever
 fn (u UDP&) SetTimeout(d time.Duration) {
     tv := Array<U8>(16)
     sec := I64(d) / 1000000000

@@ -204,7 +204,7 @@ type Rvalue enum {
     Prim(op typed.PrimOp, ty types.TypeId, args Range)       # an operation, unchecked (E6c), of result type ty
     # whether op over args, of result type ty, has a true result that does not fit ty: integer + - * and unary -,
     # / of the most negative value by -1, a narrowing or a float-to-integer conversion (a NaN or an infinity among
-    # those) - E15a's OVERFLOW, tested before the operation runs
+    # those) - E15a's Overflow, tested before the operation runs
     Overflows(op typed.PrimOp, ty types.TypeId, args Range)
     Tag(p Lvalue)                                   # the case an enum value holds, as an I64 (S13)
     # a value made of its parts: a struct (a constructor's assembly, C6), a tuple (D8c), a record, an enum case

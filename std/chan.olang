@@ -105,7 +105,7 @@ fn (c mut Chan<T>&) IsClosed() Bool {
     return closed
 }
 
-# a Send, the lock held: fails with CLOSED if the channel is closed - the lock let go first, so the channel stays usable
+# a Send, the lock held: fails with Closed if the channel is closed - the lock let go first, so the channel stays usable
 fn sendOpen<T>(c mut Chan<T>&) ? Error {
     if c.closed {
         pthread.pthread_mutex_unlock(c.lock)
@@ -392,7 +392,7 @@ test "a channel of capacity 0 is a rendezvous" {
     assert (try RecvUntil(c, tok2) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
 }
 
-# Close: what was buffered before it is still received, in order, then Recv fails with CLOSED - again on every call
+# Close: what was buffered before it is still received, in order, then Recv fails with Closed - again on every call
 test "a closed channel gives what it holds, then fails with CLOSED" {
     c mut Chan<I32>& = Chan<I32>(4)
     Init(c)

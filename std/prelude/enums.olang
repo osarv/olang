@@ -1,7 +1,7 @@
 # what enums need of the prelude: the error From and "as" fail with, and the search From is made of (T17e)
 
 # what a case fails with: no case of the enum has the raw value asked for (NO_CASE, T17e); "e as C" on a value holding
-# another case (WRONG_CASE, E32)
+# another case (WrongCase, E32)
 type CaseError error {
     NoCase
     WrongCase

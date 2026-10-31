@@ -31,7 +31,7 @@ extern {
     fn __olang_on_crash(message Array<U8>, len I64)
 }
 
-# why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
+# why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and Failed for
 # every other
 type Error error {
     NotFound
@@ -157,8 +157,8 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
 # be seen), Stdout and Stderr then being empty. It runs in the directory "dir", or in this program's own when dir is
 # empty; a relative path in args[0] is found from there. args[0] is looked up through PATH unless it holds a '/'. A
 # program that runs and fails is no error here: its status says so. Exec fails, with the Error naming why, only when
-# the program cannot be started - NOT_FOUND (no such program, or no such dir), DENIED (not executable), NOT_DIR (dir is
-# not a directory) - or with FAILED when there is nothing to run, an argument holds a zero byte (which no command line
+# the program cannot be started - NotFound (no such program, or no such dir), Denied (not executable), NotDir (dir is
+# not a directory) - or with Failed when there is nothing to run, an argument holds a zero byte (which no command line
 # can carry), or the system refuses what Exec needs. Output is gathered in memory files the program writes into as fast
 # as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output. Start and Wait are the same, in
 # two halves; ExecUntil the same with a deadline.
@@ -177,7 +177,7 @@ fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", cap
 # runs the program at path in this program's place, args its command line (args[0] the name it runs by, which need not
 # be path): what this program would do next is the program's, its status this process's - a shell's script handing on
 # to another program, a driver running what it built. path is not looked up through PATH. Returns only when the
-# program cannot be started, failing as Exec does - NOT_FOUND, DENIED, or FAILED for no arguments or one holding a zero
+# program cannot be started, failing as Exec does - NotFound, Denied, or Failed for no arguments or one holding a zero
 # byte
 fn ExecInPlace(path String&, args Array<String&>&) ? Error {
     if args.Len() == 0 { error Error.Failed }
@@ -272,7 +272,7 @@ fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir S
 }
 
 # waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
-# the caller puts it. Fails with FAILED when it was waited for already
+# the caller puts it. Fails with Failed when it was waited for already
 fn (p mut Process&) Wait() Output ? Error {
     if p.waited { error Error.Failed }
     waited := Array<I32>(1)
@@ -466,7 +466,7 @@ fn MkDir(path String&) ? Error {
 }
 
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
-# anything else in the way fails with NOT_DIR
+# anything else in the way fails with NotDir
 fn MkDirAll(path String&) ? Error {
     if IsDir(path) { return }
     for i in range 1, path.Len() + 1 {
@@ -474,7 +474,7 @@ fn MkDirAll(path String&) ? Error {
         part := path[:i]
         if sysstat.mkdir($part "\0", 0x1FF) != 0 {
             code := __olang_err()
-            if code != 2 { try raise(code) }            # 2 is EXISTS: fine, when what exists is a directory
+            if code != 2 { try raise(code) }            # 2 is Exists: fine, when what exists is a directory
             if not IsDir(part) { error Error.NotDir }
         }
     }
@@ -506,8 +506,8 @@ fn removeTree(path String&) ? Error {
     p := $path "\0"
     if stdio.remove(p) == 0 { return }
     code := __olang_err()
-    if code == 1 { return }                            # NOT_FOUND: nothing to remove
-    if code != 6 and code != 2 { try raise(code) }      # NOT_EMPTY, or EXISTS, which POSIX allows rmdir to say
+    if code == 1 { return }                            # NotFound: nothing to remove
+    if code != 6 and code != 2 { try raise(code) }      # NotEmpty, or Exists, which POSIX allows rmdir to say
     for n in try ReadDir(path) { try removeTree($path "/" $n) }
     try check(stdio.remove(p))
 }

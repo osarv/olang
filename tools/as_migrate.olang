@@ -1,5 +1,5 @@
 # as_migrate - "x as C" fails as written (E32, 2026-10-25, the user's call: "one error system: try"). It aborted where
-# the value held another case, and failed with WRONG_CASE only under checked; now it fails with CaseError.WrongCase
+# the value held another case, and failed with WrongCase only under checked; now it fails with CaseError.WrongCase
 # wherever it is written, so a use that no try covers is an error. Each such use is given the meaning it had - the
 # program ends where the value holds another case - from the compiler's own diagnostic (E32, at the "as"):
 #

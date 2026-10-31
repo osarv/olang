@@ -46,7 +46,7 @@ fn Camel(w String&) String {
 # the words of an error type to rename: by the type's name, each old word to its new spelling
 type Words struct() {
     byType Map<String&, Map<String&, String&>>
-    # a type of one word that is, CamelCase, its own name (NotFound declaring NOT_FOUND): an error raised by name
+    # a type of one word that is, CamelCase, its own name (NotFound declaring NotFound): an error raised by name
     # now (R3b) - its declaration dropped, "NotFound" written "NotFound"; by its name, the word as written
     lone Map<String&, String&>
 }

@@ -48,7 +48,7 @@ type HeaderError error {
 }
 
 # the value of the response's first header field named "name", compared without regard to case as HTTP has it -
-# failing with MISSING when it has none
+# failing with Missing when it has none
 fn (r Response&) Header(name String&) String&r ? HeaderError {
     for h in r.Headers {
         if sameName(h.Name, name) { return h.Value }

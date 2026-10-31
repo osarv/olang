@@ -2647,7 +2647,7 @@ element type needs no zero value: a new buffer is filled with the element being 
 room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
 buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
 room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of `std/list`'s `List` by the same
-names and on the same terms but `RunFrom`, failing with `VecError`'s words (`EMPTY`, `NOT_FOUND`, `OUT_OF_RANGE`) - `v[i]` and `v[i] = x` (E31,
+names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
 and `Clone`; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
@@ -2743,7 +2743,7 @@ Text has `t.ParseFloat() F64 ? ParseError`: the `F64` nearest the decimal number
 to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and `5.` are numbers, `.` is not), and an
 optional exponent, `e` or `E` with an optional sign and digits; or `inf`, `infinity` or `nan` in any case with an
 optional sign, so the text `$x` writes reads back as `x`. Nothing else is accepted: no surrounding space, no `_`, no
-hexadecimal. It fails with `EMPTY` for no text, `INVALID` for text that is not a number and `OVERFLOW` for a number
+hexadecimal. It fails with `Empty` for no text, `Invalid` for text that is not a number and `Overflow` for a number
 beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() U64, I64 ?`:
 the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no zero at `d`'s end that read back as
 `x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NotFinite` for a NaN or an infinity. Both
@@ -2755,11 +2755,11 @@ the letters in either case, and nothing else: no surrounding space, no prefix, n
 integer literal is written (L10): `0x`/`0X` before hexadecimal digits, `0b`/`0B` before binary ones, decimal otherwise,
 with a `_` between two digits as L10b allows it; a hexadecimal or binary literal is a bit pattern, read by `ParseInt`
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
-E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
-number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; the base is a `Radix`, below, refused
+E6c) and by `ParseUint` as the `U64` it is. Each fails with `Empty` for no text, `Invalid` for text that is not such a
+number (a sign alone included) and `Overflow` for a number beyond its type's range; the base is a `Radix`, below, refused
 where it is made, so a literal base cannot fail. `t.ParseAs<T>(base Radix = 10) T ? ParseError` reads an integer of
 any type `T` of the `Integer` trait (T4a): as `ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one,
-failing with `OVERFLOW` outside `T`'s range (`"128".ParseAs<U7>()`) and `INVALID` for a `-` before an unsigned one's
+failing with `Overflow` outside `T`'s range (`"128".ParseAs<U7>()`) and `Invalid` for a `-` before an unsigned one's
 digits; a type wider than 64 bits takes digits up to its own range (`"340282366920938463463374607431768211455".ParseAs<U128>()`),
 and base `0`'s prefixed literal is read as a program reads one (L10a): a pattern of at most 64 bits as `ParseInt` or
 `ParseUint` reads it, then fitting `T`, and a wider one - up to 128 bits - worth its bits read unsigned, fitting `T`
@@ -3508,15 +3508,15 @@ results, or undefined (E6a, E16, E26a). A check is asked for by calling somethin
 
 | to check | write | fails with |
 |---|---|---|
-| an index | `try a.Get(i)`, `try a.Set(i, v)` (E16d) | `ArrayError.OutOfRange` (a `List`'s and a `Vec`'s `Get`: their own `OUT_OF_RANGE`) |
+| an index | `try a.Get(i)`, `try a.Set(i, v)` (E16d) | `ArrayError.OutOfRange` (a `List`'s and a `Vec`'s `Get`: their own `OutOfRange`) |
 | a slice | `try a.SliceOf(lo, hi)` (E16c) | `ArrayError.OutOfRange` |
 | a narrowing conversion | `try x.Narrow<I32>()` (E26b) | `NumberError.Overflow`, `NumberError.Invalid` |
-| arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.Overflow`, `DIVIDE_BY_ZERO`, `INVALID` |
+| arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.Overflow`, `DivideByZero`, `Invalid` |
 
 `std/arith` gives each operation as a generic function over the number types (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`,
 `ShiftLeft`, `ShiftRight`) and a struct `Checked<T>` whose operators are those functions, failing where the true result
-does not fit (`OVERFLOW` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DIVIDE_BY_ZERO`) and on IEEE's invalid operation or a shift amount out
-of range (`INVALID`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
+does not fit (`Overflow` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DivideByZero`) and on IEEE's invalid operation or a shift amount out
+of range (`Invalid`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
 
 ### 5.5 Indexing and member access
 
@@ -3529,7 +3529,7 @@ storage it does not own (the other is `extern fn`, §11 X1a).
 Where the index and the length are **both known at compile time** — a constant index into an array whose length is
 known (T7c) — an out-of-range index is a **compile-time error**. That check costs nothing at run time and is not
 affected by the above. `base.Get(index)` (E16d) is the checked form, whose failure is defined: it compiles, and fails
-with `OUT_OF_RANGE` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
+with `OutOfRange` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
 a.Get(2) catch default -1 }`) one instance (G29) may have the element and another not.
 
 **E16d.** `base.Get(index)`, a method the compiler supplies on every array (as it supplies `Len`, E23), **checks the
@@ -5419,7 +5419,7 @@ naming it (R9).
 **R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
 `? ListError.EMPTY, io.Error`, `? TextError.NotFound, TextError.BadBase` - and the set then holds that word of the
 type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
-ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
+ListError.EMPTY` fails only with `Empty`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
 type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
 beside it. An `error` statement (R3) raising a word a written set does not hold is a compile-time error, and so is a
 `try` letting one through (R9), word by word. An inferred set (R1a) holds words too: the words of its `error`

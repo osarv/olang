@@ -2683,7 +2683,7 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
                 over := ln.into(types.BoolT, mir.Rvalue.Overflows(op, ty, ln.F.Args(ops)), sp)
                 ln.fails(over, chk, kind, Overflow, sp)
             } else if t.IsFloat(rt) {
-                # OVERFLOW when a finite value becomes infinite: an infinity converted stays one
+                # Overflow when a finite value becomes infinite: an infinity converted stays one
                 res := ln.prim(op, ty, ops, sp)
                 d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[res, res], sp)
                 ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)

@@ -112,7 +112,7 @@ fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? Error {
 # how many elements fall in each bin the edges bound, numpy's histogram: k + 1 increasing edges make k bins, bin i
 # holding the values from edges[i] up to but not including edges[i + 1] - the last one including its right edge as
 # well. A value below the first edge or above the last, or a NaN, is in no bin. Edges that are not two or more and
-# increasing fail with BAD_EDGES
+# increasing fail with BadEdges
 fn Histogram<T Number>(a Array<T>&, edges Array<F64>&) Array<I64> ? Error {
     if edges.Len() < 2 { error Error.BadEdges }
     for i in range 1, edges.Len() {

@@ -106,7 +106,7 @@ fn Neg<T Number>(a T) T ? {
     }
 }
 
-# a << n: INVALID for an amount outside [0, the width), OVERFLOW where the true value a * 2^n does not fit
+# a << n: Invalid for an amount outside [0, the width), Overflow where the true value a * 2^n does not fit
 fn ShiftLeft<T Integer>(a T, n I64) T ? {
     if n < 0 or n >= widthOf(a) { error Error.Invalid }
     r := a << n
@@ -114,13 +114,13 @@ fn ShiftLeft<T Integer>(a T, n I64) T ? {
     return r
 }
 
-# a >> n: INVALID for an amount outside [0, the width)
+# a >> n: Invalid for an amount outside [0, the width)
 fn ShiftRight<T Integer>(a T, n I64) T ? {
     if n < 0 or n >= widthOf(a) { error Error.Invalid }
     return a >> n
 }
 
-# x to the power n, failing with OVERFLOW where the true power does not fit - a square no later step needs is never
+# x to the power n, failing with Overflow where the true power does not fit - a square no later step needs is never
 # taken, so it fails exactly where the result does not fit (x.Pow(n) wraps). The product starts from the first factor
 # taken, not from 1, which I1 cannot hold: its x.Pow(0) fails
 fn Pow<T Integer>(x T, n U32) T ? {
@@ -153,7 +153,7 @@ fn (a Checked<T>) Mul(b T) Checked<T> commutes ? { return Checked<T>(try Mul(a.V
 fn (a Checked<T>) Div(b T) Checked<T> ? { return Checked<T>(try Div(a.Value, b)) }
 fn (a Checked<T>) Neg() Checked<T> ? { return Checked<T>(try Neg(a.Value)) }
 
-# a float result r of a and b, checked: INVALID for a NaN made from operands that are not, OVERFLOW for an infinity
+# a float result r of a and b, checked: Invalid for a NaN made from operands that are not, Overflow for an infinity
 # made from finite operands
 fn floatResult<T Float>(a T, b T, r T) ? {
     if r.IsNan() and not a.IsNan() and not b.IsNan() { error Error.Invalid }

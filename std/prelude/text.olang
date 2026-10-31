@@ -28,9 +28,9 @@ type ParseError error {
     Overflow
 }
 
-# what text's other operations fail with: a Find, FindLast or FindByte finding nothing (NOT_FOUND), a Radix - the base
-# Format, ParseInt and ParseUint take - made from a number outside 2 to 36 and not 0 (BAD_BASE), and ShortestDecimal given
-# a NaN or an infinity, which no digits write (NOT_FINITE). Each function names the one word it can fail with (R1c)
+# what text's other operations fail with: a Find, FindLast or FindByte finding nothing (NotFound), a Radix - the base
+# Format, ParseInt and ParseUint take - made from a number outside 2 to 36 and not 0 (BadBase), and ShortestDecimal given
+# a NaN or an infinity, which no digits write (NotFinite). Each function names the one word it can fail with (R1c)
 type TextError error {
     NotFound
     BadBase
@@ -102,7 +102,7 @@ fn (a String&) EndsWith(suffix String&) Bool {
     return a[a.Len() - suffix.Len():].Eq(suffix)
 }
 
-# the index of the first occurrence of c - failing with NOT_FOUND when there is none, so a miss is never read as a
+# the index of the first occurrence of c - failing with NotFound when there is none, so a miss is never read as a
 # position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
 fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
     for i in range a.Len() {
@@ -111,7 +111,7 @@ fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
     error TextError.NotFound
 }
 
-# the index of the first occurrence of sub, failing with NOT_FOUND when there is none. An empty sub is found
+# the index of the first occurrence of sub, failing with NotFound when there is none. An empty sub is found
 # at 0. Compared where it stands - each candidate's first byte, then the rest one byte at a time - so nothing is
 # sliced per position
 fn (a String&) Find(sub String&) I64 ? TextError.NotFound {
@@ -265,7 +265,7 @@ fn (p CStr&) StringFromC(max I64) String {
     return String(out)
 }
 
-# the index of the last occurrence of sub, failing with NOT_FOUND when there is none, as Find does. An empty sub is
+# the index of the last occurrence of sub, failing with NotFound when there is none, as Find does. An empty sub is
 # found at Len()
 fn (a String&) FindLast(sub String&) I64 ? TextError.NotFound {
     n I64 = sub.Len()
@@ -470,8 +470,8 @@ fn formatDigits(v U64, neg Bool, base Radix) String {
 # hexadecimal digits, "0b" or "0B" before binary ones, decimal otherwise (a leading 0 is no octal prefix), with a '_'
 # between any two digits ("1_000", "0xFF_FF") - and, as in a program, a hexadecimal or binary literal is a bit pattern,
 # read as an I64 (L10a): "0xFFFFFFFFFFFFFFFF".ParseInt(0) is -1, and a '-' before one negates that reading (wrapping,
-# E6c). Fails with EMPTY for no text, INVALID for anything else that is not such a number - a sign with no digits after
-# it included - and OVERFLOW for a number beyond I64's range; a base is a Radix, refused where it is made
+# E6c). Fails with Empty for no text, Invalid for anything else that is not such a number - a sign with no digits after
+# it included - and Overflow for a number beyond I64's range; a base is a Radix, refused where it is made
 fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
     if t.Len() == 0 { error ParseError.Empty }
     neg := t[0] == '-'
@@ -488,7 +488,7 @@ fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
 # the unsigned integer the text writes, as ParseInt reads one - an optional '+', never a '-' - up to U64's largest,
 # 18446744073709551615: "ffffffffffffffff".ParseUint(16) is that. Base 0 reads an olang integer literal (L10) to the
 # value it is in a program: "18446744073709551615".ParseUint(0) and "0xFFFF_FFFF_FFFF_FFFF".ParseUint(0) are both U64's
-# largest, and a literal needing more than 64 bits fails with OVERFLOW, as it is an error in a program
+# largest, and a literal needing more than 64 bits fails with Overflow, as it is an error in a program
 fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
     if t.Len() == 0 { error ParseError.Empty }
     digits := t[1:] if t[0] == '+' else t[:]
@@ -497,7 +497,7 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
 
 # the integer the text writes as a T - any integer type, of any width (T4a): "255".ParseAs<U8>() is 255 and
 # "-5".ParseAs<I24>() is -5 - read as ParseInt reads a signed type's and ParseUint an unsigned one's, failing with
-# OVERFLOW outside T's range (and INVALID for a '-' before an unsigned one's). A type wider than 64 bits takes digits up
+# Overflow outside T's range (and Invalid for a '-' before an unsigned one's). A type wider than 64 bits takes digits up
 # to its own range: "340282366920938463463374607431768211455".ParseAs<U128>() is U128's largest. Base 0's prefixed
 # literal is read as a program reads one (L10a): a pattern of at most 64 bits as ParseInt or ParseUint reads it, then
 # fitting T; a wider one's value read unsigned, up to 128 bits, fitting T where that value does
@@ -560,7 +560,7 @@ fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
 }
 
 # the bit pattern a prefixed literal's digits write ("0x..." or "0b...", a '_' between two digits, L10a, L10b), of up
-# to 128 bits - OVERFLOW past them
+# to 128 bits - Overflow past them
 fn readWide(digits String&) U128 ? ParseError {
     b U128 = 16 if digits[1] == 'x' or digits[1] == 'X' else 2
     if digits.Len() == 2 { error ParseError.Invalid }
@@ -638,7 +638,7 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
 # is not), and an optional exponent - 'e' or 'E', an optional sign, digits: "1e3", "-0.25", "6.02E23". "inf",
 # "infinity" and "nan", in any case and with an optional sign, are the infinities and a NaN, so the text "$x" writes
 # reads back as x. Nothing else: no surrounding space ("t.Trim().ParseFloat()"), no separators, no hexadecimal. Fails
-# with EMPTY for no text, INVALID for text that is not a number, and OVERFLOW for a number too large for an F64; one
+# with Empty for no text, Invalid for text that is not a number, and Overflow for a number too large for an F64; one
 # too small for any but zero is a zero of its sign. Exact with no help from the C library - Clinger's fast path, then
 # Eisel and Lemire's algorithm, then the number's own digits - so it runs while compiling (K1) as at run time. A
 # narrower float is the F64 converted, "F32(t.ParseFloat())", which can round twice: rarely, a text lying within half
@@ -733,7 +733,7 @@ exactPow10 := F64[1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 
 
 # the F64 nearest man * 10^exp10 - the number "text" writes, its sign aside (neg), man holding its first 19 significant
 # digits and trunc saying whether any later one is nonzero - correctly rounded (to nearest, a tie to even), failing with
-# OVERFLOW when that is too large for an F64 (one too small is zero). Three ways, each taken only when it is exact:
+# Overflow when that is too large for an F64 (one too small is zero). Three ways, each taken only when it is exact:
 # Clinger's (man and a power of ten both exactly F64s, so one rounding); Eisel and Lemire's (man times a 128-bit power
 # of ten, decided whenever the bits it keeps settle the rounding, which is nearly always); and failing both, the
 # number's own digits, shifted by powers of two until the integer part is the mantissa (Go's strconv's "simple
@@ -1016,7 +1016,7 @@ fn (a decimal&) roundedInteger() U64 {
 
 decimalShifts := I64[1, 3, 6, 9, 13, 16, 19, 23, 26]       # 2^decimalShifts[i] < 10^i, for 0 <= i < 9
 
-# the bits of the nearest F64, its sign aside - failing with OVERFLOW when it is too large for one
+# the bits of the nearest F64, its sign aside - failing with Overflow when it is too large for one
 fn (a mut decimal&) bits() U64 ? ParseError {
     if a.nd == 0 or a.dp < -330 { return 0 }
     if a.dp > 310 { error ParseError.Overflow }
@@ -1133,7 +1133,7 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
 
 # the fewest decimal digits that read back as x, and where the point goes: d and e with |x| = d * 10^e and no zero at
 # d's end - of those, the closest to x. 0 and 0 for a zero: x's sign is its own ("x < 0", or "x.Bits() >> 63" for a
-# negative zero). Fails with NOT_FINITE for a NaN or an infinity, which no digits write. The digits are those of
+# negative zero). Fails with NotFinite for a NaN or an infinity, which no digits write. The digits are those of
 # Python's repr and JavaScript's toString, and those "$x" writes (E11a: the runtime and the evaluator compute them by the
 # same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
 fn (x F64) ShortestDecimal() U64, I64 ? TextError.NotFinite {

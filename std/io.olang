@@ -92,7 +92,7 @@ fn Show<T>(v T, at Place = Place.Here) T {
 # 20 bytes anyway. "buf mut Array<U8>&" and not "buf mut Array<U8>": the marker is what makes this the caller's
 # own array rather than a copy of it, and so what makes this an out-parameter at all - D9a rejects the
 # unmarked spelling outright rather than let a call copy an array.
-# The digits are taken from the NEGATIVE of n's magnitude, as ParseInt accumulates: the negative range is the larger, so
+# The digits are taken from the Negative of n's magnitude, as ParseInt accumulates: the negative range is the larger, so
 # I64's minimum has a magnitude there, where negating it to a positive wraps back to itself.
 fn FormatInt(n I64, buf mut Array<U8>&) I32 {
     neg Bool = n < 0
@@ -210,7 +210,7 @@ type Writer struct(fd I32, size I64 = 65536) {
     fd
     buf mut Array<U8>& = Array<U8>(size if size > 0 else 1)
     used I64 = 0                     # buf[:used] waits to be written
-    broken I32 = 0                   # 0 while every write has gone through; 1 FAILED, 2 PARTIAL - the first that did not
+    broken I32 = 0                   # 0 while every write has gone through; 1 Failed, 2 PARTIAL - the first that did not
 }
 
 # t, after what is written already

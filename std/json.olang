@@ -125,7 +125,7 @@ fn (j Json&) Has(key String&) Bool {
 
 fn (j Json&) IsNull() Bool { return j == Json.Null }
 
-# the number j holds, as an F64 - an exact whole number's nearest - failing with WRONG_KIND when it holds something else
+# the number j holds, as an F64 - an exact whole number's nearest - failing with WrongKind when it holds something else
 fn (j Json&) AsNum() F64 ? Error {
     match j {
         case Json.Num(v) { return v }
@@ -135,7 +135,7 @@ fn (j Json&) AsNum() F64 ? Error {
     }
 }
 
-# the number j holds, when it is a whole number an I64 holds - failing with WRONG_KIND otherwise. A whole number Parse
+# the number j holds, when it is a whole number an I64 holds - failing with WrongKind otherwise. A whole number Parse
 # read is exact (an Int beyond 2^53)
 fn (j Json&) AsInt() I64 ? Error {
     w := try j.whole()
@@ -143,7 +143,7 @@ fn (j Json&) AsInt() I64 ? Error {
     return I64(w)
 }
 
-# the number j holds, when it is a whole number a U64 holds - failing with WRONG_KIND otherwise
+# the number j holds, when it is a whole number a U64 holds - failing with WrongKind otherwise
 fn (j Json&) AsUint() U64 ? Error {
     w := try j.whole()
     if w < 0 { error Error.WrongKind }
@@ -200,7 +200,7 @@ fn (j Json&) AsObj() Object&j ? Error {
 # how many members it has
 fn (o Object&) Len() I64 { return o.Keys.Len() }
 
-# the value of the member named key - the last, when several are - failing with MISSING when there is none
+# the value of the member named key - the last, when several are - failing with Missing when there is none
 fn (o Object&) At(key String&) Json&o ? Error {
     return o.Values[try o.find(key) catch { error Error.Missing }]
 }
@@ -211,7 +211,7 @@ fn (o Object&) Has(key String&) Bool {
     return true
 }
 
-# where the last member named key is, failing with MISSING when none is. Names are compared byte by
+# where the last member named key is, failing with Missing when none is. Names are compared byte by
 # byte rather than with "==", so that key may be text passed by value (a generic's String), which it can only index
 fn (o Object&) find<K>(key K) I64 ? Error {
     if o.index.Len() == 0 {
@@ -748,7 +748,7 @@ fn putUtf8(cp I64, w I64, out mut String&) I64 {
 }
 
 # how long the UTF-8 sequence at pos is (RFC 3629: no overlong forms, no surrogates, nothing past U+10FFFF), failing
-# with BAD_UTF8 at its first byte when it is not one
+# with BadUtf8 at its first byte when it is not one
 fn (r reader&) utf8() I64 ? Error {
     c := r.src[r.pos]
     n I64 = 0
@@ -780,7 +780,7 @@ fn (r reader&) utf8() I64 ? Error {
 
 # the number starting at pos, to the nearest F64: checked against JSON's grammar, -?(0|[1-9][0-9]*)(.[0-9]+)?
 # ([eE][+-]?[0-9]+)?, then read by the prelude's String.ParseFloat, whose grammar is wider - a number too large for an
-# F64 is BAD_NUMBER, one too small is zero. A whole number of at most 15 digits, the commonest kind, is worked out as it
+# F64 is BadNumber, one too small is zero. A whole number of at most 15 digits, the commonest kind, is worked out as it
 # is checked: it is exactly an F64, so there is nothing to round
 fn (r mut reader&) number() F64 ? Error {
     start I64 = r.pos
@@ -940,11 +940,11 @@ fn keyFor<F>(f F, keys Naming) String {
 
 # a value of type T read from JSON text, by Encode's rules backwards: "p := try json.Decode<Point>(text)". A struct is
 # built through its constructor (G37), so the constructor's checks run - one argument per parameter, read from the
-# member of its name, a missing member taking the parameter's default and failing with MISSING where it has none;
+# member of its name, a missing member taking the parameter's default and failing with Missing where it has none;
 # members no parameter names are passed over. Text, numbers (an integer only where the number is whole and fits, else
-# WRONG_KIND), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
+# WrongKind), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
 # such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34), an
-# error value from its word's text or null (WRONG_KIND for a word not of its type). Members are found by their keys as
+# error value from its word's text or null (WrongKind for a word not of its type). Members are found by their keys as
 # Encode writes them - its Naming, a type's own, a member's "@json.Key" - and a parameter "@json.Skip" leaves out takes
 # its default.
 # Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit

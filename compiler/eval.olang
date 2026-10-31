@@ -2955,7 +2955,7 @@ fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.Typ
     return old
 }
 
-# whether op's true result over args does not fit ty (E15a's OVERFLOW)
+# whether op's true result over args does not fit ty (E15a's Overflow)
 fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
     x := m.arg(fi, args, 0)
     at := m.opType(fi, x)
@@ -3379,7 +3379,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
     m.putInt(dst, ty, lo, hi)
 }
 
-# whether op's true result over args does not fit ty (E15a's OVERFLOW), where a wide integer is among them
+# whether op's true result over args does not fit ty (E15a's Overflow), where a wide integer is among them
 fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
     x := m.arg(fi, args, 0)
     at := m.opType(fi, x)
