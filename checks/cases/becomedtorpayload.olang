@@ -1,0 +1,22 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then
+# S21, O16: an enum whose case holds a reference to an instance with a destructor, given by a call in a block of the
+# function - its instance closes with the block, before the become's call
+import "std/io"
+
+type Res struct(n I64) { n } destruct { io.Println("destroy " $n)! }
+
+type Slot enum { Full(r Res&), Empty }
+
+fn mk(n I64) Slot { return Slot.Full(Res(n)) }
+
+fn size(s Slot) I64 { return 1 if s == Slot.Full else 0 }
+
+fn f(n I64) I64 {
+    if n == 0: return 0
+    if size(mk(n)) > 0 {
+        become f(n - 1)
+    }
+    return n
+}
+
+fn main() { io.Println("result " $f(2))! }

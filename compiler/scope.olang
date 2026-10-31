@@ -48,6 +48,39 @@ fn (s mut Scoper&) destructsAt(t types.TypeId) Bool {
     return s.P.T.KindOf(r) == types.Kind.Named and s.P.T.HasBody(r) and s.P.T.Destructs(r)
 }
 
+# whether a value of a type may hold an instance whose destructor is to run (C11, O16) - through references, elements,
+# fields and cases - or a value of a type not known here: an any's instance, a type variable's (S21, as check's
+# holdsDtor reads a local's type)
+fn (s mut Scoper&) mayHoldDtor(ty types.TypeId) Bool {
+    seen Map<types.TypeId, Bool>
+    return s.holdsDtorIn(ty, seen)
+}
+
+fn (s mut Scoper&) holdsDtorIn(ty types.TypeId, seen mut Map<types.TypeId, Bool>&) Bool {
+    t := s.P.T
+    r := t.Repr(ty)
+    if seen.Has(r) { return try seen.Get(r) catch default false }
+    seen.Put(r, false)
+    out := match t.KindOf(r) {
+        case types.Kind.Ref => s.holdsDtorIn(t.Referent(r), seen)
+        case types.Kind.Any, types.Kind.Var => true
+        case types.Kind.Array => s.holdsDtorIn(t.Elem(r), seen)
+        case types.Kind.Tuple, types.Kind.Record => s.someHoldsDtor(t.Items(t.Parts(r)), seen)
+        case types.Kind.Named => not t.HasBody(r) or t.Destructs(r) or s.someHoldsDtor(t.Items(t.Fields(r)), seen) or
+                                 s.someHoldsDtor(t.Items(t.Cases(r)), seen)
+        case _ => false
+    }
+    seen.Put(r, out)
+    return out
+}
+
+fn (s mut Scoper&) someHoldsDtor(ts Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&) Bool {
+    for p in ts {
+        if p != types.TypeId(0) and s.holdsDtorIn(p, seen) { return true }
+    }
+    return false
+}
+
 # whether a term is a block's scope - the frame's or one nested in it (S21)
 fn isBlockTerm(t Term) Bool {
     return match t {
@@ -205,7 +238,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # S21: the first become's call in the body being judged (Start -1 for none), and whether the body builds an instance
     # with a destructor in one of its own blocks - which closing its scopes before the call would run early (O16)
     tailSp source.Span = source.Span(-1, -1)
-    dtorBlock Bool = false
+    dtorAt source.Span = source.Span(-1, -1)   # S21: a call building an instance with a destructor in a block, none yet
     plan typed.Plan = typed.Plan(0, 0, 0)
     terms Vec<Term>           # by local: where its referent lives (a reference) or its references (a value holding them)
     stors Vec<Term>           # by local: where its own storage is
@@ -608,10 +641,13 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         pushed = s.instContexts(s.instanceOf(b))
     }
     s.tailSp = source.Span(-1, -1)
-    s.dtorBlock = false
+    s.dtorAt = source.Span(-1, -1)
     s.run()
     if report and str { s.strReceiver() }
-    if report and s.tailSp.Start >= I32(0) and s.dtorBlock { s.err(s.tailSp, msgs.BecomeDestructor("an instance is built in one of them")) }
+    if report and s.tailSp.Start >= I32(0) and s.dtorAt.Start >= I32(0) {
+        rec := s.err(s.tailSp, msgs.BecomeDestructor("an instance is built in one of them"))
+        s.note(rec, body.File, s.dtorAt, msgs.NoteHere())
+    }
     if report {
         for _ in range pushed { s.P.L.Diags.PopContext() }
         s.P.L.Diags.ContextBase(base)
@@ -6566,7 +6602,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         }
     }
     # ... and an instance with a destructor built in a block of the function would have it run early (O16)
-    if rv >= 0 and isBlockTerm(beta[rv]) and s.isRef(ty) and s.destructsAt(s.P.T.Referent(ty)) { s.dtorBlock = true }
+    # - a reference to one, or a value that may hold one: a struct holding a "Res&", an any, a type variable's (S21)
+    if rv >= 0 and isBlockTerm(beta[rv]) and s.mayHoldDtor(ty) and s.dtorAt.Start < I32(0) { s.dtorAt = s.nameSpan(sp) }
     scopes := Array<typed.Scope>(vars.Len())
     for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
     s.plan.Pass(c.Site, scopes)

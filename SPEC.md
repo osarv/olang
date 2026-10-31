@@ -5310,7 +5310,8 @@ the call); and so is each of the following, since a jump cannot keep a promise t
   result;
 - the function holds, or builds in one of its blocks, an instance whose **destructor** would run as that block closes
   (O16) - before the call, where a `return` would run it after; or a value that may hold one (an `any`, a type
-  variable's).
+  variable's). A call's result built in one of its blocks counts whenever its type may reach such an instance - through
+  references, elements, fields or cases (`Wrap(r Res&)` given by value), an `any`, a type variable's.
 
 ```
 fn isEven(n I64) Bool {

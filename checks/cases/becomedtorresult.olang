@@ -1,0 +1,20 @@
+# check: fail error[S21]: 'become' closes this function's scopes before the call, and an instance is built in one of them whose destructor would run then
+# S21, O16: a by-value result holding a reference to an instance with a destructor, built in the function's frame by a
+# callee (its result scope), is destroyed as the frame closes - before a become's call, where a return runs it after
+import "std/io"
+
+type Res struct(n I64) { n } destruct { io.Println("destroy " $n)! }
+
+type Wrap struct(r Res&) { r }
+
+fn mkw(n I64) Wrap { return Wrap(Res(n)) }
+
+fn peek(w Wrap) I64 { return w.r.n }
+
+fn f(n I64) I64 {
+    if n == 0: return 0
+    k := peek(mkw(n))
+    become f(k - 1)
+}
+
+fn main() { io.Println("result " $f(2))! }
