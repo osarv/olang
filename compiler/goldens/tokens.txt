@@ -2029,6 +2029,9 @@ e3212b4e8e50fcbe 1b62d614d973c616 tests/intsweep.olang
 01227125303fd596 755cf609d97b6c65 tests/lanes.olang
 40636abdae398d1a 6720aa959c021014 tests/match.olang
 8cd8b0233e814379 7b92c55b0274ae11 tests/namedargs.olang
+4f4859a2a10f7247 12a64509cf816b89 tests/params/fail/ctorwrites.olang
+54589ce9876c3d24 87960e3ca59a5700 tests/params/fail/holdsview.olang
+756eaf42aac78ccf dc25a7493331ba8b tests/params/fail/storethrough.olang
 ff5d38f0efbb77f2 e60c813f4484a2ee tests/params/fields.olang
 6dce307eebf2f318 6137e0f7bfe1a828 tests/place.olang
 56939543bb7c6442 6fda522100421fd3 tests/power.olang
