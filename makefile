@@ -336,6 +336,24 @@ verify:
 	$(MAKE) suite
 	@echo "verify: all checks passed"
 
+# the scoping rework's round 1 (docs/rework.md): every test file but checks/checks.olang run with OLANG_SCOPES=infer - every
+# written scope marker, scope argument and "outlives" read as bare, the scope pass inferring what they said - then the
+# compiler built under the switch and again by itself, the two the same. Not part of verify: round 1 measures the
+# inference, and the programs it refuses by design (a kept view, O27; a function value relating its arguments, T22a; a
+# generator's borrowed elements, D18c; a test of a marker's spelling) are docs/rework.md's "Round 1, measured"
+# - and the corpus files holding one (shared.olang and the files importing it, generators.olang), which a copy with those
+# lines adjusted passes, 756 tests of 756 (measured 2026-10-31)
+INFER_SKIP = checks/checks.olang tests/shared.olang tests/runner.olang tests/worker.olang tests/any.olang tests/generators.olang
+TEST_RUNS_INFER = $(filter-out $(addprefix test@,$(INFER_SKIP)),$(TEST_RUNS))
+verify-infer: $(OLANG)
+	@rm -f build/failed.txt
+	@OLANG_SCOPES=infer $(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_INFER) \
+		&& [ ! -s build/failed.txt ] || $(FAILED)
+	OLANG_SCOPES=infer $(OLANG) build -output build/olang.infer compiler/olang.olang
+	OLANG_SCOPES=infer build/olang.infer build -output build/olang.infer2 compiler/olang.olang
+	cmp build/olang.infer build/olang.infer2
+	@echo "verify-infer: the suite and the self-build pass under OLANG_SCOPES=infer"
+
 # the edit-test loop: the same suite as verify on what is already built - build/olang rebuilt by itself when a source
 # of it is newer (one build, the objects and build/rec it left reused), bootstrapped only when there is none. What it
 # leaves out is what only verify checks: a clean build/, the bootstrap from the seed, and the compiler rebuilding itself

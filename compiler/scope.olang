@@ -6693,10 +6693,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             if spawned { s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = true, s.opTok(a), t, false }
             vals[i] = s.val(a, t)
             s.taskTemp, s.taskAt, s.taskSlot, s.taskFunc = savedTemp, savedAt, savedSlot, savedFunc
-            # a call the inference landed elsewhere than its variable is bound: judged there as existing storage (2.4)
-            if vals[i].K == ValKind.Existing and t.Runs() and s.liftedCall(a) {
-                s.fit(vals[i].T, t, i < ps.Len() and s.storeThrough(ps[i]), a, FitValue)
-            }
+            # a call the inference landed elsewhere than its variable was bound: the variable bound where it is, which
+            # the callee's obligations then judge - a callee building into the variable builds where the argument lives
+            # (O25e, 2.4)
+            if vals[i].K == ValKind.Existing and vals[i].T.Runs() and s.liftedCall(a) { beta[owner[i]] = vals[i].T }
             if spawned and vals[i].K == ValKind.Existing and not s.lastsUntil(vals[i].T, j) and s.report {
                 s.err(s.opTok(a), msgs.SpawnArgHoldsShort())
             }
@@ -8591,6 +8591,29 @@ fn (s mut Scoper&) placeDecl(p typed.Lvalue&) I64 {
 # what the inference found, for OLANG_SCOPESTATS: the locals it lifted, their storage too, and the W's (2.4)
 fn (s Scoper&) InferStats() String {
     return $"inferred: " $s.lifts.Len() " locals lifted, " $s.liftStor.Len() " with their storage, " $s.siteLifts.Len() " calls landed, " $s.wLocals.Len() " needing a W, " $(s.promotedF.Len() - s.demotedF.Len()) " fields promoted (" $s.demotedF.Len() " given back)"
+}
+
+# what folding (2.9, not built in round 1) could reach, for OLANG_SCOPESTATS: the plain blocks - a "{ }", a branch, an
+# arm - something is built in, of how many blocks anything is built in
+fn (s mut Scoper&) FoldStats() String {
+    reach := 0
+    built := 0
+    for b in range s.Plans.Len() {
+        body := s.Bodies[b]
+        seen Map<I64, Bool>
+        for k in range s.Plans[b].Built.Len() {
+            match s.Plans[b].Built[k] {
+                case typed.Scope.Block(blk) {
+                    if seen.Has(I64(blk)) { continue }
+                    seen.Put(I64(blk), true)
+                    built++
+                    if I64(blk) < body.Blocks.Len() and body.Blocks[I64(blk)].Kind == typed.BlockKind.Plain { reach++ }
+                }
+                case _ { }
+            }
+        }
+    }
+    return $"blocks built into: " $built ", of them plain (what folding could reach): " $reach
 }
 
 # the fields the field inference promoted, "Declaration.field" each, for OLANG_SCOPESTATS

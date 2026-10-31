@@ -328,10 +328,10 @@ write the map. So `for k in m.Keys()` works on a bare `m`, and `words := t.Split
 (its slots) without writing the text.
 
 ```olang
-fn firstWord(t String) String& {
+fn firstWord(t String) String {
     words := t.Split(" ")          # a writable array of read-only views of t
     words.Sort()                   # writes the array's slots, not the text
-    return words[0]                # a read-only view of t: the caller reads it where its text lives
+    return words[0]                # a value result: handed over by pointer where nothing changes t, copied otherwise
 }
 ```
 
@@ -690,7 +690,14 @@ bulk review. Code rule for every round: at most three nested blocks, four on a s
   made; destructor sites placed shorter; the scope pass's time (`OLANG_TIMES`); the fold bound (2.9) from a header's
   and a close's cost. The round's report decides round 4's migration effort and brings the conditional open points.
 
-**Round 2: `&` means may write** (opus, high).
+**Round 2: `&` means may write** (opus, high). Revised by the user, 2026-10-31 ("read-only is said by a value"): every `&`
+a signature shows is writable and shared, and read-only is always said by a value. A result `T&` hands back only storage
+reached through a `&` parameter, a global or a shared field; a view into a bare parameter returned as `T&` is an error
+naming the value result `T`, and a value result is handed over by pointer where the caller only reads it and nothing
+changes the source (a copy only of what may change otherwise). Views of a bare parameter stay read-only inside the body
+and never leave it as references; functions like `Split`, `Trim`, `First` take `&` or return values. So 2.8's
+`firstWord` returning `words[0]` through `String&` is that error: it is `fn firstWord(t String) String`, or takes
+`t String&`. Round 1 keeps today's permissions meanwhile (KeptPerm, section 9).
 - `compiler/parse.olang` and `types.olang` (under `OLANG_PARAMS=new`: `mut` before a reference type accepted and
   ignored, one reference type per referent, bare parameters of any size), `compiler/check.olang` (permission by origin
   and per level, 2.8; D9d-D9f; D9a's run-time error and D9c off; T22's bare-fits-`&`), `compiler/scope.olang` (`st`
