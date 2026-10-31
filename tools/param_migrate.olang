@@ -467,7 +467,13 @@ fn (w mut walker&) request(kind String&, o I64, path String&) Bool {
     key := pinKey(path, w.src, n, w)
     if w.done.Has(key): return true
     w.done.Put($key, true)
-    if Pinned.Has(key) or w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
+    if Pinned.Has(key): return false
+    # a marker naming where the reference lives ("d Diagnostics&cfg") goes with it - scopes are inferred
+    if w.kind(last) == token.Tok.Iden and w.kind(last - 1) == token.Tok.Amp and w.kind(last - 2) != token.Tok.Question and last - 1 > n {
+        w.edits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
+        return true
+    }
+    if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
     w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
     return true
 }
