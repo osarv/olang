@@ -1,0 +1,46 @@
+import "std/io"
+
+type P struct(x I64) { x }
+type H struct(p mut P&) { p }
+
+fn viaField(p mut P&) I64 {
+    p.x = 7
+    return 1
+}
+
+fn viaHolder(h H) I64 {
+    h.p.x = 8
+    return 1
+}
+
+fn viaSet(a mut Array<I64>&) I64 {
+    a.Set(0, 9)!
+    return 1
+}
+
+fn viaSlice(a mut Array<I64>&) I64 {
+    s := a[0:2]
+    s[1] = 10
+    return 1
+}
+
+fn viaLocalRef(p mut P&) I64 {
+    q := p
+    q.x = 11
+    return 1
+}
+
+fn main() {
+    p := P(0)
+    viaField(p)
+    io.Println($p.x)!
+    h := H(P(0))
+    viaHolder(h)
+    io.Println($h.p.x)!
+    a := Array<I64>(3)
+    viaSet(a)
+    viaSlice(a)
+    io.Println($a)!
+    viaLocalRef(p)
+    io.Println($p.x)!
+}

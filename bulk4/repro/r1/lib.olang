@@ -1,0 +1,30 @@
+type Tag struct(Name String&) { Name }
+
+type Rec struct(A I64, b I64) {
+    A
+    b
+}
+
+fn (r Rec) Pub() I64 { return r.A }
+fn (r Rec) priv() I64 { return r.b * 1000 }
+
+@Tag("secret")
+fn hidden() I64 { return 42 }
+
+@Tag("open")
+fn Open() I64 { return 1 }
+
+fn Make() Rec { return Rec(1, 2) }
+
+# a generic in lib walking a type's methods: for lib's own Rec it may see priv
+fn CallAll<T>(v T) I64 {
+    s := 0
+    for m in T.Methods { s += m(v) }
+    return s
+}
+
+fn Fields<T>(v T) String {
+    t := ""
+    for f in T.Fields { t = $t $f.Name "=" $f.Of(v) " " }
+    return t
+}

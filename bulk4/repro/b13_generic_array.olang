@@ -1,0 +1,22 @@
+import "std/io"
+import "std/os"
+
+fn spoil(n I64) I64 {
+    v := Array<I64>(64, n)
+    return v.Sum()
+}
+
+fn walk<T>(a T, n I64) I64 {
+    if n == 0 {
+        s := spoil(77)
+        return a[0] + a[1] + s - s
+    }
+    b := Array<I64>(n + 2, n * 10)
+    become walk(b, n - 1)
+}
+
+fn main() {
+    k := os.Args().Len() + 2
+    a := Array<I64>(k, 1)
+    io.Println($walk(a, 3))!
+}

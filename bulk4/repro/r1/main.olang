@@ -1,0 +1,26 @@
+import "std/io"
+import lib "lib"
+
+type Mine struct(X I64, y I64) {
+    X
+    y
+}
+fn (m Mine) Pub() I64 { return m.X }
+fn (m Mine) priv() I64 { return m.y * 1000 }
+
+fn main() {
+    r := lib.Make()
+    s := 0
+    for m in lib.Rec.Methods { s += m(r) }
+    io.Println("main sees lib.Rec methods sum " $s)!
+    io.Println("lib's generic over its own Rec: " $lib.CallAll(r))!
+    io.Println("lib's generic over main's Mine: " $lib.CallAll(Mine(3, 4)))!
+    io.Println("lib.Fields(Mine): " $lib.Fields(Mine(3, 4)))!
+    io.Println("lib.Fields(Rec): " $lib.Fields(r))!
+    t := ""
+    for f in lib.Functions { t = $t $f.Name " " }
+    io.Println("lib.Functions: " $t)!
+    t2 := ""
+    for f in lib.Rec.Fields { t2 = $t2 $f.Name " " }
+    io.Println("lib.Rec.Fields: " $t2)!
+}

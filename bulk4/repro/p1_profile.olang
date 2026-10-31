@@ -1,0 +1,13 @@
+import "std/io"
+
+fn fib(n I64) I64 { return n if n < 2 else fib(n - 1) + fib(n - 2) }
+
+fn work(k I64) I64 { return fib(32 + k % 2) }
+
+fn main() {
+    out := Array<I64>(8)
+    join {
+        for i in range 8 { spawn out[i] = work(i) }
+    }
+    io.Println($out.Sum())!
+}

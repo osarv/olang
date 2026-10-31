@@ -1,0 +1,24 @@
+import "std/io"
+
+fn where(at Place = Place.Here) String { return $at }
+fn outer(at Place = Place.Here) String { return $where() " / " $at }
+
+type Logger trait { Log(m String&, at Place = Place.Here) String }
+type L struct(n I64) { n }
+fn (l L) Log(m String&, at Place = Place.Here) String { return $m " at " $at }
+
+fn gen<T>(x T) String { return where() }
+
+G := where()
+
+fn main() {
+    io.Println(where())!
+    io.Println(outer())!
+    a any Logger& = L(1)
+    io.Println(a.Log("via any"))!
+    io.Println(L(2).Log("direct"))!
+    io.Println($gen(1) " " $gen("s"))!
+    io.Println(G)!
+    f := fn(): return where()
+    io.Println(f())!
+}

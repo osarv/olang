@@ -1,0 +1,27 @@
+import "std/io"
+
+type P struct(x I64) { x }
+
+fn f(p P&, n I64) I64 {
+    if n == 0 { return p.x }
+    q := P(n)
+    become f(q, n - 1)
+}
+
+fn g(t String&, n I64) I64 {
+    if n == 0 { return t.Len() }
+    become g($n, n - 1)
+}
+
+type W struct(t String&) { t }
+
+fn h(w W, n I64) I64 {
+    if n == 0 { return w.t.Len() }
+    become h(W($n "xx"), n - 1)
+}
+
+fn main() {
+    io.Println($f(P(1), 3))!
+    io.Println($g("a", 3))!
+    io.Println($h(W("a"), 3))!
+}

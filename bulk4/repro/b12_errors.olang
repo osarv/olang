@@ -1,0 +1,24 @@
+import "std/io"
+
+type E error { X, Y }
+
+fn a(n I64, acc I64) I64 ? E {
+    if n == 0 { error E.Y }
+    if n == 1 and acc > 100 { return acc }
+    become b(n - 1, acc + n)
+}
+fn b(n I64, acc I64) I64 ? E {
+    if n == 3 { error E.X }
+    become a(n, acc * 2)
+}
+
+fn probe(n I64) I64 {
+    v := try a(n, 0) catch E.X { return -1 } catch E.Y { return -2 }
+    return v
+}
+
+Baked := I64[probe(4), probe(10), probe(60)]
+
+fn main() {
+    io.Println($Baked " " $I64[probe(4), probe(10), probe(60)])!
+}

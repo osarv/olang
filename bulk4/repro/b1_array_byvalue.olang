@@ -1,0 +1,11 @@
+import "std/io"
+
+fn walk(a Array<I64>, n I64) I64 {
+    if n == 0 { return a[0] + a[1] + a[2] + a[3] }
+    b := I64[n, n + 1, n + 2, n + 3]
+    become walk(b, n - 1)
+}
+
+fn main() {
+    io.Println($walk(I64[100, 200, 300, 400], 5))!
+}

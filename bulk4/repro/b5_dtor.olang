@@ -1,0 +1,16 @@
+import "std/io"
+
+type Res struct(id I64) { id } destruct { io.Println("destroy " $id)! }
+
+fn use(r Res&) I64 { return r.id }
+
+fn f(n I64) I64 {
+    if n == 0 { return 0 }
+    k := use(Res(n))
+    io.Println("calling on, k " $k)!
+    become f(n - 1)
+}
+
+fn main() {
+    io.Println($f(2))!
+}

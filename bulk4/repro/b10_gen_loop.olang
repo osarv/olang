@@ -1,0 +1,17 @@
+import "std/io"
+
+fn upto(n I64) Iterator<I64> {
+    for i in range n { yield i }
+}
+
+fn f(n I64, acc I64) I64 {
+    if n == 0 { return acc }
+    for x in upto(n) {
+        if x == 0 { become f(n - 1, acc + n) }
+    }
+    return -1
+}
+
+fn main() {
+    io.Println($f(2000, 0))!
+}

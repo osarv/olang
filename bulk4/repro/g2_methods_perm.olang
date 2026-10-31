@@ -1,0 +1,21 @@
+import "std/io"
+
+type C struct(n I64) { n }
+fn (c mut C&) Bump() I64 {
+    c.n = c.n + 1
+    return c.n
+}
+
+fn callAll(c C&) I64 {
+    s := 0
+    for m in C.Methods { s += m(c) }
+    return s
+}
+
+G := C(5)
+
+fn main() {
+    s := 0
+    for m in C.Methods { s += m(G) }
+    io.Println($callAll(C(1)) " " $s " " $G.n)!
+}

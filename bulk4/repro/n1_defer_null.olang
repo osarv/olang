@@ -1,0 +1,15 @@
+import "std/io"
+
+type Node struct(V I64) { V }
+
+fn show(p Node?&) {
+    if p is not null {
+        defer io.Println("deferred reads " $p.V)!
+        p = null
+        io.Println("assigned null")!
+    }
+}
+
+fn main() {
+    show(Node(7))
+}

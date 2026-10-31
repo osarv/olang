@@ -1,0 +1,12 @@
+import "std/io"
+import "std/os"
+
+fn check(x I64) {
+    if x > 0 { os.Exit(0) }
+    assert false, "only reached for x <= 0"
+}
+
+fn main() {
+    check(1)
+    io.Println("not reached")!
+}

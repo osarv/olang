@@ -1,0 +1,27 @@
+import "std/io"
+
+fn spoil(n I64) I64 {
+    v := Array<I64>(64, n)
+    return v.Sum()
+}
+
+fn k<T>(g T, n I64) I64 {
+    if n == 0 {
+        s := spoil(77)
+        return g() + s - s
+    }
+    x := Array<I64>(3, n * 3)
+    become k(fn() { return x[0] + x[2] }, n - 1)
+}
+
+type P struct(t String&) { t }
+
+fn q<T>(p T, n I64) I64 {
+    if n == 0 { return p.t.Len() }
+    become q(P($n "abc"), n - 1)
+}
+
+fn main() {
+    io.Println($k(fn() { return 0 }, 3))!
+    io.Println($q(P("a"), 3))!
+}

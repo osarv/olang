@@ -1,0 +1,12 @@
+import "std/io"
+
+type P struct(x I64) { x }
+
+fn bumpP(p mut P&) { p.x = 5 }
+
+fn main() {
+    p := P(1)
+    bumpP(p)
+    assert p.x == 1, "p.x is still 1"
+    io.Println("passed struct assert, p.x = " $p.x)!
+}

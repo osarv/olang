@@ -1,0 +1,15 @@
+import "std/io"
+
+type Node struct(V I64) { V }
+type E error { BAD }
+
+fn work(p Node?&) ? E {
+    if p is null { return }
+    errdefer io.Println("errdefer reads " $p.V)!
+    p = null
+    error E.BAD
+}
+
+fn main() {
+    try work(Node(7)) catch { }
+}

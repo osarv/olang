@@ -1,0 +1,12 @@
+import "std/io"
+
+type Shape enum { Circle(r F64), Sq(s F64) }
+
+fn show(e Shape) {
+    if e == Shape.Circle {
+        defer io.Println("deferred r " $e.r)!
+        e = Shape.Sq(2.0)
+    }
+}
+
+fn main() { show(Shape.Circle(1.5)) }
