@@ -91,7 +91,7 @@ type cMacro struct(Name String&, Fn Bool, Params Array<String&>&, Body Array<Str
     Variadic Bool = false
 }
 
-type Skip error { WHY }
+type Skip error { Why }
 
 # what was read from clang's tree
 type gen struct(header String&) {
@@ -212,11 +212,12 @@ fn (g mut gen&) recordAt(key String&) I64 {
     return g.recs.Len() - 1
 }
 
-# " __attribute__((noreturn))" after a function's type, taken off: the type, and whether it was there
-fn noReturnOf(t String&) String, Bool {
-    attr := " __attribute__((noreturn))"
-    if t.EndsWith(attr) { return $t[:t.Len() - attr.Len()], true }
-    return $t, false
+NoReturnAttr := " __attribute__((noreturn))"
+
+# a function's type with any " __attribute__((noreturn))" after it taken off
+fn noReturnOf(t String&) String {
+    if t.EndsWith(NoReturnAttr) { return $t[:t.Len() - NoReturnAttr.Len()] }
+    return $t
 }
 
 # the top-level declarations: each read once its location says which file it is in
@@ -590,7 +591,7 @@ fn voidRef(ro Bool) String { return "CVoid?&" if ro else "mut CVoid?&" }
 
 fn (g mut gen&) skip(why String&) ? Skip {
     g.why = $why
-    error Skip.WHY
+    error Skip.Why
 }
 
 # whether node t is C's char; isByte also takes signed and unsigned char - what a pointer C gives back to text points to
@@ -759,7 +760,8 @@ fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String 
 
 # a function's declaration: "fn NAME(...) RESULT", "..." last for a variadic one (X21), "noreturn" for C's
 fn (g mut gen&) function(f cFunc&) String ? Skip {
-    ft, noRet := noReturnOf(f.Type)
+    ft := noReturnOf(f.Type)
+    noRet := f.Type.EndsWith(NoReturnAttr)
     t := g.parseType(ft)
     n := g.nodes[t]
     if n.Kind == CKind.Bad { try g.skip(n.Text) }
@@ -795,7 +797,7 @@ fn (g gen&) numbersOnly(n ctype) Bool {
 
 # a static or inline function's wrapper in C, and its symbol (X20): what the extern links by
 fn (g mut gen&) wrapper(f cFunc&) String ? Skip {
-    ft, _ := noReturnOf(f.Type)
+    ft := noReturnOf(f.Type)
     if ft.Contains("...") { try g.skip("static or inline, and taking a variable number of arguments") }
     res := resultText(ft)
     if res == "" { try g.skip("static or inline, its result's type no olang form wraps") }
@@ -868,7 +870,7 @@ fn (g mut gen&) write(head String&) String {
     for f in g.funcs { g.taken.Put($f.Name, 0) }
     # a struct C hands back by pointer is C's to lay out: an extern type, whatever its fields
     for f in g.funcs {
-        ft, _ := noReturnOf(f.Type)
+        ft := noReturnOf(f.Type)
         t := g.parseType(ft)
         if g.nodes[t].Kind != CKind.Fn { continue }
         r := g.nodes[g.nodes[t].To]
@@ -1354,16 +1356,16 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
 
 # a character literal's value, as C reads it: 'a', '\n', '\x41', '\101'
 fn charValue(t String&) I64 ? Skip {
-    if t.Len() < 3 { error Skip.WHY }
+    if t.Len() < 3 { error Skip.Why }
     b := t[1:t.Len() - 1]
     if b[0] != '\\' {
-        if b.Len() != 1 { error Skip.WHY }
+        if b.Len() != 1 { error Skip.Why }
         return I64(U8(b[0]))
     }
-    if b.Len() < 2 { error Skip.WHY }
+    if b.Len() < 2 { error Skip.Why }
     c := b[1]
-    if c == 'x' { return try b[2:].ParseInt(16) catch { error Skip.WHY } }
-    if c.IsDigit() { return try b[1:].ParseInt(8) catch { error Skip.WHY } }
+    if c == 'x' { return try b[2:].ParseInt(16) catch { error Skip.Why } }
+    if c.IsDigit() { return try b[1:].ParseInt(8) catch { error Skip.Why } }
     return match c {
         case 'n': 10
         case 't': 9
@@ -1559,7 +1561,7 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
 
 # clang's output for args, or why it could not be run
 fn clangSays(args Array<String&>&) os.Output ? Skip {
-    out := try os.Exec(args) catch os.Error { error Skip.WHY }
+    out := try os.Exec(args) catch os.Error { error Skip.Why }
     return out
 }
 
@@ -1667,19 +1669,19 @@ fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.J
     for a in String&["-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe] { args.Push($a) }
     o := try clangSays(args.ToArray()) catch Skip {
         g.why = "clang could not be run"
-        error Skip.WHY
+        error Skip.Why
     }
     if o.Stdout.Len() == 0 { try g.skip(firstError(o.Stderr)) }
     return try json.Parse(o.Stdout) catch json.Error {
         g.why = "clang's tree could not be read"
-        error Skip.WHY
+        error Skip.Why
     }
 }
 
 # each complete struct or union an import may hold that is no plain data: its size and alignment, as clang lays it out
 fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, include String&) ? Skip {
     for f in g.funcs {
-        ft, _ := noReturnOf(f.Type)
+        ft := noReturnOf(f.Type)
         t := g.parseType(ft)
         if g.nodes[t].Kind != CKind.Fn { continue }
         r := g.nodes[g.nodes[t].To]

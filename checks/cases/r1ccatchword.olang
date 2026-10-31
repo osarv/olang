@@ -1,11 +1,11 @@
-# check: fail error[R14]: the call does not fail with LE.EMPTY - it fails with LE.GONE
+# check: fail error[R14]: the call does not fail with LE.Empty - it fails with LE.Gone
 # R1c/R14: catching a word the callee's set does not hold is no more a catch than naming a type it does not
 type LE error {
-    EMPTY
-    GONE
+    Empty
+    Gone
 }
-fn g(n I64) I64 ? LE.GONE {
-    if n == 0 { error LE.GONE }
+fn g(n I64) I64 ? LE.Gone {
+    if n == 0 { error LE.Gone }
     return n
 }
-fn main() { x := try g(1) catch LE.EMPTY default 0 catch LE.GONE default 1 }
+fn main() { x := try g(1) catch LE.Empty default 0 catch LE.Gone default 1 }

@@ -29,13 +29,14 @@ type ValueKind enum {
 
 # a value: a Bool or an integer in I, a float in F, a text by its index in the constants' text pool. Bits is a number's
 # type's width, 0 for a literal's (which adapts, T6); Uns an integer type's signedness
-type Value struct(Kind ValueKind, I I64, F F64, S I64, Bits I64, Uns Bool) {
+type Value struct(Kind ValueKind, I I64, F F64, S I64, Bits I64, Uns Bool, Big Bool = false) {
     Kind
     I
     F
     S
     Bits
     Uns
+    Big        # a -D integer above I64's maximum (a U64), I holding its bits
 }
 
 fn none() Value { return Value(ValueKind.None, 0, 0.0, 0, 0, false) }
@@ -75,7 +76,7 @@ fn (c mut Consts&) text(t String&) I64 {
 
 # a name that is not there: a build constant (Consts.find) or a global (Scope.find)
 type missing error {
-    NAME
+    Name
 }
 
 # the index of a build constant, or a miss
@@ -83,7 +84,7 @@ fn (c Consts&) find(name String&) I64 ? {
     for i in range c.names.Len() {
         if c.names[i] == name { return i }
     }
-    error missing.NAME
+    error missing.Name
 }
 
 # whether name is a build constant, and whether it is one of B10a's
@@ -113,18 +114,18 @@ fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I6
 
 # what is wrong with a -D flag (B10, B10a)
 type DefineError error {
-    SHAPE
-    NOT_NAME
-    TWICE
-    BUILTIN
-    BAD_NUMBER
-    INT_RANGE
-    NEG_RANGE
-    FLOAT_RANGE
+    Shape
+    NotName
+    Twice
+    Builtin
+    BadNumber
+    IntRange
+    NegRange
+    FloatRange
 }
 
 # a -D flag that could not be defined - its diagnostic said
-type Bad error { FLAG }
+type Bad error { Flag }
 
 # -D NAME=VALUE (B10): defines a build constant, its value read as its literal would be. What is wrong with the flag is
 # reported to d, as the compiler reports a command line's mistakes
@@ -133,41 +134,42 @@ fn (c mut Consts&) Define(flag String&, d mut diag.Diagnostics&) ? Bad {
     name := flag[:eq]
     value := flag[eq + 1:] if eq < flag.Len() else flag[flag.Len():]
     try c.define(flag)
-        catch DefineError.SHAPE { try badDefine(d, msgs.DefineShape(flag)) }
-        catch DefineError.NOT_NAME { try badDefine(d, msgs.DefineNotName(name, value)) }
-        catch DefineError.TWICE { try badDefine(d, msgs.DefineTwice(name, value)) }
-        catch DefineError.BUILTIN { try badDefine(d, msgs.DefineBuiltin(name)) }
-        catch DefineError.BAD_NUMBER { try badDefine(d, msgs.DefineBadNumber(name, value)) }
-        catch DefineError.INT_RANGE { try badDefine(d, msgs.DefineIntRange(name, value)) }
-        catch DefineError.NEG_RANGE { try badDefine(d, msgs.DefineNegRange(name, value)) }
-        catch DefineError.FLOAT_RANGE { try badDefine(d, msgs.DefineFloatRange(name, value)) }
+        catch DefineError.Shape { try badDefine(d, msgs.DefineShape(flag)) }
+        catch DefineError.NotName { try badDefine(d, msgs.DefineNotName(name, value)) }
+        catch DefineError.Twice { try badDefine(d, msgs.DefineTwice(name, value)) }
+        catch DefineError.Builtin { try badDefine(d, msgs.DefineBuiltin(name)) }
+        catch DefineError.BadNumber { try badDefine(d, msgs.DefineBadNumber(name, value)) }
+        catch DefineError.IntRange { try badDefine(d, msgs.DefineIntRange(name, value)) }
+        catch DefineError.NegRange { try badDefine(d, msgs.DefineNegRange(name, value)) }
+        catch DefineError.FloatRange { try badDefine(d, msgs.DefineFloatRange(name, value)) }
 }
 
 # a -D flag's mistake, reported where the command line's are
 fn badDefine(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
-    error Bad.FLAG
+    error Bad.Flag
 }
 
 fn (c mut Consts&) define(flag String&) ? DefineError {
-    eq := try flag.FindByte('=') catch { error DefineError.SHAPE }
+    eq := try flag.FindByte('=') catch { error DefineError.Shape }
     name := flag[:eq]
     value := flag[eq + 1:]
-    if not isName(name) { error DefineError.NOT_NAME }
+    if not isName(name) { error DefineError.NotName }
     i := try c.find(name) catch default -1
     if i >= 0 {
-        if c.builtin[i] { error DefineError.BUILTIN }
-        error DefineError.TWICE
+        if c.builtin[i] { error DefineError.Builtin }
+        error DefineError.Twice
     }
-    v, big := try c.literal(value)
-    c.add(name, v, false, big, true)
+    v := try c.literal(value)
+    c.add(name, v, false, v.Big, true)
     c.raws[c.raws.Len() - 1] = $value
 }
 
-# a build constant's value, and whether it is an integer above I64's maximum (a U64); a miss where there is none
-fn (c Consts&) ValueOf(name String&) Value, Bool ? {
+# a build constant's value - Big where it is an integer above I64's maximum (a U64); a miss where there is none
+fn (c Consts&) ValueOf(name String&) Value ? {
     i := try c.find(name)
-    return c.values[i], c.big[i]
+    v := c.values[i]
+    return Value(v.Kind, v.I, v.F, v.S, v.Bits, v.Uns, c.big[i])
 }
 
 # every build constant, its value and whether it is known, as text: what a build's objects are made under (B3i)
@@ -214,11 +216,11 @@ fn isName(t String&) Bool {
 }
 
 # a -D value as its literal would be read: true or false, one whole integer or float literal after an optional "-", or
-# else text - quoted text with its quotes taken off. Whether an integer is above I64's maximum (a U64) is the second
-fn (c mut Consts&) literal(value String&) Value, Bool ? DefineError {
-    if value == "true" or value == "false" { return boolValue(value == "true"), false }
+# else text - quoted text with its quotes taken off. An integer above I64's maximum (a U64) is Big
+fn (c mut Consts&) literal(value String&) Value ? DefineError {
+    if value == "true" or value == "false" { return boolValue(value == "true") }
     if value.Len() >= 2 and value[0] == '"' and value[value.Len() - 1] == '"' {
-        return Value(ValueKind.Text, 0, 0.0, c.text(value[1:value.Len() - 1]), 0, false), false
+        return Value(ValueKind.Text, 0, 0.0, c.text(value[1:value.Len() - 1]), 0, false)
     }
     neg := value.Len() > 0 and value[0] == '-'
     digits := value[1:] if neg else value[:]
@@ -228,25 +230,24 @@ fn (c mut Consts&) literal(value String&) Value, Bool ? DefineError {
     one := ts.Toks.Len() >= 2 and ts.Diags.Len() == 0 and ts.Toks[0].Start == 0 and ts.Toks[0].End == I32(digits.Len())
     kind := ts.Toks[0].Kind if one else token.Tok.Eof
     if kind != token.Tok.IntLit and kind != token.Tok.FloatLit {
-        if hexBin { error DefineError.BAD_NUMBER }
-        return Value(ValueKind.Text, 0, 0.0, c.text(value), 0, false), false
+        if hexBin { error DefineError.BadNumber }
+        return Value(ValueKind.Text, 0, 0.0, c.text(value), 0, false)
     }
     if kind == token.Tok.FloatLit {
-        f := try stripped(digits).ParseFloat() catch { error DefineError.FLOAT_RANGE }
-        if f - f != 0.0 { error DefineError.FLOAT_RANGE }
-        return Value(ValueKind.Float, 0, -f if neg else f, 0, 64, false), false
+        f := try stripped(digits).ParseFloat() catch { error DefineError.FloatRange }
+        if f - f != 0.0 { error DefineError.FloatRange }
+        return Value(ValueKind.Float, 0, -f if neg else f, 0, 64, false)
     }
-    u := try digits.ParseUint(0) catch { error DefineError.INT_RANGE }
+    u := try digits.ParseUint(0) catch { error DefineError.IntRange }
     if hexBin {
         n := I64(u)
-        return Value(ValueKind.Int, -n if neg else n, 0.0, 0, LiteralIntBits, false), false
+        return Value(ValueKind.Int, -n if neg else n, 0.0, 0, LiteralIntBits, false)
     }
     if neg {
-        if u > U64(9223372036854775807) + 1 { error DefineError.NEG_RANGE }
-        return Value(ValueKind.Int, 0 - I64(u), 0.0, 0, LiteralIntBits, false), false
+        if u > U64(9223372036854775807) + 1 { error DefineError.NegRange }
+        return Value(ValueKind.Int, 0 - I64(u), 0.0, 0, LiteralIntBits, false)
     }
-    big := u > U64(9223372036854775807)
-    return Value(ValueKind.Int, I64(u), 0.0, 0, LiteralIntBits, false), big
+    return Value(ValueKind.Int, I64(u), 0.0, 0, LiteralIntBits, false, u > U64(9223372036854775807))
 }
 
 fn stripped(t String&) String {
@@ -292,7 +293,7 @@ fn (s Scope&) find(name String&) Global&s ? {
     for g in s.globals {
         if g.Name == name { return g }
     }
-    error missing.NAME
+    error missing.Name
 }
 
 # ---- evaluation ----
@@ -374,25 +375,33 @@ fn (e mut Eval&) runtimeValue(sp source.Span, m msgs.Msg, local Bool) Value {
     return e.fail(sp, m)
 }
 
+# what was found of a condition: its outcome, and whether it holds where it was decided (Decided, Same)
+type Decision struct(Of Outcome, Holds Bool) {
+    Of
+    Holds
+}
+
+fn undecided(o Outcome) Decision { return Decision(o, false) }
+
 # a top-level condition: Decided with its value, Deferred, or Failed with the message and where
-fn (e mut Eval&) Top(c ast.Expr&) Outcome, Bool {
+fn (e mut Eval&) Top(c ast.Expr&) Decision {
     v := e.expr(c)
     if not e.failed and v.Kind != ValueKind.Bool { e.fail(e.first(c), msgs.CondNotBool(e.tokText(e.first(c)))) }
-    if e.failed { return Outcome.Deferred if e.deferrable else Outcome.Failed, false }
-    return Outcome.Decided, v.I != 0
+    if e.failed { return undecided(Outcome.Deferred if e.deferrable else Outcome.Failed) }
+    return Decision(Outcome.Decided, v.I != 0)
 }
 
 # a local condition (S8b): decided only where it reads a build constant and no local; Runtime where it reads a local
 # or is anything else the build does not decide; Deferred where compile-time evaluation may yet decide it
-fn (e mut Eval&) Local(c ast.Expr&) Outcome, Bool {
+fn (e mut Eval&) Local(c ast.Expr&) Decision {
     v := e.expr(c)
     if e.failed {
-        if e.runtime or e.mentionsLocal(c) { return Outcome.Runtime, false }
-        return Outcome.Deferred if e.deferrable else Outcome.Runtime, false
+        if e.runtime or e.mentionsLocal(c) { return undecided(Outcome.Runtime) }
+        return undecided(Outcome.Deferred if e.deferrable else Outcome.Runtime)
     }
-    if v.Kind != ValueKind.Bool { return Outcome.Runtime, false }
-    if not e.UsedBuild { return Outcome.Same, v.I != 0 }
-    return Outcome.Decided, v.I != 0
+    if v.Kind != ValueKind.Bool { return undecided(Outcome.Runtime) }
+    if not e.UsedBuild { return Decision(Outcome.Same, v.I != 0) }
+    return Decision(Outcome.Decided, v.I != 0)
 }
 
 fn (e Eval&) isLocal(n source.NameId) Bool {
@@ -513,31 +522,34 @@ fn buildType(v Value) Bool {
     }
 }
 
-# a written type's kind and width, as far as B9a tells one from another
-fn declaredKind(t String&) ValueKind, I64, Bool {
-    if t == "I8" { return ValueKind.Int, 8, false }
-    if t == "I16" { return ValueKind.Int, 16, false }
-    if t == "I32" { return ValueKind.Int, 32, false }
-    if t == "I64" { return ValueKind.Int, 64, false }
-    if t == "U8" { return ValueKind.Int, 8, true }
-    if t == "U16" { return ValueKind.Int, 16, true }
-    if t == "U32" { return ValueKind.Int, 32, true }
-    if t == "U64" { return ValueKind.Int, 64, true }
-    if t == "F16" or t == "BF16" { return ValueKind.Float, 16, false }
-    if t == "F32" { return ValueKind.Float, 32, false }
-    if t == "F64" { return ValueKind.Float, 64, false }
-    if t == "Bool" { return ValueKind.Bool, 0, false }
-    if t == "String" { return ValueKind.Text, 0, false }
-    return ValueKind.None, 0, false
+# a written type's kind and width (Kind, Bits, Uns - no value), as far as B9a tells one from another
+fn declaredKind(t String&) Value {
+    if t == "I8" { return shape(ValueKind.Int, 8, false) }
+    if t == "I16" { return shape(ValueKind.Int, 16, false) }
+    if t == "I32" { return shape(ValueKind.Int, 32, false) }
+    if t == "I64" { return shape(ValueKind.Int, 64, false) }
+    if t == "U8" { return shape(ValueKind.Int, 8, true) }
+    if t == "U16" { return shape(ValueKind.Int, 16, true) }
+    if t == "U32" { return shape(ValueKind.Int, 32, true) }
+    if t == "U64" { return shape(ValueKind.Int, 64, true) }
+    if t == "F16" or t == "BF16" { return shape(ValueKind.Float, 16, false) }
+    if t == "F32" { return shape(ValueKind.Float, 32, false) }
+    if t == "F64" { return shape(ValueKind.Float, 64, false) }
+    if t == "Bool" { return shape(ValueKind.Bool, 0, false) }
+    if t == "String" { return shape(ValueKind.Text, 0, false) }
+    return shape(ValueKind.None, 0, false)
 }
+
+# a value's kind and width alone
+fn shape(k ValueKind, bits I64, uns Bool) Value { return Value(k, 0, 0.0, 0, bits, uns) }
 
 fn (e mut Eval&) global(sp source.Span, g Global&) Value {
     if e.depth > 64 { return e.fail(sp, msgs.CondCycle(e.tokText(sp))) }
     if g.Mut { return e.runtimeValue(sp, msgs.CondMutable(e.tokText(sp)), false) }
     defined := not e.scope.Std and e.consts.Defined(g.Name)
-    dk, dbits, duns := declaredKind(g.Declared)
-    if not e.scope.Std and g.Declared != "" and dk != ValueKind.None {
-        if buildType(Value(dk, 0, 0.0, 0, dbits, duns)) {
+    dk := declaredKind(g.Declared)
+    if not e.scope.Std and g.Declared != "" and dk.Kind != ValueKind.None {
+        if buildType(dk) {
             if e.skip == 0 { e.UsedBuild = true }
             if defined { return e.asDeclared(sp, g, e.definedValue(sp, g.Name)) }
         }
@@ -593,10 +605,10 @@ fn (e mut Eval&) asDeclared(sp source.Span, g Global&, v Value) Value {
         if v.Kind == ValueKind.Float { return Value(v.Kind, v.I, v.F, v.S, 64, false) }
         return v
     }
-    dk, bits, uns := declaredKind(g.Declared)
-    return match dk {
-        case ValueKind.Int: e.intDeclared(sp, v, bits, uns)
-        case ValueKind.Float: e.floatDeclared(sp, v, bits)
+    dk := declaredKind(g.Declared)
+    return match dk.Kind {
+        case ValueKind.Int: e.intDeclared(sp, v, dk.Bits, dk.Uns)
+        case ValueKind.Float: e.floatDeclared(sp, v, dk.Bits)
         case ValueKind.Bool: v if v.Kind == ValueKind.Bool else e.defer(sp)
         case ValueKind.Text: v if v.Kind == ValueKind.Text else e.defer(sp)
         case _: v if v.Kind == ValueKind.Text or v.Kind == ValueKind.Bool else e.defer(sp)
@@ -633,30 +645,32 @@ fn flows(fromBits I64, fromUns Bool, toBits I64, toUns Bool) Bool {
     return fromUns == toUns or (fromUns and not toUns)
 }
 
-# the integer type two integers meet at (T6b, E6d), or none
-fn meet(a Value, b Value) Bool, I64, Bool {
+# the integer type two integers meet at (T6b, E6d) - its width and signedness (Bits, Uns) - failing with NoMeet where
+# they meet at none
+fn meet(a Value, b Value) Value ? NoMeet {
     if a.Bits != 0 and b.Bits != 0 {
-        if a.Bits == b.Bits and a.Uns == b.Uns { return true, a.Bits, a.Uns }
-        if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return true, b.Bits, b.Uns }
-        if flows(b.Bits, b.Uns, a.Bits, a.Uns) { return true, a.Bits, a.Uns }
-        return false, 0, false
+        if a.Bits == b.Bits and a.Uns == b.Uns { return shape(ValueKind.Int, a.Bits, a.Uns) }
+        if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return shape(ValueKind.Int, b.Bits, b.Uns) }
+        if flows(b.Bits, b.Uns, a.Bits, a.Uns) { return shape(ValueKind.Int, a.Bits, a.Uns) }
+        error NoMeet
     }
     if a.Bits != 0 or b.Bits != 0 {
         typed := a if a.Bits != 0 else b
         lit := b if a.Bits != 0 else a
-        if fits(lit.I, typed.Bits, typed.Uns) { return true, typed.Bits, typed.Uns }
+        if fits(lit.I, typed.Bits, typed.Uns) { return shape(ValueKind.Int, typed.Bits, typed.Uns) }
         if not flows(typed.Bits, typed.Uns, LiteralIntBits, false) and not (typed.Bits == LiteralIntBits and not typed.Uns) {
-            return false, 0, false
+            error NoMeet
         }
-        return true, LiteralIntBits, false
+        return shape(ValueKind.Int, LiteralIntBits, false)
     }
-    return true, 0, false
+    return shape(ValueKind.Int, 0, false)
 }
 
-# an integer literal adapting to a float (T6) - an integer of a type of its own does not meet one (T6b)
-fn asFloat(v Value) Bool, F64 {
-    if v.Bits != 0 or v.I > 9007199254740992 or v.I < -9007199254740992 { return false, 0.0 }
-    return true, F64(v.I)
+# an integer literal adapting to a float (T6) - an integer of a type of its own does not meet one (T6b), and one past
+# 2^53 is not exactly a float: failing with NotFloat
+fn asFloat(v Value) F64 ? NotFloat {
+    if v.Bits != 0 or v.I > 9007199254740992 or v.I < -9007199254740992 { error NotFloat }
+    return F64(v.I)
 }
 
 fn numeric(v Value) Bool { return v.Kind == ValueKind.Int or v.Kind == ValueKind.Float }
@@ -719,8 +733,8 @@ fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
     if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return none() }
     if not numeric(a) or not numeric(b) { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
     if a.Kind == ValueKind.Int and b.Kind == ValueKind.Int {
-        ok, bits, uns := meet(a, b)
-        if not ok { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
+        m := try meet(a, b) catch { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
+        bits, uns := m.Bits, m.Uns
         r I64 = 0
         over := false
         match op {
@@ -752,14 +766,10 @@ fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
     x := a.F
     y := b.F
     if a.Kind == ValueKind.Int {
-        ok, f := asFloat(a)
-        if not ok { return e.defer(opSp) }
-        x = f
+        x = try asFloat(a) catch { return e.defer(opSp) }
     }
     if b.Kind == ValueKind.Int {
-        ok, f := asFloat(b)
-        if not ok { return e.defer(opSp) }
-        y = f
+        y = try asFloat(b) catch { return e.defer(opSp) }
     }
     if op == token.Tok.Percent { return e.defer(opSp) }
     bits := 64 if a.Bits != 0 or b.Bits != 0 else 0
@@ -777,8 +787,7 @@ fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value
     } else if a.Kind == ValueKind.Bool and b.Kind == ValueKind.Bool and eqOp {
         order = 0 if a.I == b.I else 1
     } else if a.Kind == ValueKind.Int and b.Kind == ValueKind.Int {
-        ok, _, _ := meet(a, b)
-        if not ok { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
+        try meet(a, b) catch { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
         order = -1 if a.I < b.I else 1 if a.I > b.I else 0
     } else if numeric(a) and numeric(b) {
         if (a.Kind == ValueKind.Int and a.Bits != 0) or (b.Kind == ValueKind.Int and b.Bits != 0) {
@@ -787,14 +796,10 @@ fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value
         x := a.F
         y := b.F
         if a.Kind == ValueKind.Int {
-            ok, f := asFloat(a)
-            if not ok { return e.defer(opSp) }
-            x = f
+            x = try asFloat(a) catch { return e.defer(opSp) }
         }
         if b.Kind == ValueKind.Int {
-            ok, f := asFloat(b)
-            if not ok { return e.defer(opSp) }
-            y = f
+            y = try asFloat(b) catch { return e.defer(opSp) }
         }
         if x != x or y != y { return boolValue(op == token.Tok.NotEq) }
         order = -1 if x < y else 1 if x > y else 0
@@ -825,16 +830,16 @@ test "a -D value reads as its literal would" {
     assert c.values[3].Kind == ValueKind.Text and c.Texts[c.values[3].S] == "1.2.3"
     assert c.values[4].I == -16 and c.big[5]
     bad := 0
-    try c.define("X=0x") catch DefineError.BAD_NUMBER { bad++ } catch { unreachable }
-    try c.define("X=99999999999999999999") catch DefineError.INT_RANGE { bad++ } catch { unreachable }
-    try c.define("X=-9223372036854775809") catch DefineError.NEG_RANGE { bad++ } catch { unreachable }
-    try c.define("X=1e400") catch DefineError.FLOAT_RANGE { bad++ } catch { unreachable }
-    try c.define("A=6") catch DefineError.TWICE { bad++ } catch { unreachable }
-    try c.define("2x=1") catch DefineError.NOT_NAME { bad++ } catch { unreachable }
-    try c.define("nothing") catch DefineError.SHAPE { bad++ } catch { unreachable }
+    try c.define("X=0x") catch DefineError.BadNumber { bad++ } catch { unreachable }
+    try c.define("X=99999999999999999999") catch DefineError.IntRange { bad++ } catch { unreachable }
+    try c.define("X=-9223372036854775809") catch DefineError.NegRange { bad++ } catch { unreachable }
+    try c.define("X=1e400") catch DefineError.FloatRange { bad++ } catch { unreachable }
+    try c.define("A=6") catch DefineError.Twice { bad++ } catch { unreachable }
+    try c.define("2x=1") catch DefineError.NotName { bad++ } catch { unreachable }
+    try c.define("nothing") catch DefineError.Shape { bad++ } catch { unreachable }
     assert bad == 7
     c.Builtins("linux", "x86_64", "", 0, -1, false, false, true)
-    try c.define("TestBuild=false") catch DefineError.BUILTIN { bad++ } catch { unreachable }
+    try c.define("TestBuild=false") catch DefineError.Builtin { bad++ } catch { unreachable }
     assert bad == 8 and c.IsBuiltin("TargetOs") and not c.Defined("TargetOs") and c.Defined("A")
 }
 
@@ -844,11 +849,10 @@ test "integers meet as T6b says" {
     u8 := Value(ValueKind.Int, 1, 0.0, 0, 8, true)
     i8 := Value(ValueKind.Int, 1, 0.0, 0, 8, false)
     lit := Value(ValueKind.Int, 300, 0.0, 0, 0, false)
-    ok, bits, _ := meet(i32, i64)
-    assert ok and bits == 64
-    ok2, _, _ := meet(u8, i8)
-    assert not ok2
-    ok3, bits3, _ := meet(u8, lit)
-    assert ok3 and bits3 == 64
+    assert (try meet(i32, i64)).Bits == 64
+    met := true
+    try meet(u8, i8) catch NoMeet { met = false }
+    assert not met
+    assert (try meet(u8, lit)).Bits == 64
     assert fits(127, 8, false) and not fits(128, 8, false) and not fits(-1, 8, true)
 }

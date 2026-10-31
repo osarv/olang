@@ -17,17 +17,17 @@ fn isOdd(n I64) Bool {
     become isEven(n - 1)
 }
 
-type Odd error { NEGATIVE, TOO_DEEP }
+type Odd error { Negative, TooDeep }
 
 # the callee's failure is the function's own: one set, in one order
 fn steps(n I64, acc I64) I64 ? Odd {
-    if n < 0: error Odd.NEGATIVE
+    if n < 0: error Odd.Negative
     if n == 0: return acc
     become hop(n - 1, acc + 1)
 }
 
 fn hop(n I64, acc I64) I64 ? Odd {
-    if acc > 20000000: error Odd.TOO_DEEP
+    if acc > 20000000: error Odd.TooDeep
     become steps(n, acc)
 }
 
@@ -93,8 +93,8 @@ test "become runs a chain of any depth in one frame" {
 
 test "a become's failure is the function's own" {
     assert steps(1000000, 0)! == 1000000
-    try steps(-1, 0) catch Odd.NEGATIVE { } catch Odd { unreachable }
-    try steps(30000000, 0) catch Odd.TOO_DEEP { } catch Odd { unreachable }
+    try steps(-1, 0) catch Odd.Negative { } catch Odd { unreachable }
+    try steps(30000000, 0) catch Odd.TooDeep { } catch Odd { unreachable }
 }
 
 test "references given are handed on, results built where they go" {

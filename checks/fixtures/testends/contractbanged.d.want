@@ -1,2 +1,2 @@
-contractbanged.olang:5: ArgumentError.INVALID
+contractbanged.olang:5: ArgumentError.Invalid
 contractbanged.olang:3: pick: y > x

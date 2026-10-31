@@ -1,0 +1,185 @@
+# question_migrate - a function that can fail says so (R1d, 2026-10-31, QBZ): every function that can fail writes '?'
+# after its result, bare where its errors are inferred. Code written before it - a `main` whose errors escaped with no
+# '?', a function with conditions in brackets (whose ArgumentError was implied) - is fixed from the compiler's own
+# diagnostic ("... writes no '?'"): the '?' is written before the body's opening brace,
+#
+#     fn pick(x I64, y I64) [y > x] I64 { ... }    ->  fn pick(x I64, y I64) [y > x] I64 ? { ... }
+#     fn main() {                                  ->  fn main() ? {
+#     type P struct(v I64) [v >= 0] { v }          ->  type P struct(v I64) [v >= 0] ? { v }
+#
+# Each file is compiled (test when it has tests, compile otherwise), the edits applied, and that repeats until nothing
+# more changes. A checks/cases program whose header names the diagnostic keeps it. Running it again changes nothing.
+#
+#     $OLANG build tools/question_migrate.olang && build/tools_question_migrate [--olang PATH] [-j N] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+Message String& = "writes no '?'"
+
+# what bodyAt fails with: no declaration stands above the line, its body has no brace, or it already writes a '?'
+type Unfixable error { NoDeclaration, NoBody, Written }
+
+# where the lines of src start
+fn lineStarts(src String&) Vec<I64> {
+    out Vec<I64>
+    out.Push(0)
+    for i in range src.Len() {
+        if src[i] == '\n': out.Push(i + 1)
+    }
+    return out
+}
+
+# whether a declaration of a function or a type begins at offset at, at the start of its line
+fn declares(src String&, at I64) Bool {
+    t := src[at:]
+    return t.StartsWith("fn ") or t.StartsWith("type ")
+}
+
+# the offset of the brace opening the body of the declaration line (from 1) stands in; a '?' already written in its
+# signature, outside the brackets, says there is nothing to do
+fn bodyAt(src String&, line I64) I64 ? Unfixable {
+    starts := lineStarts(src)
+    k := line.Min(starts.Len()) - 1
+    for k >= 0 and not declares(src, starts[k]): k--
+    if k < 0: error Unfixable.NoDeclaration
+    mask := srcmask.Mask(src, true)
+    depth, angle := 0, 0
+    for i in range starts[k], src.Len() {
+        if mask[i] != 'c': continue
+        c := src[i]
+        if c == '(' or c == '[': depth++
+        if c == ')' or c == ']': depth--
+        if depth > 0: continue
+        if c == '<': angle++
+        if c == '>' and angle > 0: angle--
+        if c == '?' and angle == 0: error Unfixable.Written
+        if c == '{': return i
+    }
+    error Unfixable.NoBody
+}
+
+# src with '?' written before the body of the declaration the line stands in
+fn withQuestion(src String&, line I64) String ? Unfixable {
+    at := try bodyAt(src, line)
+    gap := "" if at > 0 and src[at - 1] == ' ' else " "
+    return $src[:at] $gap "? " $src[at:]
+}
+
+fn main() {
+    args := os.Args()
+    olang := "build/olang"
+    jobs I64 = 3
+    paths Vec<String&>
+    i := 1
+    for i < args.Len() {
+        if args[i] == "--olang" and i + 1 < args.Len() {
+            olang = $args[i + 1]
+            i += 2
+        } else if args[i] == "-j" and i + 1 < args.Len() {
+            jobs = try args[i + 1].ParseInt() catch default 3
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_question_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    olang = $diagedit.RealPathOf(olang)
+    files Vec<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed Vec<String&>
+    for p in paths: allowed.Push(diagedit.RealPathOf(p))
+    tmp := try os.MkTemp("", "question_migrate") catch {
+        srcmask.SayErr("question_migrate: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs.Max(1))
+    for k in range work.Len() {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("question_migrate: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    total I64 = 0
+    left Vec<String&>
+    fileArray := files.ToArray()
+    for round in range 1, 20 {
+        requests Vec<diagedit.Request>
+        for o in diagedit.CompileAll(olang, fileArray, work, true) {
+            for row in o.Split("\n") {
+                parsed := try diagedit.ParseRow(row) catch { continue }
+                full := diagedit.RealPathOf(parsed.Path)
+                if not parsed.IsError or not parsed.Msg.Contains(Message) or not diagedit.Allowed(full, allowed): continue
+                requests.Push(diagedit.Request($full, parsed.Line, parsed.Col, "question", "", $row))
+            }
+        }
+        made := apply(requests, left)
+        srcmask.Say("round " $round ": " $made " edits")
+        total += made
+        if made == 0: break
+    }
+    srcmask.Say("total: " $total " edits")
+    for l in left: srcmask.Say("by hand: " $l)
+}
+
+# the edits applied to their files, a file's last first so an edit moves nothing still to do; how many were made, what
+# could not be in left
+fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
+    paths Vec<String&>
+    for r in requests {
+        if not (r.Path in paths): paths.Push($r.Path)
+    }
+    made I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch { continue }
+        expect Vec<String&>
+        diagedit.ExpectedTexts(src, expect)
+        mine Vec<diagedit.Request>
+        for r in requests {
+            if r.Path == path and not diagedit.ContainsAny(r.Why, expect): mine.Push(r)
+        }
+        mine.Sort(fn(a, b): return a.Line > b.Line)
+        out := $src
+        done Vec<I64>
+        for r in mine {
+            at := try bodyAt(out, r.Line) catch Unfixable.Written { continue } catch {
+                if not (r.Why in left): left.Push($r.Why)
+                continue
+            }
+            if at in done: continue
+            done.Push(at)
+            out = try withQuestion(out, r.Line) catch { continue }
+            made++
+        }
+        if out == src: continue
+        try os.WriteFile(path, out) catch { srcmask.SayErr("question_migrate: cannot write " $path) }
+    }
+    return made
+}
+
+test "a '?' written before the body" {
+    assert try withQuestion("fn pick(x I64, y I64) [y > x] I64 { return y - x }", 1) ==
+        "fn pick(x I64, y I64) [y > x] I64 ? { return y - x }"
+    assert try withQuestion("fn main() {\n    try f()\n}", 2) == "fn main() ? {\n    try f()\n}"
+    assert try withQuestion("type P struct(v I64) [v >= 0] { v }", 1) == "type P struct(v I64) [v >= 0] ? { v }"
+    assert try withQuestion("fn f(g fn(x I64) I64 ? E) I64{\n    return 1\n}", 2) == "fn f(g fn(x I64) I64 ? E) I64 ? {\n    return 1\n}"
+    assert try withQuestion("fn a() {\n}\nfn (s S&) b(m Map<I64, I64>&) I64 {\n    x := 1\n}", 4) ==
+        "fn a() {\n}\nfn (s S&) b(m Map<I64, I64>&) I64 ? {\n    x := 1\n}"
+}
+
+test "nothing to do where a '?' is written, and nothing to find above the first declaration" {
+    written := false
+    try bodyAt("fn f() I64 ? E { }", 1) catch Unfixable.Written { written = true }
+    assert written
+    none := false
+    try bodyAt("import \"std/io\"\nx := 1", 2) catch Unfixable.NoDeclaration { none = true }
+    assert none
+}

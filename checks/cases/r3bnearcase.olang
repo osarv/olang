@@ -1,0 +1,15 @@
+# check: fail error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
+# R3b: two errors of a module may not differ by case alone, unless a signature says the second is meant
+fn a(k I64) I64 ? {
+    if k < 0 { error NotFound }
+    if k > 9 { error NotFound }
+    return k
+}
+fn b(k I64) I64 ? {
+    if k < 0 { error notFound }
+    return k
+}
+fn main() ? {
+    try a(1)
+    try b(1)
+}

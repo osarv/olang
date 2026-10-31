@@ -31,29 +31,29 @@ extern {
     fn __olang_on_crash(message Array<U8>, len I64)
 }
 
-# why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and FAILED for
+# why a file-system call failed - errno's commonest answers, by name (X6's classes, in their order), and Failed for
 # every other
 type Error error {
-    NOT_FOUND
-    EXISTS
-    DENIED
-    NOT_DIR
-    IS_DIR
-    NOT_EMPTY
-    FAILED
+    NotFound
+    Exists
+    Denied
+    NotDir
+    IsDir
+    NotEmpty
+    Failed
 }
 
 # fails with the Error naming "code" - what __olang_err() said, asked right after the call that failed, before
 # anything else could change errno
 fn raise(code I32) ? Error {
     match code {
-        case 1 { error Error.NOT_FOUND }
-        case 2 { error Error.EXISTS }
-        case 3 { error Error.DENIED }
-        case 4 { error Error.NOT_DIR }
-        case 5 { error Error.IS_DIR }
-        case 6 { error Error.NOT_EMPTY }
-        case _ { error Error.FAILED }
+        case 1 { error Error.NotFound }
+        case 2 { error Error.Exists }
+        case 3 { error Error.Denied }
+        case 4 { error Error.NotDir }
+        case 5 { error Error.IsDir }
+        case 6 { error Error.NotEmpty }
+        case _ { error Error.Failed }
     }
 }
 
@@ -97,7 +97,7 @@ fn Args() Array<String&>& {
 fn Env(name String&) String& ? Error {
     key := $name "\0"
     return try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_env(key, buf, buf.Len()) })
-        catch Error { error Error.NOT_FOUND }
+        catch Error { error Error.NotFound }
 }
 
 # B5b: ends the process with "code" as its exit status (the platform passes on its low 8 bits), by the process's
@@ -157,8 +157,8 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
 # be seen), Stdout and Stderr then being empty. It runs in the directory "dir", or in this program's own when dir is
 # empty; a relative path in args[0] is found from there. args[0] is looked up through PATH unless it holds a '/'. A
 # program that runs and fails is no error here: its status says so. Exec fails, with the Error naming why, only when
-# the program cannot be started - NOT_FOUND (no such program, or no such dir), DENIED (not executable), NOT_DIR (dir is
-# not a directory) - or with FAILED when there is nothing to run, an argument holds a zero byte (which no command line
+# the program cannot be started - NotFound (no such program, or no such dir), Denied (not executable), NotDir (dir is
+# not a directory) - or with Failed when there is nothing to run, an argument holds a zero byte (which no command line
 # can carry), or the system refuses what Exec needs. Output is gathered in memory files the program writes into as fast
 # as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output. Start and Wait are the same, in
 # two halves; ExecUntil the same with a deadline.
@@ -177,20 +177,20 @@ fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", cap
 # runs the program at path in this program's place, args its command line (args[0] the name it runs by, which need not
 # be path): what this program would do next is the program's, its status this process's - a shell's script handing on
 # to another program, a driver running what it built. path is not looked up through PATH. Returns only when the
-# program cannot be started, failing as Exec does - NOT_FOUND, DENIED, or FAILED for no arguments or one holding a zero
+# program cannot be started, failing as Exec does - NotFound, Denied, or Failed for no arguments or one holding a zero
 # byte
 fn ExecInPlace(path String&, args Array<String&>&) ? Error {
-    if args.Len() == 0 { error Error.FAILED }
+    if args.Len() == 0 { error Error.Failed }
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.FAILED }
+        if zero { error Error.Failed }
         size += a.Len() + 1
     }
     zero := true
     try path.FindByte(0) catch { zero = false }
-    if zero { error Error.FAILED }
+    if zero { error Error.Failed }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
     for a in args {
@@ -202,7 +202,7 @@ fn ExecInPlace(path String&, args Array<String&>&) ? Error {
     }
     __olang_exec($path "\0", line, args.Len())
     try raise(__olang_err())
-    error Error.FAILED
+    error Error.Failed
 }
 
 # a program Start started: Wait for it, once, to have what it did; Kill it to end it sooner. Its descriptors are closed
@@ -223,20 +223,20 @@ fn (p Process&) Pid() I32 { return p.pid }
 # running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
 # once), or one to give up on. Fails as Exec does when it cannot be started
 fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
-    if args.Len() == 0 { error Error.FAILED }
+    if args.Len() == 0 { error Error.Failed }
     size I64 = 0
     for a in args {
         zero := true
         try a.FindByte(0) catch { zero = false }
-        if zero { error Error.FAILED }
+        if zero { error Error.Failed }
         size += a.Len() + 1
     }
     zero := true
     try dir.FindByte(0) catch { zero = false }
-    if zero { error Error.FAILED }
+    if zero { error Error.Failed }
     if dir.Len() > 0 {                                  # said here, where a missing program could not be mistaken for it
         info := try Stat(dir)
-        if info.Kind != FileKind.DIR { error Error.NOT_DIR }
+        if info.Kind != FileKind.DIR { error Error.NotDir }
     }
     line := Array<U8>(size)                         # the arguments, each ended by a zero byte
     at I64 = 0
@@ -249,7 +249,7 @@ fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir S
     }
     feed := try memFile()
     defer unistd.close(feed)
-    try io.Write(feed, input) catch io.Error { error Error.FAILED }
+    try io.Write(feed, input) catch io.Error { error Error.Failed }
     unistd.lseek(feed, 0, 0)
     out I32 = -1                                        # -1: this program's own, which the child inherits
     errs I32 = -1
@@ -272,9 +272,9 @@ fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir S
 }
 
 # waits for the program to end and gives what it did - its status, and what it wrote when Start captured it, built where
-# the caller puts it. Fails with FAILED when it was waited for already
+# the caller puts it. Fails with Failed when it was waited for already
 fn (p mut Process&) Wait() Output ? Error {
-    if p.waited { error Error.FAILED }
+    if p.waited { error Error.Failed }
     waited := Array<I32>(1)
     if syswait.waitpid(p.pid, waited, 0) < 0 { try p.lost(__olang_err()) }
     return try p.ended(waited[0])
@@ -294,7 +294,7 @@ fn (p mut Process&) lost(code I32) ? Error {
 # program has ended. Asks every few milliseconds at most - sooner while the program is young, so a short one is not
 # kept waiting - as nothing can wait for a child and a token at once
 fn (p mut Process&) WaitUntil(tok cancel.Token&) Output ? Error, cancel.Stopped {
-    if p.waited { error Error.FAILED }
+    if p.waited { error Error.Failed }
     waited := Array<I32>(1)
     nap := ctime.timespec()
     left := ctime.timespec()
@@ -353,7 +353,7 @@ fn readBack(fd I32) String& ? Error {
     for got < size {
         n := unistd.read(fd, text[got:], U64(size - got))
         if n < 0 { try raise(__olang_err()) }
-        if n == 0 { error Error.FAILED }
+        if n == 0 { error Error.Failed }
         got += n
     }
     return text
@@ -362,7 +362,7 @@ fn readBack(fd I32) String& ? Error {
 # the whole of the file at "path", built where the caller puts it, or where the scope argument says
 # ("os.ReadFile&x(p)" builds it where x lives)
 fn ReadFile(path String&) String& ? Error {
-    if IsDir(path) { error Error.IS_DIR }            # a directory opens, and its size means nothing
+    if IsDir(path) { error Error.IsDir }            # a directory opens, and its size means nothing
     fd := fcntl.open($path "\0", 0)
     try check(fd)
     # the size is where reading starts from, nothing more: the end is where a read finds it. A byte past the size, so the
@@ -466,7 +466,7 @@ fn MkDir(path String&) ? Error {
 }
 
 # makes the directory "path" and every one above it that is missing; a directory already there is left as it is, and
-# anything else in the way fails with NOT_DIR
+# anything else in the way fails with NotDir
 fn MkDirAll(path String&) ? Error {
     if IsDir(path) { return }
     for i in range 1, path.Len() + 1 {
@@ -474,8 +474,8 @@ fn MkDirAll(path String&) ? Error {
         part := path[:i]
         if sysstat.mkdir($part "\0", 0x1FF) != 0 {
             code := __olang_err()
-            if code != 2 { try raise(code) }            # 2 is EXISTS: fine, when what exists is a directory
-            if not IsDir(part) { error Error.NOT_DIR }
+            if code != 2 { try raise(code) }            # 2 is Exists: fine, when what exists is a directory
+            if not IsDir(part) { error Error.NotDir }
         }
     }
 }
@@ -496,7 +496,7 @@ fn RemoveAll(path String&) ? Error {
     s := e
     for s > 0 and path[s - 1] != '/' { s -= 1 }
     name := path[s:e]
-    if name == "." or name == ".." { error Error.FAILED }
+    if name == "." or name == ".." { error Error.Failed }
     try removeTree(path)
 }
 
@@ -506,8 +506,8 @@ fn removeTree(path String&) ? Error {
     p := $path "\0"
     if stdio.remove(p) == 0 { return }
     code := __olang_err()
-    if code == 1 { return }                            # NOT_FOUND: nothing to remove
-    if code != 6 and code != 2 { try raise(code) }      # NOT_EMPTY, or EXISTS, which POSIX allows rmdir to say
+    if code == 1 { return }                            # NotFound: nothing to remove
+    if code != 6 and code != 2 { try raise(code) }      # NotEmpty, or Exists, which POSIX allows rmdir to say
     for n in try ReadDir(path) { try removeTree($path "/" $n) }
     try check(stdio.remove(p))
 }
@@ -517,7 +517,7 @@ fn removeTree(path String&) ? Error {
 # "prefix" followed by six characters chosen to make the name unused. Only this user may read, write or enter it
 # (mode 0700). Removing it once done is the caller's - RemoveAll
 fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
-    if prefix.Contains("/") { error Error.FAILED }      # a name, never a path below "dir"
+    if prefix.Contains("/") { error Error.Failed }      # a name, never a path below "dir"
     base := tempDir(dir)
     sep := "" if base.EndsWith("/") else "/"
     path mut String&return = $base $sep $prefix "XXXXXX\0"
@@ -602,7 +602,7 @@ test "ReadFile reads what a command wrote" {
     assert Run("printf 'a\\nb' > build/os_test.txt") == 0
     text := try ReadFile("build/os_test.txt") catch default ""
     assert text.Eq("a\nb")
-    missing := try ReadFile("build/no/such/file") catch Error.NOT_FOUND default "gone" catch default "other"
+    missing := try ReadFile("build/no/such/file") catch Error.NotFound default "gone" catch default "other"
     assert missing.Eq("gone")
 }
 
@@ -645,7 +645,7 @@ test "WriteFile creates a file, and empties one that is there" {
     try WriteFile("build/os_files/empty", "")
     assert (try ReadFile("build/os_files/empty") catch default "x") == ""
     denied := false
-    try WriteFile("build/os_files/no/such/dir/f", "x") catch Error.NOT_FOUND { denied = true } catch { }
+    try WriteFile("build/os_files/no/such/dir/f", "x") catch Error.NotFound { denied = true } catch { }
     assert denied
 }
 
@@ -663,7 +663,7 @@ test "Create writes through a descriptor, a piece at a time" {
     assert got.Len() == 7
     try Close(rd)
     closed := false
-    try Close(rd) catch Error.FAILED { closed = true } catch { }
+    try Close(rd) catch Error.Failed { closed = true } catch { }
     assert closed
 }
 
@@ -702,12 +702,12 @@ test "Stat gives the kind, the size, and the modification time to the nanosecond
     assert dir.Kind == FileKind.DIR
     assert (try Stat("/dev/null") catch default FileInfo(FileKind.FILE, -1, -1)).Kind == FileKind.OTHER
     missing := false
-    try Stat("build/os_files/none") catch Error.NOT_FOUND { missing = true } catch { }
+    try Stat("build/os_files/none") catch Error.NotFound { missing = true } catch { }
     assert missing
     assert Exists("build/os_files/s.txt") and not Exists("build/os_files/none")
     assert IsDir("build/os_files") and not IsDir("build/os_files/s.txt")
     notDir := false
-    try Stat("build/os_files/s.txt/x") catch Error.NOT_DIR { notDir = true } catch { }
+    try Stat("build/os_files/s.txt/x") catch Error.NotDir { notDir = true } catch { }
     assert notDir
 }
 
@@ -717,16 +717,16 @@ test "MkDir and MkDirAll make directories" {
     assert IsDir("build/os_files/m/x/y")
     try MkDirAll("build/os_files/m/x/y")        # all there already: nothing to do
     there := false
-    try MkDir("build/os_files/m/x") catch Error.EXISTS { there = true } catch { }
+    try MkDir("build/os_files/m/x") catch Error.Exists { there = true } catch { }
     assert there
     try MkDir("build/os_files/m/z")
     assert IsDir("build/os_files/m/z")
     noParent := false
-    try MkDir("build/os_files/m/a/b") catch Error.NOT_FOUND { noParent = true } catch { }
+    try MkDir("build/os_files/m/a/b") catch Error.NotFound { noParent = true } catch { }
     assert noParent
     try WriteFile("build/os_files/m/f", "")
     inTheWay := false
-    try MkDirAll("build/os_files/m/f/g") catch Error.NOT_DIR { inTheWay = true } catch { }
+    try MkDirAll("build/os_files/m/f/g") catch Error.NotDir { inTheWay = true } catch { }
     assert inTheWay
 }
 
@@ -745,15 +745,15 @@ test "ReadDir, Rename and Remove" {
     after := try ReadDir("build/os_files/d") catch default Array<String&>(0)
     assert after.Len() == 2 and after[0] == "sub" and after[1] == "z"
     full := false
-    try Remove("build/os_files/d") catch Error.NOT_EMPTY { full = true } catch { }
+    try Remove("build/os_files/d") catch Error.NotEmpty { full = true } catch { }
     assert full
     try Remove("build/os_files/d/z")
     try Remove("build/os_files/d/sub")
     assert (try ReadDir("build/os_files/d") catch default Array<String&>(1, "x")).Len() == 0
     gone := false
-    try ReadDir("build/os_files/nothing") catch Error.NOT_FOUND { gone = true } catch { }
+    try ReadDir("build/os_files/nothing") catch Error.NotFound { gone = true } catch { }
     assert gone
-    try Rename("build/os_files/nothing", "build/os_files/else") catch Error.NOT_FOUND { gone = false } catch { }
+    try Rename("build/os_files/nothing", "build/os_files/else") catch Error.NotFound { gone = false } catch { }
     assert not gone
 }
 
@@ -765,10 +765,10 @@ test "Link gives a file a second name, and fails where the name is taken" {
     try Rename("build/os_files/h/a", "build/os_files/h/c")       # b is the file still, under its own name
     assert (try ReadFile("build/os_files/h/b") catch default "") == "one"
     taken := false
-    try Link("build/os_files/h/c", "build/os_files/h/b") catch Error.EXISTS { taken = true } catch { }
+    try Link("build/os_files/h/c", "build/os_files/h/b") catch Error.Exists { taken = true } catch { }
     assert taken
     missing := false
-    try Link("build/os_files/h/none", "build/os_files/h/d") catch Error.NOT_FOUND { missing = true } catch { }
+    try Link("build/os_files/h/none", "build/os_files/h/d") catch Error.NotFound { missing = true } catch { }
     assert missing
 }
 
@@ -776,10 +776,10 @@ test "ReadLink, RealPath and Cwd" {
     assert Run("rm -rf build/os_files/l && mkdir -p build/os_files/l && ln -s target.txt build/os_files/l/link") == 0
     assert (try ReadLink("build/os_files/l/link") catch default "") == "target.txt"
     notLink := false
-    try ReadLink("build/os_files/l") catch Error.FAILED { notLink = true } catch { }
+    try ReadLink("build/os_files/l") catch Error.Failed { notLink = true } catch { }
     assert notLink
     dangling := false
-    try RealPath("build/os_files/l/link") catch Error.NOT_FOUND { dangling = true } catch { }
+    try RealPath("build/os_files/l/link") catch Error.NotFound { dangling = true } catch { }
     assert dangling
     try WriteFile("build/os_files/l/target.txt", "t")
     real := try RealPath("build/os_files/l/./link") catch default ""
@@ -790,7 +790,7 @@ test "ReadLink, RealPath and Cwd" {
 
 test "ReadFile names why it failed" {
     isDir := false
-    try ReadFile("build") catch Error.IS_DIR { isDir = true } catch { }
+    try ReadFile("build") catch Error.IsDir { isDir = true } catch { }
     assert isDir
 }
 
@@ -868,17 +868,17 @@ test "Exec takes any amount of output without waiting on it" {
 
 test "Exec fails only when the program cannot be started" {
     missing := false
-    try Exec(String&["olang-no-such-program"]) catch Error.NOT_FOUND { missing = true } catch { }
+    try Exec(String&["olang-no-such-program"]) catch Error.NotFound { missing = true } catch { }
     assert missing
     assert Run("mkdir -p build/os_files && printf '#!/bin/sh\\necho hi\\n' > build/os_files/noexec.sh && chmod -x build/os_files/noexec.sh") == 0
     denied := false
-    try Exec(String&["build/os_files/noexec.sh"]) catch Error.DENIED { denied = true } catch { }
+    try Exec(String&["build/os_files/noexec.sh"]) catch Error.Denied { denied = true } catch { }
     assert denied
     nothing := false
-    try Exec(Array<String&>(0)) catch Error.FAILED { nothing = true } catch { }
+    try Exec(Array<String&>(0)) catch Error.Failed { nothing = true } catch { }
     assert nothing
     zero := false
-    try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch Error.FAILED { zero = true } catch { }
+    try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch Error.Failed { zero = true } catch { }
     assert zero
     assert Run("chmod +x build/os_files/noexec.sh") == 0
     ok := try Exec(String&["build/os_files/noexec.sh"])
@@ -895,10 +895,10 @@ test "Exec runs a program in the directory it is given" {
     cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir")
     assert cat.Stdout.EndsWith("echo here\n")
     nowhere := false
-    try Exec(String&["pwd"], default, default, "build/os_files/no-such-dir") catch Error.NOT_FOUND { nowhere = true } catch { }
+    try Exec(String&["pwd"], default, default, "build/os_files/no-such-dir") catch Error.NotFound { nowhere = true } catch { }
     assert nowhere
     notDir := false
-    try Exec(String&["pwd"], default, default, "build/os_files/indir/here.sh") catch Error.NOT_DIR { notDir = true } catch { }
+    try Exec(String&["pwd"], default, default, "build/os_files/indir/here.sh") catch Error.NotDir { notDir = true } catch { }
     assert notDir
 }
 
@@ -907,14 +907,14 @@ test "Exec runs a program in the directory it is given" {
 test "ExecUntil kills a program that outlives its token" {
     start := cancel.NowNs()
     timedOut := false
-    try ExecUntil(String&["sleep", "5"], cancel.After(100)) catch cancel.Stopped.TIMED_OUT { timedOut = true } catch { }
+    try ExecUntil(String&["sleep", "5"], cancel.After(100)) catch cancel.Stopped.TimedOut { timedOut = true } catch { }
     assert timedOut and cancel.NowNs() - start < 4000000000
     quick := try ExecUntil(String&["echo", "in time"], cancel.After(60000))
     assert quick.Status == 0 and quick.Stdout == "in time\n"
     tok mut cancel.Token& = cancel.Token()
     tok.Cancel()
     stopped := false
-    try ExecUntil(String&["sleep", "5"], tok) catch cancel.Stopped.CANCELLED { stopped = true } catch { }
+    try ExecUntil(String&["sleep", "5"], tok) catch cancel.Stopped.Cancelled { stopped = true } catch { }
     assert stopped
 }
 
@@ -928,7 +928,7 @@ test "Start, Wait, Kill and Pid" {
     assert killed.Status == 137
     slow.Kill()                                     # waited for: nothing to end
     again := false
-    try slow.Wait() catch Error.FAILED { again = true } catch { }
+    try slow.Wait() catch Error.Failed { again = true } catch { }
     assert again
     got := try fed.Wait()
     assert got.Status == 0 and got.Stdout == "fed in" and got.Stderr == ""
@@ -936,7 +936,7 @@ test "Start, Wait, Kill and Pid" {
     f := try failing.WaitUntil(cancel.After(60000))
     assert f.Status == 3 and f.Stderr == "oops\n"
     missing := false
-    try Start(String&["olang-no-such-program"]) catch Error.NOT_FOUND { missing = true } catch { }
+    try Start(String&["olang-no-such-program"]) catch Error.NotFound { missing = true } catch { }
     assert missing
 }
 
@@ -966,7 +966,7 @@ test "RemoveAll removes a tree, depth first, and never follows a link" {
     assert not Exists("build/os_files/ra/keep/k") and IsDir("build/os_files/ra/keep")
     for bad in String&["build/os_files/ra/keep/.", "build/os_files/ra/keep/..", ".", "..", "build/os_files/ra/keep/./"] {
         refused := false
-        try RemoveAll(bad) catch Error.FAILED { refused = true } catch { }
+        try RemoveAll(bad) catch Error.Failed { refused = true } catch { }
         assert refused and IsDir("build/os_files/ra/keep")
     }
     try RemoveAll("build/os_files/ra/keep/")        # a trailing '/' names the directory
@@ -987,10 +987,10 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
     assert tmp.StartsWith("/") and IsDir(tmp)
     try RemoveAll(tmp)
     missing := false
-    try MkTemp("build/os_files/mt/no/such") catch Error.NOT_FOUND { missing = true } catch { }
+    try MkTemp("build/os_files/mt/no/such") catch Error.NotFound { missing = true } catch { }
     assert missing
     slash := false
-    try MkTemp("build/os_files/mt", "a/b") catch Error.FAILED { slash = true } catch { }
+    try MkTemp("build/os_files/mt", "a/b") catch Error.Failed { slash = true } catch { }
     assert slash
     try RemoveAll("build/os_files/mt")
     assert not Exists(a)

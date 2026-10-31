@@ -1,7 +1,7 @@
 # The prover: a design note
 
 **History only (2026-10-25): the prover is removed from the plans** (the user's decision). Contracts are now
-requirements checked on entry in every build, failing with `ArgumentError.INVALID` (SPEC D17), and `checked` is gone;
+requirements checked on entry in every build, failing with `ArgumentError.Invalid` (SPEC D17), and `checked` is gone;
 nothing below is planned. The note is kept as the record of what was weighed.
 
 Status: written 2026-10-24 for the user's review. Nothing here is built. Contracts themselves are built (SPEC D17-D17g):

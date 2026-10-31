@@ -10,12 +10,12 @@
 # (T17e) of an enum whose raw type is an integer (`type Perm enum U32 { READ = 1, WRITE = 2 }`), FromFlags the cases
 # whose nonzero raw value lies wholly in a word.
 
-type Error error { OUT_OF_RANGE }
+type Error error { OutOfRange }
 
-# made from case-index bits: bits past the last case fail the call with ArgumentError.INVALID (D17), so a walk of the set
+# made from case-index bits: bits past the last case fail the call with ArgumentError.Invalid (D17), so a walk of the set
 # never meets a case that does not exist (std ends no program on a caller's mistake, R22); FromBits fails with
-# Error.OUT_OF_RANGE instead, and Empty, Full and Of cannot fail
-type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
+# Error.OutOfRange instead, and Empty, Full and Of cannot fail
+type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
     check<T>()
     bits
 }
@@ -72,8 +72,8 @@ fn Of<T>(a Array<T>&) BitSet<T> {
 }
 
 # the set whose case-index bits are b; bits past the last case fail
-fn FromBits<T>(b U64) BitSet<T> ? Error.OUT_OF_RANGE {
-    if b & ~mask<T>() != 0 { error Error.OUT_OF_RANGE }
+fn FromBits<T>(b U64) BitSet<T> ? Error.OutOfRange {
+    if b & ~mask<T>() != 0 { error Error.OutOfRange }
     return of<T>(b)
 }
 
@@ -149,7 +149,7 @@ type Iter<T> struct(bits U64) {
 fn (s BitSet<T>&) Iter() Iter<T> { return Iter<T>(s.bits) }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.rest == 0 { error Exhausted.END }
+    if it.rest == 0 { error Exhausted.End }
     k := it.rest.TrailingZeros()
     it.rest &= it.rest - 1
     return caseAt<T>(k)
@@ -206,7 +206,7 @@ test BitSet "a walk gives the cases in declaration order" {
 test FromBits "round trips Bits and fails past the last case" {
     s := Of(Color[Color.Green, Color.Blue])
     assert (try FromBits<Color>(s.Bits())) == s
-    try FromBits<Color>(8) catch Error.OUT_OF_RANGE { return }
+    try FromBits<Color>(8) catch Error.OutOfRange { return }
     assert false, "FromBits(8) gave a set past the last case"
 }
 
@@ -218,7 +218,7 @@ test BitSet "flag words from raw values" {
 
 # whether the constructor makes a set of the bits b
 fn madeFrom(b U64) Bool {
-    try BitSet<Color>(b) catch ArgumentError.INVALID { return false }
+    try BitSet<Color>(b) catch ArgumentError.Invalid { return false }
     return true
 }
 BakedRefused := not madeFrom(12) and madeFrom(5)

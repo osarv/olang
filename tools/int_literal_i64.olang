@@ -37,16 +37,16 @@ import "diagedit"
 
 # what localType and rangeEnd fail with: the note asks for no type, or there is no range end there
 type noFix error {
-    HERE
+    Here
 }
 
 # the type a note asks for when it is "'NAME' is I64, its literal's own type - declare the type it should have, 'NAME TYPE = ...'",
-# else noFix.HERE
+# else noFix.Here
 fn localType(msg String&) String ? {
     marker := "' is I64, its literal's own type - declare the type it should have, '"
     from := 0
     for {
-        at := from + (try msg[from:].Find(marker) catch { error noFix.HERE })
+        at := from + (try msg[from:].Find(marker) catch { error noFix.Here })
         from = at + 1
         # 'NAME before the marker
         start := at
@@ -64,16 +64,16 @@ fn localType(msg String&) String ? {
         if not msg[p:].StartsWith(" = ...'") { continue }
         return $msg[t:p]
     }
-    error noFix.HERE
+    error noFix.Here
 }
 
 # the type a note asks for when it is "the range's literals make 'NAME' I64 - write 'TYPE(' ..." or "... convert its end,
-# 'TYPE(' ...", else noFix.HERE
+# 'TYPE(' ...", else noFix.Here
 fn rangeType(msg String&) String ? {
     marker := "the range's literals make '"
     from := 0
     for {
-        at := from + (try msg[from:].Find(marker) catch { error noFix.HERE })
+        at := from + (try msg[from:].Find(marker) catch { error noFix.Here })
         from = at + 1
         p := at + marker.Len()
         if p >= msg.Len() or not srcmask.IsIdStart(msg[p]) { continue }
@@ -94,7 +94,7 @@ fn rangeType(msg String&) String ? {
         for p < msg.Len() and srcmask.IsWord(msg[p]) and msg[p] != '_' { p++ }
         if p < msg.Len() and msg[p] == '(' { return $msg[t:p] }
     }
-    error noFix.HERE
+    error noFix.Here
 }
 
 # the edits the compiler's output asks for in the allowed paths, and the errors mentioning I64 that no note answers (as
@@ -105,7 +105,8 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
     current := ""
     answered := false
     for row in output.Split("\n") {
-        path, line, col, isError, _, msg := try diagedit.ParseRow(row) catch { continue }
+        parsed := try diagedit.ParseRow(row) catch { continue }
+        path, line, col, isError, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Msg
         full := diagedit.RealPathOf(path)
         if isError {
             if current.Len() > 0 and not answered and current.Contains("I64") and diagedit.Allowed(currentPath, allowed) {
@@ -136,12 +137,12 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
 }
 
 # the span (start, end) of the end argument of the range whose note points at column at: the one argument of "range e", the
-# second of "range s, e[, step]" - or noFix.HERE
+# second of "range s, e[, step]" - or noFix.Here
 fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     n := text.Len()
     k := (at + 1 if at + 1 < n else n) - 5
     for k >= 0 and not (text[k:].StartsWith("range") and mask[k] == 'c' and (k == 0 or not srcmask.IsWord(text[k - 1]))) { k-- }
-    if k < 0 { error noFix.HERE }
+    if k < 0 { error noFix.Here }
     i := k + 5
     starts Vec<I64>
     ends Vec<I64>
@@ -178,7 +179,7 @@ fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     e := ends[pick]
     for s < e and (text[s] == ' ' or text[s] == '\t') { s++ }
     for e > s and (text[e - 1] == ' ' or text[e - 1] == '\t') { e-- }
-    if s >= e { error noFix.HERE }
+    if s >= e { error noFix.Here }
     return s, e
 }
 

@@ -14,7 +14,7 @@ fn next(n I64) I64 {
 fn main() ? {
     a := Ticket[Ticket(1), Ticket(2)]
     c := chan.Chan<Ticket>(4)       # a channel's ring is made as values arrive: no zero value needed
-    assert not chan.IsClosed(c)
+    assert not c.IsClosed()
     assert a.Len() == 2
     b := a.Repeat(2)
     assert b.Len() == 4

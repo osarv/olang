@@ -21,6 +21,6 @@ Baked := describe<P>()
 fn main() {
     assert describe<P>() == "a2-" and Baked == describe<P>()
     missing := false
-    try P.Attr<Key>() catch AttrError.MISSING { missing = true }
+    try P.Attr<Key>() catch AttrError.Missing { missing = true }
     assert missing
 }

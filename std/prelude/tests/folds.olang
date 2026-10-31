@@ -3,7 +3,7 @@
 # Next would have left them, after an error from the callback too - with Sum, Count, Min and Max through Fold. Each
 # beside a baked global the compile-time evaluator computes.
 
-type FoldBad error { NO }
+type FoldBad error { No }
 
 fn foldsAll(a Array<I64>&) String {
     v Vec<I64>
@@ -19,7 +19,7 @@ fn foldsAll(a Array<I64>&) String {
 # the callback failing part way: each iterator where Next would have left it
 fn foldsFailing(a Array<I64>&) String {
     stop := fn(acc I64, x I64) I64 ? FoldBad {
-        if x == 8: error FoldBad.NO
+        if x == 8: error FoldBad.No
         return acc + x
     }
     t := a.Iter().Take(4)

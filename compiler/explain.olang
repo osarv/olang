@@ -14,7 +14,7 @@ import "interp"
 import typecheck "check"
 
 # a name the root module does not declare
-type Missing error { NAME }
+type Missing error { Name }
 
 # the item name names in module mi - "Type.Method" for a method - as text ending in a line break
 fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? Missing {
@@ -23,9 +23,9 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     dot := try name.Find(".") catch default -1
     if dot > 0 {
         d := typeNamed(c, mi, name[:dot])
-        if d < types.DeclId(0) { error Missing.NAME }
+        if d < types.DeclId(0) { error Missing.Name }
         f := c.P.MethodOf(c.P.SelfType(d), nm.Intern(name[dot + 1:]))
-        if f < 0 { error Missing.NAME }
+        if f < 0 { error Missing.Name }
         return fnItem(c, sc, f)
     }
     id := nm.Intern(name)
@@ -39,7 +39,7 @@ fn Item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
     }
     d := typeNamed(c, mi, name)
     if d >= types.DeclId(0) { return typeItem(c, d) }
-    error Missing.NAME
+    error Missing.Name
 }
 
 fn typeNamed(c mut typecheck.Checker&, mi I64, name String&) types.DeclId {
@@ -277,6 +277,7 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
         case types.DeclKind.Foreign { return $"extern type " $name "\n" }
         case types.DeclKind.Error {
             # T19, T19a: its members as written, then its own words
+            if c.P.IsRaisedError(d) { return $"error " $name "   # declared where it is raised (R3b)\n" }
             src := c.P.L.Mods[c.P.DeclModule(d)].Src!.Text
             b.Push($"type " $name " error")
             ms := c.P.ErrorMembers(d)
@@ -547,8 +548,7 @@ fn globalItem(c mut typecheck.Checker&, x mut interp.Exec&, mi I64, e names.Entr
     head := $nm.Text(e.Name) $(" mut " if e.Mut else " ") $c.Ty(t)
     if e.Mut { return $head "   # set at startup\n" }
     body := c.RenderBody(mi, e.Name, e.Sp)
-    text, has := x.Text(body)
-    if not has { return $head "   # set at startup\n" }
+    text := try x.Text(body) catch { return $head "   # set at startup\n" }
     v := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
     shown := $quoted(text) if v == c.TextType() else $text
     # a long value - an embedded file's bytes (E38), a large table - is cut, its length said

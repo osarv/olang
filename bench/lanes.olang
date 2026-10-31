@@ -10,8 +10,8 @@ import "std/io"
 import "std/os"
 
 type Usage error {
-    ARGS
-    MODE
+    Args
+    Mode
 }
 
 # the pseudo-random values every mode starts from, in [0, 1), as c/lanes.c makes them
@@ -39,7 +39,7 @@ fn ints(a Array<F64>&) Array<I32> {
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error Usage.ARGS }
+    if args.Len() < 5 { error Usage.Args }
     mode := args[1]
     lanes := args[2] == "lanes"
     n := try args[3].ParseInt()
@@ -116,6 +116,6 @@ fn main() ? {
         }
         try io.Println($t)
     } else {
-        error Usage.MODE
+        error Usage.Mode
     }
 }

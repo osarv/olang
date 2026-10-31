@@ -1,4 +1,4 @@
-# std/chan: a Send on a closed channel fails with chan.Error.CLOSED - after what was buffered before the close has been
+# std/chan: a Send on a closed channel fails with chan.Error.Closed - after what was buffered before the close has been
 # received
 import "std/chan"
 import "std/io"

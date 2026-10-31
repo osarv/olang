@@ -2,7 +2,7 @@
 # Generator<T ? E>, whose Next runs the body on from where it stopped to its next yield
 
 type Bad error {
-    NEG
+    Neg
 }
 
 type Res struct(id I64) {
@@ -24,7 +24,7 @@ fn evens(n I64) Iterator<I64> {
 
 fn countdown(n I64) Iterator<I64 ? Bad> {
     for n > 0 {
-        if n == 3 { error Bad.NEG }
+        if n == 3 { error Bad.Neg }
         yield n
         n--
     }
@@ -219,7 +219,7 @@ test "D18c: a generator yields copies of what it was given" {
 EdLog mut I64 = 0
 
 fn edCheck(n I64) ? Bad {
-    if n < 0 { error Bad.NEG }
+    if n < 0 { error Bad.Neg }
 }
 
 fn edWalk(n I64) Iterator<I64 ? Bad> {
@@ -301,7 +301,7 @@ fn firstOver(n I64, k I64) I64 {
 fn guardedFails(n I64) I64 ? Bad {
     t I64 = 0
     for x in guarded(n) {
-        if x == 2 { error Bad.NEG }
+        if x == 2 { error Bad.Neg }
         t += x
     }
     return t

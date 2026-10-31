@@ -19,7 +19,7 @@ import "../compiler/parse"
 import "../compiler/diag"
 import layout "../compiler/fmt"
 
-type Unparsable error { SYNTAX }
+type Unparsable error { Syntax }
 
 # the comparisons the old reading of a file has as operands of a bitwise operator
 fn mixed(path String&, text String&, std String&, prelude String&) Vec<source.Span> ? Unparsable {
@@ -32,7 +32,7 @@ fn mixed(path String&, text String&, std String&, prelude String&) Vec<source.Sp
     p := parse.Parser(src, ts, names, o, d, file)
     p.OldBitwise = true
     p.File()
-    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.SYNTAX }
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
     return p.Mixed
 }
 
@@ -48,7 +48,7 @@ fn reading(path String&, text String&, std String&, prelude String&, old Bool) S
     p.OldBitwise = old
     p.RecordOperators = true
     p.File()
-    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.SYNTAX }
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.Syntax }
     b := StringBuilder()
     for sp in p.Operators { b.Push($sp.Start ":" $sp.End " ") }
     return b.ToString()

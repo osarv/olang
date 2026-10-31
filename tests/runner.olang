@@ -6,7 +6,7 @@ import "geom/rect"
 import "geom/measure"
 
 type RunnerError error {
-    STARTUP_FAILED
+    StartupFailed
 }
 
 fn DoubleIt(n I32) I32 {
@@ -17,7 +17,7 @@ fn DoubleIt(n I32) I32 {
 # only declare a foreign error in your own signature and try/catch it, never raise one yourself; see the
 # report. wk.WorkerError is declared over in worker.olang, not here.
 fn alwaysWorkerBadInput() I32 ? wk.WorkerError {
-    error wk.WorkerError.BAD_INPUT
+    error wk.WorkerError.BadInput
 }
 
 # a chain of TWO alias hops ("wk" - runner's own alias for worker.olang, then "Base" - worker's own
@@ -26,12 +26,12 @@ fn alwaysWorkerBadInput() I32 ? wk.WorkerError {
 # mechanism (type ref, call, bare var read, catch, "error" statement) supports an alias chain of any
 # length now, not just one hop - see the report.
 fn alwaysBaseBrokenViaChain() ? wk.Base.BaseError {
-    error wk.Base.BaseError.BROKEN
+    error wk.Base.BaseError.Broken
 }
 
 fn main() ? RunnerError {
     try sh.SafeDiv(10, 2) catch sh.MathError {
-        error RunnerError.STARTUP_FAILED
+        error RunnerError.StartupFailed
     }
     return
 }
@@ -58,7 +58,7 @@ test "runner can call worker's cross-module wrapper directly" {
 
 test "originating a foreign module's error type directly with 'error alias.Type.word'" {
     caught Bool = false
-    try alwaysWorkerBadInput() catch wk.WorkerError.BAD_INPUT {
+    try alwaysWorkerBadInput() catch wk.WorkerError.BadInput {
         caught = true
     }
     assert caught
@@ -149,7 +149,7 @@ test "a two-hop alias chain constructs a re-exported plain type via an array lit
 
 test "a two-hop alias chain reaches a re-exported module's own error type via catch" {
     caught Bool = false
-    try wk.Base.AlwaysBaseBroken() catch wk.Base.BaseError.BROKEN {
+    try wk.Base.AlwaysBaseBroken() catch wk.Base.BaseError.Broken {
         caught = true
     }
     assert caught

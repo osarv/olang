@@ -2,23 +2,23 @@
 # -i, which runs a join's tasks one after another: each line printed by each, and the three the same
 import "std/io"
 type E error {
-    NEG
-    BIG
+    Neg
+    Big
 }
 type F error {
-    SEVEN
+    Seven
 }
 type Node struct(v I64) {
     v
 }
 run mut I64 = 1
 fn sq(n I64) I64 ? E {
-    if n < 0 { error E.NEG }
-    if n > 1000 { error E.BIG }
+    if n < 0 { error E.Neg }
+    if n > 1000 { error E.Big }
     return n * n
 }
 fn seven(n I64) ? F {
-    if n == 7 { error F.SEVEN }
+    if n == 7 { error F.Seven }
 }
 fn spin(n I64, k I64) I64 ? E {
     t I64 = 0
@@ -27,21 +27,21 @@ fn spin(n I64, k I64) I64 ? E {
     return try sq(n)
 }
 fn mk(n I64) Node& ? E {
-    if n < 0 { error E.NEG }
+    if n < 0 { error E.Neg }
     return Node(n * 10)
 }
 fn text(n I64) String ? E {
-    if n < 0 { error E.NEG }
+    if n < 0 { error E.Neg }
     return "n=" $n
 }
 fn many(n I64) Vec<I64> ? E {
-    if n < 0 { error E.NEG }
+    if n < 0 { error E.Neg }
     l := Vec<I64>()
     for i in range n { l.Push(i * i) }
     return l
 }
 fn divmod(a I64, b I64) I64, I64 ? E {
-    if b == 0 { error E.NEG }
+    if b == 0 { error E.Neg }
     return a / b, a % b
 }
 fn churn() I64 {
@@ -58,7 +58,7 @@ fn earliest() I64 {
         spawn try spin(-run, 20000)
         spawn try spin(2000 * run, 0)
         for i in range 10 { spawn try sq(5000 + i) }
-    } catch E.NEG { return 1 } catch E.BIG { return 2 }
+    } catch E.Neg { return 1 } catch E.Big { return 2 }
     return 0
 }
 fn mixed(a I64, b I64) I64 ? E, F {
@@ -69,7 +69,7 @@ fn mixed(a I64, b I64) I64 ? E, F {
     return 0
 }
 fn classify(a I64, b I64) I64 {
-    return try mixed(a, b) catch F default 70 catch E.NEG default 80 catch E.BIG default 90
+    return try mixed(a, b) catch F default 70 catch E.Neg default 80 catch E.Big default 90
 }
 fn sumSq(a Array<I64>&) I64 ? E {
     out := Array<I64>(a.Len())
@@ -83,14 +83,14 @@ fn sumSq(a Array<I64>&) I64 ? E {
 fn defaulted(a Array<I64>&) String {
     out := Array<I64>(a.Len())
     join {
-        for i in range a.Len() { spawn out[i] = try sq(a[i]) catch E.NEG default -1 catch E.BIG default -2 }
+        for i in range a.Len() { spawn out[i] = try sq(a[i]) catch E.Neg default -1 catch E.Big default -2 }
     }
     return $out
 }
 fn counted() String {
     tally mut Array<I64>& = Array<I64>(2)
     join {
-        for i in range 12 { spawn try sq(I64(i) - 6) catch E.NEG { tally[0].AtomicAdd(1) } catch E.BIG { } }
+        for i in range 12 { spawn try sq(I64(i) - 6) catch E.Neg { tally[0].AtomicAdd(1) } catch E.Big { } }
         spawn try seven(7 * run) catch { tally[1].AtomicAdd(1) }
     }
     return $tally
@@ -120,16 +120,16 @@ fn nested() I64 {
                 spawn try sq(-run)
             }
         }
-    } catch E.NEG { return 5 } catch E { return 4 }
+    } catch E.Neg { return 5 } catch E { return 4 }
     return 6
 }
 fn main() ? E, io.Error {
     try io.Println($earliest())
     try io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
-    try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
+    try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.Neg default -1 catch default -2))
     try io.Println(defaulted(I64[3, -3, 3000, 4]))
     try io.Println(counted())
-    try io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
+    try io.Println($(try returned() catch E.Neg default 30) " " $broken() " " $nested())
     a, b String
     p, q Node?&
     l1, l2 Vec<I64>

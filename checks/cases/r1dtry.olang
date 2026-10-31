@@ -1,0 +1,6 @@
+# check: fail error[R1d]: io.Error can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+# R1d: a function that can fail writes '?' - main included
+import "std/io"
+fn main() {
+    try io.Println("hi")
+}

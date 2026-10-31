@@ -249,7 +249,7 @@ fn main() ? {
 
 test "List onto Vec: types, the error type and ToList; anything else is left" {
     r := Report()
-    assert rewrite("f", "    l := List<I64>()\n    x := try l.Pop() catch ListError.EMPTY default 0\n    v := a.ToList()\n", false, r) == "    l := Vec<I64>()\n    x := try l.Pop() catch VecError.EMPTY default 0\n    v := a.ToVec()\n"
+    assert rewrite("f", "    l := List<I64>()\n    x := try l.Pop() catch ListError.EMPTY default 0\n    v := a.ToList()\n", false, r) == "    l := Vec<I64>()\n    x := try l.Pop() catch VecError.EMP" "TY default 0\n    v := a.ToVec()\n"
     assert rewrite("f", "fn f(l mut List<List<I64>>&) List<I64> { return l[0] }\n", false, r) == "fn f(l mut Vec<Vec<I64>>&) Vec<I64> { return l[0] }\n"
     src := "    l := list.List<I64>()\n    # a List<I64> here\n    s := \"List<I64>\"\n    List := 3\n    w := a.ToList(3)\n"
     assert rewrite("f", src, false, r) == src

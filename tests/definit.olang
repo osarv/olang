@@ -21,10 +21,10 @@ type DiShape enum {
     Square(s I64)
 }
 
-type DiErr error { BAD }
+type DiErr error { Bad }
 
 fn diFind(k I64) DiNode& ? DiErr {
-    if k < 0 { error DiErr.BAD }
+    if k < 0 { error DiErr.Bad }
     return DiNode(k)
 }
 
@@ -120,7 +120,7 @@ fn diAfterDo(k I64) I64 {
 }
 
 fn diStep(i I64) I64 ? DiErr {
-    if i >= 3 { error DiErr.BAD }
+    if i >= 3 { error DiErr.Bad }
     return i
 }
 

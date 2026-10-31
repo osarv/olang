@@ -23,7 +23,7 @@ type Gen struct() {
     i I64 = 0
 }
 fn (g mut Gen&) next() I64 ? Exhausted {
-    if g.i == 3 { error Exhausted.END }
+    if g.i == 3 { error Exhausted.End }
     g.i++
     return g.i
 }

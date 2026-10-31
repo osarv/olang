@@ -180,12 +180,12 @@ fn (s mut scanner&) run() {
                 i++
             } else if c == '#' {
                 if i + 1 < n and t[i + 1] == '#' {
-                    end, spans := blockComment(t, i + 2)
+                    end := blockComment(t, i + 2)
                     if end < 0 {
                         s.diag(LexError.UnclosedComment, i, i + 2)
                         i = n
                     } else {
-                        if spans { nl = true }
+                        if hasLineEnd(t, i + 2, end) { nl = true }
                         i = end
                     }
                 } else {
@@ -328,19 +328,23 @@ fn lineEnd(t String&, from I64) I64 {
     return i
 }
 
-# the end of a block comment whose text starts at i - just past its closing "##" - and whether it spans a line's
-# end; -1 when it is never closed (L4a)
-fn blockComment(t String&, from I64) I64, Bool {
+# the end of a block comment whose text starts at i - just past its closing "##"; -1 when it is never closed (L4a)
+fn blockComment(t String&, from I64) I64 {
     i I64 = from
     n := t.Len()
-    spans Bool = false
     for i + 1 < n {
-        c := t[i]
-        if c == '#' and t[i + 1] == '#' { return i + 2, spans }
-        if c == '\n' { spans = true }
+        if t[i] == '#' and t[i + 1] == '#' { return i + 2 }
         i++
     }
-    return -1, spans
+    return -1
+}
+
+# whether t[from:to] holds a line's end
+fn hasLineEnd(t String&, from I64, to I64) Bool {
+    for i in range from, to {
+        if t[i] == '\n' { return true }
+    }
+    return false
 }
 
 # whether a token can start at t[i] - or whitespace, or a comment: what ends a run of bytes that begin none (L1)
@@ -555,8 +559,7 @@ fn (s mut scanner&) escape(j I64, q Char) I64 {
         return j + 2
     }
     if e == 'u' {
-        v, end, ok := unicodeEscape(t, j)
-        if not ok {
+        v, end := try unicodeEscape(t, j) catch {
             s.diag(LexError.BadUnicodeEscape, j, j + 2)
             return j + 2
         }
@@ -711,18 +714,19 @@ fn hasPrefix(t String&, a I64, b I64, p I64, q I64) Bool {
     return true
 }
 
-# '\u{H...}' at j (its '\'): its code point, where it ends, and whether it is one to six hexadecimal digits in braces
-fn unicodeEscape(t String&, j I64) I64, I64, Bool {
+# '\u{H...}' at j (its '\'): its code point and where it ends - failing with BadEscape where it is not one to six
+# hexadecimal digits in braces
+fn unicodeEscape(t String&, j I64) I64, I64 ? BadEscape {
     n := t.Len()
-    if j + 2 >= n or t[j + 2] != '{' { return 0, j + 2, false }
+    if j + 2 >= n or t[j + 2] != '{' { error BadEscape }
     v I64 = 0
     k := j + 3
     for k < n and hexDigit(t[k]) >= 0 and k < j + 9 {
         v = v * 16 + hexDigit(t[k])
         k++
     }
-    if k == j + 3 or k >= n or t[k] != '}' { return 0, j + 2, false }
-    return v, k + 1, true
+    if k == j + 3 or k >= n or t[k] != '}' { error BadEscape }
+    return v, k + 1
 }
 
 # a text or character literal's bytes as its source writes them (L13-L15, L14a): its escapes decoded, raw text's lines
@@ -766,8 +770,8 @@ fn LiteralBytes(t String&) Array<U8> {
             b.Push(U8(hexDigit(t[i + 2]) * 16 + hexDigit(t[i + 3])))
             i += 4
         } else if e == 'u' {
-            v, end, ok := unicodeEscape(t, i)
-            if ok { pushUtf8(b, v) }
+            v, end := try unicodeEscape(t, i) catch default -1, (i + 2)
+            if v >= 0 { pushUtf8(b, v) }
             i = end
         } else {
             b.Push(10 if e == 'n' else 9 if e == 't' else 13 if e == 'r' else 0 if e == '0' else U8(e))

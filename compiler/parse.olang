@@ -16,7 +16,7 @@ import "diag"
 import "msgs"
 import "std/os"
 
-type Fail error { SYNTAX }
+type Fail error { Syntax }
 
 # L21: how deep blocks, operands and operator chains may nest
 MaxNesting I64 = 20000
@@ -242,12 +242,12 @@ fn (p mut Parser&) report(start I32, end I32, m msgs.Msg) {
 
 # what was wanted is not here: said at the next token, in the words of a hint where one fits
 fn (p mut Parser&) fail(want String&) ? Fail {
-    if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+    if p.tooDeep or p.unclosed { error Fail.Syntax }
     if not p.hint(want) {
         t := p.tk()
         p.report(p.here(), t.End, msgs.Expected(want, p.found()))
     }
-    error Fail.SYNTAX
+    error Fail.Syntax
 }
 
 fn (p mut Parser&) want(k token.Tok) I32 ? Fail {
@@ -296,7 +296,7 @@ fn (p mut Parser&) enter() ? Fail {
             t := p.tk()
             p.diags.ErrorUnheld(diag.Where.Span(p.file, I64(p.here()), I64(t.End)), msgs.Nesting(MaxNesting))
         }
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     if p.depth + 1 == MaxNesting and p.limitAt < 0 { p.limitAt = p.pos }
     p.depth++
@@ -736,7 +736,7 @@ fn (p mut Parser&) externFn(at I32) ast.Func&p ? Fail {
     p.variadicOk = true
     s := try p.sig(false) catch {
         p.variadicOk = false
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     p.variadicOk = false
     return ast.Func(p.from(at), null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false)
@@ -828,11 +828,11 @@ fn (p mut Parser&) typeDecl() ast.Decl&p ? Fail {
     if p.sees(token.Tok.Error) { return try p.errorDecl(at, name) }
     return try p.typeDeclRest(at, name) catch {
         p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, p.typeParamsRead, false, null)))
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
 }
 
-# "type Name error [Member, ...] [{ WORDS }]" (T19, T19a): an error type's words, a named set's members on the line
+# "type Name error [Member, ...] [{ Words }]" (T19, T19a): an error type's words, a named set's members on the line
 # after "error", or both - at least one of the two, the braces last
 fn (p mut Parser&) errorDecl(at I32, name source.NameId) ast.Decl&p ? Fail {
     p.advance()
@@ -990,7 +990,7 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
         p.noAttrs = true
         recv = try p.param(false) catch {
             p.noAttrs = false
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         p.noAttrs = false
         try p.want(token.Tok.RParen)
@@ -1008,7 +1008,7 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
         if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false))) }
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     return ast.Func(p.from(at), recv, name, s, body, tps)
 }
@@ -1103,7 +1103,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
     p.noAttrs = value
     params := try p.params(lambda) catch {
         p.noAttrs = wasNo
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     p.noAttrs = wasNo
     variadic := p.sawVariadic
@@ -1120,7 +1120,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
             t := try p.typeExpr() catch {
                 p.item = wasItem
                 p.tys.Truncate(from)
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.tys.Push(t)
             if one or not p.accept(token.Tok.Comma) { break }
@@ -1303,7 +1303,7 @@ fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
 fn (p mut Parser&) trailing(close token.Tok) ? Fail {
     if p.sees(close) and not p.breakBefore() {
         p.report(p.prevEnd - 1, p.prevEnd, msgs.TrailingComma(msgs.Tok(close.Text())))
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
 }
 
@@ -1378,19 +1378,19 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             t := try p.typeExpr() catch {
                 p.item = wasItem
                 p.skip = wasSkip
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.item = wasItem
             p.skip = wasSkip
             if not p.sees(token.Tok.RParen) and not isFuncType(t) {
                 # "(I64, I64)": types bare, as several results are written (D8c)
                 p.report(at, p.prevEnd, msgs.NeedlessGroup())
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             try p.want(token.Tok.RParen)
             if not p.grouped(t) {
                 p.report(at, p.prevEnd, msgs.NeedlessGroup())
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             return t
         }
@@ -1638,7 +1638,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
             }
             p.stmts.Truncate(from)
             p.unclosed = true
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         marks := p.marks()
         start := p.pos
@@ -1658,7 +1658,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
         s := try p.stmt() catch {
             if p.tooDeep or p.unclosed {
                 p.stmts.Truncate(from)
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.release(marks)
             p.skip = false
@@ -2131,7 +2131,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt&p ? Fail {
     cl := try p.clauses(false)
     if cl.Len() == 0 and reached >= 0 {
         p.tooDeepAt(reached)
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     e ast.Expr&p = ast.Expr.Try(p.from(at), x, cl)
     sp := p.from(at)
@@ -2174,7 +2174,7 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
         g := p.diags.Hold()
         body := try p.lineBody() catch {
             p.diags.EndHold()
-            if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+            if p.tooDeep or p.unclosed { error Fail.Syntax }
             p.syncFrom()
             return ast.Branch(p.from(at), Array<ast.Stmt&>(0), g)
         }
@@ -2186,9 +2186,9 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
     open := p.pos
     body := try p.block() catch {
         p.diags.EndHold()
-        if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+        if p.tooDeep or p.unclosed { error Fail.Syntax }
         close := p.ts.Match(I32(open))
-        if close < 0 { error Fail.SYNTAX }
+        if close < 0 { error Fail.Syntax }
         p.pos = I64(close)
         p.half = token.Tok.Eof
         p.advance()
@@ -2226,12 +2226,12 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>&p ? Fail {
     t := p.tk()
     if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
         p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     what := lineBodyRefused(p.peek())
     if what != "" {
         p.report(t.Start, t.End, msgs.LineBodyNotSimple(what))
-        error Fail.SYNTAX
+        error Fail.Syntax
     }
     wasLine := p.inLine
     p.inLine = true
@@ -2244,11 +2244,11 @@ fn (p mut Parser&) lineBody() Array<ast.Stmt&>&p ? Fail {
     match st {
         case ast.Stmt.Var(sp, _), ast.Stmt.Multi(sp, _) {
             p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         case ast.Stmt.Join(sp, _) {
             p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a join"))
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         case _ { }
     }
@@ -2297,7 +2297,7 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt&p ? Fail {
             if p.reflListPath(src) { p.reflNames.Push(name) }
             body := try p.body() catch {
                 p.reflNames.Truncate(reflAt)
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.reflNames.Truncate(reflAt)
             cl Array<ast.Catch&>&p = Array<ast.Catch&>(0)
@@ -2479,7 +2479,7 @@ fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
         t := p.tk()
         if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
             p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         v := try p.expr()
         return Array<ast.Stmt&>(0), v
@@ -2629,7 +2629,7 @@ fn (p mut Parser&) exprList() Array<ast.Expr&>&p ? Fail {
     for {
         x := try p.expr() catch {
             p.exprs.Truncate(from)
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         p.exprs.Push(x)
         if not p.accept(token.Tok.Comma) { break }
@@ -3021,14 +3021,14 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
                 p.exprs.Truncate(from)
                 p.brackets--
                 p.skip = wasSkip
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.advance()
             x := try p.expr() catch {
                 p.exprs.Truncate(from)
                 p.brackets--
                 p.skip = wasSkip
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.exprs.Push(ast.Expr.Named(p.from(at), n, x))
         } else {
@@ -3036,7 +3036,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
                 p.exprs.Truncate(from)
                 p.brackets--
                 p.skip = wasSkip
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             # G37: "T(e for p in T.Params)" - a comprehension standing as arguments, its own item of the list
             if p.comprehends() {
@@ -3045,7 +3045,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
                     p.exprs.Truncate(from)
                     p.brackets--
                     p.skip = wasSkip
-                    error Fail.SYNTAX
+                    error Fail.Syntax
                 }
             }
             p.exprs.Push(x)
@@ -3054,7 +3054,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
             p.exprs.Truncate(from)
             p.brackets--
             p.skip = wasSkip
-            error Fail.SYNTAX
+            error Fail.Syntax
         }
         if not more { break }
     }
@@ -3091,14 +3091,14 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 p.brackets--
                 p.skip = wasSkip
                 p.item = wasItem
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.item = wasItem
             p.brackets--
             p.noGt = wasNoGt
             try p.want(token.Tok.RParen) catch {
                 p.skip = wasSkip
-                error Fail.SYNTAX
+                error Fail.Syntax
             }
             p.skip = wasSkip
             return ast.Expr.Paren(p.from(at), x)

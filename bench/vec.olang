@@ -13,9 +13,9 @@ import "std/os"
 import "std/list"
 
 type Usage error {
-    ARGS
-    MODE
-    KIND
+    Args
+    Mode
+    Kind
 }
 
 # the pseudo-random values every mode starts from, as c/vec.c makes them
@@ -140,12 +140,12 @@ fn opaqueArray(a Array<I64>&, passes I64) I64 {
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error Usage.ARGS }
+    if args.Len() < 5 { error Usage.Args }
     mode := args[1]
     kind := args[2]
     n := try args[3].ParseInt()
     passes := try args[4].ParseInt()
-    if not (kind == "vec" or kind == "array" or kind == "list") { error Usage.KIND }
+    if not (kind == "vec" or kind == "array" or kind == "list") { error Usage.Kind }
     a := values(n)
     v := Vec<I64>()
     l := list.List<I64>()
@@ -196,7 +196,7 @@ fn main() ? {
             for i in range n { total += a[i] * (i % 7) }
         }
     } else {
-        error Usage.MODE
+        error Usage.Mode
     }
     try io.Print($total "\n")
 }

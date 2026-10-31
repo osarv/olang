@@ -377,8 +377,8 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.put("(")
             w.params(s.Params)
             w.put(")")
-            w.errors(s.Errs!)
             w.contract(s.Errs!)
+            w.errors(s.Errs!)
             w.put(" ")
             w.block(s.Body)
             if s.DtorSp.End > 0 {

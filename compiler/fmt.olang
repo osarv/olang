@@ -628,7 +628,7 @@ fn (f formatter&) write() String {
 # ---- files ----
 
 # a file that does not scan or parse, so it has no layout: its diagnostics are said
-type Unparsable error { SYNTAX }
+type Unparsable error { Syntax }
 
 # the file src in the layout - or, where it does not scan or parse, nothing, its diagnostics rendered into said (in
 # colour where color says)
@@ -646,7 +646,7 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
     decls := p.File()
     if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 {
         said.Push(d.Render())
-        error Unparsable.SYNTAX
+        error Unparsable.Syntax
     }
     held := unparse.HeldBranches(decls, names, src.Text, d)
     return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held, p.TypeGroups)

@@ -576,12 +576,13 @@ fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
                     }
                     case mir.Rvalue.Prim(op, ty, args) {
                         if not m.number(ty) or m.width(ty) != w or not flatOp(op) { return }
-                        if not m.flatOperand(f, f.Ops[I64(args.At)], c, o + 3, o + 7) { return }
+                        try m.flatOperand(f, f.Ops[I64(args.At)], c, o + 3, o + 7) catch { return }
                         if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not {
                             if args.N != 1 { return }
                             c.Fast[o] = fUn
                         } else {
-                            if args.N != 2 or not m.flatOperand(f, f.Ops[I64(args.At) + 1], c, o + 5, o + 8) { return }
+                            if args.N != 2 { return }
+                            try m.flatOperand(f, f.Ops[I64(args.At) + 1], c, o + 5, o + 8) catch { return }
                             c.Fast[o] = fBin
                             if m.i64(types.TypeId(I32(c.Fast[o + 7]))) and m.i64(types.TypeId(I32(c.Fast[o + 8]))) and wordOp(op) {
                                 c.Fast[o + 10] = 1
@@ -604,7 +605,7 @@ fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
                             case mir.Rvalue.Use(x) {
                                 match x {
                                     case mir.Operand.Const(_, _), mir.Operand.Copy(_) {
-                                        if not m.flatOperand(f, x, c, o + 3, o + 9) { return }
+                                        try m.flatOperand(f, x, c, o + 3, o + 9) catch { return }
                                         if m.width(types.TypeId(I32(c.Fast[o + 9]))) != w { return }
                                     }
                                     case _ { return }
@@ -625,22 +626,20 @@ fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
 }
 
 # an operand of a flat form: a local of a number (its id at slot), or a number constant (-1 at slot, its bits after);
-# its type at tslot. Whether it is one
-fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, tslot I64) Bool {
+# its type at tslot - failing with NotFlat where it is neither
+fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, tslot I64) ? NotFlat {
     match x {
         case mir.Operand.Const(ty, bits) {
-            if not m.number(ty) { return false }
+            if not m.number(ty) { error NotFlat }
             c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = -1, m.canonBits(ty, bits), I64(ty)
-            return true
         }
         case mir.Operand.Copy(q) {
-            if q.Path.N != 0 { return false }
+            if q.Path.N != 0 { error NotFlat }
             a := plainLocal(q)
-            if a < 0 or not m.number(f.Locals[a].Ty) { return false }
+            if a < 0 or not m.number(f.Locals[a].Ty) { error NotFlat }
             c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = a, m.width(f.Locals[a].Ty), I64(f.Locals[a].Ty)
-            return true
         }
-        case _ { return false }
+        case _ { error NotFlat }
     }
 }
 
@@ -2956,7 +2955,7 @@ fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.Typ
     return old
 }
 
-# whether op's true result over args does not fit ty (E15a's OVERFLOW)
+# whether op's true result over args does not fit ty (E15a's Overflow)
 fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
     x := m.arg(fi, args, 0)
     at := m.opType(fi, x)
@@ -3380,7 +3379,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
     m.putInt(dst, ty, lo, hi)
 }
 
-# whether op's true result over args does not fit ty (E15a's OVERFLOW), where a wide integer is among them
+# whether op's true result over args does not fit ty (E15a's Overflow), where a wide integer is among them
 fn (m mut Machine&) overflowsWide(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) Bool {
     x := m.arg(fi, args, 0)
     at := m.opType(fi, x)
@@ -3850,52 +3849,52 @@ fn (m mut Machine&) startGlobal(g I64) {
 
 # ---- calls ----
 
-fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, Bool, I64 {
-    # the function called (its index in fns, -1 for none), its environment, whether it is an extern and which
+fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, I64 {
+    # the function called (its index in fns, -1 for none), its environment, and the extern it is (-1 for none)
     match c {
         case mir.Callee.Fn(key, _) {
             i := try m.fnOf.Get(key) catch default -1
             if i < 0 { m.refuse(WhyNoBody) }
-            return i, NullPtr, false, 0
+            return i, NullPtr, -1
         }
-        case mir.Callee.Extern(e, _) { return -1, NullPtr, true, e }
+        case mir.Callee.Extern(e, _) { return -1, NullPtr, e }
         case mir.Callee.Value(x) {
             p := m.addr(fi, x, 3)
             code := m.rdPtr(p)
             env := m.rdPtr(Ptr(p.Id, p.Off + 8))
-            if m.halted { return -1, NullPtr, false, 0 }
+            if m.halted { return -1, NullPtr, -1 }
             if code.Id == 0 {
                 m.refuse(WhyNullCall)
-                return -1, NullPtr, false, 0
+                return -1, NullPtr, -1
             }
             a := m.allocOf(code.Id)
             if a.Kind != aCode {
                 m.refuse(WhyNotModelled)
-                return -1, NullPtr, false, 0
+                return -1, NullPtr, -1
             }
-            if a.Extern { return -1, env, true, a.Code }
+            if a.Extern { return -1, env, a.Code }
             i := try m.fnOf.Get(m.codeKeys[a.Code]) catch default -1
             if i < 0 { m.refuse(WhyNoBody) }
-            return i, env, false, 0
+            return i, env, -1
         }
         case mir.Callee.Dispatch(x, slot, _) {
             # T32b: the function the any's table holds for the slot
             p := m.addr(fi, x, 3)
             tab := m.rdPtr(Ptr(p.Id, p.Off + 8))
-            if m.halted { return -1, NullPtr, false, 0 }
+            if m.halted { return -1, NullPtr, -1 }
             if tab.Id == 0 {
                 m.refuse(WhyNullCall)
-                return -1, NullPtr, false, 0
+                return -1, NullPtr, -1
             }
             code := m.rdPtr(Ptr(tab.Id, tab.Off + 8 * (types.AnySlotBase + slot)))
-            if m.halted { return -1, NullPtr, false, 0 }
+            if m.halted { return -1, NullPtr, -1 }
             if code.Id == 0 or m.allocOf(code.Id).Kind != aCode {
                 m.refuse(WhyNotModelled)
-                return -1, NullPtr, false, 0
+                return -1, NullPtr, -1
             }
             i := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
             if i < 0 { m.refuse(WhyNoBody) }
-            return i, NullPtr, false, 0
+            return i, NullPtr, -1
         }
     }
 }
@@ -3911,7 +3910,8 @@ fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
 # result stored. The new frame's index, -1 for an extern's call done, -2 stopped
 fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range, ret I64, retArg I64) I64 {
     f := m.fnOfFrame(fi)
-    callee, env, isExtern, _ := m.callee(fi, c)
+    callee, env, ext := m.callee(fi, c)
+    isExtern := ext >= 0
     if m.halted { return -2 }
     vty := m.calleeType(fi, c)
     if isExtern { return -2 }
@@ -4140,7 +4140,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     rk := U8(0) if res == types.VoidT or res == types.NoreturnT else ffi.Code(ffi.Kind.U64) if foreignRes else ffi.Code(m.ffiKind(res))
     fixed := try m.variadic.Get(e) catch default -1
-    out := try ffi.Call(name, kinds, words, rk, fixed) catch ffi.Error.NOT_FOUND {
+    out := try ffi.Call(name, kinds, words, rk, fixed) catch ffi.Error.NotFound {
         m.refuse(WhyFfiFind)
         return false
     } catch {
@@ -4398,7 +4398,8 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             match c.Target {
                 case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
                 case mir.Callee.Value(_) {
-                    _, _, isExtern, e := m.callee(fi, c.Target)
+                    _, _, e := m.callee(fi, c.Target)
+                    isExtern := e >= 0
                     if m.halted { return }
                     if isExtern {
                         m.externCall(fi, c, e, m.calleeType(fi, c.Target))
@@ -4499,13 +4500,13 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
 }
 
 # a frame's block that ends in no call: the machine was asked for the call index of something else
-type NotACall error { TERM }
+type NotACall error { Term }
 
 fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? NotACall {
     t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
     match t {
         case mir.Term.Call(_, k) { return I64(k) }
-        case _ { error NotACall.TERM }
+        case _ { error NotACall.Term }
     }
 }
 
@@ -5329,20 +5330,20 @@ type Image struct() {
 }
 
 type NotBaked error {
-    REFUSED
+    Refused
 }
 
 # the image of global (module, name) once evaluated while compiling: a value that is plain data, and what it reaches,
 # the program's own storage made by its initializer. One reaching code (a function value), another global's storage
 # or storage the evaluator does not hold as data is set at startup instead
 fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) Image ? NotBaked {
-    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.REFUSED }
-    g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
+    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.Refused }
+    g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.Refused }
     img := Image()
     blobOf Map<I64, I64>
     work Vec<I64>
     root := m.globals[g].Store & slotMask
-    if m.al[root].Size == 0 { error NotBaked.REFUSED }
+    if m.al[root].Size == 0 { error NotBaked.Refused }
     blobOf.Put(root, 0)
     work.Push(root)
     k I64 = 0
@@ -5361,9 +5362,9 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
             id := m.prov[a.Base / 8 + w]
             if id == 0 { continue }
             ts := id & slotMask
-            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.REFUSED }
-            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.REFUSED }
-            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.REFUSED }
+            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.Refused }
+            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.Refused }
+            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.Refused }
             # an instance another global's initializer made is that global's: written once, with it, and named here
             # (K2b) - the caller resolves which global's image holds it
             if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g {

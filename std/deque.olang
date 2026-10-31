@@ -8,7 +8,7 @@
 
 # what a Deque's operations fail with: a Front, Back or Pop of an empty deque
 type Error error {
-    EMPTY
+    Empty
 }
 
 type Deque<T> struct() {
@@ -53,9 +53,9 @@ fn (d mut Deque<T>&) PushFront(x T) {
 }
 
 # the front element, taken off
-fn (d mut Deque<T>&) PopFront() T ? Error.EMPTY {
+fn (d mut Deque<T>&) PopFront() T ? Error.Empty {
     s := d.s
-    if s.n == 0 { error Error.EMPTY }
+    if s.n == 0 { error Error.Empty }
     x := s.buf[s.head]
     s.head = (s.head + 1) % s.buf.Len()
     s.n--
@@ -63,22 +63,22 @@ fn (d mut Deque<T>&) PopFront() T ? Error.EMPTY {
 }
 
 # the back element, taken off
-fn (d mut Deque<T>&) PopBack() T ? Error.EMPTY {
+fn (d mut Deque<T>&) PopBack() T ? Error.Empty {
     s := d.s
-    if s.n == 0 { error Error.EMPTY }
+    if s.n == 0 { error Error.Empty }
     s.n--
     return s.buf[(s.head + s.n) % s.buf.Len()]
 }
 
-fn (d Deque<T>&) Front() T ? Error.EMPTY {
+fn (d Deque<T>&) Front() T ? Error.Empty {
     s := d.s
-    if s.n == 0 { error Error.EMPTY }
+    if s.n == 0 { error Error.Empty }
     return s.buf[s.head]
 }
 
-fn (d Deque<T>&) Back() T ? Error.EMPTY {
+fn (d Deque<T>&) Back() T ? Error.Empty {
     s := d.s
-    if s.n == 0 { error Error.EMPTY }
+    if s.n == 0 { error Error.Empty }
     return s.buf[(s.head + s.n - 1) % s.buf.Len()]
 }
 
@@ -124,7 +124,7 @@ type Iter<T> struct(of Deque<T>&) {
 }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.i >= it.d.Len() { error Exhausted.END }
+    if it.i >= it.d.Len() { error Exhausted.End }
     it.i++
     return it.d.At(it.i - 1)
 }
@@ -166,9 +166,9 @@ test "a Deque is pushed and popped at both ends" {
     for x in d { sum += x }
     assert sum == -1 + 171
     d.Clear()
-    v := try d.PopFront() catch Error.EMPTY default 99
+    v := try d.PopFront() catch Error.Empty default 99
     assert v == 99
-    assert (try d.Back() catch Error.EMPTY default 7) == 7
+    assert (try d.Back() catch Error.Empty default 7) == 7
 }
 
 test "a Deque used as a ring wraps and grows in order" {

@@ -315,12 +315,12 @@ fn wideParseCase(n I64) String {
     a := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch default U128(n)
     b := try "-0x1_0000_0000_0000_0000".ParseAs<I128>(0) catch default I128(n)
     c := try "0xFFFFFFFFFFFFFFFF".ParseAs<I128>(0) catch default I128(n)
-    d := try "0x1FFFFFFFFFFFFFFFF".ParseAs<I65>(0) catch ParseError.OVERFLOW default I65(n) catch default I65(-1)
+    d := try "0x1FFFFFFFFFFFFFFFF".ParseAs<I65>(0) catch ParseError.Overflow default I65(n) catch default I65(-1)
     e := try "0x1FFFFFFFFFFFFFFFF".ParseAs<U65>(0) catch default U65(n)
-    f := try "0x100000000000000000000000000000000".ParseAs<U128>(0) catch ParseError.OVERFLOW default U128(n) catch default U128(1)
+    f := try "0x100000000000000000000000000000000".ParseAs<U128>(0) catch ParseError.Overflow default U128(n) catch default U128(1)
     g := try "-0x80000000000000000000000000000000".ParseAs<I128>(0) catch default I128(n)
-    h := try "0x80000000000000000000000000000000".ParseAs<I128>(0) catch ParseError.OVERFLOW default I128(n) catch default I128(1)
-    k := try "-0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch ParseError.INVALID default U128(n) catch default U128(1)
+    h := try "0x80000000000000000000000000000000".ParseAs<I128>(0) catch ParseError.Overflow default I128(n) catch default I128(1)
+    k := try "-0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) catch ParseError.Invalid default U128(n) catch default U128(1)
     return $a " " $b " " $c " " $d " " $e " " $f " " $g " " $h " " $k
 }
 

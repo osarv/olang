@@ -125,8 +125,7 @@ fn run(args Array<String&>&) {
             }
             gaps := lw.Gaps.Len()
             wantDump := mirAt.Len() > 0 and (try where.Find(mirAt) catch default -1) >= 0
-            gapped, problems, dump := lw.Verified(b, wantDump)
-            if gapped {
+            problems, dump := try lw.Verified(b, wantDump) catch {
                 if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("an unknown type") {
                     n.unchecked++
                 } else {
@@ -155,8 +154,7 @@ fn run(args Array<String&>&) {
             w++
             n.made++
             name := $key
-            gapped, problems, dump := lw.VerifiedKey(key, mirAt.Len() > 0 and (try name.Find(mirAt) catch default -1) >= 0)
-            if gapped {
+            problems, dump := try lw.VerifiedKey(key, mirAt.Len() > 0 and (try name.Find(mirAt) catch default -1) >= 0) catch {
                 n.madeGapped++
                 continue
             }

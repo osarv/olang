@@ -1,4 +1,4 @@
-# check: fail error[R9]: io.Error can escape here
+# check: fail error[R1d]: io.Error can escape here
 # never: error[R9]: Error can escape
 # R9, B11: another module's error is named as code here writes it - by the alias it is imported by
 import "std/io"

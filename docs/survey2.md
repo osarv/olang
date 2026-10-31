@@ -482,7 +482,7 @@ For the announcement's "if you know ..." notes. The olang column is what to writ
 | `context.Context` cancellation | `std/cancel` tokens; cancelling siblings on a failure is `errdefer tok.Cancel()` in each task |
 | `go test -race` | `olang test -race` (ThreadSanitizer) |
 | interfaces, implicit satisfaction | traits (as constraints) and `any Trait&` (run-time values) |
-| `errors.Is` / `errors.AsType` (1.26) | `catch os.Error.NOT_FOUND { }`, `catch os.Error e { if e == ... }` |
+| `errors.Is` / `errors.AsType` (1.26) | `catch os.Error.NotFound { }`, `catch os.Error e { if e == ... }` |
 | range-over-func (1.23), `iter.Seq` | generators and `Iterator<T>` |
 | `for i := range 10` | `for i in range 10` |
 | per-iteration loop variables (1.22) | lambdas copy their captures, so each iteration's value is captured |

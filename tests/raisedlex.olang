@@ -1,0 +1,27 @@
+# errors raised by name (R3b), seen from another module: tests/raised.olang imports this one
+
+# the position of k in xs - failing with NotFound, an error of this module declared by raising it
+fn Find(xs Array<I64>&, k I64) I64 ? {
+    for i, x in xs {
+        if x == k: return i
+    }
+    error NotFound
+}
+
+# a private error raised by name: no module but this one can name it, and a caller outside takes it with a bare catch
+fn Hidden(k I64) I64 ? {
+    if k < 0 { error negative }
+    return k
+}
+
+# a named set listing errors raised by name (T19a)
+type LookupError error NotFound, Ambiguous
+
+fn Pick(xs Array<I64>&, k I64) I64 ? LookupError {
+    n := 0
+    for x in xs {
+        if x == k: n++
+    }
+    if n > 1 { error Ambiguous }
+    return try Find(xs, k)
+}

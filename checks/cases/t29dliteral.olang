@@ -1,10 +1,10 @@
 # check: fail error[T29d]: this literal enters Checked through its constructor, which does not run on it while compiling: it fails with an error no clause handles
 # T29d: a literal enters a type with a constructor through it, run while compiling - one it rejects is an error there
 type RangeError error {
-    NEGATIVE
+    Negative
 }
 type Checked I32(v I32) ? RangeError {
-    if v < 0 { error RangeError.NEGATIVE }
+    if v < 0 { error RangeError.Negative }
 }
 fn main() ? {
     c Checked = -5

@@ -4,8 +4,8 @@
 # S18c: an assert after statements that cannot leave - a loop, an if whose branch does not leave, a clause that takes
 # the error and goes on - is reached on every run and decided; one in a branch is passed by on some run, a run-time check
 import "std/os"
-type Bad error { NO }
-fn fails() ? Bad { error Bad.NO }
+type Bad error { No }
+fn fails() ? Bad { error Bad.No }
 fn main() {
     n I64 = 0
     for a in os.Args() { n += a.Len() }

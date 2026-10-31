@@ -118,6 +118,19 @@ type Resolver struct(L mut load.Loader&) {
     aliasUsed Map<I64, Bool>
     skippedTop Vec<pair.Pair<I64, source.Span>>
     pendingTop Map<I64, Bool>
+    # R3b: a module's bodies walked once before they are resolved, for the errors it raises by name - each "error X"
+    # whose X names nothing there, and whether the function raising it names it after its "?"
+    survey Bool = false
+    raises Vec<raised>
+    sigNames Vec<source.NameId>
+    sigMarks Vec<I64>
+}
+
+# R3b: "error X" met by the survey, X naming nothing - where, and whether its function's signature names X
+type raised struct(Name source.NameId, Sp source.Span, Named Bool) {
+    Name
+    Sp
+    Named
 }
 
 # ---- the program ----
@@ -142,6 +155,7 @@ fn (r mut Resolver&) Resolve() {
     for mi in range r.L.Mods.Len() {
         if not r.L.Mods[mi].Prelude { r.tableOf(mi) }
     }
+    for mi in range r.L.Mods.Len() { r.raisedErrors(mi, r.L.Mods[mi].Decls) }
     for mi in range r.L.Mods.Len() {
         m := r.L.Mods[mi]
         if m.Decls.Len() > 0 { r.bodies(mi, m.Decls) }
@@ -197,16 +211,156 @@ fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
             case ast.Decl.If(_, ti) {
                 if ti.Cond!.Span().Start == condStart {
                     r.collectIf(mi, ti, chosen, 0)
+                    r.raisedIf(mi, ti, chosen, 0)
                     r.bodiesIf(mi, ti, chosen, 0)
                 }
             }
             case _ { }
         }
     }
+    for k in range before, r.L.Mods.Len() { r.raisedErrors(k, r.L.Mods[k].Decls) }
     for k in range before, r.L.Mods.Len() {
         if r.L.Mods[k].Decls.Len() > 0 { r.bodies(k, r.L.Mods[k].Decls) }
     }
 }
+
+# ---- errors raised by name (R3b) ----
+
+# the errors module mi raises by name that nothing declares - every "error X" in decls whose X names no local there,
+# nothing of the module, its imports, the build or the prelude - each declared as an error of the module (a type of one
+# value), and a name one edit from another error of the module said
+fn (r mut Resolver&) raisedErrors(mi I64, decls Array<ast.Decl&>&) {
+    m := r.L.Mods[mi]
+    if m.Prelude or m.C or decls.Len() == 0 { return }
+    r.surveyBodies(mi, decls)
+    if r.raises.Len() == 0 { return }
+    firsts := r.firstRaises()
+    r.declareRaised(mi, firsts)
+    for f in firsts { r.nearRaise(mi, f, firsts) }
+    r.raises.Clear()
+}
+
+# the chosen branch of a pending top-level if, decided now (B9c)
+fn (r mut Resolver&) raisedIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    if chosen == index and ti.Then!.Decls.Len() > 0 { r.raisedErrors(mi, ti.Then!.Decls) }
+    if ti.ElseIf is not null { r.raisedIf(mi, ti.ElseIf!, chosen, index + 1) }
+    if ti.Else is not null and chosen == index + 1 { r.raisedErrors(mi, ti.Else!.Decls) }
+}
+
+# decls' bodies walked with nothing reported or recorded, the raises collected
+fn (r mut Resolver&) surveyBodies(mi I64, decls Array<ast.Decl&>&) {
+    unreads := r.Unreads.Len()
+    said := r.unknownSaid.Len()
+    tops := r.skippedTop.Len()
+    r.survey = true
+    r.L.Diags.Quiet = true
+    r.bodies(mi, decls)
+    r.L.Diags.Quiet = false
+    r.survey = false
+    r.Unreads.Truncate(unreads)
+    r.unknownSaid.Truncate(said)
+    r.skippedTop.Truncate(tops)
+}
+
+# "error X" during the survey: X naming nothing here is a candidate
+fn (r mut Resolver&) surveyRaise(word ast.Path?&) {
+    if word is null or word.Parts.Len() != 1 { return }
+    n := word.Parts[0]
+    if r.lookup(n).Kind != What.None or n in r.Tables[r.mi].waiting or r.text(n) == "_" { return }
+    named := false
+    from := r.sigMarks[r.sigMarks.Len() - 1] if r.sigMarks.Len() > 0 else r.sigNames.Len()
+    for i in range from, r.sigNames.Len() {
+        if r.sigNames[i] == n { named = true }
+    }
+    r.raises.Push(raised(n, word.Sp, named))
+}
+
+# the signature of the function whose body is walked: the one-part names after its "?"
+fn (r mut Resolver&) pushSig(s ast.Sig&) {
+    if not r.survey { return }
+    r.sigMarks.Push(r.sigNames.Len())
+    for e in s.Errors {
+        if e.Parts.Len() == 1: r.sigNames.Push(e.Parts[0])
+    }
+}
+
+fn (r mut Resolver&) popSig() {
+    if not r.survey or r.sigMarks.Len() == 0 { return }
+    m := try r.sigMarks.Pop() catch { return }
+    r.sigNames.Truncate(m)
+}
+
+# each name raised, once: its first raise, its count of raises, and whether any function raising it names it
+fn (r mut Resolver&) firstRaises() Vec<raisedName> {
+    out Vec<raisedName>
+    for i in range r.raises.Len() {
+        x := r.raises[i]
+        k := indexOfRaised(out, x.Name)
+        if k < 0 {
+            out.Push(raisedName(x.Name, x.Sp, 1, x.Named, out.Len()))
+            continue
+        }
+        y := out[k]
+        out[k] = raisedName(y.Name, y.Sp, y.Count + 1, y.Named or x.Named, y.Order)
+    }
+    return out
+}
+
+fn indexOfRaised(xs Vec<raisedName>&, n source.NameId) I64 {
+    for i in range xs.Len() {
+        if xs[i].Name == n { return i }
+    }
+    return -1
+}
+
+# one name raised: its first raise, how often, whether a signature names it, and its place among the names
+type raisedName struct(Name source.NameId, Sp source.Span, Count I64, Named Bool, Order I64) {
+    Name
+    Sp
+    Count
+    Named
+    Order
+}
+
+# each name entered as a type of module mi, and its declaration added to the module's: an error type of one word, the
+# name itself (generic.IsRaisedError)
+fn (r mut Resolver&) declareRaised(mi I64, firsts Vec<raisedName>&) {
+    ds mut Vec<ast.Decl&>&r = Vec<ast.Decl&>()
+    for d in r.L.Mods[mi].Decls { ds.Push(d) }
+    for f in firsts {
+        r.addType(mi, f.Name, f.Sp, null)
+        r.L.Mods[mi].Types.Push($r.text(f.Name))
+        ds.Push(ast.Decl.Errors(f.Sp, f.Name, Array<source.NameId>(1, f.Name), Array<ast.Path&>(0)))
+    }
+    r.L.Mods[mi].Decls = ds.ToArray()
+}
+
+# R3b: a name raised that is one edit from another error of the module - a declared one, or one raised more often (or
+# as often and first) - is taken for a misspelling of it, unless a function raising it names it after its "?"
+fn (r mut Resolver&) nearRaise(mi I64, f raisedName, firsts Vec<raisedName>&) {
+    if f.Named { return }
+    word := r.text(f.Name)
+    best := ""
+    far I64 = 2
+    t := r.Tables[mi]
+    for e in t.Entries {
+        if e.Kind != What.Type or e.Decl is not null or e.Name == f.Name { continue }
+        k := indexOfRaised(firsts, e.Name)
+        if k >= 0 and not outranks(firsts[k], f) { continue }
+        d := msgs.Distance(word, r.text(e.Name))
+        if d < far and msgs.Near(word, d) {
+            best = $r.text(e.Name)
+            far = d
+        }
+    }
+    if best.Len() == 0 { return }
+    for x in r.raises {
+        if x.Name == f.Name: r.L.Diags.Error(r.at(mi, x.Sp), msgs.RaiseNearError(r.tok(f.Name), msgs.Tok(best)))
+    }
+}
+
+# whether name a, raised, is the one name b is taken to misspell: raised more often, or as often and first
+fn outranks(a raisedName, b raisedName) Bool { return a.Count > b.Count or a.Count == b.Count and a.Order < b.Order }
 
 # what the name written at that offset of that file is; None where it was not resolved
 fn (r Resolver&) Use(file I64, at I32) Ref {
@@ -457,7 +611,7 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if ty >= 0 { return Ref(What.Type, r.mi, ty) }
     a := try t.aliases.Get(n) catch default -1
     if a >= 0 {
-        r.aliasUsed.Put(key(r.mi, I32(n)), true)   # M5a
+        if not r.survey: r.aliasUsed.Put(key(r.mi, I32(n)), true)   # M5a
         return Ref(What.Import, a, -1)
     }
     name := r.text(n)
@@ -493,7 +647,7 @@ fn (r mut Resolver&) memberOf(mi I64, n source.NameId) Ref {
 }
 
 fn (r mut Resolver&) record(sp source.Span, ref Ref) {
-    if ref.Kind != What.None { r.uses.Put(key(r.L.Mods[r.mi].File, sp.Start), ref) }
+    if ref.Kind != What.None and not r.survey { r.uses.Put(key(r.L.Mods[r.mi].File, sp.Start), ref) }
 }
 
 # ---- parameters and locals ----
@@ -682,7 +836,9 @@ fn (r mut Resolver&) func(f ast.Func&) {
     m := r.mark()
     r.sig(f, true)
     r.contract(f.S)
+    r.pushSig(f.S)
     if f.Body.Len() > 0 { r.block(f.Body) }
+    r.popSig()
     r.popTo(m)
 }
 
@@ -953,7 +1109,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             if msg is not null { r.expr(msg) }
         }
         case ast.Stmt.Raise(_, word) {
-            if word is not null { r.path(word) }
+            if r.survey: r.surveyRaise(word) else: r.path(word)
         }
         case ast.Stmt.Spawn(_, targets, call) {
             for t in targets { r.target(t) }
@@ -1015,6 +1171,10 @@ fn (r mut Resolver&) forName(from I32, id source.NameId) {
 
 # a local if: its condition's names, B10's unknown ones, and S8b - a condition the build decides chooses its branch
 fn (r mut Resolver&) ifStmt(i ast.If&) {
+    if r.survey {
+        r.surveyIf(i)
+        return
+    }
     if i.Cond is null {
         r.branch(i.Then!)
         return
@@ -1022,7 +1182,8 @@ fn (r mut Resolver&) ifStmt(i ast.If&) {
     r.inCond = true
     r.expr(i.Cond)
     r.inCond = false
-    outcome, value := r.decideLocal(i.Cond!)
+    d := r.decideLocal(i.Cond!)
+    outcome, value := d.Of, d.Holds
     if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond!.Span().Start)), true) }
     decided := outcome == cond.Outcome.Decided
     runtime := outcome != cond.Outcome.Deferred
@@ -1040,6 +1201,17 @@ fn (r mut Resolver&) ifStmt(i ast.If&) {
                 r.ifStmt(e)
             }
         }
+        case _ { r.stmt(i.Else) }
+    }
+}
+
+# R3b: the survey walks every branch, deciding nothing
+fn (r mut Resolver&) surveyIf(i ast.If&) {
+    if i.Cond is not null: r.expr(i.Cond)
+    r.block(i.Then!.Body)
+    if i.Else is null { return }
+    match i.Else {
+        case ast.Stmt.If(_, e) { r.surveyIf(e) }
         case _ { r.stmt(i.Else) }
     }
 }
@@ -1077,7 +1249,7 @@ fn (r mut Resolver&) branch(b ast.Branch&) {
 }
 
 # S8b: what the build decides of a local condition - Decided where it reads a build constant and no local
-fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
+fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Decision {
     m := r.L.Mods[r.mi]
     r.L.CondParser(m)
     m.Scope!.Locals.Clear()
@@ -1235,7 +1407,9 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.lambdaParams = true
             r.sig(f, true)
             r.lambdaParams = false
+            r.pushSig(f.S)
             if f.Body.Len() > 0 { r.block(f.Body) }
+            r.popSig()
             r.popTo(m)
             r.inCond = wasCond
         }

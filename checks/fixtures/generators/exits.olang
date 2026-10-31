@@ -12,7 +12,7 @@ type Res struct(id I64) {
 }
 
 type Stop error {
-    HALT
+    Halt
 }
 
 fn held(id I64, n I64) Iterator<I64> {
@@ -44,7 +44,7 @@ fn find(n I64, k I64) I64 {
 fn fails(n I64) I64 ? Stop {
     t I64 = 0
     for x in held(20, n) {
-        if x == 2 { error Stop.HALT }
+        if x == 2 { error Stop.Halt }
         t += x
     }
     return t

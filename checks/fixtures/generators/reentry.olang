@@ -3,7 +3,7 @@ import "std/io"
 # S20: a generator asked for its next value from inside its own walk - its body calling the Next it is walked by -
 # fails a guaranteed check, built and interpreted alike (the bulk review's F5: it was undefined)
 type Cell struct() {
-    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.END })
+    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.End })
 }
 
 fn gen(c mut Cell&) Iterator<I64> {

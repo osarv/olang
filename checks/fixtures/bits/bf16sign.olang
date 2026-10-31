@@ -3,15 +3,15 @@
 # (fuzz/repro/bf16signbit.ll). Built -b and -d; the globals are mutable so nothing is decided while compiling
 A mut Array<BF16>& = BF16[1.0, -2.0]
 Pick mut Bool = false
-fn stored(a Array<BF16>&, b mut Array<BF16>&) Bool {
+fn stored(a Array<BF16>&, b mut Array<BF16>&) U16 {
     x := a[1]
     b[0] = x
-    return x.Bits() >> 15 == 1
+    return x.Bits() >> 15
 }
 fn main() ? {
     b := Array<BF16>(2)
     chosen := A[0] if Pick else A[1]
     assert A[1].SignBit() and not A[0].SignBit() and (A[1].Bits() & 0x8000) != 0
     assert F32(A[1]).Bits() >> 31 == 1 and F64(A[1]).Bits() >> 63 == 1
-    assert stored(A, b) and chosen.Bits() >> 15 == 1 and (-A[1]).Bits() >> 15 == 0
+    assert stored(A, b) == 1 and chosen.Bits() >> 15 == 1 and (-A[1]).Bits() >> 15 == 0
 }

@@ -431,7 +431,7 @@ test "$ renders a Map's entries, not its buckets" {
     assert $m == expect.ToString()
 }
 
-# Take is Get and Remove in one (M19d): it gives the value and removes the key, failing with MISSING on a miss, and the
+# Take is Get and Remove in one (M19d): it gives the value and removes the key, failing with Missing on a miss, and the
 # slot it empties is reused by the next key put - so a map whose keys come and go through Take stays its size. Text
 # values given by it are the very values put, read after the slot was reused
 fn mapTakes() I64 {

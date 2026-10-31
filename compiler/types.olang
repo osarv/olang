@@ -237,23 +237,20 @@ fn primIndex(bits I64, unsigned Bool) I64 {
     return 3 + k + (4 if unsigned else 0)
 }
 
-# T4a: the width an integer type's name gives - "I24" 24 signed, "U7" 7 unsigned - or 0 where it names none: a width of
-# 1 to 128 written with no leading zero
-fn IntWidth(name String&) I64, Bool {
-    if name.Len() < 2 or name.Len() > 4 or (name[0] != 'I' and name[0] != 'U') or name[1] == '0' { return 0, false }
+# T4a: the width an integer type's name gives - "I24" 24 (signed, its "I"), "U7" 7 (unsigned, its "U") - or 0 where it
+# names none: a width of 1 to 128 written with no leading zero
+fn IntWidth(name String&) I64 {
+    if name.Len() < 2 or name.Len() > 4 or (name[0] != 'I' and name[0] != 'U') or name[1] == '0' { return 0 }
     n I64 = 0
     for i in range 1, name.Len() {
-        if not name[i].IsDigit() { return 0, false }
+        if not name[i].IsDigit() { return 0 }
         n = n * 10 + I64(name[i]) - I64('0')
     }
-    if n < 1 or n > 128 { return 0, false }
-    return n, name[0] == 'U'
+    if n < 1 or n > 128 { return 0 }
+    return n
 }
 
-fn IsIntName(name String&) Bool {
-    bits, _ := IntWidth(name)
-    return bits > 0
-}
+fn IsIntName(name String&) Bool { return IntWidth(name) > 0 }
 
 # the integer type of a width (1 to 128), signed or not (T4a)
 fn (t Table&) IntType(bits I64, unsigned Bool) TypeId { return t.ints[bits + (128 if unsigned else 0)] }
@@ -279,8 +276,8 @@ fn (t Table&) Prim(name String&) TypeId {
     for i in range 1, 15 {
         if primNames[i] == name { return TypeId(I32(i)) }
     }
-    bits, unsigned := IntWidth(name)
-    if bits > 0 { return t.IntType(bits, unsigned) }
+    bits := IntWidth(name)
+    if bits > 0 { return t.IntType(bits, name[0] == 'U') }
     return UnknownT
 }
 
@@ -900,6 +897,38 @@ fn (t Table&) fieldList(id TypeId) ListId {
         case Kind.Tuple, Kind.Record: t.Parts(id)
         case _: ListId(0)
     }
+}
+
+# a walk asking whether a value of a type may hold an instance whose destructor is to run (C11, O16) - through
+# references, elements, fields and cases - or a value of a type not known here: an any's instance, a type variable's.
+# Each type is asked once a walk
+type DtorWalk struct(T Table&) {
+    T
+    seen Map<TypeId, Bool>
+}
+
+fn (w mut DtorWalk&) Holds(ty TypeId) Bool {
+    t := w.T
+    r := t.Repr(ty)
+    if w.seen.Has(r) { return try w.seen.Get(r) catch default false }
+    w.seen.Put(r, false)
+    out := match t.KindOf(r) {
+        case Kind.Ref: w.Holds(t.Referent(r))
+        case Kind.Any, Kind.Var: true
+        case Kind.Array: w.Holds(t.Elem(r))
+        case Kind.Tuple, Kind.Record: w.some(t.Items(t.Parts(r)))
+        case Kind.Named: not t.HasBody(r) or t.Destructs(r) or w.some(t.Items(t.Fields(r))) or w.some(t.Items(t.Cases(r)))
+        case _: false
+    }
+    w.seen.Put(r, out)
+    return out
+}
+
+fn (w mut DtorWalk&) some(ts Array<TypeId>&) Bool {
+    for p in ts {
+        if p != TypeId(0) and w.Holds(p) { return true }
+    }
+    return false
 }
 
 # what a type's value is: the representation its layout follows, past any declared type over another (T29)

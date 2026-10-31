@@ -85,43 +85,43 @@ fn paramNameBefore(src String&, i I64, known Map<String&, Bool>&) Bool {
 
 # what occurrenceAt fails with: no type variable is written there
 type notVariable error {
-    HERE
+    Here
 }
 
-# the type variable written with its "<" at i, else notVariable.HERE. names: the variables of the item when known (then
+# the type variable written with its "<" at i, else notVariable.Here. names: the variables of the item when known (then
 # only those are taken) - hasNames says whether it is. A "<" right after a name is one only after a parameter's name
 # ("a<T>"), never after a type's ("Box<T>" is type arguments) and never for a name a type has
 fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&
                 known Map<String&, Bool>&) Occ ? {
-    if src[i] != '<' or mask[i] != 'c' or i + 1 >= hi or not srcmask.IsIdStart(src[i + 1]) { error notVariable.HERE }
+    if src[i] != '<' or mask[i] != 'c' or i + 1 >= hi or not srcmask.IsIdStart(src[i + 1]) { error notVariable.Here }
     prev := ' '
     if i > 0 { prev = src[i - 1] }
-    if prev == ')' or prev == ']' or prev.IsDigit() { error notVariable.HERE }
+    if prev == ')' or prev == ']' or prev.IsDigit() { error notVariable.Here }
     j := identEnd(src, i + 1)
     name := src[i + 1:j]
-    if name in Keywords or (hasNames and not names.Has(name)) { error notVariable.HERE }
-    if srcmask.IsWord(prev) and (known.Has(name) or not paramNameBefore(src, i, known)) { error notVariable.HERE }
+    if name in Keywords or (hasNames and not names.Has(name)) { error notVariable.Here }
+    if srcmask.IsWord(prev) and (known.Has(name) or not paramNameBefore(src, i, known)) { error notVariable.Here }
     if j < hi and src[j] == '>' { return Occ(i, j + 1, i + 1, j, NoC, NoC) }
-    if j >= hi or src[j] != ' ' { error notVariable.HERE }
+    if j >= hi or src[j] != ' ' { error notVariable.Here }
     # a constraint, or a constant variable's type: up to the ">" closing this "<", on this line
     depth I64 = 1
     k := j
     for k < hi and src[k] != '\n' {
         ch := src[k]
-        if mask[k] != 'c' or not constraintChar(ch) { error notVariable.HERE }
+        if mask[k] != 'c' or not constraintChar(ch) { error notVariable.Here }
         if ch == '<' {
             depth++
         } else if ch == '>' {
             depth--
             if depth == 0 {
                 cs := j + 1
-                if srcmask.Strip(src[cs:k]).Len() == 0 or notAConstraint(src[cs:k]) { error notVariable.HERE }
+                if srcmask.Strip(src[cs:k]).Len() == 0 or notAConstraint(src[cs:k]) { error notVariable.Here }
                 return Occ(i, k + 1, i + 1, j, cs, k)
             }
         }
         k++
     }
-    error notVariable.HERE
+    error notVariable.Here
 }
 
 # every type variable written between lo and hi, in order

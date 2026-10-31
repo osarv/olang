@@ -1,0 +1,7 @@
+# check: fail error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+# R23: in a function type too
+fn apply(f (fn(x I64) I64, Bool), x I64) I64 {
+    v, _ := f(x)
+    return v
+}
+fn main() { }

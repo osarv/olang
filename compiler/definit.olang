@@ -68,11 +68,18 @@ type Walker struct(B typed.Body&, L typed.LocalId) {
 
 # the judgment for local l of body b: whether a path reads it before assigning it (a constructor's field read again at
 # the body's end, where its instance is assembled); where; and why that path has not assigned it, and where
-fn Judge(b typed.Body&, l typed.LocalId, field Bool) Bool, source.Span, Cause, source.Span {
+fn Judge(b typed.Body&, l typed.LocalId, field Bool) Verdict {
     w := Walker(b, l)
     s := w.Run()
     if field and s.On and not s.Set { w.read(s, b.Sp) }
-    return w.Found, w.ReadAt, w.Why, w.WhyAt
+    return Verdict(w.Found, w.ReadAt, w.Why, w.WhyAt)
+}
+
+type Verdict struct(Found Bool, ReadAt source.Span, Why Cause, WhyAt source.Span) {
+    Found
+    ReadAt
+    Why
+    WhyAt
 }
 
 # the first read on a path that has not assigned the local: Found, where (ReadAt) and why

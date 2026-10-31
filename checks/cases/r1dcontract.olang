@@ -1,0 +1,4 @@
+# check: fail error[R1d, D17]: pick has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'
+# R1d, D17b: a function with conditions fails where one is false, so it writes '?'
+fn pick(x I64, y I64) [y > x] I64 { return y - x }
+fn main() { assert pick(1, 2) == 1 }

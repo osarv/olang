@@ -5,8 +5,8 @@
 type K struct(n I32) { n }
 fn (k K) Str() String { return "a" }
 fn (k K) str() String { return "b" }
-fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.END }
-fn (k mut K&) next() I32 ? Exhausted { error Exhausted.END }
+fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.End }
+fn (k mut K&) next() I32 ? Exhausted { error Exhausted.End }
 fn (k K) Hash() I64 { return 1 }
 fn (k K) hash() I64 { return 2 }
 fn main() ? { }

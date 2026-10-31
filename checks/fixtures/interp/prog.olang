@@ -31,10 +31,10 @@ fn fold(e Expr&) Expr&e {
 }
 
 type Oops error {
-    BAD
+    Bad
 }
 fn risky(n I32) I32 ? Oops {
-    if n > 2 { error Oops.BAD }
+    if n > 2 { error Oops.Bad }
     return n * 10
 }
 

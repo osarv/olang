@@ -4,9 +4,9 @@
 
 import "std/os"
 
-type Bad error { NO }
+type Bad error { No }
 
-fn fails() ? Bad { error Bad.NO }
+fn fails() ? Bad { error Bad.No }
 
 fn twice(n I64) I64 { return n * 2 }
 
@@ -38,7 +38,7 @@ fn afterContinue(n I64) I64 {
 }
 
 fn afterRaise() ? Bad {
-    try fails() catch Bad { error Bad.NO }
+    try fails() catch Bad { error Bad.No }
     assert false, "after a clause that raises"
 }
 
@@ -63,8 +63,8 @@ test "a false assert after a clause that returns is not reached" {
 
 test "a false assert after what leaves a function is not reached" {
     assert afterReturn() == 1 and afterBreak(3) == 1 and afterContinue(3) == 3
-    try afterRaise() catch Bad.NO { }
-    try afterPassedOn() catch Bad.NO { }
+    try afterRaise() catch Bad.No { }
+    try afterPassedOn() catch Bad.No { }
     assert inBranch() == 7
 }
 

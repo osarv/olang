@@ -8,7 +8,7 @@
 
 # what a Heap's operations fail with: a Peek or Pop of an empty heap
 type Error error {
-    EMPTY
+    Empty
 }
 
 type Heap<T> struct(less fn(a T, b T) Bool) {
@@ -38,16 +38,16 @@ fn (h mut Heap<T>&) Push(x T) {
 }
 
 # the top element - the least by the order - left in the heap
-fn (h Heap<T>&) Peek() T ? Error.EMPTY {
-    if h.s.items.Len() == 0 { error Error.EMPTY }
+fn (h Heap<T>&) Peek() T ? Error.Empty {
+    if h.s.items.Len() == 0 { error Error.Empty }
     return h.s.items[0]
 }
 
 # the top element, taken off
-fn (h mut Heap<T>&) Pop() T ? Error.EMPTY {
+fn (h mut Heap<T>&) Pop() T ? Error.Empty {
     s := h.s
     v := s.items
-    if v.Len() == 0 { error Error.EMPTY }
+    if v.Len() == 0 { error Error.Empty }
     top := v[0]
     last := try v.Pop() catch VecError { unreachable }
     n := v.Len()
@@ -83,7 +83,7 @@ test "a Heap gives its elements least first" {
     assert h.Len() == 8 and h.Peek()! == 1
     assert h.Drain() == I64[1, 2, 3, 3, 5, 7, 8, 9]
     assert h.Len() == 0
-    assert (try h.Pop() catch Error.EMPTY default -1) == -1
+    assert (try h.Pop() catch Error.Empty default -1) == -1
 }
 
 type job struct(prio I64, name String&) {

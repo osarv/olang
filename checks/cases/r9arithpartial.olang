@@ -1,8 +1,8 @@
-# check: fail error[R9]: arith.Error.OVERFLOW can escape here, and this function does not declare it
-# R9: a checked division (std/arith) fails with DIVIDE_BY_ZERO and OVERFLOW, so catching one word is not complete
+# check: fail error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?'
+# R9: a checked division (std/arith) fails with DivideByZero and Overflow, so catching one word is not complete
 import "std/arith"
 fn div(a I32, b I32) I32 {
-    r I32 = try arith.Div(a, b) catch arith.Error.DIVIDE_BY_ZERO default 0
+    r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
     return r
 }
 fn main() { }

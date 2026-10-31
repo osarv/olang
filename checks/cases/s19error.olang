@@ -1,11 +1,11 @@
 # check: fail an error may not leave deferred code
 # S19b: nor may an error statement raise one from it
 type E error {
-    BAD
+    Bad
 }
 fn f(n I32) I32 ? E {
     defer {
-        if n > 1 { error E.BAD }
+        if n > 1 { error E.Bad }
     }
     return n
 }

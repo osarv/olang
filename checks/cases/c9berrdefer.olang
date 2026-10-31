@@ -2,7 +2,7 @@
 # C9b, S19e: an errdefer's Destroy() runs where an error leaves its block - here a join whose task failed, which the
 # clause takes - and the function goes on: so 'r' is not read after that block
 type Bad error {
-    NEG
+    Neg
 }
 type Res struct(id I64) {
     id
@@ -12,7 +12,7 @@ type Res struct(id I64) {
 Closed mut I64 = 0
 
 fn fails(n I64) ? Bad {
-    if n < 0 { error Bad.NEG }
+    if n < 0 { error Bad.Neg }
 }
 
 fn main() {

@@ -813,7 +813,7 @@ writes. `own` closed a connection's socket the moment the connection left its ma
 std's resource types (files, sockets, processes, channels) follow one pattern:
 - **`Close()` is idempotent.** The object records that it is closed (`fd = -1`); a second `Close` does nothing.
 - **The destructor is the backstop.** It closes only what is still open, when the object's scope closes.
-- **Use after `Close` fails with an error** (`io.Error.CLOSED`) instead of touching a descriptor number the system may
+- **Use after `Close` fails with an error** (`io.Error.Closed`) instead of touching a descriptor number the system may
   have handed to another file.
 
 **The consequence, stated plainly.** With the backstop, a closed socket's destructor is still pending until its scope

@@ -33,21 +33,19 @@ import "utf8"
 # to repeat or a count past 1000 or inverted, a class range written backwards, a group name repeated or not a name, a
 # flag that is not one, or a program too large (over 100,000 instructions once counted repetitions are written out)
 type SyntaxError error {
-    UNCLOSED_GROUP
-    UNMATCHED_PAREN
-    UNCLOSED_CLASS
-    BAD_ESCAPE
-    BAD_REPEAT
-    BAD_RANGE
-    BAD_NAME
-    BAD_FLAG
-    TOO_BIG
+    UnclosedGroup
+    UnmatchedParen
+    UnclosedClass
+    BadEscape
+    BadRepeat
+    BadRange
+    BadName
+    BadFlag
+    TooBig
 }
 
-# what Find fails with when the pattern matches nowhere, and Group when a group took part in no match
-type NotFound error {
-    NOT_FOUND
-}
+# Find fails with NotFound, an error raised by name (R3b), when the pattern matches nowhere, and Group when a group took
+# part in no match
 
 # ---- the program ----
 
@@ -225,7 +223,7 @@ fn hexValue(c Char) I64 {
 }
 
 # the code point an escape after '\' stands for - the escape's letter already taken as c
-fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BAD_ESCAPE {
+fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BadEscape {
     match c {
         case 'n' { return '\n' }
         case 't' { return '\t' }
@@ -242,12 +240,12 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BAD_ESCAPE {
                     v = v * 16 + hexValue(q.peek())
                     q.at++
                 }
-                if q.at == start or not q.more() or q.peek() != '}' or v > 0x10FFFF { error SyntaxError.BAD_ESCAPE }
+                if q.at == start or not q.more() or q.peek() != '}' or v > 0x10FFFF { error SyntaxError.BadEscape }
                 q.at++
                 return U32(v)
             }
             for _ in range 2 {
-                if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BAD_ESCAPE }
+                if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BadEscape }
                 v = v * 16 + hexValue(q.peek())
                 q.at++
             }
@@ -255,15 +253,15 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BAD_ESCAPE {
         }
         case _ {
             # any punctuation escapes itself; a letter or digit with no meaning is an error, as in RE2
-            if c.IsLetter() or c.IsDigit() or c >= 0x80 { error SyntaxError.BAD_ESCAPE }
+            if c.IsLetter() or c.IsDigit() or c >= 0x80 { error SyntaxError.BadEscape }
             return U32(c)
         }
     }
 }
 
 # the ranges of [:name:], at the parser just after "[:"
-fn (q mut parser&) posixClass() ? SyntaxError.UNCLOSED_CLASS, SyntaxError.BAD_RANGE {
-    end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UNCLOSED_CLASS }
+fn (q mut parser&) posixClass() ? SyntaxError.UnclosedClass, SyntaxError.BadRange {
+    end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UnclosedClass }
     name := q.t[q.at:q.at + end]
     q.at += end + 2
     match name {
@@ -306,7 +304,7 @@ fn (q mut parser&) posixClass() ? SyntaxError.UNCLOSED_CLASS, SyntaxError.BAD_RA
             q.addRange('A', 'F')
             q.addRange('a', 'f')
         }
-        case _ { error SyntaxError.BAD_RANGE }
+        case _ { error SyntaxError.BadRange }
     }
 }
 
@@ -320,7 +318,7 @@ fn (q mut parser&) class() I64 ? SyntaxError {
     from := q.p.ranges.Len()
     first := true
     for {
-        if not q.more() { error SyntaxError.UNCLOSED_CLASS }
+        if not q.more() { error SyntaxError.UnclosedClass }
         c := q.peek()
         if c == ']' and not first {
             q.at++
@@ -335,7 +333,7 @@ fn (q mut parser&) class() I64 ? SyntaxError {
         lo U32 = 0
         if c == '\\' {
             q.at++
-            if not q.more() { error SyntaxError.BAD_ESCAPE }
+            if not q.more() { error SyntaxError.BadEscape }
             e := q.peek()
             q.at++
             if q.perlClass(e) { continue }
@@ -352,14 +350,14 @@ fn (q mut parser&) class() I64 ? SyntaxError {
             q.at++
             if q.peek() == '\\' {
                 q.at++
-                if not q.more() { error SyntaxError.BAD_ESCAPE }
+                if not q.more() { error SyntaxError.BadEscape }
                 e := q.peek()
                 q.at++
                 hi = try q.escapedRune(e)
             } else {
                 hi = q.rune()
             }
-            if hi < lo { error SyntaxError.BAD_RANGE }
+            if hi < lo { error SyntaxError.BadRange }
         }
         q.addRange(lo, hi)
     }
@@ -405,10 +403,10 @@ fn (q mut parser&) atom() I64 ? SyntaxError {
         if c == '^' { n.a = atLineStart if q.multi else atTextStart } else { n.a = atLineEnd if q.multi else atTextEnd }
         return q.add(n)
     }
-    if c == '*' or c == '+' or c == '?' { error SyntaxError.BAD_REPEAT }
+    if c == '*' or c == '+' or c == '?' { error SyntaxError.BadRepeat }
     if c == '\\' {
         q.at++
-        if not q.more() { error SyntaxError.BAD_ESCAPE }
+        if not q.more() { error SyntaxError.BadEscape }
         e := q.peek()
         q.at++
         if e == 'b' or e == 'B' or e == 'A' or e == 'z' {
@@ -481,7 +479,7 @@ fn (q mut parser&) repeated() I64 ? SyntaxError {
                 break
             }
             q.at++
-            if min > maxRepeat or max > maxRepeat or (max >= 0 and max < min) { error SyntaxError.BAD_REPEAT }
+            if min > maxRepeat or max > maxRepeat or (max >= 0 and max < min) { error SyntaxError.BadRepeat }
         } else {
             break
         }
@@ -493,7 +491,7 @@ fn (q mut parser&) repeated() I64 ? SyntaxError {
             n.greedy = false
             q.at++
         }
-        if q.nodes[a].kind == nRepeat or q.nodes[a].kind == nEmpty { error SyntaxError.BAD_REPEAT }
+        if q.nodes[a].kind == nRepeat or q.nodes[a].kind == nEmpty { error SyntaxError.BadRepeat }
         a = q.add(n)
     }
     return a
@@ -530,7 +528,7 @@ fn (q mut parser&) alternation() I64 ? SyntaxError {
 
 # "(?flags)" standing alone, the parser at its '(' - taken, and true; or false, the parser where it was, for any other
 # "(?" group
-fn (q mut parser&) flags() Bool ? SyntaxError.BAD_FLAG {
+fn (q mut parser&) flags() Bool ? SyntaxError.BadFlag {
     save := q.at
     q.at += 2
     on := true
@@ -561,11 +559,11 @@ fn (q mut parser&) flags() Bool ? SyntaxError.BAD_FLAG {
         } else {
             q.at = save
             if c == 'P' or c == '<' { return false }
-            error SyntaxError.BAD_FLAG
+            error SyntaxError.BadFlag
         }
         q.at++
     }
-    error SyntaxError.BAD_FLAG
+    error SyntaxError.BadFlag
 }
 
 # a group, the parser just after its '('
@@ -578,17 +576,17 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         q.at++
         if q.more() and (q.peek() == 'P' or q.peek() == '<') {
             if q.peek() == 'P' { q.at++ }
-            if not q.more() or q.peek() != '<' { error SyntaxError.BAD_NAME }
+            if not q.more() or q.peek() != '<' { error SyntaxError.BadName }
             q.at++
-            end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BAD_NAME }
+            end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BadName }
             name := q.t[q.at:q.at + end]
             q.at += end + 1
-            if name.Len() == 0 or name[0].IsDigit() { error SyntaxError.BAD_NAME }
+            if name.Len() == 0 or name[0].IsDigit() { error SyntaxError.BadName }
             for c in name {
-                if not (c.IsLetter() or c.IsDigit() or c == '_') { error SyntaxError.BAD_NAME }
+                if not (c.IsLetter() or c.IsDigit() or c == '_') { error SyntaxError.BadName }
             }
             for other in q.p.names.View() {
-                if other == name { error SyntaxError.BAD_NAME }
+                if other == name { error SyntaxError.BadName }
             }
             capture = q.groups
             q.groups++
@@ -596,7 +594,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         } else {
             on := true
             for {
-                if not q.more() { error SyntaxError.UNCLOSED_GROUP }
+                if not q.more() { error SyntaxError.UnclosedGroup }
                 c := q.peek()
                 q.at++
                 if c == ':' { break }
@@ -609,7 +607,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
                 } else if c == 's' {
                     q.dotAll = on
                 } else {
-                    error SyntaxError.BAD_FLAG
+                    error SyntaxError.BadFlag
                 }
             }
         }
@@ -619,7 +617,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
         q.p.names.Push("")
     }
     body := try q.alternation()
-    if not q.more() or q.peek() != ')' { error SyntaxError.UNCLOSED_GROUP }
+    if not q.more() or q.peek() != ')' { error SyntaxError.UnclosedGroup }
     q.at++
     q.fold = fold
     q.multi = multi
@@ -632,9 +630,9 @@ fn (q mut parser&) group() I64 ? SyntaxError {
 
 # ---- compiling ----
 
-fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
+fn (q mut parser&) emitNode(i I64) ? SyntaxError.TooBig {
     p := q.p
-    if p.op.Len() > maxProgram { error SyntaxError.TOO_BIG }
+    if p.op.Len() > maxProgram { error SyntaxError.TooBig }
     n := q.nodes[i]
     match n.kind {
         case nEmpty { }
@@ -699,7 +697,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
                     split := p.emit(opSplit, 0, 0, 0)
                     splits.Push(split)
                     try q.emitNode(n.a)
-                    if p.op.Len() > maxProgram { error SyntaxError.TOO_BIG }
+                    if p.op.Len() > maxProgram { error SyntaxError.TooBig }
                 }
                 out := p.op.Len()
                 for split in splits.View() {
@@ -741,7 +739,7 @@ fn Compile(pattern String&) Regex ? SyntaxError {
     q := parser(pattern)
     q.p.names.Push("")
     root := try q.alternation()
-    if q.more() { error SyntaxError.UNMATCHED_PAREN }        # only a ')' stops the top level early
+    if q.more() { error SyntaxError.UnmatchedParen }        # only a ')' stops the top level early
     p := q.p
     p.emit(opSave, 0, 0, 0)
     try q.emitNode(root)
@@ -1216,29 +1214,29 @@ fn copyOf(a Array<I64>&) mut Array<I64>& {
 # the text matched
 fn (m Match&) Text() String&m { return m.t[m.Start:m.End] }
 
-# the text capture group i matched (0 the whole match) - failing with NOT_FOUND when there is no group i or it took
+# the text capture group i matched (0 the whole match) - failing with NotFound when there is no group i or it took
 # part in no match ("(a)|b" matching "b")
-fn (m Match&) Group(i I64) String&m ? NotFound.NOT_FOUND {
-    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NOT_FOUND }
+fn (m Match&) Group(i I64) String&m ? NotFound {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound }
     return m.t[m.caps[2 * i]:m.caps[2 * i + 1]]
 }
 
 # where capture group i matched, start and end - failing as Group does
-fn (m Match&) Span(i I64) I64, I64 ? NotFound.NOT_FOUND {
-    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NOT_FOUND }
+fn (m Match&) Span(i I64) I64, I64 ? NotFound {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound }
     return m.caps[2 * i], m.caps[2 * i + 1]
 }
 
-# the number of the group named "name", for Match's Group - failing with NOT_FOUND when the pattern names none so
-fn (re Regex&) GroupNamed(name String&) I64 ? NotFound.NOT_FOUND {
+# the number of the group named "name", for Match's Group - failing with NotFound when the pattern names none so
+fn (re Regex&) GroupNamed(name String&) I64 ? NotFound {
     names := re.s.names
     for i in range names.Len() {
         if names[i] == name and name.Len() > 0 { return i }
     }
-    error NotFound.NOT_FOUND
+    error NotFound
 }
 
-# the leftmost-first match in t at or after byte "from" - failing with NOT_FOUND where there is none
+# the leftmost-first match in t at or after byte "from" - failing with NotFound where there is none
 # a search of one text, match after match: the DFAs where they serve, the Pike VM for the groups
 type searcher struct(of prog&, text String&, ncap I64) {
     t String&text = text
@@ -1270,14 +1268,14 @@ fn (s mut searcher&) next(from I64) Bool {
     return m.run(from, false)
 }
 
-fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound.NOT_FOUND {
-    if from < 0 or from > t.Len() { error NotFound.NOT_FOUND }
+fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound {
+    if from < 0 or from > t.Len() { error NotFound }
     sr := searcher(re.s, t, 2 * re.s.names.Len())
-    if not sr.next(from) { error NotFound.NOT_FOUND }
+    if not sr.next(from) { error NotFound }
     return Match(t, sr.m.best)
 }
 
-fn (re Regex&) Find(t String&) Match ? NotFound.NOT_FOUND { return try re.FindFrom(t, 0) }
+fn (re Regex&) Find(t String&) Match ? NotFound { return try re.FindFrom(t, 0) }
 
 # where the next match is looked for after one from "start" to "end": its end, or one code point on for an empty match
 fn onFrom(t String&, start I64, end I64) I64 {
@@ -1519,7 +1517,7 @@ test "what does not compile" {
         "(?P<a>x)(?P<a>y)", "(?z)a", "[[:nope:]]", "\\x{110000}"] {
         assert firstOf(bad, "") == "error", $bad
     }
-    try Compile("(a{1000}){1000}") catch SyntaxError.TOO_BIG { } catch SyntaxError { unreachable }
+    try Compile("(a{1000}){1000}") catch SyntaxError.TooBig { } catch SyntaxError { unreachable }
 }
 
 test "matching takes linear time where backtracking takes exponential" {

@@ -2,7 +2,7 @@
 # also: compilation failed with 1 error
 # one wrong argument count at a call is one error: what the call bound is not then reported again at a later use (O10d)
 type Lookup error {
-    MISSING
+    Missing
 }
 type H struct(Name String&, Value String&) {
     Name
@@ -15,10 +15,10 @@ fn (r R&) find(name String&) String&r ? {
     for h in r.Hs {
         if h.Name == name { return h.Value }
     }
-    error Lookup.MISSING
+    error Lookup.Missing
 }
 fn make(url String&) R ? {
-    if url.Len() == 0 { error Lookup.MISSING }
+    if url.Len() == 0 { error Lookup.Missing }
     hs mut Array<H>&return = Array<H>(1)
     hs[0] = H("a", "b")
     return R(hs)

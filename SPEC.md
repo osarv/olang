@@ -878,7 +878,7 @@ else, and compares, matches, hashes and renders as before (`$Op.Plus` is `Op.Plu
   `Len`), computed while compiling where the case is known. A text value is constant data (T25d), a `String&` read
   only. A raw-valued enum may not declare a method named `Value`.
 - `Op.From(v)`, reached through the type's name, is the case whose raw value is `v`, failing with the prelude's
-  `CaseError.NO_CASE` where no case has it - so it is written under `try` (R8): `op := try Op.From(s) catch default
+  `CaseError.NoCase` where no case has it - so it is written under `try` (R8): `op := try Op.From(s) catch default
   Op.Plus`. It exists for an enum none of whose cases carries a payload, a case of which may not be named `From`.
 
 Cases carrying payloads may have raw values; `Value()` then gives the case's whatever its payload. An anonymous enum
@@ -990,17 +990,19 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 declaration's line, D8), with at least one of the two written and the braces last, is a **top-level** declaration, and
 the only form an error type is declared in: `error` after the name says what the type is, as `struct`, `enum` and
 `trait` do, and an error type is never reached from a general `type-expr` position (T2). With braces it declares an
-**error type**: a closed, ordered set of named words, `type IoError error { FULL, DENIED }` - shaped like an enum
+**error type**: a closed, ordered set of named words, `type IoError error { Full, Denied }` - shaped like an enum
 body, at least one word, the words following the listing rule (L18a) as an enum's cases do (T17): `type E error { A,
 B }` on one line, one per line otherwise; a word declared twice is a compile-time error. A word is always written
-qualified by its own type (`IoError.FULL`) and is public by its own first letter (M6a). An error type takes no type
-parameters and extends nothing.
+qualified by its own type (`IoError.Full`) and is public by its own first letter (M6a). Every error name is
+CamelCase - a word as a type is (`ListError.OutOfRange`, a private `notFound`) - so an error reads one way whether it is
+declared in braces or raised by name (R3b). An error type takes no type parameters and extends nothing; one of a
+single word named as itself is no declaration (R3b: an error raised by name is that).
 
 **T19a (named error sets).** With an `error-list` after `error` the declaration names an **error set**: `type
 LoadError error os.Error, ParseError`. Its members are what an `error-list` names (D8) - error types, single words
-(`ParseError.EMPTY`) and other named sets - and the set **stands for** its members, flattened: a set among the
+(`ParseError.Empty`) and other named sets - and the set **stands for** its members, flattened: a set among the
 members stands for its own, and the words of one type are one entry (R1c). A set with braces as well, `type LoadError
-error os.Error, ParseError { TIMEOUT }`, is also an error type of its own words (`LoadError.TIMEOUT`), a member of its
+error os.Error, ParseError { TIMEOUT }`, is also an error type of its own words (`LoadError.Timeout`), a member of its
 own set after the others. A named set is written wherever an error set is - after a signature's `?` (`fn load() Config
 ? LoadError`), in a function type and a trait's method (`fn(I64) ? LoadError`), as a member of another set, and as a
 catch item (R11: `catch LoadError` takes every member) - and is **the same set as its members written out**: `?
@@ -1012,7 +1014,7 @@ confusion. A member naming no error type, word or set is a compile-time error (R
 
 **T20 (error values).** An error type, or a named error set (T19a), is a **value's type** everywhere but a function's
 result: a parameter, a local, a global, a field, an array's element and a type argument may be one (`List<LoadError>`,
-`Map<net.Error, I64>`). Its values are the set's words, written qualified (`ParseError.EMPTY` is a value wherever a
+`Map<net.Error, I64>`). Its values are the set's words, written qualified (`ParseError.Empty` is a value wherever a
 value of a set holding it is wanted), and `null`, which says "no error" and is the type's zero value (D13). An error
 value carries no data and holds no reference: it is a number to the scope rules (§8). Writing an error type or a set
 as a function's result - alone or among several results, or in a function type - is a compile-time error naming `?`,
@@ -1021,7 +1023,7 @@ of several types used as a value's type is a named set; an unnamed list is writt
 as a catch clause's items. An error value is made by a word written, by `null`, or by a catch clause naming what it
 took (R11b), and it is used in these ways and no others:
 
-- `==` and `!=` with a word (`e == ParseError.EMPTY`), with an error type or a named set (`e == ParseError`: true
+- `==` and `!=` with a word (`e == ParseError.Empty`), with an error type or a named set (`e == ParseError`: true
   where it holds a word of that type, or of what the set stands for), and with another error value (the same word);
   whether it holds no error is `e is null` (`e is not null` its negation), the one null test (E10c) - `e == null` is
   E10c's error, naming it. Each side names something the
@@ -1034,7 +1036,7 @@ took (R11b), and it is used in these ways and no others:
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
   test has shown is not null (known by the program's structure, never by evaluation). A case's block narrows `e`;
-- `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.EMPTY`, another module's type by
+- `$e`: the error's name as an unhandled error prints it (B5, E11a) - `ParseError.Empty`, another module's type by
   its module's name - and `null` for none;
 - hashing: the compiler supplies `Hash` (E10b), so an error value is a `Map` key - by the error it holds (its type and
   word), whatever set it is held as, so two error values `==` across sets hash alike;
@@ -1310,7 +1312,7 @@ type Percent I32(v I32) {
     if v > 100 { v = 100 }        # Percent(150) is 100
 }
 type Checked I32(v I32) ? RangeError {
-    if v < 0 { error RangeError.NEGATIVE }        # try Checked(x)
+    if v < 0 { error RangeError.Negative }        # try Checked(x)
 }
 ```
 
@@ -1387,9 +1389,9 @@ only by `String(bytes)`, which copies nothing. A slice of a `String` is a `Strin
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
 (E10a), so `==` compares what two texts say, through a reference too.
 A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
-where the first occurrence starts (`t.FindLast(sub)` the last), and fail with `TextError.NOT_FOUND` when there is none -
+where the first occurrence starts (`t.FindLast(sub)` the last), and fail with `TextError.NotFound` when there is none -
 `try t.Find(sub) catch default -1` writes a fallback - as an array's `FindIndex(keep)` fails with
-`ArrayError.NOT_FOUND` for no element `keep` holds for.
+`ArrayError.NotFound` for no element `keep` holds for.
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
 array type or a built-in one, whatever is known of its length.
@@ -1479,7 +1481,7 @@ arguments as type variables, bound through the constrained type's methods (`<I I
 method of a generic type (`fn (b mut Box<T>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
-**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { END }` and `type Iterator<T ? E> trait {
+**T35b (built-in traits).** The prelude (M19d) declares `type Exhausted error { End }` and `type Iterator<T ? E> trait {
 mut Next() T ? E, Exhausted }`, visible in every module: `Next()` gives the following value, and fails with
 `Exhausted` once there are none - running out is an error like any other, never a flag beside a value - and with what
 `E` holds where it can fail on its way (G1a): a file's lines are an `Iterator<String ? io.Error>`. `Iterator<T>` is an
@@ -1503,7 +1505,7 @@ over what it has left, the same values, the iterators left where `Next` would le
 `Chain`) fail as the iterators they wrap do. So do the walks of the same shape, each failing also with what its callback
 fails with: `TakeWhile(keep)`, the values up to the first `keep` does not hold for (which ends the walk and is not
 given); `SkipWhile(keep)`, the values from that first one on; `StepBy(n)`, the first value and every `n`-th after it,
-`n` a `StepSize` - a declared `I64` whose constructor fails with `StepError.BAD_STEP` below one, a literal checked while
+`n` a `StepSize` - a declared `I64` whose constructor fails with `StepError.BadStep` below one, a literal checked while
 compiling (T29d) as a `ChunkSize` is; `FlatMap(f)`, the values of the iterator `f` gives for each value, one walk after
 another, each made when the one before it has run out; and `Partition(keep)`, two new `Vec`s as two results (D8c) -
 the values `keep` holds for and the rest, each in order. A third round: `Scan(init, f)`, each running value `f` gives
@@ -1519,7 +1521,7 @@ with `At` and `Len` has, beside `Iter()`, the default `Reversed()`, a `ReversedI
 `CycleIndexIter<T, C>` over positions `0` to `Len() - 1` and round again without end (an empty one gives nothing);
 `LowerBound(x)`, in elements sorted by `<`, the first position whose element is not below `x` (`Len()` where all are) -
 a binary search; and `BinarySearch(x)`, the first position whose element is `==` to `x`, failing with
-`ArrayError.NOT_FOUND` where there is none.
+`ArrayError.NotFound` where there is none.
 The prelude also declares `type Generator<T ? E> struct(next (fn() T ? E, Exhausted)) { next }`, whose `Next()` calls
 `next`: what a generator gives (D18), and an iterator made of any such function value. A copy of a `Generator` is a
 second name for the same walk, as a `Vec`'s copy is the same `Vec`. Beside it, `type ViewGenerator<T ? E> struct(next
@@ -1623,7 +1625,7 @@ calls a function or a function value (P1), never through a table: `spawn s.M()` 
 `spawn fn() { s.M() }`.
 
 A call through an `any` is held to the **contract `R` writes on the method** (D17f): its conditions are checked before
-the dispatch, failing with `ArgumentError.INVALID`, and then the method the instance's type supplies - its own, or a
+the dispatch, failing with `ArgumentError.Invalid`, and then the method the instance's type supplies - its own, or a
 default's - checks its own on entry, as every call of it does.
 
 **T32c (an `any` satisfies its trait).** The type `any R&` satisfies `R`, and every trait `R` extends (T30a), and
@@ -1656,7 +1658,7 @@ body; `_` binds nothing. A type case binding a name is its clause's only alterna
 one (`case Button _, Slider _`). The type cases must cover every member of the trait, or the match carries a
 `case _` (S13a's rule, S13f); a type that is not a member, or one named in two unguarded clauses, is a compile-time
 error. A null `any` matches no type case (S13: it aborts where nothing else takes it). `w as Button` gives the instance
-as a binding would, and fails with `CaseError.WRONG_CASE` when the instance is of another type (E32's rule), covered by
+as a binding would, and fails with `CaseError.WrongCase` when the instance is of another type (E32's rule), covered by
 a `try` or a `!` as an enum's `as` is.
 
 An `any` of an **open** trait is used through its methods alone: a type case or an `as` on one is a compile-time error -
@@ -1896,13 +1898,14 @@ of a contract only (L9b).
 receiver, the parameters and anything a function body reads at its top level (globals, constants, functions) - a call
 in it, a fallible one, a lambda among its arguments included. It writes nothing: the parameters are read-only in it.
 Each condition is checked **on entry**, in every build, in the order written, before the body runs: a false one makes
-the call fail with the prelude's `ArgumentError.INVALID` (§7.6), its trace (S18d) and a `!`'s message naming the
+the call fail with the prelude's `ArgumentError.Invalid` (§7.6), its trace (S18d) and a `!`'s message naming the
 function and the condition as written (`pick: y > x`). A call in a condition that fails leaves the function with its
 own error, as a call in the body would (R6), and the conditions after it are not evaluated.
 
-**D17b (the error set).** A function with conditions can fail with `ArgumentError`: a bare `?` (R1a) infers it with
-the rest, a function with no `?` has the set `? ArgumentError` and anything its conditions' calls can fail with, and a
-written set must list `ArgumentError` - a compile-time error naming it otherwise. Every call is then handled as any
+**D17b (the error set).** A function with conditions can fail with `ArgumentError`, so it writes `?` (R1d): a bare
+`?` (R1a) infers it with the rest, and a written set must list `ArgumentError` - a compile-time error naming it
+otherwise; a function with conditions writing no `?` is a compile-time error naming `?`. A trait's method with
+conditions lists `ArgumentError` in its set (R1b). Every call is then handled as any
 fallible call is (R8): `try`, a `catch`, or `!`. A function whose only items are `outlives` ones has no conditions and
 fails with nothing more.
 
@@ -2104,7 +2107,7 @@ over another iterator ends the walk where that one ends. A `?` after its result 
 `Iterator<T ? E>`. Its parameters are its own locals from its first `Next()` on: set from the arguments when it is
 called, written as a function's are. Its contract's requirements (D17) are checked as its first `Next()` begins, before
 its body runs - the call making it checks nothing, and D17e decides nothing at it - so a false one is that `Next()`'s
-`ArgumentError.INVALID`, every `Next()` after it failing with `Exhausted` (D18a): `E` lists `ArgumentError`, as D17b
+`ArgumentError.Invalid`, every `Next()` after it failing with `Exhausted` (D18a): `E` lists `ArgumentError`, as D17b
 asks of a written set, a compile-time error naming it otherwise (`fn evens(n I64) [n >= 0] Iterator<I64 ?
 ArgumentError>`). A function whose result is written `Iterator<T ? E>` and whose body does not yield is T30's error: a
 trait is no type.
@@ -2560,13 +2563,13 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 `0.0`, so `a.Min(b)` and `b.Min(a)` are one value; on an integer `Abs` negates a negative value (the most negative one
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
-U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.OVERFLOW` where
+U32)`, `x` to the `n`th power, wrapping as `*` does (E6c) - `std/arith`'s `Pow` fails with `arith.Error.Overflow` where
 the true power does not fit (E15a); `x.Mod(n)`, the floored modulo - `x - n * x.DivFloor(n)`, its sign the divisor's
 (`(-7).Mod(3)` is `2`, where `-7 % 3`, `Rem`, is `-1`) - `x.DivFloor(n)` and `x.DivCeil(n)`, the quotient rounded down
 and up (`(-7).DivFloor(2)` is `-4`, `7.DivCeil(2)` is `4`, where `/` truncates), each undefined where `/` is (E6a); and
 every integer of every width (T4a) `Sqrt()`, the
 integer square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
-exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
+exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.Negative` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
 
 `Pair` is not part of the prelude: `std/pair` declares `type Pair<A, B> struct(First A, Second B)`, two values of
@@ -2582,7 +2585,7 @@ array in the caller's scope, and `Has(x)` asks by `==` (E29); `list.Of(a)` is th
 (`list.Of(Array<I32>(n, v))` for `n` copies of one value), and `list.From(it)` a new `List` of every value an
 iterator gives. It indexes (E31): `l[i]` is `At(i)`, a copy of
 the element, and `l[i] = x` is `SetAt(i, x)`, which replaces one - both unchecked, as an array index is (E16), with
-`try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OUT_OF_RANGE`. Every one of these costs the same whatever
+`try l.Get(i)` checking `i` against `Len()`, failing with `list.Error.OutOfRange`. Every one of these costs the same whatever
 the length: storage is a run of chunks, each twice the size of the last, so a position's chunk is found by arithmetic
 rather than by a search, and nothing stored is moved by a later `Push`. `RunFrom(at)` gives the elements stored next
 to each other from position `at` - a read-only slice of the chunk holding it, to that chunk's end or the list's - and
@@ -2590,15 +2593,15 @@ fails with `Exhausted` at `Len()`, so `for x in l` walks a `List` run by run (S9
 out a fresh position (S9c), a `list.Iter<T>` whose iterator helpers (`Some`, `Every`, `Count`, `Fold`, `Map`, `Filter` -
 M19e overrides, `Map` and `Filter` building a `Vec` as the defaults do) walk the rest of the list run by run too,
 leaving it where `Next()` would.
-`First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with `list.Error.EMPTY` when
+`First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with `list.Error.Empty` when
 there is none; `Clear()` removes every element, and `Truncate(n)` all but the first `n` (nothing when the list holds
 `n` or fewer, every element for an `n` of `0` or less). None moves anything, and the chunks they
 empty are kept and filled again by the `Push`es that follow. `TakeAt(i)` removes the element at `i` and gives it,
 `RemoveAt(i)` removes it and gives nothing, and `Insert(i, x)` puts `x` at `i` (`Insert(Len(), x)` is `Push(x)`); each
 moves the elements after `i` one place, so costs their number, and takes `i` from `0` to `Len() - 1` (`TakeAt`,
-`RemoveAt`) or `Len()` (`Insert`) - another fails with `list.Error.OUT_OF_RANGE`, checked once per call. `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
+`RemoveAt`) or `Len()` (`Insert`) - another fails with `list.Error.OutOfRange`, checked once per call. `Reverse()` reverses the elements in place, and `Sort(less)` sorts them as an array's `Sort` does, stably,
 through one contiguous copy. `IndexOf(x)` gives the position of the first element equal to `x` by `==` (E10a), failing
-with `list.Error.NOT_FOUND` when there is none; `Remove(x)` removes that element as `RemoveAt` would and says whether
+with `list.Error.NotFound` when there is none; `Remove(x)` removes that element as `RemoveAt` would and says whether
 there was one; `SwapTake(i)` removes the element at `i` and gives it, the last element taking its place - one element
 moved whatever the length, the order not kept - and takes `i` as `TakeAt` does, and `SwapRemove(i)` does the same
 giving nothing. A `List` of texts has `Join(sep)`, as an array of texts does. `$` renders a `List` (E11c) as an
@@ -2619,9 +2622,9 @@ a `List`'s removals for no let-go, and what they removed is reclaimed with the l
 
 The prelude declares `type Map<K Hashable<K>, V>`, values found by key, keys compared with `==` (E10) and hashed
 with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it had; `Get(k)` gives it, failing with
-`MapError.MISSING` when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
+`MapError.Missing` when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
 where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
-and says whether it was there, `Take(k)` removes `k` and gives its value, failing with `MapError.MISSING` when there is
+and says whether it was there, `Take(k)` removes `k` and gives its value, failing with `MapError.Missing` when there is
 none (`Get` and `Remove` in one), and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a copy of a
 `MapEntry<K, V>` holding `Key` and `Value`, in no specified order; the entry just given may be removed while the walk
 goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
@@ -2644,7 +2647,7 @@ element type needs no zero value: a new buffer is filled with the element being 
 room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
 buffer is full first replaces it by one twice as large (8 at first), every element copied into it; `Reserve(n)` makes
 room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of `std/list`'s `List` by the same
-names and on the same terms but `RunFrom`, failing with `VecError`'s words (`EMPTY`, `NOT_FOUND`, `OUT_OF_RANGE`) - `v[i]` and `v[i] = x` (E31,
+names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
 `Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
 and `Clone`; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
@@ -2725,7 +2728,7 @@ receiver does, failing with what `same` fails with; and `Chunks(size)`, the arra
 elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
 the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
 receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor
-fails with `ArrayError.BAD_CHUNK` below one: a literal size is checked while compiling (T29d, `a.Chunks(0)` is a
+fails with `ArrayError.BadChunk` below one: a literal size is checked while compiling (T29d, `a.Chunks(0)` is a
 compile-time error) and a computed one is made one with `try ChunkSize(n)`, as a base is a `Radix`. A `String` has them as every array method (T29e), the new ones being
 `String`s. An array of texts, `Array<String&>`, has `Join(sep)`: its texts one after another with `sep` between each
 two, built once at its length - `$` writes such an array as source instead (E11a). Text has `TrimStart()` and
@@ -2740,10 +2743,10 @@ Text has `t.ParseFloat() F64 ? ParseError`: the `F64` nearest the decimal number
 to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and `5.` are numbers, `.` is not), and an
 optional exponent, `e` or `E` with an optional sign and digits; or `inf`, `infinity` or `nan` in any case with an
 optional sign, so the text `$x` writes reads back as `x`. Nothing else is accepted: no surrounding space, no `_`, no
-hexadecimal. It fails with `EMPTY` for no text, `INVALID` for text that is not a number and `OVERFLOW` for a number
+hexadecimal. It fails with `Empty` for no text, `Invalid` for text that is not a number and `Overflow` for a number
 beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() U64, I64 ?`:
 the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no zero at `d`'s end that read back as
-`x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NOT_FINITE` for a NaN or an infinity. Both
+`x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NotFinite` for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
 
 Text has `t.ParseInt(base Radix = 10) I64 ? ParseError` and `t.ParseUint(base Radix = 10) U64 ? ParseError`: the integer `t`
@@ -2752,11 +2755,11 @@ the letters in either case, and nothing else: no surrounding space, no prefix, n
 integer literal is written (L10): `0x`/`0X` before hexadecimal digits, `0b`/`0B` before binary ones, decimal otherwise,
 with a `_` between two digits as L10b allows it; a hexadecimal or binary literal is a bit pattern, read by `ParseInt`
 as an `I64` (L10a: `"0xFFFFFFFFFFFFFFFF".ParseInt(0)` is `-1`, a `-` before it negating that reading as `-` does,
-E6c) and by `ParseUint` as the `U64` it is. Each fails with `EMPTY` for no text, `INVALID` for text that is not such a
-number (a sign alone included) and `OVERFLOW` for a number beyond its type's range; the base is a `Radix`, below, refused
+E6c) and by `ParseUint` as the `U64` it is. Each fails with `Empty` for no text, `Invalid` for text that is not such a
+number (a sign alone included) and `Overflow` for a number beyond its type's range; the base is a `Radix`, below, refused
 where it is made, so a literal base cannot fail. `t.ParseAs<T>(base Radix = 10) T ? ParseError` reads an integer of
 any type `T` of the `Integer` trait (T4a): as `ParseInt` reads it for a signed `T` and `ParseUint` for an unsigned one,
-failing with `OVERFLOW` outside `T`'s range (`"128".ParseAs<U7>()`) and `INVALID` for a `-` before an unsigned one's
+failing with `Overflow` outside `T`'s range (`"128".ParseAs<U7>()`) and `Invalid` for a `-` before an unsigned one's
 digits; a type wider than 64 bits takes digits up to its own range (`"340282366920938463463374607431768211455".ParseAs<U128>()`),
 and base `0`'s prefixed literal is read as a program reads one (L10a): a pattern of at most 64 bits as `ParseInt` or
 `ParseUint` reads it, then fitting `T`, and a wider one - up to 128 bits - worth its bits read unsigned, fitting `T`
@@ -2774,7 +2777,7 @@ lowercase letters, with a `-` before a negative number's digits and nothing else
 `ParseInt` and `ParseUint` read back in the same base, and in base `10` it is `$n`; an unsigned value's text is its
 bits read unsigned (`U64(-1).Format(16)` is sixteen `f`s), and a `Char`'s is its code (`'A'.Format(16)` is `"41"`, the
 method a `Char` inherits from `U8`). The base is a `Radix`, the prelude's `type Radix I64` whose constructor fails with
-`TextError.BAD_BASE` (`? TextError.BAD_BASE`, R1c) for a number outside `2` to `36` other than `0` - the base the text
+`TextError.BadBase` (`? TextError.BadBase`, R1c) for a number outside `2` to `36` other than `0` - the base the text
 says, which `ParseInt` and `ParseUint` read as any of a literal's three forms and `Format` writes in decimal: a literal
 base is checked while compiling (T29d), so `(255).Format(16)` and `t.ParseInt(16)` cannot fail for it and `Format(40)`
 is a compile-time error, and a base computed while the program runs is made one with `Radix(b)`, which can fail - one
@@ -3280,10 +3283,10 @@ its type: the value written the way it would be in source:
 - a struct — its declared name, then its fields in declaration order in parentheses: `Point(1, -2)`.
 - an enum — `Type.Case`, followed by the payload's fields in parentheses when the live case carries one:
   `Shape.Rect(3, 4)`.
-- an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.EMPTY`, `os.Error.DENIED`
+- an error value (T20) — the error's name as an unhandled error prints it (B5), `ParseError.Empty`, `os.Error.Denied`
   with another module's type by its module's name; `null` for no error. An error type or a named set written as part
   of a rendering's type - an array literal's element type, a type argument - is qualified the same way:
-  `Vec<os.Error>[os.Error.DENIED]`.
+  `Vec<os.Error>[os.Error.Denied]`.
 - a declared type over a primitive or an array — as the type it is declared over (a `type Meters I32`
   renders as a number, a `type Letter Char` - `extends` or not - as a character).
 - a value of a type declaring `Str` (E11c) — whatever `Str` returns, at the top level and inside another value
@@ -3505,15 +3508,15 @@ results, or undefined (E6a, E16, E26a). A check is asked for by calling somethin
 
 | to check | write | fails with |
 |---|---|---|
-| an index | `try a.Get(i)`, `try a.Set(i, v)` (E16d) | `ArrayError.OUT_OF_RANGE` (a `List`'s and a `Vec`'s `Get`: their own `OUT_OF_RANGE`) |
-| a slice | `try a.SliceOf(lo, hi)` (E16c) | `ArrayError.OUT_OF_RANGE` |
-| a narrowing conversion | `try x.Narrow<I32>()` (E26b) | `NumberError.OVERFLOW`, `NumberError.INVALID` |
-| arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.OVERFLOW`, `DIVIDE_BY_ZERO`, `INVALID` |
+| an index | `try a.Get(i)`, `try a.Set(i, v)` (E16d) | `ArrayError.OutOfRange` (a `List`'s and a `Vec`'s `Get`: their own `OutOfRange`) |
+| a slice | `try a.SliceOf(lo, hi)` (E16c) | `ArrayError.OutOfRange` |
+| a narrowing conversion | `try x.Narrow<I32>()` (E26b) | `NumberError.Overflow`, `NumberError.Invalid` |
+| arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.Overflow`, `DivideByZero`, `Invalid` |
 
 `std/arith` gives each operation as a generic function over the number types (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`,
 `ShiftLeft`, `ShiftRight`) and a struct `Checked<T>` whose operators are those functions, failing where the true result
-does not fit (`OVERFLOW` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DIVIDE_BY_ZERO`) and on IEEE's invalid operation or a shift amount out
-of range (`INVALID`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
+does not fit (`Overflow` - never `Rem`, whose result always fits: the least value's remainder by `-1` is `0`), on a zero divisor (`DivideByZero`) and on IEEE's invalid operation or a shift amount out
+of range (`Invalid`). They are ordinary olang, so the compile-time evaluator computes them as the program does.
 
 ### 5.5 Indexing and member access
 
@@ -3526,11 +3529,11 @@ storage it does not own (the other is `extern fn`, §11 X1a).
 Where the index and the length are **both known at compile time** — a constant index into an array whose length is
 known (T7c) — an out-of-range index is a **compile-time error**. That check costs nothing at run time and is not
 affected by the above. `base.Get(index)` (E16d) is the checked form, whose failure is defined: it compiles, and fails
-with `OUT_OF_RANGE` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
+with `OutOfRange` where it runs - in a function over a by-value array (`fn third(a Array<I32>) I32 { return try
 a.Get(2) catch default -1 }`) one instance (G29) may have the element and another not.
 
 **E16d.** `base.Get(index)`, a method the compiler supplies on every array (as it supplies `Len`, E23), **checks the
-index**: against `[0, base.Len())`, an out-of-range one failing with `ArrayError.OUT_OF_RANGE` (the prelude's) rather
+index**: against `[0, base.Len())`, an out-of-range one failing with `ArrayError.OutOfRange` (the prelude's) rather
 than reading storage the array does not own - covered by `try` or `!` as any fallible call is, so `try a.Get(i) catch
 default 0` is a checked index with a fallback and `a.Get(i)!` one that ends the program. The index is of any integer
 type, as `base[index]`'s is; the result is the element, as `base[index]` gives it. `base.Set(index, v)`, supplied
@@ -3588,7 +3591,7 @@ cheap exactly where a per-index check is not, since a slice is taken once and re
 paid per slice expression, never per element access.
 
 **E16c.** `base.SliceOf(lo, hi)`, a method the compiler supplies on every array (beside `Get`, E16d), is the slice
-`base[lo:hi]` made **fallible** instead: an out-of-range bound fails with `ArrayError.OUT_OF_RANGE` rather than
+`base[lo:hi]` made **fallible** instead: an out-of-range bound fails with `ArrayError.OutOfRange` rather than
 aborting, covered by `try` or `!` as any fallible call is. It is the slice in every other respect - a borrow of
 `base`'s storage, its type, scope and permission `base[lo:hi]`'s (E16a) - and both bounds are written.
 
@@ -3729,10 +3732,10 @@ nothing. In practice x86 yields the target's most negative value and sets a mask
 but that is the hardware's behaviour rather than the language's.
 
 **E26b (`Narrow`).** `x.Narrow<T>()`, a method of every number in the prelude (`fn (x S) Narrow<S Number, T Number>()
-T ? NumberError`), is the conversion `T(x)` **checked**: it fails with `NumberError.OVERFLOW` where `x`'s value does
+T ? NumberError`), is the conversion `T(x)` **checked**: it fails with `NumberError.Overflow` where `x`'s value does
 not fit `T` - an integer out of `T`'s range (a sign change between types of one width included), a finite float whose
 value truncated toward zero is out of an integer type's range, a finite value made infinite by a narrower float type -
-and with `NumberError.INVALID` for a NaN or an infinity made an integer; otherwise it gives `T(x)`. It is ordinary
+and with `NumberError.Invalid` for a NaN or an infinity made an integer; otherwise it gives `T(x)`. It is ordinary
 olang (written over `T(x)` and E36's limits), so the compile-time evaluator computes it as the program does.
 
 ### 5.12 Comprehensions
@@ -4007,7 +4010,7 @@ gives (T7c, E16a) - `as` is a compile-time error. What follows `as` is a `type-r
 after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `as` to the type `Box.Val&mask`, and a
 compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
 
-An `as` **can fail as written**: one whose answer is no fails with `CaseError.WRONG_CASE` (the prelude's), so it is
+An `as` **can fail as written**: one whose answer is no fails with `CaseError.WrongCase` (the prelude's), so it is
 covered by a `try` or a `!` (R8, E35) as a fallible call is - `try e as Shape.Circle catch default c0`, `(e as
 Shape.Circle)!` - and one covered by neither is a compile-time error naming both. A case test never fails. A null
 reference to an enum is no case: a test is false and `as` does not hold. The safe forms are a test that narrows (S8d),
@@ -4158,7 +4161,7 @@ Arrays have these **lane methods**, the compiler's as `Len()` is, on any array t
   order, so a float sum is the sequential one and vectorizes only where the order does not matter (integers).
 - `a.Min()`, `a.Max()` - the least and greatest by `<` (E31's `Less` for a type of its own), ties the first; a float
   NaN, once met, is the answer (IEEE's minimum and maximum propagate it). An empty array fails with
-  `ArrayError.EMPTY`, so both are written with `try` (or `!`).
+  `ArrayError.Empty`, so both are written with `try` (or `!`).
 - `a.LanesEqual(b)`, `a.LanesLess(b)` - `Array<Bool>` of `==` and `<` lane by lane (`==` on two arrays compares the
   whole arrays, E10, so these are methods). An ordering comparison of arrays (`a < b`, `>`, `<=`, `>=`) is an error
   naming the method to write: `a.LanesLess(b)`, `b.LanesLess(a)`, `not b.LanesLess(a)`, `not a.LanesLess(b)`.
@@ -4186,7 +4189,7 @@ reference points, nothing written back, as `v[i].xs[j] += k` is.
 ```
 d := (a * b).Sum()                      # a dot product: one loop, no array
 y += a * k                              # in place
-m := try (a - b).Max()                  # fails with ArrayError.EMPTY on empty arrays
+m := try (a - b).Max()                  # fails with ArrayError.Empty on empty arrays
 c := a.LanesLess(b).Select(a, b)        # the lesser of each pair
 ok := (x - y).LanesLess(eps).Every()
 ```
@@ -4198,7 +4201,7 @@ what can fail in the postfix expression before it **as written**, exactly what a
 fallible call and operator in it, arguments and every link of a chain included), by **ending the program**: an error
 reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
-of its path (`io.Error.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
+of its path (`io.Error.Failed`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; a check is a call
 that can fail, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c), `x!` is that
@@ -5414,9 +5417,9 @@ stands for (T19a). A written list is a
 naming it (R9).
 
 **R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
-`? ListError.EMPTY, io.Error`, `? TextError.NOT_FOUND, TextError.BAD_BASE` - and the set then holds that word of the
+`? ListError.EMPTY, io.Error`, `? TextError.NotFound, TextError.BadBase` - and the set then holds that word of the
 type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
-ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
+ListError.EMPTY` fails only with `Empty`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
 type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
 beside it. An `error` statement (R3) raising a word a written set does not hold is a compile-time error, and so is a
 `try` letting one through (R9), word by word. An inferred set (R1a) holds words too: the words of its `error`
@@ -5442,19 +5445,44 @@ one is a compile-time error. A named function used as a value fits a function ty
 function can fail with, in any order (T22) - its codes are re-encoded for the type's list where the two differ - and a
 method meets a trait's method (T31) on the same terms.
 
+**R1d (a function that can fail says so).** A function, a method or a constructor that can fail - its body raising
+an error (R3), letting through what a `try` covers (R9, R13), or having conditions (D17) - writes `?` after its result:
+bare to infer its set (R1a), or the set as a promise (R1). One that writes no `?` cannot fail, and anything in it that
+would let an error out is a compile-time error naming `?` - `main` included (B4). A lambda (D16b) and a generator
+(D18, whose errors its result writes) are not declarations of their own set and write none.
+
 **R2.** Declaring the same error type twice in one `error-list` is redundant but not itself
 specified as an error here; each of R1's members is nonetheless still exactly one declared error
 type.
 
 ### 7.2 The `error` statement
 
-**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
-possibly empty, giving a bare `Type.WORD`). `alias-chain IDEN` names a declared error type (§4.4),
-and the final `IDEN` is one of that type's own declared words (T19): every error is of a type, and names its word.
+**R3.** `error-stmnt ::= "error" ( alias-chain IDEN "." IDEN | alias-chain IDEN ) STMNT_END` (`alias-chain`, §4.4 M8,
+possibly empty, giving a bare `Type.Word`). `alias-chain IDEN "." IDEN` names a declared error type (§4.4) and one of
+that type's own declared words (T19); a lone `IDEN` is a held error (R3a) where it names a local, a parameter or a
+global, else an error raised by name (R3b), and `alias-chain IDEN` another module's error raised by name. Every error
+is of a type: a declared one names its word; one raised by name is its own type. A declared error type written whole
+(`error IoError`) is a compile-time error naming one of its words.
 Valid inside an ordinary function's own body, and inside a **constructor's** own body (§9.1 C2), whose signature's
 error union (R1) includes the named error type, and the word if the set names words (R1c) - or is inferred (R1a), and
 so takes it on. Not valid in a `test { }` block or a `destruct { }` body
 (§9.3 C7) — neither has an error union of its own — nor at module scope.
+
+**R3b (errors raised by name).** `error NotFound`, where `NotFound` names no local, parameter, global, function, type,
+import, build constant or prelude name there - and no local of that name is in scope where it is raised - **declares**
+an error of its module named `NotFound`: an error type of one value, which is the error itself. Every `error NotFound`
+in the module raises that one error, wherever it stands (in any function, a lambda, a constructor). It is a type of the
+module as a declared one is (D2): `catch NotFound` takes it, `? NotFound` names it in a set, `e == NotFound` tests a
+held error for it, a named set may list it (`type LookupError error NotFound, Ambiguous`), an error value may be of it
+(T20), and it prints by its name alone - `NotFound` in its own program, `lex.NotFound` from another module (B5, E11a).
+It is public by its first letter (M6): `NotFound` is reached from other modules as `lex.NotFound`, a private `notFound`
+by none. It is never written qualified by itself (`NotFound.NotFound` names nothing), and a declared error type of one
+word named as the type (`type NotFound error { NotFound }`) is a compile-time error naming `error NotFound` - raising it
+is how it is declared. The prelude raises no error by name: its errors are declared in sets, since its names are
+reserved everywhere (D3a). A name raised that is **one edit** from another error of its module (case-insensitive edit
+distance at most one, and within a third of the word, B11) is taken for a misspelling: a compile-time error naming the
+other, with did-you-mean - the other a declared error type or set, or a name raised more often (as often and raised
+first) - unless a function raising it names it after its `?` (`fn f() ? NotFond`), which says it is meant.
 
 **R3a (raising a held error).** `error e`, with `e` an error value (T20) - a local, a parameter or a global holding
 one, the name a catch clause gave the error it took (R11b) among them - raises the error it holds, its type and word.
@@ -5558,7 +5586,7 @@ written would be kept by neither.
   references are where the result's are, and what is later put into it lands there too. A default naming existing
   storage, or built from it, is a compile-time error: its references would have to agree with every scope the
   result's live in.
-- A checked index `a.Get(i)` and a slice `a.SliceOf(lo, hi)` can fail only with `ArrayError.OUT_OF_RANGE`
+- A checked index `a.Get(i)` and a slice `a.SliceOf(lo, hi)` can fail only with `ArrayError.OutOfRange`
   (§7.6), which a clause names or takes with an item-less `catch`: `try a.Get(i) catch default -1`. The
   expression is then a value, never an lvalue.
 
@@ -5639,20 +5667,32 @@ method declares errors (E31) - there must be one. Its clauses are a statement's 
 block and control continues after the statement; an error no clause names propagates.
 
 **R20.** The language checks nothing at run time that a program does not ask for by a call that can fail (E15a), so it
-raises no error of its own but these, each declared in the prelude as an ordinary error type: `CaseError.WRONG_CASE`
-from an `as` that does not hold (E32), `CaseError.NO_CASE` from an enum's `From` (T17e), `Exhausted.END` from an
-iterator that has run out (S9a), `ArgumentError.INVALID` from a call whose requirement is false (D17), and
-`AttrError.MISSING` from `x.Attr<A>()` on a declaration with no attribute of type `A` (G40). The methods
-it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OUT_OF_RANGE` (E16d, E16c), an array's `Min` and `Max` with
-`ArrayError.EMPTY` (E39), and `Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
+raises no error of its own but these, each declared in the prelude as an ordinary error type: `CaseError.WrongCase`
+from an `as` that does not hold (E32), `CaseError.NoCase` from an enum's `From` (T17e), `Exhausted.End` from an
+iterator that has run out (S9a), `ArgumentError.Invalid` from a call whose requirement is false (D17), and
+`AttrError.Missing` from `x.Attr<A>()` on a declaration with no attribute of type `A` (G40). The methods
+it supplies fail with the prelude's errors too: `Get` and `SliceOf` with `ArrayError.OutOfRange` (E16d, E16c), an array's `Min` and `Max` with
+`ArrayError.Empty` (E39), and `Narrow` is the prelude's own (E26b). A function letting one through names it in its `?` (or infers it, R1a), and a
 `catch` names it, or one of its words.
 
-**R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
+**R22.** Every failure a program can handle is an error of a declared type with a word (R3), or one raised by name
+(R3b) - there is no error
 without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, a
 slice or a length out of range, running out of memory, a task that cannot start - ends the test or
 the process (§6.6) and is never an error. The standard library holds itself to this: a function that can fail on its
 arguments (an index out of range, an empty collection, a closed channel, a bad base) fails with an error declared
 beside it, and none ends the process on a caller's mistake.
+
+### 7.7 No flags beside values
+
+**R23.** A `Bool` among several results (D8c) - `fn find(k K) V, Bool` - is a compile-time error naming `? E`: what
+can be missing or fail says so with an error and its caller's `try` (R8), never with a flag beside the value. So is one
+in a function type's results. A struct holding a `Bool` among its fields is a value of its own, not a flag beside one.
+
+**R23a.** A function or method giving a `Bool` that also writes through a reference parameter - a parameter written
+`mut T&`, its receiver aside (a method's `Bool` says something of what it acts on: `s.Add(x)` whether it changed) - is
+a compile-time error naming `? E`: an out-parameter and a success flag are a value and an error. So is a function type
+of that shape. An `extern fn` and an `export fn` keep C's conventions (X1, X13) and are neither's.
 
 ## 8. Scopes
 
@@ -7054,8 +7094,8 @@ only the text objects. What is printed is the same either way. `compile`, which 
 ### 10.2 Program entry
 
 **B4.** In `build`, `profile` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
-no parameters and no success type - with no error set (`fn main() { ... }`), or one written (`fn main() ? SomeError
-[+ ...] { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
+no parameters and no success type - with no error set (`fn main() { ... }`, which then cannot fail, R1d), or one
+written (`fn main() ? SomeError, ... { ... }`) or inferred (`fn main() ? { ... }`, §7 R1a, which may come out empty). Any other shape (parameters,
 a `ret-type`) is a compile-time error. There is no
 other valid `main` signature; in particular, there is no "return an int/bool status" convention.
 
@@ -7071,7 +7111,7 @@ each argument in order. A test binary's command line is its own name alone.
 the end, or a bare `return`), the process exits with status `0`. If an error (§7) escapes `main`
 uncaught, the process prints `unhandled error: TypeName.WORD\n` to `stderr` (naming the specific
 declared error type and word that escaped) and exits with status `1`. The type is named as source writes it outside its
-module: with its module's alias before it (`io.Error.FAILED`, `chan.Error.CLOSED`), except a type of the prelude, or of the
+module: with its module's alias before it (`io.Error.Failed`, `chan.Error.Closed`), except a type of the prelude, or of the
 root program itself, which is written bare (`ListError.EMPTY`). The same name stands in a failed test's line, in `!`'s
 message and in the error trace, whether the program is built or interpreted. What follows that line is the error's trace in a
 test or debug build, and how to get one in any other (§6.7 S18d).
@@ -7421,7 +7461,7 @@ the build - built with libFuzzer (clang's `-fsanitize=fuzzer`, every object of t
 run once per input libFuzzer makes, until a check fails (an `assert`, `unreachable`, a `!`, an error leaving the test,
 and with `-sanitize` a reference read after its scope closed, B2f), until it is stopped, or for `-fuzztime SECONDS`
 (given without `-fuzz` an error). A run's input is handed to the test through std/fuzz: `fuzz.Check(f)` calls `f(data
-Array<U8>&)` on it, and `fuzz.Input()` gives it, failing with `fuzz.Error.NONE` where no fuzzer runs. The program's
+Array<U8>&)` on it, and `fuzz.Input()` gives it, failing with `fuzz.Error.None` where no fuzzer runs. The program's
 globals are set once, before the first input; each input runs the test as a test run does, its scopes closed when it
 returns. The input of a failed run is written to `testdata/fuzz/SLUG/` in the directory of the file - SLUG the test's
 name as its run reports it (`Twice: doubles`), each run of characters that are no letter or digit made one `_` and none
@@ -8466,7 +8506,7 @@ type User struct(@json.Key("id") UserID I64, @json.Skip Cache I64 = 0) {
 (G34, G41):
 
 - `x.Attr<A>()` is the attribute of type `A` the declaration has, as a call failing with the prelude's
-  `AttrError.MISSING` where it has none: `key := try f.Attr<json.Key>() catch default json.Key(f.Name)`. It is a call
+  `AttrError.Missing` where it has none: `key := try f.Attr<json.Key>() catch default json.Key(f.Name)`. It is a call
   that can fail as written, whichever the compiler finds, so code reading it is the same for every member it walks.
 - `x.HasAttr<A>()` is whether it has one, a `Bool` known while compiling: it decides an `if`, a conditional and an
   `assert` per member as G35 says, so a branch reading what only some members have is checked only for them (`if

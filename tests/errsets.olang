@@ -4,28 +4,28 @@
 
 import "std/os"
 
-type ParseErr error { EMPTY, BAD }
+type ParseErr error { Empty, Bad }
 type NetErr error {
-    DOWN
-    SLOW
+    Down
+    Slow
 }
 # a set: its members, flattened, then its own words
-type LoadErr error os.Error, ParseErr { TIMEOUT }
+type LoadErr error os.Error, ParseErr { Timeout }
 # a set of a set and a single word
-type AnyErr error LoadErr, NetErr.DOWN
+type AnyErr error LoadErr, NetErr.Down
 
 Live mut I64 = 0
 
 fn load(n I64) I64 ? LoadErr {
-    if n == 0 { error ParseErr.EMPTY }
-    if n == 1 { error ParseErr.BAD }
-    if n == 2 { error LoadErr.TIMEOUT }
-    if n == 3 { error os.Error.DENIED }
+    if n == 0 { error ParseErr.Empty }
+    if n == 1 { error ParseErr.Bad }
+    if n == 2 { error LoadErr.Timeout }
+    if n == 3 { error os.Error.Denied }
     return n * 10
 }
 
 fn fetch(n I64) I64 ? AnyErr {
-    if n == 9 { error NetErr.DOWN }
+    if n == 9 { error NetErr.Down }
     return try load(n)
 }
 
@@ -39,9 +39,9 @@ fn label(n I64) String {
 fn kind(n I64) I64 {
     return try fetch(n) catch e {
         match e {
-            case ParseErr.EMPTY { return 100 }
+            case ParseErr.Empty { return 100 }
             case ParseErr { return 200 }
-            case LoadErr.TIMEOUT { return 300 }
+            case LoadErr.Timeout { return 300 }
             case NetErr { return 400 }
             case _ { return 500 }
         }
@@ -51,7 +51,7 @@ fn kind(n I64) I64 {
 fn kindValue(n I64) I64 {
     return try fetch(n) catch e default (match e {
         case ParseErr: 1
-        case LoadErr.TIMEOUT, NetErr.DOWN: 2
+        case LoadErr.Timeout, NetErr.Down: 2
         case os.Error: 3
     })
 }
@@ -65,30 +65,30 @@ fn onlyParse(n I64) I64 ? ParseErr {
 }
 
 fn twice(n I64) I64 ? ParseErr {
-    return try onlyParse(n) catch ParseErr.BAD default 7 catch e { error e }
+    return try onlyParse(n) catch ParseErr.Bad default 7 catch e { error e }
 }
 
 BakedLabel := label(0)
 BakedTimeout := label(2)
 BakedKinds := I64[kind(0), kind(1), kind(2), kind(3), kind(9), kind(5)]
 BakedValues := I64[kindValue(1), kindValue(2), kindValue(3), kindValue(9)]
-BakedTwice := I64[try twice(0) catch ParseErr e default (10 if e == ParseErr.EMPTY else 20), try twice(1) catch default -9, try twice(3) catch default -9]
+BakedTwice := I64[try twice(0) catch ParseErr e default (10 if e == ParseErr.Empty else 20), try twice(1) catch default -9, try twice(3) catch default -9]
 
 test "an error type and a set are declared as types, and a set stands for its members" {
     f fn(n I64) I64 ? os.Error, ParseErr, LoadErr = load
     assert (try f(4) catch default 0) == 40
     g fn(n I64) I64 ? LoadErr = loadAgain
-    assert (try g(1 + Live) catch ParseErr.BAD default -1 catch default 0) == -1
+    assert (try g(1 + Live) catch ParseErr.Bad default -1 catch default 0) == -1
     assert (try fetch(9 + Live) catch AnyErr default 1) == 1
     assert (try fetch(Live) catch LoadErr default 2 catch NetErr default 3) == 2
 }
 
 test "a caught error renders as its name prints, decided while compiling and at run time alike" {
-    assert BakedLabel == "failed: ParseErr.EMPTY"
-    assert BakedTimeout == "failed: LoadErr.TIMEOUT"
-    assert label(0) == "failed: ParseErr.EMPTY"
-    assert label(Live + 3) == "failed: os.Error.DENIED"
-    assert label(Live + 1) == "failed: ParseErr.BAD"
+    assert BakedLabel == "failed: ParseErr.Empty"
+    assert BakedTimeout == "failed: LoadErr.Timeout"
+    assert label(0) == "failed: ParseErr.Empty"
+    assert label(Live + 3) == "failed: os.Error.Denied"
+    assert label(Live + 1) == "failed: ParseErr.Bad"
     assert label(Live + 5) == "50"
 }
 
@@ -101,16 +101,16 @@ test "a caught error is compared, narrowed and matched" {
 
 test "a caught error is raised again, held to the set the narrowing leaves" {
     assert BakedTwice == I64[10, 7, -1]
-    assert (try onlyParse(Live) catch ParseErr e default (1 if e == ParseErr.EMPTY else 2)) == 1
+    assert (try onlyParse(Live) catch ParseErr e default (1 if e == ParseErr.Empty else 2)) == 1
     assert (try twice(Live + 1) catch default -1) == 7
     assert (try onlyParse(Live + 3) catch default -9) == -1
 }
 
 test "a clause's name reaches its block and its default; each clause its own" {
-    r := try load(Live + 2) catch ParseErr p default ($p).Len() catch LoadErr.TIMEOUT t {
-        assert $t == "LoadErr.TIMEOUT"
+    r := try load(Live + 2) catch ParseErr p default ($p).Len() catch LoadErr.Timeout t {
+        assert $t == "LoadErr.Timeout"
     } default 99
     assert r == 99
     s := try $load(Live) catch e default $e
-    assert s == "ParseErr.EMPTY"
+    assert s == "ParseErr.Empty"
 }

@@ -26674,11 +26674,78 @@ declare qualified members (the prelude's, whose bare names would be reserved eve
 with M6's visibility, and `?` is always written by a function that can fail (bare infers): the reading that no `?`
 could also infer was mine and is withdrawn - a contract function's implicit ArgumentError and `main` without `?` go
 with it. Typos: R14 already refuses a clause naming what the call never raises; a raised name one edit from one of the
-module's errors is refused with did-you-mean unless the signature names it (mine). Not built yet.
+module's errors is refused with did-you-mean unless the signature names it (mine). Built the same day (below).
 
 The user then banned both flag shapes ("yes, ban both flag shapes"): a `Bool` among several results, and a
 success `Bool` beside a written `&` parameter, are compile errors naming `? E` - with errors this cheap, nothing needs
 them, and the rule "errors are errors" holds in every program.
+
+**Built (wt-err31, 2026-10-31).** SPEC R3b (errors raised by name), R1d (a function that can fail writes `?`),
+R23 and R23a (the flag bans), T19's CamelCase; how each was built, and what I decided:
+
+- **Finding the raised names.** A raise's name is declared by being raised, so it must be known before anything that
+  names it is resolved - a signature's `? NotFound`, a `catch NotFound` in an earlier function, `e == NotFound`, another
+  module's `lex.NotFound`. The resolver therefore walks every module's bodies once before resolving any
+  (`names.surveyBodies`: the diagnostics quiet, nothing recorded, every branch of a local if walked undecided, its
+  scratch lists put back), collecting each `error X` whose X names nothing there - no local in scope (so `error e` of a
+  catch name stays R3a's), nothing of the module, its imports, the build or the prelude, nothing a pending branch
+  declares. Each name is then a type of the module (`addType`) and a synthesized `ast.Decl.Errors(sp, X, [X], [])`
+  appended to its declarations: an error type of one word that is its own name (`generic.IsRaisedError`). Everything
+  downstream - the error-union codes (R6), sets, catch coverage (R14), error values (T20), lowering, emit, the evaluator,
+  `interpret`, explain, the C header's constants - takes it as the error type it is; only printing changed, through one
+  helper (`generic.ErrorWordName`: the name alone where it is raised, `Type.Word` otherwise) used by `$e`, `unhandled
+  error:`, `!`'s message, the trace, interp's names and explain (`error NotFound   # declared where it is raised`). A
+  pending top-level branch decided later (B9c) is walked when it is decided. The walk costs one more pass of name
+  resolution, which is small beside the checker. Decided (mine): a raise's word written qualified by itself
+  (`NotFound.NotFound`) names nothing (T19's "no word" error), and a declared `type NotFound error { NotFound }` is
+  refused naming `error NotFound` - one way to write it; the prelude raises nothing by name, its names being reserved
+  everywhere (D3a); a raised name that is a local's elsewhere in the module meets D3a at that local.
+- **Did you mean.** A raised name is suspect where another error of its module is one edit away - case-insensitive
+  edit distance at most one, and within B11's third of the word (so `A` and `B` are not) - the other a declared error
+  type or set, or a name raised more often (as often, then raised first); every raise of the suspect is the error, the
+  other suggested, unless some function raising it names it after its `?`, which says it is meant (mine: one naming
+  signature exempts the name, not only that raise - one deliberate declaration is enough).
+- **`?` always written.** The checker's messages for a function writing no `?` now say so (R1d): a try letting an
+  error out, a raise, and a function with conditions - whose implicit `? ArgumentError` (D17b's old reading) is gone.
+  A trait's method with conditions must list `ArgumentError` (R1b: a trait writes its set); `tests/any.olang`'s
+  Account did. `main` already needed `?`; its rule is R1d's now.
+  Old code is fixed by `tools/question_migrate.olang` (driven, in `olang fix` before `unused_migrate`): where the
+  compiler says a function "writes no '?'" it writes `?` before the body's brace of the declaration the diagnostic
+  stands in, in rounds - found because the fix scenario's 2026-10-25 program (a contract with no `?`) stopped building.
+  The fix fixtures' old programs keep their old upper-case words (the rename had reached their uses, not their old
+  `error E { }` declarations); `olang fix` renames both.
+  Found on the way (pre-existing): the tree printer (compiler/unparse.olang, astdiff's round trip) wrote a
+  constructor's `?` before its contract block (`struct(v I64) ? [v >= 0]`), which no parser reads back - unseen while no
+  constructor wrote both; now written as the grammar has it. The seed was regenerated: its compiler knew no raised errors.
+- **The flag bans** are judged on signatures as resolved (`generic.flagBans`): every declared function and method but
+  an `extern fn` or `export fn` (C's conventions, X1/X13), and every function type. R23a counts a parameter written
+  `mut T&`, the receiver aside: a method's `Bool` speaks of what it acts on (`s.Add(x)` whether it changed, a parser's
+  `Accept`), where the ban's target is the out-parameter beside a success flag.
+- **CamelCase.** `tools/errorcase_rename.olang` reads every error type's words (the files named, and std's with
+  `--std`), renames an upper-case word to its parts capitalized in its declaration and wherever it is written qualified
+  - code, comments, strings, Markdown - and turns a declaration of one word that is, so renamed, the type's own name
+  into an error raised by name (std/regex's `NotFound`, two checks cases, tests/attrs). It ran over compiler/, std/,
+  tests, checks, bench, fuzz, docs, SPEC, editors, tools and CLAUDE.md (not HISTORY.md, a record): 240 files, ~2,000
+  words; then the compiler's string literals naming prelude words (`"OutOfRange"`, `"Invalid"` ...) by hand. Running
+  it again changes nothing. A library's C header keeps its constants (`NAME_ERROR_OUT_OF_RANGE`: a word's parts apart).
+- **The sites moved** (about 90 in compiler/, 5 in std, 6 in tools, a few in tests), each to what fit: a success flag
+  to an error raised by name - unification (`p.Unify`, `UnifyArg`, `unifyLists`, `bind`, `unifyErrs`) fails with
+  `generic.Mismatch` (its ignoring callers `try ... catch { }`, a predicate `p.Matches`), `cond.meet` with `NoMeet`,
+  `cond.asFloat` `NotFloat`, `scan.unicodeEscape` `BadEscape`, `lower.Verified` `GapMet`, interp's `x.Text`/`Cond`/
+  `Int` `NoValue`, check's `onlyFixed` `NotFixed`, `reflText` `Unrendered`, `textValue` `NotText`, `caughtItems`
+  `NotError`, `caughtCases` `Unread`, the scope pass's `agreeStep` `Disagree`, emit's `walkFlow` `Undecided`, eval's
+  `flatOperand` `NotFlat`, views' `bufferOf` `NotBuffer`, fix's `ensureBuilt` `NotBuilt`, try_migrate's `trailing`
+  `Unreadable`, diagedit's `NotARow` (it had declared a type of one word for it); a Bool that is data into a small
+  struct - `cond.Decision`, `definit.Verdict`, check's `signMag` (a 129-bit sign and magnitude), scope's `placeSlot` and
+  `agreeAt`, interp's `chained`, diagedit's `Row`, unused_migrate's `DeclEdit` enum; "whether anything changed" into
+  a count - `free.addTo`, `unifyBound`, interp's `decide`, the tools' `migrateFile`; an accumulator into a receiver -
+  typed's leave walk (`leaveWalk`), the destructor walk shared by check and scope (`types.DtorWalk`), emit's
+  `scopeUse`, check's `effCalls`/`fixedOut`, build's `claim`, std/chan's `IsClosed` (now `c.IsClosed()`); a Bool
+  derivable elsewhere dropped (bindgen's `noReturnOf`, scan's `blockComment`, `types.IntWidth`, eval's `callee`,
+  `AnyTableFor` split into `AnyTableOf` and `NewAnyTable`); std/json's whole numbers (a sign beside a magnitude) an
+  I128; the prelude's `alone` (a second result that renders) an `I64`.
+- **Found on the way (pre-existing):** `error IoError` - a declared error type written whole - was accepted and raised
+  nothing (the error item read as a set's); it is R3's error now, naming a word to raise.
 
 ## Optimizations from the survey, built (docs/optsurvey.md, 2026-10-31)
 
@@ -26881,4 +26948,13 @@ array can be held by value inside a struct, an element or a type argument, its s
 copying into it; a run-time-length array can be passed by value; D9c's 128-byte cap goes - under QCC a bare parameter
 is passed by pointer as the compiler chooses and copied only where the callee keeps or writes it, so a large value
 costs a copy only where a copy is the point. Built with QCC's rework (both change how parameters are passed).
+
+## Read-only is said by a value (2026-10-31)
+
+A getter `fn (s Server) Cfg() Config&` read-only by inference reads, in its signature, like a writable reference -
+the user: "Shouldn't this function return Config as a value instead?". Made the rule ("yes, make it the rule"):
+every `&` in a signature is writable and shared; a `T&` result hands back only storage reached through a `&`
+parameter, a global or a shared field; read-only is a value result (or parameter), handed over by pointer where the
+caller only reads it and nothing changes the source, copying only what may change otherwise. Functions handing back
+views of their input (Split, Trim, First) take `&` or give values.
 

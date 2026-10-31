@@ -2,9 +2,9 @@
 # R11: a by-value default holding references is admitted only when it built all it holds - here the fallback list is
 # existing storage, whose references would have to agree with every scope the result's live in
 import "std/io"
-type Bad error { NO }
+type Bad error { No }
 fn validate(text String&) Vec<String&> ? Bad {
-    if text.Len() == 0 { error Bad.NO }
+    if text.Len() == 0 { error Bad.No }
     return Vec<String&>()
 }
 fn main() ? {
