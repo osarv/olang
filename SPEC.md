@@ -1492,11 +1492,14 @@ and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
-(`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
+(`total(a.Iter())`); its `Rest()` is a view of the elements it has still to give, and `Advance(n)` moves it past at
+most `n` of them, as that many `Next` calls would, giving how many it passed. There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter` - the last two building a new `Vec` -
 and `ToVec()`, a new `Vec` of every value left - `m.Keys().ToVec()`; each fails with what the iterator and its callbacks fail with - `E`, bound to their union
-(G1a) - so it is called without `try` where neither can fail. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
+(G1a) - so it is called without `try` where neither can fail. `Sum`, `Count`, `Min` and `Max` go through `Fold`, which
+`Take` and `Skip` give a fold of their own over an array's iterator (`Take` over an `Indexable`'s too) - a counted loop
+over what it has left, the same values, the iterators left where `Next` would leave them. The adapters (`Take`, `Skip`, `Enumerate`, `Zip`,
 `Chain`) fail as the iterators they wrap do. So do the walks of the same shape, each failing also with what its callback
 fails with: `TakeWhile(keep)`, the values up to the first `keep` does not hold for (which ends the walk and is not
 given); `SkipWhile(keep)`, the values from that first one on; `StepBy(n)`, the first value and every `n`-th after it,

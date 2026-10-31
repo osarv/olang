@@ -26656,3 +26656,20 @@ and on every tag load of an enum with payloads (`Rvalue.Tag`, i32 or a word) - a
 writes a tag, and an enum's zero value is its first case - so the last compare folds and the trap goes. An eight-case
 `match` over an array of 1M operations, 10 passes: 161.7M -> 141.7M Ir; dispatch's enum row (three cases with
 payloads) 21.9M -> 21.4M. No new MIR; the evaluator unchanged.
+
+**8. Take's and Skip's reductions vectorize.** Each adapter's `Next` wraps the inner one's - two counters and an
+`Exhausted` code a value - so a reduction's loop had two exits and LLVM's vectorizer refused it. Rust's answer, in the
+prelude: `Sum`, `Count`, `Min` and `Max` are written over `Fold` (the defaults' meaning unchanged), and `Take` and `Skip`
+override `Fold`. Over an array's iterator (`ArrayIter`, gaining `Rest()`, a view of what it has still to give, and
+`Advance(n)`, moving past at most n as that many Nexts would) Take's fold is a counted loop over at most its count of
+the elements left (`foldUpTo`), Skip's takes its skip at once and folds the rest by the array's own iterator; Take over a
+Skip over an array settles the Skip first, and Take over an `Indexable`'s `IndexIter` (a Vec's `Iter()`) counts over
+`At` (`foldIndexed`). Anything else folds as Next walks. Each leaves the iterators where Next would - Take's count
+lowered by one more where the array ended first, as its Next does - and where the callback fails part way, past the
+value it failed on (a `catch F e` that advances and raises `e` again: the happy path stores nothing per element, so it
+still vectorizes). Decided (mine): a match on the wrapped iterator's type (G15) rather than a new internal protocol,
+since prelude files cannot reach each other's private members; `Some`/`Every` stay on Next (they stop early).
+bench/repro/adapter_reduce, 100,000 x 10 (setup 1.7M): take 11.4M -> 1.9M, skip 12.4M -> 1.9M, Skip-then-Take inline
+16.4M -> 1.9M and as locals 13.4M -> 1.9M, `a.Iter().Sum()` 1.9M unchanged; a Vec's `v.Iter().Take(k).Sum()` 13.5M ->
+2.9M. std/prelude/tests/folds.olang compares every form with the same walk by Next, after a failing callback too, beside
+baked globals of the same functions.
