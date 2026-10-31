@@ -2007,3 +2007,17 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBP 10 DECIDED 2026-10-31 (the user: "Do it Ig"): array patterns `case String&["test", file, ..words]` - literals
   compare, names bind, `..name` binds the rest as a view (once per pattern), no `..` means the exact length; lengths
   checked first; exhaustiveness over lengths. Queued with the errors batch's language round.
+- QCD ASKED 2026-10-31 (the user: "Can we remake range with this keyword?" - `..` from array patterns). Proposed:
+  `lo..hi` is a range value - half-open (hi excluded, as slices and Len are), counting up, a prelude Range that is an
+  iterator (`for i in 0..n`, `(0..n).StepBy(2)`, `xs.Map` over it) and answers `x in 0..10`; the `range` word removed
+  (one way); no inclusive form (`0..n + 1`). Weighed: the word reads aloud (principle 3) and `..` is read inclusive in
+  Kotlin and exclusive in Rust; for it: ranges become values (passed, stored, tested with `in`) where `range` is loop
+  syntax only, and `..` means "a run of positions" in patterns and loops alike. Rec: yes, half-open. Slices keep
+  `a[lo:hi]`. In effect: `range`.
+- QCE TO DISCUSS (the user, 2026-10-31: "add immutable data types to the ledger as something to discuss"): immutable
+  data types - a type whose values never change once built (no field written after the constructor, through any
+  reference). Context: QCC gave up declaring a stored reference read-only, so an immutable type could be how shared
+  data is made safe to hand around (configs, keys, values shared between tasks without races); questions to settle:
+  declared on the type or the use, what it means for arrays/Vec/Map inside, how it meets `&` parameters (a `&`
+  parameter of an immutable type could never write), and the compile-time evaluator (immutable values bake freely).
+  Not discussed yet.
