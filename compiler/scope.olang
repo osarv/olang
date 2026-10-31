@@ -324,6 +324,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     liftGather Bool = false
     liftGrew Bool = false
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
+    siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
     origin Vec<I64>                        # by local: whose claim its own is (":=" of a local), -1 its own, -2 none to lift
@@ -4325,7 +4326,8 @@ fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     if not source.InferScopes or l >= s.origin.Len() or s.origin[l] == -2 { return }
     if v.K != ValKind.Existing { return }
     r := s.wholeRoot(x)
-    s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2
+    ok := r >= 0 and r != l and (s.liftable(r) or s.held.Has(r) or s.heldCall(r) >= 0)
+    s.origin[l] = r if ok else -2
 }
 
 # a local initialized by a constructor call, or by a call whose result is an instance of known bindings (O13c), and
@@ -6337,6 +6339,12 @@ fn (s mut Scoper&) inner(a Term, b Term) Term {
 fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Term) Val {
     land := s.landing
     s.landing = false
+    # the inference's landing for it (2.4): where its uses need its result
+    sl := s.siteLift(I64(c.Site))
+    if sl != Term.None {
+        dest = s.joinTerm(dest, sl) if dest.Runs() else sl
+        land = false
+    }
     # a part of its result read where it is put (O18a): there, unless its obligations force it elsewhere (O18c)
     pd := try s.partDest.Get(I64(c.Site)) catch default Term.None
     partD := pd != Term.None
@@ -7825,7 +7833,10 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     k := s.order(t, slot)
     # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
     # local's that the value outlives, a longer claim for that local
-    if s.liftGather and k == FailsBlock { s.propose(x, slot) }
+    if s.liftGather and k == FailsBlock {
+        if s.Trace { s.TraceLog.Push($"fails @" $x.Span().Start " body " $s.Id " root " $s.wholeRoot(x) " kind " $kind) }
+        s.propose(x, slot)
+    }
     if s.liftGather and k == Holds and exact and t != slot and s.order(slot, t) == FailsBlock {
         s.proposeLocal(s.fitTarget, t, false)
     }
@@ -8094,10 +8105,11 @@ fn (s mut Scoper&) joinTerm(a Term, b Term) Term {
 # of one (what it names lives where the local's referent or references do, O20, O25h); -1 for a view of storage (a slice,
 # a borrow of a part) or no local's
 fn (s mut Scoper&) wholeRoot(x typed.Expr&) I64 {
-    return match s.unAway(x) {
+    return match unPassed(s.unAway(x)) {
         case typed.Expr.Read(_, _, p, _): flRoot(p)
         case typed.Expr.Borrow(_, _, p): s.borrowRoot(p)
         case typed.Expr.Promote(_, _, pr): s.wholeRoot(pr.X)
+        case typed.Expr.Seq(_, _, q): -1 if q.X is null else s.wholeRoot(q.X!)
         case _: -1
     }
 }
@@ -8113,7 +8125,7 @@ fn (s mut Scoper&) borrowRoot(p typed.Lvalue&) I64 {
 
 # whether what value x keeps is a local's own storage: a value local borrowed whole (E12c)
 fn (s mut Scoper&) keepsStorage(x typed.Expr&) Bool {
-    match s.unAway(x) {
+    match unPassed(s.unAway(x)) {
         case typed.Expr.Borrow(_, _, p) {
             l := wholeLocal(p)
             return l >= 0 and not s.isRef(s.B!.Locals[l].Ty)
@@ -8124,7 +8136,7 @@ fn (s mut Scoper&) keepsStorage(x typed.Expr&) Bool {
 
 # the local whose storage value x is a view of (O27): a slice of a place rooted at it, a borrow of a part of it; -1 none
 fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
-    match unWidened(s.unAway(x)) {
+    match unWidened(unPassed(s.unAway(x))) {
         case typed.Expr.Slice(_, _, sl) { return flRoot(sl.Base) }
         case typed.Expr.Borrow(_, _, p) {
             match p {
@@ -8137,7 +8149,62 @@ fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
 }
 
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
-fn (s mut Scoper&) propose(x typed.Expr&, t Term) { s.proposeLocal(s.wholeRoot(x), t, s.keepsStorage(x)) }
+fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
+    u := unPassed(s.unAway(x))
+    match u {
+        # each value a conditional or a match can give, lifted as though stored alone (E28)
+        case typed.Expr.Cond(_, _, cd) {
+            if cd.A is not null { s.propose(cd.A!, t) }
+            s.propose(cd.B, t)
+            return
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a.Value is not null { s.propose(a.Value!, t) }
+            }
+            if m.NoMatch is not null and m.NoMatch!.Value is not null { s.propose(m.NoMatch!.Value!, t) }
+            return
+        }
+        case typed.Expr.Promote(_, _, pr) {
+            if s.wholeRoot(pr.X) < 0 {
+                s.proposeCall(pr.X, t)
+                return
+            }
+        }
+        case _ { }
+    }
+    r := s.wholeRoot(x)
+    if r < 0 {
+        s.proposeCall(u, t)
+        return
+    }
+    s.proposeLocal(r, t, s.keepsStorage(x))
+}
+
+# a lift proposed for the call value x is, where it is one: it lands at a term outliving t (2.4)
+fn (s mut Scoper&) proposeCall(x typed.Expr&, t Term) {
+    c := s.callOf(x)
+    if c is not null { s.proposeSite(I64(c.Site), t) }
+}
+
+# a lift proposed for the call at site: where it lands outlives t - its result scope bound there, what it builds built
+# there - rather than where its obligations or where it stands put it
+fn (s mut Scoper&) proposeSite(site I64, t Term) {
+    if site < 0 or not t.Runs() { return }
+    key := pair.Pair<I64, I64>(s.Id, site)
+    cur := try s.siteLifts.Get(key) catch default Term.None
+    nt := s.joinTerm(cur, t) if cur.Runs() else t
+    if nt == cur { return }
+    s.siteLifts.Put(key, nt)
+    s.liftGrew = true
+    if s.Trace { s.TraceLog.Push($"lift site " $site " in body " $s.Id ": " $nt) }
+}
+
+# where the inference lands the call at site, None for where its obligations or where it stands put it
+fn (s mut Scoper&) siteLift(site I64) Term {
+    if not source.InferScopes { return Term.None }
+    return try s.siteLifts.Get(pair.Pair<I64, I64>(s.Id, site)) catch default Term.None
+}
 
 # a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
 # with it where stor: lowering homes a local's storage in its frame, a scope variable or the program's (O26a), so its
@@ -8147,6 +8214,30 @@ fn (s mut Scoper&) proposeLocal(l I64, t Term, stor Bool) {
         if l < 0 or l >= s.origin.Len() or s.origin[l] < 0 { break }
         l = s.origin[l]
     }
+    # a held local's value is its temporary initializer's, built where its one use puts it: a call of it lifted - and so is
+    # a hidden one's holding a call's several results (D8d)
+    if l >= 0 and s.held.Has(l) {
+        h := try s.held.Get(l) catch { return }
+        s.proposeCall(h, t)
+        return
+    }
+    hc := s.heldCall(l) if l >= 0 else -1
+    if hc >= 0 {
+        s.proposeSite(hc, t)
+        return
+    }
+    s.liftLocal(l, t, stor)
+}
+
+# the call site a hidden local holding a call's several results is initialized by (D8d), -1 for none
+fn (s mut Scoper&) heldCall(l I64) I64 {
+    x := try s.inits.Get(l) catch { return -1 }
+    if s.B!.Locals[l].Kind != typed.LocalKind.Hidden { return -1 }
+    c := s.callOf(x)
+    return I64(c.Site) if c is not null else -1
+}
+
+fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     if l < 0 or l >= s.origin.Len() or s.origin[l] == -2 or not s.liftable(l) or not t.Runs() {
         if s.Trace and l >= 0 and l < s.origin.Len() {
             s.TraceLog.Push($"no lift " $s.P.L.Names.Text(s.B!.Locals[l].Name) " @" $s.B!.Locals[l].Sp.Start " to " $t " (origin " $s.origin[l] ")")
