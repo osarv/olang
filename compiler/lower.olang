@@ -2462,6 +2462,15 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     ln.block(c.Loop)
     try ln.collects.Pop() catch { }
     if ln.dead { return mir.Operand.None }
+    if ln.madeAt(c.Site) == s {
+        # the buffer is the comprehension's alone and lives where the result does: its first n elements are the
+        # result, with no copy - the room past them kept as long as the copy would have kept the buffer
+        rt := t.Ref(t.Array(el, types.TypeId(0)), types.Writable)
+        whole := ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref])
+        view := ln.into(rt, mir.Rvalue.Slice(whole, ln.constI64(0), mir.Operand.Copy(mir.L(n)), rt), sp)
+        if t.IsRef(t.Repr(ty)) { return view }
+        return ln.prim(typed.PrimOp.Convert, ty, mir.Operand[view], sp)
+    }
     out := ln.temp(ty, sp)
     # no fill: every element is copied in at once
     ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(ln.madeAt(c.Site), ty, mir.Operand.Copy(mir.L(n)), mir.Operand.None)))

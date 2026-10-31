@@ -26673,3 +26673,20 @@ bench/repro/adapter_reduce, 100,000 x 10 (setup 1.7M): take 11.4M -> 1.9M, skip 
 16.4M -> 1.9M and as locals 13.4M -> 1.9M, `a.Iter().Sum()` 1.9M unchanged; a Vec's `v.Iter().Take(k).Sum()` 13.5M ->
 2.9M. std/prelude/tests/folds.olang compares every form with the same walk by Next, after a failing callback too, beside
 baked globals of the same functions.
+
+**7. A filtered comprehension's result is its buffer.** A comprehension with an `if` filled a buffer (reserved from the
+source's length, else 100 and doubling) and then copied its first n elements into an array of exactly n - 45% of its
+instructions. Where the buffer is built in the scope the result is made in (no promotion adopting it elsewhere), the
+result is now those n elements of the buffer, a slice taken as the value (`lower.collect`): nothing else names the
+buffer, and the room past n is kept exactly as long as the copy would have kept the buffer, so memory is never more.
+bench/repro/filtered_comprehension `if` 100000: 17.7M -> 13.7M Ir (a Vec filled by Push: 12.6M); the unfiltered `sq`
+(already exact) unchanged. tests/filtered.olang writes, keeps, grows past and empties such results, built, `-debug`,
+`-sanitize`, `-quick` and baked.
+
+**7, not built: a Vec grown in place.** Decided as "only while no `View()` was taken", but the flag has nowhere to be
+set: `View()` takes a read-only `Vec<T>&`, and the state its handle names is read-only through it (QC), so recording a
+view needs either a writable receiver (a change of `View`'s signature, so of what programs may call it on) or a new
+prelude privilege to write through a read-only reference. And a growing Vec's buffer past 4KB is a chunk of its own, so
+growing it in place means `mremap` and relinking the scope's chunk list, which may move the chunk. Left for the user's
+QBV-like call on the first and a runtime round on the second; the comprehension's growth (private, no views) is the
+same runtime work and waits with it.

@@ -1327,6 +1327,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   - 13: every enum tag load carries `!range` over its cases, so a match's exhaustiveness trap folds (8-way -12%).
   - 8: `Sum`/`Count`/`Min`/`Max` through `Fold`; `Take`/`Skip` fold an array's (Take: an Indexable's) iterator by a counted loop
     (`ArrayIter.Rest`, `Advance`) - `a.Iter().Skip(10).Take(k).Sum()` vectorizes (16.4 -> 1.9M Ir).
+  - 7: a filtered comprehension's result is the first n elements of its own buffer, no copy (17.7 -> 13.7M Ir); a Vec
+    grown in place is not built (View's read-only receiver has nowhere to record a view).
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
