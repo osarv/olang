@@ -2163,3 +2163,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   return (their point 4): no field anywhere in the repository needs a run-time scope; the one refused shape is a field
   set after construction in a struct with several reference parameters (`last String&a = ""` assigned a view of
   another field later), refused with O20 naming `$p.last` - written `last String& = a` it is inferred.
+- Rework round 2a (wt-rework 03375dd, behind OLANG_PARAMS=new; merged half-built since the default path is
+  unchanged and verified) - decided by me, user absent: (1) per-level inferred permission (docs/rework.md 2.8) is
+  required for "every `&` is writable" to work - a fresh `Vec<String&>` must hold read-only views - so it is built next
+  (round 2b), by re-checking as error sets and entry copies are; (2) the agent's "every bare array by pointer, no G29
+  instances" is NOT taken whole: G29's per-length instance stays where the body decides something on the length (an
+  `if`/conditional/`match`/assert on `Len()`, a `comptime`, T7c storage sized by it - G30's uses), everything else is
+  one instance taking the array by pointer - so the user's QP2/QP3 compile-time lengths survive and os.Exec gets one
+  copy; (3) open point 3 (a stored read-only reference) decided after 2b's numbers; (4) constructor parameters stay by
+  value, D9d never judges a generic's parameters, Split/Lines keep `&` receivers - accepted.

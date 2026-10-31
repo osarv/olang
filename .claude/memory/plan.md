@@ -636,3 +636,10 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   0 hidden W parameters needed; 15 fields promoted in compiler/, 14 of std's 23 &q fields; refused: O27 kept views (2
   in shared.olang), T22a function values, D18c borrowed-element generators. Also fixed: scope-pass gaps now stop a build
   (a lambda building through an instance's &p field read freed storage). Next: round 2 (& means may write).
+- 2026-10-31 CET: rework round 2a merged (03375dd, fast-forward; behind OLANG_PARAMS=new, default path unchanged,
+  verified): written `&` writable, bare struct/array parameters by pointer as read-only references (generic.BareRef),
+  copy on entry where a body writes one (-memory lists them), D9d/D9f/T25d diagnostics, tools/param_migrate.olang;
+  std 19/40 files pass under the switch, compiler/ 1,904 errors after the text phase. Found and fixed: B7a's
+  once-check kept its record across checking passes (a twice-checked program reported each named test twice). Next:
+  round 2b - per-level inferred permission, G29 where the length decides something, std and compiler/ migrated,
+  open point 5, not-a-value reasons, KeptPerm/storeThrough, the field loop's speed, the flip and the seed.
