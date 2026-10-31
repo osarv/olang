@@ -643,3 +643,13 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   once-check kept its record across checking passes (a twice-checked program reported each named test twice). Next:
   round 2b - per-level inferred permission, G29 where the length decides something, std and compiler/ migrated,
   open point 5, not-a-value reasons, KeptPerm/storeThrough, the field loop's speed, the flip and the seed.
+- 2026-10-31 CET: rework round 2b merged (8933479, fast-forward; behind OLANG_PARAMS=new, the default path unchanged;
+  verified on e9528e5, goldens recaptured after): per-level inferred permission (load.RoLevels), narrowed and following
+  results, G29 only where the length decides something, `?&` parameters read-only unless written, a level made
+  read-only before any entry copy (String.Split no longer copies), arguments checked in their parameter's context
+  (order.ByFields a value again); std 35/40 under the switches, bench identical with 0 entry copies, compiler/ 2,430 ->
+  716 errors after two tool runs. Found, not fixed: param_migrate's text phase not idempotent (makes `p T&` bare again),
+  D9d's suggestion keeping a scope marker, the tool pinning `&` from an earlier note (488 D9d rows). Next: round 2c -
+  per-field permission bindings (2.8), the by-pointer value-result handover then QCC's T& error, the tool's idempotence
+  guard and unpinned D9d round, compiler/ migrated and self-built, open point 5, not-a-value reasons, KeptPerm and the
+  storeThrough hole, the caller-side copy, the field loop's speed, then the flip.

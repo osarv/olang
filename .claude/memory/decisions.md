@@ -2172,3 +2172,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   one instance taking the array by pointer - so the user's QP2/QP3 compile-time lengths survive and os.Exec gets one
   copy; (3) open point 3 (a stored read-only reference) decided after 2b's numbers; (4) constructor parameters stay by
   value, D9d never judges a generic's parameters, Split/Lines keep `&` receivers - accepted.
+- Rework round 2b's three questions DECIDED by me 2026-10-31 (the user absent; theirs to review): (1) a view of a bare
+  parameter handed back as `T&` - build the by-pointer value-result handover first, then apply QCC's rule as written (an
+  error naming the value result); read-only results only as the stop-gap until then; (2) read-only `?&` parameters are
+  inferred from the body, no spelling (QCC: read-only is said by a value, never by a marker); (3) per-field permission
+  bindings (docs/rework.md 2.8) are built in round 2c - the last std files and compiler/'s O17 errors need them. The
+  agent's ten provisional details (docs/rework.md 11.2) stand.
