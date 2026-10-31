@@ -2152,3 +2152,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   views of a bare parameter stay read-only (they never leave as references). Functions that hand back views of their
   input (Split, Trim, a list's First) take `&` - sharing the caller's storage, which the `&` then says - or return
   values. ASKED.
+- Read-only by values DECIDED 2026-10-31 (the user: "yes, make it the rule"). In the rework's round 2.
+

@@ -26949,3 +26949,12 @@ copying into it; a run-time-length array can be passed by value; D9c's 128-byte 
 is passed by pointer as the compiler chooses and copied only where the callee keeps or writes it, so a large value
 costs a copy only where a copy is the point. Built with QCC's rework (both change how parameters are passed).
 
+## Read-only is said by a value (2026-10-31)
+
+A getter `fn (s Server) Cfg() Config&` read-only by inference reads, in its signature, like a writable reference -
+the user: "Shouldn't this function return Config as a value instead?". Made the rule ("yes, make it the rule"):
+every `&` in a signature is writable and shared; a `T&` result hands back only storage reached through a `&`
+parameter, a global or a shared field; read-only is a value result (or parameter), handed over by pointer where the
+caller only reads it and nothing changes the source, copying only what may change otherwise. Functions handing back
+views of their input (Split, Trim, First) take `&` or give values.
+

@@ -344,7 +344,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   rework).** A parameter or receiver `p T&` may write the caller's instance; a bare `p T` can never affect the caller
   (it may write its own copy), passed by value or pointer as the compiler chooses, unobservably (a pointer only where
   nothing the call reaches writes storage of that type). No `mut` on parameters, receivers or references; a view taken
-  from a bare parameter or constant data is read-only by inference, never written. `&` stays on fields, elements, type
+  from a bare parameter or constant data is read-only inside the body and never leaves it as a reference: every `&`
+  a signature shows is writable and shared, and read-only is always said by a value (the user, 2026-10-31) - a result
+  `T&` hands back only storage reached through a `&` parameter, a global or a shared field, else it is an error
+  naming the value result, which the compiler hands over by pointer where nothing changes the source. `&` stays on fields, elements, type
   arguments, `?&` and a result handing back an existing instance. Globals stay immutable unless written `mut` (the
   user, 2026-10-31: "Keep mut and make globals immutable by default") - the one place `mut` is written. Enforced
   (the user's "Yes do them"): a `&` parameter the body never writes, passes to a `&` parameter or stores shared is an
