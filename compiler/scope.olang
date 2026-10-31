@@ -8416,7 +8416,11 @@ fn (s mut Scoper&) liftAtCall(c typed.Call&, r rel, lo Term) {
         return
     }
     rv := s.resultVarOf(s.calleeType(c))
-    if rv >= 0 and r.Hi == Term.Var(rv) { s.proposeSite(I64(c.Site), lo) }
+    if rv < 0 or r.Hi != Term.Var(rv) { return }
+    # a result that may hold a destructor is never landed longer for what its callee requires of it - its destructor
+    # would run later than where it stands (2.5's destructor timing); kept whole somewhere, it lifts with what keeps it
+    if s.mayHoldDtor(s.P.T.Result(s.calleeType(c))) { return }
+    s.proposeSite(I64(c.Site), lo)
 }
 
 # body b's claims inferred (2.4): judged quietly, gathering lifts, until no claim grows
