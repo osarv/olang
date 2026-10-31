@@ -286,6 +286,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unsets Vec<unsetCand>       # D13d: the locals declared with no value, judged once the attempt has checked
     heldWalks Vec<heldCand>     # D18e: the locals walked by a for-in or a comprehension, judged once the attempt has checked
     idle Vec<idleCall>          # S3: the call statements whose value is dropped, judged once the attempt has checked
+    effCalls Vec<I64>           # S3: the bodies the walk of effX and the rest found called
+    fixedOut Map<source.NameId, I64>   # S8c: the fixed locals readsFixed found, by name
     # E27: a comprehension's walk - 1 while its block is yet to be opened (comprOpen: where its source's setup ends, so
     # its reservation is counted before the loop), 2 once open (comprId, comprOuter, comprMark, comprFrom), 3 filling the
     # fixed array comprOut of a count known while compiling (T7c) by its counter comprIdx; comprKnown that count, the walk's
@@ -680,7 +682,8 @@ fn (c mut Checker&) settleUnset() {
             continue
         }
         b := c.Bodies[u.Body]
-        found, readAt, why, whyAt := definit.Judge(b, typed.LocalId(I32(u.Local)), u.Field)
+        v := definit.Judge(b, typed.LocalId(I32(u.Local)), u.Field)
+        found, readAt, why, whyAt := v.Found, v.ReadAt, v.Why, v.WhyAt
         if not found {
             d.Drop(u.Group)
             if u.ValueAt >= 0 { c.ValueAsks[u.ValueAt].Gone = true }
@@ -795,8 +798,18 @@ fn (c mut Checker&) plainScalar(t types.TypeId) Bool {
     return c.isEnum(t) and not c.P.T.HasPayload(c.P.T.Cases(t))
 }
 
-# whether an expression reads no local but fixed ones (S8c), each found put in out with its own initializer's, by name
-fn (c mut Checker&) onlyFixed(x ast.Expr?&, out mut Map<source.NameId, I64>&) Bool {
+# the fixed locals an expression reads, by name (S8c), with the ones their own initializers read - failing with
+# NotFixed where it reads any other local
+fn (c mut Checker&) onlyFixed(x ast.Expr?&) Map<source.NameId, I64> ? NotFixed {
+    saved := c.fixedOut
+    c.fixedOut = Map<source.NameId, I64>()
+    defer c.fixedOut = saved
+    if not c.readsFixed(x) { error NotFixed }
+    return c.fixedOut.Clone()
+}
+
+# whether an expression reads no local but fixed ones (S8c), each found put in fixedOut
+fn (c mut Checker&) readsFixed(x ast.Expr?&) Bool {
     if x is null { return true }
     match x {
         case ast.Expr.Name(sp, n) {
@@ -804,39 +817,39 @@ fn (c mut Checker&) onlyFixed(x ast.Expr?&, out mut Map<source.NameId, I64>&) Bo
             if not c.namesLocal(sp) { return c.localNamed(n) < 0 }
             if c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar { return c.constsRead and c.fr().Ctx.Vars.Has(n) }
             if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return false }
-            if out.Has(n) { return true }
+            if c.fixedOut.Has(n) { return true }
             id := c.localNamed(n)
             # written already (a write after it is settled once the body is checked)
             if id < 0 or c.writes.Has(pair.Pair(c.fr().Body, id)) { return false }
             fi := try c.fixedInits.Get(pair.Pair(c.fr().Body, id)) catch { return false }
-            out.Put(n, id)
+            c.fixedOut.Put(n, id)
             c.lastFixed.Push(id)
-            return c.onlyFixed(fi.Init, out)
+            return c.readsFixed(fi.Init)
         }
         case _ { }
     }
     return match x {
         case ast.Expr.Lit(_, _), ast.Expr.Default(_): true
-        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.onlyFixed(a, out)
-        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _): c.onlyFixed(a, out)
-        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): c.onlyFixed(a, out) and c.onlyFixed(b, out)
-        case ast.Expr.Cond(_, a, k, b): c.onlyFixed(a, out) and c.onlyFixed(k, out) and c.onlyFixed(b, out)
-        case ast.Expr.Chain(_, ch): c.allFixed(ch.Xs, out)
-        case ast.Expr.Call(_, f, args): c.paramLen(f, args) >= 0 or (c.onlyFixed(f, out) and c.allFixed(args, out))
-        case ast.Expr.ScopeCall(_, f, _, args): c.onlyFixed(f, out) and c.allFixed(args, out)
-        case ast.Expr.Index(_, a, items): c.onlyFixed(a, out) and c.allFixed(items, out)
-        case ast.Expr.Slice(_, a, lo, hi): c.onlyFixed(a, out) and c.onlyFixed(lo, out) and c.onlyFixed(hi, out)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items, out)
-        case ast.Expr.Try(_, a, clauses): c.onlyFixed(a, out) and (clauses.Len() == 0)
-        case ast.Expr.Unreachable(_, msg): msg is null or c.onlyFixed(msg, out)
+        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _): c.readsFixed(a)
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _): c.readsFixed(a)
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): c.readsFixed(a) and c.readsFixed(b)
+        case ast.Expr.Cond(_, a, k, b): c.readsFixed(a) and c.readsFixed(k) and c.readsFixed(b)
+        case ast.Expr.Chain(_, ch): c.allFixed(ch.Xs)
+        case ast.Expr.Call(_, f, args): c.paramLen(f, args) >= 0 or (c.readsFixed(f) and c.allFixed(args))
+        case ast.Expr.ScopeCall(_, f, _, args): c.readsFixed(f) and c.allFixed(args)
+        case ast.Expr.Index(_, a, items): c.readsFixed(a) and c.allFixed(items)
+        case ast.Expr.Slice(_, a, lo, hi): c.readsFixed(a) and c.readsFixed(lo) and c.readsFixed(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items): c.allFixed(items)
+        case ast.Expr.Try(_, a, clauses): c.readsFixed(a) and (clauses.Len() == 0)
+        case ast.Expr.Unreachable(_, msg): msg is null or c.readsFixed(msg)
         case _: false
     }
 }
 
-fn (c mut Checker&) allFixed(xs Array<ast.Expr&>&, out mut Map<source.NameId, I64>&) Bool {
+fn (c mut Checker&) allFixed(xs Array<ast.Expr&>&) Bool {
     if xs.Len() == 0 { return true }
     for x in xs {
-        if not c.onlyFixed(x, out) { return false }
+        if not c.readsFixed(x) { return false }
     }
     return true
 }
@@ -2354,7 +2367,7 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     fixedIn I64 = -1
     if c.frames.Len() > 0 {
         fixedIn = c.fr().Body
-        if not c.onlyFixed(x, fixed) { return -1 }
+        fixed = try c.onlyFixed(x) catch NotFixed { return -1 }
     } else if c.declaresNames(x) {
         return -1
     }
@@ -3547,9 +3560,8 @@ fn (c mut Checker&) comptimeBody(sp source.Span, y ast.Expr&, want types.TypeId,
     outer := c.fr()
     mi := outer.Mi
     c.P.SynthGlobal(home, n, y)
-    fixed := Map<source.NameId, I64>()
     c.lastFixed.Clear()
-    if not c.onlyFixed(y, fixed) { fixed.Clear() }
+    fixed := try c.onlyFixed(y) catch NotFixed default Map<source.NameId, I64>()
     id := c.newBody(typed.BodyOf.Global(home, n), c.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0)), mi, sp)
     key := pair.Pair(home, I64(n))
     c.globalBodies.Put(key, id)
@@ -3673,9 +3685,8 @@ fn (c mut Checker&) unrollBody(x ast.Expr&, ty types.TypeId) I64 {
     mi := outer.Mi
     d := c.P.L.Diags
     mark := d.Count()
-    fixed := Map<source.NameId, I64>()
     c.lastFixed.Clear()
-    if not c.onlyFixed(x, fixed) { fixed.Clear() }
+    fixed := try c.onlyFixed(x) catch NotFixed default Map<source.NameId, I64>()
     sp := x.Span()
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
     c.state[id] = 1
@@ -6139,7 +6150,8 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
             if not v.Ok { return noLit() }
             if op == token.Tok.Minus {
                 if v.IsFloat { return floatLit(-v.F) }
-                n, m := magOf(v)
+                vMag := magOf(v)
+                n, m := vMag.Neg, vMag.M
                 return ofMag(not n, m) if m != U128(0) else intLit(0)
             }
             if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
@@ -6163,8 +6175,10 @@ fn (c mut Checker&) fold(x ast.Expr?&) litv {
                 if op == token.Tok.Slash { return floatLit(fa / fb) }
                 return noLit()
             }
-            na, ma := magOf(va)
-            nb, mb := magOf(vb)
+            aMag := magOf(va)
+            na, ma := aMag.Neg, aMag.M
+            bMag := magOf(vb)
+            nb, mb := bMag.Neg, bMag.M
             if op == token.Tok.Plus { return addMag(na, ma, nb, mb) }
             if op == token.Tok.Minus { return addMag(na, ma, not nb, mb) }
             if op == token.Tok.Star {
@@ -6237,11 +6251,17 @@ fn (c mut Checker&) foldPart(x ast.Expr&) litv {
 }
 
 # an integer literal value's sign and magnitude: exact for every value E4a computes, from I128's least to U128's greatest
-fn magOf(v litv) Bool, U128 {
-    if v.Wide { return v.Neg, v.W }
-    if v.Big { return false, U128(U64(v.I)) }
-    if v.I < 0 { return true, U128(U64(0) - U64(v.I)) }
-    return false, U128(U64(v.I))
+fn magOf(v litv) signMag {
+    if v.Wide { return signMag(v.Neg, v.W) }
+    if v.Big { return signMag(false, U128(U64(v.I))) }
+    if v.I < 0 { return signMag(true, U128(U64(0) - U64(v.I))) }
+    return signMag(false, U128(U64(v.I)))
+}
+
+# an integer of up to 129 bits: a sign and a magnitude (magOf), or the bit above 128 and the 128 below (twos)
+type signMag struct(Neg Bool, M U128) {
+    Neg
+    M
 }
 
 # the literal value of a sign and magnitude: an I64, a U64 above I64's maximum (L10), a value past both up to I128's
@@ -6271,8 +6291,10 @@ fn addMag(na Bool, ma U128, nb Bool, mb U128) litv {
 
 # E4a: & | ^ on values past 64 bits, in two's complement wide enough for both: a 64-bit pattern is its bits there (L10a)
 fn wideBits(op token.Tok, va litv, vb litv) litv {
-    ea, ba := twos(va)
-    eb, bb := twos(vb)
+    aBits := twos(va)
+    ea, ba := aBits.Neg, aBits.M
+    bBits := twos(vb)
+    eb, bb := bBits.Neg, bBits.M
     e := ea and eb if op == token.Tok.Amp else ea or eb if op == token.Tok.Pipe else ea != eb
     r := ba & bb if op == token.Tok.Amp else ba | bb if op == token.Tok.Pipe else ba ^ bb
     if not e { return ofMag(false, r) }
@@ -6281,11 +6303,11 @@ fn wideBits(op token.Tok, va litv, vb litv) litv {
 }
 
 # a value as its sign extension and its low 128 bits
-fn twos(v litv) Bool, U128 {
-    if v.Hex and not v.Wide { return false, U128(U64(v.I)) }
-    n, m := magOf(v)
-    if n { return true, U128(0) - m }
-    return false, m
+fn twos(v litv) signMag {
+    if v.Hex and not v.Wide { return signMag(false, U128(U64(v.I))) }
+    sm := magOf(v)
+    if sm.Neg { return signMag(true, U128(0) - sm.M) }
+    return sm
 }
 
 # the digits of an integer literal no 64 bits hold, as an unsigned 128-bit value (L10, L10a); separators were checked by
@@ -6886,18 +6908,6 @@ fn (c mut Checker&) preludeForeign(t types.TypeId, name String&) Bool {
     x := c.P.T.Referent(t)
     d := c.P.T.DeclOf(x)
     return c.text(c.P.T.DeclName(d)) == name and c.P.L.Mods[c.P.T.DeclModule(d)].Prelude
-}
-
-# a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
-# what is wrong in its own words (S12b, S13, E28)
-fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c, Bool {
-    n := c.P.L.Diags.Count()
-    g := c.P.L.Diags.Hold()
-    y := c.fit(x, want, sp)
-    c.P.L.Diags.EndHold()
-    ok := c.P.L.Diags.Count() == n
-    if ok { c.P.L.Diags.Choose(g) } else { c.P.L.Diags.Drop(g) }
-    return y, ok
 }
 
 # whether values of two types can be compared or chosen between: one flows into the other, numbers meet, null beside a
@@ -7575,7 +7585,8 @@ fn (c mut Checker&) buildDefaulted(mi I64, n source.NameId, v ast.VarDecl&) Bool
 
 # -D's value for n as a literal of type want (B10c); null where it is no literal of it (names reports that)
 fn (c mut Checker&) defineValue(sp source.Span, n source.NameId, want types.TypeId) typed.Expr?&c {
-    v, big := try c.P.L.Consts.ValueOf(c.text(n)) catch { return null }
+    v := try c.P.L.Consts.ValueOf(c.text(n)) catch { return null }
+    big := v.Big
     w := c.under(want)
     if v.Kind == cond.ValueKind.Bool and w == types.BoolT { return c.lit(sp, want, 1 if v.I != 0 else 0) }
     if v.Kind == cond.ValueKind.Int and c.P.T.IsInt(w) { return c.lit(sp, want, v.I) }
@@ -7587,10 +7598,11 @@ fn (c mut Checker&) defineValue(sp source.Span, n source.NameId, want types.Type
 
 fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
     c.ReadsBuild.Put(c.fr().Body, true)
-    v, big := try c.P.L.Consts.ValueOf(c.text(n)) catch {
+    v := try c.P.L.Consts.ValueOf(c.text(n)) catch {
         c.gap(sp, "a build constant without a value")
         return c.unknown(sp)
     }
+    big := v.Big
     if v.Kind == cond.ValueKind.Bool { return c.lit(sp, types.BoolT, 1 if v.I != 0 else 0) }
     if v.Kind == cond.ValueKind.Int { return c.lit(sp, c.P.T.Prim("U64") if big else c.i64(), v.I) }
     if v.Kind == cond.ValueKind.Float { return c.lit(sp, c.P.T.Prim("F64"), I64(v.F.Bits())) }
@@ -11215,7 +11227,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         if typeOf(e) != types.UnknownT {
             c.unifySoft(ps[pk], typeOf(e), b)
             if c.P.T.KindOf(ps[pk]) == types.Kind.Func and c.P.T.KindOf(typeOf(e)) == types.Kind.Func {
-                c.P.UnifyErrors(c.P.T.Errors(ps[pk]), c.P.T.Errors(typeOf(e)), b)
+                try c.P.UnifyErrors(c.P.T.Errors(ps[pk]), c.P.T.Errors(typeOf(e)), b) catch { }
             }
         }
         vals[i] = e
@@ -11356,7 +11368,7 @@ literalOrder := String&["F64", "I64", "U64", "F32", "I32", "U32", "F16", "BF16",
 # bound (a lambda's type may be looser than its parameter, T22)
 fn (c mut Checker&) unifySoft(pat types.TypeId, actual types.TypeId, b mut generic.Binding&) {
     b2 := generic.Binding(b.Owner, b.N)
-    c.P.UnifyArg(pat, actual, b2, false, false)
+    try c.P.UnifyArg(pat, actual, b2, false, false) catch { }
     for j in range b.N {
         if b2.Vals[j] != types.UnknownT and (b.Vals[j] == types.UnknownT or b.LiteralOnly[j]) {
             b.Vals[j] = b2.Vals[j]
@@ -11390,7 +11402,7 @@ fn (c mut Checker&) unify(pat types.TypeId, actual types.TypeId, b mut generic.B
     if c.isRef(p) and not c.isRef(a) { p = c.P.T.Referent(p) }
     # a reference reaching a bare variable binds the reference (G11); one reaching a value pattern its referent (E12)
     if c.isRef(a) and not c.isRef(p) and c.P.T.KindOf(p) != types.Kind.Var { a = c.P.T.Referent(a) }
-    c.P.UnifyArg(p, a, b, literal, receiver)
+    try c.P.UnifyArg(p, a, b, literal, receiver) catch { }
 }
 
 # T2c: where the k-th parameter of a call's target is written (the receiver 0 when there is one), for declNote; Nowhere
@@ -12929,53 +12941,57 @@ fn (c mut Checker&) reflInt(x ast.Expr&) reflVal {
 }
 
 # a message reflection renders while compiling (G35, S18c): text, or a join of text and "$" renderings of what
-# reflFold knows - a member's name, a type's size, a length ("field " $f.Name " has no order"); whether it does
-fn (c mut Checker&) reflText(x ast.Expr&) String, Bool {
+# reflFold knows - a member's name, a type's size, a length ("field " $f.Name " has no order") - failing with
+# Unrendered where it renders none
+fn (c mut Checker&) reflText(x ast.Expr&) String ? Unrendered {
     was := c.reflTouched
     c.reflTouched = false
-    out, ok := c.reflTextOf(x)
+    defer c.reflTouched = was
+    out := try c.reflTextOf(x) catch Unrendered {
+        c.reflSaid = c.reflTouched
+        error Unrendered
+    }
     c.reflSaid = c.reflTouched
-    c.reflTouched = was
-    return out, ok
+    return out
 }
 
-fn (c mut Checker&) reflTextOf(x ast.Expr&) String, Bool {
+fn (c mut Checker&) reflTextOf(x ast.Expr&) String ? Unrendered {
     match x {
         case ast.Expr.Lit(sp, kind) {
-            if kind == token.Tok.StrLit { return String(c.strBytes(sp)), true }
+            if kind == token.Tok.StrLit { return String(c.strBytes(sp)) }
         }
-        case ast.Expr.Paren(_, y) { return c.reflTextOf(y) }
+        case ast.Expr.Paren(_, y) { return try c.reflTextOf(y) }
         case ast.Expr.Join(_, parts) {
             out := ""
-            for p in parts {
-                t, ok := c.reflPiece(p)
-                if not ok { return "", false }
-                out = $out $t
-            }
-            return out, true
+            for p in parts { out = $out $(try c.reflPiece(p)) }
+            return out
         }
         case _ { }
     }
-    return "", false
+    error Unrendered
 }
 
-fn (c mut Checker&) reflPiece(p ast.Expr&) String, Bool {
+fn (c mut Checker&) reflPiece(p ast.Expr&) String ? Unrendered {
     match p {
         case ast.Expr.Lit(sp, kind) {
-            if kind == token.Tok.StrLit { return String(c.strBytes(sp)), true }
+            if kind == token.Tok.StrLit { return String(c.strBytes(sp)) }
         }
         case ast.Expr.Unary(_, op, y) {
-            if op == token.Tok.Dollar {
-                v := c.reflFold(y)
-                if not v.Ok { return "", false }
-                if v.K == RvText { return v.S, true }
-                if v.K == RvInt { return $v.I, true }
-                if v.K == RvBool { return "true" if v.I == 1 else "false", true }
-            }
+            if op == token.Tok.Dollar { return try c.reflRendered(y) }
         }
         case _ { }
     }
-    return "", false
+    error Unrendered
+}
+
+# "$y" rendered while compiling where reflFold knows y: a text, an integer or a Bool
+fn (c mut Checker&) reflRendered(y ast.Expr&) String ? Unrendered {
+    v := c.reflFold(y)
+    if not v.Ok { error Unrendered }
+    if v.K == RvText { return v.S }
+    if v.K == RvInt { return $v.I }
+    if v.K == RvBool { return "true" if v.I == 1 else "false" }
+    error Unrendered
 }
 
 # a condition reflection decides (G35): 1 true, 0 false, -1 where it reads no reflected member or is not decided
@@ -13721,8 +13737,7 @@ fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable&c {
                     if cd.Value is null {
                         bytes[i] = textBytes(c.text(cd.Name))
                     } else {
-                        sp, ok := c.textValue(cd.Value!)
-                        if not ok {
+                        sp := try c.textValue(cd.Value!) catch NotText {
                             if report { c.err(at, msgs.RawNotLiteral(c.ty(rt))) }
                             continue
                         }
@@ -13739,7 +13754,8 @@ fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable&c {
                 }
                 v := noLit()
                 if cd.Value is null {
-                    na, ma := magOf(prev)
+                    aMag := magOf(prev)
+                    na, ma := aMag.Neg, aMag.M
                     v = addMag(na, ma, false, U128(1)) if prev.Ok else noLit()
                 } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
                     v = c.foldPart(cd.Value!)
@@ -13774,13 +13790,16 @@ fn (c mut Checker&) caseNameSpan(cd ast.CaseDecl&) source.Span {
     return source.Span(cd.Sp.Start, cd.Sp.Start + I32(c.text(cd.Name).Len()))
 }
 
-# a raw value written as one text literal: its span
-fn (c mut Checker&) textValue(x ast.Expr&) source.Span, Bool {
+# a raw value written as one text literal: its span - failing with NotText where it is not one
+fn (c mut Checker&) textValue(x ast.Expr&) source.Span ? NotText {
     match x {
-        case ast.Expr.Lit(sp, kind) { return sp, kind == token.Tok.StrLit }
-        case ast.Expr.Paren(_, y) { return c.textValue(y) }
-        case _ { return source.Span(0, 0), false }
+        case ast.Expr.Lit(sp, kind) {
+            if kind == token.Tok.StrLit { return sp }
+        }
+        case ast.Expr.Paren(_, y) { return try c.textValue(y) }
+        case _ { }
     }
+    error NotText
 }
 
 fn isCharLit(x ast.Expr&) Bool {
@@ -15031,20 +15050,20 @@ fn exprPath(x ast.Expr&) ast.Path?&x {
 
 # what an item compared with an error value stands for (R11b, T20): a word, an error type, a set's entries; false where
 # it names none of these
-fn (c mut Checker&) caughtItems(x ast.Expr&) Vec<types.TypeId>, Bool {
+fn (c mut Checker&) caughtItems(x ast.Expr&) Vec<types.TypeId> ? NotError {
     out Vec<types.TypeId>
     p := exprPath(x)
-    if p is null { return out, false }
+    if p is null { error NotError }
     ctx := c.fr().Ctx
     et := c.P.ErrorType(ctx, p)
     if et != types.UnknownT {
         c.P.EntriesOf(et, out)
-        return c.normalSet(c.merged(out)), true
+        return c.normalSet(c.merged(out))
     }
     w, wt := c.errorWord(p)
-    if w < 0 or w >= 64 { return out, false }
+    if w < 0 or w >= 64 { error NotError }
     out.Push(c.entryOf(wt, U64(1) << w))
-    return out, true
+    return out
 }
 
 # T20: whether an expression is an error type or a named set written (a type test's other side), or an error word
@@ -15148,8 +15167,7 @@ fn (c mut Checker&) errCompareItem(sp source.Span, op token.Tok, o ast.Expr&, it
         c.err(o.Span(), msgs.ErrComparedNotError(c.src(o.Span()), c.ty(t), c.src(it.Span())))
         return c.lit(sp, types.BoolT, 0)
     }
-    xs, ok := c.caughtItems(it)
-    if not ok { return c.lit(sp, types.BoolT, 0) }
+    xs := try c.caughtItems(it) catch NotError { return c.lit(sp, types.BoolT, 0) }
     now := c.setItems(c.P.T.ErrValItems(t))
     if c.setMeet(now, xs).Len() == 0 {
         c.err(it.Span(), msgs.CaughtNeverIs("'" $c.src(o.Span()) "'", c.setText(xs), c.setText(now)))
@@ -15246,8 +15264,7 @@ fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, n source.NameId, now V
                 } else if c.errLocalName(b) != n {
                     return now.Clone()
                 }
-                xs, ok := c.caughtItems(o)
-                if not ok { return now.Clone() }
+                xs := try c.caughtItems(o) catch NotError { return now.Clone() }
                 return c.setMeet(now, xs) if (op == token.Tok.EqEq) == holds else c.setLess(now, xs)
             }
             if op == token.Tok.And {
@@ -15301,8 +15318,7 @@ fn (c mut Checker&) reraise(sp source.Span, x typed.Expr&c) {
 fn (c mut Checker&) caughtMatch(sp source.Span, m ast.Match&) {
     wasPin, wasLocal := c.fr().errPinSp, c.fr().errPinLocal
     if not c.errPinned(m) { return }
-    ok, covered := c.caughtCases(sp, m)
-    if not ok {
+    covered := try c.caughtCases(sp, m) catch Unread {
         c.unpin(wasPin, wasLocal)
         return
     }
@@ -15326,8 +15342,7 @@ fn (c mut Checker&) caughtMatchValue(sp source.Span, m ast.Match&, want types.Ty
     wasPin, wasLocal := c.fr().errPinSp, c.fr().errPinLocal
     from := c.stmts.Len()
     if not c.errPinned(m) { return c.unknown(sp) }
-    ok, covered := c.caughtCases(sp, m)
-    if not ok {
+    covered := try c.caughtCases(sp, m) catch Unread {
         c.unpin(wasPin, wasLocal)
         return c.unknown(sp)
     }
@@ -15430,9 +15445,9 @@ fn (c mut Checker&) caughtLast(m ast.Match&, covered Bool) I64 {
 
 # R11b, T20: a match's cases checked before it is read as a chain - each names words, error types or sets, null, or
 # "_"; the cases without guards cover every error the subject can be, and null where it may be null; a
-# case after they have, or naming nothing it can be, is never reached. Whether it may be read (false where it is said
-# why not), and whether the cases cover everything
-fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
+# case after they have, or naming nothing it can be, is never reached. Whether the cases cover everything - failing
+# with Unread where it may not be read, said why
+fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool ? Unread {
     fr := c.fr()
     what := "'" $c.src(m.Subject.Span()) "'"
     now Vec<types.TypeId>
@@ -15475,11 +15490,12 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
                         nulls = true
                         continue
                     }
-                    ys, good := c.caughtItems(y)
-                    if not good {
+                    ys := try c.caughtItems(y) catch NotError {
                         c.err(p.Span(), msgs.CaughtCaseForm())
                         ok = false
-                    } else if c.setMeet(now, ys).Len() == 0 {
+                        continue
+                    }
+                    if c.setMeet(now, ys).Len() == 0 {
                         c.err(p.Span(), msgs.CaughtNeverIs(what, c.setText(ys), c.setText(now)))
                         ok = false
                     } else {
@@ -15505,7 +15521,8 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
         c.err(source.Span(sp.Start, sp.Start + 5), msgs.CaughtMatchMissing(txt))
         ok = false
     }
-    return ok, all
+    if not ok { error Unread }
+    return all
 }
 
 # ---- statements ----
@@ -15560,7 +15577,8 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
                 said, saidOk := "", false
                 written := ""
                 if (cb >= 0 or rd == 0) and msg is not null {
-                    said, saidOk = c.reflText(msg)
+                    saidOk = true
+                    said = try c.reflText(msg) catch Unrendered { saidOk = false } default ""
                     if not saidOk {
                         c.constsRead = true
                         mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly))
@@ -17493,7 +17511,7 @@ fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
     fr := c.fr()
     if fr.restAt >= fr.rest.Len() { return false }
     n := match value {
-        case ast.Expr.Call(_, f, args): args[0] if args.Len() == 1 and isArrayCtor(c, f) else null
+        case ast.Expr.Call(_, f, args): args[0] if args.Len() == 1 and c.isArrayCtor(f) else null
         case _: null
     }
     if n is null or not plainLen(n) { return false }
@@ -17533,7 +17551,7 @@ fn (c mut Checker&) filledNext(name source.NameId, value ast.Expr&) Bool {
 }
 
 # whether an expression is "Array<T>" naming the built-in array (a call of it then makes one)
-fn isArrayCtor(c mut Checker&, f ast.Expr&) Bool {
+fn (c mut Checker&) isArrayCtor(f ast.Expr&) Bool {
     match f {
         case ast.Expr.Generic(_, g, targs) {
             if targs.Len() != 1 { return false }
@@ -19132,10 +19150,10 @@ fn (c mut Checker&) tailSets() {
         bsp := source.Span(a.Sp.Start, a.Sp.Start + 6)
         if not same { c.err(bsp, msgs.BecomeErrors(c.errsText(ea), c.errsText(eb))) }
         b := c.Bodies[a.Caller]
-        seen Map<types.TypeId, Bool>
+        w := types.DtorWalk(c.P.T)
         for l in b.Locals {
             if l.Kind == typed.LocalKind.Param { continue }
-            if c.holdsDtor(l.Ty, seen) {
+            if w.Holds(l.Ty) {
                 rec := c.err(bsp, msgs.BecomeDestructor($"it holds a value of " $c.ty(l.Ty) ", which may hold an instance"))
                 c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteHere())
                 break
@@ -19143,43 +19161,6 @@ fn (c mut Checker&) tailSets() {
         }
         c.pop()
     }
-}
-
-# whether a value of a type may hold an instance whose destructor is to run (C11, O16) - or a value of a type not known
-# here: an any's instance, a type variable's
-fn (c mut Checker&) holdsDtor(ty types.TypeId, seen mut Map<types.TypeId, Bool>&) Bool {
-    t := c.P.T
-    r := t.Repr(ty)
-    if seen.Has(r) { return try seen.Get(r) catch default false }
-    seen.Put(r, false)
-    k := t.KindOf(r)
-    out := false
-    if k == types.Kind.Ref {
-        out = c.holdsDtor(t.Referent(r), seen)
-    } else if k == types.Kind.Any or k == types.Kind.Var {
-        out = true
-    } else if k == types.Kind.Array {
-        out = c.holdsDtor(t.Elem(r), seen)
-    } else if k == types.Kind.Tuple or k == types.Kind.Record {
-        for p in t.Items(t.Parts(r)) {
-            if c.holdsDtor(p, seen) { out = true }
-        }
-    } else if k == types.Kind.Named {
-        if not t.HasBody(r) {
-            out = true
-        } else if t.Destructs(r) {
-            out = true
-        } else {
-            for f in t.Items(t.Fields(r)) {
-                if c.holdsDtor(f, seen) { out = true }
-            }
-            for cs in t.Items(t.Cases(r)) {
-                if cs != types.TypeId(0) and c.holdsDtor(cs, seen) { out = true }
-            }
-        }
-    }
-    seen.Put(r, out)
-    return out
 }
 
 # ---- generators (D18, S20) ----
@@ -19659,7 +19640,7 @@ fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) 
 }
 
 # "case _" of a match on a type (S13f): any
-fn isWildType(c mut Checker&, t ast.TypeRef&) Bool {
+fn (c mut Checker&) isWildType(t ast.TypeRef&) Bool {
     match t {
         case ast.TypeRef.Named(_, path, args) { return path.Len() == 1 and args.Len() == 0 and c.text(path[0]) == "_" }
         case _ { return false }
@@ -19686,7 +19667,7 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
     seen Vec<typeCase>
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
-            if isWildType(c, tr) {
+            if c.isWildType(tr) {
                 for e in seen {
                     if e.Wild { c.P.L.Diags.ErrorOncePerLine(c.at(tr.Span()), msgs.ReflCaseUnreachable()) }
                 }
@@ -19821,7 +19802,7 @@ fn (c mut Checker&) typeCaseHolds(tc typeCase, st types.TypeId, tr ast.TypeRef&)
         if c.isRef(st) { ro = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & ~types.Writable) }
         if not c.P.T.Same(tc.Pat, st) and not c.P.T.Same(tc.Pat, ro) { return false }
     } else {
-        if not c.P.Unify(tc.Pat, st, b, false, false) { return false }
+        try c.P.Unify(tc.Pat, st, b, false, false) catch { return false }
         for k in range tc.N {
             if b.Vals[k] == types.UnknownT { return false }
         }
@@ -19974,8 +19955,17 @@ fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
     v := c.expr(x, rt)
     if said == types.UnknownT { said = rt }
     if rt == types.UnknownT and typeOf(v) != types.NullT and typeOf(v) != types.NoreturnT { rt = c.firstValueType(m, v, x) }
-    w, ok := c.fitQuiet(v, rt, x.Span())
-    if not ok { c.matchValueMismatch(x.Span(), said, rt, w) }
+    # made to fit as fit does, with nothing it says kept - said in the match's own words (S12b, S13, E28)
+    n := c.P.L.Diags.Count()
+    g := c.P.L.Diags.Hold()
+    w := c.fit(v, rt, x.Span())
+    c.P.L.Diags.EndHold()
+    if c.P.L.Diags.Count() == n {
+        c.P.L.Diags.Choose(g)
+    } else {
+        c.P.L.Diags.Drop(g)
+        c.matchValueMismatch(x.Span(), said, rt, w)
+    }
     return w, rt, said
 }
 
@@ -21177,9 +21167,9 @@ fn (c mut Checker&) settleIdle() {
     reach Vec<I64>
     for cand in c.idle {
         from.Push(reach.Len())
-        calls Vec<I64>
-        direct.Push(c.effX(cand.X, calls))
-        for b in calls {
+        c.effCalls.Clear()
+        direct.Push(c.effX(cand.X))
+        for b in c.effCalls {
             reach.Push(b)
             if not at.Has(b) {
                 at.Put(b, seen.Len())
@@ -21195,12 +21185,12 @@ fn (c mut Checker&) settleIdle() {
             does[k] = true
             continue
         }
-        calls Vec<I64>
-        if c.effB(c.Bodies[b].Root, calls) {
+        c.effCalls.Clear()
+        if c.effB(c.Bodies[b].Root) {
             does[k] = true
             continue
         }
-        for cb in calls {
+        for cb in c.effCalls {
             edges.Push(pair.Pair(k, cb))
             if not at.Has(cb) {
                 at.Put(cb, seen.Len())
@@ -21231,18 +21221,18 @@ fn (c mut Checker&) settleIdle() {
     }
 }
 
-# S3: whether an expression may do something beyond giving its value, the bodies it calls added to calls
-fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
+# S3: whether an expression may do something beyond giving its value, the bodies it calls added to effCalls
+fn (c mut Checker&) effX(x typed.Expr?&) Bool {
     if x is null { return false }
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Fn(_, _, _) { return false }
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return c.effP(p, calls, false) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return c.effP(p, false) }
         # storage made - a temporary given a place, a text, an array, a comprehension's - is memory the program uses
         case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Collect(_, _, _) { return true }
         case typed.Expr.Call(_, t, cl) {
             if c.destructs(t) { return true }
             match cl.Target {
-                case typed.Callee.Body(id) { calls.Push(I64(id)) }
+                case typed.Callee.Body(id) { c.effCalls.Push(I64(id)) }
                 case typed.Callee.Extern(f) {
                     fd := c.P.FnDecl(f)
                     if not typed.MathExtern(c.text(fd.Name), fd.S.Params.Len()) { return true }
@@ -21251,98 +21241,98 @@ fn (c mut Checker&) effX(x typed.Expr?&, calls mut Vec<I64>&) Bool {
                 case typed.Callee.Helper(_, _) { }
             }
             for a in cl.Args {
-                if c.effX(a, calls) { return true }
+                if c.effX(a) { return true }
             }
             return false
         }
         case typed.Expr.Make(_, _, m) {
-            if I64(m.Site) >= 0 or m.Checked == typed.Check.Abort or c.effX(m.Length, calls) { return true }
+            if I64(m.Site) >= 0 or m.Checked == typed.Check.Abort or c.effX(m.Length) { return true }
             for y in m.Items {
-                if c.effX(y, calls) { return true }
+                if c.effX(y) { return true }
             }
             return false
         }
         case typed.Expr.Prim(_, _, op, ck, args) {
             if ck == typed.Check.Abort or effectOp(op) { return true }
             for y in args {
-                if c.effX(y, calls) { return true }
+                if c.effX(y) { return true }
             }
             return false
         }
         case typed.Expr.Slice(_, _, sl) {
-            return sl.Checked == typed.Check.Abort or c.effP(sl.Base, calls, false) or c.effX(sl.Lo, calls) or c.effX(sl.Hi, calls)
+            return sl.Checked == typed.Check.Abort or c.effP(sl.Base, false) or c.effX(sl.Lo) or c.effX(sl.Hi)
         }
-        case typed.Expr.Cond(_, _, cd) { return c.effX(cd.C, calls) or c.effX(cd.A, calls) or c.effX(cd.B, calls) }
-        case typed.Expr.Seq(_, _, q) { return c.effSs(q.Stmts, calls) or c.effX(q.X, calls) }
+        case typed.Expr.Cond(_, _, cd) { return c.effX(cd.C) or c.effX(cd.A) or c.effX(cd.B) }
+        case typed.Expr.Seq(_, _, q) { return c.effSs(q.Stmts) or c.effX(q.X) }
         case typed.Expr.Match(_, _, m) {
-            if c.effSs(m.Held, calls) { return true }
+            if c.effSs(m.Held) { return true }
             for a in m.Arms {
-                if c.effArm(a, calls) { return true }
+                if c.effArm(a) { return true }
             }
-            return m.NoMatch is not null and c.effArm(m.NoMatch!, calls)
+            return m.NoMatch is not null and c.effArm(m.NoMatch!)
         }
         case typed.Expr.Try(_, _, tr) {
-            if tr.Ends or c.effX(tr.X, calls) { return true }
+            if tr.Ends or c.effX(tr.X) { return true }
             for cl in tr.Clauses {
-                if c.effB(cl.Code, calls) { return true }
+                if c.effB(cl.Code) { return true }
                 for d in cl.Defaults {
-                    if c.effX(d, calls) { return true }
+                    if c.effX(d) { return true }
                 }
             }
             return false
         }
-        case typed.Expr.Away(_, _, y) { return c.effX(y, calls) }
+        case typed.Expr.Away(_, _, y) { return c.effX(y) }
     }
 }
 
-fn (c mut Checker&) effArm(a typed.Arm&, calls mut Vec<I64>&) Bool {
+fn (c mut Checker&) effArm(a typed.Arm&) Bool {
     for alt in a.Alts {
-        if c.effX(alt.Test, calls) { return true }
+        if c.effX(alt.Test) { return true }
         for bd in alt.Binds {
-            if c.effX(bd.From, calls) { return true }
+            if c.effX(bd.From) { return true }
         }
     }
-    return c.effX(a.Guard, calls) or c.effB(a.Code, calls) or c.effX(a.Value, calls)
+    return c.effX(a.Guard) or c.effB(a.Code) or c.effX(a.Value)
 }
 
 # S3: whether reading (or, store, writing) a place may do something: a store into a global or through a reference
-fn (c mut Checker&) effP(p typed.Lvalue&, calls mut Vec<I64>&, store Bool) Bool {
+fn (c mut Checker&) effP(p typed.Lvalue&, store Bool) Bool {
     match p {
         case typed.Lvalue.Local(_, _, _), typed.Lvalue.Target(_, _) { return false }
         case typed.Lvalue.Global(_, _, _, _) { return store }
-        case typed.Lvalue.Deref(_, _, r) { return store or c.effX(r, calls) }
-        case typed.Lvalue.Field(_, _, base, _) { return c.effP(base, calls, store) }
+        case typed.Lvalue.Deref(_, _, r) { return store or c.effX(r) }
+        case typed.Lvalue.Field(_, _, base, _) { return c.effP(base, store) }
         case typed.Lvalue.Elem(_, _, e) {
             if e.Checked == typed.Check.Abort or (store and c.isRef(e.Base.Type())) { return true }
-            return c.effP(e.Base, calls, store) or c.effX(e.Index, calls)
+            return c.effP(e.Base, store) or c.effX(e.Index)
         }
-        case typed.Lvalue.Payload(_, _, pl) { return pl.Checked == typed.Check.Abort or c.effP(pl.Base, calls, store) }
-        case typed.Lvalue.Temp(_, _, v, _) { return c.effX(v, calls) }
+        case typed.Lvalue.Payload(_, _, pl) { return pl.Checked == typed.Check.Abort or c.effP(pl.Base, store) }
+        case typed.Lvalue.Temp(_, _, v, _) { return c.effX(v) }
     }
 }
 
-fn (c mut Checker&) effB(b typed.Block?&, calls mut Vec<I64>&) Bool {
+fn (c mut Checker&) effB(b typed.Block?&) Bool {
     if b is null { return false }
-    return c.effSs(b.Stmts, calls)
+    return c.effSs(b.Stmts)
 }
 
-fn (c mut Checker&) effSs(ss Array<typed.Stmt&>&, calls mut Vec<I64>&) Bool {
+fn (c mut Checker&) effSs(ss Array<typed.Stmt&>&) Bool {
     for st in ss {
-        if c.effS(st, calls) { return true }
+        if c.effS(st) { return true }
     }
     return false
 }
 
-fn (c mut Checker&) effS(st typed.Stmt&, calls mut Vec<I64>&) Bool {
+fn (c mut Checker&) effS(st typed.Stmt&) Bool {
     match st {
-        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { return c.effX(x, calls) }
-        case typed.Stmt.Assign(_, t, v) { return c.effP(t, calls, true) or c.effX(v, calls) }
-        case typed.Stmt.If(_, i) { return c.effX(i.Test, calls) or c.effB(i.Then, calls) or c.effB(i.Else, calls) }
-        case typed.Stmt.Loop(_, body, post) { return c.effB(body, calls) or c.effB(post, calls) }
-        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { return c.effX(v, calls) }
-        case typed.Stmt.Reraise(_, code, _) { return c.effX(code, calls) }
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { return c.effX(x) }
+        case typed.Stmt.Assign(_, t, v) { return c.effP(t, true) or c.effX(v) }
+        case typed.Stmt.If(_, i) { return c.effX(i.Test) or c.effB(i.Then) or c.effB(i.Else) }
+        case typed.Stmt.Loop(_, body, post) { return c.effB(body) or c.effB(post) }
+        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { return c.effX(v) }
+        case typed.Stmt.Reraise(_, code, _) { return c.effX(code) }
         case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { return false }
-        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { return c.effB(b, calls) }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { return c.effB(b) }
         case typed.Stmt.Exit(_, _, _), typed.Stmt.Assert(_, _, _), typed.Stmt.Join(_, _), typed.Stmt.Spawn(_, _) { return true }
     }
 }
@@ -21521,8 +21511,9 @@ fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Boo
 # the type meets it with - checked like any other - and $'s rendering of the type made where it calls a Str; -1 where a
 # method's scopes say more than the trait's signature (said where the table is first asked for)
 fn (c mut Checker&) anyTable(t types.TypeId, r types.TypeId, sp source.Span) I64 {
-    ti, fresh := c.P.AnyTableFor(t, r, c.fr().File, sp)
-    if not fresh { return -1 if c.anyBad.Has(ti) else ti }
+    made := c.P.AnyTableOf(t, r)
+    if made >= 0 { return -1 if c.anyBad.Has(made) else made }
+    ti := c.P.NewAnyTable(t, r, c.fr().File, sp)
     slots := c.P.AnySlots(r)
     stored := c.P.AnyStored(c.P.T.Plain(t))
     for k in range slots.Len() {
@@ -21696,7 +21687,10 @@ fn (c mut Checker&) traitContracts(mi I64, td ast.TypeDecl?&) {
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) {
             has := false
-            for m in ms { has = has or m.S.Contract is not null }
+            for m in ms {
+                has = has or m.S.Contract is not null
+                c.traitArgumentError(mi, m)
+            }
             if not has { return }
             ei := c.P.TypeEntry(mi, td.Name)
             if ei < 0 { return }
@@ -21710,6 +21704,17 @@ fn (c mut Checker&) traitContracts(mi I64, td ast.TypeDecl?&) {
         }
         case _ { }
     }
+}
+
+# D17, R1b: a trait's method with conditions writes ArgumentError among its errors - a call through an any fails with it
+# where one is false, and a trait's method writes its set
+fn (c mut Checker&) traitArgumentError(mi I64, m ast.Func&) {
+    if m.S.Contract is null or m.S.Contract!.Items.Len() == 0 { return }
+    for e in m.S.Errors {
+        if c.text(e.Parts[e.Parts.Len() - 1]) == "ArgumentError" { return }
+    }
+    sp := m.S.Contract!.Sp
+    c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start), I64(sp.End)), msgs.ContractNeedsArgumentError(c.text(m.Name)))
 }
 
 # whether a task's call is through an "any"'s table (T32b)

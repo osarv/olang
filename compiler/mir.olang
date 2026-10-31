@@ -1104,27 +1104,35 @@ fn (v mut verifier&) arrayOf(ty types.TypeId) types.TypeId {
     return r if v.T.KindOf(r) == types.Kind.Array else types.UnknownT
 }
 
-# the fields of a struct, a tuple or a record, in order; none (with ok false) for any other
-fn (v mut verifier&) fieldsOf(ty types.TypeId) types.ListId, Bool {
+# whether a type has fields: a struct, a tuple or a record
+fn (v mut verifier&) hasFields(ty types.TypeId) Bool {
     t := v.T
     r := t.Repr(ty)
     k := t.KindOf(r)
-    if k == types.Kind.Tuple or k == types.Kind.Record { return t.Parts(r), true }
-    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r) {
-        return t.Fields(r), true
-    }
-    return types.ListId(0), false
+    return k == types.Kind.Tuple or k == types.Kind.Record or
+           (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r))
 }
 
-# an enum's cases' payloads (a Record, or 0 for none), in order; none (with ok false) for any other type
-fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId, Bool {
+# the fields of a struct, a tuple or a record, in order; none for any other
+fn (v mut verifier&) fieldsOf(ty types.TypeId) types.ListId {
+    if not v.hasFields(ty) { return types.ListId(0) }
+    r := v.T.Repr(ty)
+    return v.T.Parts(r) if v.T.KindOf(r) != types.Kind.Named else v.T.Fields(r)
+}
+
+# whether a type is an enum
+fn (v mut verifier&) hasCases(ty types.TypeId) Bool {
     t := v.T
     r := t.Repr(ty)
-    if t.KindOf(r) == types.Kind.AnonEnum { return t.ShapeCases(r), true }
-    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r) {
-        return t.Cases(r), true
-    }
-    return types.ListId(0), false
+    return t.KindOf(r) == types.Kind.AnonEnum or
+           (t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r))
+}
+
+# an enum's cases' payloads (a Record, or 0 for none), in order; none for any other type
+fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId {
+    if not v.hasCases(ty) { return types.ListId(0) }
+    r := v.T.Repr(ty)
+    return v.T.ShapeCases(r) if v.T.KindOf(r) == types.Kind.AnonEnum else v.T.Cases(r)
 }
 
 fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l)].Ty }
@@ -1142,7 +1150,7 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
         pr := v.F.Projs[I64(p.Path.At) + i]
         match pr {
             case Proj.Field(k) {
-                fl, ok := v.fieldsOf(ty)
+                fl, ok := v.fieldsOf(ty), v.hasFields(ty)
                 fs := t.Items(fl)
                 if not ok or k < 0 or k >= fs.Len() {
                     v.bad("no field " $k " in a " $v.canon(ty))
@@ -1179,7 +1187,7 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
                 ty = t.Referent(ty)
             }
             case Proj.Payload(tag) {
-                cl, ok := v.casesOf(ty)
+                cl, ok := v.casesOf(ty), v.hasCases(ty)
                 cs := t.Items(cl)
                 if not ok or tag < 0 or tag >= cs.Len() {
                     v.bad("no case " $tag " in a " $v.canon(ty))
@@ -1350,7 +1358,7 @@ fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
 fn (v mut verifier&) takeType(of types.TypeId) types.TypeId { return of }
 
 fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
-    _, ok := v.casesOf(of)
+    ok := v.hasCases(of)
     if of != types.UnknownT and not ok { v.bad("the case of a " $v.canon(of) ", not an enum") }
     return I64T
 }
@@ -1438,7 +1446,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if ty != types.VoidT { v.bad("Retire typed " $v.canon(ty)) }
         }
         case typed.PrimOp.IsCase {
-            _, ok := v.casesOf(a)
+            ok := v.hasCases(a)
             if not ok { v.bad("IsCase of a " $v.canon(a)) }
             if ty != types.BoolT { v.bad("IsCase typed " $v.canon(ty)) }
         }
@@ -1508,7 +1516,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
         for i in range n { v.want(v.operandType(v.arg(r, i)), t.Elem(a), "element " $i) }
         return ty
     }
-    cl, isEnum := v.casesOf(ty)
+    cl, isEnum := v.casesOf(ty), v.hasCases(ty)
     cs := t.Items(cl)
     if isEnum {
         if tag < 0 or tag >= cs.Len() {
@@ -1518,7 +1526,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
         v.parts(ty, t.Parts(cs[tag]) if cs[tag] != types.TypeId(0) else types.ListId(0), r)
         return ty
     }
-    fl, ok := v.fieldsOf(ty)
+    fl, ok := v.fieldsOf(ty), v.hasFields(ty)
     if not ok {
         v.bad("a " $v.canon(ty) " made of parts")
         return ty

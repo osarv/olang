@@ -135,22 +135,28 @@ fn closeOf(t String&, mask String&, start I64) I64 {
 }
 
 # what to do with a declaration never read at column index at of a line: drop the line, keep its value as a statement
-# (the new line), or nothing ("" and false) for a person to decide. A value that is a try is kept as the try statement it
-# then is wherever it stands, one block on its line or several lines; any other only on a line of its own
-fn declEdit(text String&, at I64) String, Bool {
+# (the new line), or leave it for a person to decide. A value that is a try is kept as the try statement it then is
+# wherever it stands, one block on its line or several lines; any other only on a line of its own
+type DeclEdit enum {
+    Drop
+    Keep(line String&)
+    Leave
+}
+
+fn declEdit(text String&, at I64) DeclEdit {
     v := valueAt(text, at)
     if v >= 0 {
         k := v
         for k < text.Len() and text[k] == ' ' { k++ }
         # a try statement takes no default (R11): a declaration whose value has one is left for a person
         if text[k:].StartsWith("try ") {
-            if codeOf(text[k:]).Contains(" default ") { return "", false }
-            return $text[:at] $text[k:], false
+            if codeOf(text[k:]).Contains(" default ") { return DeclEdit.Leave }
+            return DeclEdit.Keep($text[:at] $text[k:])
         }
     }
     code := codeOf(text)
-    if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return "", false }
-    if v < 0 { return "", true }
+    if not balanced(text) or not code.StartsWith(text[at:at + 1]) or text[:at].Contains("{") { return DeclEdit.Leave }
+    if v < 0 { return DeclEdit.Drop }
     value := $srcmask.Strip(text[v:])
     mask := srcmask.Mask(text, true)
     for i in range v, text.Len() {
@@ -159,9 +165,9 @@ fn declEdit(text String&, at I64) String, Bool {
             break
         }
     }
-    if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return "", true }
-    if oneCall(value) { return $text[:at] $value, false }
-    return "", false
+    if not value.Contains("(") and not value.Contains("!") and not value.Contains("{") { return DeclEdit.Drop }
+    if oneCall(value) { return DeclEdit.Keep($text[:at] $value) }
+    return DeclEdit.Leave
 }
 
 fn main() ? {
@@ -218,7 +224,8 @@ fn main() ? {
         requests Vec<diagedit.Request>
         for o in outputs {
             for row in o.Split("\n") {
-                path, line, col, isError, _, msg := try diagedit.ParseRow(row) catch { continue }
+                parsed := try diagedit.ParseRow(row) catch { continue }
+                path, line, col, isError, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Msg
                 full := diagedit.RealPathOf(path)
                 if not isError or not diagedit.Allowed(full, allowed) { continue }
                 kind := ""
@@ -340,7 +347,11 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
                     if not (r.Why in left) { left.Push($r.Why) }
                     continue
                 }
-                if r.Kind == KindDecl { out, drop = declEdit(text, at) }
+                if r.Kind == KindDecl {
+                    edit := declEdit(text, at)
+                    drop = edit == DeclEdit.Drop
+                    if edit == DeclEdit.Keep: out = edit.line
+                }
                 if drop and (keepLines or not balanced(text) or codeOf(text).Contains("{")) {
                     drop = false
                     out = ""
@@ -379,26 +390,16 @@ test "a name never read made '_'" {
 }
 
 test "a declaration never read: its line left out, or its one call kept" {
-    out, drop := declEdit("    x := 3", 4)
-    assert drop and out == ""
-    out2, drop2 := declEdit("    y := build(a) # made", 4)
-    assert not drop2 and out2 == "    build(a)"
-    out3, drop3 := declEdit("    z := a + f(b)", 4)
-    assert not drop3 and out3 == ""
-    out4, drop4 := declEdit("    t I64 = 0", 4)
-    assert drop4 and out4 == ""
-    out5, drop5 := declEdit("    v Vec<I64>", 4)
-    assert drop5 and out5 == ""
-    out6, drop6 := declEdit("    w := try load(p)!", 4)
-    assert not drop6 and out6 == "    try load(p)!"
-    out7, drop7 := declEdit("    if c { k := 1 }", 15)
-    assert not drop7 and out7 == ""
-    out9, drop9 := declEdit("    for _ in range 3 { x := try it.Next() catch Exhausted { unreachable } }", 23)
-    assert not drop9 and out9 == "    for _ in range 3 { try it.Next() catch Exhausted { unreachable } }"
-    out10, drop10 := declEdit("    failed := try f() catch Bad {", 4)
-    assert not drop10 and out10 == "    try f() catch Bad {"
-    out8, drop8 := declEdit("    r Res& = Res(1)", 4)
-    assert not drop8 and out8 == "    Res(1)"
+    assert declEdit("    x := 3", 4) == DeclEdit.Drop
+    assert declEdit("    y := build(a) # made", 4) == DeclEdit.Keep("    build(a)")
+    assert declEdit("    z := a + f(b)", 4) == DeclEdit.Leave
+    assert declEdit("    t I64 = 0", 4) == DeclEdit.Drop
+    assert declEdit("    v Vec<I64>", 4) == DeclEdit.Drop
+    assert declEdit("    w := try load(p)!", 4) == DeclEdit.Keep("    try load(p)!")
+    assert declEdit("    if c { k := 1 }", 15) == DeclEdit.Leave
+    assert declEdit("    for _ in range 3 { x := try it.Next() catch Exhausted { unreachable } }", 23) == DeclEdit.Keep("    for _ in range 3 { try it.Next() catch Exhausted { unreachable } }")
+    assert declEdit("    failed := try f() catch Bad {", 4) == DeclEdit.Keep("    try f() catch Bad {")
+    assert declEdit("    r Res& = Res(1)", 4) == DeclEdit.Keep("    Res(1)")
 }
 
 test "a declaration whose block names it again is left" {

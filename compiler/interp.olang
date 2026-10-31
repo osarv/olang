@@ -67,7 +67,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         c.Decided = decided
         c.Dead = dead
         c.CheckProgram()
-        if not decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) {
+        if decide(l, c, decided, dead, lengths, embeds, unrolls, unrollWhy, condErrs) == 0 {
             for e in condErrs { l.Diags.Error(e.At, e.M) }
             if l.Diags.Count() == mark { judgeViews(c) }
             return c
@@ -82,34 +82,34 @@ fn judgeViews(c mut typecheck.Checker&) {
     vw.Run()
 }
 
-# the decisions one check of the program leaves to evaluation, made where they can be: whether any was
+# the decisions one check of the program leaves to evaluation, made where they can be: how many were (a count, R23a)
 fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
     dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&
     embeds mut Map<pair.Pair<I64, I64>, String&>&, unrolls mut Map<String&, Array<I64>&>&
-    unrollWhy mut Map<String&, String&>&, condErrs mut Vec<CondErr>&) Bool {
+    unrollWhy mut Map<String&, String&>&, condErrs mut Vec<CondErr>&) I64 {
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 and c.UnrollAsks.Len() == 0 {
-        return false
+        return 0
     }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.ReadsBuild = c.ReadsBuild
-    made := false
+    made I64 = 0
     # E38: an embed's path that is no literal, evaluated - "\0" where it gives none, which the next check reports.
     # Decided first and alone: until the next check reads the file, the embed holds no bytes, and nothing else
     # evaluated now may read them
     for a in c.EmbedAsks {
         key := pair.Pair(a.File, I64(a.At))
         if embeds.Has(key) { continue }
-        made = true
-        path, ok := x.Text(a.Body)
-        embeds.Put(key, $(path if ok else "\0"))
+        made++
+        path := try x.Text(a.Body) catch default "\0"
+        embeds.Put(key, $path)
     }
-    if made { return true }
+    if made > 0 { return made }
     # K3a: a comptime for's elements, each walk once - its range's arguments or its array evaluated
     for a in c.UnrollAsks {
         if unrolls.Has(a.Key) or unrollWhy.Has(a.Key) { continue }
-        made = true
+        made++
         match x.unrolled(a) {
             case Unrolled.Values(vals) { unrolls.Put($a.Key, I64[v for v in vals]) }
             case Unrolled.Refused(why) { unrollWhy.Put($a.Key, $why) }
@@ -119,17 +119,13 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
         if decided.Has(key) or dead.Has(key) { continue }
-        v, ok := x.Cond(a.Body)
-        if ok and not x.M.UsedBuild {
-            # S8a: decided reading no build constant - the same on every build, which the next check reports
-            dead.Put(key, true)
-            made = true
-        } else if ok {
-            decided.Put(key, v)
-            made = true
-        } else {
+        v := try x.Cond(a.Body) catch {
             undecided.Push(a.If)
+            continue
         }
+        made++
+        # S8a: decided reading no build constant - the same on every build, which the next check reports
+        if not x.M.UsedBuild: dead.Put(key, true) else: decided.Put(key, v)
     }
     # QP1: an array's length a call computes, evaluated in its module's context - one the evaluator cannot compute, or
     # that does not check as a constant, is a length known only at run time, never an error (the program's own check
@@ -137,7 +133,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for a in c.P.ConstAsks {
         key := a.Key
         if lengths.Has(key) { continue }
-        made = true
+        made++
         b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
         if b < 0 {
             lengths.Put($key, generic.RunTimeLength)
@@ -153,7 +149,8 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
         if ti is null { continue }
-        chosen, ok, why, at := chain(x, c, t.First, ti)
+        ch := chain(x, c, t.First, ti)
+        chosen, ok, why, at := ch.Chosen, ch.Decided, ch.Why, ch.At
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
         # one reading what did not check - a global whose initializer had an error - waits on that error, said already
@@ -165,11 +162,11 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             chosen = load.NoBranch
         }
         l.Decide(t.First, t.Second, chosen)
-        made = true
+        made++
     }
     # a condition that does not evaluate is the running program's, what its branches hold reported - once no decision
     # is left to make: one calling a function whose own if is still undecided may evaluate in the next check (S8b)
-    if not made {
+    if made == 0 {
         for i in undecided { c.Running(i) }
     }
     return made
@@ -193,7 +190,7 @@ type CondErr struct(At diag.Where, M msgs.Msg) {
 # them, load.NoBranch for none - and whether every condition read decided, or for the first that cannot, why: "" where it
 # does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
 # the condition is
-fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool, String, diag.Where {
+fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) chained {
     d := c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
@@ -202,20 +199,28 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
         csp := link.Cond!.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
         b := c.CondBody(mi, link.Cond!)
-        if b < 0 { return 0, false, "", at }
-        v, s := x.CondStop(b)
+        if b < 0 { return chained(0, false, "", at) }
+        s := x.CondStop(b)
         match s {
             case eval.Stop.None { }
-            case eval.Stop.Refused(why, f, sp) { return 0, false, $why " (" $line(d, f, sp) ")", at }
-            case eval.Stop.Exited(kind, f, sp, _) { return 0, false, $AbortWhy(kind) " (" $line(d, f, sp) ")", at }
-            case eval.Stop.Raised(_) { return 0, false, "it fails with an error no clause handles", at }
+            case eval.Stop.Refused(why, f, sp) { return chained(0, false, $why " (" $line(d, f, sp) ")", at) }
+            case eval.Stop.Exited(kind, f, sp, _) { return chained(0, false, $AbortWhy(kind) " (" $line(d, f, sp) ")", at) }
+            case eval.Stop.Raised(_) { return chained(0, false, "it fails with an error no clause handles", at) }
         }
-        if v { return k, true, "", at }
+        if x.Held() { return chained(k, true, "", at) }
         k++
-        if link.ElseIf is null { return (k if link.Else is not null else load.NoBranch), true, "", at }
+        if link.ElseIf is null { return chained((k if link.Else is not null else load.NoBranch), true, "", at) }
         link = link.ElseIf
     }
-    return load.NoBranch, true, "", diag.Where.Span(file, 0, 0)
+    return chained(load.NoBranch, true, "", diag.Where.Span(file, 0, 0))
+}
+
+# a top-level if's chain decided: the branch it takes, else (not Decided) why it cannot be decided, and where
+type chained struct(Chosen I64, Decided Bool, Why String&, At diag.Where) {
+    Chosen
+    Decided
+    Why
+    At
 }
 
 # the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
@@ -310,9 +315,14 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
 fn falseMessage(x mut Exec&, a typecheck.AssertAsk&) msgs.Msg {
     if a.Said { return msgs.AssertFalseMessage(a.SaidText) }
     if a.Msg >= 0 {
-        text, has := x.Text(a.Msg)
-        if has { return msgs.AssertFalseMessage(text) }
+        text := try x.Text(a.Msg) catch NoValue { return writtenMessage(a) }
+        return msgs.AssertFalseMessage(text)
     }
+    return writtenMessage(a)
+}
+
+# a false assert's error where its message has no value while compiling: its text as written, where it has one
+fn writtenMessage(a typecheck.AssertAsk&) msgs.Msg {
     if a.Written != "" { return msgs.AssertFalseWritten(a.Written) }
     return msgs.AssertFalse()
 }
@@ -331,8 +341,11 @@ fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
         match s {
             case eval.Stop.None {
                 if x.M.Int(x.M.Result, types.BoolT) != 0 { continue }
-                text, has := x.Text(a.Msg)
-                d.Error(at, msgs.TopAssertFalseMessage(text) if has else msgs.TopAssertFalse())
+                text := try x.Text(a.Msg) catch NoValue {
+                    d.Error(at, msgs.TopAssertFalse())
+                    continue
+                }
+                d.Error(at, msgs.TopAssertFalseMessage(text))
             }
             case eval.Stop.Exited(kind, file, sp, _) {
                 rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
@@ -688,41 +701,36 @@ fn AbortWhy(k mir.ExitKind) String& {
     }
 }
 
-# a text body's value evaluated while compiling (an assert's message, S18c): the text, and whether it has one
-fn (x mut Exec&) Text(body I64) String, Bool {
-    if body < 0 { return "", false }
-    k := mir.FnKey.Body(typed.BodyId(I32(body)))
-    x.Need(k)
-    s := x.M.Eval(k, Array<I64>(0))
-    if s != eval.Stop.None { return "", false }
-    return x.M.Text(x.M.Result, x.M.ResultTy), true
+# a text body's value evaluated while compiling (an assert's message, S18c) - failing with NoValue where it has none
+fn (x mut Exec&) Text(body I64) String ? NoValue {
+    if body < 0 { error NoValue }
+    if x.run(body) != eval.Stop.None { error NoValue }
+    return x.M.Text(x.M.Result, x.M.ResultTy)
 }
 
-# a condition's body evaluated while compiling (K1): its value, and whether it has one
-fn (x mut Exec&) Cond(body I64) Bool, Bool {
-    k := mir.FnKey.Body(typed.BodyId(I32(body)))
-    x.Need(k)
-    s := x.M.Eval(k, Array<I64>(0))
-    if s != eval.Stop.None { return false, false }
-    return x.M.Int(x.M.Result, types.BoolT) != 0, true
+# a condition's body evaluated while compiling (K1): its value - failing with NoValue where it has none
+fn (x mut Exec&) Cond(body I64) Bool ? NoValue {
+    if x.run(body) != eval.Stop.None { error NoValue }
+    return x.M.Int(x.M.Result, types.BoolT) != 0
 }
 
-# the same, with what stopped an evaluation that gave no value
-fn (x mut Exec&) CondStop(body I64) Bool, eval.Stop {
-    k := mir.FnKey.Body(typed.BodyId(I32(body)))
-    x.Need(k)
-    s := x.M.Eval(k, Array<I64>(0))
-    if s != eval.Stop.None { return false, s }
-    return x.M.Int(x.M.Result, types.BoolT) != 0, s
+# a condition's body evaluated: what stopped an evaluation that gave no value, None where it gave one - Held then
+fn (x mut Exec&) CondStop(body I64) eval.Stop { return x.run(body) }
+
+# whether the condition CondStop evaluated holds
+fn (x mut Exec&) Held() Bool { return x.M.Int(x.M.Result, types.BoolT) != 0 }
+
+# a body giving an integer evaluated (a length computed while compiling, T7c): its value - failing with NoValue where
+# evaluation reaches none
+fn (x mut Exec&) Int(body I64, ty types.TypeId) I64 ? NoValue {
+    if x.run(body) != eval.Stop.None { error NoValue }
+    return x.M.Int(x.M.Result, ty)
 }
 
-# a body giving an integer evaluated (a length computed while compiling, T7c): its value, and whether evaluation reached one
-fn (x mut Exec&) Int(body I64, ty types.TypeId) I64, Bool {
+fn (x mut Exec&) run(body I64) eval.Stop {
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
-    s := x.M.Eval(k, Array<I64>(0))
-    if s != eval.Stop.None { return 0, false }
-    return x.M.Int(x.M.Result, ty), true
+    return x.M.Eval(k, Array<I64>(0))
 }
 
 # K3a: what the evaluator made of a comptime for's elements: their values, or why it gave none

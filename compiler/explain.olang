@@ -548,8 +548,7 @@ fn globalItem(c mut typecheck.Checker&, x mut interp.Exec&, mi I64, e names.Entr
     head := $nm.Text(e.Name) $(" mut " if e.Mut else " ") $c.Ty(t)
     if e.Mut { return $head "   # set at startup\n" }
     body := c.RenderBody(mi, e.Name, e.Sp)
-    text, has := x.Text(body)
-    if not has { return $head "   # set at startup\n" }
+    text := try x.Text(body) catch { return $head "   # set at startup\n" }
     v := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
     shown := $quoted(text) if v == c.TextType() else $text
     # a long value - an embedded file's bytes (E38), a large table - is cut, its length said

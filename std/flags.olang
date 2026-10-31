@@ -42,7 +42,7 @@ type Error error {
 type Help struct(Text String&) { Text }
 
 # a flag's one-letter name, written on a parameter Read declares it from (G39)
-type Short struct(Letter Char) [Letter != 0 and Letter != '-'] { Letter }
+type Short struct(Letter Char) [Letter != 0 and Letter != '-'] ? { Letter }
 
 # what a flag holds
 type Kind enum { Bool, Int, Float, Text }

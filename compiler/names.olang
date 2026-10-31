@@ -1182,7 +1182,8 @@ fn (r mut Resolver&) ifStmt(i ast.If&) {
     r.inCond = true
     r.expr(i.Cond)
     r.inCond = false
-    outcome, value := r.decideLocal(i.Cond!)
+    d := r.decideLocal(i.Cond!)
+    outcome, value := d.Of, d.Holds
     if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond!.Span().Start)), true) }
     decided := outcome == cond.Outcome.Decided
     runtime := outcome != cond.Outcome.Deferred
@@ -1248,7 +1249,7 @@ fn (r mut Resolver&) branch(b ast.Branch&) {
 }
 
 # S8b: what the build decides of a local condition - Decided where it reads a build constant and no local
-fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
+fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Decision {
     m := r.L.Mods[r.mi]
     r.L.CondParser(m)
     m.Scope!.Locals.Clear()

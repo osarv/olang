@@ -6,7 +6,7 @@ import "attrmod"
 # a key for a member, a mark that leaves one out, and a number its constructor checks - built while compiling (G39)
 type Key struct(Name String&) { Name }
 type Skip struct() { }
-type Tag struct(V I64) [V >= 0] { V }
+type Tag struct(V I64) [V >= 0] ? { V }
 type Level enum { Low, High }
 type Weight extends F64
 
@@ -102,10 +102,9 @@ fn methods(r attrmod.Rec) String {
 }
 
 # a generic taking a function's descriptor, failing as the function does
-type Odd error { Odd }
 
 fn half(x I64) I64 ? Odd {
-    if x % 2 != 0 { error Odd.Odd }
+    if x % 2 != 0 { error Odd }
     return x / 2
 }
 

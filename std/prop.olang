@@ -381,7 +381,7 @@ fn Check<F>(f F, cases I64 = 100) ? F.Errors {
 
 # ---- tests ----
 
-type Percent struct(v I64) [v >= 0 and v <= 100] { v }
+type Percent struct(v I64) [v >= 0 and v <= 100] ? { v }
 
 type Shape enum {
     Dot

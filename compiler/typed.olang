@@ -1037,8 +1037,8 @@ fn reached(b Block?&, sp source.Span) I64 {
         if isAssertAt(s, sp) { return 1 }
         inner := within(s)
         if inner is not null and reached(inner, sp) != 0 { return reached(inner, sp) }
-        leftBy := Vec<BlockId>()
-        if stmtLeaves(s, leftBy) { return -1 if holds(b, sp) else 0 }
+        w := leaveWalk()
+        if w.stmtLeaves(s) { return -1 if holds(b, sp) else 0 }
     }
     return 0
 }
@@ -1069,111 +1069,116 @@ fn holds(b Block?&, sp source.Span) Bool {
     return false
 }
 
-# whether s may leave the block it is in other than by ending: inner the blocks opened inside the walk so far, whose
-# own breaks and continues leave nothing. A lambda's body is another body
-fn stmtLeaves(s Stmt&, inner mut Vec<BlockId>&) Bool {
+# a walk asking whether a statement may leave the block it is in other than by ending: inner the blocks opened inside the
+# walk so far, whose own breaks and continues leave nothing. A lambda's body is another body
+type leaveWalk struct() {
+    inner Vec<BlockId>
+}
+
+# whether s may leave the block it is in other than by ending
+fn (w mut leaveWalk&) stmtLeaves(s Stmt&) Bool {
     return match s {
         case Stmt.Return(_, _), Stmt.Raise(_, _, _), Stmt.Reraise(_, _, _), Stmt.Suspend(_, _): true
-        case Stmt.Jump(_, _, l): not inner.Has(l)
-        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x): exprLeaves(x, inner)
-        case Stmt.Assign(_, p, x): placeLeaves(p, inner) or exprLeaves(x, inner)
-        case Stmt.If(_, i): exprLeaves(i.Test, inner) or blockLeaves(i.Then, inner) or blockLeaves(i.Else, inner)
-        case Stmt.Loop(_, body, post): loopLeaves(body, post, inner)
+        case Stmt.Jump(_, _, l): not w.inner.Has(l)
+        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x): w.exprLeaves(x)
+        case Stmt.Assign(_, p, x): w.placeLeaves(p) or w.exprLeaves(x)
+        case Stmt.If(_, i): w.exprLeaves(i.Test) or w.blockLeaves(i.Then) or w.blockLeaves(i.Else)
+        case Stmt.Loop(_, body, post): w.loopLeaves(body, post)
         case Stmt.Exit(_, _, _), Stmt.Assert(_, _, _): false
-        case Stmt.Block(_, b): openLeaves(b, inner)
-        case Stmt.Defer(_, b): blockLeaves(b, inner)
-        case Stmt.Join(_, j): (j.Tried and not clausesTakeAll(j.Clauses)) or blockLeaves(j.Code, inner) or
-                                clausesLeave(j.Clauses, inner)
-        case Stmt.Spawn(_, sp): exprLeaves(sp.Task, inner)
+        case Stmt.Block(_, b): w.openLeaves(b)
+        case Stmt.Defer(_, b): w.blockLeaves(b)
+        case Stmt.Join(_, j): (j.Tried and not clausesTakeAll(j.Clauses)) or w.blockLeaves(j.Code) or
+                                w.clausesLeave(j.Clauses)
+        case Stmt.Spawn(_, sp): w.exprLeaves(sp.Task)
     }
 }
 
-fn loopLeaves(body Block&, post Block?&, inner mut Vec<BlockId>&) Bool {
-    return openLeaves(body, inner) or openLeaves(post, inner)
+fn (w mut leaveWalk&) loopLeaves(body Block&, post Block?&) Bool {
+    return w.openLeaves(body) or w.openLeaves(post)
 }
 
 # a block opened inside - a loop's body or post clause, a block statement (the block a for-in's break leaves): a jump to
 # it leaves nothing. A branch's, an arm's or a clause's block may carry the id of the block it is in (a loop's own
 # "if not c { break }"), so only these are counted
-fn openLeaves(b Block?&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) openLeaves(b Block?&) Bool {
     if b is null { return false }
-    inner.Push(b.Id)
-    out := stmtsLeave(b.Stmts, inner)
-    try inner.Pop() catch { }
+    w.inner.Push(b.Id)
+    out := w.stmtsLeave(b.Stmts)
+    try w.inner.Pop() catch { }
     return out
 }
 
-fn blockLeaves(b Block?&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) blockLeaves(b Block?&) Bool {
     if b is null { return false }
-    return stmtsLeave(b.Stmts, inner)
+    return w.stmtsLeave(b.Stmts)
 }
 
-fn stmtsLeave(ss Array<Stmt&>&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) stmtsLeave(ss Array<Stmt&>&) Bool {
     if ss.Len() == 0 { return false }
     for s in ss {
-        if stmtLeaves(s, inner) { return true }
+        if w.stmtLeaves(s) { return true }
     }
     return false
 }
 
-fn exprsLeave(xs Array<Expr&>&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) exprsLeave(xs Array<Expr&>&) Bool {
     if xs.Len() == 0 { return false }
     for x in xs {
-        if exprLeaves(x, inner) { return true }
+        if w.exprLeaves(x) { return true }
     }
     return false
 }
 
-fn exprLeaves(x Expr?&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) exprLeaves(x Expr?&) Bool {
     if x is null { return false }
     return match x {
         case Expr.Lit(_, _, _), Expr.Data(_, _, _, _), Expr.Fn(_, _, _): false
-        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): placeLeaves(p, inner)
-        case Expr.Promote(_, _, pr): exprLeaves(pr.X, inner)
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p), Expr.Take(_, _, p): w.placeLeaves(p)
+        case Expr.Promote(_, _, pr): w.exprLeaves(pr.X)
         # a call of a noreturn function leaves (D8e), as D10a counts it
-        case Expr.Call(_, t, k): t == types.NoreturnT or calleeLeaves(k.Target, inner) or exprsLeave(k.Args, inner)
-        case Expr.Make(_, _, m): exprsLeave(m.Items, inner) or exprLeaves(m.Length, inner)
-        case Expr.Collect(_, _, c): exprLeaves(c.Reserve, inner) or loopLeaves(c.Loop, null, inner)
-        case Expr.Prim(_, _, _, _, args): exprsLeave(args, inner)
-        case Expr.Slice(_, _, sl): placeLeaves(sl.Base, inner) or exprLeaves(sl.Lo, inner) or exprLeaves(sl.Hi, inner)
-        case Expr.Cond(_, _, k): exprLeaves(k.C, inner) or exprLeaves(k.A, inner) or exprLeaves(k.B, inner)
-        case Expr.Seq(_, _, q): stmtsLeave(q.Stmts, inner) or exprLeaves(q.X, inner)
-        case Expr.Match(_, _, m): stmtsLeave(m.Held, inner) or armsLeave(m.Arms, inner) or
-                                    (m.NoMatch is not null and armLeaves(m.NoMatch!, inner))
+        case Expr.Call(_, t, k): t == types.NoreturnT or w.calleeLeaves(k.Target) or w.exprsLeave(k.Args)
+        case Expr.Make(_, _, m): w.exprsLeave(m.Items) or w.exprLeaves(m.Length)
+        case Expr.Collect(_, _, c): w.exprLeaves(c.Reserve) or w.loopLeaves(c.Loop, null)
+        case Expr.Prim(_, _, _, _, args): w.exprsLeave(args)
+        case Expr.Slice(_, _, sl): w.placeLeaves(sl.Base) or w.exprLeaves(sl.Lo) or w.exprLeaves(sl.Hi)
+        case Expr.Cond(_, _, k): w.exprLeaves(k.C) or w.exprLeaves(k.A) or w.exprLeaves(k.B)
+        case Expr.Seq(_, _, q): w.stmtsLeave(q.Stmts) or w.exprLeaves(q.X)
+        case Expr.Match(_, _, m): w.stmtsLeave(m.Held) or w.armsLeave(m.Arms) or
+                                    (m.NoMatch is not null and w.armLeaves(m.NoMatch!))
         # what no clause takes is passed on - out of the body, or to the try around it, which is in the walk too
         case Expr.Try(_, _, t): (not t.Ends and not t.Passes and t.Left and not clausesTakeAll(t.Clauses)) or
-                                  exprLeaves(t.X, inner) or clausesLeave(t.Clauses, inner)
-        case Expr.Text(_, _, t): piecesLeave(t.Pieces, inner)
-        case Expr.Away(_, _, y): exprLeaves(y, inner)
+                                  w.exprLeaves(t.X) or w.clausesLeave(t.Clauses)
+        case Expr.Text(_, _, t): w.piecesLeave(t.Pieces)
+        case Expr.Away(_, _, y): w.exprLeaves(y)
     }
 }
 
-fn calleeLeaves(c Callee&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) calleeLeaves(c Callee&) Bool {
     return match c {
-        case Callee.Value(x): exprLeaves(x, inner)
+        case Callee.Value(x): w.exprLeaves(x)
         case Callee.Body(_), Callee.Extern(_), Callee.Dispatch(_, _, _), Callee.Helper(_, _): false
     }
 }
 
-fn piecesLeave(ps Array<Piece&>&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) piecesLeave(ps Array<Piece&>&) Bool {
     if ps.Len() == 0 { return false }
     for p in ps {
         match p {
-            case Piece.Render(x) { if exprLeaves(x, inner): return true }
+            case Piece.Render(x) { if w.exprLeaves(x): return true }
             case Piece.Lit(_) { }
         }
     }
     return false
 }
 
-fn placeLeaves(p Lvalue&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) placeLeaves(p Lvalue&) Bool {
     return match p {
         case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _): false
-        case Lvalue.Deref(_, _, r): exprLeaves(r, inner)
-        case Lvalue.Field(_, _, base, _): placeLeaves(base, inner)
-        case Lvalue.Elem(_, _, e): placeLeaves(e.Base, inner) or exprLeaves(e.Index, inner)
-        case Lvalue.Payload(_, _, pl): placeLeaves(pl.Base, inner)
-        case Lvalue.Temp(_, _, v, _): exprLeaves(v, inner)
+        case Lvalue.Deref(_, _, r): w.exprLeaves(r)
+        case Lvalue.Field(_, _, base, _): w.placeLeaves(base)
+        case Lvalue.Elem(_, _, e): w.placeLeaves(e.Base) or w.exprLeaves(e.Index)
+        case Lvalue.Payload(_, _, pl): w.placeLeaves(pl.Base)
+        case Lvalue.Temp(_, _, v, _): w.exprLeaves(v)
     }
 }
 
@@ -1185,28 +1190,28 @@ fn clausesTakeAll(cs Array<Clause&>&) Bool {
     return false
 }
 
-fn clausesLeave(cs Array<Clause&>&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) clausesLeave(cs Array<Clause&>&) Bool {
     if cs.Len() == 0 { return false }
     for k in cs {
-        if blockLeaves(k.Code, inner) or exprsLeave(k.Defaults, inner) { return true }
+        if w.blockLeaves(k.Code) or w.exprsLeave(k.Defaults) { return true }
     }
     return false
 }
 
-fn armsLeave(arms Array<Arm&>&, inner mut Vec<BlockId>&) Bool {
+fn (w mut leaveWalk&) armsLeave(arms Array<Arm&>&) Bool {
     if arms.Len() == 0 { return false }
     for a in arms {
-        if armLeaves(a, inner) { return true }
+        if w.armLeaves(a) { return true }
     }
     return false
 }
 
-fn armLeaves(a Arm&, inner mut Vec<BlockId>&) Bool {
-    if exprLeaves(a.Guard, inner) or blockLeaves(a.Code, inner) or exprLeaves(a.Value, inner) { return true }
+fn (w mut leaveWalk&) armLeaves(a Arm&) Bool {
+    if w.exprLeaves(a.Guard) or w.blockLeaves(a.Code) or w.exprLeaves(a.Value) { return true }
     for alt in a.Alts {
-        if exprLeaves(alt.Test, inner) { return true }
+        if w.exprLeaves(alt.Test) { return true }
         for bd in alt.Binds {
-            if exprLeaves(bd.From, inner) { return true }
+            if w.exprLeaves(bd.From) { return true }
         }
     }
     return false

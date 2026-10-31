@@ -455,7 +455,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
         if os.Exists(path) { return path }
     }
     # B3k: another build in this directory compiling this very object: waited for, not compiled twice
-    if unit >= 0 and not claim(path, j) {
+    if unit >= 0 and not j.claim(path) {
         j.waits.Push(unit)
         return path
     }
@@ -497,7 +497,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
 
 # B3k: whether this build may compile the object at path - none other in its directory is (path.lock, a directory, names
 # the process that claimed it), or the one that was has gone - claiming it in j if so
-fn claim(path String&, j mut compiles&) Bool {
+fn (j mut compiles&) claim(path String&) Bool {
     lock := $path ".lock"
     for _ in range 2 {
         made := true
@@ -1183,14 +1183,14 @@ test "B3k: an object one build claims another waits for, unless the build that c
     defer try os.RemoveAll(dir) catch os.Error { }
     obj := $dir "/m.0123.o"
     a := compiles()
-    assert claim(obj, a) and a.locks.Len() == 1
+    assert a.claim(obj) and a.locks.Len() == 1
     assert holderAlive($obj ".lock")                  # this process
     b := compiles()
-    assert not claim(obj, b) and b.locks.Len() == 0
+    assert not b.claim(obj) and b.locks.Len() == 0
     # its holder gone (a process number no process has): the next build takes it over
     try os.WriteFile($obj ".lock/pid", "999999999")
     assert not holderAlive($obj ".lock")
-    assert claim(obj, b) and b.locks.Len() == 1
+    assert b.claim(obj) and b.locks.Len() == 1
     # a lock no build ever finished writing is waited for a minute
     other := $dir "/n.4567.o"
     try os.MkDir($other ".lock")

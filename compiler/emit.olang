@@ -3594,8 +3594,7 @@ fn (fe mut fnEm&) findDirect() {
 
 fn (fe mut fnEm&) findIdle() {
     f := fe.F
-    used := Array<Bool>(f.Scopes.Len())
-    frame := false
+    u := scopeUse(Array<Bool>(f.Scopes.Len()))
     # D18: the scopes a generator holds open at a yield are not used by being held - one nothing else uses has no
     # header to close when the walk is dropped
     held := Array<Bool>(f.Refs.Len())
@@ -3608,27 +3607,27 @@ fn (fe mut fnEm&) findIdle() {
         }
     }
     for i in range f.Refs.Len() {
-        if not held[i] { frame = fe.useRef(f.Refs[i], used) or frame }
+        if not held[i] { u.use(f.Refs[i]) }
     }
     for bb in f.Blocks {
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) {
-                    frame = fe.useRef(r, used) or frame
+                    u.use(r)
                 }
-                case mir.Stmt.Spawn(_, j, _) { used[I64(j)] = true }
-                case mir.Stmt.Give(_, x) { used[I64(x)] = true }
+                case mir.Stmt.Spawn(_, j, _) { u.used[I64(j)] = true }
+                case mir.Stmt.Give(_, x) { u.used[I64(x)] = true }
                 case mir.Stmt.Assign(_, _, rv) {
                     match rv {
                         case mir.Rvalue.New(r, _, _), mir.Rvalue.NewArray(r, _, _, _), mir.Rvalue.Closure(_, _, r, _, _) {
-                            frame = fe.useRef(r, used) or frame
+                            u.use(r)
                         }
                         case mir.Rvalue.Text(b, into, _) {
-                            frame = fe.useRef(b, used) or frame
-                            frame = fe.useRef(into, used) or frame
+                            u.use(b)
+                            u.use(into)
                         }
                         # a region's parent (O8d): its kids close with it, and its registrations go on its list (C9b)
-                        case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { frame = fe.useRef(r, used) or frame }
+                        case mir.Rvalue.Region(r), mir.Rvalue.RegionOr(_, r) { u.use(r) }
                         case _ { }
                     }
                 }
@@ -3636,17 +3635,17 @@ fn (fe mut fnEm&) findIdle() {
             }
         }
         match bb.T {
-            case mir.Term.Wait(_, j, _, _, _) { used[I64(j)] = true }
+            case mir.Term.Wait(_, j, _, _, _) { u.used[I64(j)] = true }
             case _ { }
         }
     }
     for l in f.Locals {
-        if not fe.isFrame(l.Home) { frame = fe.useRef(l.Home, used) or frame }
+        if not fe.isFrame(l.Home) { u.use(l.Home) }
     }
     for i in range f.Scopes.Len() {
         k := f.Scopes[i].Kind
         if k != mir.ScopeKind.Frame and k != mir.ScopeKind.Block and k != mir.ScopeKind.Loop { continue }
-        if used[i] or (frame and i == fe.frameScope) { continue }
+        if u.used[i] or (u.frame and i == fe.frameScope) { continue }
         fe.idle.Put(i, true)
     }
 }
@@ -3675,8 +3674,7 @@ fn (fe mut fnEm&) findWalks() {
     }
     for en in by {
         if en.Value < 0 { continue }
-        made, ok := fe.walkFlow(en.Key, en.Value)
-        if not ok { continue }
+        made := try fe.walkFlow(en.Key, en.Value) catch Undecided { continue }
         fe.walks.Put(en.Key, en.Value)
         for m in made { fe.walkMade.Put(m.Key, m.Value) }
     }
@@ -3686,8 +3684,8 @@ fn (fe mut fnEm&) findWalks() {
 fn (fe fnEm&) walkKey(b I64, i I64) I64 { return b << 20 | (i & 0xFFFFF) }
 
 # the dataflow of findWalks for scope sc and its walk call c: at each close of sc and each suspend holding it, whether
-# the walk is made there; false where some such point, or the call itself, cannot be decided
-fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
+# the walk is made there - failing with Undecided where some such point, or the call itself, cannot be decided
+fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
     f := fe.F
     nb := f.Blocks.Len()
     st := Array<I64>(nb, -1)
@@ -3712,7 +3710,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
                     case mir.Stmt.Close(_, s) {
                         if I64(s) == sc {
                             if phase == 1 {
-                                if x == 2: return out, false
+                                if x == 2: error Undecided
                                 out.Put(fe.walkKey(b, i), x == 1)
                             }
                             x = 0
@@ -3736,7 +3734,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
                     cl := f.Calls[I64(k)]
                     if I64(k) == c {
                         # the call runs again before its scope closed (or while the walk may be made): undecided
-                        if x != 0: return out, false
+                        if x != 0: error Undecided
                         if phase == 0 { fe.walkJoin(st, I64(cl.Ok), 1, work) }
                         if cl.Err != mir.NoBlock and phase == 0 { fe.walkJoin(st, I64(cl.Err), x, work) }
                         continue
@@ -3753,7 +3751,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
                         match f.Refs[I64(held.At) + j] {
                             case mir.ScopeRef.Scope(s) {
                                 if I64(s) == sc and phase == 1 {
-                                    if x == 2: return out, false
+                                    if x == 2: error Undecided
                                     out.Put(fe.walkKey(b, -1), x == 1)
                                 }
                             }
@@ -3769,7 +3767,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool>, Bool {
             }
         }
     }
-    return out, true
+    return out
 }
 
 # a successor's entry state met with x, queued again where it changed
@@ -3836,15 +3834,18 @@ fn (fe mut fnEm&) walkEnds() {
     }
 }
 
-# a scope a reference names, marked used; whether it is the frame's
-fn (fe mut fnEm&) useRef(r mir.ScopeRef, used mut Array<Bool>&) Bool {
+# the scopes a function's code uses, and whether it uses the frame's (findIdle)
+type scopeUse struct(used mut Array<Bool>&) {
+    used
+    frame Bool = false
+}
+
+# a scope a reference names, marked used
+fn (u mut scopeUse&) use(r mir.ScopeRef) {
     match r {
-        case mir.ScopeRef.Scope(s) {
-            used[I64(s)] = true
-            return false
-        }
-        case mir.ScopeRef.Frame { return true }
-        case _ { return false }
+        case mir.ScopeRef.Scope(s) { u.used[I64(s)] = true }
+        case mir.ScopeRef.Frame { u.frame = true }
+        case _ { }
     }
 }
 

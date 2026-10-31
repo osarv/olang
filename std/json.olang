@@ -138,37 +138,30 @@ fn (j Json&) AsNum() F64 ? Error {
 # the number j holds, when it is a whole number an I64 holds - failing with WRONG_KIND otherwise. A whole number Parse
 # read is exact (an Int beyond 2^53)
 fn (j Json&) AsInt() I64 ? Error {
-    neg, mag := try j.whole()
-    if neg {
-        if mag > U64(9223372036854775808) { error Error.WrongKind }
-        return I64(U64(0) - mag)
-    }
-    if mag > U64(9223372036854775807) { error Error.WrongKind }
-    return I64(mag)
+    w := try j.whole()
+    if w < I128(I64.Min) or w > I128(I64.Max) { error Error.WrongKind }
+    return I64(w)
 }
 
 # the number j holds, when it is a whole number a U64 holds - failing with WRONG_KIND otherwise
 fn (j Json&) AsUint() U64 ? Error {
-    neg, mag := try j.whole()
-    if neg and mag != U64(0) { error Error.WrongKind }
-    return mag
+    w := try j.whole()
+    if w < 0 { error Error.WrongKind }
+    return U64(w)
 }
 
-# a whole number's sign and magnitude, exactly - a Num's where it is whole and its magnitude below 2^64
-fn (j Json&) whole() Bool, U64 ? Error {
+# a whole number, exactly - a Num's where it is whole and from -2^63 to below 2^64 - as an I128, which holds both an
+# I64's and a U64's
+fn (j Json&) whole() I128 ? Error {
     match j {
         case Json.Num(v) {
             if v != v or v - v != 0.0 or v >= 18446744073709551616.0 or v < -9223372036854775808.0 { error Error.WrongKind }
-            if v >= 9223372036854775808.0 { return false, U64(v) }     # every F64 there is whole
+            if v >= 9223372036854775808.0 { return I128(U64(v)) }     # every F64 there is whole
             if F64(I64(v)) != v { error Error.WrongKind }
-            if v < 0.0 { return true, U64(0) - U64(I64(v)) }
-            return false, U64(I64(v))
+            return I128(I64(v))
         }
-        case Json.Int(v) {
-            if v < 0 { return true, U64(0) - U64(v) }
-            return false, U64(v)
-        }
-        case Json.Uint(v) { return false, v }
+        case Json.Int(v) { return I128(v) }
+        case Json.Uint(v) { return I128(v) }
         case _ { error Error.WrongKind }
     }
 }
@@ -338,9 +331,9 @@ fn numEq(a Json&, b Json&) Bool {
         case Json.Num(_), Json.Int(_), Json.Uint(_) { }
         case _ { return false }
     }
-    an, am := try a.whole() catch { return false }
-    bn, bm := try b.whole() catch { return false }
-    return am == bm and (an == bn or am == U64(0))
+    aw := try a.whole() catch { return false }
+    bw := try b.whole() catch { return false }
+    return aw == bw
 }
 
 # agrees with Eq: equal values hash equally (an object's members combined in no order, a zero of either sign alike)
@@ -354,7 +347,9 @@ fn (j Json&) Hash() I64 {
         }
         case Json.Int(_), Json.Uint(_) {
             # a whole number an F64 holds exactly hashes as that Num does
-            neg, mag := try j.whole() catch { return 0 }
+            w := try j.whole() catch { return 0 }
+            neg := w < 0
+            mag := U64(-w if neg else w)
             f := F64(mag)
             if f < 18446744073709551616.0 and U64(f) == mag { return Json.Num(-f if neg else f).Hash() }
             return I64(mag) * 1099511628211 + (7 if neg else 9)
@@ -890,7 +885,7 @@ type Naming enum {
 }
 
 # a member's key, whatever the policy: "@json.Key("id")" on a field, a constructor's parameter or a case
-type Key struct(Name String&) [Name.Len() > 0] { Name }
+type Key struct(Name String&) [Name.Len() > 0] ? { Name }
 
 # a field left out: never written, and on reading its parameter takes its default (a parameter with none is a
 # compile-time error - Decode could not build the value)
@@ -989,12 +984,12 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
         case _ {
             if T.Kind == TypeKind.Integer {
                 # exactly, an unsigned type's whole range included: a negative number through I64, the rest through U64
-                neg, mag := try j.whole()
-                if neg and mag != U64(0) {
+                w := try j.whole()
+                if w < 0 {
                     n := try j.AsInt()
                     return T(try n.Narrow<T.Base>() catch NumberError { error Error.WrongKind })
                 }
-                return T(try mag.Narrow<T.Base>() catch NumberError { error Error.WrongKind })
+                return T(try U64(w).Narrow<T.Base>() catch NumberError { error Error.WrongKind })
             } else if T.Kind == TypeKind.Float {
                 return T(T.Base(try j.AsNum()))
             } else if T.Kind == TypeKind.Array {

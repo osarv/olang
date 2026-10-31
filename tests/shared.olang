@@ -18137,18 +18137,18 @@ test "T30a, T31a, G19: an extended trait's methods, a closed trait's types, an i
 # ---- D17: contracts - a function's requirements checked on entry in every build, failing with ArgumentError.Invalid;
 # decided while compiling at calls the evaluator computes (D17e); conversions require that their value fits (D17g) ----
 
-fn dkPercent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
-fn dkDivmod(a I64, b I64) [b > 0] I64, I64 { return a / b, a % b }
-fn (l mut Vec<I64>&) dkPushSmall(x I64) [x < 100] { l.Push(x) }
+fn dkPercent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
+fn dkDivmod(a I64, b I64) [b > 0] I64, I64 ? { return a / b, a % b }
+fn (l mut Vec<I64>&) dkPushSmall(x I64) [x < 100] ? { l.Push(x) }
 # a condition may call a function, a lambda among its arguments
-fn dkSum(a Array<I64>&) [a.Every(fn(x I64) Bool { return x >= 0 })] I64 {
+fn dkSum(a Array<I64>&) [a.Every(fn(x I64) Bool { return x >= 0 })] I64 ? {
     t I64 = 0
     for x in a: t += x
     return t
 }
-fn dkSign(x I64, neg Bool) [(x < 0) == neg] { }
-fn dkNarrow(x I64) [x >= I32.Min and x <= I32.Max] I32 { return I32(x) }
-type dkRing struct(cap I64) [cap > 0, (cap & (cap - 1)) == 0] { cap }
+fn dkSign(x I64, neg Bool) [(x < 0) == neg] ? { }
+fn dkNarrow(x I64) [x >= I32.Min and x <= I32.Max] I32 ? { return I32(x) }
+type dkRing struct(cap I64) [cap > 0, (cap & (cap - 1)) == 0] ? { cap }
 type dkNode struct(v I64) { v }
 fn dkLink(a mut dkNode&, b dkNode&) [b outlives a] { }
 fn dkChain(a mut dkNode&, b mut dkNode&, c dkNode&) [c outlives b outlives a] { }

@@ -914,7 +914,7 @@ fn firstLine(t String&) String {
 }
 
 # whether a method's receiver type r takes a value of type t: the same declaration, or the same built-in kind
-fn sameShape(c mut typecheck.Checker&, r types.TypeId, t types.TypeId) Bool {
+fn sameShape(c typecheck.Checker&, r types.TypeId, t types.TypeId) Bool {
     kr := c.P.T.KindOf(r)
     kt := c.P.T.KindOf(t)
     if kr == types.Kind.Named and kt == types.Kind.Named { return c.P.T.DeclOf(r) == c.P.T.DeclOf(t) }

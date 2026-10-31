@@ -149,7 +149,8 @@ fn main() ? {
         requests Vec<diagedit.Request>
         for o in outputs {
             for row in o.Split("\n") {
-                path, line, col, isError, _, msg := try diagedit.ParseRow(row) catch { continue }
+                parsed := try diagedit.ParseRow(row) catch { continue }
+                path, line, col, isError, msg := parsed.Path, parsed.Line, parsed.Col, parsed.IsError, parsed.Msg
                 full := diagedit.RealPathOf(path)
                 if isError and msg.StartsWith(AsMessage) and diagedit.Allowed(full, allowed) {
                     requests.Push(diagedit.Request($full, line, col, "as", "", $row))

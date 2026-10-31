@@ -191,7 +191,7 @@ fn Record(fields Array<String&>&, sep Char = ',') String ? Error {
 #     items := try csv.Decode<Item>(text)           # a Vec<Item>, by the header's names
 
 # a column's name, written on a field or a constructor's parameter (G39)
-type Column struct(Name String&) [Name.Len() > 0] { Name }
+type Column struct(Name String&) [Name.Len() > 0] ? { Name }
 
 # a field that is no column (G39): never written, and read back its parameter takes its default
 type Skip struct() { }

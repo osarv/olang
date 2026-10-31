@@ -218,12 +218,12 @@ test "T34: type cases bind the instance itself; as gives it, or fails under chec
 
 # D17f: a trait's requirements held to every call through an any, before dispatch; the instance's own on its entry
 type Account trait {
-    mut Withdraw(n I64) [n > 0] I64
+    mut Withdraw(n I64) [n > 0] I64 ? ArgumentError
 }
 type Wallet struct(cash I64) {
     cash
 }
-fn (w mut Wallet&) Withdraw(n I64) [n <= 100] I64 {
+fn (w mut Wallet&) Withdraw(n I64) [n <= 100] I64 ? ArgumentError {
     w.cash -= n
     return w.cash
 }

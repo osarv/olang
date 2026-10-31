@@ -417,12 +417,12 @@ fn (l mut Loader&) decide(mi I64, c I64) {
     from := m.chainCondFrom[c]
     to := m.conds.Len() if c + 1 == m.chainCondFrom.Len() else m.chainCondFrom[c + 1]
     for k in range from, to {
-        outcome, value := l.evalCond(mi, m.conds[k])
-        if outcome == cond.Outcome.Deferred {
+        d := l.evalCond(mi, m.conds[k])
+        if d.Of == cond.Outcome.Deferred {
             m.chainChosen[c] = Pending
             return
         }
-        if outcome == cond.Outcome.Decided and value {
+        if d.Of == cond.Outcome.Decided and d.Holds {
             m.chainChosen[c] = k - from
             return
         }
@@ -431,18 +431,18 @@ fn (l mut Loader&) decide(mi I64, c I64) {
 }
 
 # a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
-fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
+fn (l mut Loader&) evalCond(mi I64, i I64) cond.Decision {
     m := l.Mods[mi]
     l.CondParser(m)
-    x := try m.cparser!.ExprAt(i) catch { return cond.Outcome.Failed, false } # the parser reports it
-    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Outcome.Deferred, false }
+    x := try m.cparser!.ExprAt(i) catch { return cond.Decision(cond.Outcome.Failed, false) } # the parser reports it
+    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Decision(cond.Outcome.Deferred, false) }
     e mut cond.Eval&m = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
-    outcome, value := e.Top(x)
-    if outcome == cond.Outcome.Failed {
+    d := e.Top(x)
+    if d.Of == cond.Outcome.Failed {
         at, msg := e.Error()
         l.Diags.Error(l.at(m, at), msg)
     }
-    return outcome, value
+    return d
 }
 
 # the parser conditions are read with, and the globals they may read: "Name [mut] [type] = init" and "Name := init" at

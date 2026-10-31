@@ -564,24 +564,28 @@ fn (v mut Viewer&) recordPlaces(base typed.Lvalue&, st state&, out mut Vec<place
     }
 }
 
-# whether a place is a Vec record's buffer, or what the buffer names: the record's places in out
-fn (v mut Viewer&) bufferOf(p typed.Lvalue&, st state&, out mut Vec<place>&) Bool {
+# the record's places in out where a place is a Vec record's buffer, or what the buffer names - failing with NotBuffer
+# where it is neither
+fn (v mut Viewer&) bufferOf(p typed.Lvalue&, st state&, out mut Vec<place>&) ? NotBuffer {
     match p {
         case typed.Lvalue.Deref(_, _, r) {
             match unAway(r) {
-                case typed.Expr.Read(_, _, q, _) { return v.bufferOf(q, st, out) }
+                case typed.Expr.Read(_, _, q, _) {
+                    try v.bufferOf(q, st, out)
+                    return
+                }
                 case _ { }
             }
         }
         case typed.Lvalue.Field(_, _, b, i) {
             if v.isRecord(b.Type()) and v.fieldName(v.deref(b.Type()), i) == "data" {
                 v.recordPlaces(b, st, out)
-                return true
+                return
             }
         }
         case _ { }
     }
-    return false
+    error NotBuffer
 }
 
 # a summary's place below where a call's argument is
@@ -679,18 +683,14 @@ fn viewAdd(out mut Vec<view>&, w view) {
     out.Push(w)
 }
 
-fn holdAdd(st mut state&, l I64, w view) Bool {
+fn holdAdd(st mut state&, l I64, w view) {
     for i in range st.Holds.Len() {
         o := st.Holds[i]
         if o.L != l or o.V.Site != w.Site or o.V.P != w.P { continue }
-        if w.Stale and not o.V.Stale {
-            st.Holds[i] = holding(l, w)
-            return true
-        }
-        return false
+        if w.Stale and not o.V.Stale { st.Holds[i] = holding(l, w) }
+        return
     }
     st.Holds.Push(holding(l, w))
-    return true
 }
 
 fn nameAdd(st mut state&, l I64, p place) {
@@ -1055,11 +1055,11 @@ fn (v mut Viewer&) assign(target typed.Lvalue?&, x typed.Expr?&, refs Vec<view>&
     }
     # a Vec's record given another buffer: the growth every growing method comes down to (the prelude's room)
     rec Vec<place>
-    if v.bufferOf(target, st, rec) {
-        for g in rec { v.grow(g, target.Span(), v.str("'Push'"), -1, source.Span(0, 0), st) }
+    try v.bufferOf(target, st, rec) catch NotBuffer {
+        v.storeInto(target, refs, st)
         return
     }
-    v.storeInto(target, refs, st)
+    for g in rec { v.grow(g, target.Span(), v.str("'Push'"), -1, source.Span(0, 0), st) }
 }
 
 # a target's parts read before it is stored into: what it is below, its indices
@@ -1178,9 +1178,8 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
             v.expr(sl.Hi, st, scratch)
             # a slice of a Vec's record's buffer is a view of the record (the prelude's View, ViewMut and the rest)
             rec Vec<place>
-            if v.bufferOf(sl.Base, st, rec) {
-                for p in rec { viewAdd(mine, view(p, I64(sp.Start))) }
-            }
+            try v.bufferOf(sl.Base, st, rec) catch NotBuffer { }
+            for p in rec { viewAdd(mine, view(p, I64(sp.Start))) }
         }
         case typed.Expr.Cond(_, _, c) {
             v.expr(c.C, st, scratch)

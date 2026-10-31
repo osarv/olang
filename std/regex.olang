@@ -44,10 +44,8 @@ type SyntaxError error {
     TooBig
 }
 
-# what Find fails with when the pattern matches nowhere, and Group when a group took part in no match
-type NotFound error {
-    NotFound
-}
+# Find fails with NotFound, an error raised by name (R3b), when the pattern matches nowhere, and Group when a group took
+# part in no match
 
 # ---- the program ----
 
@@ -1216,29 +1214,29 @@ fn copyOf(a Array<I64>&) mut Array<I64>& {
 # the text matched
 fn (m Match&) Text() String&m { return m.t[m.Start:m.End] }
 
-# the text capture group i matched (0 the whole match) - failing with NOT_FOUND when there is no group i or it took
+# the text capture group i matched (0 the whole match) - failing with NotFound when there is no group i or it took
 # part in no match ("(a)|b" matching "b")
-fn (m Match&) Group(i I64) String&m ? NotFound.NotFound {
-    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NotFound }
+fn (m Match&) Group(i I64) String&m ? NotFound {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound }
     return m.t[m.caps[2 * i]:m.caps[2 * i + 1]]
 }
 
 # where capture group i matched, start and end - failing as Group does
-fn (m Match&) Span(i I64) I64, I64 ? NotFound.NotFound {
-    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NotFound }
+fn (m Match&) Span(i I64) I64, I64 ? NotFound {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound }
     return m.caps[2 * i], m.caps[2 * i + 1]
 }
 
-# the number of the group named "name", for Match's Group - failing with NOT_FOUND when the pattern names none so
-fn (re Regex&) GroupNamed(name String&) I64 ? NotFound.NotFound {
+# the number of the group named "name", for Match's Group - failing with NotFound when the pattern names none so
+fn (re Regex&) GroupNamed(name String&) I64 ? NotFound {
     names := re.s.names
     for i in range names.Len() {
         if names[i] == name and name.Len() > 0 { return i }
     }
-    error NotFound.NotFound
+    error NotFound
 }
 
-# the leftmost-first match in t at or after byte "from" - failing with NOT_FOUND where there is none
+# the leftmost-first match in t at or after byte "from" - failing with NotFound where there is none
 # a search of one text, match after match: the DFAs where they serve, the Pike VM for the groups
 type searcher struct(of prog&, text String&, ncap I64) {
     t String&text = text
@@ -1270,14 +1268,14 @@ fn (s mut searcher&) next(from I64) Bool {
     return m.run(from, false)
 }
 
-fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound.NotFound {
-    if from < 0 or from > t.Len() { error NotFound.NotFound }
+fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound {
+    if from < 0 or from > t.Len() { error NotFound }
     sr := searcher(re.s, t, 2 * re.s.names.Len())
-    if not sr.next(from) { error NotFound.NotFound }
+    if not sr.next(from) { error NotFound }
     return Match(t, sr.m.best)
 }
 
-fn (re Regex&) Find(t String&) Match ? NotFound.NotFound { return try re.FindFrom(t, 0) }
+fn (re Regex&) Find(t String&) Match ? NotFound { return try re.FindFrom(t, 0) }
 
 # where the next match is looked for after one from "start" to "end": its end, or one code point on for an empty match
 fn onFrom(t String&, start I64, end I64) I64 {

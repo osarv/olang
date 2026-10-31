@@ -197,12 +197,12 @@ fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
 }
 
 # what LowerKey makes of k, held to the verifier, as Verified
-fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) Bool, String, String {
+fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) String, String ? GapMet {
     f mir.Fn&lw = lw.LowerKey(k)
-    if lw.Gapped { return true, "", "" }
+    if lw.Gapped { error GapMet }
     problems := f.Verify(lw.P.T)
     text := f.Dump(lw.P.T) if dump else ""
-    return false, problems, text
+    return problems, text
 }
 
 # the modules whose initialization runs a global's initializer, in order
@@ -219,14 +219,14 @@ fn (lw mut Lowerer&) InitModules() Vec<I64> {
     return out
 }
 
-# body id lowered and held to the verifier: whether lowering met a gap (or a body with errors), the verifier's problems
-# ("" for none), and the function's dump where dump is asked for
-fn (lw mut Lowerer&) Verified(id I64, dump Bool) Bool, String, String {
+# body id lowered and held to the verifier: the verifier's problems ("" for none) and the function's dump where dump
+# is asked for - failing with GapMet where lowering met a gap (or a body with errors)
+fn (lw mut Lowerer&) Verified(id I64, dump Bool) String, String ? GapMet {
     f mir.Fn&lw = lw.Lower(id)
-    if lw.Gapped { return true, "", "" }
+    if lw.Gapped { error GapMet }
     problems := f.Verify(lw.P.T)
     text := f.Dump(lw.P.T) if dump else ""
-    return false, problems, text
+    return problems, text
 }
 
 # ---- one body ----
@@ -3027,16 +3027,20 @@ fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Arra
     return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest))
 }
 
-# what a type's value is made of, for the helpers: a struct's, a tuple's or a record's fields; ok false for none
-fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId>, Bool {
+# whether a type's value is made of parts, for the helpers: a struct, a tuple or a record
+fn (ln mut lowering&) hasParts(ty types.TypeId) Bool {
     t := ln.T
     r := t.Repr(ty)
     k := t.KindOf(r)
-    if k == types.Kind.Tuple or k == types.Kind.Record { return ln.items(t.Parts(r)), true }
-    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r) {
-        return ln.items(t.Fields(r)), true
-    }
-    return Array<types.TypeId>(0), false
+    return k == types.Kind.Tuple or k == types.Kind.Record or
+           (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r))
+}
+
+# a struct's, a tuple's or a record's fields; none for anything else
+fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId> {
+    if not ln.hasParts(ty) { return Array<types.TypeId>(0) }
+    r := ln.T.Repr(ty)
+    return ln.items(ln.T.Parts(r) if ln.T.KindOf(r) != types.Kind.Named else ln.T.Fields(r))
 }
 
 fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
@@ -3046,15 +3050,19 @@ fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
     return out
 }
 
-# an enum's cases' payloads (a record, or 0 for none); ok false for no enum
-fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId>, Bool {
+# whether a type is an enum
+fn (ln mut lowering&) hasCases(ty types.TypeId) Bool {
     t := ln.T
     r := t.Repr(ty)
-    if t.KindOf(r) == types.Kind.AnonEnum { return ln.items(t.ShapeCases(r)), true }
-    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r) {
-        return ln.items(t.Cases(r)), true
-    }
-    return Array<types.TypeId>(0), false
+    return t.KindOf(r) == types.Kind.AnonEnum or
+           (t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r))
+}
+
+# an enum's cases' payloads (a record, or 0 for none); none for anything else
+fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId> {
+    if not ln.hasCases(ty) { return Array<types.TypeId>(0) }
+    r := ln.T.Repr(ty)
+    return ln.items(ln.T.ShapeCases(r) if ln.T.KindOf(r) == types.Kind.AnonEnum else ln.T.Cases(r))
 }
 
 # whether a value of the type is compared, hashed and rendered as itself: a number, a Bool, a Char
@@ -3117,8 +3125,8 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top B
     res := ln.flag(true, sp)
     no := ln.F.NewBlock()
     ends Vec<mir.BlockId>
-    parts, isParts := ln.partsOf(ty)
-    cases, isEnum := ln.casesOf(ty)
+    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
+    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
     if isParts {
         for i in range parts.Len() {
             e := ln.equalAt(ln.with(a, mir.Proj.Field(i)), ln.with(b, mir.Proj.Field(i)), parts[i], sp)
@@ -3270,8 +3278,8 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
     if not top { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
     h := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
-    parts, isParts := ln.partsOf(ty)
-    cases, isEnum := ln.casesOf(ty)
+    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
+    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
     if isParts {
         for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Field(i)), parts[i], sp), sp) }
     } else if isEnum {
@@ -3539,8 +3547,8 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp), ln.depth()], mir.ScopeRef[b], types.VoidT, sp)
         return
     }
-    parts, isParts := ln.partsOf(ty)
-    cases, isEnum := ln.casesOf(ty)
+    parts, isParts := ln.partsOf(ty), ln.hasParts(ty)
+    cases, isEnum := ln.casesOf(ty), ln.hasCases(ty)
     if isParts {
         if t.KindOf(r) == types.Kind.Named { ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
         ln.word(b, "(", sp)
@@ -3916,8 +3924,10 @@ fn lowerText(text String&, dumps Array<String&>&) String, String {
             case _ { }
         }
         dump := body.File == root and name in dumps
-        gapped, bad, shown := lw.Verified(b, dump)
-        if gapped { problems.Push("B" $b ": gapped\n") }
+        bad, shown := try lw.Verified(b, dump) catch GapMet {
+            problems.Push("B" $b ": gapped\n")
+            continue
+        }
         for line in bad.Split("\n") {
             if line.Len() > 0 { problems.Push("B" $b ": " $line "\n") }
         }
@@ -3928,8 +3938,10 @@ fn lowerText(text String&, dumps Array<String&>&) String, String {
     for w < lw.Wanted.Len() {
         key := lw.Wanted[w]
         w++
-        gapped, bad, _ := lw.VerifiedKey(key, false)
-        if gapped { problems.Push($key ": gapped\n") }
+        bad, _ := try lw.VerifiedKey(key, false) catch GapMet {
+            problems.Push($key ": gapped\n")
+            continue
+        }
         for line in bad.Split("\n") {
             if line.Len() > 0 { problems.Push($key ": " $line "\n") }
         }

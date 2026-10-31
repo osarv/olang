@@ -143,7 +143,7 @@ test "match T: generic cases bind their arguments, traits are met, the first cas
 
 test "a function type's parameters, results and errors" {
     assert sig<fn(a I64, b String&) Bool>() == "2 -> 1: I64 String& Bool"
-    assert sig<(fn(a I64) I64, Bool)>() == "1 -> 2: I64 I64 Bool"
+    assert sig<(fn(a I64) I64, F64)>() == "1 -> 2: I64 I64 F64"
     assert (try call(risky, 4) catch Bad default 0) == 8
     assert (try call(risky, -1) catch Bad default 7) == 7
 }

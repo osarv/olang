@@ -212,11 +212,12 @@ fn (g mut gen&) recordAt(key String&) I64 {
     return g.recs.Len() - 1
 }
 
-# " __attribute__((noreturn))" after a function's type, taken off: the type, and whether it was there
-fn noReturnOf(t String&) String, Bool {
-    attr := " __attribute__((noreturn))"
-    if t.EndsWith(attr) { return $t[:t.Len() - attr.Len()], true }
-    return $t, false
+NoReturnAttr := " __attribute__((noreturn))"
+
+# a function's type with any " __attribute__((noreturn))" after it taken off
+fn noReturnOf(t String&) String {
+    if t.EndsWith(NoReturnAttr) { return $t[:t.Len() - NoReturnAttr.Len()] }
+    return $t
 }
 
 # the top-level declarations: each read once its location says which file it is in
@@ -759,7 +760,8 @@ fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String 
 
 # a function's declaration: "fn NAME(...) RESULT", "..." last for a variadic one (X21), "noreturn" for C's
 fn (g mut gen&) function(f cFunc&) String ? Skip {
-    ft, noRet := noReturnOf(f.Type)
+    ft := noReturnOf(f.Type)
+    noRet := f.Type.EndsWith(NoReturnAttr)
     t := g.parseType(ft)
     n := g.nodes[t]
     if n.Kind == CKind.Bad { try g.skip(n.Text) }
@@ -795,7 +797,7 @@ fn (g gen&) numbersOnly(n ctype) Bool {
 
 # a static or inline function's wrapper in C, and its symbol (X20): what the extern links by
 fn (g mut gen&) wrapper(f cFunc&) String ? Skip {
-    ft, _ := noReturnOf(f.Type)
+    ft := noReturnOf(f.Type)
     if ft.Contains("...") { try g.skip("static or inline, and taking a variable number of arguments") }
     res := resultText(ft)
     if res == "" { try g.skip("static or inline, its result's type no olang form wraps") }
@@ -868,7 +870,7 @@ fn (g mut gen&) write(head String&) String {
     for f in g.funcs { g.taken.Put($f.Name, 0) }
     # a struct C hands back by pointer is C's to lay out: an extern type, whatever its fields
     for f in g.funcs {
-        ft, _ := noReturnOf(f.Type)
+        ft := noReturnOf(f.Type)
         t := g.parseType(ft)
         if g.nodes[t].Kind != CKind.Fn { continue }
         r := g.nodes[g.nodes[t].To]
@@ -1679,7 +1681,7 @@ fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.J
 # each complete struct or union an import may hold that is no plain data: its size and alignment, as clang lays it out
 fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, include String&) ? Skip {
     for f in g.funcs {
-        ft, _ := noReturnOf(f.Type)
+        ft := noReturnOf(f.Type)
         t := g.parseType(ft)
         if g.nodes[t].Kind != CKind.Fn { continue }
         r := g.nodes[g.nodes[t].To]

@@ -233,19 +233,20 @@ fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) Stri
 }
 
 # migrates one file; whether it changed
-fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) Bool {
-    if path == "std/math.olang" or path.EndsWith("/std/math.olang") { return false }
+# a file migrated, notes added to: how many files it changed, 0 or 1
+fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) I64 {
+    if path == "std/math.olang" or path.EndsWith("/std/math.olang") { return 0 }
     text := try srcmask.ReadText(path) catch {
         srcmask.SayErr("math_methods: cannot read " $path)
         os.Exit(1)
         unreachable
     }
     alias, from, to := mathImport(text, path)
-    if alias.Len() == 0 { return false }
+    if alias.Len() == 0 { return 0 }
     mine Vec<String&>
     result := migrate($text[:from] $text[to:], alias, 1, mine)
     for n in mine { notes.Push($path ":" $n) }
-    if result == text { return false }
+    if result == text { return 0 }
     if not dry {
         try os.WriteFile(path, result) catch {
             srcmask.SayErr("math_methods: cannot write " $path)
@@ -253,7 +254,7 @@ fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) Bool {
         }
     }
     srcmask.Say($("would migrate " if dry else "migrated ") $path)
-    return true
+    return 1
 }
 
 fn main() ? {
@@ -276,7 +277,7 @@ fn main() ? {
     notes Vec<String&>
     for k, f in files {
         if k > 0 and f == files[k - 1] { continue }
-        if migrateFile(f, dry, notes) { changed++ }
+        changed += migrateFile(f, dry, notes)
     }
     srcmask.Say($changed " files " $("would change" if dry else "changed"))
     if notes.Len() > 0 {

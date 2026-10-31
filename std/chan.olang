@@ -98,7 +98,7 @@ fn Close<T>(c mut Chan<T>&) {
 
 # whether Close has been called. A channel open now may be closed by the time the answer is used - a receiver learns
 # that it has ended from Recv's error, never from this
-fn IsClosed<T>(c mut Chan<T>&) Bool {
+fn (c mut Chan<T>&) IsClosed() Bool {
     pthread.pthread_mutex_lock(c.lock)
     closed := c.closed
     pthread.pthread_mutex_unlock(c.lock)
@@ -399,10 +399,10 @@ test "a closed channel gives what it holds, then fails with CLOSED" {
     try Send(c, 1)
     try Send(c, 2)
     try Send(c, 3)
-    assert not IsClosed(c)
+    assert not c.IsClosed()
     Close(c)
     Close(c)                                 # again: nothing changes
-    assert IsClosed(c)
+    assert c.IsClosed()
     assert (try Recv(c) catch default -1) == 1
     tok := cancel.After(1000)
     assert (try RecvUntil(c, tok) catch default -1) == 2
