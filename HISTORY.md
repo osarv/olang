@@ -26549,3 +26549,79 @@ bench timings (min of 7, interleaved) moved by a geometric mean of 0.994 against
 Vec push's 0.855 -> 0.815 s agreed with its counts. So by the decision's rule the weights stay: every call's error edge
 is written `, !prof !99`, `!99` beside the fixed alias tags in every object. Not weighted: a join's failure edge (rare
 and not in loops), the entry's and harness's (once).
+
+## `case _` and `case P: v`: `nomatch` and `=>` removed (S12, S12b, S13f, QBQ, QBR, 2026-10-31)
+
+The user, 2026-10-27, on survey3's guard narrowing ("what is the _ case? is this just a glorious nomatch?"): unguarded,
+`case _` matched every value exactly as `nomatch` did - two spellings of one thing. First "nomatch should be replaced
+with default", then "remove nomatch from the language completely ... case _ is the best I think": no clause of its own,
+the pattern rule `_` = anything applied at the top. The same day ("for value matching why dont we reuse the normal case
+syntax"): a value match's clause is `case P: v`, S1b's one-line body, and `=>` leaves the language; "the : ... just
+start" (the value begins on the `:`'s line and runs on as a statement does); "disallow {} blocks in the value matches".
+
+What was built:
+- the scanner has no `=>` token (it reads as `=` then `>`) and no `nomatch` keyword - simply gone, no diagnostic kept
+  (principle 4); the AST's `Match.NoMatch` went, `case _` being an ordinary case the checker already handled everywhere
+  (`match T`'s isWildType, G30/G35's choosers, the closed trait's any, the error-value chain);
+- the parser knows whether a match is a value (it was parsed in expression position) and reads a clause's body by
+  that: in a value match `case P: v`, or one statement that leaves after the `:` (`return`, `error`, `break`,
+  `continue` - decided (mine): a leaving clause had been a block, and a value match with no block has to leave some
+  way; `case P: unreachable` and a noreturn call are values already); a block there is S12b's `ValueCaseBlock` error,
+  the block read past so what follows is still checked; in a statement match a block or `case P: stmt` (lineBody);
+- diagnostics reworded (`add 'case _: v'`, `or 'case _ { }'`, `case P: return a, b`); `ArrowInStatement`,
+  `ArrowLeaves` and `CaseBlockStays` went (nothing reaches them); the checker's match is split into `caseValue`,
+  `firstValueType`, `matchElse` and `sayUncovered` (the nesting rule), and a noreturn first value no longer sets the
+  match's type (`case 7: unreachable` first beside `case _: s.cur` was "every value of this match is noreturn");
+- `tools/match_migrate.olang`: tokens alone, idempotent - `nomatch {` / `nomatch => v` to `case _`, `=>` (an `=`
+  touching a `>`) to `:`, and a value match's one-statement clause block to `case P: stmt`, a longer block or one holding
+  a comment listed `by hand:` (none in the repository). A match is a value unless `match` begins a statement. It is in
+  `olang fix`'s table after link_migrate, before the driven tools (an old file would not parse for them); its fixture
+  (`checks/fixtures/fix/old.olang`) gained a match. Migrated: 135 files; programs inside strings by hand (the fuzz
+  generators, a lowering test); the seed regenerated (the seed's compiler reads only the old forms, so the chain was:
+  the old compiler builds the new compiler from source still written in the old forms, the tool migrates the
+  repository, that compiler builds the migrated source).
+
+Found on the way (pre-existing): in a match on an error value, a guarded `case _` was taken as the chain's else - its
+guard dropped - and made every later clause "never reached" (`caughtLast`, `caughtCases` now ask for no guard).
+
+## A guard narrows in its clause (S13e, S8d, QBP 1, 2026-10-31)
+
+survey3's A4.1 (the user: "1 yes"): `case _ if s == Shape.Circle` and `case Wrap.One(s) if s == Shape.Circle: s.r`
+narrowed nothing in the clause - the guard was checked as a value only. Now the clause's block gets the guard's facts
+through the one narrowing walk (`pushFacts`), as an if's block does, so case tests, null tests and error-value tests
+narrow there alike; tests/match.olang holds it, baked and run.
+
+## Mod, DivFloor, DivCeil (QBP 2, 2026-10-27/31)
+
+The user asked whether DivCeil was not the default and whether Mod clashed with `%` - `/` truncates (ceil only for
+negative quotients) and `%`'s method is `Rem`, the truncated remainder, so `Mod` was free and is the floored modulo's
+mathematical name. Built as defaults over `Integer` in std/prelude/number.olang (every width), computed from `/` and
+`%` with one correction, so the evaluator computes them; a zero divisor is undefined as for `/`.
+
+## Typed holes (E41, QBP 3, 2026-10-31)
+
+`_` where a value is wanted had been B11's "unknown name '_'". Now the checker answers with the type wanted there and
+what in scope fits it - decided (mine): the locals and parameters bound at that point first, then the module's
+globals, by E12's flow (`Same`, `flowsInto`, or one's referent), at most eight listed; where nothing says the type
+(`x := _`), it says that. A diagnostic only: names still records `_` as nothing; the language server shows it.
+
+## io.Show (QBP 4, 2026-10-31)
+
+`io.Show<T>(v T, at Place = Place.Here) T` - the user: "yes build it Ig, I wouldn't use it but I dont mind". It writes
+`FILE:LINE:COLUMN: $v` to the standard error and gives v back; a failed write is ignored (`try Write(...) catch { }`),
+the one std call that swallows an error, said in its doc comment and SPEC M19f.
+
+## Walks, round 3 (M19d, QBP 5, 2026-10-31)
+
+The user: "build them any way you want". Decided (mine): on iterators `Scan` (each running value, init not given -
+Rust's shape, not Haskell's scanl), `GroupBy` (collects into a `Map<K, Vec<T>>`, Kotlin's meaning; the consecutive
+form is `ChunkBy`), `ChunkBy(same)` (a neighbour test, Rust's slice::chunk_by), `Dedup` (consecutive equal values),
+`Unzip`, `Product`, `Last`, `Nth` (Exhausted past the end and for a negative position); on arrays (text by its bytes)
+and At+Len types `LowerBound`, `BinarySearch` (the first equal element; `ArrayError.NOT_FOUND` from a Vec too - a
+position search's error, one word whatever holds the positions) and `Cycle`; `ChunkBy` as views on arrays only (a Vec
+through `View()` - a view of an Indexable's elements does not exist). A held value the walk needs before the first
+(Dedup's last, ChunkBy's next run's start) is kept in a Vec of one, as FlatMap's inner walk is, since T may have no zero
+value (D13c). Found: an iterator of reference-holding elements built per Next (ChunkBy's runs) cannot be collected by
+`ToVec` (O10c at its Push: each element lives with its turn) - a recorded limit, consumed by a for-in instead. Each has
+B7a examples (`test Iterator.Scan`, `test Array.BinarySearch`, `test Indexable.Cycle` ...) and std/prelude/tests/
+iterator.olang bakes five globals through them beside the same at run time.

@@ -234,8 +234,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   block's kind (`typed.BlockKind.ErrDefer`), `lowering.runDefers` taking it only where `erroring` (raise, a clause) or
   after a failed wait - nothing new in the evaluator or emit.
 - **`match` (S12-S13f).** Several values per case, guards (`case P if c`), nested patterns, literals in payload
-  positions, `case _` (alone, last); `match` as a value with `case P => v` (S12b); exhaustiveness over the patterns
-  (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).
+  positions, `case _` (alone, last); exhaustiveness over the patterns (S13a, Maranget). Binding alternatives bind the
+  same names and types. `match T` dispatches on a type variable (G15). **`case _` is the one catch-all, `case P: v` the
+  value form (S12, S12b, S13f; the user's QBQ "case _ is the best" and QBR "Ye agree", 2026-10-27; built 2026-10-31)**:
+  `nomatch` and `=>` are gone from the language (no diagnostic kept for either); a match used as a value gives each
+  clause's value on its `:`'s line - the value running on as a statement does - and a clause there may instead leave by
+  one statement (`case _: return 0`, mine: what S1b's one-line body allows, so leaving needs no block); a `{ }` clause in
+  a value match is an error naming `case P: v`; a statement match's clause is a block or `case P: stmt` (S1b). A guard's
+  test narrows in its clause as an if's condition does (S13e, QBP 1, the user's yes; the one narrowing walk,
+  `pushFacts`). `tools/match_migrate.olang` (tokens, idempotent, in `olang fix` before unused_migrate) migrated the
+  repository - 135 files. Found on the way (pre-existing): in a match on an error value a guarded `case _` was taken as
+  the chain's else, its guard dropped (`caughtLast`, `caughtCases`).
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
   (fails as written with `CaseError.WRONG_CASE`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
@@ -292,7 +301,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
   length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
   (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
-  IoError error { ... }`, T19).
+  IoError error { ... }`, T19); `nomatch` and `=>` (2026-10-31, QBQ/QBR: `case _`, `case P: v`).
 
 ### Types
 
@@ -538,7 +547,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reaches it (so `any Iterator<String>&` exists), an argument left off taking the trait's default; `for x in it` walks an
   `any Iterator<T>&`; the any satisfies its
   trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
-  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `nomatch`) and `w as Button` (failing with
+  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `case _`) and `w as Button` (failing with
   `CaseError.WRONG_CASE` as written); an open trait's never (the user). A trait's methods take contracts (D17f), checked before every call through an
   any; the implementation's own on its entry, after dispatch. Tables are `linkonce_odr`, named by
   type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
@@ -858,12 +867,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
   caught by the rule that a clause's name must be used) name the error the clause took (an error value, below, never null and never assigned): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
   something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
-  combine), `match e` (read as the if-chain it is; exhaustive or `nomatch`/`case _`; a value form with `=>`), `error e`
+  combine), `match e` (read as the if-chain it is; exhaustive or `case _`; a value form with `case P: v`), `error e`
   (R3a, held to the function's set by what narrowing leaves). Representation (mine): the name is a hidden `I32` local holding
   the code recoded to the clause's own set (canonical order), assigned where the clause is entered (lowering's
   `toClause`), so the evaluator and `interpret` need nothing new; `error e` is `typed.Stmt.Reraise`, recoded to the
   body's set. Decided (mine): a spawned call's clause names no error (it is a lambda on the task's thread - an error
-  naming it); a value `match e` gives every value with `=>`; a case after the cases cover everything is an error.
+  naming it); a value `match e` gives a value in every clause (no clause there leaves); a case after the cases cover everything is an error.
   `tools/errortype_migrate.olang` (text, idempotent, last of `olang fix`'s text tools) rewrites old declarations.
 - **Errors as values (T20, R3a, R11b, 2026-10-26, the user's option (b)).** An error type or a named set is a value's
   type everywhere but a function's result (alone, among several, or in a function type - T20's error names `?`):
@@ -1074,7 +1083,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   field, method, case, error type or word, scope name, import, named argument, test target, option - ends its message
   with the nearest allowed name, ` - did you mean 'x'?`, within about a third of the word (case-insensitive edit
   distance); one helper, `msgs.Nearest` (mine: of two equally near, locals first, then aliases, then the module's and
-  the prelude's names).
+  the prelude's names). **Typed holes (E41, QBP 3, the user's "yes build it", 2026-10-27; built 2026-10-31)**: `_` where
+  a value is wanted is an error naming the type wanted and the locals, parameters and module globals in scope that fit
+  (mine: by E12's flow, the locals first, at most eight), or that nothing says the type; the language server shows it
+  as any diagnostic (`check.typedHole`).
 - **Build details.** Objects for a different mode are different artifacts (`.main.o`, `.test.o`, `.tmod.o`, `.race.o`,
   `.debug.o`, `.san.o`, a `-define` hash, B4/B10b); the target is in the object hash (B12b); symbols are mangled from
   module identity with every character but letters and digits escaped (B3b); two modules of one base name are fine
@@ -1151,7 +1163,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Sqrt()` (the user's name, not ISqrt: the floor of the root in the receiver's type, hardware sqrt plus a one-step
   correction, exact for every U64; signed fails with the prelude's `NumberError.NEGATIVE` - mine - unsigned cannot
   fail). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's, read by bare name everywhere and reserved (D3a);
-  others are computed in place (`F64(2).Sqrt()`). Decided (mine): integer `Sqrt` is a concrete method per type (the
+  others are computed in place (`F64(2).Sqrt()`). **`x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` (QBP 2, the user's
+  yes, 2026-10-27; built 2026-10-31)**: every integer's, defaults over `Integer` - the floored modulo (the divisor's
+  sign; `%` stays `Rem`, truncated) and the quotient rounded down and up; a zero divisor undefined as for `/` (E6a). Decided (mine): integer `Sqrt` is a concrete method per type (the
   two signatures differ); a type that only declares `Less` no longer has Min/Max/Clamp (nothing but std/math's own test
   used it - it declares its own); the methods live in `number.olang` beside the traits (M19: a default lives in its
   trait's module). Not done: a named constant adapting like a literal (`f F32 = Pi` is an error; `F32(Pi)` is written) -
@@ -1197,7 +1211,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `io.Error` and are written with `try`; no std function ends the program on
-  its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
+  its own. `io.Show<T>(v T, at Place = Place.Here) T` (QBP 4, 2026-10-27; built 2026-10-31) writes `FILE:LINE:COLUMN:
+  $v` to the standard error and gives `v` back - the one std call ignoring a failed write (its doc comment says why). The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
   `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
@@ -1237,7 +1252,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   type. Decided (mine): the struct adapters copy their iterator as the others do; FlatMap a struct, not a generator (a
   generator cannot yield references its inner walks hold); an array method or an Iterator default could not be a B7a
   target (only a named type's method could then), so the examples named the adapter types - they name the methods since
-  the checker batch (`Iterator.TakeWhile`, `Array.Reversed`).
+  the checker batch (`Iterator.TakeWhile`, `Array.Reversed`). **Round 3 (QBP 5, the user: "build them any way you
+  want", 2026-10-27; built 2026-10-31, details mine)**: iterator defaults `Scan(init, f)` (running values, init not
+  given), `GroupBy(key)` (a new `Map<K, Vec<T>>`, keys in first-met order), `ChunkBy(same)` (runs by a neighbour test,
+  each a `Vec` built where its Next lands - a `ToVec` of them is refused by section 8, a for-in works), `Dedup()`
+  (consecutive equal values once), `Unzip()` (Zip's pairs into two Vecs), `Product()`, `Last()`, `Nth(n)` (Exhausted
+  past the end or for n < 0); on arrays (text included) and At+Len types `LowerBound(x)`, `BinarySearch(x)` (the first
+  equal, `ArrayError.NOT_FOUND` for arrays and Vecs alike) and `Cycle()` (endless; an empty one gives nothing), and on
+  arrays `ChunkBy(same)` as views. Each has B7a examples and a baked global beside its run-time test.
 - **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31,
   details mine).** `time.Virtual(fn() { ... })` runs its body on a virtual clock: `Now`/`Wall` read it (from
   `VirtualStart`, 2000-01-01), `Sleep(d)` moves it on by d at once, std/cancel's deadlines (`NowNs` is `time.Now` now)
@@ -1423,7 +1445,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   and by nothing else; a closed trait listed takes its types in (`type Number trait for Integer, Float { }`), an open
   one is an error there. `<T Shape House>` is an intersection, met by a type satisfying both. The prelude's numeric
   traits are closed now, their private-method sealing removed; a `match T` over a closed trait's types needs no
-  `nomatch` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
+  `case _` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
   an intersection is held as a tuple of traits, each checked; a method a binding lacks from an extended trait is
   named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
 - **Contracts (D17-D17g; the user's design 2026-10-24, revised by the user 2026-10-25; details mine).** One bracketed

@@ -656,7 +656,6 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
 fn (w mut walker&) match(m ast.Match&) {
     w.expr(m.Subject)
     for c in m.Cases { w.case(c, "CASE") }
-    if m.NoMatch is not null { w.case(m.NoMatch!, "NOMATCH") }
 }
 
 fn (w mut walker&) case(c ast.Case&, kind String&) {

@@ -4672,7 +4672,7 @@ compiler/ast:If	24 8	%"compiler/ast:If"	{ ptr, ptr, ptr }	fields 0,8,16
 compiler/ast:If&	8 8	ptr	-	-
 compiler/ast:JoinS	40 8	%"compiler/ast:JoinS"	{ i1, { i64, ptr }, { i64, ptr } }	fields 0,8,24
 compiler/ast:JoinS&	8 8	ptr	-	-
-compiler/ast:Match	48 8	%"compiler/ast:Match"	{ %"compiler/source:Span", ptr, i1, { i64, ptr }, ptr }	fields 0,8,16,24,40
+compiler/ast:Match	40 8	%"compiler/ast:Match"	{ %"compiler/source:Span", ptr, i1, { i64, ptr } }	fields 0,8,16,24
 compiler/ast:Match&	8 8	ptr	-	-
 compiler/ast:Multi	40 8	%"compiler/ast:Multi"	{ { i64, ptr }, i1, { i64, ptr } }	fields 0,16,24
 compiler/ast:Multi&	8 8	ptr	-	-

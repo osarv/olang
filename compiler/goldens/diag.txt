@@ -364,11 +364,11 @@ b6elemvalue.olang:15:17: error[C2d]: this instance holds a reference to an argum
 compilation failed with 1 error
 === b6matchfield.olang
 b6matchfield.olang:12:16: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   12 |         b.last = match i { case 1 => x case _ => "z" }
+   12 |         b.last = match i { case 1: x case _: "z" }
       |                ^
-b6matchfield.olang:12:38: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   12 |         b.last = match i { case 1 => x case _ => "z" }
-      |                                      ^
+b6matchfield.olang:12:36: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+   12 |         b.last = match i { case 1: x case _: "z" }
+      |                                    ^
 compilation failed with 1 error
 === b7atargetelsewhere.olang
 b7atargetelsewhere.olang:3:6: error[B7a]: 'String.Trim' is declared in another file - a test is an example of its own file's code, written beside it
@@ -2081,11 +2081,11 @@ e28condlocallent.olang:19:6: error[E31b]: x[i] gives a copy of the element, whic
    19 |     (x if k > 0 else y).Bump()
       |      ^~~~~~~~~~~~~~~~~
 e28condlocallent.olang:20:6: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
-   20 |     (match k { case 3 => x
+   20 |     (match k { case 3: x
       |      ^~~~~
 e28condlocallent.olang:20:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
-   20 |     (match k { case 3 => x
-      |      ^~~~~~~~~~~~~~~~~~~~~
+   20 |     (match k { case 3: x
+      |      ^~~~~~~~~~~~~~~~~~~
 e28condlocallent.olang:22:32: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
    22 |     bumpPt((x if k > 0 else y).P)
       |                                ^
@@ -2534,6 +2534,21 @@ e38undecided.olang:5:15: error[E38]: this embed's path cannot be computed while 
     5 | Data := embed where()
       |               ^~~~~~~
 compilation failed with 1 error
+=== e41hole.olang
+e41hole.olang:9:17: error[E41]: '_' holds the place of a value of type F64 - in scope: x, h, Scale
+    9 |     return area(_, h) + x + F64(n)
+      |                 ^
+compilation failed with 1 error
+=== e41nofit.olang
+e41nofit.olang:3:37: error[E41]: '_' holds the place of a value of type Bool - nothing in scope has that type
+    3 | fn f(n I64) Bool { return n > 0 and _ }
+      |                                     ^
+compilation failed with 1 error
+=== e41untyped.olang
+e41untyped.olang:4:10: error[E41]: '_' holds the place of a value, and nothing here says its type
+    4 |     x := _
+      |          ^
+compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
     5 |     x I32 = 2147483647 + 1
@@ -2798,13 +2813,13 @@ g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
       |                     ^~~~~
 compilation failed with 2 errors
 === g16note.olang
-g16note.olang:5:9: error[G15]: no case covers I64, which this generic is instantiated with - add one, or 'nomatch'
+g16note.olang:5:9: error[G15]: no case covers I64, which this generic is instantiated with - add one, or 'case _'
     5 |   match T {
       |         ^
 g16note.olang:12:8: note: instantiated here, with T = I64
    12 |   a := describe(5)
       |        ^~~~~~~~
-g16note.olang:5:9: error[G15]: no case covers Bool, which this generic is instantiated with - add one, or 'nomatch'
+g16note.olang:5:9: error[G15]: no case covers Bool, which this generic is instantiated with - add one, or 'case _'
     5 |   match T {
       |         ^
 g16note.olang:13:8: note: instantiated here, with T = Bool
@@ -2947,7 +2962,7 @@ g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no paramete
       |                  ^~
 compilation failed with 1 error
 === g6bcover.olang
-g6bcover.olang:8:18: error[S13a]: case None of Opt<I64> is not covered - add it, or 'nomatch { }'
+g6bcover.olang:8:18: error[S13a]: case None of Opt<I64> is not covered - add it, or 'case _ { }'
     8 |     return match o {
       |                  ^
 compilation failed with 1 error
@@ -4389,9 +4404,9 @@ compilation failed with 1 error
 $ROOT/std/order.olang:89:12: error[S18c]: this assertion is false, evaluated while compiling: field Cells (Array<I64>) has no order - ByFields compares numbers, Bool, Char, a type with Less, and structs and enums by their fields
    89 |     assert false, "field " $f.Name " (" $V.Name ") has no order - ByFields compares nu...
       |            ^~~~~
-$ROOT/std/order.olang:81:19: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
-   81 |         case _ => nested<F, R>(f, x, y)
-      |                   ^~~~~~~~~~~~
+$ROOT/std/order.olang:81:17: note: instantiated here, with F = FieldInfo<Row, 0, 1>, V = Array<I64>
+   81 |         case _: nested<F, R>(f, x, y)
+      |                 ^~~~~~~~~~~~
 compilation failed with 1 error
 === ordernotstruct.olang
 ordernotstruct.olang:6:12: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
@@ -4690,12 +4705,12 @@ r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names th
       |                   ^~~~
 compilation failed with 1 error
 === r11bmatchblock.olang
-r11bmatchblock.olang:8:9: error[R11b]: a match on an error value giving a value gives it with '=> v' in every case
-    8 |         case P.B { return }
-      |         ^~~~~~~~~~~~~~~~~~~
+r11bmatchblock.olang:8:9: error[R11b]: a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement
+    8 |         case P.B: return
+      |         ^~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === r11bmatchmissing.olang
-r11bmatchmissing.olang:7:9: error[R11b]: this match does not cover P.B - add a case for it, or 'nomatch'
+r11bmatchmissing.olang:7:9: error[R11b]: this match does not cover P.B - add a case for it, or 'case _'
     7 |         match e {
       |         ^~~~~
 compilation failed with 1 error
@@ -4927,7 +4942,7 @@ reflcaseother.olang:15:13: error[G34]: this case is Other's, and the value is Sh
 compilation failed with 1 error
 === reflcaseunreachable.olang
 reflcaseunreachable.olang:12:14: error[G36]: no type can reach this case - a case before it takes every type it does
-   12 |         case I64 => 2
+   12 |         case I64: 2
       |              ^~~
 reflcaseunreachable.olang:15:18: note: instantiated here, with T = I64
    15 | fn main() { n := f<I64>() }
@@ -4970,7 +4985,7 @@ refllistvalue.olang:9:19: error[G33]: Point.Fields is a list known while compili
 compilation failed with 1 error
 === reflmatchsubject.olang
 reflmatchsubject.olang:8:15: error[G13]: 'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names
-    8 |         match f.Type { nomatch { } }
+    8 |         match f.Type { case _ { } }
       |               ^~~~~~
 compilation failed with 1 error
 === reflnodefault.olang
@@ -5245,45 +5260,35 @@ rv9slicetempview.olang:11:27: note: this borrows a value made here, which lives 
    11 |     h.r = Array<I64>(4, n)[0:4]
       |                           ^
 compilation failed with 1 error
-=== s12barrow.olang
-s12barrow.olang:6:16: error[S12b]: '=>' gives a value, which only a match used as a value takes - a statement's case runs a block
-    6 |         case 1 => 3
-      |                ^~
-compilation failed with 1 error
-=== s12barrowleaves.olang
-s12barrowleaves.olang:8:20: error[S12b]: '=>' gives a value, and 'return' gives none - a clause that leaves is a block: '{ return 0 }'
-    8 |         nomatch => return 0
-      |                    ^~~~~~
-compilation failed with 1 error
-=== s12barrowreturncall.olang
-s12barrowreturncall.olang:13:25: error[S12b]: '=>' gives a value, and 'return' gives none - a clause that leaves is a block: '{ return one(t) }'
-   13 |         case Tok.Num => return one(t)
-      |                         ^~~~~~
-compilation failed with 1 error
 === s12bexhaustive.olang
-s12bexhaustive.olang:8:18: error[S13a]: case A of S is not covered - add it, or 'nomatch { }'
+s12bexhaustive.olang:8:18: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
     8 |     return match s {
       |                  ^
 compilation failed with 1 error
 === s12bnomatch.olang
-s12bnomatch.olang:4:12: error[S12b]: a match over I32 gives a value only when its cases cover every value - add 'nomatch => v'
-    4 |     return match n { case 1 => 2 }
+s12bnomatch.olang:4:12: error[S12b]: a match over I32 gives a value only when its cases cover every value - add 'case _: v'
+    4 |     return match n { case 1: 2 }
       |            ^~~~~
 compilation failed with 1 error
 === s12bstays.olang
-s12bstays.olang:5:16: error[S12b]: this block can finish without leaving - give the value with '=> v'
-    5 |         case 1 { n = 2 }
+s12bstays.olang:5:16: error[S12b]: a block gives no value - a clause of a match used as a value is 'case P: v', or 'case P: return x' to leave
+    5 |         case 1 {
       |                ^
 compilation failed with 1 error
 === s12btypes.olang
-s12btypes.olang:4:45: error[S12b]: every value of this match is I64, found String
-    4 |     return match n { case 1 => 1 nomatch => "one" }
-      |                                             ^~~~~
+s12btypes.olang:4:40: error[S12b]: every value of this match is I64, found String
+    4 |     return match n { case 1: 1 case _: "one" }
+      |                                        ^~~~~
+compilation failed with 1 error
+=== s12bvalueblock.olang
+s12bvalueblock.olang:6:16: error[S12b]: a block gives no value - a clause of a match used as a value is 'case P: v', or 'case P: return x' to leave
+    6 |         case 1 { return 0 }
+      |                ^
 compilation failed with 1 error
 === s12bvaluecomma.olang
-s12bvaluecomma.olang:7:27: error[S12b, D8c]: a match gives one value - to give several, return them from each case of a match statement: 'case P { return a, b }'
-    7 |         case "+", "-" => 3, 4
-      |                           ^
+s12bvaluecomma.olang:7:25: error[S12b, D8c]: a match gives one value - to give several, return them from each case of a match statement: 'case P: return a, b'
+    7 |         case "+", "-": 3, 4
+      |                         ^
 compilation failed with 1 error
 === s12casetype.olang
 s12casetype.olang:8:22: error: expected '{', found '&'
@@ -5291,12 +5296,12 @@ s12casetype.olang:8:22: error: expected '{', found '&'
       |                      ^
 compilation failed with 1 error
 === s13aguarded.olang
-s13aguarded.olang:8:11: error[S13a]: case A of S is not covered - add it, or 'nomatch { }'
+s13aguarded.olang:8:11: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
     8 |     match s {
       |           ^
 compilation failed with 1 error
 === s13anested.olang
-s13anested.olang:12:11: error[S13a]: case A of S is not covered - add it, or 'nomatch { }'
+s13anested.olang:12:11: error[S13a]: case A of S is not covered - add it, or 'case _ { }'
    12 |     match s {
       |           ^
 compilation failed with 1 error
@@ -5348,31 +5353,31 @@ s13etypematch.olang:10:12: note: instantiated here, with T = I64
 compilation failed with 1 error
 === s13fafterwildcard.olang
 s13fafterwildcard.olang:7:9: error[S13f]: no value reaches this - an earlier 'case _' with no guard takes every one
-    7 |         case 2 => 2
+    7 |         case 2: 2
       |         ^~~~
 compilation failed with 1 error
 === s13fafterwildcardnomatch.olang
 s13fafterwildcardnomatch.olang:7:9: error[S13f]: no value reaches this - an earlier 'case _' with no guard takes every one
-    7 |         nomatch { return 2 }
-      |         ^~~~~~~
+    7 |         case _ { return 2 }
+      |         ^~~~
 compilation failed with 1 error
 === s13fsubject.olang
 s13fsubject.olang:6:14: error[S13f]: 'v' is the value being matched, so this compares it with itself - to take any value and test it, write 'case _ if ...'
-    6 |         case v if v >= 32767.0 => 32767.0
+    6 |         case v if v >= 32767.0: 32767.0
       |              ^
 compilation failed with 1 error
 === s13funknownname.olang
 s13funknownname.olang:9:14: error[S13f]: unknown name 'big' - a name in a case is a value compared by '=='; to take any value and test it, write 'case _ if ...'
-    9 |         case big if big > 100 => "big"
+    9 |         case big if big > 100: "big"
       |              ^~~
 compilation failed with 1 error
 === s13fwildcardalone.olang
 s13fwildcardalone.olang:6:17: error[S13f]: '_' matches every value, so it is its case's only alternative
-    6 |         case 1, _ => 1
+    6 |         case 1, _: 1
       |                 ^
 compilation failed with 1 error
 === s13gnovalue.olang
-s13gnovalue.olang:8:18: error[S13a]: case Right of Either<I64, Bool> is not covered - add it, or 'nomatch { }'
+s13gnovalue.olang:8:18: error[S13a]: case Right of Either<I64, Bool> is not covered - add it, or 'case _ { }'
     8 |     return match e {
       |                  ^
 compilation failed with 1 error
@@ -6647,9 +6652,9 @@ compilation failed with 1 error
 t25ccondwrite.olang:7:21: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
     7 |     (p if c else q).v = 92
       |                     ^
-t25ccondwrite.olang:10:40: error[S12b]: every value of this match is Node&, found Node&
-   10 |     (match k { case 1 => p  nomatch => q }).v = 93
-      |                                        ^
+t25ccondwrite.olang:10:35: error[S12b]: every value of this match is Node&, found Node&
+   10 |     (match k { case 1: p  case _: q }).v = 93
+      |                                   ^
 compilation failed with 2 errors
 === t25ccopyarg.olang
 t25ccopyarg.olang:11:14: error[T25c]: 'setFirst' writes through or keeps its parameter 'b', and this Box is a read-only copy - pass one of its own, made from its parts
@@ -7121,7 +7126,7 @@ t32anyspawntarget.olang:13:19: error[T32b, P1]: a task calls a function or a fun
       |                   ^~~~~~~~
 compilation failed with 1 error
 === t32anyuncovered.olang
-t32anyuncovered.olang:12:11: error[S13a]: case aSlider of any aWidget& is not covered - add it, or 'nomatch { }'
+t32anyuncovered.olang:12:11: error[S13a]: case aSlider of any aWidget& is not covered - add it, or 'case _ { }'
    12 |     match x {
       |           ^
 compilation failed with 1 error
