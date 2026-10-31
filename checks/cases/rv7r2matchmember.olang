@@ -14,8 +14,8 @@ fn poke(p mut In&) { p.k++ }
 fn (b Bag&) Str() String {
     loc mut Mid& = Mid()
     poke((match b.other.inner.k {
-        case 0 => b.m
-        nomatch => loc
+        case 0: b.m
+        case _: loc
     }).inner)
     return "b"
 }

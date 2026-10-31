@@ -8,8 +8,8 @@ type Shape enum {
 }
 fn f<T>() I64 {
     return match T {
-        case _ => 1
-        case I64 => 2
+        case _: 1
+        case I64: 2
     }
 }
 fn main() { n := f<I64>() }

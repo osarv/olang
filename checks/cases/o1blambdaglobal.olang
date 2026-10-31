@@ -12,7 +12,7 @@ GF mut fn() I32 = null
 fn stash(b Box) {
     match b {
         case Box.Has(n) { GF = fn() { return n.v } }
-        nomatch { }
+        case _ { }
     }
 }
 fn main() ? {

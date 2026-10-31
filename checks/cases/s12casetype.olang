@@ -6,6 +6,6 @@ fn main() ? {
     x := 3
     match x {
         case c Circle& { }
-        nomatch { }
+        case _ { }
     }
 }

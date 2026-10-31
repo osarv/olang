@@ -7,7 +7,7 @@ type S enum {
 fn f(s S) I32 {
     match s {
         case S.A("one") { return 1 }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() ? { }

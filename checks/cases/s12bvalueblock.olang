@@ -1,0 +1,10 @@
+# check: fail error[S12b]: a block gives no value - a clause of a match used as a value is 'case P: v', or 'case P: return x' to leave
+# also: compilation failed with 1 error
+# S12b: a clause of a match used as a value gives its value on its line - a block, even one that leaves, is an error
+fn f(n I32) I32 {
+    return match n {
+        case 1 { return 0 }
+        case _: 3
+    }
+}
+fn main() ? { }

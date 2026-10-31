@@ -378,32 +378,32 @@ type Decl enum {
 # where a node is
 fn (e Expr&) Span() source.Span {
     return match e {
-        case Expr.Name(sp, _), Expr.Lit(sp, _), Expr.Paren(sp, _), Expr.Unary(sp, _, _), Expr.Postfix(sp, _, _) => sp
-        case Expr.Binary(sp, _, _, _), Expr.NotIn(sp, _, _), Expr.Chain(sp, _), Expr.Cond(sp, _, _, _) => sp
-        case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _) => sp
-        case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _) => sp
-        case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
-        case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
-        case Expr.Default(sp) => sp
-        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _) => sp
+        case Expr.Name(sp, _), Expr.Lit(sp, _), Expr.Paren(sp, _), Expr.Unary(sp, _, _), Expr.Postfix(sp, _, _): sp
+        case Expr.Binary(sp, _, _, _), Expr.NotIn(sp, _, _), Expr.Chain(sp, _), Expr.Cond(sp, _, _, _): sp
+        case Expr.IsType(sp, _, _, _), Expr.Is(sp, _, _, _), Expr.As(sp, _, _), Expr.Call(sp, _, _): sp
+        case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _): sp
+        case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _): sp
+        case Expr.Join(sp, _), Expr.Try(sp, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _): sp
+        case Expr.Default(sp): sp
+        case Expr.Named(sp, _, _), Expr.Unreachable(sp, _): sp
     }
 }
 
 fn (t TypeRef&) Span() source.Span {
     return match t {
-        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _) => sp
-        case TypeRef.Errs(sp, _) => sp
+        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _): sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _): sp
+        case TypeRef.Errs(sp, _): sp
     }
 }
 
 fn (s Stmt&) Span() source.Span {
     return match s {
-        case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _) => sp
-        case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
-        case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _) => sp
-        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _) => sp
-        case Stmt.Block(sp, _), Stmt.Yield(sp, _), Stmt.Become(sp, _) => sp
+        case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _): sp
+        case Stmt.TryStore(sp, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _): sp
+        case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _): sp
+        case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _, _): sp
+        case Stmt.Block(sp, _), Stmt.Yield(sp, _), Stmt.Become(sp, _): sp
     }
 }
 
@@ -426,26 +426,26 @@ fn FirstYield(body Array<Stmt&>&) source.Span {
 fn yieldIn(st Stmt?&) source.Span {
     if st is null { return NoYield }
     return match st {
-        case Stmt.Yield(sp, _) => sp
-        case Stmt.ExprS(_, x) => yieldInExpr(x)
-        case Stmt.Var(_, v) => yieldInExprs(v.Values)
-        case Stmt.Multi(_, m) => yieldInExprs(m.Values)
-        case Stmt.Assign(_, _, t, v) => yieldOr(yieldInExpr(t), yieldInExpr(v))
-        case Stmt.TryStore(_, inner, cs) => yieldOr(yieldIn(inner), yieldInCatches(cs))
-        case Stmt.If(_, i) => yieldInIf(i)
-        case Stmt.Forever(_, b), Stmt.Block(_, b) => FirstYield(b)
-        case Stmt.While(_, k, b), Stmt.DoFor(_, b, k) => yieldOr(yieldInExpr(k), FirstYield(b))
-        case Stmt.For3(_, f) => yieldOr(yieldOr(yieldIn(f.Init), yieldInExpr(f.Cond)), yieldOr(yieldIn(f.Post), FirstYield(f.Body)))
-        case Stmt.ForIn(_, f) => yieldOr(yieldOr(yieldInExpr(f.Source), FirstYield(f.Body)), yieldInCatches(f.Clauses))
-        case Stmt.MatchS(_, m) => yieldInMatch(m)
-        case Stmt.Return(_, xs) => yieldInExprs(xs)
-        case Stmt.Become(_, x) => yieldInExpr(x)
-        case Stmt.Assert(_, k, msg) => yieldOr(yieldInExpr(k), yieldInExpr(msg))
-        case Stmt.Jump(_, _, msg) => yieldInExpr(msg)
-        case Stmt.Spawn(_, _, call) => yieldInExpr(call)
-        case Stmt.Join(_, j) => yieldOr(FirstYield(j.Body), yieldInCatches(j.Clauses))
-        case Stmt.Defer(_, d, _) => yieldIn(d)
-        case Stmt.Raise(_, _) => NoYield
+        case Stmt.Yield(sp, _): sp
+        case Stmt.ExprS(_, x): yieldInExpr(x)
+        case Stmt.Var(_, v): yieldInExprs(v.Values)
+        case Stmt.Multi(_, m): yieldInExprs(m.Values)
+        case Stmt.Assign(_, _, t, v): yieldOr(yieldInExpr(t), yieldInExpr(v))
+        case Stmt.TryStore(_, inner, cs): yieldOr(yieldIn(inner), yieldInCatches(cs))
+        case Stmt.If(_, i): yieldInIf(i)
+        case Stmt.Forever(_, b), Stmt.Block(_, b): FirstYield(b)
+        case Stmt.While(_, k, b), Stmt.DoFor(_, b, k): yieldOr(yieldInExpr(k), FirstYield(b))
+        case Stmt.For3(_, f): yieldOr(yieldOr(yieldIn(f.Init), yieldInExpr(f.Cond)), yieldOr(yieldIn(f.Post), FirstYield(f.Body)))
+        case Stmt.ForIn(_, f): yieldOr(yieldOr(yieldInExpr(f.Source), FirstYield(f.Body)), yieldInCatches(f.Clauses))
+        case Stmt.MatchS(_, m): yieldInMatch(m)
+        case Stmt.Return(_, xs): yieldInExprs(xs)
+        case Stmt.Become(_, x): yieldInExpr(x)
+        case Stmt.Assert(_, k, msg): yieldOr(yieldInExpr(k), yieldInExpr(msg))
+        case Stmt.Jump(_, _, msg): yieldInExpr(msg)
+        case Stmt.Spawn(_, _, call): yieldInExpr(call)
+        case Stmt.Join(_, j): yieldOr(FirstYield(j.Body), yieldInCatches(j.Clauses))
+        case Stmt.Defer(_, d, _): yieldIn(d)
+        case Stmt.Raise(_, _): NoYield
     }
 }
 
@@ -487,25 +487,25 @@ fn yieldInExprs(xs Array<Expr&>&) source.Span {
 fn yieldInExpr(x Expr?&) source.Span {
     if x is null { return NoYield }
     return match x {
-        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _) => yieldInExpr(y)
-        case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _) => yieldInExpr(y)
-        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _) => yieldOr(yieldInExpr(a), yieldInExpr(b))
-        case Expr.Cond(_, a, k, b) => yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
-        case Expr.Chain(_, ch) => yieldInExprs(ch.Xs)
-        case Expr.Call(_, f, args), Expr.ScopeCall(_, f, _, args), Expr.Index(_, f, args) => yieldOr(yieldInExpr(f), yieldInExprs(args))
-        case Expr.Slice(_, y, lo, hi) => yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
-        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Join(_, items), Expr.Range(_, items) => yieldInExprs(items)
-        case Expr.Try(_, y, cs) => yieldOr(yieldInExpr(y), yieldInCatches(cs))
-        case Expr.MatchE(_, m) => yieldInMatch(m)
-        case Expr.Compr(_, k) => yieldOr(yieldOr(yieldInExpr(k.Value), yieldInExpr(k.Source)), yieldInExpr(k.Filter))
-        nomatch => NoYield
+        case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
+        case Expr.IsType(_, y, _, _), Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
+        case Expr.Binary(_, _, a, b), Expr.NotIn(_, a, b), Expr.Is(_, a, b, _): yieldOr(yieldInExpr(a), yieldInExpr(b))
+        case Expr.Cond(_, a, k, b): yieldOr(yieldOr(yieldInExpr(a), yieldInExpr(k)), yieldInExpr(b))
+        case Expr.Chain(_, ch): yieldInExprs(ch.Xs)
+        case Expr.Call(_, f, args), Expr.ScopeCall(_, f, _, args), Expr.Index(_, f, args): yieldOr(yieldInExpr(f), yieldInExprs(args))
+        case Expr.Slice(_, y, lo, hi): yieldOr(yieldOr(yieldInExpr(y), yieldInExpr(lo)), yieldInExpr(hi))
+        case Expr.ArrayLit(_, _, items), Expr.Row(_, items), Expr.Join(_, items), Expr.Range(_, items): yieldInExprs(items)
+        case Expr.Try(_, y, cs): yieldOr(yieldInExpr(y), yieldInCatches(cs))
+        case Expr.MatchE(_, m): yieldInMatch(m)
+        case Expr.Compr(_, k): yieldOr(yieldOr(yieldInExpr(k.Value), yieldInExpr(k.Source)), yieldInExpr(k.Filter))
+        case _: NoYield
     }
 }
 
 fn (p Pattern&) Span() source.Span {
     return match p {
-        case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _) => sp
-        case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _) => sp
+        case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _): sp
+        case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _): sp
     }
 }
 

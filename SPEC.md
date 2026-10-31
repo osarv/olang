@@ -137,7 +137,7 @@ spelling: see §4.3 (visibility).
 
 ```
 if        else    try     catch   return  assert  noreturn
-for       do      in      range   match   case    nomatch break   continue
+for       do      in      range   match   case    break   continue
 is        as
 and       or      not     xor
 type      struct  enum    fn      error   mut     extends
@@ -156,7 +156,7 @@ any of the words above is a method's name there: `fn (w mut World&) spawn() I32`
 
 A field may be named by a word above that is a whole statement by itself - `break`, `continue`, `unreachable`,
 after which nothing can follow on its line - or that begins no statement and no value: `in`,
-`is`, `as`, `and`, `or`, `xor`, `range`, `case`, `nomatch`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
+`is`, `as`, `and`, `or`, `xor`, `range`, `case`, `type`, `struct`, `enum`, `trait`, `extends`, `import`,
 `test`, `extern`, `default`. It is declared with its type or `:=` (`break I64 = 0`, `in Bool`, `type := Kind.A`), never
 as a pun, and is reached only after `.` (`s.break`, `s.break++`) - a word after `.` is always a member's name, and a line
 ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
@@ -285,7 +285,7 @@ valid token starting at the current position):
 +  -  *  /  %  ,  .  ?  =  :=
 +=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --  !
-==  !=  =>
+==  !=
 <  <=  >  >=
 &  |  ^  ~  <<  >>  @
 (  )  [  ]  {  }
@@ -1030,7 +1030,7 @@ took (R11b), and it is used in these ways and no others:
 - narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
   != X { leave }` - every place S8d lists) `e` holds what of `X` it can be; where it fails, its set less `X`; a test for
   `null` narrows as it does a reference (S8e). Only a local or a parameter narrows, until a statement assigns it;
-- `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without `_` or `nomatch`
+- `match e` (S12, S13): each case's items words, types, named sets or `null`, tried in order; without an unguarded `case _`
   the cases must cover every error `e` can be, and `null` where it can be null. A case naming nothing `e` can be is a
   compile-time error, `case null` where `e` holds an error included - a catch clause's name, a word written, a value a
   test has shown is not null (known by the program's structure, never by evaluation). A case's block narrows `e`;
@@ -1465,7 +1465,7 @@ Integer, Float { }`), at any depth, each once; an open trait has no types to lis
 Each listed type must have the trait's methods, checked at the declaration (for a trait with no type parameters) - a
 listed type without one is an error naming the type and the method. An instance of a generic type is listed with its
 arguments (`for Box<I64>, Dot`); a generic type listed without them is G7's error at the declaration. Where a type variable is constrained by a closed
-trait, a `match` on it (G15) whose cases cover every listed type needs no `nomatch`: only those types can bind it. A
+trait, a `match` on it (G15) whose cases cover every listed type needs no `case _`: only those types can bind it. A
 trait with no `for` is **open**, met by any type with its methods, as T31 says.
 
 **T35.** A method signature in a trait may not introduce type parameters of its own (§12): a type satisfies a trait
@@ -1516,7 +1516,7 @@ value it is called on (O13): what a generator whose elements are borrowed gives 
 `type Float trait for F16, BF16, F32, F64 { }`; `Integer`, every integer type of every width, `I1` to `I128` and `U1` to
 `U128` (T4a), listed one by one, a line of sixteen widths at a time; and `type Number trait for Integer, Float { }`. `Bool` satisfies none of them, and no type a program declares
 satisfies one - `Char`, `type Meters extends I32` and `type Dist extends F64` are types of their own - so code
-constrained by a numeric trait may pick its behaviour with `match T` over the built-in types alone, with no `nomatch`.
+constrained by a numeric trait may pick its behaviour with `match T` over the built-in types alone, with no `case _`.
 Generic numeric code says which numbers it takes - `fn mean<T Float>(a Array<T>&) T`, or a default on the numbers
 themselves, `fn (x T) Sqrt<T Float>() T` (M19e) - so a call with any other type is an error at the call naming the
 trait (G19); a literal reaching such a variable takes a type that meets it (G9a), so `root(4)` with `fn root<T
@@ -1639,7 +1639,7 @@ match w {
 a reference to it with the `any`'s permission (`Button&`, `mut Button&` from a `mut any`; for an array its storage in
 the `any`), or, for a number, a `Bool` or a `Char`, a copy of its value - visible to the clause's guard (S13e) and
 body; `_` binds nothing. A type case binding a name is its clause's only alternative; type cases binding `_` may share
-one (`case Button _, Slider _`). The type cases must cover every member of the trait, or the match carries a `nomatch` or a
+one (`case Button _, Slider _`). The type cases must cover every member of the trait, or the match carries a
 `case _` (S13a's rule, S13f); a type that is not a member, or one named in two unguarded clauses, is a compile-time
 error. A null `any` matches no type case (S13: it aborts where nothing else takes it). `w as Button` gives the instance
 as a binding would, and fails with `CaseError.WRONG_CASE` when the instance is of another type (E32's rule), covered by
@@ -1777,7 +1777,7 @@ to a `noreturn` function or through a `noreturn` function value, by `unreachable
 `break` of its own. It declares no error set (an error is a way back to its caller), so whatever can fail inside it is
 handled there. A call to a `noreturn` function, written as a statement, leaves for D10a; and as an expression it fits
 wherever a value of any type is expected - `catch default os.Exit(2)`, `x I64 = Fatal("no x") if bad else 3`, an
-argument, a `match` value (`case 1 => os.Exit(5)`) - since control never arrives where the value would be used; so does
+argument, a `match` value (`case 1: os.Exit(5)`) - since control never arrives where the value would be used; so does
 `unreachable` written as a value (S16e). Beside
 other values (E28, S12b) it gives way to theirs, and a conditional or `match` all of whose values are such calls fits
 wherever a value is expected too; as a generic argument it takes no part in inference (G9a), as `null` takes none. A
@@ -2162,7 +2162,7 @@ Whether a path leaves is decided **structurally**, with no dataflow analysis and
 `return` leaves, and so does a `become` (S21), an `error` (§7), `unreachable` (§6.6) and a call to a `noreturn` function or through a
 `noreturn` function value (D8e), written as a statement. An `if`
 leaves only when it has an `else` and both sides leave; a `match` only when every clause leaves and it is
-either exhaustive by §6.4 S13a or has a `nomatch` that leaves; a block written as a statement (S1a) when its statements
+either exhaustive by §6.4 S13a or has an unguarded `case _` that leaves; a block written as a statement (S1a) when its statements
 do; a `join` (§6.8) when its block leaves and, for a `try join`, every clause does (P4c - what no clause takes leaves
 by propagating). **A loop counts only as `for { }` - no condition - with no `break` of its own** (one in a nested loop is that
 loop's): it is left only by what leaves the function, never by falling through. Any other loop never counts, even one
@@ -3962,7 +3962,7 @@ payload's fields - is a **test** of the case the other operand holds, an enum va
 (a null holds no case, so the test is false): `e == Shape.Circle` is whether `e` holds that case, whatever its payload;
 `e == Shape.Rect(_, 2.0)` is whether it holds `Rect` with a second field equal to `2.0`. In the parts, `_` matches
 anything, a case written is a nested test of that field (`e == Expr.Add(Expr.Lit(1), _)`), and any other expression is
-compared with the field by `==` - so the test is what `match e { case P => true, case _ => false }` asks, its parts
+compared with the field by `==` - so the test is what `match e { case P: true case _: false }` asks, its parts
 values rather than names to bind. A case written so is never a value of the type, and an `Eq` the enum declares is not
 called for it. A case of another enum, or one the type does not have, is a compile-time error.
 
@@ -4204,6 +4204,14 @@ fn expectEq(got I64, want I64, at Place = Place.Here) {
 expectEq(f(2), 4)                       # reports this line, not expectEq's
 ```
 
+**E41 (a typed hole).** `_` written where a value is expected - an operand, an argument, a value given to a target -
+is never a value: it is a compile-time error naming the type wanted there and the locals, parameters and globals in
+scope whose values fit it (E12), the locals and parameters first: `area(_, h)` with `fn area(w F64, h F64) F64` beside
+`x F64` says a hole of `F64` that `x` and `h` fill.
+Where nothing says the type wanted (`x := _`), the error says so. A program holding one never builds; the hole is a
+question put to the compiler while writing, and the language server reports it as any diagnostic. `_` keeps its other
+places: it discards (D3b, S4c), takes every value in a case (S13f) and any part in a case test (E32).
+
 ## 6. Statements
 
 ### 6.1 Blocks
@@ -4221,7 +4229,8 @@ block. It runs once, and it leaves (D10a) when its statements do.
 statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
 statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
 forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16): `if x < 0: return 0`, `for x in xs: total
-+= x`, `else: count++`, `fn(x): return x > 3`. It is
++= x`, `else: count++`, `fn(x): return x > 3`; so may a match statement's clause, `case 0: n++` (S12), and a
+match used as a value takes the same `:` for its clauses' values (S12b). It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
 block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
@@ -4539,57 +4548,63 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ### 6.4 `match`
 
-**S12.** `match-stmnt ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"`, where:
+**S12.** `match-stmnt ::= "match" expr "{" { case-clause } "}"`, where:
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
 case-alt       ::= pattern | type-case | "_" | binary
 type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
-nomatch-clause ::= "nomatch" case-body
-case-body      ::= block | "=>" expr [ STMNT_END ]
+case-body      ::= block | ":" line-stmnt
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
 sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
-one, followed by `,`, `if`, `{`, `=>` or its line's end; a path followed on its line by a name is a `type-case`, taken
-on an `any` of a closed trait (T34); `_` alone takes every value (S13f); anything else is a value,
-a `binary` expression (E1) - so the `if` of a guard is never read as a conditional (E28). Alternatives follow the
-listing rule (L18a): `,` between two on one line, the line break between lines - a clause's header runs on to its
-guard, `{` or `=>`, so a line ending in an alternative is followed by the next. In a match statement every `case-body`
-is a block; `=>` is an error there.
+one, followed by `,`, `if`, `{`, `:` or its line's end; a path followed on its line by a name is a `type-case`, taken
+on an `any` of a closed trait (T34); `_` alone takes every value (S13f), so an unguarded `case _` is the match's
+catch-all; anything else is a value, a `binary` expression (E1) - so the `if` of a guard is never read as a conditional
+(E28). Alternatives follow the listing rule (L18a): `,` between two on one line, the line break between lines - a
+clause's header runs on to its guard, `{` or `:`, so a line ending in an alternative is followed by the next. In a match
+statement a `case-body` is a block or, after a `:`, one simple statement as a one-line body is (S1b) - the block
+holding it; the statement begins on the `:`'s line and ends where L18 ends a statement or at the next clause.
 
-**S12b (a match used as a value).** `match-expr ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"` in
-expression position (E1) evaluates to the value of the clause that is selected. Each clause either gives its value,
-`case P => v` - the expression runs to the end of its line or to the next clause - or runs a block that leaves:
-`return`, `error`, `break`, `continue`, `unreachable` or a `noreturn` call, as D10a decides it with `break`
-and `continue` counting (a catch clause's rule in value position, R9b). A block that can finish is a compile-time
-error. `case P => unreachable` and `case P => os.Exit(2)` give a value (S16e, D8e), one that never arrives; a
-statement that leaves (`return`, `error`, `break`, `continue`) after `=>` is a compile-time error naming the block. The match must give a value whatever the matched value is: over an enum or a `Bool` it is exhaustive by S13a or
-has a `nomatch`; over any other type it has a `nomatch` or a `case _` with no guard (S13f). Every value has one type: the first value that is not a literal,
+**S12b (a match used as a value).** `match-expr ::= "match" expr "{" { value-clause } "}"` in expression position (E1),
+where
+
+```
+value-clause   ::= "case" case-alt { sep case-alt } [ "if" expr ] ":" ( expr | leave-stmnt )
+leave-stmnt    ::= return-stmnt | error-stmnt | "break" | "continue"
+```
+
+evaluates to the value of the clause that is selected. Each clause either gives its value, `case P: v` - the
+expression begins on the `:`'s line and runs on as a statement does (a line ending in an operator continues it), to
+its end or to the next clause - or leaves, one statement after the `:`: `return`, `error`, `break` or `continue`.
+`case P: unreachable` and `case P: os.Exit(2)` give a value (S16e, D8e), one that never arrives. A clause written with a
+block gives no value and is a compile-time error naming `case P: v`. The match must give a value whatever the matched
+value is: over an enum or a `Bool` it is exhaustive by S13a or has an unguarded `case _`; over any other type it has an
+unguarded `case _` (S13f). Every value has one type: the first value that is not a literal,
 written text or `null`, to which those adapt as in `a if c else b` (E28) - a conditional or match of numeric literals
-counting as a literal (E4a), so `case Activation.Relu => 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
+counting as a literal (E4a), so `case Activation.Relu: 1.0 if x > 0.0 else 0.0` beside an `F32` value is an `F32` -
 values that are all numeric literals (or such) take the widest, values that are all written text are a `String` (T29c),
-and values that are all array literals of one element type are an array of it whatever their lengths (`case 1 =>
-I64[1, 2, 3]` beside `nomatch => I64[4, 5]` is an `Array<I64>`), as in `a if c else b`; a match whose only value is
-its `nomatch`'s has that value's type (`match x { nomatch => I8(x) }` is an `I8`). Each value then fits the match's target on
+and values that are all array literals of one element type are an array of it whatever their lengths (`case 1:
+I64[1, 2, 3]` beside `case _: I64[4, 5]` is an `Array<I64>`), as in `a if c else b`; a match whose only value is its
+`case _`'s has that value's type (`match x { case _: I8(x) }` is an `I8`). Each value then fits the match's target on
 its own (E12), a value built in it - text, a constructor call - built where the match's value lands. A match used as a
 value declares its type for `:=` (D15), as a conditional does. Over a type variable
 (G13) the selected arm's value is the match's.
 
 ```
 area F64 = match s {
-    case Shape.Circle(r) => 3.14 * r * r
-    case Shape.Rect(w, h) => w * h
+    case Shape.Circle(r): 3.14 * r * r
+    case Shape.Rect(w, h): w * h
 }
 ```
 
 **S13.** `match`'s own `expr` is evaluated **once**, before any clause. The clauses are tried in source order: a
 clause is selected when one of its alternatives matches (S13c) and its guard, if any, is true (S13e); its body runs,
-and no other clause or `nomatch` does. If none is selected the `nomatch` body runs, if there is one; otherwise a
-match statement does nothing - a match over an enum must be exhaustive (S13a), and over any other type no
+and no other clause does. If none is selected a match statement does nothing - a match over an enum must be exhaustive (S13a), and over any other type no
 exhaustiveness is asked. A null **reference to an enum** (T17d) holds no case, so no pattern matches it - a `null`
-value alternative or the `nomatch` does; where neither is written, a match whose clauses cover every value (S13a) -
+value alternative or an unguarded `case _` does; where neither is written, a match whose clauses cover every value (S13a) -
 used as a value, or as a statement - aborts as `unreachable` does (S16d), having no clause to run: what such a match
 lets through cannot happen otherwise, and a statement match every clause of which leaves leaves (D10a), so it may not
 fall through instead. A **value** alternative matches when `matched == value` (E10), so a type's declared `Eq`
@@ -4597,12 +4612,12 @@ decides it (E10a); it must have the matched value's type (T27), a literal or a l
 `==`, written text adapting to text (T29c) and `null` to a reference (T2a).
 
 **S13a.** A `match` whose matched value is an **enum type** must cover every one of that type's cases, or
-carry a `nomatch` clause. This is the only type for which exhaustiveness is checked, and the reason is that
+carry an unguarded `case _`. This is the only type for which exhaustiveness is checked, and the reason is that
 it is the only one whose set of alternatives is both closed and written down: an enum type's cases come
 from one declaration the compiler reads. An integer's "cases" are not usefully enumerable, so it does not admit the
 question. Making `match` exhaustive here is most
 of the point of declaring an enum — adding a case tells you every place that now has to handle it — and
-`nomatch` is the opt-out. The clauses without a guard **cover** an enum case together: one pattern `Type.Case` with no
+`case _` is the opt-out. The clauses without a guard **cover** an enum case together: one pattern `Type.Case` with no
 payload list, or one whose every position is a name or `_`, covers it alone; patterns with literals or nested cases
 in the payload cover it when, position by position, they leave no value out - `Service(true)` and `Service(false)`
 for a `Bool` field, `Paint(Color.Red, n)` and `Paint(Color.Green, _)` for an enum field with those two cases. A
@@ -4610,7 +4625,7 @@ guard may let a value through to the next clause, so a guarded clause covers not
 than `Bool` never completes a position (its values cannot be listed). A `case _` with no guard covers every case
 (S13f). A `match` over a `Bool` is exhaustive in the same
 sense when `true` and `false` are both covered - not required of a statement, but it is what lets one used as a value
-(S12b) do without a `nomatch`. A `match` on an **error value** (T20) is checked the same way: its cases' items are words, error types,
+(S12b) do without a `case _`. A `match` on an **error value** (T20) is checked the same way: its cases' items are words, error types,
 named sets and `null`, and they must cover every error it can be and `null` where it can be null; `case null` where it
 cannot be is a compile-time error.
 
@@ -4665,15 +4680,15 @@ matched value already being named where it was written:
 
 ```
 label := match x {
-    case 0.0 => "zero"
-    case _ if x >= 32767.0 => "saturated"
-    case _ if x != x => "NaN"
-    nomatch => "other"
+    case 0.0: "zero"
+    case _ if x >= 32767.0: "saturated"
+    case _ if x != x: "NaN"
+    case _: "other"
 }
 ```
 
-With no guard, `case _` is selected by any value that reaches it, as `nomatch` is: it covers every value (S13a, S12b),
-and a clause or `nomatch` after it is never reached, which is a compile-time error. A name at the top of a clause is
+With no guard, `case _` is selected by any value that reaches it - the match's catch-all: it covers every value (S13a,
+S12b), and a clause after it is never reached, which is a compile-time error. A name at the top of a clause is
 always a value compared by `==` (S13) - never a binding, since the matched value is in hand already - so a lone name
 that is not declared is an error naming `case _ if ...`, and so is the matched local itself, which would compare a
 value with itself (true but for a NaN). A `match` on a by-value array parameter's length in an instance (G30) takes
@@ -7956,8 +7971,8 @@ type Opt<T> enum {
 }
 fn (o Opt<T>) Or(d T) T {
     return match o {
-        case Opt.Some(v) => v
-        case Opt.None => d
+        case Opt.Some(v): v
+        case Opt.None: d
     }
 }
 x Opt<I64> = Opt.None          # the instance the value lands in
@@ -8159,9 +8174,9 @@ declared with that variable's type may be used exactly as a value of the concret
 belonging to other cases are not checked against this instantiation at all.
 
 **G15.** Unlike a value `match` (S13), a type `match` is exhaustiveness-checked: if no `case` matches
-and no `nomatch` clause is present, it is a compile-time error reported at the **instantiation**
+and no `case _` is present, it is a compile-time error reported at the **instantiation**
 that produced the unmatched type, naming both the type and the generic. A variable a closed trait constrains (T31a)
-binds only the types it lists, so cases naming each of them make the match complete without a `nomatch`. A value `match` performs no
+binds only the types it lists, so cases naming each of them make the match complete without a `case _`. A value `match` performs no
 such check; the difference is deliberate, since a silently empty type `match` would compile a
 generic that does nothing for some of its instantiations.
 
@@ -8327,7 +8342,7 @@ read by every module that reads the case (E32, S13), so `c.Fields` holds them al
 `p.HasDefault`, `f.Name == "id"`, `T.Fields.Len() > 2`, an integer type's limits (`T.Min < 0`, E36) where they are
 within `I64`'s range, with `and`, `or`, `not`, comparisons and `+ - *` - is decided per instance: in an `if`, a conditional (E28) and an `assert` (S18c) only the branch or value chosen is checked and
 compiled, as G30 says of a length, and an assert decided false is a compile-time error. Such a condition is
-configuration, never S8a's dead code. A `match` on a reflected constant (`match T.Kind { case TypeKind.Struct => ... }`)
+configuration, never S8a's dead code. A `match` on a reflected constant (`match T.Kind { case TypeKind.Struct: ... }`)
 chooses its arm the same way.
 
 **G36 (type cases).** A `match T` (G13) case may name, besides a type:
@@ -8341,16 +8356,16 @@ chooses its arm the same way.
 A case naming a read-only reference (`case Node&`) also holds for a writable one (`mut Node&`), which converts to it
 (T25b); `case mut Node&` before it tells the two apart. Cases are tried in order and **the first that holds is chosen**. A case that no type can reach - one a case before it
 covers (`case _`, the same type, a trait every type of it satisfies, a generic case of distinct names for the same
-type) - is an error. G15's exhaustiveness holds: with no case holding and no `nomatch` (or `case _`) it is an error at
+type) - is an error. G15's exhaustiveness holds: with no case holding and no `case _` it is an error at
 the instantiation.
 
 ```
 fn what<T>() String {
     return match T {
-        case List<E> => "a list of " $E.Name
-        case Map<K, V> => "a map from " $K.Name " to " $V.Name
-        case Hashable => "hashable " $T.Name
-        case _ => "something else"
+        case List<E>: "a list of " $E.Name
+        case Map<K, V>: "a map from " $K.Name " to " $V.Name
+        case Hashable: "hashable " $T.Name
+        case _: "something else"
     }
 }
 ```
@@ -8367,7 +8382,7 @@ fn arg<P>(p P, k I64) P.Type {
     if p.HasDefault { return p.Default } else {
         match P.Type {
             case I64 { return k }
-            nomatch { unreachable }
+            case _ { unreachable }
         }
     }
 }

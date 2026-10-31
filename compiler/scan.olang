@@ -56,21 +56,21 @@ type Diag struct(Kind LexError, Start I32, End I32, Byte Char) {
 # the rule a lexical error breaks
 fn (d Diag) Rule() String& {
     return match d.Kind {
-        case LexError.UnknownChar => "L16"
-        case LexError.NonAscii, LexError.NulByte => "L1"
-        case LexError.CarriageReturn => "L3"
-        case LexError.Semicolon => "L18"
-        case LexError.CommaEndsLine => "L18a"
-        case LexError.UnclosedComment => "L4a"
-        case LexError.UnclosedString, LexError.StringNewline => "L14"
-        case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar => "L13"
-        case LexError.BadEscape, LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint => "L15"
-        case LexError.WideCharEscape => "L13, L15"
-        case LexError.RawUnclosed, LexError.RawAfterOpen, LexError.RawCloseNotAlone, LexError.RawIndent => "L14a"
-        case LexError.HexNoDigits, LexError.HexDigit => "L10a"
-        case LexError.BinNoDigits, LexError.BinDigit => "L10c"
-        case LexError.DigitSeparator => "L10b"
-        case LexError.PointNoDigit, LexError.TwoPoints => "L12"
+        case LexError.UnknownChar: "L16"
+        case LexError.NonAscii, LexError.NulByte: "L1"
+        case LexError.CarriageReturn: "L3"
+        case LexError.Semicolon: "L18"
+        case LexError.CommaEndsLine: "L18a"
+        case LexError.UnclosedComment: "L4a"
+        case LexError.UnclosedString, LexError.StringNewline: "L14"
+        case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar: "L13"
+        case LexError.BadEscape, LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint: "L15"
+        case LexError.WideCharEscape: "L13, L15"
+        case LexError.RawUnclosed, LexError.RawAfterOpen, LexError.RawCloseNotAlone, LexError.RawIndent: "L14a"
+        case LexError.HexNoDigits, LexError.HexDigit: "L10a"
+        case LexError.BinNoDigits, LexError.BinDigit: "L10c"
+        case LexError.DigitSeparator: "L10b"
+        case LexError.PointNoDigit, LexError.TwoPoints: "L12"
     }
 }
 
@@ -78,35 +78,35 @@ fn (d Diag) Rule() String& {
 fn (d Diag) Message() String {
     b := d.Byte
     return match d.Kind {
-        case LexError.UnknownChar => "unexpected character '" $b "'"
-        case LexError.NonAscii => "non-ASCII byte - olang source is ASCII"
-        case LexError.NulByte => "NUL byte in the source - is this a text file?"
-        case LexError.CarriageReturn => "carriage return - save the file with LF line endings"
-        case LexError.Semicolon => "olang has no ';' - a statement ends where its line does; put the next one on a line of its own"
-        case LexError.CommaEndsLine => "a comma never ends a line - items on different lines are separated by the line break; remove it"
-        case LexError.UnclosedComment => "unterminated block comment - '##' closes it"
-        case LexError.UnclosedString => "unterminated string literal"
-        case LexError.StringNewline => "string literal not closed on its line - write \\n for a newline"
-        case LexError.UnclosedChar => "unterminated character literal"
-        case LexError.CharNewline => "character literal not closed on its line"
-        case LexError.EmptyChar => "empty character literal"
-        case LexError.LongChar => "character literal holds more than one character - text is written in \"\""
-        case LexError.BadEscape => "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
-        case LexError.BadHexEscape => "'\\x' needs two hexadecimal digits, as \\x41"
-        case LexError.BadUnicodeEscape => "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
-        case LexError.BadCodePoint => "a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)"
-        case LexError.WideCharEscape => "a character literal holds one byte - \\u{...} there is below 80; write the text in \"\""
-        case LexError.RawUnclosed => "unterminated raw text - '\"\"\"' closes it"
-        case LexError.RawAfterOpen => "raw text across lines begins on the line after its '\"\"\"' - move this to the next line"
-        case LexError.RawCloseNotAlone => "the closing '\"\"\"' of raw text across lines stands on a line of its own"
-        case LexError.RawIndent => "a line of raw text begins with the indentation of its closing '\"\"\"'"
-        case LexError.HexNoDigits => "'0x' needs hexadecimal digits"
-        case LexError.BinNoDigits => "'0b' needs binary digits"
-        case LexError.HexDigit => "'" $b "' is not a hexadecimal digit"
-        case LexError.BinDigit => "'" $b "' is not a binary digit"
-        case LexError.DigitSeparator => "'_' in a number must stand between two digits"
-        case LexError.PointNoDigit => "a decimal point needs a digit after it"
-        case LexError.TwoPoints => "a number has at most one decimal point"
+        case LexError.UnknownChar: "unexpected character '" $b "'"
+        case LexError.NonAscii: "non-ASCII byte - olang source is ASCII"
+        case LexError.NulByte: "NUL byte in the source - is this a text file?"
+        case LexError.CarriageReturn: "carriage return - save the file with LF line endings"
+        case LexError.Semicolon: "olang has no ';' - a statement ends where its line does; put the next one on a line of its own"
+        case LexError.CommaEndsLine: "a comma never ends a line - items on different lines are separated by the line break; remove it"
+        case LexError.UnclosedComment: "unterminated block comment - '##' closes it"
+        case LexError.UnclosedString: "unterminated string literal"
+        case LexError.StringNewline: "string literal not closed on its line - write \\n for a newline"
+        case LexError.UnclosedChar: "unterminated character literal"
+        case LexError.CharNewline: "character literal not closed on its line"
+        case LexError.EmptyChar: "empty character literal"
+        case LexError.LongChar: "character literal holds more than one character - text is written in \"\""
+        case LexError.BadEscape: "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
+        case LexError.BadHexEscape: "'\\x' needs two hexadecimal digits, as \\x41"
+        case LexError.BadUnicodeEscape: "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
+        case LexError.BadCodePoint: "a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)"
+        case LexError.WideCharEscape: "a character literal holds one byte - \\u{...} there is below 80; write the text in \"\""
+        case LexError.RawUnclosed: "unterminated raw text - '\"\"\"' closes it"
+        case LexError.RawAfterOpen: "raw text across lines begins on the line after its '\"\"\"' - move this to the next line"
+        case LexError.RawCloseNotAlone: "the closing '\"\"\"' of raw text across lines stands on a line of its own"
+        case LexError.RawIndent: "a line of raw text begins with the indentation of its closing '\"\"\"'"
+        case LexError.HexNoDigits: "'0x' needs hexadecimal digits"
+        case LexError.BinNoDigits: "'0b' needs binary digits"
+        case LexError.HexDigit: "'" $b "' is not a hexadecimal digit"
+        case LexError.BinDigit: "'" $b "' is not a binary digit"
+        case LexError.DigitSeparator: "'_' in a number must stand between two digits"
+        case LexError.PointNoDigit: "a decimal point needs a digit after it"
+        case LexError.TwoPoints: "a number has at most one decimal point"
     }
 }
 
@@ -289,7 +289,7 @@ fn (s mut scanner&) track(k token.Tok) {
                 }
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -440,7 +440,7 @@ fn operator(t String&, i I64) token.Tok, I64 {
         case ']' { return token.Tok.RBrack, i + 1 }
         case '{' { return token.Tok.LBrace, i + 1 }
         case '}' { return token.Tok.RBrace, i + 1 }
-        nomatch { return token.Tok.Eof, i + 1 }
+        case _ { return token.Tok.Eof, i + 1 }
     }
 }
 

@@ -1168,17 +1168,17 @@ fn lit(t String&, k I64) cx { return cx(t, k, -1, "") }
 # C's binary operators, by precedence: 0 for none
 fn cPrec(op String&) I64 {
     return match op {
-        case "||" => 1
-        case "&&" => 2
-        case "|" => 3
-        case "^" => 4
-        case "&" => 5
-        case "==", "!=" => 6
-        case "<", ">", "<=", ">=" => 7
-        case "<<", ">>" => 8
-        case "+", "-" => 9
-        case "*", "/", "%" => 10
-        case _ => 0
+        case "||": 1
+        case "&&": 2
+        case "|": 3
+        case "^": 4
+        case "&": 5
+        case "==", "!=": 6
+        case "<", ">", "<=", ">=": 7
+        case "<<", ">>": 8
+        case "+", "-": 9
+        case "*", "/", "%": 10
+        case _: 0
     }
 }
 
@@ -1365,15 +1365,15 @@ fn charValue(t String&) I64 ? Skip {
     if c == 'x' { return try b[2:].ParseInt(16) catch { error Skip.WHY } }
     if c.IsDigit() { return try b[1:].ParseInt(8) catch { error Skip.WHY } }
     return match c {
-        case 'n' => 10
-        case 't' => 9
-        case 'r' => 13
-        case '0' => 0
-        case 'a' => 7
-        case 'b' => 8
-        case 'f' => 12
-        case 'v' => 11
-        case _ => I64(U8(c))
+        case 'n': 10
+        case 't': 9
+        case 'r': 13
+        case '0': 0
+        case 'a': 7
+        case 'b': 8
+        case 'f': 12
+        case 'v': 11
+        case _: I64(U8(c))
     }
 }
 
@@ -1409,14 +1409,14 @@ fn textLiteral(toks Array<String&>&) String {
                 i = j
             } else {
                 v = match e {
-                    case 'n' => 10
-                    case 't' => 9
-                    case 'r' => 13
-                    case 'a' => 7
-                    case 'b' => 8
-                    case 'f' => 12
-                    case 'v' => 11
-                    case _ => I64(U8(e))
+                    case 'n': 10
+                    case 't': 9
+                    case 'r': 13
+                    case 'a': 7
+                    case 'b': 8
+                    case 'f': 12
+                    case 'v': 11
+                    case _: I64(U8(e))
                 }
                 i++
             }
@@ -1545,11 +1545,11 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
     for k in range m.Params.Len() { b.Push($(", " if k > 0 else "") "a" $k " T" $k) }
     b.Push(") ")
     r := match x.Kind {
-        case KVar => $"T" $x.Var
-        case KType => $x.Ty
-        case KBool => "Bool"
-        case KFloat => "F64"
-        case _ => "I64"
+        case KVar: $"T" $x.Var
+        case KType: $x.Ty
+        case KBool: "Bool"
+        case KFloat: "F64"
+        case _: "I64"
     }
     b.Push($r " { return " $x.Text " }")
     return b.ToString()

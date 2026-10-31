@@ -17,8 +17,8 @@ fn main() ? {
     y := Acc()
     k := 3
     (x if k > 0 else y).Bump()
-    (match k { case 3 => x
-               case _ => y }).Bump()
+    (match k { case 3: x
+               case _: y }).Bump()
     bumpPt((x if k > 0 else y).P)
     l := Vec<Acc>()
     l.Push(Acc())

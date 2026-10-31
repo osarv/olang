@@ -9,8 +9,8 @@ type Bag struct(name String&) {
 fn (b Bag&) Str() String {
     name := b.name if b.name.Len() > 0 else "anon"
     kind := match b.name.Len() {
-        case 0 => "empty"
-        nomatch => b.name
+        case 0: "empty"
+        case _: b.name
     }
     return $name "/" $kind
 }

@@ -124,8 +124,8 @@ fn (lw mut Lowerer&) HasCode(id I64) Bool {
     b := lw.Bodies[id]
     if b.Root is null { return false }
     return match b.Of {
-        case typed.BodyOf.Case(_, _) => false
-        case _ => true
+        case typed.BodyOf.Case(_, _): false
+        case _: true
     }
 }
 
@@ -321,9 +321,9 @@ fn (ln mut lowering&) run() {
     for i in range b.Locals.Len() {
         l := b.Locals[i]
         k := match l.Kind {
-            case typed.LocalKind.Param => mir.LocalKind.Param
-            case typed.LocalKind.Capture => mir.LocalKind.Capture
-            case _ => mir.LocalKind.Var
+            case typed.LocalKind.Param: mir.LocalKind.Param
+            case typed.LocalKind.Capture: mir.LocalKind.Capture
+            case _: mir.LocalKind.Var
         }
         if l.Ty == types.UnknownT { ln.gapped = true }
         # where its storage is: the frame, or a scope variable where the scope pass moved it (O26a's returned locals)
@@ -347,11 +347,11 @@ fn (ln mut lowering&) run() {
     }
     for v in b.Vars {
         k := match v {
-            case typed.ScopeVar.Param(l) => mir.VarKind.Param(indexOf(b.Params, l))
-            case typed.ScopeVar.Result => mir.VarKind.Result
-            case typed.ScopeVar.Instance => mir.VarKind.Instance
-            case typed.ScopeVar.Closing => mir.VarKind.Closing
-            case typed.ScopeVar.Capture(l) => mir.VarKind.Capture(indexOf(caps, l))
+            case typed.ScopeVar.Param(l): mir.VarKind.Param(indexOf(b.Params, l))
+            case typed.ScopeVar.Result: mir.VarKind.Result
+            case typed.ScopeVar.Instance: mir.VarKind.Instance
+            case typed.ScopeVar.Closing: mir.VarKind.Closing
+            case typed.ScopeVar.Capture(l): mir.VarKind.Capture(indexOf(caps, l))
         }
         ln.F.Vars.Push(k)
     }
@@ -368,8 +368,8 @@ fn (ln mut lowering&) run() {
     if ln.dead { return }
     # falling off the end
     ctor := match b.Of {
-        case typed.BodyOf.Ctor(_, _) => true
-        case _ => false
+        case typed.BodyOf.Ctor(_, _): true
+        case _: false
     }
     res := t.Result(b.Ty)
     if ctor {
@@ -587,12 +587,12 @@ fn (ln mut lowering&) regionOf(site I64) mir.ScopeRef {
 fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
     if not ln.planned { return -1 }
     s := match x {
-        case typed.Expr.Promote(_, _, pr) => I64(pr.Site)
-        case typed.Expr.Make(_, _, m) => I64(m.Site)
-        case typed.Expr.Text(_, _, tx) => I64(tx.Site)
-        case typed.Expr.Collect(_, _, c) => I64(c.Site)
-        case typed.Expr.Call(_, _, c) => I64(c.Site)
-        case _ => -1
+        case typed.Expr.Promote(_, _, pr): I64(pr.Site)
+        case typed.Expr.Make(_, _, m): I64(m.Site)
+        case typed.Expr.Text(_, _, tx): I64(tx.Site)
+        case typed.Expr.Collect(_, _, c): I64(c.Site)
+        case typed.Expr.Call(_, _, c): I64(c.Site)
+        case _: -1
     }
     if s < 0 or s >= ln.plan.RegionKind.Len() or ln.plan.RegionKind[s] == 0 { return -1 }
     return s
@@ -652,9 +652,9 @@ fn (ln mut lowering&) block(bl typed.Block&) {
         return
     }
     kind := match ln.B.Blocks[I64(bl.Id)].Kind {
-        case typed.BlockKind.Loop => mir.ScopeKind.Loop
-        case typed.BlockKind.Join => mir.ScopeKind.Join
-        case _ => mir.ScopeKind.Block
+        case typed.BlockKind.Loop: mir.ScopeKind.Loop
+        case typed.BlockKind.Join: mir.ScopeKind.Join
+        case _: mir.ScopeKind.Block
     }
     ln.openBlock(bl, kind)
     for s in bl.Stmts { ln.stmt(s) }
@@ -909,16 +909,16 @@ fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
 # whether x, an array value, is existing storage rather than a temporary whose storage its target takes
 fn (ln mut lowering&) copiesValue(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Read(_, _, _, _) => true
+        case typed.Expr.Read(_, _, _, _): true
         # a conversion names its argument's storage (T29a): a fixed array a reference names, an array of a run-time
         # length (a place, a scoped call) - one of fixed storage made a run-time value is copied out, new storage
         # - and one of fixed storage widened is a temporary of the innermost block, copied where it is kept
-        case typed.Expr.Prim(_, pt, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or (ln.valueArray(args[0].Type()) and ln.copiesValue(args[0])) or ln.widening(op, args, pt))
+        case typed.Expr.Prim(_, pt, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and (derefOf(args[0]) is not null or (ln.valueArray(args[0].Type()) and ln.copiesValue(args[0])) or ln.widening(op, args, pt))
         # a call given a scope argument builds its array where that says, which may close first (E25)
-        case typed.Expr.Call(_, _, c) => typed.ScopedCall(c)
-        case typed.Expr.Away(_, _, y) => ln.copiesValue(y)
-        case typed.Expr.Seq(_, _, q) => q.X is not null and ln.copiesValue(q.X!)
-        case _ => false
+        case typed.Expr.Call(_, _, c): typed.ScopedCall(c)
+        case typed.Expr.Away(_, _, y): ln.copiesValue(y)
+        case typed.Expr.Seq(_, _, q): q.X is not null and ln.copiesValue(q.X!)
+        case _: false
     }
 }
 
@@ -936,11 +936,11 @@ fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr&x {
 # the reference a read of what it names reads through, else null
 fn derefOf(x typed.Expr&) typed.Expr?&x {
     return match x {
-        case typed.Expr.Read(_, _, p, _) => match p {
-            case typed.Lvalue.Deref(_, _, r) => r
-            case _ => null
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Deref(_, _, r): r
+            case _: null
         }
-        case _ => null
+        case _: null
     }
 }
 
@@ -968,8 +968,8 @@ fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
 # by value only there, T7b)
 fn (ln mut lowering&) placeStorage(p typed.Lvalue&) mir.ScopeRef {
     return match p {
-        case typed.Lvalue.Local(_, _, id) => ln.storageOf(id)
-        case _ => mir.ScopeRef.Program
+        case typed.Lvalue.Local(_, _, id): ln.storageOf(id)
+        case _: mir.ScopeRef.Program
     }
 }
 
@@ -1062,7 +1062,7 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
                 return
             }
         }
-        nomatch { }
+        case _ { }
     }
     res := ln.T.Result(ln.B.Ty)
     # a fixed array widened is made in the result scope, the result as it is (T7b, T7c)
@@ -1423,14 +1423,14 @@ fn (ln mut lowering&) place(p typed.Lvalue?&) pl {
         return pl(mir.Base.None)
     }
     return match p {
-        case typed.Lvalue.Local(_, _, id) => pl(mir.Base.Local(mir.LocalId(I32(id))))
-        case typed.Lvalue.Global(_, ty, m, n) => pl(mir.Base.Global(m, n, ty))
-        case typed.Lvalue.Deref(sp, _, r) => ln.deref(r, sp)
-        case typed.Lvalue.Field(_, _, base, i) => ln.with(ln.place(base), mir.Proj.Field(i))
-        case typed.Lvalue.Elem(sp, _, e) => ln.elem(e, sp)
-        case typed.Lvalue.Payload(sp, _, py) => ln.payload(py, sp)
-        case typed.Lvalue.Temp(sp, ty, v, _) => pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
-        case typed.Lvalue.Target(sp, _) => ln.target(sp)
+        case typed.Lvalue.Local(_, _, id): pl(mir.Base.Local(mir.LocalId(I32(id))))
+        case typed.Lvalue.Global(_, ty, m, n): pl(mir.Base.Global(m, n, ty))
+        case typed.Lvalue.Deref(sp, _, r): ln.deref(r, sp)
+        case typed.Lvalue.Field(_, _, base, i): ln.with(ln.place(base), mir.Proj.Field(i))
+        case typed.Lvalue.Elem(sp, _, e): ln.elem(e, sp)
+        case typed.Lvalue.Payload(sp, _, py): ln.payload(py, sp)
+        case typed.Lvalue.Temp(sp, ty, v, _): pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
+        case typed.Lvalue.Target(sp, _): ln.target(sp)
     }
 }
 
@@ -1733,24 +1733,24 @@ fn (ln mut lowering&) value(x typed.Expr&) mir.Operand {
         return mir.Operand.None
     }
     return match x {
-        case typed.Expr.Lit(_, lt, bits) => mir.Operand.Const(lt, bits)
-        case typed.Expr.Data(sp, dt, _, c) => mir.Operand.Data(dt, ln.F.AddConst(c), ln.file, sp)
-        case typed.Expr.Read(sp, rt, p, _) => ln.read(p, rt, sp)
-        case typed.Expr.Borrow(sp, bt, p) => ln.into(bt, mir.Rvalue.Ref(ln.mk(ln.place(p)), bt), sp)
-        case typed.Expr.Take(sp, tt, p) => ln.take(p, tt, sp)
-        case typed.Expr.Promote(sp, pt, pr) => ln.promote(pr, pt, sp)
-        case typed.Expr.Call(sp, ct, c) => ln.call(c, ct, sp)
-        case typed.Expr.Make(sp, mt, m) => ln.make(m, mt, sp)
-        case typed.Expr.Collect(sp, ct, c) => ln.collect(c, ct, sp)
-        case typed.Expr.Prim(sp, pt, op, chk, args) => ln.primExpr(op, chk, args, pt, sp)
-        case typed.Expr.Slice(sp, st, s) => ln.slice(s, st, sp)
-        case typed.Expr.Cond(sp, ct, c) => ln.cond(c, ct, sp)
-        case typed.Expr.Seq(_, _, s) => ln.seq(s)
-        case typed.Expr.Match(sp, mt, m) => ln.match(m, mt, sp)
-        case typed.Expr.Try(sp, _, tr) => ln.try(x, tr, sp)
-        case typed.Expr.Fn(sp, ft, fv) => ln.fnVal(fv, ft, sp)
-        case typed.Expr.Text(sp, tt, tx) => ln.text(tx, tt, sp)
-        case typed.Expr.Away(_, file, y) => ln.away(file, y)
+        case typed.Expr.Lit(_, lt, bits): mir.Operand.Const(lt, bits)
+        case typed.Expr.Data(sp, dt, _, c): mir.Operand.Data(dt, ln.F.AddConst(c), ln.file, sp)
+        case typed.Expr.Read(sp, rt, p, _): ln.read(p, rt, sp)
+        case typed.Expr.Borrow(sp, bt, p): ln.into(bt, mir.Rvalue.Ref(ln.mk(ln.place(p)), bt), sp)
+        case typed.Expr.Take(sp, tt, p): ln.take(p, tt, sp)
+        case typed.Expr.Promote(sp, pt, pr): ln.promote(pr, pt, sp)
+        case typed.Expr.Call(sp, ct, c): ln.call(c, ct, sp)
+        case typed.Expr.Make(sp, mt, m): ln.make(m, mt, sp)
+        case typed.Expr.Collect(sp, ct, c): ln.collect(c, ct, sp)
+        case typed.Expr.Prim(sp, pt, op, chk, args): ln.primExpr(op, chk, args, pt, sp)
+        case typed.Expr.Slice(sp, st, s): ln.slice(s, st, sp)
+        case typed.Expr.Cond(sp, ct, c): ln.cond(c, ct, sp)
+        case typed.Expr.Seq(_, _, s): ln.seq(s)
+        case typed.Expr.Match(sp, mt, m): ln.match(m, mt, sp)
+        case typed.Expr.Try(sp, _, tr): ln.try(x, tr, sp)
+        case typed.Expr.Fn(sp, ft, fv): ln.fnVal(fv, ft, sp)
+        case typed.Expr.Text(sp, tt, tx): ln.text(tx, tt, sp)
+        case typed.Expr.Away(_, file, y): ln.away(file, y)
     }
 }
 
@@ -1779,16 +1779,16 @@ fn (ln mut lowering&) fitAt(x typed.Expr&, ty types.TypeId, sp source.Span, at m
 # whether x is a conversion written of a fixed array's value to a run-time-length array value
 fn (ln mut lowering&) widens(x typed.Expr&, ty types.TypeId) Bool {
     return match x {
-        case typed.Expr.Prim(_, pt, op, _, args) => ln.widening(op, args, pt)
-        case typed.Expr.Away(_, _, _) => false
-        case _ => false
+        case typed.Expr.Prim(_, pt, op, _, args): ln.widening(op, args, pt)
+        case typed.Expr.Away(_, _, _): false
+        case _: false
     }
 }
 
 fn convertArg(x typed.Expr&) typed.Expr&x {
     return match x {
-        case typed.Expr.Prim(_, _, _, _, args) => args[0]
-        case _ => x
+        case typed.Expr.Prim(_, _, _, _, args): args[0]
+        case _: x
     }
 }
 
@@ -1894,27 +1894,27 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
 # whether an expression is a try with clauses
 fn clausedTry(x typed.Expr&) Bool {
     return match x {
-        case typed.Expr.Try(_, _, t) => t.Clauses.Len() > 0
-        case _ => false
+        case typed.Expr.Try(_, _, t): t.Clauses.Len() > 0
+        case _: false
     }
 }
 
 # the comprehension an expression is - a lane operation's result, the collect a sequence ends in - null for none
 fn collectOf(x typed.Expr&) typed.Collect?&x {
     return match x {
-        case typed.Expr.Collect(_, _, c) => c
-        case typed.Expr.Seq(_, _, sq) => collectOf(sq.X!) if sq.X is not null else null
-        case _ => null
+        case typed.Expr.Collect(_, _, c): c
+        case typed.Expr.Seq(_, _, sq): collectOf(sq.X!) if sq.X is not null else null
+        case _: null
     }
 }
 
 # the call an expression is, under a try, null for none
 fn callOfExpr(x typed.Expr&) typed.Call?&x {
     return match x {
-        case typed.Expr.Call(_, _, c) => c
-        case typed.Expr.Try(_, _, t) => callOfExpr(t.X!) if t.X is not null else null
-        case typed.Expr.Away(_, _, y) => callOfExpr(y)
-        case _ => null
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Try(_, _, t): callOfExpr(t.X!) if t.X is not null else null
+        case typed.Expr.Away(_, _, y): callOfExpr(y)
+        case _: null
     }
 }
 
@@ -2134,8 +2134,8 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     t := ln.T
     ps := t.Items(t.Params(ty))
     helper := match callee {
-        case mir.Callee.Fn(mir.FnKey.Helper(_, _), _) => true
-        case _ => false
+        case mir.Callee.Fn(mir.FnKey.Helper(_, _), _): true
+        case _: false
     }
     ops := Array<mir.Operand>(c.Args.Len())
     for i in range c.Args.Len() {
@@ -2329,8 +2329,8 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         fv = mir.Operand.None
     } else if m.Items.Len() > 0 {
         zero := match m.Items[0] {
-            case typed.Expr.Call(_, _, k) => k.Zero
-            case _ => false
+            case typed.Expr.Call(_, _, k): k.Zero
+            case _: false
         }
         if zero and n != mir.Operand.None and not ln.dead {
             # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
@@ -2680,9 +2680,9 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
-        case typed.FnVal.Lambda(body, caps, site) => ln.lambda(body, caps, site, ty, sp)
-        case typed.FnVal.Adapter(call, recv, site) => ln.adapter(call, recv, site, ty, sp)
+        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
+        case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }
 }
 
@@ -3905,7 +3905,7 @@ test "control flow verifies clean: ifs, loops with break and continue, ranges, f
     text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
              "type E error {\n    BAD\n    WORSE\n}\n"
              "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
-             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
+             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r): 3 * r * r\n        case Shape.Square: 1\n    }\n}\n"
              "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"
              "        if x > 50 { break }\n        t += try pick(x) catch E.BAD default 0\n    }\n    for i in range 3 { t += i }\n"
              "    return t\n}\n"

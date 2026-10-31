@@ -7,7 +7,7 @@ type Opt<T> enum {
 fn show(o Opt<I32>) I32 {
   match o {
     case Opt.Some(v) { return v }
-    nomatch { return 0 }
+    case _ { return 0 }
   }
 }
 fn main() ? {

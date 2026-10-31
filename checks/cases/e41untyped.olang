@@ -1,0 +1,5 @@
+# check: fail error[E41]: '_' holds the place of a value, and nothing here says its type
+# E41: a hole where nothing says the type wanted
+fn main() ? {
+    x := _
+}

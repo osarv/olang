@@ -563,11 +563,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         if ir.Contains("@__olang_dyncall") { dyncall = true }
         if e.Library { ir = libraryIr(ir) }
         holds := match o.Kind {
-            case emit.ObjectKind.Module => build.UnitKind.Module
-            case emit.ObjectKind.Main => build.UnitKind.Main
-            case emit.ObjectKind.Tests => build.UnitKind.Tests
-            case emit.ObjectKind.Instances => build.UnitKind.Instances
-            case emit.ObjectKind.Locations => build.UnitKind.Locations
+            case emit.ObjectKind.Module: build.UnitKind.Module
+            case emit.ObjectKind.Main: build.UnitKind.Main
+            case emit.ObjectKind.Tests: build.UnitKind.Tests
+            case emit.ObjectKind.Instances: build.UnitKind.Instances
+            case emit.ObjectKind.Locations: build.UnitKind.Locations
         }
         u mut build.Unit&prog = build.Unit($o.Identity, holds, ir)
         if kind != build.Kind.Module and (o.Kind == emit.ObjectKind.Module or o.Kind == emit.ObjectKind.Locations) {

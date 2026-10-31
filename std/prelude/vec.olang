@@ -261,7 +261,7 @@ fn (v Vec<T>&) Str() String {
             b.PushChar(']')
             return b.ToString()
         }
-        nomatch {
+        case _ {
             r := $v.s.data[:v.s.n]
             o := try r.FindByte('[') catch { unreachable }
             return "Vec<" $r[:o] ">" $r[o:]

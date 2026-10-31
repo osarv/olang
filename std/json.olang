@@ -85,13 +85,13 @@ fn (j Json&) At<K>(key K) Json&j ? Error {
         case String {
             match j {
                 case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.MISSING }] }
-                nomatch { error Error.WRONG_KIND }
+                case _ { error Error.WRONG_KIND }
             }
         }
         case String& {
             match j {
                 case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.MISSING }] }
-                nomatch { error Error.WRONG_KIND }
+                case _ { error Error.WRONG_KIND }
             }
         }
         case I32 {
@@ -100,7 +100,7 @@ fn (j Json&) At<K>(key K) Json&j ? Error {
                     if key < 0 or I64(key) >= items.Len() { error Error.MISSING }
                     return items[I64(key)]
                 }
-                nomatch { error Error.WRONG_KIND }
+                case _ { error Error.WRONG_KIND }
             }
         }
         case I64 {
@@ -109,7 +109,7 @@ fn (j Json&) At<K>(key K) Json&j ? Error {
                     if key < 0 or key >= items.Len() { error Error.MISSING }
                     return items[key]
                 }
-                nomatch { error Error.WRONG_KIND }
+                case _ { error Error.WRONG_KIND }
             }
         }
     }
@@ -119,7 +119,7 @@ fn (j Json&) At<K>(key K) Json&j ? Error {
 fn (j Json&) Has(key String&) Bool {
     match j {
         case Json.Obj(o) { return o.Has(key) }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -131,7 +131,7 @@ fn (j Json&) AsNum() F64 ? Error {
         case Json.Num(v) { return v }
         case Json.Int(v) { return F64(v) }
         case Json.Uint(v) { return F64(v) }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
@@ -169,14 +169,14 @@ fn (j Json&) whole() Bool, U64 ? Error {
             return false, U64(v)
         }
         case Json.Uint(v) { return false, v }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
 fn (j Json&) AsBool() Bool ? Error {
     match j {
         case Json.Bool(v) { return v }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
@@ -184,7 +184,7 @@ fn (j Json&) AsBool() Bool ? Error {
 fn (j Json&) AsStr() String&j ? Error {
     match j {
         case Json.Str(s) { return s }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
@@ -192,7 +192,7 @@ fn (j Json&) AsStr() String&j ? Error {
 fn (j Json&) AsArr() Array<Json&>&j ? Error {
     match j {
         case Json.Arr(items) { return items }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
@@ -200,7 +200,7 @@ fn (j Json&) AsArr() Array<Json&>&j ? Error {
 fn (j Json&) AsObj() Object&j ? Error {
     match j {
         case Json.Obj(o) { return o }
-        nomatch { error Error.WRONG_KIND }
+        case _ { error Error.WRONG_KIND }
     }
 }
 
@@ -283,14 +283,14 @@ fn (a Json&) Eq(b Json&) Bool {
         case Json.Bool(x) {
             match b {
                 case Json.Bool(y) { return x == y }
-                nomatch { return false }
+                case _ { return false }
             }
         }
         case Json.Num(_), Json.Int(_), Json.Uint(_) { return numEq(a, b) }
         case Json.Str(x) {
             match b {
                 case Json.Str(y) { return x == y }
-                nomatch { return false }
+                case _ { return false }
             }
         }
         case Json.Arr(x) {
@@ -302,7 +302,7 @@ fn (a Json&) Eq(b Json&) Bool {
                     }
                     return true
                 }
-                nomatch { return false }
+                case _ { return false }
             }
         }
         case Json.Obj(x) {
@@ -316,10 +316,10 @@ fn (a Json&) Eq(b Json&) Bool {
                     }
                     return true
                 }
-                nomatch { return false }
+                case _ { return false }
             }
         }
-        nomatch { return false }
+        case _ { return false }
     }
 }
 
@@ -329,14 +329,14 @@ fn numEq(a Json&, b Json&) Bool {
         case Json.Num(x) {
             match b {
                 case Json.Num(y) { return x == y }
-                nomatch { }
+                case _ { }
             }
         }
-        nomatch { }
+        case _ { }
     }
     match b {
         case Json.Num(_), Json.Int(_), Json.Uint(_) { }
-        nomatch { return false }
+        case _ { return false }
     }
     an, am := try a.whole() catch { return false }
     bn, bm := try b.whole() catch { return false }
@@ -370,7 +370,7 @@ fn (j Json&) Hash() I64 {
             for i in range o.Len() { h = h + (nameHash(o.Keys[i]) ^ o.Values[i].Hash()) * 1099511628211 }
             return h
         }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 
@@ -1017,7 +1017,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                             if name == c.Name { return c() }
                         }
                     }
-                    nomatch { }
+                    case _ { }
                 }
                 error Error.WRONG_KIND
             } else if T.Kind == TypeKind.Enum {
@@ -1041,7 +1041,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                             }
                         }
                     }
-                    nomatch { }
+                    case _ { }
                 }
                 error Error.WRONG_KIND
             } else {
@@ -1144,7 +1144,7 @@ fn (w mut writer&) value(j Json&, depth I64) {
             w.newline(depth)
             w.out.PushChar('}')
         }
-        nomatch { w.out.Push("null") }              # a null reference - and nomatch keeps Str evaluable (see Eq)
+        case _ { w.out.Push("null") }              # a null reference - and nomatch keeps Str evaluable (see Eq)
     }
 }
 

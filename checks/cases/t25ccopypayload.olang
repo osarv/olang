@@ -13,6 +13,6 @@ fn main() ? {
     o := Opt.Some(GB)
     match o {
         case Opt.Some(b) { b.P[0] = 1 }
-        nomatch { }
+        case _ { }
     }
 }

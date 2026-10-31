@@ -6,8 +6,8 @@ import "std/io"
 type M struct(n I64, data Array<F64>& = null) {
     n
     Data Array<F64>& = match n {
-        case 0 => Array<F64>(1)
-        case _ => data[0:n]
+        case 0: Array<F64>(1)
+        case _: data[0:n]
     }
 }
 

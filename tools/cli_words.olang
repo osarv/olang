@@ -108,18 +108,18 @@ fn valueLen(w String&) I64 {
 
 fn word(f String&) String& {
     return match f {
-        case "-d" => "-debug"
-        case "-r" => "-race"
-        case "-s" => "-sanitize"
-        case "-u" => "-update"
-        case "-a" => "-target"
-        case "-D" => "-define"
-        case "-b" => "build"
-        case "-c" => "compile"
-        case "-t" => "test"
-        case "-i" => "interpret"
-        case "-e" => "explain"
-        nomatch => ""
+        case "-d": "-debug"
+        case "-r": "-race"
+        case "-s": "-sanitize"
+        case "-u": "-update"
+        case "-a": "-target"
+        case "-D": "-define"
+        case "-b": "build"
+        case "-c": "compile"
+        case "-t": "test"
+        case "-i": "interpret"
+        case "-e": "explain"
+        case _: ""
     }
 }
 

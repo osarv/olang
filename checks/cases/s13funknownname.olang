@@ -5,9 +5,9 @@
 import "std/io"
 fn classify(n I64) String {
     return match n {
-        case 0 => "zero"
-        case big if big > 100 => "big"
-        nomatch => "small"
+        case 0: "zero"
+        case big if big > 100: "big"
+        case _: "small"
     }
 }
 fn main() ? { try io.Println(classify(500)) }

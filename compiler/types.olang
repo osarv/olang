@@ -224,11 +224,11 @@ fn NewTable(names mut source.Names&) Table {
 # the id of one of the eight fixed integer types of a width, else Unknown
 fn primIndex(bits I64, unsigned Bool) I64 {
     k := match bits {
-        case 8 => 0
-        case 16 => 1
-        case 32 => 2
-        case 64 => 3
-        case _ => -1
+        case 8: 0
+        case 16: 1
+        case 32: 2
+        case 64: 3
+        case _: -1
     }
     if k < 0 { return 0 }
     return 3 + k + (4 if unsigned else 0)
@@ -583,16 +583,16 @@ fn IntBytes(b I64) I64 { return 1 if b <= 8 else 2 if b <= 16 else 4 if b <= 32 
 fn (t Table&) Closed(id TypeId) Bool {
     d := t.at(id)
     return match d.K {
-        case Kind.Unknown, Kind.Var, Kind.ConstExpr, Kind.Null => false
-        case Kind.Named, Kind.Tuple, Kind.Record => t.closedList(ListId(I32(d.B if d.K == Kind.Named else d.A)))
-        case Kind.Array => t.Closed(t.Elem(id)) and (t.Length(id) == TypeId(0) or t.Closed(t.Length(id)))
-        case Kind.Ref => t.Closed(t.Referent(id))
-        case Kind.Func => t.closedList(t.Params(id)) and t.Closed(t.Result(id)) and t.closedList(t.Errors(id))
-        case Kind.AnonEnum => t.closedList(t.ShapeCases(id))
-        case Kind.Const => t.Closed(t.ConstType(id))
-        case Kind.Any => t.Closed(t.AnyTrait(id))
-        case Kind.ErrSet => t.closedList(t.ErrSetItems(id))
-        case _ => true
+        case Kind.Unknown, Kind.Var, Kind.ConstExpr, Kind.Null: false
+        case Kind.Named, Kind.Tuple, Kind.Record: t.closedList(ListId(I32(d.B if d.K == Kind.Named else d.A)))
+        case Kind.Array: t.Closed(t.Elem(id)) and (t.Length(id) == TypeId(0) or t.Closed(t.Length(id)))
+        case Kind.Ref: t.Closed(t.Referent(id))
+        case Kind.Func: t.closedList(t.Params(id)) and t.Closed(t.Result(id)) and t.closedList(t.Errors(id))
+        case Kind.AnonEnum: t.closedList(t.ShapeCases(id))
+        case Kind.Const: t.Closed(t.ConstType(id))
+        case Kind.Any: t.Closed(t.AnyTrait(id))
+        case Kind.ErrSet: t.closedList(t.ErrSetItems(id))
+        case _: true
     }
 }
 
@@ -706,7 +706,7 @@ fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
             }
             return true
         }
-        nomatch { return true }
+        case _ { return true }
     }
 }
 
@@ -733,13 +733,13 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
                 case DeclKind.Struct { holds = t.listHolds(t.Fields(id)) }
                 case DeclKind.Enum { holds = t.listHolds(t.Cases(id), true) }
                 case DeclKind.Over { holds = t.HoldsRefs(t.Base(id)) }
-                nomatch { }
+                case _ { }
             }
         }
         case Kind.Array { holds = t.HoldsRefs(t.Elem(id)) }
         case Kind.Tuple, Kind.Record { holds = t.listHolds(t.Parts(id)) }
         case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id), true) }
-        nomatch { }
+        case _ { }
     }
     # a part not typed yet (a ":=" field the checker has not reached) leaves the answer to be asked again
     t.setHolds(id, 0 if t.holdsUnsure else 3 if holds else 2)
@@ -893,9 +893,9 @@ fn (t Table&) PayloadSize(id TypeId) I64 { return t.payloads[I64(id)] }
 
 fn (t Table&) fieldList(id TypeId) ListId {
     return match t.KindOf(id) {
-        case Kind.Named => t.Fields(id)
-        case Kind.Tuple, Kind.Record => t.Parts(id)
-        case _ => ListId(0)
+        case Kind.Named: t.Fields(id)
+        case Kind.Tuple, Kind.Record: t.Parts(id)
+        case _: ListId(0)
     }
 }
 
@@ -923,7 +923,7 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
                     }
                 }
                 case DeclKind.Over { out.Push(t.Base(id)) }
-                nomatch { }
+                case _ { }
             }
         }
         case Kind.Array {
@@ -937,7 +937,7 @@ fn (t Table&) Embedded(id TypeId) Array<TypeId> {
                 if c != TypeId(0) { out.Push(c) }
             }
         }
-        nomatch { }
+        case _ { }
     }
     return out.ToArray()
 }
@@ -1040,10 +1040,10 @@ fn (t mut Table&) layEnum(id TypeId, cases ListId) I64, I64 {
 fn (t Table&) ByAddress(id TypeId) Bool {
     r := t.Repr(id)
     return match t.KindOf(r) {
-        case Kind.Tuple, Kind.Record => true
-        case Kind.Named => t.DeclKindOf(t.DeclOf(r)) == DeclKind.Struct
-        case Kind.Array => t.Length(r) != TypeId(0)
-        case _ => false
+        case Kind.Tuple, Kind.Record: true
+        case Kind.Named: t.DeclKindOf(t.DeclOf(r)) == DeclKind.Struct
+        case Kind.Array: t.Length(r) != TypeId(0)
+        case _: false
     }
 }
 
@@ -1066,17 +1066,17 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
     d := t.at(id)
     return match d.K {
         case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
-             Kind.BF16, Kind.F32, Kind.F64 => $primLlvm[I64(id)]
-        case Kind.Int => "i" $d.A
-        case Kind.DefaultErr, Kind.ErrVal => "i32"
-        case Kind.Noreturn => "void"
-        case Kind.Func => "{ ptr, ptr }"
-        case Kind.Ref => "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"
-        case Kind.Array => t.arrayLlvm(id)
-        case Kind.Tuple, Kind.Record => t.aggregate(t.Parts(id))
-        case Kind.AnonEnum => t.enumLlvm(id)
-        case Kind.Named => t.namedLlvm(id)
-        case _ => "?"
+             Kind.BF16, Kind.F32, Kind.F64: $primLlvm[I64(id)]
+        case Kind.Int: "i" $d.A
+        case Kind.DefaultErr, Kind.ErrVal: "i32"
+        case Kind.Noreturn: "void"
+        case Kind.Func: "{ ptr, ptr }"
+        case Kind.Ref: "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"
+        case Kind.Array: t.arrayLlvm(id)
+        case Kind.Tuple, Kind.Record: t.aggregate(t.Parts(id))
+        case Kind.AnonEnum: t.enumLlvm(id)
+        case Kind.Named: t.namedLlvm(id)
+        case _: "?"
     }
 }
 
@@ -1092,11 +1092,11 @@ fn (t mut Table&) enumLlvm(id TypeId) String {
 
 fn (t mut Table&) namedLlvm(id TypeId) String {
     return match t.DeclKindOf(t.DeclOf(id)) {
-        case DeclKind.Struct => t.structName(id)
-        case DeclKind.Enum => t.enumLlvm(id)
-        case DeclKind.Error => "i32"
-        case DeclKind.Over => $t.Llvm(t.Base(id))
-        case _ => "?"
+        case DeclKind.Struct: t.structName(id)
+        case DeclKind.Enum: t.enumLlvm(id)
+        case DeclKind.Error: "i32"
+        case DeclKind.Over: $t.Llvm(t.Base(id))
+        case _: "?"
     }
 }
 

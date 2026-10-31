@@ -222,7 +222,7 @@ fn (a mut Array<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E {
     if a.Len() < 2 { return }
     match T {
         case I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64, Bool, Char { try sortMergeBuffered(a, less) }
-        nomatch { try sortByPositions(a, less) }
+        case _ { try sortByPositions(a, less) }
     }
 }
 

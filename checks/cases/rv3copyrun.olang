@@ -27,8 +27,8 @@ type X enum {
 }
 fn eval(e X&) I64 {
     return match e {
-        case X.Lit(v) => v
-        case X.Add(a, b) => eval(a) + eval(b)
+        case X.Lit(v): v
+        case X.Add(a, b): eval(a) + eval(b)
     }
 }
 fn (a X&) Plus(b X&) X { return X.Add(a, b) }

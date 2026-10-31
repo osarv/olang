@@ -26,9 +26,9 @@ fn copyOut(p P&) P { return p }
 
 fn classify(n I64) String {
     return match n {
-        case 1, 2, 3 => "small"
-        case 7 => "seven"
-        nomatch => "other"
+        case 1, 2, 3: "small"
+        case 7: "seven"
+        case _: "other"
     }
 }
 

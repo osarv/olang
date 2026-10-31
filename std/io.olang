@@ -79,6 +79,14 @@ fn PrintErr(t String&) ? Error { try Write(Stderr, t) }
 # t and a line end - to the standard error
 fn PrintErrln(t String& = "") ? Error { try Write(Stderr, $t "\n") }
 
+# v written to the standard error with the place of the call, "FILE:LINE:COLUMN: $v", and given back - a look at a
+# value in passing, wherever it stands: "y := io.Show(f(x)) + 1". A failed write is ignored, the one call of std that
+# does so: a look that could fail would need a try at every use, and a lost look changes nothing the program computes
+fn Show<T>(v T, at Place = Place.Here) T {
+    try Write(Stderr, $at ": " $v "\n") catch { }
+    return v
+}
+
 # writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
 # buffer because a function may not return a bare "&" reference (O13) and an I64 never needs more than
 # 20 bytes anyway. "buf mut Array<U8>&" and not "buf mut Array<U8>": the marker is what makes this the caller's
@@ -269,6 +277,13 @@ test "Print and Println write text, Println with its line end" {
     try PrintErr("") catch Error { }
     n := 42
     try Println("io.olang: n is " $n) catch Error { }
+}
+
+test Show "gives its value back after writing it, with the place of the call, to the standard error" {
+    assert Show(41) + 1 == 42
+    assert Show("io.olang: Show") == "io.olang: Show"
+    xs := Show(I64[1, 2, 3])
+    assert xs.Len() == 3 and xs[2] == 3
 }
 
 # an ordinary zero-filled fixed-size buffer, no marker and no run-time length: passing it to a "Array<U8>&"

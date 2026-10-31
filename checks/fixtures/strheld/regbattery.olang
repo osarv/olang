@@ -42,8 +42,8 @@ fn mkV(k I64) Res& ? E {
 fn retCond(c Bool) Res& { return Res(1) if c else Res(2) }
 fn retMatch(k I64) Res& {
     return match k {
-        case 1 => Res(1)
-        nomatch => Res(2)
+        case 1: Res(1)
+        case _: Res(2)
     }
 }
 fn task(r mut Res&) { r.k++ }

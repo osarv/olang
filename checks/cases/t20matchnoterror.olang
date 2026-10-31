@@ -5,6 +5,6 @@ fn main() {
     n I64 = 1
     match n {
         case P.A { }
-        nomatch { }
+        case _ { }
     }
 }

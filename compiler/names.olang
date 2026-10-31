@@ -200,7 +200,7 @@ fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
                     r.bodiesIf(mi, ti, chosen, 0)
                 }
             }
-            nomatch { }
+            case _ { }
         }
     }
     for k in range before, r.L.Mods.Len() {
@@ -294,7 +294,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
             }
             case ast.Decl.ExternBlock(_, _, ds) { r.collect(mi, ds) }
-            nomatch { }
+            case _ { }
         }
     }
 }
@@ -329,7 +329,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
                     match x {
                         case ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
                         case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
-                        nomatch { }
+                        case _ { }
                     }
                 }
             }
@@ -341,7 +341,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
                 }
                 t.waiting.Put(name, true)
             }
-            nomatch { }
+            case _ { }
         }
     }
 }
@@ -350,8 +350,8 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
 fn writable(t ast.TypeRef?&) Bool {
     if t is null { return false }
     return match t {
-        case ast.TypeRef.Perm(_, _, w, _) => w
-        case _ => false
+        case ast.TypeRef.Perm(_, _, w, _): w
+        case _: false
     }
 }
 
@@ -432,11 +432,11 @@ fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast
 # the type a literal's own type gives a ":=" declaration (T6a), "" for anything else
 fn literalType(x ast.Expr&) String {
     return match x {
-        case ast.Expr.Lit(_, k) => "I64" if k == token.Tok.IntLit else "F64" if k == token.Tok.FloatLit else
+        case ast.Expr.Lit(_, k): "I64" if k == token.Tok.IntLit else "F64" if k == token.Tok.FloatLit else
                                    "Bool" if k == token.Tok.BoolLit else "String" if k == token.Tok.StrLit else ""
-        case ast.Expr.Unary(_, op, inner) => literalType(inner) if op == token.Tok.Minus else ""
-        case ast.Expr.Paren(_, inner) => literalType(inner)
-        case _ => ""
+        case ast.Expr.Unary(_, op, inner): literalType(inner) if op == token.Tok.Minus else ""
+        case ast.Expr.Paren(_, inner): literalType(inner)
+        case _: ""
     }
 }
 
@@ -655,7 +655,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
                 for m in members { r.path(m) }
             }
             case ast.Decl.ExternBlock(_, _, ds) { r.bodies(mi, ds) }
-            nomatch { }
+            case _ { }
         }
     }
 }
@@ -772,7 +772,7 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
         }
         case ast.TypeRef.Ref(_, of, _, _) { r.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -863,7 +863,7 @@ fn fieldNames(s ast.StructBody&) Vec<source.NameId> {
             case ast.Stmt.Var(_, v) {
                 for n in v.Names { out.Push(n) }
             }
-            nomatch { }
+            case _ { }
         }
     }
     return out
@@ -969,7 +969,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt?&) {
             r.popTo(m)
         }
         case ast.Stmt.Block(_, body) { r.block(body) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -1157,7 +1157,7 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
                 r.declareRead(n, sp, true)
             }
         }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -1240,7 +1240,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.inCond = wasCond
         }
         case ast.Expr.MatchE(_, mt) { r.matchOf(mt) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -1325,9 +1325,9 @@ fn (r mut Resolver&) member(sp source.Span, a ast.Expr&, n source.NameId) {
 # the module an alias chain reaches - a name that is an import's alias, then public aliases - or -1
 fn (r mut Resolver&) aliasTarget(a ast.Expr&) I64 {
     return match a {
-        case ast.Expr.Name(sp, n) => r.aliasHead(sp, n)
-        case ast.Expr.Member(sp, inner, n) => r.aliasHop(sp, inner, n)
-        case _ => -1
+        case ast.Expr.Name(sp, n): r.aliasHead(sp, n)
+        case ast.Expr.Member(sp, inner, n): r.aliasHop(sp, inner, n)
+        case _: -1
     }
 }
 
@@ -1417,7 +1417,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
                         if p.Ty is not null { r.typeRef(p.Ty) }
                     }
                 }
-                nomatch { }
+                case _ { }
             }
         }
         case ast.TypeRef.Ref(_, of, scope, _) {

@@ -6,7 +6,7 @@ fn main() {
     try f() catch e {
         match e {
             case 3 { }
-            nomatch { }
+            case _ { }
         }
     }
 }

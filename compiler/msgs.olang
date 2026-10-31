@@ -210,6 +210,8 @@ type Diag enum {
     UnknownNumberType
     UnknownName
     UnknownNameMeant
+    TypedHole
+    TypedHoleUntyped
     TypeNotAValue
     UnknownFunction
     UnknownFunctionMeant
@@ -1265,6 +1267,12 @@ fn UnknownName(tok String&) Msg { return Msg(Diag.UnknownName, "", "unknown name
 # ERR_UNKNOWN_NAME_MEANT
 fn UnknownNameMeant(tok String&, text String&) Msg { return Msg(Diag.UnknownNameMeant, "", "unknown name " $tok " - did you mean '" $text "'?") }
 
+# ERR_TYPED_HOLE
+fn TypedHole(ty String&, fits String&) Msg { return Msg(Diag.TypedHole, "E41", "'_' holds the place of a value of type " $ty $(" - nothing in scope has that type" if fits.Len() == 0 else " - in scope: " $fits)) }
+
+# ERR_TYPED_HOLE_UNTYPED
+fn TypedHoleUntyped() Msg { return Msg(Diag.TypedHoleUntyped, "E41", "'_' holds the place of a value, and nothing here says its type") }
+
 # ERR_TYPE_NOT_A_VALUE
 fn TypeNotAValue(tok String&) Msg { return Msg(Diag.TypeNotAValue, "", $tok " is a type, not a value") }
 
@@ -1328,7 +1336,7 @@ fn ReraiseWordNotInSet(ty1 String&, ty2 String&) Msg { return Msg(Diag.ReraiseWo
 fn RaiseNotCaught(tok String&) Msg { return Msg(Diag.RaiseNotCaught, "R3", "'error' raises a word, 'error T.WORD', or an error value - " $tok " is neither") }
 
 # ERR_CAUGHT_MATCH_BLOCK
-fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value giving a value gives it with 'case P: v' in every case") }
+fn CaughtMatchBlock() Msg { return Msg(Diag.CaughtMatchBlock, "R11b", "a match on an error value used as a value gives a value in every clause, 'case P: v' - a clause that leaves is written in a match statement") }
 
 # ERR_CAUGHT_CASE_NEVER
 fn CaughtCaseNever(tok String&) Msg { return Msg(Diag.CaughtCaseNever, "R11b", "this case is never reached: the cases before it take every error " $tok " can be") }

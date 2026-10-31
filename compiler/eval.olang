@@ -646,8 +646,8 @@ fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, 
 
 fn plainLocal(p mir.Lvalue) I64 {
     return match p.B {
-        case mir.Base.Local(l) => I64(l)
-        case _ => -1
+        case mir.Base.Local(l): I64(l)
+        case _: -1
     }
 }
 
@@ -657,8 +657,8 @@ fn flatOp(op typed.PrimOp) Bool {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul
              typed.PrimOp.Div, typed.PrimOp.Rem, typed.PrimOp.Shl, typed.PrimOp.Shr, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
              typed.PrimOp.BitXor, typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt
-             typed.PrimOp.Ge => true
-        nomatch => false
+             typed.PrimOp.Ge: true
+        case _: false
     }
 }
 
@@ -671,8 +671,8 @@ fn wordOp(op typed.PrimOp) Bool {
     return match op {
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
              typed.PrimOp.BitXor, typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt
-             typed.PrimOp.Ge => true
-        nomatch => false
+             typed.PrimOp.Ge: true
+        case _: false
     }
 }
 
@@ -714,22 +714,22 @@ fn (m mut Machine&) writesInto(f mir.Fn&, l mir.LocalId) Bool {
 
 fn baseIs(p mir.Lvalue, l mir.LocalId) Bool {
     return match p.B {
-        case mir.Base.Local(k) => k == l
-        case _ => false
+        case mir.Base.Local(k): k == l
+        case _: false
     }
 }
 
 fn placeNamesGlobal(p mir.Lvalue) Bool {
     return match p.B {
-        case mir.Base.Global(_, _, _) => true
-        case _ => false
+        case mir.Base.Global(_, _, _): true
+        case _: false
     }
 }
 
 fn opNamesGlobal(x mir.Operand) Bool {
     return match x {
-        case mir.Operand.Copy(p) => placeNamesGlobal(p)
-        case _ => false
+        case mir.Operand.Copy(p): placeNamesGlobal(p)
+        case _: false
     }
 }
 
@@ -743,27 +743,27 @@ fn rangeNamesGlobal(f mir.Fn&, r mir.Range) Bool {
 # whether a statement's place or operands name a global: what globalsReady reads
 fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt&) Bool {
     return match st {
-        case mir.Stmt.Assign(_, p, rv) => placeNamesGlobal(p) or match rv {
-            case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => opNamesGlobal(x)
-            case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => placeNamesGlobal(q)
-            case mir.Rvalue.Slice(q, lo, hi, _) => placeNamesGlobal(q) or opNamesGlobal(lo) or opNamesGlobal(hi)
+        case mir.Stmt.Assign(_, p, rv): placeNamesGlobal(p) or match rv {
+            case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _): opNamesGlobal(x)
+            case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q): placeNamesGlobal(q)
+            case mir.Rvalue.Slice(q, lo, hi, _): placeNamesGlobal(q) or opNamesGlobal(lo) or opNamesGlobal(hi)
             case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r)
-                 mir.Rvalue.Closure(_, _, _, r, _) => rangeNamesGlobal(f, r)
-            case mir.Rvalue.NewArray(_, _, n, fill) => opNamesGlobal(n) or opNamesGlobal(fill)
-            case _ => false
+                 mir.Rvalue.Closure(_, _, _, r, _): rangeNamesGlobal(f, r)
+            case mir.Rvalue.NewArray(_, _, n, fill): opNamesGlobal(n) or opNamesGlobal(fill)
+            case _: false
         }
-        case _ => false
+        case _: false
     }
 }
 
 # whether a terminator's operands name a global: what term's readiness checks read
 fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
     return match t {
-        case mir.Term.Branch(c, _, _) => opNamesGlobal(c)
-        case mir.Term.Switch(x, _, _) => opNamesGlobal(x)
-        case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _) => opNamesGlobal(x)
-        case mir.Term.Call(_, k), mir.Term.Tail(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
-        case _ => false
+        case mir.Term.Branch(c, _, _): opNamesGlobal(c)
+        case mir.Term.Switch(x, _, _): opNamesGlobal(x)
+        case mir.Term.Return(_, x), mir.Term.Suspend(_, x, _, _): opNamesGlobal(x)
+        case mir.Term.Call(_, k), mir.Term.Tail(_, k): rangeNamesGlobal(f, f.Calls[I64(k)].Args)
+        case _: false
     }
 }
 
@@ -932,31 +932,31 @@ fn (m mut Machine&) shapeOf(ty types.TypeId) I64 {
     m.lay(ty)
     r := t.Repr(ty)
     return match t.KindOf(r) {
-        case types.Kind.Void => vVoid
-        case types.Kind.Bool => vBool
-        case types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64 => vInt
-        case types.Kind.U8, types.Kind.U16, types.Kind.U32, types.Kind.U64 => vUint
-        case types.Kind.Int => vWide if t.A(r) > 64 else vInt if t.B(r) == 1 else vUint
-        case types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64 => vFloat
-        case types.Kind.Null => vPtr
-        case types.Kind.DefaultErr => vOrd
-        case types.Kind.Ref => vPair if m.rtArray(t.Referent(r)) else vPtr
-        case types.Kind.Func => vFunc
-        case types.Kind.Array => vPair if t.Length(r) == types.TypeId(0) else vFixed
-        case types.Kind.Tuple, types.Kind.Record => vAgg
-        case types.Kind.AnonEnum => vEnum if t.HasPayload(t.ShapeCases(r)) else vOrd
-        case types.Kind.Named => m.namedShape(r)
-        case _ => vNone
+        case types.Kind.Void: vVoid
+        case types.Kind.Bool: vBool
+        case types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64: vInt
+        case types.Kind.U8, types.Kind.U16, types.Kind.U32, types.Kind.U64: vUint
+        case types.Kind.Int: vWide if t.A(r) > 64 else vInt if t.B(r) == 1 else vUint
+        case types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64: vFloat
+        case types.Kind.Null: vPtr
+        case types.Kind.DefaultErr: vOrd
+        case types.Kind.Ref: vPair if m.rtArray(t.Referent(r)) else vPtr
+        case types.Kind.Func: vFunc
+        case types.Kind.Array: vPair if t.Length(r) == types.TypeId(0) else vFixed
+        case types.Kind.Tuple, types.Kind.Record: vAgg
+        case types.Kind.AnonEnum: vEnum if t.HasPayload(t.ShapeCases(r)) else vOrd
+        case types.Kind.Named: m.namedShape(r)
+        case _: vNone
     }
 }
 
 fn (m mut Machine&) namedShape(r types.TypeId) I64 {
     t := m.T
     return match t.DeclKindOf(t.DeclOf(r)) {
-        case types.DeclKind.Struct => vAgg
-        case types.DeclKind.Enum => vEnum if t.HasPayload(t.Cases(r)) else vOrd
-        case types.DeclKind.Error => vOrd
-        case _ => vNone
+        case types.DeclKind.Struct: vAgg
+        case types.DeclKind.Enum: vEnum if t.HasPayload(t.Cases(r)) else vOrd
+        case types.DeclKind.Error: vOrd
+        case _: vNone
     }
 }
 
@@ -965,9 +965,9 @@ fn (m mut Machine&) partList(ty types.TypeId) types.ListId {
     t := m.T
     r := t.Repr(ty)
     return match t.KindOf(r) {
-        case types.Kind.Tuple, types.Kind.Record => t.Parts(r)
-        case types.Kind.Named => t.Fields(r)
-        case _ => types.ListId(0)
+        case types.Kind.Tuple, types.Kind.Record: t.Parts(r)
+        case types.Kind.Named: t.Fields(r)
+        case _: types.ListId(0)
     }
 }
 
@@ -1685,18 +1685,18 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
             if m.halted { return }
             if fast[o + 10] == 1 {
                 v = match op {
-                    case typed.PrimOp.Add => a + b
-                    case typed.PrimOp.Sub => a - b
-                    case typed.PrimOp.Mul => a * b
-                    case typed.PrimOp.BitAnd => a & b
-                    case typed.PrimOp.BitOr => a | b
-                    case typed.PrimOp.BitXor => a ^ b
-                    case typed.PrimOp.Eq => 1 if a == b else 0
-                    case typed.PrimOp.Ne => 1 if a != b else 0
-                    case typed.PrimOp.Lt => 1 if a < b else 0
-                    case typed.PrimOp.Le => 1 if a <= b else 0
-                    case typed.PrimOp.Gt => 1 if a > b else 0
-                    nomatch => 1 if a >= b else 0
+                    case typed.PrimOp.Add: a + b
+                    case typed.PrimOp.Sub: a - b
+                    case typed.PrimOp.Mul: a * b
+                    case typed.PrimOp.BitAnd: a & b
+                    case typed.PrimOp.BitOr: a | b
+                    case typed.PrimOp.BitXor: a ^ b
+                    case typed.PrimOp.Eq: 1 if a == b else 0
+                    case typed.PrimOp.Ne: 1 if a != b else 0
+                    case typed.PrimOp.Lt: 1 if a < b else 0
+                    case typed.PrimOp.Le: 1 if a <= b else 0
+                    case typed.PrimOp.Gt: 1 if a > b else 0
+                    case _: 1 if a >= b else 0
                 }
             } else {
                 v = m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
@@ -1747,11 +1747,11 @@ fn (m mut Machine&) flatIndex(fi I64, fast Array<I64>&, o I64) I64 {
 fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
     fr := m.fs[fi]
     return match r {
-        case mir.ScopeRef.Scope(s) => m.ws[fr.Scopes + I64(s)]
-        case mir.ScopeRef.Var(i) => m.ws[fr.Vars + i]
-        case mir.ScopeRef.Program => m.program
-        case mir.ScopeRef.Frame => fr.Store
-        case mir.ScopeRef.Held(l) => m.heldScope(fi, l)
+        case mir.ScopeRef.Scope(s): m.ws[fr.Scopes + I64(s)]
+        case mir.ScopeRef.Var(i): m.ws[fr.Vars + i]
+        case mir.ScopeRef.Program: m.program
+        case mir.ScopeRef.Frame: fr.Store
+        case mir.ScopeRef.Held(l): m.heldScope(fi, l)
     }
 }
 
@@ -1878,9 +1878,9 @@ fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) Ptr, I64 {
 
 fn (m mut Machine&) opType(fi I64, x mir.Operand) types.TypeId {
     return match x {
-        case mir.Operand.None => types.VoidT
-        case mir.Operand.Copy(p) => m.placeType(fi, p)
-        case mir.Operand.Const(ty, _), mir.Operand.Data(ty, _, _, _) => ty
+        case mir.Operand.None: types.VoidT
+        case mir.Operand.Copy(p): m.placeType(fi, p)
+        case mir.Operand.Const(ty, _), mir.Operand.Data(ty, _, _, _): ty
     }
 }
 
@@ -1889,16 +1889,16 @@ fn (m mut Machine&) placeType(fi I64, p mir.Lvalue) types.TypeId {
     k := m.fs[fi].Fn
     t := m.T
     ty := match p.B {
-        case mir.Base.Local(l) => m.cf[k].Locals[I64(l)].Ty
-        case mir.Base.Global(_, _, gt) => gt
-        case mir.Base.None => types.UnknownT
+        case mir.Base.Local(l): m.cf[k].Locals[I64(l)].Ty
+        case mir.Base.Global(_, _, gt): gt
+        case mir.Base.None: types.UnknownT
     }
     for i in range p.Path.N {
         ty = match m.cf[k].Projs[I64(p.Path.At) + i] {
-            case mir.Proj.Field(j) => m.partType(ty, j)
-            case mir.Proj.Index(_), mir.Proj.At(_) => m.elemOf(ty)
-            case mir.Proj.Deref => t.Referent(t.Repr(ty))
-            case mir.Proj.Payload(tag) => m.payloadType(ty, tag)
+            case mir.Proj.Field(j): m.partType(ty, j)
+            case mir.Proj.Index(_), mir.Proj.At(_): m.elemOf(ty)
+            case mir.Proj.Deref: t.Referent(t.Repr(ty))
+            case mir.Proj.Payload(tag): m.payloadType(ty, tag)
         }
     }
     return ty
@@ -2023,8 +2023,8 @@ fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp sour
 
 fn (m mut Machine&) constLen(f mir.Fn&, node mir.ConstNode) I64 {
     return match node {
-        case mir.ConstNode.Bits(_) => 1
-        case mir.ConstNode.Bytes(r), mir.ConstNode.Items(r) => I64(r.N)
+        case mir.ConstNode.Bits(_): 1
+        case mir.ConstNode.Bytes(r), mir.ConstNode.Items(r): I64(r.N)
     }
 }
 
@@ -2083,7 +2083,7 @@ fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, s
         }
         case vPtr { m.wrPtr(dst, p) }
         case vFixed { m.copy(dst, p, m.size(ty)) }
-        nomatch { m.refuse(WhyNotModelled) }
+        case _ { m.refuse(WhyNotModelled) }
     }
 }
 
@@ -2636,7 +2636,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             if m.halted { return 0 }
             return bitOp(op, U64(a & bmask(m.ibits(at))), m.ibits(at), n)
         }
-        nomatch { }
+        case _ { }
     }
     sh := m.shape(at)
     a := m.scalar(fi, x)
@@ -2697,15 +2697,15 @@ fn (m mut Machine&) numOp(op typed.PrimOp, a I64, b I64, at types.TypeId, yt typ
     if sh == vInt or sh == vUint { return m.intOp(op, a, b, at, yt) }
     if sh == vBool {
         return match op {
-            case typed.PrimOp.BitAnd => a & b
-            case typed.PrimOp.BitOr => a | b
-            case typed.PrimOp.BitXor, typed.PrimOp.Ne => a ^ b
-            case typed.PrimOp.Eq => 1 if a == b else 0
-            case typed.PrimOp.Lt => 1 if a < b else 0
-            case typed.PrimOp.Le => 1 if a <= b else 0
-            case typed.PrimOp.Gt => 1 if a > b else 0
-            case typed.PrimOp.Ge => 1 if a >= b else 0
-            nomatch => m.notModelled()
+            case typed.PrimOp.BitAnd: a & b
+            case typed.PrimOp.BitOr: a | b
+            case typed.PrimOp.BitXor, typed.PrimOp.Ne: a ^ b
+            case typed.PrimOp.Eq: 1 if a == b else 0
+            case typed.PrimOp.Lt: 1 if a < b else 0
+            case typed.PrimOp.Le: 1 if a <= b else 0
+            case typed.PrimOp.Gt: 1 if a > b else 0
+            case typed.PrimOp.Ge: 1 if a >= b else 0
+            case _: m.notModelled()
         }
     }
     return m.notModelled()
@@ -2735,9 +2735,9 @@ fn (m mut Machine&) unary(op typed.PrimOp, a I64, at types.TypeId, sh I64) I64 {
     w := m.width(at)
     k := bmask(m.ibits(at))
     return match op {
-        case typed.PrimOp.Not => a ^ 1
-        case typed.PrimOp.BitNot => ~a & k
-        nomatch => (a ^ (1 << (8 * w - 1))) & m.mask(w) if sh == vFloat else (0 - a) & k
+        case typed.PrimOp.Not: a ^ 1
+        case typed.PrimOp.BitNot: ~a & k
+        case _: (a ^ (1 << (8 * w - 1))) & m.mask(w) if sh == vFloat else (0 - a) & k
     }
 }
 
@@ -2792,7 +2792,7 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
         case typed.PrimOp.Le { return 1 if (x <= y if signed else ux <= uy) else 0 }
         case typed.PrimOp.Gt { return 1 if (x > y if signed else ux > uy) else 0 }
         case typed.PrimOp.Ge { return 1 if (x >= y if signed else ux >= uy) else 0 }
-        nomatch { return m.notModelled() }
+        case _ { return m.notModelled() }
     }
     return r & bmask(w)
 }
@@ -2800,20 +2800,20 @@ fn (m mut Machine&) intOp(op typed.PrimOp, a I64, b I64, at types.TypeId, bt typ
 # a float of the type's width, as an F64 holding its value exactly
 fn (m mut Machine&) toF64(bits I64, ty types.TypeId) F64 {
     return match m.T.Repr(ty) {
-        case types.TypeId(11) => F64(U16(bits & 0xFFFF).F16FromBits())
-        case types.TypeId(12) => F64(U16(bits & 0xFFFF).BF16FromBits())
-        case types.TypeId(13) => F64(U32(bits & 0xFFFFFFFF).F32FromBits())
-        nomatch => U64(bits).F64FromBits()
+        case types.TypeId(11): F64(U16(bits & 0xFFFF).F16FromBits())
+        case types.TypeId(12): F64(U16(bits & 0xFFFF).BF16FromBits())
+        case types.TypeId(13): F64(U32(bits & 0xFFFFFFFF).F32FromBits())
+        case _: U64(bits).F64FromBits()
     }
 }
 
 # an F64's value rounded once to the float type's width, as its bits
 fn (m mut Machine&) fromF64(v F64, ty types.TypeId) I64 {
     return match m.T.Repr(ty) {
-        case types.TypeId(11) => I64(F16(v).Bits())
-        case types.TypeId(12) => I64(BF16(v).Bits())
-        case types.TypeId(13) => I64(F32(v).Bits())
-        nomatch => I64(v.Bits())
+        case types.TypeId(11): I64(F16(v).Bits())
+        case types.TypeId(12): I64(BF16(v).Bits())
+        case types.TypeId(13): I64(F32(v).Bits())
+        case _: I64(v.Bits())
     }
 }
 
@@ -2824,24 +2824,24 @@ fn (m mut Machine&) floatOp(op typed.PrimOp, a I64, b I64, ty types.TypeId) I64 
     if r == types.TypeId(14) {
         x, y := U64(a).F64FromBits(), U64(b).F64FromBits()
         return match op {
-            case typed.PrimOp.Add => I64((x + y).Bits())
-            case typed.PrimOp.Sub => I64((x - y).Bits())
-            case typed.PrimOp.Mul => I64((x * y).Bits())
-            case typed.PrimOp.Div => I64((x / y).Bits())
-            nomatch => m.floatCompare(op, x, y)
+            case typed.PrimOp.Add: I64((x + y).Bits())
+            case typed.PrimOp.Sub: I64((x - y).Bits())
+            case typed.PrimOp.Mul: I64((x * y).Bits())
+            case typed.PrimOp.Div: I64((x / y).Bits())
+            case _: m.floatCompare(op, x, y)
         }
     }
     x, y := F32(m.toF64(a, ty)), F32(m.toF64(b, ty))
     v := match op {
-        case typed.PrimOp.Add => x + y
-        case typed.PrimOp.Sub => x - y
-        case typed.PrimOp.Mul => x * y
-        case typed.PrimOp.Div => x / y
-        nomatch => F32(0.0)
+        case typed.PrimOp.Add: x + y
+        case typed.PrimOp.Sub: x - y
+        case typed.PrimOp.Mul: x * y
+        case typed.PrimOp.Div: x / y
+        case _: F32(0.0)
     }
     match op {
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div { }
-        nomatch { return m.floatCompare(op, F64(x), F64(y)) }
+        case _ { return m.floatCompare(op, F64(x), F64(y)) }
     }
     if r == types.TypeId(13) { return I64(v.Bits()) }
     return m.fromF64(F64(v), ty)
@@ -2849,17 +2849,17 @@ fn (m mut Machine&) floatOp(op typed.PrimOp, a I64, b I64, ty types.TypeId) I64 
 
 fn (m mut Machine&) floatCompare(op typed.PrimOp, x F64, y F64) I64 {
     yes := match op {
-        case typed.PrimOp.Eq => x == y
-        case typed.PrimOp.Ne => x != y
-        case typed.PrimOp.Lt => x < y
-        case typed.PrimOp.Le => x <= y
-        case typed.PrimOp.Gt => x > y
-        case typed.PrimOp.Ge => x >= y
-        nomatch => false
+        case typed.PrimOp.Eq: x == y
+        case typed.PrimOp.Ne: x != y
+        case typed.PrimOp.Lt: x < y
+        case typed.PrimOp.Le: x <= y
+        case typed.PrimOp.Gt: x > y
+        case typed.PrimOp.Ge: x >= y
+        case _: false
     }
     match op {
         case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge { }
-        nomatch { return m.notModelled() }
+        case _ { return m.notModelled() }
     }
     return 1 if yes else 0
 }
@@ -2895,17 +2895,17 @@ fn (m mut Machine&) intToFloat(v I64, unsigned Bool, to types.TypeId) I64 {
     if unsigned {
         u := U64(v)
         return match r {
-            case types.TypeId(11) => I64(F16(u).Bits())
-            case types.TypeId(12) => I64(BF16(u).Bits())
-            case types.TypeId(13) => I64(F32(u).Bits())
-            nomatch => I64(F64(u).Bits())
+            case types.TypeId(11): I64(F16(u).Bits())
+            case types.TypeId(12): I64(BF16(u).Bits())
+            case types.TypeId(13): I64(F32(u).Bits())
+            case _: I64(F64(u).Bits())
         }
     }
     return match r {
-        case types.TypeId(11) => I64(F16(v).Bits())
-        case types.TypeId(12) => I64(BF16(v).Bits())
-        case types.TypeId(13) => I64(F32(v).Bits())
-        nomatch => I64(F64(v).Bits())
+        case types.TypeId(11): I64(F16(v).Bits())
+        case types.TypeId(12): I64(BF16(v).Bits())
+        case types.TypeId(13): I64(F32(v).Bits())
+        case _: I64(F64(v).Bits())
     }
 }
 
@@ -2915,10 +2915,10 @@ fn (m mut Machine&) bitcast(bits I64, from types.TypeId) I64 {
     if m.shape(from) == vFloat and m.When == Mode.Compile {
         w := 8 * m.width(from)
         mbits := match m.T.Repr(from) {
-            case types.TypeId(11) => 10
-            case types.TypeId(12) => 7
-            case types.TypeId(13) => 23
-            nomatch => 52
+            case types.TypeId(11): 10
+            case types.TypeId(12): 7
+            case types.TypeId(13): 23
+            case _: 52
         }
         expMask := ((1 << (w - 1 - mbits)) - 1) << mbits
         frac := bits & ((1 << mbits) - 1)
@@ -2949,7 +2949,7 @@ fn (m mut Machine&) atomic(fi I64, op typed.PrimOp, args mir.Range, at types.Typ
         case typed.PrimOp.AtomicStore { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
         case typed.PrimOp.AtomicAdd { m.wr(p, w, (old + m.scalar(fi, m.arg(fi, args, 1))) & m.mask(w)) }
         case typed.PrimOp.AtomicSwap { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 1))) }
-        nomatch {
+        case _ {
             if old == (m.scalar(fi, m.arg(fi, args, 1)) & m.mask(w)) { m.wr(p, w, m.scalar(fi, m.arg(fi, args, 2))) }
         }
     }
@@ -2977,10 +2977,10 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
     if not signed {
         ua, ub := U64(a & bmask(w)), U64(b & bmask(w))
         return match op {
-            case typed.PrimOp.Add => ((ua + ub) & U64(bmask(w))) < ua or (w == 64 and ua + ub < ua)
-            case typed.PrimOp.Sub => ua < ub
-            case typed.PrimOp.Mul => ua != 0 and ((ua * ub) / ua != ub or (w < 64 and ua * ub > U64(bmask(w))))
-            nomatch => false
+            case typed.PrimOp.Add: ((ua + ub) & U64(bmask(w))) < ua or (w == 64 and ua + ub < ua)
+            case typed.PrimOp.Sub: ua < ub
+            case typed.PrimOp.Mul: ua != 0 and ((ua * ub) / ua != ub or (w < 64 and ua * ub > U64(bmask(w))))
+            case _: false
         }
     }
     if op == typed.PrimOp.Div { return x0 == minBits(w) and b == -1 }
@@ -2988,10 +2988,10 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
         # operands of at most 63 bits: a sum or a difference fits an I64, a product may not
         if op == typed.PrimOp.Mul and overflows64(op, x0, b, true) { return true }
         r := match op {
-            case typed.PrimOp.Add => x0 + b
-            case typed.PrimOp.Sub => x0 - b
-            case typed.PrimOp.Mul => x0 * b
-            nomatch => 0
+            case typed.PrimOp.Add: x0 + b
+            case typed.PrimOp.Sub: x0 - b
+            case typed.PrimOp.Mul: x0 * b
+            case _: 0
         }
         return r < minBits(w) or r > -(minBits(w) + 1)
     }
@@ -3314,7 +3314,7 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
             m.putInt(dst, ty, l1 | l2, h1 | h2)
             return
         }
-        nomatch { }
+        case _ { }
     }
     y := m.arg(fi, args, 1)
     blo, bhi := m.wideOf(fi, y)
@@ -3362,17 +3362,17 @@ fn (m mut Machine&) primWide(fi I64, dst Ptr, op typed.PrimOp, ty types.TypeId, 
         case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
             c := cmp128(alo, ahi, blo, bhi, signed)
             yes := match op {
-                case typed.PrimOp.Eq => c == 0
-                case typed.PrimOp.Ne => c != 0
-                case typed.PrimOp.Lt => c < 0
-                case typed.PrimOp.Le => c <= 0
-                case typed.PrimOp.Gt => c > 0
-                nomatch => c >= 0
+                case typed.PrimOp.Eq: c == 0
+                case typed.PrimOp.Ne: c != 0
+                case typed.PrimOp.Lt: c < 0
+                case typed.PrimOp.Le: c <= 0
+                case typed.PrimOp.Gt: c > 0
+                case _: c >= 0
             }
             m.wr(dst, 1, 1 if yes else 0)
             return
         }
-        nomatch {
+        case _ {
             m.notModelled()
             return
         }
@@ -3509,11 +3509,11 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
         case mir.Stmt.Open(_, s) {
             si := m.cf[fk].Scopes[I64(s)]
             kind := match si.Kind {
-                case mir.ScopeKind.Inert => sInert
-                case mir.ScopeKind.Builder => sBuilder
-                case mir.ScopeKind.Region => sRegion
-                case mir.ScopeKind.Join => sJoin
-                nomatch => sBlock
+                case mir.ScopeKind.Inert: sInert
+                case mir.ScopeKind.Builder: sBuilder
+                case mir.ScopeKind.Region: sRegion
+                case mir.ScopeKind.Join: sJoin
+                case _: sBlock
             }
             id := m.newScope(kind)
             m.ws[m.fs[fi].Scopes + I64(s)] = id
@@ -3656,10 +3656,10 @@ fn (m mut Machine&) write(fi I64, b mir.ScopeRef, how mir.WriteKind, x mir.Opera
 # a float's text as "$" writes it at its own type (E11a)
 fn (m mut Machine&) floatText(bits I64, ty types.TypeId) String {
     return match m.T.Repr(ty) {
-        case types.TypeId(11) => $U16(bits & 0xFFFF).F16FromBits()
-        case types.TypeId(12) => $U16(bits & 0xFFFF).BF16FromBits()
-        case types.TypeId(13) => $U32(bits & 0xFFFFFFFF).F32FromBits()
-        nomatch => $U64(bits).F64FromBits()
+        case types.TypeId(11): $U16(bits & 0xFFFF).F16FromBits()
+        case types.TypeId(12): $U16(bits & 0xFFFF).BF16FromBits()
+        case types.TypeId(13): $U32(bits & 0xFFFFFFFF).F32FromBits()
+        case _: $U64(bits).F64FromBits()
     }
 }
 
@@ -3667,13 +3667,13 @@ fn (m mut Machine&) floatText(bits I64, ty types.TypeId) String {
 # with an escape of their own escaped, everything else as it is
 fn (m mut Machine&) appendEscaped(bs I64, c I64, quote I64) {
     e := match c {
-        case 10 => 110
-        case 9 => 116
-        case 13 => 114
-        case 0 => 48
-        case 92 => 92
-        case _ if c == quote => c
-        nomatch => -1
+        case 10: 110
+        case 9: 116
+        case 13: 114
+        case 0: 48
+        case 92: 92
+        case _ if c == quote: c
+        case _: -1
     }
     if e < 0 {
         m.appendByte(bs, c)
@@ -3711,13 +3711,13 @@ fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
     f := m.fns[m.fs[fi].Fn]
     if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
-        case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
-        case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
-        case mir.Rvalue.Slice(q, lo, hi, _) => m.placeReady(fi, q) and m.operandReady(fi, lo) and m.operandReady(fi, hi)
+        case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _): m.operandReady(fi, x)
+        case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q): m.placeReady(fi, q)
+        case mir.Rvalue.Slice(q, lo, hi, _): m.placeReady(fi, q) and m.operandReady(fi, lo) and m.operandReady(fi, hi)
         case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r)
-             mir.Rvalue.Closure(_, _, _, r, _) => m.rangeReady(fi, f, r)
-        case mir.Rvalue.NewArray(_, _, n, fill) => m.operandReady(fi, n) and m.operandReady(fi, fill)
-        case _ => true
+             mir.Rvalue.Closure(_, _, _, r, _): m.rangeReady(fi, f, r)
+        case mir.Rvalue.NewArray(_, _, n, fill): m.operandReady(fi, n) and m.operandReady(fi, fill)
+        case _: true
     }
 }
 
@@ -3730,8 +3730,8 @@ fn (m mut Machine&) rangeReady(fi I64, f mir.Fn&, r mir.Range) Bool {
 
 fn (m mut Machine&) operandReady(fi I64, x mir.Operand) Bool {
     return match x {
-        case mir.Operand.Copy(p) => m.placeReady(fi, p)
-        case _ => true
+        case mir.Operand.Copy(p): m.placeReady(fi, p)
+        case _: true
     }
 }
 
@@ -3902,8 +3902,8 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, Bool, I64 {
 
 fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
     return match c {
-        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty), mir.Callee.Dispatch(_, _, ty) => ty
-        case mir.Callee.Value(x) => m.T.Repr(m.opType(fi, x))
+        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty), mir.Callee.Dispatch(_, _, ty): ty
+        case mir.Callee.Value(x): m.T.Repr(m.opType(fi, x))
     }
 }
 
@@ -3940,8 +3940,8 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     if nf < 0 { return -2 }
     g := m.fns[callee]
     dispatched := match c {
-        case mir.Callee.Dispatch(_, _, _) => true
-        case _ => false
+        case mir.Callee.Dispatch(_, _, _): true
+        case _: false
     }
     for i in range args.N {
         if i < g.Params.Len() {
@@ -3965,8 +3965,8 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         }
     }
     direct := match c {
-        case mir.Callee.Fn(_, _) => true
-        case _ => false
+        case mir.Callee.Fn(_, _): true
+        case _: false
     }
     vvars := m.T.ScopeVarsOf(vty)
     for i in range passed {
@@ -3975,10 +3975,10 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
             if i < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + i]) }
         } else {
             want := match g.Vars[i] {
-                case mir.VarKind.Param(p) => p
-                case mir.VarKind.Result, mir.VarKind.Instance => types.ResultVar
-                case mir.VarKind.Closing => types.ClosingVar
-                nomatch => -9
+                case mir.VarKind.Param(p): p
+                case mir.VarKind.Result, mir.VarKind.Instance: types.ResultVar
+                case mir.VarKind.Closing: types.ClosingVar
+                case _: -9
             }
             for j in range vvars.Len() {
                 if vvars[j] == want and j < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + j]) }
@@ -4200,10 +4200,10 @@ fn (m mut Machine&) numbersOnly(ty types.TypeId) Bool {
 # the bytes one element of an array kind takes
 fn (m mut Machine&) kindWidth(k U8) I64 {
     return match k & 0x7F {
-        case 1, 5 => 1
-        case 2, 6, 9, 10 => 2
-        case 3, 7, 11 => 4
-        nomatch => 8
+        case 1, 5: 1
+        case 2, 6, 9, 10: 2
+        case 3, 7, 11: 4
+        case _: 8
     }
 }
 
@@ -4344,19 +4344,19 @@ fn (m mut Machine&) ffiScalar(ty types.TypeId, result Bool) Bool {
 
 fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
     return match m.T.Repr(ty) {
-        case types.TypeId(3) => ffi.Kind.I8
-        case types.TypeId(4) => ffi.Kind.I16
-        case types.TypeId(5) => ffi.Kind.I32
-        case types.TypeId(7) => ffi.Kind.U8
-        case types.TypeId(8) => ffi.Kind.U16
-        case types.TypeId(9) => ffi.Kind.U32
-        case types.TypeId(10) => ffi.Kind.U64
-        case types.TypeId(11) => ffi.Kind.F16
-        case types.TypeId(12) => ffi.Kind.BF16
-        case types.TypeId(13) => ffi.Kind.F32
-        case types.TypeId(14) => ffi.Kind.F64
-        case types.BoolT => ffi.Kind.U8
-        nomatch => ffi.Kind.I64
+        case types.TypeId(3): ffi.Kind.I8
+        case types.TypeId(4): ffi.Kind.I16
+        case types.TypeId(5): ffi.Kind.I32
+        case types.TypeId(7): ffi.Kind.U8
+        case types.TypeId(8): ffi.Kind.U16
+        case types.TypeId(9): ffi.Kind.U32
+        case types.TypeId(10): ffi.Kind.U64
+        case types.TypeId(11): ffi.Kind.F16
+        case types.TypeId(12): ffi.Kind.BF16
+        case types.TypeId(13): ffi.Kind.F32
+        case types.TypeId(14): ffi.Kind.F64
+        case types.BoolT: ffi.Kind.U8
+        case _: ffi.Kind.I64
     }
 }
 
@@ -4569,7 +4569,7 @@ fn (m mut Machine&) deliver(fi I64, x mir.Operand) {
             m.put(fi, Ptr(g.Store, 0), types.TypeId(I32(g.Ty)), x)
         }
         case rTask, rClause { m.toTargets(fi, fr.RetArg, x, xt) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -4630,7 +4630,7 @@ fn (m mut Machine&) returned(fr frame) {
             m.taskEnded(fr)
         }
         case rClause { m.freeTask(fr.RetArg) }
-        nomatch { }
+        case _ { }
     }
 }
 
@@ -4675,8 +4675,8 @@ fn (m mut Machine&) waitsForTask(name String&) Bool {
 fn (m mut Machine&) failedHere(fi I64, kind I64) {
     t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
     at := match t {
-        case mir.Term.Call(sp, _), mir.Term.Wait(sp, _, _, _, _) => sp.Start
-        nomatch => I32(-1)
+        case mir.Term.Call(sp, _), mir.Term.Wait(sp, _, _, _, _): sp.Start
+        case _: I32(-1)
     }
     m.fs[fi].ErrKind, m.fs[fi].ErrAt = kind, at
 }
@@ -4945,8 +4945,8 @@ fn (m mut Machine&) taskEnded(fr frame) {
     k := f.Tasks[tk.Task]
     waiter := m.nFs - 1
     ty := match k.Target {
-        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t), mir.Callee.Dispatch(_, _, t) => t
-        case mir.Callee.Value(x) => m.T.Repr(m.opType(waiter, x))
+        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t), mir.Callee.Dispatch(_, _, t): t
+        case mir.Callee.Value(x): m.T.Repr(m.opType(waiter, x))
     }
     errs := m.T.Errors(ty)
     xs := m.T.Items(errs)
@@ -5502,16 +5502,16 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
 
 fn (m mut Machine&) writesGlobal(p mir.Lvalue) Bool {
     return match p.B {
-        case mir.Base.Global(_, _, _) => true
-        case _ => false
+        case mir.Base.Global(_, _, _): true
+        case _: false
     }
 }
 
 fn (m mut Machine&) readsMutable(f mir.Fn&, rv mir.Rvalue) Bool {
     return match rv {
-        case mir.Rvalue.Use(mir.Operand.Copy(p)) => m.mutableGlobal(p)
-        case mir.Rvalue.Prim(_, _, r) => m.rangeMutable(f, r)
-        case _ => false
+        case mir.Rvalue.Use(mir.Operand.Copy(p)): m.mutableGlobal(p)
+        case mir.Rvalue.Prim(_, _, r): m.rangeMutable(f, r)
+        case _: false
     }
 }
 
@@ -5592,26 +5592,26 @@ fn hostBits<T>(x T) I64 { return I64(x) }
 # what the host computes for op on a and b at their own type: the run time's answer
 fn hostOp<T>(op typed.PrimOp, a T, b T) T {
     return match op {
-        case typed.PrimOp.Add => a + b
-        case typed.PrimOp.Sub => a - b
-        case typed.PrimOp.Mul => a * b
-        case typed.PrimOp.Div => a / b
-        case typed.PrimOp.Rem => a % b
-        case typed.PrimOp.BitAnd => a & b
-        case typed.PrimOp.BitOr => a | b
-        case typed.PrimOp.BitXor => a ^ b
-        nomatch => a
+        case typed.PrimOp.Add: a + b
+        case typed.PrimOp.Sub: a - b
+        case typed.PrimOp.Mul: a * b
+        case typed.PrimOp.Div: a / b
+        case typed.PrimOp.Rem: a % b
+        case typed.PrimOp.BitAnd: a & b
+        case typed.PrimOp.BitOr: a | b
+        case typed.PrimOp.BitXor: a ^ b
+        case _: a
     }
 }
 
 fn hostCmp<T>(op typed.PrimOp, a T, b T) Bool {
     return match op {
-        case typed.PrimOp.Eq => a == b
-        case typed.PrimOp.Ne => a != b
-        case typed.PrimOp.Lt => a < b
-        case typed.PrimOp.Le => a <= b
-        case typed.PrimOp.Gt => a > b
-        nomatch => a >= b
+        case typed.PrimOp.Eq: a == b
+        case typed.PrimOp.Ne: a != b
+        case typed.PrimOp.Lt: a < b
+        case typed.PrimOp.Le: a <= b
+        case typed.PrimOp.Gt: a > b
+        case _: a >= b
     }
 }
 
@@ -5749,10 +5749,10 @@ fn fbits<T>(x T) I64 { return I64(x.Bits()) }
 
 fn hostFloat<T>(op typed.PrimOp, a T, b T) T {
     return match op {
-        case typed.PrimOp.Add => a + b
-        case typed.PrimOp.Sub => a - b
-        case typed.PrimOp.Mul => a * b
-        nomatch => a / b
+        case typed.PrimOp.Add: a + b
+        case typed.PrimOp.Sub: a - b
+        case typed.PrimOp.Mul: a * b
+        case _: a / b
     }
 }
 
@@ -5825,18 +5825,18 @@ NumNames Array<String&>& = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32"
 # x converted to the numeric type named, by the host, as that type's bits
 fn hostConv<S>(to String&, x S) I64 {
     return match to {
-        case "I8" => I64(I8(x))
-        case "I16" => I64(I16(x))
-        case "I32" => I64(I32(x))
-        case "I64" => I64(x)
-        case "U8" => I64(U8(x))
-        case "U16" => I64(U16(x))
-        case "U32" => I64(U32(x))
-        case "U64" => I64(U64(x))
-        case "F16" => I64(F16(x).Bits())
-        case "BF16" => I64(BF16(x).Bits())
-        case "F32" => I64(F32(x).Bits())
-        nomatch => I64(F64(x).Bits())
+        case "I8": I64(I8(x))
+        case "I16": I64(I16(x))
+        case "I32": I64(I32(x))
+        case "I64": I64(x)
+        case "U8": I64(U8(x))
+        case "U16": I64(U16(x))
+        case "U32": I64(U32(x))
+        case "U64": I64(U64(x))
+        case "F16": I64(F16(x).Bits())
+        case "BF16": I64(BF16(x).Bits())
+        case "F32": I64(F32(x).Bits())
+        case _: I64(F64(x).Bits())
     }
 }
 

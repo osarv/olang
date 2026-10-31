@@ -113,7 +113,7 @@ test "a two-hop alias chain names a re-exported enum type's word, and matches on
     hit I32 = 0
     match d {
         case wk.Base.BaseDir.North { hit = 1 }
-        nomatch { hit = 2 }
+        case _ { hit = 2 }
     }
     assert hit == 1
 }

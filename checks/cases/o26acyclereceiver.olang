@@ -47,8 +47,8 @@ fn (p mut Parser&) expr(minPrec I64) Expr& {
 }
 fn eval(e Expr&) I64 {
     return match e {
-        case Expr.Num(v) => v
-        case Expr.Bin(op, l, r) => eval(l) * eval(r) if op == '*' else eval(l) + eval(r)
+        case Expr.Num(v): v
+        case Expr.Bin(op, l, r): eval(l) * eval(r) if op == '*' else eval(l) + eval(r)
     }
 }
 fn parse(src String&) Expr& {

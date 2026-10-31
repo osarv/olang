@@ -57,7 +57,7 @@ fn arg<P>(p P, k I64) P.Type {
         match P.Type {
             case I64 { return k }
             case F64 { return F64(k) }
-            nomatch { unreachable }
+            case _ { unreachable }
         }
     }
 }
@@ -73,11 +73,11 @@ fn double<T>(v mut T&) {
 
 fn what<T>() String {
     return match T {
-        case Vec<E> => "a list of " $E.Name
-        case Map<K, V> => "a map from " $K.Name " to " $V.Name
-        case Tree<E> => "a tree of " $E.Name
-        case Hashable => "hashable " $T.Name
-        case _ => "something else: " $T.Kind
+        case Vec<E>: "a list of " $E.Name
+        case Map<K, V>: "a map from " $K.Name " to " $V.Name
+        case Tree<E>: "a tree of " $E.Name
+        case Hashable: "hashable " $T.Name
+        case _: "something else: " $T.Kind
     }
 }
 
@@ -173,9 +173,9 @@ fn firstNumber<T>() String {
 
 fn kindWord<T>() String {
     return match T.Kind {
-        case TypeKind.Struct => "struct"
-        case TypeKind.Enum => "enum"
-        case _ => "other"
+        case TypeKind.Struct: "struct"
+        case TypeKind.Enum: "enum"
+        case _: "other"
     }
 }
 

@@ -16,7 +16,7 @@ type Opt enum {
 fn pokeE(e mut Opt&) {
     match e {
         case Opt.Some(c) { c.c.v++ }
-        nomatch { }
+        case _ { }
     }
 }
 fn (b Bag&) Str() String {

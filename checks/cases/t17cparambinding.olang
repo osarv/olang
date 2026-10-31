@@ -11,7 +11,7 @@ type Box enum {
 fn stash(b Box, l mut Vec<Node&>&) {
     match b {
         case Box.Has(n) { l.Push(n) }
-        nomatch { }
+        case _ { }
     }
 }
 fn main() ? {

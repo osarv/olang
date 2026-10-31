@@ -7,8 +7,8 @@ type E enum {
 }
 fn sum(e E&) I64 {
     return match e {
-        case E.Lit(v) => v
-        case E.Add(a, b) => sum(a) + sum(b)
+        case E.Lit(v): v
+        case E.Add(a, b): sum(a) + sum(b)
     }
 }
 fn main() ? {

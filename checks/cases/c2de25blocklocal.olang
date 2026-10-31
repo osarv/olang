@@ -21,7 +21,7 @@ fn depth(f Value&) I64 {
             local.n = 1
             return local.n
         }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() ? {

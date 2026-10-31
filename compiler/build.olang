@@ -372,11 +372,11 @@ fn Readable(identity String&) String {
 
 fn kindSuffix(k UnitKind) String {
     return match k {
-        case UnitKind.Module => ""
-        case UnitKind.Main => ".main"
-        case UnitKind.Tests => ".test"
-        case UnitKind.Instances => ".inst"
-        case UnitKind.Locations => ".loc"
+        case UnitKind.Module: ""
+        case UnitKind.Main: ".main"
+        case UnitKind.Tests: ".test"
+        case UnitKind.Instances: ".inst"
+        case UnitKind.Locations: ".loc"
     }
 }
 
@@ -963,20 +963,20 @@ fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d m
 # a signal as the C library names it (strsignal)
 fn SignalName(sig I32) String {
     return match sig {
-        case 1 => "Hangup"
-        case 2 => "Interrupt"
-        case 3 => "Quit"
-        case 4 => "Illegal instruction"
-        case 5 => "Trace/breakpoint trap"
-        case 6 => "Aborted"
-        case 7 => "Bus error"
-        case 8 => "Floating point exception"
-        case 9 => "Killed"
-        case 11 => "Segmentation fault"
-        case 13 => "Broken pipe"
-        case 14 => "Alarm clock"
-        case 15 => "Terminated"
-        case _ => $"Unknown signal " $sig
+        case 1: "Hangup"
+        case 2: "Interrupt"
+        case 3: "Quit"
+        case 4: "Illegal instruction"
+        case 5: "Trace/breakpoint trap"
+        case 6: "Aborted"
+        case 7: "Bus error"
+        case 8: "Floating point exception"
+        case 9: "Killed"
+        case 11: "Segmentation fault"
+        case 13: "Broken pipe"
+        case 14: "Alarm clock"
+        case 15: "Terminated"
+        case _: $"Unknown signal " $sig
     }
 }
 

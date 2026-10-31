@@ -12,7 +12,7 @@ type aKnob struct(k I64) { k }
 fn f(x any aWidget&) I64 {
     match x {
         case aKnob k { return k.k }
-        nomatch { return 0 }
+        case _ { return 0 }
     }
 }
 fn main() { }

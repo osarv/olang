@@ -68,17 +68,17 @@ fn lessThan<F, V>(f F, x V, y V) Bool {
 
 fn lessVal<F, V>(f F, x V, y V) Bool {
     return match V {
-        case Number, Bool, Char => x < y
-        case Lesser<V> => x < y
-        case _ => nested(f, x, y)
+        case Number, Bool, Char: x < y
+        case Lesser<V>: x < y
+        case _: nested(f, x, y)
     }
 }
 
 # the same for a field held by reference (text, a struct held by &)
 fn lessRef<F, R>(f F, x R&, y R&) Bool {
     return match R {
-        case Lesser<R> => x < y
-        case _ => nested<F, R>(f, x, y)
+        case Lesser<R>: x < y
+        case _: nested<F, R>(f, x, y)
     }
 }
 

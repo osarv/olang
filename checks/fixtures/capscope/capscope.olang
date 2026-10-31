@@ -45,8 +45,8 @@ fn main() ? {
     a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 := nodes[0]!, nodes[1]!, nodes[2]!, nodes[3]!, nodes[4]!, nodes[5]!, nodes[6]!, nodes[7]!, nodes[8]!, nodes[9]!
     b0, b1, b2, b3, b4, b5, b6, b7, b8, b9 := nodes[10]!, nodes[11]!, nodes[12]!, nodes[13]!, nodes[14]!, nodes[15]!, nodes[16]!, nodes[17]!, nodes[18]!, nodes[19]!
     both(fn(i I64) { a0.next = a0.next if i < 0 else Node(i) }, fn(i I64) { b0.next = b0.next if i < 0 else Node(i) })
-    both(fn(i I64) { a1.next = match i { case -1 => a1.next nomatch => Node(i) } }
-         fn(i I64) { b1.next = match i { case -1 => b1.next nomatch => Node(i) } })
+    both(fn(i I64) { a1.next = match i { case -1: a1.next case _: Node(i) } }
+         fn(i I64) { b1.next = match i { case -1: b1.next case _: Node(i) } })
     both(fn(i I64) { a2.next = try find(a2) catch default Node(i) }, fn(i I64) { b2.next = try find(b2) catch default Node(i) })
     both(fn(i I64) { setNext(a3, i) }, fn(i I64) { setNext(b3, i) })
     both(Adder(a4), Adder(b4))

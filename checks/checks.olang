@@ -470,7 +470,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "generators" { try generators(r) }
         case "frameenv" { try frameenv(r) }
         case "testends" { try testends(r) }
-        nomatch {
+        case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
             error Failed.CHECK
         }

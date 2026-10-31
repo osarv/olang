@@ -340,19 +340,19 @@ fn (v mut Viewer&) text(n source.NameId) String&v { return v.P.L.Names.Text(n) }
 fn (v mut Viewer&) quoted(b I64) String {
     if b < 0 { return "a call through a function value" }
     return match v.Bodies[b].Of {
-        case typed.BodyOf.Fn(inst) => "'" $v.text(v.P.FnDecl(v.P.InstanceFn(inst)).Name) "'"
-        case typed.BodyOf.Ctor(t, _) => "'" $v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) "'"
-        case _ => "a lambda"
+        case typed.BodyOf.Fn(inst): "'" $v.text(v.P.FnDecl(v.P.InstanceFn(inst)).Name) "'"
+        case typed.BodyOf.Ctor(t, _): "'" $v.text(v.P.T.DeclName(v.P.T.DeclOf(t))) "'"
+        case _: "a lambda"
     }
 }
 
 # where a place is, as a message says it: "l.toks"
 fn (v mut Viewer&) where(p place) String {
     name := match p.R {
-        case Root.Local(id) => $v.text(v.B!.Locals[id].Name)
-        case Root.Param(i) => $v.text(v.B!.Locals[I64(v.B!.Params[i])].Name)
-        case Root.Global(_, n) => $v.text(n)
-        case _ => "?"
+        case Root.Local(id): $v.text(v.B!.Locals[id].Name)
+        case Root.Param(i): $v.text(v.B!.Locals[I64(v.B!.Params[i])].Name)
+        case Root.Global(_, n): $v.text(n)
+        case _: "?"
     }
     path := v.strs[p.Path]
     show := p.Show if p.Show >= 0 and p.Show <= path.Len() else path.Len()
@@ -380,12 +380,12 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
                                         for n in vd.Names { v.nameLists[k].Push(n) }
                                     }
                                 }
-                                nomatch { }
+                                case _ { }
                             }
                         }
                     }
                 }
-                nomatch { }
+                case _ { }
             }
         }
     }
@@ -416,11 +416,11 @@ fn (v mut Viewer&) nameFrom(at I64) source.Span {
 # an expression's token: a method call's name, an element's "[", a field's name; else where it starts
 fn (v mut Viewer&) tokOf(x typed.Expr&) source.Span {
     return match x {
-        case typed.Expr.Call(sp, _, c) => v.callTok(sp, c)
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => v.placeTok(p)
-        case typed.Expr.Promote(_, _, pr) => v.tokOf(pr.X)
-        case typed.Expr.Away(_, _, y) => v.tokOf(y)
-        case _ => x.Span()
+        case typed.Expr.Call(sp, _, c): v.callTok(sp, c)
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): v.placeTok(p)
+        case typed.Expr.Promote(_, _, pr): v.tokOf(pr.X)
+        case typed.Expr.Away(_, _, y): v.tokOf(y)
+        case _: x.Span()
     }
 }
 
@@ -437,9 +437,9 @@ fn (v mut Viewer&) callTok(sp source.Span, c typed.Call&) source.Span {
 
 fn (v mut Viewer&) placeTok(p typed.Lvalue&) source.Span {
     return match p {
-        case typed.Lvalue.Elem(sp, _, e) => v.after(sp, e.Base, '[')
-        case typed.Lvalue.Field(sp, _, b, _) => v.after(sp, b, '.')
-        case _ => p.Span()
+        case typed.Lvalue.Elem(sp, _, e): v.after(sp, e.Base, '[')
+        case typed.Lvalue.Field(sp, _, b, _): v.after(sp, b, '.')
+        case _: p.Span()
     }
 }
 
@@ -457,17 +457,17 @@ fn (v mut Viewer&) after(sp source.Span, base typed.Lvalue&, c Char) source.Span
 # (a dereference, a read) are the whole operation's
 fn placeEnd(p typed.Lvalue&) I64 {
     return match p {
-        case typed.Lvalue.Deref(_, _, r) => exprEnd(r)
-        case typed.Lvalue.Temp(_, _, x, _) => exprEnd(x)
-        case _ => I64(p.Span().End)
+        case typed.Lvalue.Deref(_, _, r): exprEnd(r)
+        case typed.Lvalue.Temp(_, _, x, _): exprEnd(x)
+        case _: I64(p.Span().End)
     }
 }
 
 fn exprEnd(x typed.Expr&) I64 {
     return match x {
-        case typed.Expr.Read(sp, _, p, _), typed.Expr.Borrow(sp, _, p) => placeEnd(p).Min(I64(sp.End))
-        case typed.Expr.Away(_, _, y) => exprEnd(y)
-        case _ => I64(x.Span().End)
+        case typed.Expr.Read(sp, _, p, _), typed.Expr.Borrow(sp, _, p): placeEnd(p).Min(I64(sp.End))
+        case typed.Expr.Away(_, _, y): exprEnd(y)
+        case _: I64(x.Span().End)
     }
 }
 
@@ -600,8 +600,8 @@ fn (v mut Viewer&) prefix(a I64, b I64) Bool {
 
 fn real(r Root) Bool {
     return match r {
-        case Root.Local(_), Root.Param(_), Root.Global(_, _) => true
-        case _ => false
+        case Root.Local(_), Root.Param(_), Root.Global(_, _): true
+        case _: false
     }
 }
 
@@ -619,8 +619,8 @@ fn (v mut Viewer&) rootLocal(p typed.Lvalue&) I64 {
     q := v.rootPlace(p)
     if q is null { return -1 }
     return match q {
-        case typed.Lvalue.Local(_, _, id) => -1 if v.isParam(I64(id)) else I64(id)
-        case _ => -1
+        case typed.Lvalue.Local(_, _, id): -1 if v.isParam(I64(id)) else I64(id)
+        case _: -1
     }
 }
 
@@ -662,8 +662,8 @@ fn unAway(x typed.Expr&) typed.Expr&x {
 fn argPlace(x typed.Expr&) typed.Lvalue?&x {
     y := unAway(x)
     return match y {
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => p
-        case _ => null
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): p
+        case _: null
     }
 }
 
@@ -1119,14 +1119,14 @@ fn (v mut Viewer&) keepIn(into typed.Lvalue?&, ty types.TypeId, refs Vec<view>&,
     if rp is not null { v.placePlaces(rp, st, roots) }
     for r in roots {
         pi := match r.R {
-            case Root.Param(i) => i
-            case _ => -1
+            case Root.Param(i): i
+            case _: -1
         }
         if pi < 0 { continue }
         for f in refs {
             mi := match f.P.R {
-                case Root.Mark(i) => i
-                case _ => -1
+                case Root.Mark(i): i
+                case _: -1
             }
             if mi < 0 or mi == pi { continue }
             have := false
@@ -1424,9 +1424,9 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
 # the function type a call is made through
 fn (v mut Viewer&) calleeType(c typed.Call&) types.TypeId {
     return match c.Target {
-        case typed.Callee.Value(f) => f.Type()
-        case typed.Callee.Body(id) => v.Bodies[I64(id)].Ty
-        case _ => types.UnknownT
+        case typed.Callee.Value(f): f.Type()
+        case typed.Callee.Body(id): v.Bodies[I64(id)].Ty
+        case _: types.UnknownT
     }
 }
 

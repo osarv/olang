@@ -16,7 +16,7 @@ fn main() ? {
         s Slot& = Slot.Held(outer)
         match s {
             case Slot.Held(n) { n.next = Node(i) }
-            nomatch { }
+            case _ { }
         }
     }
 }

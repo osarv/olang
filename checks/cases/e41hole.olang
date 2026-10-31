@@ -1,0 +1,11 @@
+# check: fail error[E41]: '_' holds the place of a value of type F64 - in scope: h, x, Scale
+# E41: a typed hole names the type wanted and what in scope fits it, locals and parameters first
+Scale F64 = 2.0
+Count I64 = 3
+fn area(w F64, h F64) F64 { return w * h }
+fn f(h F64) F64 {
+    x := 2.0
+    n := 4
+    return area(_, h) + x + F64(n)
+}
+fn main() ? { }
