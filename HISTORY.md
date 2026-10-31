@@ -26690,3 +26690,21 @@ prelude privilege to write through a read-only reference. And a growing Vec's bu
 growing it in place means `mremap` and relinking the scope's chunk list, which may move the chunk. Left for the user's
 QBV-like call on the first and a runtime round on the second; the comprehension's growth (private, no views) is the
 same runtime work and waits with it.
+
+**Not built in this batch: items 10, 6 and 11** - each the survey's "days", and each a design of its own rather than a
+local change; recorded here so the next round starts from what was found.
+- *10, enum layout* (decided: tightened, `T.Size`/`T.Align`/`f.Offset` reporting the new numbers). The tag is an I32
+  and a payload whole words in three places that must change together: types' `layEnum`/`enumLlvm` (`{ i64, [k x i64]
+  }`), emit's tag loads and stores (`Rvalue.Tag`'s `i64`/`sext i32`, case construction, `Proj.Payload` at offset 8) and
+  the evaluator's shapes (`vEnum`'s 8-byte tag, `vOrd`'s 4 bytes - shared with error codes, which stay I32), with K2's
+  images, the supplied Hash and `$` reading the same bytes and cabi's plain-data structs (if an enum field may cross).
+  A payload-less enum to the smallest integer counting its cases is the smaller half (Dir 4 -> 1 byte); the payload's
+  natural alignment the larger (Opt 16 -> 8).
+- *6, constant calls in bodies computed while compiling.* K3's `comptime e` already makes a hidden global per site
+  that must be baked; the silent form needs a site that falls back to the call where the evaluator refuses (a hidden
+  global set at startup would run the call at another time - a change of meaning for any call with an effect), so a
+  typed node holding both, lowering choosing by what Bake gave, and a budget and cache per callee and arguments so the
+  compiler's own build does not slow.
+- *11, Filter/Map chains fused.* Fusing `for y in a.Filter(f).Map(g)` interleaves f, g and the body, which reorders
+  their effects and failures; sound only for callbacks that do nothing and cannot fail - S3's `settleIdle` knows that
+  only after every body is checked, so the elaboration has to move after it.
