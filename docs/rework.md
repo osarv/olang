@@ -1407,7 +1407,9 @@ spelling).
   time (`depth` walking a tree gave 1 for 2). It now copies the record, as emit does.
 - **The effects line missed writes through a local made from a parameter's reach** (the tooling batch, on the default
   path too): a binding of a payload or a reference read out of a parameter wrote "effects: none" for `match h { case
-  One(x) { x.v = n } }`; such locals now stand for their parameter (effects.olang's `derive`).
+  One(x) { x.v = n } }`, and so did a write through a conditional's or a match's choice of two parameters' reaches;
+  such locals now stand for every parameter they may be read out of (effects.olang's `derive`, `rootBits`;
+  `checks/cases/b11beffectsbind.olang`).
 
 - **A variadic struct's elements were references** (round 2a): `headers ...Header` was gathered into an
   `Array<Header&>` (the element taken bare, by pointer), which no `Array<Header>&` parameter took - std/http's `Get`
