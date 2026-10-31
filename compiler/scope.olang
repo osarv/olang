@@ -4698,7 +4698,8 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
         # existing storage stored into a "&p" field of an instance whose construction binding is not known through this
         # path - an element, a field of another instance: only its container's scope is, an underestimate, and the store
-        # could falsify the binding every reader of that instance relies on (O23, O11)
+        # could falsify the binding every reader of that instance relies on (O23, O11); a promoted field's goes back
+        s.giveBack(s.placeDecl(p))
         if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
         try s.targets.Pop() catch { }
         return
@@ -5448,6 +5449,7 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
             slot, exact, kind := sl.T, sl.Exact, sl.Kind
             if s.bindingUnknown(p, slot) {
                 # existing storage stored into a "&p" field of an instance whose binding is not known here (O23, O11)
+                s.giveBack(s.placeDecl(p))
                 if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
                 continue
             }

@@ -829,8 +829,8 @@ fn inferStats(sc mut scope.Scoper&) {
     }
     head := StringBuilder()
     for a in os.Args() { head.Push($a " ") }
-    path := try os.MkTemp(to, "stats") catch os.Error { return }
-    try os.WriteFile(path, $head.ToString() "\n" $b.ToString()) catch os.Error { }
+    dir := try os.MkTemp(to, "stats") catch os.Error { return }
+    try os.WriteFile($dir "/stats", $head.ToString() "\n" $b.ToString()) catch os.Error { }
 }
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
