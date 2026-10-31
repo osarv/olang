@@ -2537,7 +2537,13 @@ first as in C), `Sinh`, `Cosh`, `Tanh`, `Erf`, `Erfc`, `Floor`, `Ceil`, `Trunc`,
 compiling where a value is needed then, K1, by the very function the program calls), an `F16` or a `BF16` in `F32` -
 `F64` for `Fma` - and rounded once to its own type. A result outside a function's domain is what IEEE 754 says
 (`(-1.0).Sqrt()` and `(-1.0).Log()` are `NaN`, `0.0.Log()` is `-Inf`, `1000.0.Exp()` is `Inf`), never an error: a NaN
-carries the failure through the rest of a computation and is asked about once, with `IsNan`.
+carries the failure through the rest of a computation and is asked about once, with `IsNan`. `x.Pow(y)` is C's `pow` but for
+these exponents, decided by `y`'s value wherever it comes from: `0` (either sign) gives `1`, `1` gives `x`, `2` gives
+`x * x`, `-1` gives `1 / x` - each `pow`'s own result; `0.5` gives `x.Sqrt()`, except `+0` for `-0` and `+Inf` for
+`-Inf`, as `pow` has them; any other whole number `n` with `|n| <= 16` gives `x` multiplied by itself by squaring (the
+bits of `n` from the lowest, the result, starting from `1`, multiplied by each square whose bit is set), and for a
+negative `n` `1` divided by that - a result that may differ from `pow`'s in its last bits. The compile-time evaluator
+computes the same operations, so a constant exponent's power is one value while compiling and at run time.
 Every number has `Abs()`, `a.Min(b)`, `a.Max(b)` and `x.Clamp(lo, hi)`, defaults over `Number`: on a float `Abs`
 clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a NaN if either is one, and `-0.0` below
 `0.0`, so `a.Min(b)` and `b.Min(a)` are one value; on an integer `Abs` negates a negative value (the most negative one

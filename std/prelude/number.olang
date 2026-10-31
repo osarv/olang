@@ -151,14 +151,49 @@ fn (x T) Log1p<T Float>() T {
 }
 
 # x to the power y - C's pow, with every one of its special cases: x.Pow(0.0) is 1 even for a NaN x, and a negative
-# x to a power that is not a whole number is NaN
+# x to a power that is not a whole number is NaN. A few exponents are computed without pow, so that where y is a
+# constant (x.Pow(2.0)) the call folds to what is left: 0 gives 1, 1 gives x, 2 x * x and -1 1 / x - each what pow
+# gives, to the bit; 0.5 x.Sqrt(), but +0 for -0 and +Inf for -Inf as pow has them; and any other whole number up to 16
+# either way x multiplied by itself by squaring (powSquares), and a negative one 1 over that - which may differ from
+# pow's result in its last bits. Every other exponent is pow's. The evaluator runs the same code, so a power computed
+# while compiling is the one the program computes
 fn (x T) Pow<T Float>(y T) T {
+    if y.Abs() <= T(16) {
+        n := I64(y)
+        if T(n) == y {
+            if n == 2: return x * x
+            if n == 0: return T(1)
+            if n == 1: return x
+            if n == -1: return T(1) / x
+            if n > 0: return powSquares(x, n)
+            return T(1) / powSquares(x, -n)
+        }
+        if y == T(0.5) {
+            if x == T(0): return T(0)
+            if x == -T.Inf: return T.Inf
+            return x.Sqrt()
+        }
+    }
     return match T {
         case F64 => cmath.pow(x, y)
         case F32 => cmath.powf(x, y)
         case F16 => F16(cmath.powf(x, y))
         case BF16 => BF16(cmath.powf(x, y))
     }
+}
+
+# x to the whole power n, 1 to 16, by squaring - the bits of n from the lowest, the result multiplied by each square
+# whose bit is set, starting from 1 (an exact first product)
+fn powSquares<T Float>(x T, n I64) T {
+    r := T(1)
+    b := x
+    k := n
+    for k > 0 {
+        if (k & 1) == 1: r = r * b
+        k = k >> 1
+        if k > 0: b = b * b
+    }
+    return r
 }
 
 # the length of the vector (x, y) - (x * x + y * y).Sqrt() without overflowing or underflowing on the way

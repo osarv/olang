@@ -354,7 +354,7 @@ result); **cost** hours, after the check; meaning: none if the check holds.
 
 ## 16. Needs a decision
 
-- **`x.Pow(2.0)`** costs 137 Ir an element against `x * x`'s 3.1: X8 declares inexact libm functions `nobuiltin` so the
+- **Done 2026-10-31 (the user's answer to QBV: every exponent that gains; HISTORY.md item 16).** **`x.Pow(2.0)`** costs 137 Ir an element against `x * x`'s 3.1: X8 declares inexact libm functions `nobuiltin` so the
   run time calls exactly what the evaluator called. `pow(x, 2.0)` and `x * x` are both correctly rounded in IEEE
   terms only if libm's `pow` is; glibc's is not guaranteed to be. Folding small integral exponents into multiplies
   (as LLVM would without `nobuiltin`) makes `Pow` mean "x times x" for those exponents, in the evaluator and at run

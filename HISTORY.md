@@ -26716,3 +26716,24 @@ machine loaded by other agents (load 11-22 on 4 cores), `OLANG_TIMES`: the front
 lower and emit) 6.79 s -> 6.53 s; clang's compile 27.6-28.1 s -> 28.7 s; peak memory 1.90 GB -> 1.85 GB. Measured on
 the way: the empty-array branch in `__olang_scope_alloc` (item 14's first form) had taken clang's compile to 30-33 s,
 and the inlined bump alone (item 1) to 28.5-30 s; item 14 moved to emit's constant-length case brought it back.
+
+**16. Pow with the exponents that gain computed without pow (QBV, the user, 2026-10-31: "Wrap all the exponents that
+you think would gain from it").** X8 declares libm's `pow` `nobuiltin`, so `x.Pow(2.0)` was a call of 137
+instructions. The prelude's float `Pow` now decides by `y`'s value, so a constant exponent folds once inlined: 0 (either
+sign) gives 1, 1 gives x, 2 `x * x`, -1 `1 / x` - each pow's own result to the bit (IEEE rounds each once, as pow
+does, its special cases included); 0.5 `x.Sqrt()` with pow's two differences, +0 for -0 and +Inf for -Inf; any other
+whole number up to 16 either way by squaring (`powSquares`: the bits from the lowest, from 1), a negative one as 1 over
+that - here the last bits may differ from pow's, as decided; every other exponent pow's. No new mechanism: being
+prelude code, the evaluator computes exactly the same operations, so a power computed while compiling is the
+program's (std/prelude/tests/pow.olang bakes them beside the run-time calls, edges included: NaN, signed zeros,
+infinities, F32, F16, BF16). The bound 16 was picked by measurement: x.Pow(16.0) by squaring is 6.3M Ir over 1M
+values against pow's 138.2M (4 squarings and one multiply), so every |n| up to it gains; past it, accuracy rather than
+speed sets the bound. Measured (1M values x 10, callgrind): Pow(2.0) 138.0M -> 4.4M, Pow(3.0) 138.0M -> 4.9M,
+Pow(16.0) 138.2M -> 6.3M, Pow(-2.0) 138.2M -> 4.9M, Pow(0.5) 138.0M -> 12.8M, Pow(2.5) 138.2M unchanged. The cost:
+an exponent that is not a constant pays the test (`y.Abs() <= 16`, a conversion and a compare) before pow - x.Pow(x)
+138.0M -> 155.3M, 17 instructions a call, and natively 0.41-0.42 s against 0.38-0.50 s (noise) over 30M calls. Decided
+(mine): decided by the value, not by whether the exponent is written as a constant, so one value has one power wherever
+it comes from - in every build and in the evaluator (`llvm.is.constant` would make -debug and -O3 disagree). Integer
+`Pow` with a constant exponent already folds to the same multiplications as a hand-written product (I64 Pow(3) 9.3M =
+hand 9.3M, Pow(13) 12.3M = hand 12.3M): LLVM unrolls its squaring loop, so it is left as it is. SPEC's math paragraph
+states which exponents are computed how.

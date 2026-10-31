@@ -1329,6 +1329,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
     (`ArrayIter.Rest`, `Advance`) - `a.Iter().Skip(10).Take(k).Sum()` vectorizes (16.4 -> 1.9M Ir).
   - 7: a filtered comprehension's result is the first n elements of its own buffer, no copy (17.7 -> 13.7M Ir); a Vec
     grown in place is not built (View's read-only receiver has nowhere to record a view).
+  - 16 (QBV, the user: every exponent that gains): float `Pow` gives 1, x, x*x, 1/x for 0, 1, 2, -1 (pow's bits), a square root
+    for 0.5 (pow's edges kept), squaring for other whole |n| <= 16 (last bits may differ), else pow; decided by the value,
+    the evaluator computing the same - Pow(2.0) 138 -> 4.4M Ir, a variable exponent +17 Ir a call. SPEC states it.
   - Not built: 10 (enum layout), 6 (constant calls in bodies), 11 (Filter/Map fusion) - each a design of its own; HISTORY.md.
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
