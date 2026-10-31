@@ -2122,3 +2122,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   D9c's cap removed; copies only where kept or written. Held with QCC's rework. std's text-keyed maps move to
   Map<String, V> where they need the guarantee (json, flags, ...).
 
+- docs/rework.md's open points DECIDED by me 2026-10-31 (the user absent until the first version is done; theirs to
+  review): (1) function values relating their arguments' scopes are given up (one function type in compiler/, one in
+  tests/), no relations inferred through function types; (2) the copies a bare argument needs where a call may write
+  its storage type (opaque callbacks, `any`) are kept, each listed by `-memory` and hover, counted in round 2 - if
+  they are common, round 2 brings a way to avoid them; (3) the read-only stored reference decided with round 2's
+  numbers; (4) a field round 1 cannot place gets a per-instance run-time scope word only if real cases show up -
+  round 1 lists them first. Rework rounds merge to master one by one when verified (round 1 behind OLANG_SCOPES=infer),
+  not in one merge after round 4, so the branch stays short.
