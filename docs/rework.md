@@ -1260,9 +1260,14 @@ compiler's root (`compiler/olang.olang`) checked; distinct errors, by rule:
 The driven phase converges (its last rounds 9, 1, 0 edits) but not to none. Most of what is left is D9d's 488 the tool
 listed for a person: a parameter it made `&` in an earlier round, from a note naming it as the bare parameter behind a
 refusal, is pinned there so the rounds cannot oscillate - and once the rest settled, D9d finds it never written after
-all (making `build.olang`'s `ensureDir` receiver bare by hand removes its error and adds none). A second driven run with
-fresh pins over the result is the next step (11.6), then O17's 95 (bare struct values holding references lent to `&`
-parameters - point 7's class) and the T25c rest. Not yet built and measured: the self-build under the switches.
+all (making `build.olang`'s `ensureDir` receiver bare by hand removes its error and adds none). A second whole run of
+the tool over that result (fresh pins, 10 rounds, 3,328 edits) leaves 716: D9d 172, but S3 121, E35 57, T24 36 and S6
+20 new - the tool's text phase is not idempotent on migrated code (it reads a `p T&` with no `mut` as the old read-only
+form and makes it bare again, so a method that writes its receiver works on a copy and its calls do nothing, S3). So
+the next tool change is a finishing round inside one run: D9d's requests applied unpinned once the driven rounds
+converge; and param_migrate needs a guard before it can join `olang fix`'s table (B17 runs only idempotent tools).
+Then O17's 73-95 (bare struct values holding references lent to `&` parameters - point 7's class) and the T25c rest.
+Not yet built and measured: the self-build under the switches.
 
 ### 11.6 Today's path
 
