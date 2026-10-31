@@ -2077,3 +2077,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   matches in its own module stay exhaustive; adding a case to an open enum is then no breaking change (`olang api`
   says so). Cost: one keyword, and importers lose the "every place to handle a new case" check on that enum - which
   is the point. Rec: yes, small. ASKED (spelling `open enum`).
+- QBP 13 / B1.4 DECIDED 2026-10-31 (the user: "do D"): a generic's needs read off its body are its requirement, shown
+  by doc/explain/hover; a call whose type lacks one is an error at the call naming the need, never inside the body; no
+  written constraint required; match T and reflection stay per instance. Queued with the tooling batch (it moves G18's
+  errors to the call).
