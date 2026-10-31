@@ -4295,7 +4295,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         match v.T {
             case Term.Derived(p, _) {
                 if p < 0 and -p - 1 < s.underElem.Len() and s.underElem[-p - 1] {
-                    s.giveBack(s.fieldDecl(x!))
+                    s.giveBackExpr(x!)
                     if s.report { s.err(s.lastName(x!.Span()), msgs.BuildThroughUnknownScope()) }
                 }
             }
@@ -4702,7 +4702,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         # existing storage stored into a "&p" field of an instance whose construction binding is not known through this
         # path - an element, a field of another instance: only its container's scope is, an underestimate, and the store
         # could falsify the binding every reader of that instance relies on (O23, O11); a promoted field's goes back
-        s.giveBack(s.placeDecl(p))
+        s.giveBackPlace(p)
         if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
         try s.targets.Pop() catch { }
         return
@@ -4792,7 +4792,7 @@ fn (s mut Scoper&) freshIntoUnknown(sp source.Span, p typed.Lvalue&, slot Term) 
     match slot {
         case Term.Derived(_, _) {
             if s.unknownBinding(slot) {
-                s.giveBack(s.placeDecl(p))
+                s.giveBackPlace(p)
                 if s.report { s.err(s.eqAfter(p.Span()), msgs.BuildThroughUnknownScope()) }
                 return
             }
@@ -5452,7 +5452,7 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
             slot, exact, kind := sl.T, sl.Exact, sl.Kind
             if s.bindingUnknown(p, slot) {
                 # existing storage stored into a "&p" field of an instance whose binding is not known here (O23, O11)
-                s.giveBack(s.placeDecl(p))
+                s.giveBackPlace(p)
                 if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
                 continue
             }
@@ -8707,14 +8707,38 @@ fn (s mut Scoper&) giveBack(d I64) {
 # ... the field a refusal reads through at a derived term t: the declaration it is read out of, and the parameter's
 fn (s mut Scoper&) giveBackRead(x typed.Expr&, t Term) {
     if not s.fieldGather or not s.finalQuiet { return }
-    s.giveBack(s.fieldDecl(x))
+    s.giveBackExpr(x)
     s.giveBackDerived(t)
+}
+
+# ... every declaration a field is read out of along the place x reads - the outermost and those it is reached through
+# (a destructor's own field, an element's)
+fn (s mut Scoper&) giveBackExpr(x typed.Expr&) {
+    if not s.fieldGather or not s.finalQuiet { return }
+    match unPassed(s.unAway(x)) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): s.giveBackPlace(p)
+        case _ { }
+    }
+}
+
+fn (s mut Scoper&) giveBackPlace(p typed.Lvalue&) {
+    if not s.fieldGather or not s.finalQuiet { return }
+    match p {
+        case typed.Lvalue.Field(_, _, b, _) {
+            s.giveBack(s.declOf(b.Type()))
+            s.giveBackPlace(b)
+        }
+        case typed.Lvalue.Elem(_, _, e): s.giveBackPlace(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): s.giveBackPlace(pl.Base)
+        case typed.Lvalue.Deref(_, _, r): s.giveBackExpr(r)
+        case _ { }
+    }
 }
 
 # ... the field the argument for callee variable v at call c is read out of
 fn (s mut Scoper&) giveBackArg(c typed.Call&, v Term) {
     a := s.argOfVar(c, v)
-    if a >= 0 { s.giveBack(s.fieldDecl(c.Args[a])) }
+    if a >= 0 { s.giveBackExpr(c.Args[a]) }
 }
 
 # ... the declaration of the parameter whose "&p" field derived term t reads
