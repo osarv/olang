@@ -2034,3 +2034,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   arguments still come last, after the variadic ones; a function type writes `fn(...I64)`; never with defaults on the
   same parameter. Rec: yes - small, and it removes filepath.Join's six-default trick and the type-in-front literal at
   most calls. In effect: none (olang functions are never variadic, X21).
+- QCF DECIDED 2026-10-31 (the user: "yes, add variadic args"): as proposed - `xs ...T` last, one type, a read-only
+  array inside built in the caller's frame, `...a` passes an array on; filepath.Join and os.Exec move to it. Queued
+  with array patterns.
