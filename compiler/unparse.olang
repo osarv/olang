@@ -839,7 +839,7 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
         case ast.Pattern.Elems(_, x, _) { w.expr(x) }
         case ast.Pattern.Rest(_, n) {
             w.put("...")
-            w.name(n)
+            if w.names.Text(n) != "_": w.name(n)     # a bare "..." holds the name "_"
         }
     }
 }
@@ -1040,7 +1040,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Spread(_, y) {
             w.put("...")
-            w.expr(y)
+            if not bareSpread(y, w.names): w.expr(y)
         }
         case ast.Expr.Variadic(_, items) {
             for k, it in items {
@@ -1048,6 +1048,14 @@ fn (w mut writer&) expr(x ast.Expr&) {
                 w.expr(it)
             }
         }
+    }
+}
+
+# whether what "..." holds is the "_" a bare one is given (S13h)
+fn bareSpread(y ast.Expr&, names source.Names&) Bool {
+    match y {
+        case ast.Expr.Name(_, n) { return names.Text(n) == "_" }
+        case _ { return false }
     }
 }
 
