@@ -334,6 +334,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # the field inference (2.6): quiet judgings of the program collecting the declarations whose fields a refusal needs
     # given a binding of their own, by declaration; what was promoted and given back, by (declaration, field)
     fieldGather Bool = false
+    finalQuiet Bool = false                   # the quiet judging after a body's claims are inferred: its refusals count
     wantDecl Map<I64, Bool>
     wantField Map<pair.Pair<I64, I64>, Bool>
     promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
@@ -551,9 +552,12 @@ fn (s mut Scoper&) component(comp Array<I64>&, report Bool) {
             if not grew { break }
         }
     }
-    # the inference's claims (OLANG_SCOPES=infer), then the judging that reports
+    # the inference's claims (OLANG_SCOPES=infer), then the judging that reports - or, quietly, the one whose refusals the
+    # field inference reads
     for b in comp { s.inferClaims(b) }
+    s.finalQuiet = not report
     for b in comp { s.judge(b, report) }
+    s.finalQuiet = false
     for b in comp {
         s.sums[b].Done = true
         s.sums[b].Judging = false
@@ -6477,7 +6481,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
                     # callee's obligations then judge (O10c), as stage 0 binds it
                     v = existing(s.here())
-                } else if s.fieldGather {
+                } else if s.fieldGather and s.finalQuiet {
                     s.wantPromotion(pr.X)
                 } else if s.report {
                     # x[i]'s copy, said at its "[" (E31b)
@@ -6505,7 +6509,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.build(pr.Site, s.here())
             landed[i] = true
             if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
-                if s.fieldGather { s.wantPromotion(pr.X) }
+                s.wantPromotion(pr.X)
                 if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
             }
             if v.K == ValKind.Fresh { v = existing(v.T) }
@@ -7905,7 +7909,7 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     k := s.order(t, slot)
     # the inference: a value whose local's claim is too short proposes a longer one (2.4); a slot exactly its target
     # local's that the value outlives, a longer claim for that local
-    if s.fieldGather and not s.report and (k == FailsBlock or k == FailsUnknown) { s.wantPromotion(x) }
+    if (k == FailsBlock or k == FailsUnknown) { s.wantPromotion(x) }
     if s.liftGather and k == FailsBlock {
         if s.Trace { s.TraceLog.Push($"fails root " $s.wholeRoot(x) " kind " $kind " | " $s.traceAt(x.Span().Start)) }
         s.propose(x, slot)
@@ -8502,7 +8506,7 @@ fn (s mut Scoper&) bindingParam(body typed.Body&, f I64) I64 {
 # what a quiet judging's refusal asks of the field inference: the declaration a value read out of a field is, or the
 # declaration of the value itself
 fn (s mut Scoper&) wantPromotion(x typed.Expr&) {
-    if not s.fieldGather { return }
+    if not s.fieldGather or not s.finalQuiet { return }
     d := s.fieldDecl(x)
     if d < 0 { d = s.declOf(x.Type()) }
     if d >= 0 { s.wantDecl.Put(d, true) }
@@ -8571,7 +8575,7 @@ fn (s mut Scoper&) buildsInto(t Term, sp source.Span, file I64, at source.Span) 
             # made where the instance whose field it reads lives, which it outlives (O23)
             if s.report and not s.standIn { s.err(sp, msgs.BuildThroughUnknownScope()) }
             # the field inference: a promoted field built through goes back to its container's scope (2.6, step 4)
-            if s.fieldGather and not s.standIn and p >= 0 and p < s.B!.Params.Len() {
+            if s.fieldGather and s.finalQuiet and not s.standIn and p >= 0 and p < s.B!.Params.Len() {
                 d := s.declOf(s.B!.Locals[I64(s.B!.Params[p])].Ty)
                 if d >= 0 { s.wantField.Put(pair.Pair<I64, I64>(d, -1), true) }
             }
