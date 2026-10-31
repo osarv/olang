@@ -26571,3 +26571,11 @@ an unused `&` parameter is an error (so `&` always means "may write"), a bare pa
 an error naming `&` or `.Clone()` (the promise or a hidden copy would break otherwise), and a write to a bare parameter
 that nothing reads afterwards is an error naming `&` (the forgotten `&`, without making counting parameters read-only).
 Accepted as a loss: a stored reference can no longer be declared read-only (Go's and Java's position).
+
+## Blocks stay scopes under inference (QCB, 2026-10-31)
+
+Asked whether a bare `{ }` should still reclaim what it built once no scope is written (the alternative: inference
+works per function and loop turn only, blocks being grouping), the user kept blocks as scopes. With the no-extension
+rule, what a block built that nothing outside keeps is freed at its close in every program: a kept value is built where
+it is kept from the start, and a kept view of the block's storage is a compile error. `x.Destroy()` stays: it ends one
+value a long-lived structure held, which no block can.

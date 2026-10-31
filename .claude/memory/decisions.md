@@ -1965,3 +1965,4 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and Java's position), revisit if real code wants it. In effect: nothing built.
 - QCC enforcement DECIDED 2026-10-31 (the user: "Yes do them"): checks (1)-(3) as proposed, the read-only stored
   reference given up. Built with QCC in the held rework.
+- QCB bare blocks DECIDED 2026-10-31 (the user: "yes, keep blocks as scopes"): a block stays a scope under inference.
