@@ -1,0 +1,8 @@
+# check: fail error[S17a]: this top-level assert is false, decided while compiling
+# also: anything it calls may allocate
+# G42: a call through a function value may do anything, so Apply has every fact but Terminates
+fn Apply(f fn(x I64) I64, x I64) I64 { return f(x) }
+
+assert not Apply.Allocates, "anything it calls may allocate"
+
+fn main() { assert Apply(fn(x I64) I64: return x, 1) == 1 }

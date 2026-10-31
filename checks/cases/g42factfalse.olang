@@ -1,0 +1,7 @@
+# check: fail error[S17a]: this top-level assert is false, decided while compiling: the callback must not allocate
+# G42: a function's fact pinned by a top-level assert - Label renders text, so it allocates
+fn Label(n I64) String { return $"#" $n }
+
+assert not Label.Allocates, "the callback must not allocate"
+
+fn main() { assert Label(1).Len() == 2 }

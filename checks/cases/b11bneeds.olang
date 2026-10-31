@@ -1,0 +1,17 @@
+# check: doc Largest
+# also: # T needs: Less, Plus
+# also: # not a value: a generic is a value only named with its type arguments, 'Largest<...>' (G12)
+# never: needs: Neg
+# B11b, G18a: a generic's needs read off its body, through the generics it calls; a match on its variable is per instance
+fn bigger<U>(a U, b U) U { return b if a < b else a }
+
+fn Largest<T>(xs Array<T>&) T {
+    m := xs[0]
+    for x in xs { m = bigger(m, x + x) }
+    match T {
+        case I64 { return -m }
+        case _ { return m }
+    }
+}
+
+fn main() { assert Largest(I64[1, 2]) == -4 }

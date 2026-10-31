@@ -237,6 +237,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # what each inferred set came to, by body (bodyKey) - kept from one attempt to the next, where checking starts
     errPresets Map<pair.Pair<I64, I64>, types.ListId>
     found Map<pair.Pair<I64, I64>, types.ListId>
+    # G42: a function's facts read while checking, as each attempt read them, and their values as the bodies of the
+    # attempt before found them - kept from one attempt to the next, as errPresets is
+    factReads Vec<factRead>
+    factPresets Map<String&, Bool>
     Attempts I64 = 0
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
     # T25c: the locals that are read-only copies, by (body, local), each with the name of what it copies (0 for none);
@@ -437,6 +441,16 @@ type unsetCand struct(Body I64, Local I64, Group I64, NoZero Bool, ValueAt I64, 
     Field
 }
 
+# G42: a fact read while checking - of an instance, its name - the value it was read as, and where
+type factRead struct(Inst I64, Fact String&, Value Bool, File I64, Sp source.Span, Text String&) {
+    Inst
+    Fact
+    Value
+    File
+    Sp
+    Text
+}
+
 # S3: a call standing as a statement whose value is dropped, judged once every body is checked (settleIdle): its body,
 # where it is and as it is written, the call checked
 type idleCall struct(Body I64, File I64, Sp source.Span, Text String&, X typed.Expr&) {
@@ -553,7 +567,10 @@ fn (c mut Checker&) CheckProgram() {
         for r in c.errReads {
             if c.P.T.Items(try c.inferredErrs.Get(r.First) catch default types.ListId(0)).Len() != r.Second { grew = true }
         }
-        if not grew or c.Attempts >= 20 {
+        # G42: a fact read as other than the bodies found it means checking again, reading what they found
+        moved := c.settleFacts()
+        if (not grew and not moved) or c.Attempts >= 20 {
+            if moved { c.factsUndecided() }
             c.settleFixed()
             c.orderGlobals()
             return
@@ -613,6 +630,7 @@ fn (c mut Checker&) reset() {
     c.inferring = Map<I64, Bool>()
     c.inferredErrs = Map<I64, types.ListId>()
     c.errReads = Vec<pair.Pair<I64, I64>>()
+    c.factReads = Vec<factRead>()
     c.unsettled = Map<I64, Bool>()
     c.found = Map<pair.Pair<I64, I64>, types.ListId>()
     c.boundsMet = Map<types.TypeId, Bool>()
@@ -3727,10 +3745,12 @@ fn (c mut Checker&) unrollConsts(sp source.Span, f ast.ForIn&, vals Array<I64>&,
     from := c.stmts.Len()
     oid, oouter, omark := c.open(typed.BlockKind.Loop, sp)
     c.fr().exits.Push(oid)
+    c.cur().Bounded.Push(typed.BlockId(I32(oid)))   # B1.1: an unrolled walk runs once
     for k in range vals.Len() {
         efrom := c.stmts.Len()
         eid, eouter, emark := c.open(typed.BlockKind.Loop, sp)
         c.fr().loops.Push(eid)
+        c.cur().Bounded.Push(typed.BlockId(I32(eid)))
         wasName := c.unrollBind(f.Name, c.P.T.Const(et, vals[k]))
         wasKey := c.unrollBind(f.Key, c.P.T.Const(c.i64(), k))
         if f.Body.Len() > 0 { c.stmtsOf(f.Body) }
@@ -12542,6 +12562,9 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
     # T21: a function named through an import alias, as a value - as one named bare
     if ref.Kind == names.What.Func { return c.fnValue(nsp, c.P.FnNamed(ref.Module, n)) }
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
+    # G42: a fact of a function named, or of a function's descriptor
+    fv := c.fnFact(sp, nsp, x, n)
+    if fv is not null { return fv }
     if ref.Kind != names.What.None {
         c.gap(nsp, "a member reached through an import, of this kind")
         return c.unknown(sp)
@@ -13353,7 +13376,7 @@ fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n s
         case generic.DescField: "Name, Type, Offset, Of, Attr and HasAttr"
         case generic.DescCase: "Name, Fields, Attr and HasAttr"
         case generic.DescParam: "Name, Type, HasDefault, Default, Attr and HasAttr"
-        case generic.DescFunc: "Name, Type, Params, Results, Errors, Attr and HasAttr - and it is called"
+        case generic.DescFunc: "Name, Type, Params, Results, Errors, Attr, HasAttr, NoReturn, Exported, Extern, Commutes and G42's facts - and it is called"
         case _: "Type"
     }
     what := match ds.K {
@@ -13485,10 +13508,12 @@ fn (c mut Checker&) unrolled(sp source.Span, f ast.ForIn&, l reflList) {
     from := c.stmts.Len()
     oid, oouter, omark := c.open(typed.BlockKind.Loop, sp)
     c.fr().exits.Push(oid)
+    c.cur().Bounded.Push(typed.BlockId(I32(oid)))   # B1.1: an unrolled walk runs once
     for k in range items.Len() {
         efrom := c.stmts.Len()
         eid, eouter, emark := c.open(typed.BlockKind.Loop, sp)
         c.fr().loops.Push(eid)
+        c.cur().Bounded.Push(typed.BlockId(I32(eid)))
         wasName := c.reflBind(f.Name, c.descriptor(l, items[k]))
         wasKey := c.reflBind(f.Key, c.P.T.Const(c.i64(), k))
         if f.Body.Len() > 0 { c.stmtsOf(f.Body) }
@@ -21472,6 +21497,109 @@ fn leaves(s typed.Stmt&) Bool {
             }
         }
         case _ { return false }
+    }
+}
+
+# ---- function facts (G42) ----
+
+# x.n read as a function's fact: how it is declared (NoReturn, Exported, Extern, Commutes - G41) or what it may do
+# (B1.1's Allocates ... Terminates - effects.olang), through its name ("mix.Allocates", "pick<I64>.Allocates") or a
+# function's descriptor (G41); null where x.n is no such fact
+fn (c mut Checker&) fnFact(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?&c {
+    name := c.text(n)
+    k := effects.FactNamed(name)
+    declared := declaredFact(name)
+    if k == effects.Fact.Unknown and not declared { return null }
+    f := c.factFn(x)
+    if f < 0 { return null }
+    if declared { return c.lit(sp, types.BoolT, 1 if c.declFact(f, name) else 0) }
+    if c.P.FnIsExtern(f) { return c.lit(sp, types.BoolT, 1 if c.Effects().OfExtern(f).Holds(k) else 0) }
+    inst := c.factInst(x, f)
+    if inst < 0 {
+        c.err(nsp, msgs.FactOfGeneric(c.text(c.P.FnDecl(f).Name), name))
+        return c.unknown(sp)
+    }
+    c.fnBody(inst)    # checked in this attempt, so its facts are found once it ends
+    key := $inst ":" $name
+    v := try c.factPresets.Get(key) catch default effects.Conservative(k)
+    c.factReads.Push(factRead(inst, $name, v, c.fr().File, sp, $c.src(sp)))
+    return c.lit(sp, types.BoolT, 1 if v else 0)
+}
+
+fn declaredFact(name String&) Bool { return name == "NoReturn" or name == "Exported" or name == "Extern" or name == "Commutes" }
+
+fn (c mut Checker&) declFact(f I64, name String&) Bool {
+    d := c.P.FnDecl(f)
+    return match name {
+        case "NoReturn": d.S.NoReturn
+        case "Exported": d.Export
+        case "Extern": c.P.FnIsExtern(f)
+        case _: d.S.Commutes
+    }
+}
+
+# the function an expression names for its facts: a function's name, an import's function, one with type arguments
+# written, or a function's descriptor; -1 for none
+fn (c mut Checker&) factFn(x ast.Expr&) I64 {
+    match x {
+        case ast.Expr.Generic(_, g, _) { return c.genericFn(g) }
+        case ast.Expr.Paren(_, y) { return c.factFn(y) }
+        case _ { }
+    }
+    f := c.genericFn(x)
+    if f >= 0 { return f }
+    dt := c.descTypeOf(x)
+    if dt < types.TypeId(0) or dt == types.UnknownT { return -1 }
+    ds := c.P.DescOf(dt)
+    return ds.Case if ds.K == generic.DescFunc else -1
+}
+
+# the instance of f whose facts x reads: f's own where it has no variables, the one its written type arguments name,
+# or the one a method descriptor's receiver type gives; -1 for a generic named with none
+fn (c mut Checker&) factInst(x ast.Expr&, f I64) I64 {
+    owner := generic.FnOwner(f)
+    if c.P.VarCount(owner) == 0 { return c.P.FnInstance(f, types.ListId(0)) }
+    match x {
+        case ast.Expr.Generic(sp, _, targs) {
+            given := c.explicitArgs(f, targs, sp)
+            if given.Len() != c.P.VarCount(owner) { return -1 }
+            for t in given {
+                if t == types.UnknownT { return -1 }
+            }
+            return c.P.FnInstance(f, c.P.T.List(given))
+        }
+        case _ { }
+    }
+    dt := c.descTypeOf(x)
+    if dt < types.TypeId(0) or c.P.DescOf(dt).K != generic.DescFunc { return -1 }
+    ps := c.P.T.Items(c.P.T.Params(c.P.DescOf(dt).Of))
+    if ps.Len() == 0 or c.P.FnDecl(f).Recv is null { return -1 }
+    recv := c.deref(ps[0])
+    if not c.isNamed(recv) or c.P.T.Items(c.P.T.Args(recv)).Len() != c.P.VarCount(owner) { return -1 }
+    return c.P.FnInstance(f, c.P.T.Args(recv))
+}
+
+# G42, once an attempt has checked every body: each fact read set to what the bodies found - whether any was read as
+# something else, so the program is checked again reading that (an attempt's diagnostics where the program has errors
+# are its own: nothing is settled)
+fn (c mut Checker&) settleFacts() Bool {
+    if c.factReads.Len() == 0 or c.P.L.Diags.Errors() > 0 { return false }
+    moved := false
+    for r in c.factReads {
+        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.FactNamed(r.Fact))
+        if found == r.Value { continue }
+        c.factPresets.Put($r.Inst ":" $r.Fact, found)
+        moved = true
+    }
+    return moved
+}
+
+# G42: facts still read as other than found after the last attempt - each changes the code it is read from
+fn (c mut Checker&) factsUndecided() {
+    for r in c.factReads {
+        found := c.Effects().Of(try c.fnBodies.Get(r.Inst) catch default -1).Holds(effects.FactNamed(r.Fact))
+        if found == r.Value { continue }
+        c.P.L.Diags.Error(diag.Where.Span(r.File, I64(r.Sp.Start), I64(r.Sp.End)), msgs.FactUndecided(r.Text))
     }
 }
 

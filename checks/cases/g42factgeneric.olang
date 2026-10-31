@@ -1,0 +1,7 @@
+# check: fail error[G42]: pick is generic, and each of its instances has facts of its own - name one with its type arguments: 'pick<T>.Terminates'
+# G42: a generic named without its type arguments names no one function
+fn pick<T>(a T, b T) T { return a }
+
+assert pick.Terminates
+
+fn main() { assert pick(1, 2) == 1 }

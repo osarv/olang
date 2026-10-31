@@ -946,6 +946,16 @@ itself: a type variable contains no reference and no destructor-bearing struct, 
 asking what a field of type `T` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
 
+**G18a (needs).** What a generic's body asks of a type variable - a method of a value of its type, an operator (its
+method: `Less` for a comparison, `Plus` for `+`), an index (`At`, `SetAt`), a slice, a walk, a membership test, a field,
+a call - is the variable's **need**, and a generic requires nothing more of a type than its needs and its written
+constraint (G19); no constraint has to be written for a need. A call binding a variable to a type lacking one of its
+needs is a compile-time error **at that call** - the program's own call that began the chain of instances, where the
+type it gave became the variable's binding: `Max needs Less ('<'), and Point has none`, with a note where the body
+asks for it - never an error inside the generic's body. What an arm of a `match` on a type variable (G15) or a branch
+decided by reflection (G35) asks is a need only of the instances that check it, as each instance's body is its own.
+The needs are read by `explain`, `doc` and the language server (B11b).
+
 **G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy, written
 after its name in the list introducing it: a function's (`fn area<S Shape>(s S)`, `fn drain<I Iterator<E>, E>(it mut
 I&) E`) or a generic type's (`type Map<K Hashable<K>, V>`). Several traits written side by side are their
@@ -7370,6 +7380,30 @@ its name (a pun's being its parameter's). A global is printed with its type and,
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
 tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 
+Under a function's signature (and each instance's, and each method's under its type) a line `# effects: ...` says what a
+call may do beyond computing its result, read off its body and every body it may call: `none`, or each of - the
+parameters it writes through (`writes through 'out'`), `writes a global`, `allocates` or `allocates nothing`, `may grow a
+Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
+else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
+and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written). A call through a
+function value or an `any` is `anything`; a body that did not check is `not known`. Under a generic function, a line
+`# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
+(G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
+one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
+length of an array it takes by value (G29) has none, and one whose scope obligations relate its arguments' scopes cannot
+be called through a function value (T22a). `doc` (B14) and the language server's hover (B15) show the same lines.
+
+**B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
+each module it loads - the root first, then its imports in the order loaded - with what code of the module may reach,
+through everything it calls: `files` (opening, creating, removing or renaming one, a directory, a path read through
+the file system), `network` (a socket, a connection, a name looked up), `processes` (starting, waiting for or signalling
+one), `environment` (reading or setting its variables), `threads` (a task started, `spawn` or a thread C makes) and `C`
+(an extern or a C import the module calls itself, outside the standard library); each class with the module where it is
+first reached - `files (std/os)` - or `none`. A class is counted where it is gained, by the C function gaining it:
+reading, writing or closing a descriptor already open (the standard streams among them) gains nothing. A call through a
+function value or an `any` reaches what no reading can say, and is printed as `anything`. The mode reads what the
+checker already holds; no other build computes it.
+
 ### 10.8 Formatting
 
 **B13.** `format <file> ...` rewrites each file in place in olang's one layout; with `-check` it rewrites nothing and
@@ -8530,7 +8564,9 @@ the copies differ as instances do.
   (`Box<I64>.Methods`), with the instance's types.
 
 Calling a descriptor, `f(args)`, is the call its name would be - defaults, named arguments, errors and all; a
-method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A descriptor names its function by its
+method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A function's descriptor also says how it is
+declared, each a `Bool` known while compiling (G35): `f.NoReturn` (D8e), `f.Exported` (`export fn`, X12), `f.Extern` (an
+extern fn, X1), `f.Commutes` (E31c); and the facts G42 reads. A descriptor names its function by its
 module, its receiver's type and its name, so an instance a descriptor is an argument of is the same one in every
 compilation. A table collected while compiling:
 
@@ -8543,6 +8579,31 @@ fn routes() Map<String&, fn(r Request&) Response> {
     return m
 }
 ```
+
+**G42 (function facts).** What a function may do is read while compiling, through its name - `mix.Allocates`,
+`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance (a generic named without
+its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
+walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
+body it may call:
+
+| fact | holds where it may |
+|---|---|
+| `Allocates` | ask the runtime for storage in any scope, its frame's included: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place does not count) |
+| `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
+| `WritesGlobals` | store into a global's own storage |
+| `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
+| `Spawns` | start a task |
+| `Recursive` | call itself, directly or through others |
+| `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
+
+A call through a function value or an `any` may do anything, and so may a body that did not check: such a function
+has every fact but `Terminates`, so no fact is claimed that a run could prove false. A fact is decided once the
+program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
+its cautious value first and the program is checked again with the values found, until what is read is what is found
+(as R1a's sets are); a fact whose value changes the code it is read from (a function reading its own fact to choose
+what it calls) is an error naming it. So a top-level `assert` (S17a) pins one: `assert not mix.Allocates, "the audio
+callback must not allocate"`; a fact is no condition the checker decides a branch by while checking (G35's), as a
+branch is part of what it is read from.
 
 ## 13. Compile-time evaluation
 

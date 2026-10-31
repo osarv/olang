@@ -198,6 +198,18 @@ fn (e mut Effects&) ModuleOf(b I64) I64 {
     return try e.fileMod.Get(e.Bodies[b].File) catch default -1
 }
 
+# what an extern or a C import's function may do (X1, X17), as a call of it does
+fn (e mut Effects&) OfExtern(f I64) Facts {
+    e.grow()
+    was := e.cur
+    e.cur = Facts()
+    e.curMod = -1
+    e.extern(f)
+    out := e.cur
+    e.cur = was
+    return out
+}
+
 # ---- the call graph ----
 
 fn (e mut Effects&) visit(b I64) {
@@ -646,18 +658,11 @@ fn (e mut Effects&) extern(f I64) {
     if name == "exit" or name == "_exit" or name == "abort" { e.cur.Exits = true }
     bit := capOf(name)
     if bit != 0 { e.cap(bit) }
-    # C of the program's own - an extern or a C import outside the standard library - is a class of its own
-    mi := e.P.FnModule(f)
-    if not name.StartsWith("__olang_") and mi >= 0 and not e.P.L.Mods[mi].Identity.StartsWith("std/") and not systemHeader(e.P.L.Mods[mi].Identity) {
-        e.cap(CapC)
-    } else if not name.StartsWith("__olang_") and bit == 0 and e.curMod >= 0 and not e.P.L.Mods[e.curMod].Identity.StartsWith("std/") {
-        # the program's own code calling the C library straight
-        e.cap(CapC)
-    }
+    # C the program calls itself - from a module outside the standard library - is a class of its own (B1.2); what std
+    # calls C for is said by what it gains
+    own := e.curMod >= 0 and not e.P.L.Mods[e.curMod].Identity.StartsWith("std/")
+    if own and not name.StartsWith("__olang_") { e.cap(CapC) }
 }
-
-# a system header's module (X17): a header path not beside the program
-fn systemHeader(identity String&) Bool { return identity.EndsWith(".h") and not identity.Contains("/") or identity.StartsWith("sys/") }
 
 # the capability a C function gains (B1.2), 0 for none
 fn capOf(name String&) I64 {
@@ -718,7 +723,7 @@ fn Describe(f Facts&, names Array<String&>&) String {
     parts.Push("allocates" if f.Allocates else "allocates nothing")
     if f.Grows { parts.Push("may grow a Vec") }
     if f.Spawns { parts.Push("starts tasks") }
-    reach := capText(f, true)
+    reach := capText(f)
     if reach != "" { parts.Push(reach) } else if f.CallsC { parts.Push("calls C") }
     if f.Exits { parts.Push("may end the program") }
     parts.Push("may block" if f.Blocks else "never blocks")
@@ -728,7 +733,10 @@ fn Describe(f Facts&, names Array<String&>&) String {
     return parts.Join("; ")
 }
 
-fn endsNote(f Facts&) String { return "; always ends" if f.Terminates() else "" }
+fn endsNote(f Facts&) String {
+    if f.Recursive { return "; recursive" }
+    return "; always ends" if f.Terminates() else ""
+}
 
 # the classes a body reaches, "files, network": with the module each is reached in first where via
 fn CapText(f Facts&, mods Array<String&>&) String {
@@ -741,7 +749,7 @@ fn CapText(f Facts&, mods Array<String&>&) String {
     return parts.Join(", ")
 }
 
-fn capText(f Facts&, plain Bool) String {
+fn capText(f Facts&) String {
     parts Vec<String&>
     for k in range CapCount {
         if f.Caps & (1 << k) != 0 { parts.Push(CapName(k)) }
