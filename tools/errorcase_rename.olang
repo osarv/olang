@@ -137,7 +137,7 @@ fn rename(t String&, ws Words&, c mut Count&) String {
     out := StringBuilder()
     at I64 = 0
     i I64 = 0
-    inDecl := ""      # the type whose braces i is in, "" outside
+    inDecl := "" # the type whose braces i is in, "" outside
     declEnd I64 = -1
     for i < t.Len() {
         if inDecl.Len() > 0 and i >= declEnd { inDecl = "" }
@@ -325,13 +325,13 @@ test Camel "an upper-case word becomes its parts, each capitalized" {
 
 test rename "a declaration's words and their qualified uses are renamed; a bare word and another type's are not" {
     src := ("type IoError error " "{ " $Full ", " $Denied " }\nfn f() ? IoError { error IoError." $Full " }\n# io.IoError." $Full
-           " and " $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+        " and " $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
     ws := Words()
     collect(src, ws)
     n := Count()
     out := rename(src, ws, n)
     want := ("type IoError error " "{ Full, Denied }\nfn f() ? IoError { error IoError.Full }\n# io.IoError.Full and "
-             $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+        $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
     assert out == want, out
     assert n.n == 4
     assert rename(out, ws, n) == out
@@ -339,7 +339,7 @@ test rename "a declaration's words and their qualified uses are renamed; a bare 
 
 test rename "a type of one word that is its own name is an error raised by name: its declaration dropped" {
     src := ("# what Find fails with\ntype NotFound error " "{ NOT" "_FOUND }\nfn f() ? NotFound { error NotFound.NOT" "_FOUND }\n"
-           "x := try f() catch regex.NotFound.NOT" "_FOUND default 0\n")
+        "x := try f() catch regex.NotFound.NOT" "_FOUND default 0\n")
     ws := Words()
     collect(src, ws)
     n := Count()
@@ -351,12 +351,12 @@ test rename "a type of one word that is its own name is an error raised by name:
 
 test rename "a set's own words, words across lines and a declaration in a string" {
     src := ("type L error os.Error, P " "{ " $Full " }\ntype P error " "{\n    " $Range "\n    A\n}\nt := \"type Q error " "{ "
-           $Full " }\\nfn f() ? Q { error Q." $Full " }\"\n")
+        $Full " }\\nfn f() ? Q { error Q." $Full " }\"\n")
     ws := Words()
     collect(src, ws)
     n := Count()
     out := rename(src, ws, n)
     want := ("type L error os.Error, P " "{ Full }\ntype P error " "{\n    OutOfRange\n    A\n}\nt := \"type Q error " "{ Full"
-             " }\\nfn f() ? Q { error Q.Full }\"\n")
+        " }\\nfn f() ? Q { error Q.Full }\"\n")
     assert out == want, out
 }

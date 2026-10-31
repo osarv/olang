@@ -26709,6 +26709,11 @@ R23 and R23a (the flag bans), T19's CamelCase; how each was built, and what I de
   error out, a raise, and a function with conditions - whose implicit `? ArgumentError` (D17b's old reading) is gone.
   A trait's method with conditions must list `ArgumentError` (R1b: a trait writes its set); `tests/any.olang`'s
   Account did. `main` already needed `?`; its rule is R1d's now.
+  Old code is fixed by `tools/question_migrate.olang` (driven, in `olang fix` before `unused_migrate`): where the
+  compiler says a function "writes no '?'" it writes `?` before the body's brace of the declaration the diagnostic
+  stands in, in rounds - found because the fix scenario's 2026-10-25 program (a contract with no `?`) stopped building.
+  The fix fixtures' old programs keep their old upper-case words (the rename had reached their uses, not their old
+  `error E { }` declarations); `olang fix` renames both.
 - **The flag bans** are judged on signatures as resolved (`generic.flagBans`): every declared function and method but
   an `extern fn` or `export fn` (C's conventions, X1/X13), and every function type. R23a counts a parameter written
   `mut T&`, the receiver aside: a method's `Bool` speaks of what it acts on (`s.Add(x)` whether it changed, a parser's

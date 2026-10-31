@@ -821,7 +821,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   exported, lower case private (M6). Named sets list them (`type LookupError error NotFound, Ambiguous`), braces still
   declare a set's own (`IoError.Full`). Every error name is CamelCase, words included (`ListError.Empty`),
   `tools/errorcase_rename.olang` (in `olang fix`) migrated the repository. A function that can fail writes `?` (R1d) -
-  contract functions and `main` included; a trait method with conditions names `ArgumentError`. A raised name one edit
+  contract functions and `main` included (`tools/question_migrate.olang`, driven by R1d, in `olang fix`); a trait method
+  with conditions names `ArgumentError`. A raised name one edit
   from another error of the module is an error with did-you-mean unless a function raising it names it after its `?`.
   A `Bool` among several results (R23) and a `Bool` result beside a `mut T&` parameter (R23a) are errors naming `? E`.
   Decided (mine): the resolver walks a module's bodies once before resolving them (`names.surveyBodies`, diagnostics
