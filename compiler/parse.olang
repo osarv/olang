@@ -762,6 +762,13 @@ fn (p mut Parser&) entryEnd() ? Fail {
         p.skipEnds()
         return
     }
+    # QY: after an entry ending in "}", ">" or a bare "&" (after which L18 puts no statement end) the next one may begin a
+    # later line - "Round Circle&" above "Sq(s F64)"
+    pk := p.prevKind
+    if (pk == token.Tok.RBrace or pk == token.Tok.Gt or pk == token.Tok.Amp) and p.breakBefore() {
+        p.skipEnds()
+        return
+    }
     # the next entry on the same line: the body's end was wanted (T17, T19)
     if not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and not p.sees(token.Tok.Eof) { try p.fail(token.Tok.RBrace.Describe()) }
     try p.endStmt()

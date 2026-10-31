@@ -1,0 +1,21 @@
+# check: run
+# T17, QY: a case carrying a reference written whole ends in a bare "&", after which the line break separates the next
+# case (L18 puts no statement end there) - as the formatter writes such an enum
+type Circle struct(r F64) { r }
+type Box<T> struct(v T) { v }
+
+type Shape enum {
+    Round mut Circle&
+    Maybe Circle?&
+    Boxed Box<I64>
+    Sq(s F64)
+}
+
+fn main() {
+    k := Circle(1.0)
+    s := Shape.Round(k)
+    if s == Shape.Round { s.r = 2.0 }
+    q := Shape.Sq(1.0)
+    b := Shape.Boxed(Box(3))
+    assert k.r == 2.0 and q == Shape.Sq and b == Shape.Boxed
+}

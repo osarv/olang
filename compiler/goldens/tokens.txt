@@ -1285,6 +1285,7 @@ c540f54848e40a7a dbcbe614919d021c checks/cases/t17payloadoutlived.olang
 c48357a9666e2548 9f239a33925533b3 checks/cases/t17payloadscopes.olang
 adefa78faa14caa6 a5590cd21989970c checks/cases/t17payloadwrite.olang
 e45fdb316f6b73e7 d990cfb5e722921d checks/cases/t17sep.olang
+a8cb3b6897d77c2b 59a970774a06de99 checks/cases/t17wholereflines.olang
 603b860efecd6d45 259fa758fd50c0cb checks/cases/t19asetholdsitself.olang
 f45df3585cce2fbf 12ead8ba783ce5aa checks/cases/t19aunknownmember.olang
 0585910422c8b86e 7c7a278c6959104e checks/cases/t19awordofmember.olang
@@ -1806,7 +1807,7 @@ fa9ed970d3d1051f 1c08a7353965639f compiler/mcp.olang
 bc532f9936c7c2a0 71ce2a352ee0a0f9 compiler/msgs.olang
 a90cb7f3b8bf7a7c 9897568c43d7304c compiler/names.olang
 456a7d37e7dff7e7 25113c23c30c6851 compiler/olang.olang
-0458a49ba0c1ee13 1563fbf946a76c70 compiler/parse.olang
+d8a9089fffd919b7 423f8a07e416bd6f compiler/parse.olang
 ae916dcaefab9a3b 1dd71aa3550202b5 compiler/profile.olang
 e7cd4d1ef2df86bf 0c6b47a51f539ff8 compiler/runtime.olang
 6bd63fcea748f9e4 da891c47392d96c1 compiler/scan.olang

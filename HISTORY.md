@@ -26401,6 +26401,10 @@ records are keyed apart from a plain test build's (`buildInputs`), though only t
 reproduced: a narrowed copy dangling under early freeing (a Map value replaced while a narrowed copy of its old payload
 was read), and S3 refusing a call whose only effect is a user `Eq` (both a struct's `==` and an array's call it and
 count as effects). Left: the profiler's signal handler runs on the interrupted stack (no `sigaltstack`), and samples
-reserved but not published at `__olang_prof_stop` are dropped. Found on the way, not fixed (an over-rejection): a
+reserved but not published at `__olang_prof_stop` are dropped. Found on the way and fixed (the parser, pre-existing): an enum
+written across lines whose case carries a reference whole (`Round Circle&`, `Maybe Circle?&` above `Sq(s F64)`) did not
+parse - the line break after a bare `&` separates entries by QY, which the list helper `sep` knew and the enum's
+`entryEnd` did not - while the AST writer (and so astdiff's round trip of the new case) wrote exactly that; case
+`t17wholereflines`. Found on the way, not fixed (an over-rejection): a
 second name for a constructed local returned (`x2 := x1; return x2`) is O10d's error, the flow analysis not following
 `x2 := x1` into the result scope.
