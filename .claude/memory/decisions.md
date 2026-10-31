@@ -2004,3 +2004,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QBZ flag bans DECIDED 2026-10-31 (the user: "yes, ban both flag shapes"): in the errors batch.
 - QCA DECIDED 2026-10-31 (the user: "no, this is just for you. A human may write code how it wants"): the nesting
   limit is my own code's discipline (rules.md), never a rule, report or check on other people's olang code.
+- QBP 10 DECIDED 2026-10-31 (the user: "Do it Ig"): array patterns `case String&["test", file, ..words]` - literals
+  compare, names bind, `..name` binds the rest as a view (once per pattern), no `..` means the exact length; lengths
+  checked first; exhaustiveness over lengths. Queued with the errors batch's language round.
