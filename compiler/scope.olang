@@ -4324,7 +4324,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
 fn (s mut Scoper&) noteOrigin(l I64, x typed.Expr&, v Val) {
     if not source.InferScopes or l >= s.origin.Len() or s.origin[l] == -2 { return }
     if v.K != ValKind.Existing { return }
-    r, _ := s.wholeRoot(x)
+    r := s.wholeRoot(x)
     s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2
 }
 
@@ -6173,7 +6173,7 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
                 s.terms[l] = v.T
                 bound.Push(l)
                 # the inference: a binding's claim is its subject's, which a lift of the binding lengthens (2.4)
-                r, _ := s.wholeRoot(bd.From)
+                r := s.wholeRoot(bd.From)
                 if l < s.origin.Len() { s.origin[l] = r if r >= 0 and r != l and s.liftable(r) else -2 }
             }
         }
@@ -8090,24 +8090,35 @@ fn (s mut Scoper&) joinTerm(a Term, b Term) Term {
     return a
 }
 
-# the local value x is the whole of (2.3's whole edges) and whether its own storage is what is kept: a local read or
-# borrowed whole, a reference read out of a part of one (what it names lives where the local's referent or references
-# do, O20, O25h); -1 for a view of storage (a slice, a borrow of a part) or no local's
-fn (s mut Scoper&) wholeRoot(x typed.Expr&) I64, Bool {
+# the local value x is the whole of (2.3's whole edges): a local read or borrowed whole, a reference read out of a part
+# of one (what it names lives where the local's referent or references do, O20, O25h); -1 for a view of storage (a slice,
+# a borrow of a part) or no local's
+fn (s mut Scoper&) wholeRoot(x typed.Expr&) I64 {
+    return match s.unAway(x) {
+        case typed.Expr.Read(_, _, p, _): flRoot(p)
+        case typed.Expr.Borrow(_, _, p): s.borrowRoot(p)
+        case typed.Expr.Promote(_, _, pr): s.wholeRoot(pr.X)
+        case _: -1
+    }
+}
+
+# the local a borrow of place p is the whole of: the local itself, or what a reference names; -1 for a part
+fn (s mut Scoper&) borrowRoot(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Deref(_, _, r): flRootExpr(r)
+        case _: -1
+    }
+}
+
+# whether what value x keeps is a local's own storage: a value local borrowed whole (E12c)
+fn (s mut Scoper&) keepsStorage(x typed.Expr&) Bool {
     match s.unAway(x) {
-        case typed.Expr.Read(_, _, p, _) { return flRoot(p), false }
         case typed.Expr.Borrow(_, _, p) {
-            match p {
-                case typed.Lvalue.Local(_, _, id) { return I64(id), not s.isRef(s.B!.Locals[I64(id)].Ty) }
-                case typed.Lvalue.Deref(_, _, r) { return flRootExpr(r), false }
-                case _ { return -1, false }
-            }
+            l := wholeLocal(p)
+            return l >= 0 and not s.isRef(s.B!.Locals[l].Ty)
         }
-        case typed.Expr.Promote(_, _, pr) {
-            l, _ := s.wholeRoot(pr.X)
-            return l, false
-        }
-        case _ { return -1, false }
+        case _ { return false }
     }
 }
 
@@ -8126,10 +8137,7 @@ fn (s mut Scoper&) viewRoot(x typed.Expr&) I64 {
 }
 
 # a lift proposed for the local value x is the whole of: its claim lengthened to outlive t
-fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
-    l, stor := s.wholeRoot(x)
-    s.proposeLocal(l, t, stor)
-}
+fn (s mut Scoper&) propose(x typed.Expr&, t Term) { s.proposeLocal(s.wholeRoot(x), t, s.keepsStorage(x)) }
 
 # a lift proposed for local l - for the local its claim was taken from, where ":=" took it - to outlive t, its storage
 # with it where stor: lowering homes a local's storage in its frame, a scope variable or the program's (O26a), so its
