@@ -1,0 +1,249 @@
+# variadic_migrate - D8g: the std functions that took an array of what are now their variadic arguments - os.Exec,
+# os.Start, os.ExecUntil, os.ExecInPlace, http.Get, http.Post, csv.Record - called the new way. The array's place takes
+# its items, `os.Exec(String&["ls", "-l"])` becoming `os.Exec("ls", "-l")`, or an array a call gives passed on,
+# `os.Exec(...args.ToArray())`; the defaulted parameters after it, given by position before, are given by name
+# (`os.Exec(args, "", false)` becomes `os.Exec(..., capture = false)`), their defaults left out; ExecUntil's token goes
+# first. filepath.Join needs nothing: its calls read the same. In a module's own file its calls written bare are
+# rewritten too. Re-runnable: a call already written the new way - its variadic place holding "...", text or nothing -
+# is left alone. A call it cannot tell - the array a plain name, which a String could be too - is listed "by hand:"
+# with its line, for a person (write `...args`), and the tool then ends with the status 1.
+#
+#     olang build tools/variadic_migrate.olang && build/tools_variadic_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+# a std function moved onto a variadic parameter: its module, its name, its old parameters in order - the array the
+# variadic one replaces marked "*", a defaulted one written with its default ("dir=\"\"", an argument giving it left
+# out) - and those of them that stay positional, before the variadic one
+type moved struct(Module String&, Name String&, Old Array<String&>&, Before Array<String&>&) {
+    Module
+    Name
+    Old
+    Before
+}
+
+Moved Array<moved> = moved[moved("std/os", "Exec", String&["*args", "input=\"\"", "capture=true", "dir=\"\""], String&[])
+    moved("std/os", "Start", String&["*args", "input=\"\"", "capture=true", "dir=\"\""], String&[])
+    moved("std/os", "ExecUntil", String&["*args", "tok", "input=\"\"", "capture=true", "dir=\"\""], String&["tok"])
+    moved("std/os", "ExecInPlace", String&["path", "*args"], String&["path"])
+    moved("std/http", "Get", String&["url", "*headers"], String&["url"])
+    moved("std/http", "Post", String&["url", "contentType", "body", "*headers"], String&["url", "contentType", "body"])
+    moved("std/csv", "Record", String&["*fields", "sep=','"], String&[])]
+
+fn main() {
+    args := os.Args()
+    check := false
+    verbose := false
+    files Vec<String&>
+    for k in range 1, args.Len() {
+        a := args[k]
+        if a == "--check": check = true
+        else if a == "-v": verbose = true
+        else if os.IsDir(a): srcmask.Walk(a, files)
+        else: files.Push(a)
+    }
+    hand := 0
+    changed := 0
+    for path in files {
+        text := try srcmask.ReadText(path) catch os.Error {
+            srcmask.SayErr("variadic_migrate: " $path ": cannot be read")
+            continue
+        }
+        r := migrate(path, text)
+        hand += r.Hand
+        if r.Text == text { continue }
+        changed++
+        if verbose or check: srcmask.Say(path)
+        if not check: os.WriteFile(path, r.Text)!
+    }
+    if check and changed > 0: os.Exit(1)
+    if hand > 0: os.Exit(1)
+}
+
+# a file's text rewritten, and how many calls it left for a person
+type migrated struct(Text String&, Hand I64) {
+    Text
+    Hand
+}
+
+fn migrate(path String&, text String&) migrated {
+    out := $text
+    hand := 0
+    for m in Moved {
+        alias := aliasOf(out, m.Module)
+        heads Vec<String&>
+        if alias.Len() > 0: heads.Push($alias "." $m.Name "(")
+        if path.EndsWith($m.Module ".olang"): heads.Push($m.Name "(")    # the module's own calls
+        for head in heads {
+            r := rewriteCalls(path, out, head, m)
+            out = r.Text
+            hand += r.Hand
+        }
+    }
+    return migrated(out, hand)
+}
+
+# the alias a file imports module under - its base name, or the one written before the path - "" where it imports none
+fn aliasOf(text String&, module String&) String {
+    for line in text.Split("\n") {
+        t := srcmask.Strip(line)
+        if not t.StartsWith("import ") or not (t.EndsWith($"\"" $module "\"")) { continue }
+        head := srcmask.Strip(t[7:t.Len() - module.Len() - 2])
+        if head.Len() > 0 { return $head }
+        return $module[(try module.Find("/") catch default -1) + 1:]
+    }
+    return ""
+}
+
+# every call written "ALIAS.Name(" rewritten the new way, the last first so earlier offsets hold
+fn rewriteCalls(path String&, text String&, head String&, m moved&) migrated {
+    out := $text
+    hand := 0
+    mask := srcmask.Mask(out, false)
+    at := out.Len()
+    for {
+        i := try out[:at].FindLast(head) catch { break }
+        at = i
+        if mask[i] != 'c' or (i > 0 and (srcmask.IsWord(out[i - 1]) or out[i - 1] == '.')) { continue }
+        if out[:i].EndsWith("fn ") { continue }   # its declaration
+        o := i + head.Len() - 1
+        close := srcmask.CloseOf(out, mask, o)
+        if close < 0 { continue }
+        args := try splitArgs(out, mask, o + 1, close - 1) catch NotOneLine {
+            hand++
+            sayHand(path, out, i, "an argument list across lines")
+            continue
+        }
+        given := try newArgs(args, m) catch Unclear {
+            hand++
+            sayHand(path, out, i, "the array is a name - pass it on as '...name', or give its items")
+            continue
+        } catch Unchanged {
+            continue
+        }
+        out = $out[:o + 1] $given $out[close - 1:]
+    }
+    return migrated(out, hand)
+}
+
+fn sayHand(path String&, text String&, at I64, why String&) {
+    line := 1 + text[:at].CountOf("\n")
+    srcmask.SayErr("by hand: " $path ":" $line ": " $why)
+}
+
+# a call's arguments between from and to, split at the commas no bracket holds, each without its surrounding spaces;
+# a line break no bracket holds - items on several lines - fails with NotOneLine
+fn splitArgs(text String&, mask String&, from I64, to I64) Vec<String&>&text ? NotOneLine {
+    parts mut Vec<String&>&text = Vec<String&>()
+    depth := 0
+    start := from
+    for i in range from, to {
+        if mask[i] != 'c' { continue }
+        c := text[i]
+        if c == '(' or c == '[' or c == '{': depth++
+        else if c == ')' or c == ']' or c == '}': depth--
+        else if c == '\n' and depth == 0 and srcmask.Strip(text[start:i]).Len() > 0: error NotOneLine
+        else if c == ',' and depth == 0 {
+            parts.Push(srcmask.Strip(text[start:i]))
+            start = i + 1
+        }
+    }
+    last := srcmask.Strip(text[start:to])
+    if last.Len() > 0 or parts.Len() > 0: parts.Push(last)
+    return parts
+}
+
+# the arguments of a call of m written the new way - failing with Unchanged where it is written so already, or has no
+# array to move, and with Unclear where the array is one it cannot tell from a single argument
+fn newArgs(args Vec<String&>&, m moved&) String ? Unchanged, Unclear {
+    if newForm(args, m) { error Unchanged }
+    before Vec<String&>
+    named Vec<String&>
+    spread := ""
+    seen := false
+    for k in range args.Len() {
+        a := args[k]
+        if isNamed(a) {
+            named.Push($a)
+            continue
+        }
+        if k >= m.Old.Len() { error Unchanged }   # more than the old form took: the new one already
+        p := m.Old[k]
+        if p.StartsWith("*") {
+            spread = try spreadOf(a)
+            seen = true
+        } else if p in m.Before {
+            before.Push($a)
+        } else if a != "default" and not p.EndsWith($"=" $a) {
+            named.Push($nameOf(p) " = " $a)
+        }
+    }
+    if not seen { error Unchanged }
+    all Vec<String&>
+    for b in before { all.Push(b) }
+    if spread.Len() > 0: all.Push(spread)
+    for n in named { all.Push(n) }
+    return $all.Join(", ")
+}
+
+# what an old call's array becomes among the variadic arguments: a literal's items, or a call's array passed on with
+# "..."; Unchanged for what the new form already holds there - "...", text - and Unclear for any other value
+fn spreadOf(a String&) String ? Unchanged, Unclear {
+    if a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$") { error Unchanged }
+    lb := try a.Find("[") catch default -1
+    if lb > 0 and a.EndsWith("]") and typeText(a[:lb]) { return $srcmask.Strip(a[lb + 1:a.Len() - 1]) }
+    if a.EndsWith(")") { return $"..." $a }   # a call's array: ToArray(), View(), Args()
+    error Unclear
+}
+
+# whether text is what an array literal writes before its "[": a type's name, its marker and arguments
+fn typeText(t String&) Bool {
+    for c in t {
+        if not (srcmask.IsWord(c) or c == '&' or c == '?' or c == '.' or c == '<' or c == '>' or c == ',' or c == ' ') { return false }
+    }
+    return t.Len() > 0 and t[0].IsUpper()
+}
+
+# whether a call is written the new way where the old one held something else: what stands at the variadic place, after
+# the positional parameters before it, is "..." or text
+fn newForm(args Vec<String&>&, m moved&) Bool {
+    k := m.Before.Len()
+    if k == 0 or k >= args.Len() { return false }
+    a := args[k]
+    return a.StartsWith("...") or a.StartsWith("\"") or a.StartsWith("$")
+}
+
+# an old parameter's name, its default left off
+fn nameOf(p String&) String&p { return p[:try p.Find("=") catch default p.Len()] }
+
+# whether an argument is given by name, "name = value"
+fn isNamed(a String&) Bool {
+    i := 0
+    for i < a.Len() and srcmask.IsWord(a[i]) { i++ }
+    if i == 0 { return false }
+    rest := srcmask.StripStart(a[i:])
+    return rest.StartsWith("=") and not rest.StartsWith("==")
+}
+
+test "a literal's items take the array's place, later positions by name" {
+    m := Moved[0]
+    t := "import \"std/os\"\nfn f() { o := try os.Exec(String&[\"ls\", \"-l\"], \"\", false, dir) }\n"
+    r := migrate("t.olang", t)
+    assert r.Text == "import \"std/os\"\nfn f() { o := try os.Exec(\"ls\", \"-l\", capture = false, dir = dir) }\n", r.Text
+    assert m.Name == "Exec" and r.Hand == 0
+}
+
+test "a call's array passed on, the token first, re-runnable" {
+    t := "import \"std/os\"\nfn f() { o := os.ExecUntil(a.ToArray(), tok, \"x\") }\n"
+    r := migrate("t.olang", t)
+    assert r.Text == "import \"std/os\"\nfn f() { o := os.ExecUntil(tok, ...a.ToArray(), input = \"x\") }\n", r.Text
+    assert migrate("t.olang", r.Text).Text == r.Text
+}
+
+test "a name is left for a person; the new form and other modules alone" {
+    t := "import \"std/os\"\nimport h \"std/http\"\nfn f() { os.Exec(args)\n os.Exec(\"ls\")\n h.Get(u, Header[x]) }\n"
+    r := migrate("t.olang", t)
+    assert r.Hand == 1
+    assert r.Text == "import \"std/os\"\nimport h \"std/http\"\nfn f() { os.Exec(args)\n os.Exec(\"ls\")\n h.Get(u, x) }\n", r.Text
+}

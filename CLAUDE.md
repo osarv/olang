@@ -129,6 +129,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `x & 1 == 0` is `(x & 1) == 0` - Go's and Rust's order, C's mistake not copied: `| ^ &` sit between the comparisons and
   the shifts. `tools/precedence_migrate.olang` parenthesizes every comparison under `& | ^` at the old precedence (none
   in the repository - `&`/`|` never took Bools, so no valid code mixed them) and `--verify` shows each file reads alike.
+- **`**`, the power (E5a, QCG, the user's "Yes add the operator", 2026-10-31; built 2026-10-31).** `a ** b` calls
+  `a`'s type's `Pow` (E31, `Pow` joining the shapes), tighter than the prefix operators and to the right (`-x ** 2` is
+  `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`), `**=` with it, lane by lane on arrays. Decided (mine): the exponent adapts to
+  `Pow`'s parameter (a float's own type, an integer's `U32` - `n ** U32(k)`), a literal base to the number type wanted,
+  else its own (E13c); `arith.Checked<T>` gained `Pow`; a type with none is an error naming it. A call in check
+  (`power`), so the evaluator and QBV's folding apply unchanged.
 - **Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).** `and`/`or` short-circuit (the user's
   call); `not` binds looser than comparisons, as in Python. No compound logic assignments.
 - **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses (post clause a
@@ -245,6 +251,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `pushFacts`). `tools/match_migrate.olang` (tokens, idempotent, in `olang fix` before unused_migrate) migrated the
   repository - 135 files. Found on the way (pre-existing): in a match on an error value a guarded `case _` was taken as
   the chain's else, its guard dropped (`caughtLast`, `caughtCases`).
+- **Array patterns (S13h, QBP 10, the user's "Do it" and the rest spelled `...`, 2026-10-31; built 2026-10-31).**
+  `case String&["test", file, ...words]`: a literal compares an element, a name binds one (always new; a local's value
+  is a guard), `...name` binds the rest as a view of the array (a slice), a bare `...` skips it, no `...` is the exact
+  length; items after the rest count from the end; the length is tested first. Decided (mine): the element type is
+  written as a literal writes it and must be the subject's; arrays, text (`Char[...]`, the rest a `String`) and an
+  At+Len type (a Vec - a named rest needs its `Slice`); at a case's top or in a payload; lengths are S13a's
+  constructors (`I64[]` + `I64[x, ...r]` cover every array), a value match missing a length names it. Built as the
+  parser's `Pattern.Elems`/`Rest` and the checker's tests and bindings (`elemsPattern`) - nothing new below check.
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
   (fails as written with `CaseError.WrongCase`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
@@ -548,6 +562,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   value are errors. Functions, methods, constructors, generics, an `any`'s trait methods. Decided (mine): evaluated in
   the order written - reordered arguments but literals held in hidden locals (`inWrittenOrder`); a defaulted
   parameter's name is part of the API, a required one's stays the declaration's; `olang explain`/`doc` show defaults.
+- **Variadic parameters (D8g, QCF, the user's "yes, add variadic args", 2026-10-31; built 2026-10-31).** `fn sum(xs
+  ...I64)`: a call gives any number of arguments there - held as a fixed array in the caller's frame, lent to the call,
+  no allocation - or passes an array on with `...a`; inside, a read-only `Array<T>&`. Decided (mine): last but
+  defaulted parameters, which follow it by name (`os.Exec("ls", "-l", dir = d)`); one, no default, those before it
+  required; methods, lambdas, function types (`fn(xs ...I64)`, named as every function type's parameters are) - not
+  constructors, payloads or externs; the arguments evaluated in written order (earlier ones held first where a
+  variadic one could change them); a generic's variable inferred from them; a function fits a function type of either
+  form (T22). Representation: `TypeRef.Spread`, a `Spread` permission bit on the signature's parameter, the checker
+  gathering the arguments into one before named ones are placed. std: filepath.Join, os.Exec/Start/ExecUntil (the
+  token first)/ExecInPlace, http.Get/Post's headers, csv.Record; `tools/variadic_migrate.olang` (in `olang fix`).
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
   read-only, references still naming their instance, value arrays borrowed); types from the expected function type
   (D16a) or the body (D16b). A function value is `{code, environment}`, nullable, identity by both words (T21).

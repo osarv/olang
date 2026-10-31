@@ -1,4 +1,4 @@
-# check: fail error[S13h]: none matches an array of 3 elements or more
+# check: fail none matches an array of 3 elements or more
 # S13h: past the longest pattern written, one length stands for every longer one
 fn f(xs Array<I64>&) I64 {
     return match xs {
