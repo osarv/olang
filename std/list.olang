@@ -539,8 +539,14 @@ fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
 
 # the run in chunk k from position at: to the chunk's end, or the list's when k is the last chunk in use
 fn (s listState<T>&) runIn(k I64, at I64) Array<T>&s {
-    if k == s.nChunks - 1 { return s.chunk(k)[at + firstChunk - (firstChunk << k):s.used] }
-    return s.chunk(k)[at + firstChunk - (firstChunk << k):]
+    if k == s.nChunks - 1 { return s.chunkIn(k)[at + firstChunk - (firstChunk << k):s.used] }
+    return s.chunkIn(k)[at + firstChunk - (firstChunk << k):]
+}
+
+# chunk k as a walk reads it: chunk's, read-only - what a read-only list hands out
+fn (s listState<T>&) chunkIn(k I64) Array<T>&s {
+    if k == 0 { return s.first }
+    return s.chunks[k]
 }
 
 # the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -

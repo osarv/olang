@@ -251,8 +251,6 @@ fn (w mut walker&) itemBreak(j I64) Bool {
 # one parameter, its tokens from s to e: "name TYPE [= default]"; a read-only reference made bare
 fn (w mut walker&) param(s I64, e I64, names Vec<String&>&, ext Bool) {
     if w.kind(s) != token.Tok.Iden or e - s < 3: return
-    name := w.text(s)
-    if names.Has(name): return
     t := s + 1
     end := e
     for q in range t, e {
@@ -266,6 +264,12 @@ fn (w mut walker&) param(s I64, e I64, names Vec<String&>&, ext Bool) {
     # written writable, a function value, a variadic list, an "any": nothing to make bare here
     if k0 == token.Tok.Mut or k0 == token.Tok.Fn or k0 == token.Tok.LParen or k0 == token.Tok.Dot: return
     if k0 == token.Tok.Iden and w.text(t) == "any" and w.kind(t + 1) == token.Tok.Iden: return
+    # a scope marker after it ("b N&a"): scopes are inferred (docs/rework.md round 1), so it says nothing - made bare
+    # with its reference, as one named by a marker is ("T&p" - what is handed back of it is read-only, as it was)
+    if w.refMarked(t, end) and w.kind(last - 2) != token.Tok.Question {
+        if not ext: w.edits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
+        return
+    }
     if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return
     if ext and not w.textOrArray(t): return
     w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
@@ -307,8 +311,8 @@ test TextPhase "drops mut, makes read-only parameters bare" {
     assert TextPhase("fn (c Checker&) Lookup(n I64) I64 { }\n") == "fn (c Checker) Lookup(n I64) I64 { }\n"
     assert TextPhase("fn (c mut Checker&) Add(t String&) { }\n") == "fn (c Checker&) Add(t String) { }\n"
     assert TextPhase("G mut I64 = 0\nfn f() { x mut Vec<mut N&>& = v }\n") == "G mut I64 = 0\nfn f() { x Vec<N&>& = v }\n"
-    assert TextPhase("fn first(l List&) Node&l { }\n") == "fn first(l List&) Node&l { }\n"
-    assert TextPhase("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N&a) { }\n"
+    assert TextPhase("fn first(l List&) Node&l { }\n") == "fn first(l List) Node&l { }\n"
+    assert TextPhase("fn link(a mut N&, b N&a) { }\n") == "fn link(a N&, b N) { }\n"
     assert TextPhase("type It trait {\n    mut Next() I64 ? Exhausted\n    Peek() I64\n}\n") == "type It trait {\n    &Next() I64 ? Exhausted\n    Peek() I64\n}\n"
     assert TextPhase("fn f(g fn(x T&) I64, h any Shape&) { }\n") == "fn f(g fn(x T) I64, h any Shape&) { }\n"
     assert TextPhase("extern { fn w(fd I32, b Array<U8>&, p Point&) I64 }\n") == "extern { fn w(fd I32, b Array<U8>, p Point&) I64 }\n"

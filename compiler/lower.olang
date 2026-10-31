@@ -2610,6 +2610,12 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     if op == typed.PrimOp.Convert and args.Len() == 1 and t.KindOf(ty) == types.Kind.ErrVal and t.KindOf(args[0].Type()) == types.Kind.ErrVal {
         return ln.into(ty, mir.Rvalue.Recode(ops[0], t.ErrValItems(args[0].Type()), t.ErrValItems(ty)), sp)
     }
+    # the rework's round 2 (docs/rework.md 2.8): a value seen with fewer of its reference levels writable is the same
+    # value - a fresh one, or one a read-only reference names
+    if op == typed.PrimOp.Convert and args.Len() == 1 and not t.Same(args[0].Type(), ty) and t.SameButPerm(args[0].Type(), ty) and
+       t.KindOf(ty) != types.Kind.Ref and ln.arrayOf(ty) == types.UnknownT {
+        return ln.into(ty, mir.Rvalue.Use(ops[0]), sp)
+    }
     if ln.widening(op, args, ty) { return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost()) }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
     if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }

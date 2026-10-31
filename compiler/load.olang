@@ -99,6 +99,10 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # the rework's round 2: the bare parameters names found written in their bodies, by (file, the parameter's start) -
     # each given a copy of its own on entry (D9, 2.10)
     BareWritten Map<pair.Pair<I64, I64>, Bool>
+    # ... and the reference levels a body's written types are found to hold read-only (2.8's inferred levels), by
+    # (module, the start of the written "T&") - the checker records one where a read-only value is stored into a level
+    # of a local's type and checks the program again; such a "&" then reads read-only there
+    RoLevels Map<pair.Pair<I64, I64>, Bool>
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1

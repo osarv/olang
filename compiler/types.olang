@@ -692,6 +692,50 @@ fn (t mut Table&) PlainList(l ListId) ListId {
 # whether two types are one type (T22, T25a): identity with function types' scopes left out
 fn (t Table&) Same(a TypeId, b TypeId) Bool { return t.Plain(a) == t.Plain(b) }
 
+# whether a and b are one type but for which of their reference levels may be written - through references, arrays,
+# instances' arguments and several results; a function type is the same only as itself
+fn (t Table&) SameButPerm(a TypeId, b TypeId) Bool {
+    if t.Same(a, b) { return true }
+    k := t.KindOf(a)
+    if k != t.KindOf(b) { return false }
+    return match k {
+        case Kind.Ref: (t.PermOf(a) & ~Writable) == (t.PermOf(b) & ~Writable) and t.SameButPerm(t.Referent(a), t.Referent(b))
+        case Kind.Array: t.Length(a) == t.Length(b) and t.SameButPerm(t.Elem(a), t.Elem(b))
+        case Kind.Named: t.DeclOf(a) == t.DeclOf(b) and t.sameListButPerm(t.Args(a), t.Args(b))
+        case Kind.Tuple: t.sameListButPerm(t.Parts(a), t.Parts(b))
+        case _: false
+    }
+}
+
+fn (t Table&) sameListButPerm(a ListId, b ListId) Bool {
+    xs, ys := t.Items(a), t.Items(b)
+    if xs.Len() != ys.Len(): return false
+    for i in range xs.Len() {
+        if not t.SameButPerm(xs[i], ys[i]): return false
+    }
+    return true
+}
+
+# whether some reference level of a may be written where b's same level may not (a and b SameButPerm)
+fn (t Table&) WiderPerm(a TypeId, b TypeId) Bool {
+    if t.Same(a, b) { return false }
+    return match t.KindOf(a) {
+        case Kind.Ref: (t.PermOf(a) & Writable) != 0 and (t.PermOf(b) & Writable) == 0 or t.WiderPerm(t.Referent(a), t.Referent(b))
+        case Kind.Array: t.WiderPerm(t.Elem(a), t.Elem(b))
+        case Kind.Named: t.widerList(t.Args(a), t.Args(b))
+        case Kind.Tuple: t.widerList(t.Parts(a), t.Parts(b))
+        case _: false
+    }
+}
+
+fn (t Table&) widerList(a ListId, b ListId) Bool {
+    xs, ys := t.Items(a), t.Items(b)
+    for i in range xs.Len() {
+        if i < ys.Len() and t.WiderPerm(xs[i], ys[i]): return true
+    }
+    return false
+}
+
 # whether two types that are Same also say the same of where function types' references live (T22): each parameter
 # sharing the same earlier one, each result borrowed from the same parameter or from none (built, or written as a type
 # variable: the same scopes passed), at any depth. A function value fits only a type saying what it says - a value of a

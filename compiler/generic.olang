@@ -640,9 +640,19 @@ fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable
             for q > I64(sp.Start) and not (text[q] == '?' and text[q + 1] == '&') { q-- }
             p.L.Diags.Error(p.at(c.Mi, source.Span(I32(q), I32(q + 1))), msgs.ArrayNullable())
         }
-        return p.T.Ref(r, p.writtenRef())
+        return p.T.Ref(r, p.writtenPerm(c, sp))
     }
-    return p.T.Ref(r, p.writtenRef() | (types.Nullable if nullable else types.ReadOnly))
+    return p.T.Ref(r, p.writtenPerm(c, sp) | (types.Nullable if nullable else types.ReadOnly))
+}
+
+# the permission of a reference written at sp in c's module: writtenRef's, but a level a body was found to hold
+# read-only (the rework's round 2, docs/rework.md 2.8: load.RoLevels)
+fn (p Program&) writtenPerm(c Context&, sp source.Span) I64 {
+    if not source.NewParams: return p.writtenRef()
+    # a C import's declarations say C's "const" by leaving "mut" out (X17, bindgen): read as they are written
+    if c.Mi >= 0 and c.Mi < p.L.Mods.Len() and p.L.Mods[c.Mi].C: return types.ReadOnly
+    if p.L.RoLevels.Has(pair.Pair(c.Mi, I64(sp.Start))) { return types.ReadOnly }
+    return types.Writable
 }
 
 # a variadic parameter's element, as its arguments are held (D8g): under the rework's round 2 its references read-only
@@ -4923,4 +4933,58 @@ test "function types carry what their markers say; a call's scope variables come
     assert p.TypeOrigin(bx).File == 7 and p.TypeOrigin(bx).Within == atI64 and p.InstanceOrigin(i).Sp.Start == 3
     assert p.InstanceOrigin(atI64).File == -1
     assert l.Diags.Errors() == 0, saidRules(l)
+}
+
+# ---- permission levels (the rework's round 2, docs/rework.md 2.8) ----
+
+# a with each reference level read-only where b's same level is (a and b SameButPerm) - its top level included
+fn (p mut Program&) MeetPerm(a types.TypeId, b types.TypeId) types.TypeId {
+    if p.T.Same(a, b) or not p.T.WiderPerm(a, b) { return a }
+    return match p.T.KindOf(a) {
+        case types.Kind.Ref: p.T.Ref(p.MeetPerm(p.T.Referent(a), p.T.Referent(b)), p.T.PermOf(a) & (p.T.PermOf(b) | ~types.Writable))
+        case types.Kind.Array: p.T.Array(p.MeetPerm(p.T.Elem(a), p.T.Elem(b)), p.T.Length(a))
+        case types.Kind.Named: p.Instance(p.T.DeclOf(a), p.meetList(p.T.Args(a), p.T.Args(b)))
+        case types.Kind.Tuple: p.T.Tuple(p.meetList(p.T.Parts(a), p.T.Parts(b)))
+        case _: a
+    }
+}
+
+fn (p mut Program&) meetList(a types.ListId, b types.ListId) types.ListId {
+    xs, ys := p.T.Items(a), p.T.Items(b)
+    out := Array<types.TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = p.MeetPerm(xs[i], ys[i]) if i < ys.Len() else xs[i] }
+    return p.T.List(out)
+}
+
+# an instance's signature with its result made read-only where a value it returns is (MeetPerm): every caller then
+# holds what the body hands back as read-only as it is. The instance keeps it from one check of the program to the next
+fn (p mut Program&) NarrowResult(i I64, value types.TypeId) Bool {
+    sig := p.instances[i].Sig
+    r := p.T.Result(sig)
+    nr := p.MeetPerm(r, value)
+    if nr == r { return false }
+    ns := p.T.Func(p.T.Params(sig), nr, p.T.Errors(sig), p.T.ScopesOf(sig), p.T.NamesIdOf(sig))
+    row := p.instances[i]
+    p.instances[i] = instance(row.Fn, row.Args, ns, row.Name, row.Text, row.From)
+    if row.Args == types.ListId(0) and p.fnSig.Has(row.Fn): p.fnSig.Put(row.Fn, ns)
+    return true
+}
+
+# t with every reference level read-only - through references, arrays, instances' arguments and several results: what
+# a bare parameter hands back of what it reaches (deep, D9)
+fn (p mut Program&) ReadOnlyAll(t types.TypeId) types.TypeId {
+    return match p.T.KindOf(t) {
+        case types.Kind.Ref: p.T.Ref(p.ReadOnlyAll(p.T.Referent(t)), p.T.PermOf(t) & ~types.Writable)
+        case types.Kind.Array: p.T.Array(p.ReadOnlyAll(p.T.Elem(t)), p.T.Length(t))
+        case types.Kind.Named: t if p.T.Args(t) == types.ListId(0) else p.Instance(p.T.DeclOf(t), p.allList(p.T.Args(t)))
+        case types.Kind.Tuple: p.T.Tuple(p.allList(p.T.Parts(t)))
+        case _: t
+    }
+}
+
+fn (p mut Program&) allList(l types.ListId) types.ListId {
+    xs := p.T.Items(l)
+    out := Array<types.TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = p.ReadOnlyAll(xs[i]) }
+    return p.T.List(out)
 }
