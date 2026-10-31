@@ -1448,7 +1448,7 @@ effects line (explain, doc and hover only - nothing decides by it).
 
 ### 12.6 Left, in order, with what each needs
 
-1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands: 347
+1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands: 326
    distinct errors on the root, most of them readers handing back a view of a `&` parameter given bare data - which
    item 2 removes; then the unpinned settling's oscillation, which pins nothing in its own stage).
 2. **The by-pointer value-result handover, then QCC's `T&` error** (the coordinator's decision 1). What it needs, as
@@ -1487,14 +1487,15 @@ every module it loads), distinct errors after the pinned rounds:
 |---|---|---|---|---|---|
 | at its start (olang.d, the pinned stage of the first run) | 658 | 114 | 280 | 114 | 27 |
 | the storage lend and the nullable widening (olang.i, a snapshot mid-run) | 410 | 179 | 93 | 7 | 29 |
-| following, the variadic element, the stored copy (olang.m's migration, olang.i's check) | 347 | 189 | 27 | 6 | 22 |
+| following, the variadic element, the stored copy (olang.m's migration, olang.i's check, the pinned tree) | 347 | 189 | 27 | 6 | 22 |
+| the same after five unpinned rounds, the match values met (olang.i's check) | 326 | 197 | 20 | 6 | 1 |
 
-The unpinned settling still oscillates (a parameter made bare by D9d, `&` again by the note its callers' errors give)
-and was stopped each time; the tree measured is the pinned one. Root check: 16 s, 1.47 GB peak (the default-path
+The unpinned settling no longer runs away (27, 15, 2, 1, 1 edits) but ends in one parameter flipping each round (bare
+by D9d, `&` again by its callers' notes) and was stopped there. Root check: 16 s, 1.47 GB peak (the default-path
 compile of compiler/ is the self-build's check, ~1.9 GB peak with its objects). The self-build under the switches is
 therefore not reached: stage 2 needs the root to check.
 
-What the 347 are: T25c's 157 "read-only here" are nearly all one shape - a reader taking a `&` parameter it only hands
+What the 326 are: T25c's ~160 "read-only here" are nearly all one shape - a reader taking a `&` parameter it only hands
 back, `fn unPassed(x typed.Expr&) typed.Expr&x`, `fn (s Scoper) callOf(x typed.Expr&) typed.Call?&x`, given a bare
 parameter's value (`unPassed(s.unAway(x))`). Under QCC such a reader takes its argument bare and gives a value - the
 by-pointer value-result handover (12.6 item 2) - so the remaining class waits for it, not for more inference; making
