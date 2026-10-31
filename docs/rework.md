@@ -1446,6 +1446,9 @@ effects line (explain, doc and hover only - nothing decides by it).
   errors in std's own modules (25 before this round's fixes), all of a module checked alone (`time.Virtual`'s decided
   assert outside a test build), none in a test.
 
+- `make verify` passes on wt-rework at the round's end (the default path: the suite, the bootstrap, the goldens -
+  tokens, trees and the checker's record layouts recaptured for the files this round changed).
+
 ### 12.6 Left, in order, with what each needs
 
 1. **compiler/'s migration to zero errors and the self-build under the switches** (12.7 has where it stands: 326
