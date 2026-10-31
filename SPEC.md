@@ -1269,9 +1269,15 @@ round-2 entry), the permission of a reference level that no declaration fixes is
   as the argument a call gives it, T25c's generic rule) may be stored into a local the body made; the instance's result
   then follows that parameter: a call giving it a read-only argument gets the result read-only at every level below its
   top. So a container's `Clone`, `ToArray` and walks copy a bare receiver's elements out as writable as the caller's.
+  Such a function is no function value (T21): a call through one cannot see its argument's permission, and the error
+  at the conversion, like `olang explain`'s `# not a value`, says so.
 - *Traits.* A trait method written `&Name()` - one that may write its receiver - is met by a method whose receiver is
   bare as well as by one taking `&`; a bare parameter passed by pointer meets a trait's parameter of the same type at
   any permission (it is read-only at every level).
+
+- *Nullable parameters.* A declared function's parameter written `p T?&` is read-only unless its body writes through
+  it, passes it where it may be written or keeps it, which makes it writable (read-only is said by a value, and a value
+  has no null); a caller passing a read-only reference to a writable one is refused as any.
 
 A C import's declarations keep C's `const`: a reference written there without `mut` is read-only (X17). Like the rest of
 T25c this changes no value and no run time.

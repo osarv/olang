@@ -148,6 +148,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     anySlotsOf Map<types.TypeId, Array<AnySlot>&>
     # D17f: the body owning the contract a trait writes on a slot's method, by SlotKey - -1 for none
     SlotContracts Map<I64, I64>
+    signingFn Bool = false             # a declared function's signature is being read (nullableParam)
     decided Map<source.NameId, Bool>   # the parameters whose length the body being signed decides on (BareRef, G29)
     decidedViews Bool = false          # ... and whether its result may hand back views (then none is held by value)
 }
@@ -731,6 +732,40 @@ fn LengthDecided(text String&, from I64, to I64, name String&) Bool {
     return false
 }
 
+# the rework's round 2 (docs/rework.md 11.3 point 6): a declared function's parameter written "p T?&" may be null and is
+# read-only, unless its body writes through it, passes it where it may be written or keeps it (load.NullWritable, found
+# by the checker, the program then checked again) - read-only being said by a value, which has no null
+fn (p mut Program&) nullableParam(c Context&, tr ast.TypeRef?&, t types.TypeId) types.TypeId {
+    if not source.NewParams or not p.signingFn or tr is null or p.T.KindOf(t) != types.Kind.Ref or not p.T.IsNullable(t): return t
+    match tr {
+        case ast.TypeRef.Ref(sp, _, _, _) {
+            if p.L.RoLevels.Has(pair.Pair(c.Mi, I64(sp.Start))) or p.L.NullWritable.Has(pair.Pair(c.Mi, I64(sp.Start))): return t
+            return p.T.Ref(p.T.Referent(t), p.T.PermOf(t) & ~types.Writable)
+        }
+        case _ { return t }
+    }
+}
+
+# a function's parameter k made writable (wantWritable): its signature and its instances' patched as NarrowResult does
+fn (p mut Program&) WidenParam(f I64, k I64) {
+    if p.fnSig.Has(f) { p.fnSig.Put(f, p.widenAt(try p.fnSig.Get(f) catch default types.UnknownT, k)) }
+    for i in range p.instances.Len() {
+        row := p.instances[i]
+        if row.Fn != f: continue
+        p.instances[i] = instance(row.Fn, row.Args, p.widenAt(row.Sig, k), row.Name, row.Text, row.From)
+    }
+}
+
+fn (p mut Program&) widenAt(sig types.TypeId, k I64) types.TypeId {
+    if sig == types.UnknownT: return sig
+    ps := p.T.Items(p.T.Params(sig))
+    if k >= ps.Len() or p.T.KindOf(ps[k]) != types.Kind.Ref: return sig
+    out := Array<types.TypeId>(ps.Len())
+    for i in range ps.Len() { out[i] = ps[i] }
+    out[k] = p.T.Ref(p.T.Referent(ps[k]), p.T.PermOf(ps[k]) | types.Writable)
+    return p.T.Func(p.T.List(out), p.T.Result(sig), p.T.Errors(sig), p.T.ScopesOf(sig), p.T.NamesIdOf(sig))
+}
+
 # whether a written type names a type variable - whose binding stays by value, however it is resolved (an instance's
 # context binds it to a struct: still the variable's representation, so a function type means one thing everywhere)
 fn (p mut Program&) namesVar(c Context&, tr ast.TypeRef?&) Bool {
@@ -1031,7 +1066,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         shares.Push(types.OwnScope)
     }
     for prm in s.Params {
-        ps.Push(p.Resolve(c, prm.Ty) if p.namesVar(c, prm.Ty) else p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name))
+        ps.Push(p.nullableParam(c, prm.Ty, p.Resolve(c, prm.Ty) if p.namesVar(c, prm.Ty) else p.BareRef(prm.Ty, p.Resolve(c, prm.Ty), prm.Name)))
         shares.Push(p.markedParam(c, prm.Ty!, named, shares))
         named.Push(prm.Name)
     }
@@ -2733,7 +2768,9 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recv = p.BareRef(row.F.Recv!.Ty, p.Resolve(c, row.F.Recv!.Ty), row.F.Recv!.Name)
         recvName = row.F.Recv!.Name
     }
+    p.signingFn = not p.FnIsExtern(f) and not row.F.Export and row.F.Bodied
     sig := p.sigType(c, row.F.S, recv, recvName)
+    p.signingFn = false
     p.cabi = wasCabi
     p.decided = Map<source.NameId, Bool>()
     if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }

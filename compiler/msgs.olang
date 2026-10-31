@@ -397,6 +397,7 @@ type Diag enum {
     ReadOnlyCopyWrite
     ReadOnlyCopyRef
     ReadOnlyFuncValue
+    FollowingFuncValue
     NoteGroupFunctionType
     NoteReadOnlyCopy
     NoteReadOnlyCopyOf
@@ -1991,6 +1992,8 @@ fn ReadOnlyCopyWrite() Msg { return Msg(Diag.ReadOnlyCopyWrite, "T25c", "this wr
 fn ReadOnlyCopyRef() Msg { return Msg(Diag.ReadOnlyCopyRef, "T25c", "a reference a read-only copy holds is read-only - it cannot be passed or kept where it may be written through") }
 
 # ERR_READ_ONLY_FUNC_VALUE
+fn FollowingFuncValue(text String&) Msg { return Msg(Diag.FollowingFuncValue, "T25c, T21", $text " gives back what it is given as read-only as the argument is - its result follows it - which a call through a function value cannot see, so it cannot be a function value: pass a lambda calling it") }
+
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
 
 # NOTE_GROUP_FUNCTION_TYPE

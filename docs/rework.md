@@ -1190,8 +1190,11 @@ Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and
 4. **A body's written inner levels are inferred even where a type is written** (`pieces Array<String&> = ...`): 2.8 had
    a written local type fix writable levels; inferring them is what lets old code migrate as written. Writes through a
    level so made read-only are refused where they are written, so nothing becomes writable that was not.
-5. **A nullable parameter (`p T?&`) is left as written** (writable under the switch): 283 such parameters in
-   compiler/, none written `mut`; read-only nullable parameters have no spelling under QCC. Open point 6 below.
+5. **A nullable parameter (`p T?&`) is read-only unless its body needs it writable** (open point 6, option (a)): 283
+   such parameters in compiler/, none written `mut`; read-only nullable parameters have no spelling under QCC, so the
+   permission is the body's, as an entry copy is. Direction question 2 in the report.
+6. **A function whose result follows its argument is no function value** (T21, `FollowingFuncValue`, said by
+   `olang explain` too): a call through a value cannot see the argument's permission.
 
 ### 11.3 Open points added
 
@@ -1199,6 +1202,10 @@ Built on `wt-rework` behind the same switches (`OLANG_PARAMS=new`, developed and
    and read-only is said by a value, which has no null. Options: (a) a `?&` parameter's permission inferred from its
    body (read-only where it writes nothing through it) and shown by doc/explain/hover; (b) a bare `p T?` - a value that
    may be absent, passed by pointer, for parameters only. Recommended (a): no new spelling, the source unchanged.
+   **Built (a), provisional** (11.2's sixth decision): a declared function's `?&` parameter starts read-only and is made
+   writable where its body writes through it, passes it writably or keeps it (`check.wantWritable` at those refusals,
+   `load.NullWritable`, `generic.nullableParam`/`WidenParam` patching the signature and its instances), the program
+   checked again; a function type's `?&` stays as written (writable), which a read-only one fits (T22).
 7. **Permission bindings** (2.8's per-field form). An instance a constructor makes from read-only arguments is a
    read-only copy whole (Rule P), so an iterator over read-only data (`ArrayIter`, `MapIter`, regex's `Match` and
    searcher) cannot be returned as a writable value or advanced by a method writing more than its plain fields. 2.8's

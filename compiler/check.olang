@@ -3649,6 +3649,32 @@ fn (c mut Checker&) wantCopy(id I64) Bool {
     return true
 }
 
+# the rework's round 2 (docs/rework.md 11.3 point 6): a nullable parameter of this function, read-only until its body is
+# found writing through it, passing it where it may be written or keeping it - then made writable (load.NullWritable,
+# generic.WidenParam) and the program checked again. Whether x reaches one so made
+fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
+    if not source.NewParams or c.frames.Len() == 0: return false
+    r := c.levelRootX(x)
+    if r < 0: return false
+    l := c.cur().Local(typed.LocalId(I32(r)))
+    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) or not c.P.T.IsNullable(l.Ty) or c.writable(l.Ty): return false
+    f := c.bodyFn(c.fr().Body)
+    if f < 0: return false
+    k := -1
+    for i in range c.cur().Params.Len() {
+        if I64(c.cur().Params[i]) == r: k = i
+    }
+    fd := c.P.FnDecl(f)
+    j := k - (1 if fd.Recv is not null else 0)
+    if j < 0 or j >= fd.S.Params.Len() or fd.S.Params[j].Ty is null: return false
+    key := pair.Pair(c.P.FnModule(f), I64(fd.S.Params[j].Ty!.Span().Start))
+    if c.P.L.NullWritable.Has(key): return false
+    c.P.L.NullWritable.Put(key, true)
+    c.P.WidenParam(f, k)
+    c.copiesGrew = true
+    return true
+}
+
 # whether the body being checked is a generator's (D18) - its parameters held by its walk, never copied on entry
 fn (c mut Checker&) genBody() Bool {
     return match c.cur().Of {
@@ -5583,7 +5609,7 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
         }
         case typed.Lvalue.Deref(_, _, ref) {
             rt := typeOf(ref)
-            if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and c.wantCopy(c.bareWhole(unwrapped(ref))) {
+            if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and (c.wantCopy(c.bareWhole(unwrapped(ref))) or c.wantWritable(unwrapped(ref))) {
                 return
             } else if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
                 if c.capturedValue(ref) {
@@ -7262,7 +7288,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 if source.NewParams {
                     if c.followResult(x) { return c.convert(sp, x, want) }
-                    if c.wantCopy(c.bareWhole(x)) { return x }
+                    if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return x }
                     c.levelRo(want)
                     c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
                     return x
@@ -9890,7 +9916,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
         }
         if source.NewParams {
             if c.followResult(x) { return true }
-            if c.wantCopy(c.bareWhole(x)) { return false }
+            if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return false }
             # a view of what a bare parameter reaches handed back: the result read-only, at every level (2.8)
             if c.retInst >= 0 and c.Attempts < 19 and c.P.NarrowResult(c.retInst, c.P.ReadOnlyAll(typeOf(x))) {
                 c.copiesGrew = true
@@ -10586,6 +10612,11 @@ fn (c mut Checker&) roSettle() {
         if a.BareName.Len() > 0 { c.P.L.Diags.Note(rec, a.Bare, msgs.NoteBareParam(a.BareName)) }
     }
     for f in c.roFns {
+        # the rework's round 2 (2.8): a result that follows an argument (followResult) is no function value's
+        if c.FollowsAny(f.Body) {
+            c.P.L.Diags.Error(f.At, msgs.FollowingFuncValue(f.What))
+            continue
+        }
         b := c.Bodies[f.Body]
         for k in range f.First, b.Params.Len() {
             if not c.roNeeds.Has(pair.Pair(f.Body, k)) { continue }
@@ -20386,6 +20417,20 @@ fn (c mut Checker&) followResult(x typed.Expr&) Bool {
         c.copiesGrew = true
     }
     return true
+}
+
+# whether a body's result follows an argument it is given (load.FollowResults): no function value's (T21, explain)
+fn (c mut Checker&) FollowsAny(body I64) Bool {
+    if not source.NewParams or body < 0 or body >= c.Bodies.Len() or c.P.L.FollowResults.Len() == 0: return false
+    i := match c.Bodies[body].Of {
+        case typed.BodyOf.Fn(inst): inst
+        case _: -1
+    }
+    if i < 0: return false
+    for k in range c.Bodies[body].Params.Len() {
+        if c.P.L.FollowResults.Has($i ":" $k): return true
+    }
+    return false
 }
 
 # the parameter of this body a value followsArg reaches it through, -1 for none
