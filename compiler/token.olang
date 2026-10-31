@@ -42,7 +42,6 @@ type Tok enum {
     Range
     Match
     Case
-    Nomatch
     Type
     Struct
     Enum
@@ -88,7 +87,6 @@ type Tok enum {
     Inc
     Dec
     EqEq
-    Arrow
     NotEq
     Bang
     Lt
@@ -163,7 +161,6 @@ fn (k Tok) Text() String& {
         case Tok.Range => "range"
         case Tok.Match => "match"
         case Tok.Case => "case"
-        case Tok.Nomatch => "nomatch"
         case Tok.Type => "type"
         case Tok.Struct => "struct"
         case Tok.Enum => "enum"
@@ -209,7 +206,6 @@ fn (k Tok) Text() String& {
         case Tok.Inc => "++"
         case Tok.Dec => "--"
         case Tok.EqEq => "=="
-        case Tok.Arrow => "=>"
         case Tok.NotEq => "!="
         case Tok.Bang => "!"
         case Tok.Lt => "<"
@@ -306,7 +302,6 @@ fn Keyword(t String&, at I64, n I64) Tok {
         case 'n' {
             if n == 3 and spells(t, at, "not") { return Tok.Not }
             if n == 4 and spells(t, at, "null") { return Tok.NullLit }
-            if n == 7 and spells(t, at, "nomatch") { return Tok.Nomatch }
             if n == 8 and spells(t, at, "noreturn") { return Tok.Noreturn }
         }
         case 'o' {
@@ -348,7 +343,7 @@ fn spells(t String&, at I64, word String&) Bool {
 test "Keyword finds every reserved word and nothing else" {
     for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.ErrDefer, Tok.Embed, Tok.Break
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
-                 Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
+                 Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit] {
         w := k.Text()

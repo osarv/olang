@@ -1719,7 +1719,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             return ast.Stmt.DoFor(sp, body, cond)
         }
         case token.Tok.Match {
-            m := try p.matchBody()
+            m := try p.matchBody(false)
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.MatchS(sp, m)
@@ -1840,7 +1840,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
 fn keywordNamesField(k token.Tok) Bool {
     return match k {
         case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable, token.Tok.In, token.Tok.Is, token.Tok.As, token.Tok.And, token.Tok.Or => true
-        case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Nomatch, token.Tok.Type, token.Tok.Struct => true
+        case token.Tok.Xor, token.Tok.Range, token.Tok.Case, token.Tok.Type, token.Tok.Struct => true
         case token.Tok.Enum, token.Tok.Trait, token.Tok.Extends, token.Tok.Import, token.Tok.Test => true
         case token.Tok.Extern, token.Tok.Default => true
         nomatch => false
@@ -2363,7 +2363,7 @@ fn (p mut Parser&) simpleStmt() ast.Stmt&p ? Fail {
 }
 
 # "match" subject "{" cases "}" - a statement, or a value (S12b); "match T" on an introduced type variable takes types
-fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
+fn (p mut Parser&) matchBody(value Bool) ast.Match&p ? Fail {
     at := try p.want(token.Tok.Match)
     onType := false
     if p.sees(token.Tok.Iden) and p.look(1) == token.Tok.LBrace {
@@ -2401,17 +2401,10 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
     wasSkip := p.skip
     p.skip = false
     cases mut Vec<ast.Case&>&p = Vec<ast.Case&>()
-    noMatch ast.Case?&p = null
     for {
         p.skipEnds()
         if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
         cat := p.here()
-        if p.accept(token.Tok.Nomatch) {
-            body, value := try p.caseBody()
-            noMatch = ast.Case(p.from(cat), Array<ast.Pattern&>(0), Array<ast.TypeRef&>(0), null, body, value)
-            if p.sees(token.Tok.StmtEnd) { p.advance() }
-            continue
-        }
         try p.want(token.Tok.Case)
         pfrom := p.pats.Len()
         tfrom := p.tys.Len()
@@ -2445,8 +2438,8 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
             if p.accept(token.Tok.Comma) { continue }
             if not p.sees(token.Tok.StmtEnd) { break }
             n := p.look(1)
-            if n == token.Tok.LBrace or n == token.Tok.Arrow or n == token.Tok.If or n == token.Tok.RBrace or
-               n == token.Tok.Case or n == token.Tok.Nomatch or n == token.Tok.Eof {
+            if n == token.Tok.LBrace or n == token.Tok.Colon or n == token.Tok.If or n == token.Tok.RBrace or
+               n == token.Tok.Case or n == token.Tok.Eof {
                 break
             }
             p.advance()
@@ -2455,14 +2448,14 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
         types := gather(p.tys, tfrom)
         guard ast.Expr?&p = null
         if p.accept(token.Tok.If) { guard = try p.expr() }
-        body, value := try p.caseBody()
-        cases.Push(ast.Case(p.from(cat), alts, types, guard, body, value))
+        body, v := try p.caseBody(value)
+        cases.Push(ast.Case(p.from(cat), alts, types, guard, body, v))
         if p.sees(token.Tok.StmtEnd) { p.advance() }
     }
     try p.want(token.Tok.RBrace)
     p.brackets = wasBrackets
     p.skip = wasSkip
-    return ast.Match(p.from(at), subject, onType, cases.ToArray(), noMatch)
+    return ast.Match(p.from(at), subject, onType, cases.ToArray())
 }
 
 # a case of "match T" on a type variable: a type (G15)
@@ -2470,14 +2463,39 @@ fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
     return try p.typeExpr()
 }
 
-# a case's block, or "=> value"
-fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
-    if p.accept(token.Tok.Arrow) {
+# a case's body (S12, S12b, S1b): in a match used as a value "case P: v" - the value, its expression running on as a
+# statement does - or "case P: return x", one statement that leaves; in a match statement a block or "case P: stmt"
+fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
+    if p.sees(token.Tok.Colon) and (not value or leavingWord(p.look(1))) {
+        st := try p.lineBody()
+        return st, null
+    }
+    if p.sees(token.Tok.Colon) {
+        colon := p.tk()
+        p.advance()
+        t := p.tk()
+        if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
+            p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
+            error Fail.SYNTAX
+        }
         v := try p.expr()
         return Array<ast.Stmt&>(0), v
     }
+    if value {
+        # S12b: a block gives no value - read past it, so what follows is still read
+        at := p.here()
+        try p.block()
+        p.report(at, at + 1, msgs.ValueCaseBlock())
+        return Array<ast.Stmt&>(0), ast.Expr.Unreachable(p.from(at), null)
+    }
     body := try p.block()
     return body, null
+}
+
+# a statement that leaves, which a value match's clause may be in place of its value (S12b): return, break, continue,
+# error
+fn leavingWord(k token.Tok) Bool {
+    return k == token.Tok.Return or k == token.Tok.Break or k == token.Tok.Continue or k == token.Tok.Error
 }
 
 # an alternative, read as an expression, as the pattern it is (DESIGN.md point 13): at the top a path, a case with its
@@ -3104,7 +3122,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             return ast.Expr.Lambda(p.from(at), ast.Func(p.from(at), null, source.NameId(0), s, body))
         }
         case token.Tok.Match {
-            m := try p.matchBody()
+            m := try p.matchBody(true)
             return ast.Expr.MatchE(p.from(at), m)
         }
         case token.Tok.Unreachable {
@@ -3336,7 +3354,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     pk := p.kindAt(pr)
     pl := p.lineAt(pr)
     # L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
-    if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Arrow {
+    if keywordNamesField(fk) and want == "an expression" and pk != token.Tok.Colon {
         p.reportAt(f, msgs.KeywordFieldRead(p.named(f)))
         return true
     }
@@ -3350,17 +3368,6 @@ fn (p mut Parser&) hint(want String&) Bool {
         (fk == token.Tok.Iden and (pk == token.Tok.Break or pk == token.Tok.Continue or pk == token.Tok.Unreachable or
                                    pk == token.Tok.Join))) {
         p.reportAt(pr, msgs.KeywordAsName(p.named(pr)))
-        return true
-    }
-    # S12b: "nomatch => return 0" - a clause that leaves gives no value, so it is a block ("=> unreachable" is a value,
-    # S16e)
-    if pk == token.Tok.Arrow and (fk == token.Tok.Return or fk == token.Tok.Break or fk == token.Tok.Continue or
-                                  fk == token.Tok.Error) {
-        from := I64(p.ts.Toks[f].Start)
-        end := from
-        for end < p.src.Text.Len() and p.src.Text[end] != '\n' { end++ }
-        for end > from and (p.src.Text[end - 1] == ' ' or p.src.Text[end - 1] == '\t') { end-- }
-        p.reportAt(f, msgs.ArrowLeaves(p.named(f), p.src.Text[from:end]))
         return true
     }
     # "fn join(", "x I32, done I32" - a keyword where a name was wanted
@@ -3410,7 +3417,7 @@ fn (p mut Parser&) hint(want String&) Bool {
     return false
 }
 
-# S12b/D8c: "case P => a, b" - a comma after a case's value on its line, outside every bracket
+# S12b/D8c: "case P: a, b" - a comma after a case's value on its line, outside every bracket
 fn (p Parser&) caseValueComma(f I64) Bool {
     if p.kindAt(f) != token.Tok.Comma { return false }
     line := p.lineAt(f)
@@ -3423,12 +3430,20 @@ fn (p Parser&) caseValueComma(f I64) Bool {
         } else if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
             if depth == 0 { return false }
             depth--
-        } else if k == token.Tok.Arrow and depth == 0 {
-            return true
+        } else if k == token.Tok.Colon and depth == 0 {
+            return p.lineStartsCase(t)
         }
         t--
     }
     return false
+}
+
+# whether the line of token t begins with "case"
+fn (p Parser&) lineStartsCase(t I64) Bool {
+    line := p.lineAt(t)
+    s := t
+    for s > 0 and p.lineAt(s - 1) == line { s-- }
+    return p.kindAt(s) == token.Tok.Case
 }
 
 fn isOperandEndTok(k token.Tok) Bool {

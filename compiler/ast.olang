@@ -149,15 +149,15 @@ type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defau
 }
 
 # a match, a statement's or a value's; OnType for "match T" on an introduced type variable, whose cases are types
-type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>&, NoMatch Case?&) {
+type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>&) {
     Sp
     Subject
     OnType
     Cases
-    NoMatch
 }
 
-# one case: its alternatives (patterns, or types for "match T"), its guard, and a block or a value ("=> v")
+# one case: its alternatives (patterns, or types for "match T"), its guard, and a body or a value ("case P: v");
+# "case _" with no guard is the match's catch-all (S13f)
 type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr?&, Body Array<Stmt&>&
                  Value Expr?&) {
     Sp
@@ -460,7 +460,6 @@ fn yieldInIf(i If&) source.Span {
 fn yieldInMatch(m Match&) source.Span {
     y := yieldInExpr(m.Subject)
     for cs in m.Cases { y = yieldOr(y, yieldInCase(cs)) }
-    if m.NoMatch is not null { y = yieldOr(y, yieldInCase(m.NoMatch!)) }
     return y
 }
 

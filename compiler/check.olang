@@ -4286,7 +4286,6 @@ fn storedIf(i ast.If&, out mut Map<source.NameId, Bool>&) {
 fn storedMatch(m ast.Match&, out mut Map<source.NameId, Bool>&) {
     storedExpr(m.Subject, out)
     for cs in m.Cases { storedCase(cs, out) }
-    if m.NoMatch is not null { storedCase(m.NoMatch!, out) }
 }
 
 fn storedCase(cs ast.Case&, out mut Map<source.NameId, Bool>&) {
@@ -8600,7 +8599,6 @@ fn nullValue(m ast.Match&) Bool {
     for cs in m.Cases {
         if cs.Value is not null and isNullLit(cs.Value!) { return true }
     }
-    if m.NoMatch is not null and m.NoMatch!.Value is not null and isNullLit(m.NoMatch!.Value!) { return true }
     return false
 }
 
@@ -15243,7 +15241,7 @@ fn (c mut Checker&) reraise(sp source.Span, x typed.Expr&c) {
 }
 
 # R11b, T20: a match on an error value, read as the if-chain it is - each case a test of what its items name (with its
-# guard), "case null" its null test, "case _" and "nomatch" the else, and the last case the else where the cases cover
+# guard), "case null" its null test, an unguarded "case _" the else, and the last case the else where the cases cover
 # everything it can be
 fn (c mut Checker&) caughtMatch(sp source.Span, m ast.Match&) {
     wasPin, wasLocal := c.fr().errPinSp, c.fr().errPinLocal
@@ -15254,11 +15252,9 @@ fn (c mut Checker&) caughtMatch(sp source.Span, m ast.Match&) {
         return
     }
     els ast.Stmt?&m = null
-    if m.NoMatch is not null { els = ast.Stmt.If(m.NoMatch!.Sp, ast.If(null, ast.Branch(m.NoMatch!.Sp, m.NoMatch!.Body, -1), null)) }
     last := c.caughtLast(m, covered)
     for i := m.Cases.Len() - 1, i >= 0, i-- {
         cs := m.Cases[i]
-        if cs.Value is not null { c.err(cs.Sp, msgs.ArrowInStatement()) }
         br ast.Branch&m = ast.Branch(cs.Sp, cs.Body, -1)
         if i == last {
             els = ast.Stmt.If(cs.Sp, ast.If(null, br, null))
@@ -15270,7 +15266,7 @@ fn (c mut Checker&) caughtMatch(sp source.Span, m ast.Match&) {
     c.unpin(wasPin, wasLocal)
 }
 
-# R11b, T20: "match e" giving a value, each case "=> v": the conditional it is
+# R11b, T20: "match e" giving a value, each case "case P: v": the conditional it is
 fn (c mut Checker&) caughtMatchValue(sp source.Span, m ast.Match&, want types.TypeId) typed.Expr&c {
     wasPin, wasLocal := c.fr().errPinSp, c.fr().errPinLocal
     from := c.stmts.Len()
@@ -15281,7 +15277,6 @@ fn (c mut Checker&) caughtMatchValue(sp source.Span, m ast.Match&, want types.Ty
         return c.unknown(sp)
     }
     v ast.Expr?&m = null
-    if m.NoMatch is not null { v = m.NoMatch!.Value }
     last := c.caughtLast(m, covered)
     for i := m.Cases.Len() - 1, i >= 0, i-- {
         cs := m.Cases[i]
@@ -15366,23 +15361,20 @@ fn (c mut Checker&) caughtCaseTest(m ast.Match&, cs ast.Case&) ast.Expr&m {
     return t!
 }
 
-# which case is the chain's else (R11b): a "case _", or, with no nomatch, the last where the cases cover every error -
-# -1 for none
+# which case is the chain's else (R11b): a "case _" with no guard, or the last where the cases cover every error - -1
+# for none
 fn (c mut Checker&) caughtLast(m ast.Match&, covered Bool) I64 {
     for i in range m.Cases.Len() {
+        if m.Cases[i].Guard is not null { continue }
         for p in m.Cases[i].Alts {
-            match p {
-                case ast.Pattern.Wild(_) { return i }
-                nomatch { }
-            }
+            if isWild(p) { return i }
         }
     }
-    if m.NoMatch is not null { return -1 }
     return m.Cases.Len() - 1 if covered else -1
 }
 
 # R11b, T20: a match's cases checked before it is read as a chain - each names words, error types or sets, null, or
-# "_"; with no nomatch the cases without guards cover every error the subject can be, and null where it may be null; a
+# "_"; the cases without guards cover every error the subject can be, and null where it may be null; a
 # case after they have, or naming nothing it can be, is never reached. Whether it may be read (false where it is said
 # why not), and whether the cases cover everything
 fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
@@ -15415,7 +15407,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
         for p in cs.Alts {
             match p {
                 case ast.Pattern.Wild(_) {
-                    wild = true
+                    if cs.Guard is null { wild = true }
                     nulls = true
                     xs = c.setUnion(xs, now)
                 }
@@ -15451,7 +15443,7 @@ fn (c mut Checker&) caughtCases(sp source.Span, m ast.Match&) Bool, Bool {
         }
     }
     all := wild or (c.setLess(now, covered).Len() == 0 and nullDone)
-    if ok and not all and m.NoMatch is null {
+    if ok and not all {
         left := c.setLess(now, covered)
         txt := c.setText(left) if left.Len() > 0 else "null"
         if left.Len() > 0 and not nullDone { txt = $txt " and null" }
@@ -19483,9 +19475,8 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
     }
     if m.OnType {
         k := c.matchOnType(m)
-        if k == -2 { return }
-        cs := m.NoMatch if k < 0 else m.Cases[k]
-        if cs is null { return }
+        if k < 0 { return }
+        cs := m.Cases[k]
         was := c.bindCase()
         if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
         c.unbindCase(was)
@@ -19496,14 +19487,15 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
     k := c.reflMatch(m)
     if k == -2 { k = c.lenMatch(m) }
     if k != -2 {
-        cs := m.NoMatch if k < 0 else m.Cases[k]
-        if cs is not null and cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        if k < 0 { return }
+        cs := m.Cases[k]
+        if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
         return
     }
     c.emit(typed.Stmt.Eval(sp, c.matchExpr(sp, m, false, types.VoidT)))
 }
 
-# the clause a match on a length this instance binds chooses (G30): its index, -1 for its nomatch or none, -2 where the
+# the clause a match on a length this instance binds chooses (G30): its index, -1 for none, -2 where the
 # match is no such one - its subject reads no such length or does not fold, or a clause has a guard or a pattern that
 # is no value folding while compiling
 fn (c mut Checker&) lenMatch(m ast.Match&) I64 {
@@ -19532,7 +19524,7 @@ fn (c mut Checker&) lenMatch(m ast.Match&) I64 {
     return found
 }
 
-# the clause a match on a reflected member chooses (G35): its index, -1 for its nomatch or none, -2 where the match
+# the clause a match on a reflected member chooses (G35): its index, -1 for none, -2 where the match
 # is no such one - its subject reads no reflected member, or a clause has a guard or a pattern that is no value known
 # while compiling
 fn (c mut Checker&) reflMatch(m ast.Match&) I64 {
@@ -19567,15 +19559,15 @@ fn (c mut Checker&) reflMatch(m ast.Match&) I64 {
     return found
 }
 
-# a match giving a value (S12b): "case P => v", or a block that leaves
+# a match giving a value (S12b): "case P: v", or a statement that leaves
 fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) typed.Expr&c {
     if not m.OnType and c.errMatch(m) { return c.caughtMatchValue(sp, m, want) }
     if m.OnType {
         k := c.matchOnType(m)
-        if k == -2 { return c.unknown(sp) }
-        cs := m.NoMatch if k < 0 else m.Cases[k]
-        if cs is null or cs.Value is null {
-            c.gap(sp, "a match on a type giving its value by a block (G15)")
+        if k < 0 { return c.unknown(sp) }
+        cs := m.Cases[k]
+        if cs.Value is null {
+            c.gap(sp, "a match on a type leaving from its chosen case (G15)")
             return c.unknown(sp)
         }
         was := c.bindCase()
@@ -19587,13 +19579,13 @@ fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) 
     k := c.reflMatch(m)
     if k == -2 { k = c.lenMatch(m) }
     if k != -2 {
-        cs := m.NoMatch if k < 0 else m.Cases[k]
-        if cs is null {
+        if k < 0 {
             c.err(m.Subject.Span(), msgs.MatchValueNone())
             return c.unknown(sp)
         }
+        cs := m.Cases[k]
         if cs.Value is null {
-            c.gap(sp, "a match on a length giving its value by a block (G30)")
+            c.gap(sp, "a match on a length leaving from its chosen case (G30)")
             return c.unknown(sp)
         }
         return c.expr(cs.Value, want)
@@ -19609,7 +19601,7 @@ fn isWildType(c mut Checker&, t ast.TypeRef&) Bool {
     }
 }
 
-# the case "match T" chooses for this instance: its index, -1 for nomatch, -2 where the subject is not known. The
+# the case "match T" chooses for this instance: its index, -1 for none, -2 where the subject is not known. The
 # subject is a type variable or a type a reflected member names (G38); a case is a type, a trait the type meets, or a
 # generic type or trait whose arguments name variables it binds (G36) - the first that holds is chosen, its variables
 # left in typeCaseBinds for its arm; one an earlier case takes every type of is an error
@@ -19648,8 +19640,8 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
         }
     }
     if found >= 0 { return found }
-    # G15: a type match is exhaustive for every instance - one no case covers needs a nomatch
-    if m.NoMatch is null { c.err(m.Subject.Span(), msgs.TypeMatchUncovered(c.ty(st))) }
+    # G15: a type match is exhaustive for every instance - one no case covers needs a "case _"
+    c.err(m.Subject.Span(), msgs.TypeMatchUncovered(c.ty(st)))
     return -1
 }
 
@@ -19888,37 +19880,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
             c.stmtsOf(cs.Body)
         }
         v typed.Expr?&c = null
-        if cs.Value is not null {
-            if not isValue {
-                c.err(c.wordBefore(cs.Value!.Span().Start, "=>"), msgs.ArrowInStatement())
-            } else {
-                if said == types.UnknownT and rt != types.UnknownT and c.litLike(cs.Value!) { said = typeOf(c.expr(cs.Value, types.UnknownT)) }
-                v = c.expr(cs.Value, rt)
-                if said == types.UnknownT { said = rt }
-                if rt == types.UnknownT and typeOf(v) != types.NullT {
-                    rt = typeOf(v)
-                    if c.isRef(rt) and nullValue(m) { rt = c.P.T.OrNull(rt) }   # T2c: a null value among them
-                    if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(cs.Value!) {
-                        rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
-                    }
-                    # a reference to an array of a known length gives the run-time length, so another case's array of
-                    # another length meets it (S12b, G9a)
-                    if c.isRef(rt) { rt = c.runLength(rt) }
-                }
-                ok := false
-                v, ok = c.fitQuiet(v!, rt, cs.Value!.Span())
-                if not ok { c.matchValueMismatch(cs.Value!.Span(), said, rt, v!) }
-            }
-        }
+        if cs.Value is not null and isValue { v, rt, said = c.caseValue(m, cs.Value!, rt, said) }
         code := c.close(id, outer, mark, bfrom)
-        # S12b: in a match used as a value, a case's block leaves
-        if isValue and cs.Value is null and not leavesValue(code) { c.err(c.braceAfter(cs), msgs.CaseBlockStays()) }
         arms.Push(typed.Arm(cs.Sp, alts.ToArray(), guard, code, v))
-    }
-    if m.NoMatch is not null and all and not allSaid { c.err(source.Span(m.NoMatch!.Sp.Start, m.NoMatch!.Sp.Start + 7), msgs.CaseAfterWildcard()) }
-    for k in range covered.Len() {
-        if covered[k] { continue }
-        all = all
     }
     exhaustive := all
     if not exhaustive and covered.Len() > 0 {
@@ -19931,60 +19895,68 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     if not exhaustive { exhaustive = c.coversRows(rows, Array<types.TypeId>(1, et), 0) }
     if c.caseBroken { exhaustive = true }
     c.caseBroken = broken
-    noMatch typed.Arm?&c = null
-    if m.NoMatch is not null {
-        nm := m.NoMatch
-        id, outer, mark := c.open(typed.BlockKind.Plain, nm!.Sp)
-        bfrom := c.stmts.Len()
-        if nm!.Body.Len() > 0 {
-            c.stmtsOf(nm!.Body)
-        }
-        v typed.Expr?&c = null
-        if nm!.Value is not null and isValue {
-            ok := false
-            v = c.expr(nm!.Value, rt)
-            if rt == types.UnknownT and typeOf(v) != types.NullT {
-                # S12b: a match whose only value is its nomatch's has that value's type, as a case's first value gives it
-                rt = typeOf(v)
-                if c.isRef(rt) and nullValue(m) { rt = c.P.T.OrNull(rt) }
-                if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(nm!.Value!) {
-                    rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
-                }
-                if c.isRef(rt) { rt = c.runLength(rt) }
-                if said == types.UnknownT { said = rt }
-            }
-            v, ok = c.fitQuiet(v!, rt, nm!.Value!.Span())
-            if not ok { c.matchValueMismatch(nm!.Value!.Span(), said, rt, v!) }
-        }
-        code := c.close(id, outer, mark, bfrom)
-        noMatch = typed.Arm(nm!.Sp, Array<typed.Alt&>(0), null, code, v)
-    } else {
-        efrom := c.stmts.Len()
-        if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable, null)) }
-        if not exhaustive and c.isEnum(et) {
-            # S13a: an enum's cases covered by unguarded clauses, or a nomatch
-            k := c.firstUncovered(rows, et)
-            if k >= 0 {
-                cn := c.P.T.CaseNames(et)
-                c.err(ssp, msgs.MatchNotExhaustive(c.text(cn[k]) if cn.Len() > 0 and k < cn.Len() else "?", c.ty(et)))
-            }
-        } else if not exhaustive and covered.Len() > 0 and c.P.T.KindOf(et) == types.Kind.Any {
-            # T34: a closed trait's members covered by unguarded type cases, or a nomatch
-            ms := c.P.Members(c.P.T.AnyTrait(et))
-            for k in range covered.Len() {
-                if not covered[k] and k < ms.Len() {
-                    c.err(ssp, msgs.MatchNotExhaustive(c.ty(ms[k]), c.ty(st)))
-                    break
-                }
-            }
-        } else if isValue and not exhaustive and st != types.UnknownT {
-            c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchValueNeedsNomatch(c.ty(st)))
-        }
-        code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, efrom))
-        noMatch = typed.Arm(m.Sp, Array<typed.Alt&>(0), null, code, null)
-    }
+    noMatch := c.matchElse(m, st, rows, covered, exhaustive, isValue)
     if not isValue { rt = types.VoidT }
     return typed.Expr.Match(sp, rt, typed.Match(held, arms.ToArray(), noMatch, isValue))
+}
+
+# a case's value in a match used as a value (S12b), fitted to the match's type - the first value's, once one is known -
+# with that type and what a mismatch names the values as
+fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
+                              said0 types.TypeId) typed.Expr&c, types.TypeId, types.TypeId {
+    rt, said := rt0, said0
+    if said == types.UnknownT and rt != types.UnknownT and c.litLike(x) { said = typeOf(c.expr(x, types.UnknownT)) }
+    v := c.expr(x, rt)
+    if said == types.UnknownT { said = rt }
+    if rt == types.UnknownT and typeOf(v) != types.NullT { rt = c.firstValueType(m, v, x) }
+    w, ok := c.fitQuiet(v, rt, x.Span())
+    if not ok { c.matchValueMismatch(x.Span(), said, rt, w) }
+    return w, rt, said
+}
+
+# the type a match's first value gives it (S12b): its own, nullable where a value is null (T2c), an array literal's of
+# any length, a reference to an array of a run-time length (so another case's of another length meets it, G9a)
+fn (c mut Checker&) firstValueType(m ast.Match&, v typed.Expr&, x ast.Expr&) types.TypeId {
+    rt := typeOf(v)
+    if c.isRef(rt) and nullValue(m) { rt = c.P.T.OrNull(rt) }
+    if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(x) {
+        rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
+    }
+    if c.isRef(rt) { rt = c.runLength(rt) }
+    return rt
+}
+
+# what a match runs when no case is selected (S13, S13a): nothing for a statement over a value its cases need not
+# cover, else unreachable - each case of an enum or a closed trait's any said where one is not covered, and a match
+# used as a value over any other type its "case _" asked for
+fn (c mut Checker&) matchElse(m ast.Match&, st types.TypeId, rows Vec<Array<ast.Pattern&>&>&, covered Vec<Bool>&
+                              exhaustive Bool, isValue Bool) typed.Arm&c {
+    efrom := c.stmts.Len()
+    if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable, null)) }
+    if not exhaustive { c.sayUncovered(m, st, rows, covered, isValue) }
+    code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, efrom))
+    return typed.Arm(m.Sp, Array<typed.Alt&>(0), null, code, null)
+}
+
+# what a match whose cases do not cover the value says (S13a, T34, S12b): the first enum case or closed trait's member
+# not covered, or for a match used as a value over any other type that it needs a "case _"
+fn (c mut Checker&) sayUncovered(m ast.Match&, st types.TypeId, rows Vec<Array<ast.Pattern&>&>&, covered Vec<Bool>&
+                                 isValue Bool) {
+    et := c.deref(st)
+    ssp := m.Subject.Span()
+    if c.isEnum(et) {
+        k := c.firstUncovered(rows, et)
+        cn := c.P.T.CaseNames(et)
+        if k >= 0 { c.err(ssp, msgs.MatchNotExhaustive(c.text(cn[k]) if cn.Len() > 0 and k < cn.Len() else "?", c.ty(et))) }
+        return
+    }
+    if covered.Len() > 0 and c.P.T.KindOf(et) == types.Kind.Any {
+        ms := c.P.Members(c.P.T.AnyTrait(et))
+        k := try covered.IndexOf(false) catch default -1
+        if k >= 0 and k < ms.Len() { c.err(ssp, msgs.MatchNotExhaustive(c.ty(ms[k]), c.ty(st))) }
+        return
+    }
+    if isValue and st != types.UnknownT { c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchValueUncovered(c.ty(st))) }
 }
 
 # ---- type cases (T34) ----
@@ -20199,15 +20171,6 @@ fn (c mut Checker&) wordBefore(at I32, w String&) source.Span {
     st := i + 1 - w.Len()
     if st < 0 { return source.Span(at, at) }
     return source.Span(I32(st), I32(i + 1))
-}
-
-# a case's block's "{": the first after its patterns and guard
-fn (c mut Checker&) braceAfter(cs ast.Case&) source.Span {
-    from := cs.Guard!.Span().End if cs.Guard is not null else cs.Alts[cs.Alts.Len() - 1].Span().End if cs.Alts.Len() > 0 else cs.Sp.Start
-    t := c.P.L.Mods[c.fr().Mi].Src!.Text
-    i := I64(from)
-    for i < t.Len() and t[i] != '{' { i++ }
-    return source.Span(I32(i), I32(i + 1))
 }
 
 # whether rows of patterns, one per column of types ts, cover every value (Maranget's usefulness, over the patterns'
@@ -20969,7 +20932,7 @@ fn matchAssigns(m ast.Match&, n Array<source.NameId>&) Bool {
     for cs in m.Cases {
         if caseAssigns(cs, n) { return true }
     }
-    return m.NoMatch is not null and caseAssigns(m.NoMatch!, n)
+    return false
 }
 
 fn caseAssigns(cs ast.Case&, n Array<source.NameId>&) Bool {

@@ -5,7 +5,7 @@ endif
 
 syn keyword olangKeyword fn type struct enum trait extends import test extern destruct
 syn keyword olangStatement return break continue error defer errdefer assert unreachable noreturn spawn join yield become comptime
-syn keyword olangConditional if else match case nomatch
+syn keyword olangConditional if else match case
 syn keyword olangRepeat for in range do
 syn keyword olangException try catch checked default
 syn keyword olangOperator and or not xor is as embed

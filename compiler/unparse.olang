@@ -798,11 +798,6 @@ fn (w mut writer&) match(m ast.Match&) {
         }
         w.caseBody(c)
     }
-    if m.NoMatch is not null {
-        w.nl()
-        w.put("nomatch")
-        w.caseBody(m.NoMatch!)
-    }
     w.ind--
     w.nl()
     w.put("}")
@@ -810,12 +805,11 @@ fn (w mut writer&) match(m ast.Match&) {
 
 fn (w mut writer&) caseBody(c ast.Case&) {
     if c.Value is not null {
-        w.put(" => ")
+        w.put(": ")
         w.expr(c.Value!)
         return
     }
-    w.put(" ")
-    w.block(c.Body)
+    w.body(c.Body)
 }
 
 fn (w mut writer&) pattern(p ast.Pattern&) {

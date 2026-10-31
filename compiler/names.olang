@@ -1119,7 +1119,6 @@ fn LoneCatchName(c ast.Catch&, kind What) Bool {
 fn (r mut Resolver&) matchOf(mt ast.Match&) {
     r.expr(mt.Subject)
     for c in mt.Cases { r.caseOf(c) }
-    if mt.NoMatch is not null { r.caseOf(mt.NoMatch!) }
 }
 
 fn (r mut Resolver&) caseOf(c ast.Case&) {
