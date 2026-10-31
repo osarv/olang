@@ -1849,7 +1849,8 @@ fn escape(t String&) String {
 # descriptor { i64, ptr } and a reference to a struct or an enum (one pointer, "ref") two each; a closure's environment
 # one (written where the closure is made, read only by its code); the runtime's scope and chunk headers one each, the
 # tags its inlined bodies carry (std/runtime/runtime.ll's !59, !60)
-tbaaTree String& = ("\n!20 = !{!\"olang\"}\n"
+# and !99, the weights of a call's error edge against its success (LLVM's own "unlikely": 1 to 2000)
+tbaaTree String& = ("\n!20 = !{!\"olang\"}\n!99 = !{!\"branch_weights\", i32 1, i32 2000}\n"
                     "!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n"
                     "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n"
                     "!17 = !{!\"arraydesc\", !20, i64 0}\n!18 = !{!\"closure\", !20, i64 0}\n"
@@ -5139,7 +5140,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
             case _ { }
         }
         fe.E.declare("__olang_ert_pass", "void @__olang_ert_pass(ptr)")
-        fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr)")
+        fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr) cold noreturn")
         fe.w("call void @__olang_ert_pass(ptr " $fe.located(sp, ": left the test\n") ")")
         fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
         fe.w("unreachable")
@@ -5154,7 +5155,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         }
         # where no trace is kept, the requirement that raised it is named, then the hint (D17)
         f := "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
-        fe.E.declare(f, $"void @" $f "(ptr)")
+        fe.E.declare(f, $"void @" $f "(ptr) cold noreturn")
         fe.w($"call void @" $f "(ptr " $fe.located(sp, $": " $text "\n") ")")
         fe.w("unreachable")
         return
@@ -5297,7 +5298,8 @@ fn (fe mut fnEm&) call(c mir.Call) {
         if c.Code != mir.NoLocal { fe.store("i32", code, fe.localAt(c.Code)) }
         bad := fe.let("icmp ne i32 " $code ", 0")
         ok := fe.fresh("ok")
-        fe.w("br i1 " $bad ", label %" $blockName(c.Err) ", label %" $ok)
+        # an error edge is the unlikely way out (!99): what a loop calls stays in a straight line, its failure apart
+        fe.w("br i1 " $bad ", label %" $blockName(c.Err) ", label %" $ok ", !prof !99")
         fe.label(ok)
     }
     if walkSc >= 0 and value != "" {

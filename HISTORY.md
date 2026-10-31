@@ -26442,3 +26442,33 @@ many were given. Limit: `Select(SendOf(r, 9), ...)` written inside a join block 
 the channel's reference); a SendOf made in a local before the join works. Tests: std/time's, std/cancel's and std/chan's
 own (Select over receives, sends, a rendezvous, a timer on the virtual clock and the real one, a closed channel),
 tests/defaultbinds.olang; checks cases timevirtualbuild, s13gnovalue.
+
+## Cold paths, inferred (survey2 item 9, 2026-10-31)
+
+The user's decision of 2026-10-27 ("build it either way no? ... it is quite guaranteed to work?", then "ye do the cold
+paths work the way you want"): no syntax; what ends the program or a test is always cold, and a raised error's path gets
+weights only if the bench gains and a miss-heavy benchmark does not lose.
+
+**Always cold.** Every way a program or a test ends from a failed check goes through a handful of runtime functions -
+`__olang_check_failed`, `__olang_check_failed_text` (asserts, guaranteed checks, `unreachable`, a null `!`, the lane and
+slice checks), `__olang_bang_failed` and `_plain` (`!`), `__olang_test_error` (an error leaving a test) and
+`__olang_check_end` behind them all - now defined `cold noreturn` in std/runtime/runtime.ll, so every declaration of them
+says so too (runtime.olang's `Decls` copies a definition's attributes), and `__olang_ert_req_set`, which a requirement
+found false calls in a build keeping no trace, `cold`. LLVM's branch probabilities already took a block ending in
+`unreachable` for unlikely, so the gain is in layout and inlining: the functions go to `.text.unlikely`, nothing is
+inlined into them, and every bench program's `.text` shrank by about 64 bytes. Measured (callgrind, baseline x86-64, the
+machine shared with another agent's work so timings were noise of 10-20%): dynamic instruction counts identical for
+knucleotide, text, regex, dispatch, vec, sum and binarytrees.
+
+**Raised errors' paths.** An experiment first (a toggle in emit, removed): a call's error edge given `!prof
+!{"branch_weights", 1, 2000}` (LLVM's own weights for `__builtin_expect`), the success edge the likely one. Callgrind
+counts against the cold-only build: Vec push 188.7M -> 103.7M instructions (its growth's error edge out of the loop's
+straight line), Vec gather 62.3M -> 58.3M, regex 168.5M -> 167.4M, any-dispatch 243.8M -> 242.8M, sum and knucleotide
+and binarytrees within 0.01%, text 1047.4M -> 1051.4M (+0.4%), enum dispatch 217.2M -> 220.2M (+1.4%). The miss-heavy
+program (a Map of 1,000 keys asked for 2M keys of which half are missing, `try m.Get(k) catch MapError default -1`,
+and 1M `Find`s of which five in seven fail) went 125.8M -> 124.8M with the same 1.53M mispredictions - weighting the
+error edge unlikely costs nothing where errors are the common outcome, the layout being the only thing it changes. The
+bench timings (min of 7, interleaved) moved by a geometric mean of 0.994 against the cold-only build, inside the noise;
+Vec push's 0.855 -> 0.815 s agreed with its counts. So by the decision's rule the weights stay: every call's error edge
+is written `, !prof !99`, `!99` beside the fixed alias tags in every object. Not weighted: a join's failure edge (rare
+and not in loops), the entry's and harness's (once).

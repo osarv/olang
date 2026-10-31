@@ -1284,6 +1284,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every module `available_externally`.
 - **Representation choices**: a function value is a code/environment pair crossing calls as two words; aggregates over
   128 bytes go through memory; one `ret` per function; enum payloads are whole words; integer `$` without snprintf.
+- **Cold paths, inferred (survey2 item 9, the user's decision 2026-10-27, "ye do the cold paths work the way you want";
+  built 2026-10-31, mine).** No syntax. What ends the program or a test - a failed assert or guaranteed check,
+  `unreachable`, `!`, a null `!`, an error leaving a test - calls runtime functions declared `cold noreturn`, and a
+  requirement found false (D17) calls a `cold` one, so LLVM lays those paths out of line and inlines nothing into them
+  (no dynamic change measured: callgrind's counts were identical with and without). A call's error edge carries
+  `!prof` weights of 1 to 2000 (LLVM's "unlikely"), kept because the bench gained and a miss-heavy program did not lose:
+  callgrind on baseline x86-64, Vec push 188.7M -> 103.7M instructions, a gather 62.3M -> 58.3M, regex -0.7%, any-dispatch
+  -0.4%, enum dispatch +1.4%, text +0.4%, and a program whose Map.Get misses half the time and whose Find mostly fails
+  125.8M -> 124.8M with the same mispredictions; timings agreed within the (heavy) noise.
 - **No per-operation run-time checks (the user's rule).** Checks are per construction (slice bounds, array length) or
   opt-in by a named call that fails (`try a.Get(i)`, `try x.Narrow<I32>()`, `std/arith`).
 - **Benchmarks against C are in `bench/`** (`bench/run.olang`, not in verify): plain loops and allocation at or beyond C;
