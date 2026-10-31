@@ -1802,7 +1802,7 @@ aeee3bb29f3f1dfd b74c8070ae532e54 checks/fixtures/vecalias/p3.olang
 7d80b5661b6acd44 46b708da23f878fe compiler/bindgen.olang
 4ea41a975470343a 334e24eef982e70e compiler/build.olang
 d31e1ac25d3903b0 aafdaa4ada8b4216 compiler/cabi.olang
-b3c3fe6463c47980 5d70f0a417fa777b compiler/check.olang
+1fe64990cc573a0c 76d67efe4bf14266 compiler/check.olang
 91c2d9072485cddc 3729afd767caf806 compiler/cond.olang
 88f28bf02d883f27 c14d2fcaa9f95a38 compiler/definit.olang
 c1e08a02c0846fa1 b61598c03e28f65e compiler/diag.olang
