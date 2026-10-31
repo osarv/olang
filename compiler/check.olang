@@ -566,7 +566,7 @@ type roOrigin struct(P typed.Lvalue?&, View Bool) {
 # copy's type and how one of its own is made
 type roArg struct(Body I64, Param I64, At diag.Where, Callee String&, Ty String&, Fix String&
                   Levels Array<levelSite>& = Array<levelSite>(0), Bare diag.Where = diag.Where.Nowhere, BareName String& = ""
-                  Fields Array<pair.Pair<I64, I64>>& = Array<pair.Pair<I64, I64>>(0)) {
+                  Fields Array<pair.Pair<I64, I64>>& = Array<pair.Pair<I64, I64>>(0), Widen I64 = -1, WidenK I64 = -1) {
     Body
     Param
     At
@@ -577,6 +577,8 @@ type roArg struct(Body I64, Param I64, At diag.Where, Callee String&, Ty String&
     Bare       # the bare parameter of the caller it is read out of, where it is declared (NoteBareParam), if one
     BareName
     Fields     # the reference fields read-only by inference its read-only-ness rests on (round 2c)
+    Widen      # the function whose nullable parameter WidenK, read-only by inference, it is read out of - made writable
+    WidenK     # instead of refused (round 2c: kept, the parameter is used as a "&" one), if one
 }
 
 # a reference level a body's written type gives a local or a value it makes (the rework's round 2, docs/rework.md 2.8):
@@ -3580,9 +3582,12 @@ fn (c mut Checker&) levelRoot(p typed.Lvalue?&) I64 {
 
 fn (c mut Checker&) levelRootX(x typed.Expr?&) I64 {
     if x is null: return -1
-    return match x {
+    # (round 2c: "x!" names what x does, a reference converted to a nullable one the reference it was)
+    if source.NewParams and c.refConverted(x) is not null: return c.levelRootX(c.refConverted(x))
+    y := unwrapped(x) if source.NewParams else x
+    return match y {
         case typed.Expr.Borrow(_, _, p): c.levelRoot(p)
-        case _: c.levelRoot(readPlace(x))
+        case _: c.levelRoot(readPlace(y))
     }
 }
 
@@ -3709,6 +3714,20 @@ fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
         if I64(c.cur().Params[i]) == r: k = i
     }
     return c.widenNullable(f, k)
+}
+
+# the nullable parameter of this function, read-only by inference, a reference value is read out of - its index (the
+# receiver first), -1 for none (wantWritable's test, nothing made writable)
+fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
+    if not source.NewParams or c.frames.Len() == 0 or c.bodyFn(c.fr().Body) < 0: return -1
+    r := c.levelRootX(x)
+    if r < 0: return -1
+    l := c.cur().Local(typed.LocalId(I32(r)))
+    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) or not c.P.T.IsNullable(l.Ty) or c.writable(l.Ty): return -1
+    for i in range c.cur().Params.Len() {
+        if I64(c.cur().Params[i]) == r: return i
+    }
+    return -1
 }
 
 # function f's nullable parameter k (the receiver first) made writable, the program checked again - whether it was
@@ -10757,7 +10776,8 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
                 bl := c.cur().Local(typed.LocalId(I32(bp)))
                 c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), c.at(bl.Sp), $c.text(bl.Name), fs.ToArray()))
             } else {
-                c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), Fields = fs.ToArray()))
+                nk := c.nullParamOf(e)
+                c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), "", c.levelsAt(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k]), Fields = fs.ToArray(), Widen = c.bodyFn(me) if nk >= 0 else -1, WidenK = nk))
             }
             # 2.8: an instance's parameter that follows its argument handed on so - what its callers give it narrows too
             j := c.tvRefOf(readPlace(e))
@@ -10817,6 +10837,7 @@ fn (c mut Checker&) roSettle() {
     for a in c.roRefArgs {
         if not c.roNeeds.Has(pair.Pair(a.Body, a.Param)) { continue }
         if c.fieldsWritAll(a.Fields) { continue }    # (round 2c: resting on fields read-only - written, checked again)
+        if a.Widen >= 0 and c.widenNullable(a.Widen, a.WidenK) { continue }    # (round 2c: a nullable parameter kept)
         b := c.Bodies[a.Body]
         if a.Param >= b.Params.Len() { continue }
         l := b.Local(b.Params[a.Param])
