@@ -3726,8 +3726,8 @@ Its storage is allocated before the first element where the source's length is k
 length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. Storage
 is never cleared: each element is written once, as it is computed, and nothing reads an element not yet written. With
 no `if` and a known length, the storage allocated is the array itself, exactly its length. A comprehension that keeps
-nothing is an empty array (which, as every empty array, holds no storage: there is nothing in it to read or write,
-and arrays compare by what they hold, E10).
+nothing is an empty array - whose storage, as every empty array's, nothing can tell apart from another's: there is
+nothing in it to read or write, and arrays compare by what they hold (E10).
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
