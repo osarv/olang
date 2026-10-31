@@ -70,8 +70,8 @@ type Program struct() {
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
 # (said by Unbuildable)
 type Failed error {
-    REPORTED
-    UNBUILT
+    Reported
+    Unbuilt
 }
 
 # the front end: analyzes the program whose root is root and fills prog with its IR, reporting what is wrong to d; or
@@ -455,7 +455,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
         if os.Exists(path) { return path }
     }
     # B3k: another build in this directory compiling this very object: waited for, not compiled twice
-    if unit >= 0 and not claim(path, j) {
+    if unit >= 0 and not j.claim(path) {
         j.waits.Push(unit)
         return path
     }
@@ -471,12 +471,12 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     irTmp := $irPath[:irPath.Len() - 3] "." $unistd.getpid() ".tmp.ll"
     try os.WriteFile(irTmp, ir) catch os.Error {
         fileFatal(irPath, msgs.CannotOpen(), d)
-        error Failed.REPORTED
+        error Failed.Reported
     }
     if c.Clang == "" {
         try os.Rename(irTmp, irPath) catch os.Error { }
         d.Fatal(diag.Where.Nowhere, msgs.NoClang(irPath))
-        error Failed.REPORTED
+        error Failed.Reported
     }
     tmp := $path "." $unistd.getpid() ".tmp"
     args mut Vec<String&>&j = Vec<String&>()
@@ -497,11 +497,11 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
 
 # B3k: whether this build may compile the object at path - none other in its directory is (path.lock, a directory, names
 # the process that claimed it), or the one that was has gone - claiming it in j if so
-fn claim(path String&, j mut compiles&) Bool {
+fn (j mut compiles&) claim(path String&) Bool {
     lock := $path ".lock"
     for _ in range 2 {
         made := true
-        try os.MkDir(lock) catch os.Error.EXISTS { made = false } catch os.Error { return true }
+        try os.MkDir(lock) catch os.Error.Exists { made = false } catch os.Error { return true }
         if made {
             try os.WriteFile($lock "/pid", $unistd.getpid()) catch os.Error { }
             j.locks.Push($lock)
@@ -590,7 +590,7 @@ fn (c mut Config&) compile(j mut compiles&, d mut diag.Diagnostics&) ? Failed {
         c.keep(j.finals[i])
     }
     for l in j.locks { try os.RemoveAll(l) catch os.Error { } }
-    if failed { error Failed.REPORTED }
+    if failed { error Failed.Reported }
 }
 
 # B3j: an object just made, given its name in the store too (by way of a temporary renamed into place, so a build
@@ -628,7 +628,7 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
         b.Push("{\n  global:\n")
         for x in exports { b.Push($"    " $x ";\n") }
         b.Push("  local: *;\n};\n")
-        try os.WriteFile(vs, b.ToString()) catch os.Error { error Failed.REPORTED }
+        try os.WriteFile(vs, b.ToString()) catch os.Error { error Failed.Reported }
         args.Push($"-Wl,--version-script=" $vs)
         args.Push($"-Wl,-soname," $filepath.Base(bin))
     }
@@ -651,9 +651,9 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     stamp := $bin ".link"
     if linkCurrent(bin, stamp, h) { return }
     try os.Remove(stamp) catch os.Error { }
-    if c.Clang == "" { error Failed.UNBUILT }
-    out := try os.Exec(args.ToArray(), "", false) catch os.Error { error Failed.REPORTED }
-    if out.Status != 0 { error Failed.REPORTED }
+    if c.Clang == "" { error Failed.Unbuilt }
+    out := try os.Exec(args.ToArray(), "", false) catch os.Error { error Failed.Reported }
+    if out.Status != 0 { error Failed.Reported }
     c.Linked++
     info := try os.Stat(bin) catch os.Error { return }
     try os.WriteFile(stamp, $h " " $info.Size " " $info.ModTime "\n") catch os.Error { }
@@ -699,7 +699,7 @@ fn Pid() I32 { return unistd.getpid() }
 fn (c Config&) ensureDir(d mut diag.Diagnostics&) ? Failed {
     try os.MkDirAll(c.Dir) catch os.Error {
         fileFatal(c.Dir, msgs.CannotOpen(), d)
-        error Failed.REPORTED
+        error Failed.Reported
     }
 }
 
@@ -714,7 +714,7 @@ fn (p Program&) rootIdentity() String {
 # compile FILE: the one module's object, and the runtime's beside it (B2)
 fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
-    try fe.Analyze(file, Kind.Module, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    try fe.Analyze(file, Kind.Module, c, prog, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
@@ -737,7 +737,7 @@ fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagno
 # build FILE: every module's object, then one link (B3)
 fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
-    try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
@@ -808,7 +808,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
     prog := Program()
-    try fe.Analyze(file, Kind.Tests, c, prog, d) catch Failed.REPORTED { return c.skipped(file, d) } catch Failed.UNBUILT { return unbuilt() }
+    try fe.Analyze(file, Kind.Tests, c, prog, d) catch Failed.Reported { return c.skipped(file, d) } catch Failed.Unbuilt { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return c.skipped(file, d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
@@ -892,7 +892,7 @@ fn (c Config&) fuzzRun(cmd mut Vec<String&>&, prog Program&) I32 {
 fn (c Config&) runner(d mut diag.Diagnostics&) Array<String&> ? Failed {
     return try c.Target.Runner() catch target.Bad {
         d.Fatal(diag.Where.Nowhere, msgs.TargetNoEmulator(c.Target.Arch))
-        error Failed.REPORTED
+        error Failed.Reported
     }
 }
 
@@ -950,12 +950,12 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
 
 # interpret FILE ARGS: the program run by the front end (B3e); the status it ends with
 fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
-    return try fe.Interpret(file, args, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    return try fe.Interpret(file, args, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
 }
 
 # explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
 fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&c) I32 {
-    text := try fe.Explain(file, name, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    text := try fe.Explain(file, name, c, d) catch Failed.Reported { return finish(d) } catch Failed.Unbuilt { return unbuilt() }
     say(text)
     return 0
 }
@@ -1183,14 +1183,14 @@ test "B3k: an object one build claims another waits for, unless the build that c
     defer try os.RemoveAll(dir) catch os.Error { }
     obj := $dir "/m.0123.o"
     a := compiles()
-    assert claim(obj, a) and a.locks.Len() == 1
+    assert a.claim(obj) and a.locks.Len() == 1
     assert holderAlive($obj ".lock")                  # this process
     b := compiles()
-    assert not claim(obj, b) and b.locks.Len() == 0
+    assert not b.claim(obj) and b.locks.Len() == 0
     # its holder gone (a process number no process has): the next build takes it over
     try os.WriteFile($obj ".lock/pid", "999999999")
     assert not holderAlive($obj ".lock")
-    assert claim(obj, b) and b.locks.Len() == 1
+    assert b.claim(obj) and b.locks.Len() == 1
     # a lock no build ever finished writing is waited for a minute
     other := $dir "/n.4567.o"
     try os.MkDir($other ".lock")

@@ -108,15 +108,15 @@ fn receive(fd I32) String {
 
 # what parse fails with: the text is no request
 type badRequest error {
-    LINE
+    Line
 }
 
-# the request in text, or badRequest.LINE when it is not one
+# the request in text, or badRequest.Line when it is not one
 fn parse(text String&) Request ? {
     end := try text.Find("\r\n\r\n")
     lines := text[:end].Split("\r\n")
     parts := lines[0].Split(" ")
-    if parts.Len() < 2 { error badRequest.LINE }
+    if parts.Len() < 2 { error badRequest.Line }
     names Vec<String&>
     values Vec<String&>
     for k in range 1, lines.Len() {

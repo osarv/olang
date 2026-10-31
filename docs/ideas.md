@@ -160,7 +160,7 @@ comprehension over its inputs' positions is a map, and maps of maps compose into
 `Some(f)`/`Every(f)` with the predicate defaulting to the element itself, a default fitted per call so it is legal only
 where the element is a Bool). Totals: `a.Sum()` (T has Plus;
 an empty array gives T's zero value; replaces std/stats' Sum), `a.Max()`/`a.Min()` (T has Less; empty fails with
-ArrayError.EMPTY, replacing stats' Min/Max). No implicit threads: parallelism stays explicit (join/spawn,
+ArrayError.Empty, replacing stats' Min/Max). No implicit threads: parallelism stays explicit (join/spawn,
 `a.Chunks`); a `parallel (e)` marker could come later. **Built 2026-10-26 (E39, SPEC 5.22)**: lanes are a
 checker elaboration rather than prelude methods, so the fusion covers the language's operators and lane methods, not a
 user's map-shaped functions; lengths abort once per operation (no checked form); `Shuffle`, `Bits`, `FirstSet` and

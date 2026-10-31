@@ -21,17 +21,17 @@ import "list"
 
 # why a text is not JSON, or what a question asked of a value could not answer
 type Error error {
-    UNEXPECTED          # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control
+    Unexpected          # a character that cannot be where it is: a missing ',' or ':', a misspelt true, a raw control
                         # character in a string
-    UNTERMINATED        # the text ends inside a string, an array or an object - or before any value at all
-    BAD_ESCAPE          # a backslash not followed by one of JSON's escapes, or a \u naming half a surrogate pair
-    BAD_NUMBER          # not a JSON number (01, 1., -, 1e), or too large for an F64
-    BAD_UTF8            # a string's bytes are not UTF-8
-    TRAILING            # something follows the value
-    DEPTH               # arrays and objects nest more than MaxDepth deep
-    MISSING             # no member by that name, or no item at that index
-    WRONG_KIND          # the value is not the kind asked for: AsNum on a string, a name asked of an array
-    UNEVEN              # an Object built from names and values of different counts
+    Unterminated        # the text ends inside a string, an array or an object - or before any value at all
+    BadEscape          # a backslash not followed by one of Json's escapes, or a \u naming half a surrogate pair
+    BadNumber          # not a Json number (01, 1., -, 1e), or too large for an F64
+    BadUtf8            # a string's bytes are not Utf-8
+    Trailing            # something follows the value
+    Depth               # arrays and objects nest more than MaxDepth deep
+    Missing             # no member by that name, or no item at that index
+    WrongKind          # the value is not the kind asked for: AsNum on a string, a name asked of an array
+    Uneven              # an Object built from names and values of different counts
 }
 
 # how deeply arrays and objects may nest in a text Parse reads - a bound that keeps code walking a tree recursively,
@@ -58,7 +58,7 @@ type Json enum {
 # each other: Json.Obj(Object(String&["a", "b"], Json&[Json.Num(1.0), Json.Null])). Objects with more than
 # eight members are indexed by a hash of their names when built, so asking costs the same whatever their size.
 type Object struct(Keys Array<String&>&, Values Array<Json&>&) ? Error {
-    if Keys.Len() != Values.Len() { error Error.UNEVEN }
+    if Keys.Len() != Values.Len() { error Error.Uneven }
     Keys
     Values
     index Array<I32>& = nameIndex(Keys)         # empty, or slots of member position + 1 (0 an empty slot)
@@ -84,32 +84,32 @@ fn (j Json&) At<K>(key K) Json&j ? Error {
     match K {
         case String {
             match j {
-                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.MISSING }] }
-                case _ { error Error.WRONG_KIND }
+                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing }] }
+                case _ { error Error.WrongKind }
             }
         }
         case String& {
             match j {
-                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.MISSING }] }
-                case _ { error Error.WRONG_KIND }
+                case Json.Obj(o) { return o.Values[try o.find(key) catch { error Error.Missing }] }
+                case _ { error Error.WrongKind }
             }
         }
         case I32 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or I64(key) >= items.Len() { error Error.MISSING }
+                    if key < 0 or I64(key) >= items.Len() { error Error.Missing }
                     return items[I64(key)]
                 }
-                case _ { error Error.WRONG_KIND }
+                case _ { error Error.WrongKind }
             }
         }
         case I64 {
             match j {
                 case Json.Arr(items) {
-                    if key < 0 or key >= items.Len() { error Error.MISSING }
+                    if key < 0 or key >= items.Len() { error Error.Missing }
                     return items[key]
                 }
-                case _ { error Error.WRONG_KIND }
+                case _ { error Error.WrongKind }
             }
         }
     }
@@ -125,58 +125,51 @@ fn (j Json&) Has(key String&) Bool {
 
 fn (j Json&) IsNull() Bool { return j == Json.Null }
 
-# the number j holds, as an F64 - an exact whole number's nearest - failing with WRONG_KIND when it holds something else
+# the number j holds, as an F64 - an exact whole number's nearest - failing with WrongKind when it holds something else
 fn (j Json&) AsNum() F64 ? Error {
     match j {
         case Json.Num(v) { return v }
         case Json.Int(v) { return F64(v) }
         case Json.Uint(v) { return F64(v) }
-        case _ { error Error.WRONG_KIND }
+        case _ { error Error.WrongKind }
     }
 }
 
-# the number j holds, when it is a whole number an I64 holds - failing with WRONG_KIND otherwise. A whole number Parse
+# the number j holds, when it is a whole number an I64 holds - failing with WrongKind otherwise. A whole number Parse
 # read is exact (an Int beyond 2^53)
 fn (j Json&) AsInt() I64 ? Error {
-    neg, mag := try j.whole()
-    if neg {
-        if mag > U64(9223372036854775808) { error Error.WRONG_KIND }
-        return I64(U64(0) - mag)
-    }
-    if mag > U64(9223372036854775807) { error Error.WRONG_KIND }
-    return I64(mag)
+    w := try j.whole()
+    if w < I128(I64.Min) or w > I128(I64.Max) { error Error.WrongKind }
+    return I64(w)
 }
 
-# the number j holds, when it is a whole number a U64 holds - failing with WRONG_KIND otherwise
+# the number j holds, when it is a whole number a U64 holds - failing with WrongKind otherwise
 fn (j Json&) AsUint() U64 ? Error {
-    neg, mag := try j.whole()
-    if neg and mag != U64(0) { error Error.WRONG_KIND }
-    return mag
+    w := try j.whole()
+    if w < 0 { error Error.WrongKind }
+    return U64(w)
 }
 
-# a whole number's sign and magnitude, exactly - a Num's where it is whole and its magnitude below 2^64
-fn (j Json&) whole() Bool, U64 ? Error {
+# a whole number, exactly - a Num's where it is whole and from -2^63 to below 2^64 - as an I128, which holds both an
+# I64's and a U64's
+fn (j Json&) whole() I128 ? Error {
     match j {
         case Json.Num(v) {
-            if v != v or v - v != 0.0 or v >= 18446744073709551616.0 or v < -9223372036854775808.0 { error Error.WRONG_KIND }
-            if v >= 9223372036854775808.0 { return false, U64(v) }     # every F64 there is whole
-            if F64(I64(v)) != v { error Error.WRONG_KIND }
-            if v < 0.0 { return true, U64(0) - U64(I64(v)) }
-            return false, U64(I64(v))
+            if v != v or v - v != 0.0 or v >= 18446744073709551616.0 or v < -9223372036854775808.0 { error Error.WrongKind }
+            if v >= 9223372036854775808.0 { return I128(U64(v)) }     # every F64 there is whole
+            if F64(I64(v)) != v { error Error.WrongKind }
+            return I128(I64(v))
         }
-        case Json.Int(v) {
-            if v < 0 { return true, U64(0) - U64(v) }
-            return false, U64(v)
-        }
-        case Json.Uint(v) { return false, v }
-        case _ { error Error.WRONG_KIND }
+        case Json.Int(v) { return I128(v) }
+        case Json.Uint(v) { return I128(v) }
+        case _ { error Error.WrongKind }
     }
 }
 
 fn (j Json&) AsBool() Bool ? Error {
     match j {
         case Json.Bool(v) { return v }
-        case _ { error Error.WRONG_KIND }
+        case _ { error Error.WrongKind }
     }
 }
 
@@ -184,7 +177,7 @@ fn (j Json&) AsBool() Bool ? Error {
 fn (j Json&) AsStr() String&j ? Error {
     match j {
         case Json.Str(s) { return s }
-        case _ { error Error.WRONG_KIND }
+        case _ { error Error.WrongKind }
     }
 }
 
@@ -192,7 +185,7 @@ fn (j Json&) AsStr() String&j ? Error {
 fn (j Json&) AsArr() Array<Json&>&j ? Error {
     match j {
         case Json.Arr(items) { return items }
-        case _ { error Error.WRONG_KIND }
+        case _ { error Error.WrongKind }
     }
 }
 
@@ -200,16 +193,16 @@ fn (j Json&) AsArr() Array<Json&>&j ? Error {
 fn (j Json&) AsObj() Object&j ? Error {
     match j {
         case Json.Obj(o) { return o }
-        case _ { error Error.WRONG_KIND }
+        case _ { error Error.WrongKind }
     }
 }
 
 # how many members it has
 fn (o Object&) Len() I64 { return o.Keys.Len() }
 
-# the value of the member named key - the last, when several are - failing with MISSING when there is none
+# the value of the member named key - the last, when several are - failing with Missing when there is none
 fn (o Object&) At(key String&) Json&o ? Error {
-    return o.Values[try o.find(key) catch { error Error.MISSING }]
+    return o.Values[try o.find(key) catch { error Error.Missing }]
 }
 
 # whether a member is named key: "name" in o
@@ -218,7 +211,7 @@ fn (o Object&) Has(key String&) Bool {
     return true
 }
 
-# where the last member named key is, failing with MISSING when none is. Names are compared byte by
+# where the last member named key is, failing with Missing when none is. Names are compared byte by
 # byte rather than with "==", so that key may be text passed by value (a generic's String), which it can only index
 fn (o Object&) find<K>(key K) I64 ? Error {
     if o.index.Len() == 0 {
@@ -227,17 +220,17 @@ fn (o Object&) find<K>(key K) I64 ? Error {
             if sameName(o.Keys[i], key) { return i }
             i--
         }
-        error Error.MISSING
+        error Error.Missing
     }
     mask I64 = o.index.Len() - 1
     s I64 = nameHash(key) & mask
     for _ in range o.index.Len() {
         at I64 = I64(o.index[s])
-        if at == 0 { error Error.MISSING }
+        if at == 0 { error Error.Missing }
         if sameName(o.Keys[at - 1], key) { return at - 1 }
         s = (s + 1) & mask
     }
-    error Error.MISSING
+    error Error.Missing
 }
 
 fn sameName<K>(a String&, b K) Bool {
@@ -338,9 +331,9 @@ fn numEq(a Json&, b Json&) Bool {
         case Json.Num(_), Json.Int(_), Json.Uint(_) { }
         case _ { return false }
     }
-    an, am := try a.whole() catch { return false }
-    bn, bm := try b.whole() catch { return false }
-    return am == bm and (an == bn or am == U64(0))
+    aw := try a.whole() catch { return false }
+    bw := try b.whole() catch { return false }
+    return aw == bw
 }
 
 # agrees with Eq: equal values hash equally (an object's members combined in no order, a zero of either sign alike)
@@ -354,7 +347,9 @@ fn (j Json&) Hash() I64 {
         }
         case Json.Int(_), Json.Uint(_) {
             # a whole number an F64 holds exactly hashes as that Num does
-            neg, mag := try j.whole() catch { return 0 }
+            w := try j.whole() catch { return 0 }
+            neg := w < 0
+            mag := U64(-w if neg else w)
             f := F64(mag)
             if f < 18446744073709551616.0 and U64(f) == mag { return Json.Num(-f if neg else f).Hash() }
             return I64(mag) * 1099511628211 + (7 if neg else 9)
@@ -440,7 +435,7 @@ fn (r mut reader&) pushName(name String&) {
 }
 
 fn (r mut reader&) open(isObject Bool) ? Error {
-    if r.depth == MaxDepth { error Error.DEPTH }
+    if r.depth == MaxDepth { error Error.Depth }
     if r.depth == r.starts.Len() {
         old := r.starts
         oldNames := r.nameStarts
@@ -511,7 +506,7 @@ fn (r mut reader&) run() ? Error {
     for {
         # a value is next
         r.skipSpace()
-        if r.pos == r.src.Len() { error Error.UNTERMINATED }
+        if r.pos == r.src.Len() { error Error.Unterminated }
         c := r.src[r.pos]
         if c == '[' {
             try r.open(false)
@@ -537,11 +532,11 @@ fn (r mut reader&) run() ? Error {
         for {
             if r.depth == 0 {
                 r.skipSpace()
-                if r.pos < r.src.Len() { error Error.TRAILING }
+                if r.pos < r.src.Len() { error Error.Trailing }
                 return
             }
             r.skipSpace()
-            if r.pos == r.src.Len() { error Error.UNTERMINATED }
+            if r.pos == r.src.Len() { error Error.Unterminated }
             d := r.src[r.pos]
             if d == ',' {
                 r.pos++
@@ -551,7 +546,7 @@ fn (r mut reader&) run() ? Error {
             if d == ('}' if r.inObject() else ']') {
                 r.close()
             } else {
-                error Error.UNEXPECTED
+                error Error.Unexpected
             }
         }
     }
@@ -560,12 +555,12 @@ fn (r mut reader&) run() ? Error {
 # an object member's name and the ':' after it
 fn (r mut reader&) name() ? Error {
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.UNTERMINATED }
-    if r.src[r.pos] != '"' { error Error.UNEXPECTED }
+    if r.pos == r.src.Len() { error Error.Unterminated }
+    if r.src[r.pos] != '"' { error Error.Unexpected }
     r.pushName(try r.string())
     r.skipSpace()
-    if r.pos == r.src.Len() { error Error.UNTERMINATED }
-    if r.src[r.pos] != ':' { error Error.UNEXPECTED }
+    if r.pos == r.src.Len() { error Error.Unterminated }
+    if r.src[r.pos] != ':' { error Error.Unexpected }
     r.pos++
 }
 
@@ -587,14 +582,14 @@ fn (r mut reader&) scalar(c Char) ? Error {
         try r.word("null")
         r.push(Json.Null)
     } else {
-        error Error.UNEXPECTED
+        error Error.Unexpected
     }
 }
 
 fn (r mut reader&) word(w String&) ? Error {
     for i in range w.Len() {
-        if r.pos == r.src.Len() { error Error.UNTERMINATED }
-        if r.src[r.pos] != w[i] { error Error.UNEXPECTED }
+        if r.pos == r.src.Len() { error Error.Unterminated }
+        if r.src[r.pos] != w[i] { error Error.Unexpected }
         r.pos++
     }
 }
@@ -612,13 +607,13 @@ fn (r mut reader&) string() String& ? Error {
     # the rest: checked, and measured, then decoded into text of exactly that length
     size I64 = r.pos - start
     for {
-        if r.pos == r.src.Len() { error Error.UNTERMINATED }
+        if r.pos == r.src.Len() { error Error.Unterminated }
         c := r.src[r.pos]
         if c == '"' { break }
         if c == '\\' {
             size += try r.escape(start, "")
         } else if c < 0x20 {
-            error Error.UNEXPECTED
+            error Error.Unexpected
         } else if c < 0x80 {
             size++
             r.pos++
@@ -651,7 +646,7 @@ fn (r mut reader&) string() String& ? Error {
 fn (r mut reader&) escape(w I64, out mut String&) I64 ? Error {
     if r.pos + 1 == r.src.Len() {
         r.pos++
-        error Error.UNTERMINATED
+        error Error.Unterminated
     }
     e := r.src[r.pos + 1]
     b Char = 0
@@ -673,24 +668,24 @@ fn (r mut reader&) escape(w I64, out mut String&) I64 ? Error {
         r.pos += 6
         if cp >= 0xDC00 and cp <= 0xDFFF {
             r.pos = at
-            error Error.BAD_ESCAPE
+            error Error.BadEscape
         }
         if cp >= 0xD800 and cp <= 0xDBFF {          # the first half of a pair: the second must follow at once
             if r.pos + 1 >= r.src.Len() or r.src[r.pos] != '\\' or r.src[r.pos + 1] != 'u' {
                 r.pos = at
-                error Error.BAD_ESCAPE
+                error Error.BadEscape
             }
             lo := try r.hex4(r.pos + 2)
             if lo < 0xDC00 or lo > 0xDFFF {
                 r.pos = at
-                error Error.BAD_ESCAPE
+                error Error.BadEscape
             }
             r.pos += 6
             cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
         }
         return putUtf8(cp, w, out)
     } else {
-        error Error.BAD_ESCAPE
+        error Error.BadEscape
     }
     if out.Len() > 0 { out[w] = b }
     r.pos += 2
@@ -703,7 +698,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
     for k in range i, i + 4 {
         if k >= r.src.Len() {
             r.pos = r.src.Len()
-            error Error.UNTERMINATED
+            error Error.Unterminated
         }
         c := r.src[k]
         d I64 = 0
@@ -715,7 +710,7 @@ fn (r mut reader&) hex4(i I64) I64 ? Error {
             d = I64(c - 'A') + 10
         } else {
             r.pos = k
-            error Error.BAD_ESCAPE
+            error Error.BadEscape
         }
         v = v * 16 + d
     }
@@ -753,7 +748,7 @@ fn putUtf8(cp I64, w I64, out mut String&) I64 {
 }
 
 # how long the UTF-8 sequence at pos is (RFC 3629: no overlong forms, no surrogates, nothing past U+10FFFF), failing
-# with BAD_UTF8 at its first byte when it is not one
+# with BadUtf8 at its first byte when it is not one
 fn (r reader&) utf8() I64 ? Error {
     c := r.src[r.pos]
     n I64 = 0
@@ -770,13 +765,13 @@ fn (r reader&) utf8() I64 ? Error {
         if c == 0xF0 { lo = 0x90 }
         if c == 0xF4 { hi = 0x8F }
     } else {
-        error Error.BAD_UTF8
+        error Error.BadUtf8
     }
-    if r.pos + n > r.src.Len() { error Error.BAD_UTF8 }
+    if r.pos + n > r.src.Len() { error Error.BadUtf8 }
     b := r.src[r.pos + 1]
-    if b < lo or b > hi { error Error.BAD_UTF8 }
+    if b < lo or b > hi { error Error.BadUtf8 }
     for k in range 2, n {
-        if (r.src[r.pos + k] & 0xC0) != 0x80 { error Error.BAD_UTF8 }
+        if (r.src[r.pos + k] & 0xC0) != 0x80 { error Error.BadUtf8 }
     }
     return n
 }
@@ -785,18 +780,18 @@ fn (r reader&) utf8() I64 ? Error {
 
 # the number starting at pos, to the nearest F64: checked against JSON's grammar, -?(0|[1-9][0-9]*)(.[0-9]+)?
 # ([eE][+-]?[0-9]+)?, then read by the prelude's String.ParseFloat, whose grammar is wider - a number too large for an
-# F64 is BAD_NUMBER, one too small is zero. A whole number of at most 15 digits, the commonest kind, is worked out as it
+# F64 is BadNumber, one too small is zero. A whole number of at most 15 digits, the commonest kind, is worked out as it
 # is checked: it is exactly an F64, so there is nothing to round
 fn (r mut reader&) number() F64 ? Error {
     start I64 = r.pos
     neg Bool = r.src[r.pos] == '-'
     if neg { r.pos++ }
-    if not r.digitAt(r.pos) { error Error.BAD_NUMBER }
+    if not r.digitAt(r.pos) { error Error.BadNumber }
     whole I64 = 0
     digits I64 = 0
     if r.src[r.pos] == '0' {
         r.pos++
-        if r.digitAt(r.pos) { error Error.BAD_NUMBER }     # no leading zeros
+        if r.digitAt(r.pos) { error Error.BadNumber }     # no leading zeros
     } else {
         for r.digitAt(r.pos) {
             whole = whole * 10 + I64(r.src[r.pos] - '0')
@@ -808,20 +803,20 @@ fn (r mut reader&) number() F64 ? Error {
     if r.pos < r.src.Len() and r.src[r.pos] == '.' {
         simple = false
         r.pos++
-        if not r.digitAt(r.pos) { error Error.BAD_NUMBER }
+        if not r.digitAt(r.pos) { error Error.BadNumber }
         for r.digitAt(r.pos) { r.pos++ }
     }
     if r.pos < r.src.Len() and (r.src[r.pos] == 'e' or r.src[r.pos] == 'E') {
         simple = false
         r.pos++
         if r.pos < r.src.Len() and (r.src[r.pos] == '+' or r.src[r.pos] == '-') { r.pos++ }
-        if not r.digitAt(r.pos) { error Error.BAD_NUMBER }
+        if not r.digitAt(r.pos) { error Error.BadNumber }
         for r.digitAt(r.pos) { r.pos++ }
     }
     if simple { return -F64(whole) if neg else F64(whole) }
     v := try r.src[start:r.pos].ParseFloat() catch {
         r.pos = start
-        error Error.BAD_NUMBER
+        error Error.BadNumber
     }
     return v
 }
@@ -890,7 +885,7 @@ type Naming enum {
 }
 
 # a member's key, whatever the policy: "@json.Key("id")" on a field, a constructor's parameter or a case
-type Key struct(Name String&) [Name.Len() > 0] { Name }
+type Key struct(Name String&) [Name.Len() > 0] ? { Name }
 
 # a field left out: never written, and on reading its parameter takes its default (a parameter with none is a
 # compile-time error - Decode could not build the value)
@@ -945,14 +940,14 @@ fn keyFor<F>(f F, keys Naming) String {
 
 # a value of type T read from JSON text, by Encode's rules backwards: "p := try json.Decode<Point>(text)". A struct is
 # built through its constructor (G37), so the constructor's checks run - one argument per parameter, read from the
-# member of its name, a missing member taking the parameter's default and failing with MISSING where it has none;
+# member of its name, a missing member taking the parameter's default and failing with Missing where it has none;
 # members no parameter names are passed over. Text, numbers (an integer only where the number is whole and fits, else
-# WRONG_KIND), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
+# WrongKind), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
 # such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34), an
-# error value from its word's text or null (WRONG_KIND for a word not of its type). Members are found by their keys as
+# error value from its word's text or null (WrongKind for a word not of its type). Members are found by their keys as
 # Encode writes them - its Naming, a type's own, a member's "@json.Key" - and a parameter "@json.Skip" leaves out takes
 # its default.
-# Fails with what Parse fails with, with Error.MISSING and Error.WRONG_KIND where the text does not fit
+# Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit
 # the type, and with what a constructor fails with
 fn Decode<T>(text String&, at mut Position?& = null, keys Naming = Naming.Exact) T ? {
     j := try Parse(text, at)
@@ -966,7 +961,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
         case String& { return $(try j.AsStr()) }
         case Char {
             t := try j.AsStr()
-            if t.Len() != 1 { error Error.WRONG_KIND }
+            if t.Len() != 1 { error Error.WrongKind }
             return t[0]
         }
         case Bool { return try j.AsBool() }
@@ -989,12 +984,12 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
         case _ {
             if T.Kind == TypeKind.Integer {
                 # exactly, an unsigned type's whole range included: a negative number through I64, the rest through U64
-                neg, mag := try j.whole()
-                if neg and mag != U64(0) {
+                w := try j.whole()
+                if w < 0 {
                     n := try j.AsInt()
-                    return T(try n.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
+                    return T(try n.Narrow<T.Base>() catch NumberError { error Error.WrongKind })
                 }
-                return T(try mag.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
+                return T(try U64(w).Narrow<T.Base>() catch NumberError { error Error.WrongKind })
             } else if T.Kind == TypeKind.Float {
                 return T(T.Base(try j.AsNum()))
             } else if T.Kind == TypeKind.Array {
@@ -1019,7 +1014,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                     }
                     case _ { }
                 }
-                error Error.WRONG_KIND
+                error Error.WrongKind
             } else if T.Kind == TypeKind.Enum {
                 # a case with no fields as its name; one with fields as an object of one member, its name
                 k := policy<T>(keys)
@@ -1043,7 +1038,7 @@ fn From<T>(j Json&, keys Naming = Naming.Exact) T ? {
                     }
                     case _ { }
                 }
-                error Error.WRONG_KIND
+                error Error.WrongKind
             } else {
                 assert false, "json.Decode cannot read a function value"
                 unreachable
@@ -1313,13 +1308,13 @@ if TestBuild {
     # why text is not JSON, as "WORD LINE:COL", or "ok"
     fn problem(text String&) String& {
         at := Position()
-        try Parse(text, at) catch Error.UNEXPECTED { return "UNEXPECTED " $at }
-            catch Error.UNTERMINATED { return "UNTERMINATED " $at }
-            catch Error.BAD_ESCAPE { return "BAD_ESCAPE " $at }
-            catch Error.BAD_NUMBER { return "BAD_NUMBER " $at }
-            catch Error.BAD_UTF8 { return "BAD_UTF8 " $at }
-            catch Error.TRAILING { return "TRAILING " $at }
-            catch Error.DEPTH { return "DEPTH " $at }
+        try Parse(text, at) catch Error.Unexpected { return "UNEXPECTED " $at }
+            catch Error.Unterminated { return "UNTERMINATED " $at }
+            catch Error.BadEscape { return "BAD_ESCAPE " $at }
+            catch Error.BadNumber { return "BAD_NUMBER " $at }
+            catch Error.BadUtf8 { return "BAD_UTF8 " $at }
+            catch Error.Trailing { return "TRAILING " $at }
+            catch Error.Depth { return "DEPTH " $at }
             catch Error { return "OTHER" }
         return "ok"
     }
@@ -1332,7 +1327,7 @@ if TestBuild {
 
     # the word a question about j fails with, or "ok"
     fn asking<K>(j Json&, key K) String& {
-        try j[key] catch Error.MISSING { return "MISSING" } catch Error.WRONG_KIND { return "WRONG_KIND" }
+        try j[key] catch Error.Missing { return "MISSING" } catch Error.WrongKind { return "WRONG_KIND" }
             catch Error { return "OTHER" }
         return "ok"
     }
@@ -1365,14 +1360,14 @@ if TestBuild {
         assert asking(a, 3) == "MISSING" and asking(a, -1) == "MISSING" and asking(a, 2) == "ok"
         assert asking(a, "s") == "WRONG_KIND" and asking(try doc["s"], 0) == "WRONG_KIND"
         wrong := false
-        try (try doc["s"]).AsNum() catch Error.WRONG_KIND { wrong = true }
+        try (try doc["s"]).AsNum() catch Error.WrongKind { wrong = true }
         assert wrong
         half := try Parse("2.5")
         notWhole := false
-        try half.AsInt() catch Error.WRONG_KIND { notWhole = true }
+        try half.AsInt() catch Error.WrongKind { notWhole = true }
         assert notWhole
         tooBig := false
-        try (try Parse("1e19")).AsInt() catch Error.WRONG_KIND { tooBig = true }
+        try (try Parse("1e19")).AsInt() catch Error.WrongKind { tooBig = true }
         assert tooBig and (try (try Parse("-9223372036854775808")).AsInt() catch default 0) == -9223372036854775807 - 1
     }
 
@@ -1507,7 +1502,7 @@ if TestBuild {
     test "values built in code" {
         o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null])
             Json.Bool(true)])
-        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch Error.UNEVEN default -1
+        uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch Error.Uneven default -1
         assert uneven == -1
         doc Json& = Json.Obj(o)
         assert Encode(doc) == "{\"name\":\"olang\",\"tags\":[1,null],\"ok\":true}"
@@ -1583,7 +1578,7 @@ if TestBuild {
         Gust(Speed F64, Dir Char)
     }
     type Report struct(Who Member, Air Wind, Days Array<I32>&, Ok Bool) { Who, Air, Days, Ok }
-    type Percent struct(V I64) [V >= 0 and V <= 100] { V }
+    type Percent struct(V I64) [V >= 0 and V <= 100] ? { V }
     type Hidden struct(Open I64, shut I64) { Open, shut }
 
     fn sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), I32[1, 2], true) }
@@ -1651,7 +1646,7 @@ if TestBuild {
         f := try Decode<Event>("{\"power_off\": {\"after_seconds\": 4}}", keys = Naming.Snake)
         assert f == Event.PowerOff(4)
         missing := false
-        try Decode<Plain>("{\"FirstName\": \"cy\", \"HTTPServer\": 2}", keys = Naming.Camel) catch Error.MISSING { missing = true }
+        try Decode<Plain>("{\"FirstName\": \"cy\", \"HTTPServer\": 2}", keys = Naming.Camel) catch Error.Missing { missing = true }
         assert missing
     }
 
@@ -1668,39 +1663,39 @@ if TestBuild {
         r := try Decode<Report>(bakedReport)
         assert r.Who.Name == "ada" and r.Days[1] == 2 and r.Ok and Encode(r) == bakedReport
         assert r.Air == Wind.Gust(2.5, 'N') and (try Decode<Wind>("\"Calm\"")) == Wind.Calm
-        assert (try Decode<Wind>("\"Gust\"") catch Error.WRONG_KIND default Wind.Calm) == Wind.Calm
+        assert (try Decode<Wind>("\"Gust\"") catch Error.WrongKind default Wind.Calm) == Wind.Calm
         l := try Decode<Vec<Member>>("[{\"Id\": 1, \"Name\": \"x\", \"Tags\": [\"a\", \"b\"]}]")
         assert l.Len() == 1 and l[0].Tags.Len() == 2 and l[0].Tags[1] == "b"
-        assert (try Decode<I64>("[1]") catch Error.WRONG_KIND default -1) == -1
-        assert (try Decode<U8>("300") catch Error.WRONG_KIND default 0) == 0
-        assert (try Decode<Member>("{\"Name\": \"x\"}") catch Error.MISSING default Member(-1, "")).Id == -1
+        assert (try Decode<I64>("[1]") catch Error.WrongKind default -1) == -1
+        assert (try Decode<U8>("300") catch Error.WrongKind default 0) == 0
+        assert (try Decode<Member>("{\"Name\": \"x\"}") catch Error.Missing default Member(-1, "")).Id == -1
         assert (try pct("{\"V\": 300}")) == -1 and (try pct("{\"V\": 30}")) == 30
     }
 
     # error values (T20) written as "$" writes them and read back by their words (G32's TypeKind.Error, G34): baked while
     # compiling, and at run time
-    type jsErr error { EMPTY, BAD }
-    type jsAny error os.Error, jsErr { TIMEOUT }
+    type jsErr error { Empty, Bad }
+    type jsAny error os.Error, jsErr { Timeout }
     type jsRec struct(N I64, E jsErr, A jsAny, Seen Vec<jsErr>) {
         N, E, A, Seen
     }
     fn jsSeen() Vec<jsErr> {
         v := Vec<jsErr>()
-        v.Push(jsErr.BAD)
+        v.Push(jsErr.Bad)
         v.Push(null)
         return v
     }
-    errText String = Encode(jsRec(3, jsErr.BAD, jsAny.TIMEOUT, jsSeen()))
-    errBack jsErr = (try Decode<jsRec>(errText) catch default jsRec(0, jsErr.EMPTY, null, Vec<jsErr>())).E
+    errText String = Encode(jsRec(3, jsErr.Bad, jsAny.Timeout, jsSeen()))
+    errBack jsErr = (try Decode<jsRec>(errText) catch default jsRec(0, jsErr.Empty, null, Vec<jsErr>())).E
 
     test "error values are written as their words, and read back" {
-        want := "{\"N\":3,\"E\":\"" $jsErr.BAD "\",\"A\":\"" $jsAny.TIMEOUT "\",\"Seen\":[\"" $jsErr.BAD "\",null]}"
-        assert errText == want and errBack == jsErr.BAD
-        r := try Decode<jsRec>(Encode(jsRec(4, null, os.Error.DENIED, jsSeen())))
-        assert r.N == 4 and r.E is null and r.A == os.Error.DENIED and r.Seen.Len() == 2 and r.Seen[0] == jsErr.BAD
-        assert r.Seen[1] is null and $r.A == "os.Error.DENIED"
-        assert (try Decode<jsErr>("\"jsErr.NOPE\"") catch Error.WRONG_KIND default jsErr.EMPTY) == jsErr.EMPTY
-        assert (try Decode<jsErr>("3") catch Error.WRONG_KIND default jsErr.EMPTY) == jsErr.EMPTY
+        want := "{\"N\":3,\"E\":\"" $jsErr.Bad "\",\"A\":\"" $jsAny.Timeout "\",\"Seen\":[\"" $jsErr.Bad "\",null]}"
+        assert errText == want and errBack == jsErr.Bad
+        r := try Decode<jsRec>(Encode(jsRec(4, null, os.Error.Denied, jsSeen())))
+        assert r.N == 4 and r.E is null and r.A == os.Error.Denied and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
+        assert r.Seen[1] is null and $r.A == "os.Error.Denied"
+        assert (try Decode<jsErr>("\"jsErr.NOPE\"") catch Error.WrongKind default jsErr.Empty) == jsErr.Empty
+        assert (try Decode<jsErr>("3") catch Error.WrongKind default jsErr.Empty) == jsErr.Empty
         assert jsErr.Kind == TypeKind.Error and jsErr.Cases.Len() == 2 and jsAny.Cases.Len() > 3
     }
 
@@ -1719,13 +1714,13 @@ if TestBuild {
         r := try Decode<bigRec>(Encode(bigRec(LiveBig + 9007199254740993, U64(LiveBig) + 18446744073709551615, -5)))
         assert r.Id == 9007199254740993 and r.Big == 18446744073709551615 and r.Small == -5
         assert (try Decode<I64>("-9223372036854775808")) == I64.Min and (try Decode<U64>("9223372036854775808")) == U64(9223372036854775808)
-        assert (try Decode<I64>("9223372036854775808") catch Error.WRONG_KIND default 0) == 0
-        assert (try Decode<U64>("-1") catch Error.WRONG_KIND default 7) == 7
+        assert (try Decode<I64>("9223372036854775808") catch Error.WrongKind default 0) == 0
+        assert (try Decode<U64>("-1") catch Error.WrongKind default 7) == 7
         n := try Parse("[9007199254740993, -9007199254740993, 18446744073709551615, 9007199254740992, 1e19, 12.0]")
         assert Encode(n) == "[9007199254740993,-9007199254740993,18446744073709551615,9007199254740992,1e+19,12]"
         assert (try (try n[0]).AsInt()) == 9007199254740993 and (try (try n[2]).AsUint()) == 18446744073709551615
         assert (try (try n[0]).AsNum()) == 9007199254740992.0 and (try (try n[4]).AsUint()) == 10000000000000000000
-        assert (try (try n[2]).AsInt() catch Error.WRONG_KIND default 0) == 0 and (try (try n[5]).AsInt()) == 12
+        assert (try (try n[2]).AsInt() catch Error.WrongKind default 0) == 0 and (try (try n[5]).AsInt()) == 12
         # equal by value, whichever kind holds the number, and hashing alike
         assert Json.Int(5) == Json.Num(5.0) and Json.Uint(5) == Json.Int(5) and Json.Int(9007199254740993) != Json.Num(9007199254740992.0)
         assert Json.Int(5).Hash() == Json.Num(5.0).Hash() and Json.Uint(7).Hash() == Json.Int(7).Hash()

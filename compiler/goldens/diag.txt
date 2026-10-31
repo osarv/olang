@@ -166,7 +166,7 @@ attrrequire.olang:4:16: error[D17e]: this call breaks Tag's requirement 'v >= 0'
     4 | type P struct(@Tag(-1) x I64) { x }
       |                ^~~
 attrrequire.olang:3:25: note: the condition
-    3 | type Tag struct(v I64) [v >= 0] { v }
+    3 | type Tag struct(v I64) [v >= 0] ? { v }
       |                         ^~~~~~
 attrrequire.olang:4:16: error[G39]: an attribute's value is built while compiling, and this one cannot be: an error reaches '!', which ends the program
     4 | type P struct(@Tag(-1) x I64) { x }
@@ -227,7 +227,7 @@ b10undefined.olang:12:8: error: unknown name 'Mode'
       |        ^~~~
 compilation failed with 3 errors
 === b11near.olang
-b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'FIRST'?
+b11near.olang:16:26: error[T19]: MyErr has no word 'FIRTS' - did you mean 'First'?
    16 |     if count < 0 { error MyErr.FIRTS }
       |                          ^~~~~~~~~~~
 b11near.olang:17:12: error: unknown name 'cout' - did you mean 'count'?
@@ -555,7 +555,7 @@ bitsetctorbits.olang:10:10: error[D17e]: this call breaks BitSet's requirement '
    10 |     s := bitset.BitSet<Color>(12)!
       |          ^~~~~~~~~~~~~
 $ROOT/std/bitset.olang:18:38: note: the condition
-   18 | type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
+   18 | type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
       |                                      ^~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === bitsetnotenum.olang
@@ -1299,13 +1299,13 @@ d17fnvalue.olang:10:10: error[T22a]: 'keep' relates its arguments' scopes, which
       |          ^~~~
 compilation failed with 1 error
 === d17needsargerror.olang
-d17needsargerror.olang:7:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
-    7 | fn half(n I64) [n >= 0] I64 ? Odd {
+d17needsargerror.olang:4:16: error[D17]: half has conditions, so a call fails with ArgumentError where one is false - add it after '?'
+    4 | fn half(n I64) [n >= 0] I64 ? Odd {
       |                ^~~~~~~~
 compilation failed with 1 error
 === d17notbool.olang
 d17notbool.olang:3:14: error: a condition is a Bool, found I64
-    3 | fn f(x I64) [x + 1] { }
+    3 | fn f(x I64) [x + 1] ? { }
       |              ^~~~~
 d17notbool.olang:6:5: error[E15]: this call can fail - write 'try', and catch or pass on its errors
     6 |     f(3)
@@ -1340,7 +1340,7 @@ d17reqfalse.olang:10:10: error[D17e]: this call breaks percent's requirement 'wh
    10 |     p := percent(5, Whole)!
       |          ^~~~~~~
 d17reqfalse.olang:5:34: note: the condition
-    5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
+    5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
       |                                  ^~~~~~~~~
 compilation failed with 2 errors
 === d18argoutlived.olang
@@ -3639,10 +3639,13 @@ narrowimplicit.olang:5:13: error[T6b]: I64 does not flow into I32 - convert it, 
       |             ^
 compilation failed with 1 error
 === nextflag.olang
+nextflag.olang:6:28: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+    6 | fn (t mut It&) Next() I32, Bool { return 0, false }
+      |                            ^~~~
 nextflag.olang:9:14: error[S9a]: It& cannot be walked - 'for ... in' takes an array, a range, an iterator ('mut Next() T ? Exhausted') or a type with Iter()
     9 |     for _ in t { }
       |              ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === noextendsmethod.olang
 noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not extend its base, which has one - declare it with 'extends'
     6 |     c := n.Count(fn(x) { return x > 1 })
@@ -4510,7 +4513,7 @@ p4aclausecapture.olang:17:35: error[P2, D16e]: this lambda captures a variable d
 compilation failed with 1 error
 === p4aclauseerror.olang
 p4aclauseerror.olang:12:42: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
-   12 |         spawn try work(-1) catch E.BAD { error E.WORSE }
+   12 |         spawn try work(-1) catch E.Bad { error E.Worse }
       |                                          ^~~~~~~~~~~~~
 compilation failed with 1 error
 === p4aclausereturns.olang
@@ -4564,7 +4567,7 @@ p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write
       |     ^~~~~~
 compilation failed with 1 error
 === p4cjoinundeclared.olang
-p4cjoinundeclared.olang:12:9: error[R9]: E.WORSE can escape here, and this function does not declare it - add it after '?', or catch it
+p4cjoinundeclared.olang:12:9: error[R1d]: E.Worse can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
    12 |     try join {
       |         ^~~~
 compilation failed with 1 error
@@ -4641,7 +4644,7 @@ protobothstr.olang:6:10: error[M6b]: K declares Str twice, public and private - 
     6 | fn (k K) Str() String { return "a" }
       |          ^~~
 protobothstr.olang:8:15: error[M6b]: K declares Next twice, public and private - keep one: Next, or next for its own module only
-    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.END }
+    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.End }
       |               ^~~~
 protobothstr.olang:10:10: error[M6b]: K declares Hash twice, public and private - keep one: Hash, or hash for its own module only
    10 | fn (k K) Hash() I64 { return 1 }
@@ -4774,24 +4777,39 @@ r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? io.Er
       |     ^~~~
 compilation failed with 1 error
 === r1ccatchword.olang
-r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.EMPTY - it fails with LE.GONE
-   11 | fn main() { x := try g(1) catch LE.EMPTY default 0 catch LE.GONE default 1 }
+r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.Empty - it fails with LE.Gone
+   11 | fn main() { x := try g(1) catch LE.Empty default 0 catch LE.Gone default 1 }
       |                                    ^~~~~
 compilation failed with 1 error
 === r1cfuncword.olang
-r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
+r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.Empty, found fn(n I64) I64 ? LE.Gone
    12 | fn main() { x := run(g) }
       |                      ^
 compilation failed with 1 error
 === r1cwordescapes.olang
-r1cwordescapes.olang:11:37: error[R9]: LE.GONE can escape here, and this function does not declare it - add it after '?', or catch it
-   11 | fn f(n I64) I64 ? LE.EMPTY { return try g(n) }
+r1cwordescapes.olang:11:37: error[R9]: LE.Gone can escape here, and this function does not declare it - add it after '?', or catch it
+   11 | fn f(n I64) I64 ? LE.Empty { return try g(n) }
       |                                     ^~~
 compilation failed with 1 error
 === r1cwordraised.olang
-r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not this word - add it after '?'
-    8 |     if n == 0 { error LE.GONE }
+r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.Empty, not this word - add it after '?'
+    8 |     if n == 0 { error LE.Gone }
       |                          ^~~~
+compilation failed with 1 error
+=== r1dcontract.olang
+r1dcontract.olang:3:23: error[R1d, D17]: pick has conditions, so a call fails with ArgumentError where one is false, and it writes no '?' - write '?' after its result, or '? ArgumentError'
+    3 | fn pick(x I64, y I64) [y > x] I64 { return y - x }
+      |                       ^~~~~~~
+compilation failed with 1 error
+=== r1draise.olang
+r1draise.olang:4:27: error[R1d]: this function raises Odd but writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or '? Odd'
+    4 |     if n % 2 == 1 { error Odd }
+      |                           ^~~
+compilation failed with 1 error
+=== r1dtry.olang
+r1dtry.olang:5:5: error[R1d]: io.Error can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+    5 |     try io.Println("hi")
+      |     ^~~
 compilation failed with 1 error
 === r1functypeunknown.olang
 r1functypeunknown.olang:3:15: error[R1]: unknown error type 'Nope'
@@ -4813,6 +4831,21 @@ r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
     3 | fn f() I64 ? peErr { return 1 }
       |              ^~~~~
 compilation failed with 1 error
+=== r23aoutparam.olang
+r23aoutparam.olang:3:21: error[R23a]: a function giving a Bool that writes through 'out' gives a flag beside a value - give the value as the result and fail with '? E' instead
+    3 | fn parse(t String&, out mut Vec<I64>&) Bool {
+      |                     ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== r23boolresult.olang
+r23boolresult.olang:3:37: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+    3 | fn find(xs Array<I64>&, k I64) I64, Bool {
+      |                                     ^~~~
+compilation failed with 1 error
+=== r23functype.olang
+r23functype.olang:3:28: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+    3 | fn apply(f (fn(x I64) I64, Bool), x I64) I64 {
+      |                            ^~~~
+compilation failed with 1 error
 === r3areraiseundeclared.olang
 r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare - add it after '?', or test the error first
     7 |     try f() catch e { error e }
@@ -4828,10 +4861,38 @@ r3bareerror.olang:4:22: error: expected a name, found '}'
     4 |     if n < 0 { error }
       |                      ^
 compilation failed with 1 error
+=== r3bnear.olang
+r3bnear.olang:12:22: error[R3b]: no error of this module is named 'NotFond' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
+   12 |     if k < 0 { error NotFond }
+      |                      ^~~~~~~
+compilation failed with 1 error
+=== r3bnearcase.olang
+r3bnearcase.olang:9:22: error[R3b]: no error of this module is named 'notFound' - did you mean 'NotFound'? To raise a new error of that name, name it after this function's '?'
+    9 |     if k < 0 { error notFound }
+      |                      ^~~~~~~~
+compilation failed with 1 error
+=== r3bownword.olang
+r3bownword.olang:3:1: error[R3b]: an error of one word named as its type is declared by raising it - write 'error NotFound' where it is raised, with no declaration
+    3 | type NotFound error { NotFound }
+      | ^~~~~~~~
+compilation failed with 1 error
+=== r3bqualified.olang
+r3bqualified.olang:8:11: error[T19]: NotFound has no word 'NotFound'
+    8 |     error NotFound.NotFound
+      |           ^~~~~~~~~~~~~~~~~
+r3bqualified.olang:12:5: error[R8]: nothing here can fail - write it without 'try'
+   12 |     try g()
+      |     ^~~
+compilation failed with 2 errors
 === r3raisenotcaught.olang
 r3raisenotcaught.olang:6:11: error[R3]: 'error' raises a word, 'error T.WORD', or an error value - 'x' is neither
     6 |     error x
       |           ^
+compilation failed with 1 error
+=== r3wholetype.olang
+r3wholetype.olang:5:11: error[R3]: 'IoErr' is an error type of words - raise one of them, 'error IoErr.Word'
+    5 |     error IoErr
+      |           ^~~~~
 compilation failed with 1 error
 === r8tryinner.olang
 r8tryinner.olang:6:10: error[R8]: nothing here can fail - write it without 'try'
@@ -4866,8 +4927,8 @@ r9adefaultlocal.olang:18:5: error[D3b]: 'keep' is declared and never read - read
       |     ^~~~
 compilation failed with 3 errors
 === r9arithpartial.olang
-r9arithpartial.olang:5:13: error[R9]: arith.Error.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
-    5 |     r I32 = try arith.Div(a, b) catch arith.Error.DIVIDE_BY_ZERO default 0
+r9arithpartial.olang:5:13: error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
+    5 |     r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
       |             ^~~
 compilation failed with 1 error
 === r9atrydefaultassign.olang
@@ -4909,7 +4970,7 @@ r9buncaught.olang:10:10: error[R9]: F can escape here, and this function does no
       |          ^~~
 compilation failed with 1 error
 === r9qualified.olang
-r9qualified.olang:7:5: error[R9]: io.Error can escape here, and this function does not declare it - add it after '?', or catch it
+r9qualified.olang:7:5: error[R1d]: io.Error can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
     7 |     try io.Println("hello")
       |     ^~~
 compilation failed with 1 error
@@ -5438,7 +5499,7 @@ s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while
 compilation failed with 1 error
 === s19error.olang
 s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch it here
-    8 |         if n > 1 { error E.BAD }
+    8 |         if n > 1 { error E.Bad }
       |                    ^~~~~
 compilation failed with 1 error
 === s19eyield.olang

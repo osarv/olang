@@ -72,27 +72,32 @@ fn splitArgs(t String&, mask String&) Vec<String&> {
     return out
 }
 
-# a declaration written before at, on its line, with no value after the type: the start of its name and whether it
-# is "mut" - (-1, false) for none
-fn bareDecl(text String&, at I64, end I64) I64, Bool {
+# a declaration written before at, on its line, with no value after the type: the start of its name - failing with
+# NoDecl where there is none (mutBefore says whether it is "mut")
+fn bareDecl(text String&, at I64, end I64) I64 ? NoDecl {
     j := end
     for j < text.Len() and (text[j] == ' ' or text[j] == '\t') { j++ }
-    if j < text.Len() and not (text[j] == '\n' or text[j] == '#' or text[j] == '}') { return -1, false }
+    if j < text.Len() and not (text[j] == '\n' or text[j] == '#' or text[j] == '}') { error NoDecl }
     i := at
     for i > 0 and text[i - 1] == ' ' { i-- }
-    isMut := false
-    if i >= 4 and text[i - 3:i] == "mut" and not srcmask.IsWord(text[i - 4]) {
-        isMut = true
+    if mutBefore(text, at) {
         i -= 3
         for i > 0 and text[i - 1] == ' ' { i-- }
     }
     e := i
     for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
-    if i == e or not srcmask.IsIdStart(text[i]) { return -1, false }
+    if i == e or not srcmask.IsIdStart(text[i]) { error NoDecl }
     k := i
     for k > 0 and (text[k - 1] == ' ' or text[k - 1] == '\t') { k-- }
-    if k > 0 and not (text[k - 1] == '\n' or text[k - 1] == '{') { return -1, false }
-    return i, isMut
+    if k > 0 and not (text[k - 1] == '\n' or text[k - 1] == '{') { error NoDecl }
+    return i
+}
+
+# whether "mut" is written directly before at, spaces apart
+fn mutBefore(text String&, at I64) Bool {
+    i := at
+    for i > 0 and text[i - 1] == ' ' { i-- }
+    return i >= 4 and text[i - 3:i] == "mut" and not srcmask.IsWord(text[i - 4])
 }
 
 # text with its written array lengths migrated; what a person must look at goes in notes, as "path:line: what"
@@ -159,7 +164,8 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
             done = i
             continue
         }
-        at, isMut := bareDecl(text, i, e)
+        at := try bareDecl(text, i, e) catch NoDecl default -1
+        isMut := mutBefore(text, i)
         if at >= 0 {
             name := text[at:b - (3 if isMut else 0)]
             out.Push(text[done:at])
@@ -181,21 +187,22 @@ fn migrate(text String&, path String&, notes mut Vec<String&>&) String {
     return out.ToString()
 }
 
-fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) Bool {
+# a file migrated, notes added to: how many files it changed, 0 or 1
+fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) I64 {
     text := try srcmask.ReadText(path) catch {
         srcmask.SayErr("arrays_migrate: cannot read " $path)
-        return false
+        return 0
     }
     after := migrate(text, path, notes)
-    if after == text { return false }
+    if after == text { return 0 }
     if not dry {
         try os.WriteFile(path, after) catch {
             srcmask.SayErr("arrays_migrate: cannot write " $path)
-            return false
+            return 0
         }
     }
     srcmask.Say($("would migrate " if dry else "migrated ") $path)
-    return true
+    return 1
 }
 
 fn main() ? {
@@ -217,7 +224,7 @@ fn main() ? {
     notes := Vec<String&>()
     changed := 0
     for f in files {
-        if migrateFile(f, dry, notes) { changed++ }
+        changed += migrateFile(f, dry, notes)
     }
     srcmask.Say($changed " files " $("would change" if dry else "changed"))
     if notes.Len() > 0 {

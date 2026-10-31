@@ -7,8 +7,8 @@ type Shape enum {
     Circle(r I64)
     Holder(p N&)
 }
-type E error { BAD }
-fn g() I64 ? E { error E.BAD }
+type E error { Bad }
+fn g() I64 ? E { error E.Bad }
 fn f(e Shape) I64 {
     if e == Shape.Holder {
         x := try g() catch { e = Shape.Circle(12345) } default 0

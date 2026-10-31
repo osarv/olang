@@ -1,10 +1,10 @@
 # check: fail error[P4c]: this join's tasks can fail with E - write 'try join', with catch clauses for what it handles here
 # P4c: a join whose tasks can fail is tried, as a fallible call is
 type E error {
-    BAD
+    Bad
 }
 fn work(n I32) ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
 }
 fn main() ? E {
     join {

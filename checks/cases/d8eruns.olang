@@ -3,7 +3,7 @@
 # with no result
 import "std/os"
 type E error {
-    NO
+    No
 }
 fn die(code I32) noreturn { os.Exit(code) }
 fn pick(n I64) I64 {
@@ -11,7 +11,7 @@ fn pick(n I64) I64 {
     die(3)
 }
 fn g(n I64) I64 ? {
-    if n < 0 { error E.NO }
+    if n < 0 { error E.No }
     return n
 }
 fn call(f fn(c I32)) { f(0) }

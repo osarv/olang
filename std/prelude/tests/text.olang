@@ -90,8 +90,8 @@ fn float(text String&) F64 {
 
 # the word ParseFloat fails with, or "ok"
 fn floatProblem(text String&) String& {
-    try text.ParseFloat() catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    try text.ParseFloat() catch ParseError.Empty { return "EMPTY" } catch ParseError.Invalid { return "INVALID" }
+        catch ParseError.Overflow { return "OVERFLOW" }
     return "ok"
 }
 
@@ -191,15 +191,15 @@ test "ParseFloat and ShortestDecimal, evaluated while compiling as at run time" 
 
 # what ParseInt makes of t in base, or the word it fails with
 fn intIn(t String&, base I64) String {
-    v := try t.ParseInt(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    v := try t.ParseInt(Radix(base)!) catch ParseError.Empty { return "EMPTY" } catch ParseError.Invalid { return "INVALID" }
+        catch ParseError.Overflow { return "OVERFLOW" }
     return $v
 }
 
 # what ParseUint makes of t in base, or the word it fails with
 fn uintIn(t String&, base I64) String {
-    v := try t.ParseUint(Radix(base)!) catch ParseError.EMPTY { return "EMPTY" } catch ParseError.INVALID { return "INVALID" }
-        catch ParseError.OVERFLOW { return "OVERFLOW" }
+    v := try t.ParseUint(Radix(base)!) catch ParseError.Empty { return "EMPTY" } catch ParseError.Invalid { return "INVALID" }
+        catch ParseError.Overflow { return "OVERFLOW" }
     return $v
 }
 

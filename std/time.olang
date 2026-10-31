@@ -186,7 +186,7 @@ fn After(d Duration) Timer { return Timer(Now() + I64(d)) }
 # the clock's reading where the timer is ready; Exhausted before then
 fn (t mut Timer&) TryNow() I64 ? Exhausted {
     n := Now()
-    if n < t.At: error Exhausted.END
+    if n < t.At: error Exhausted.End
     return n
 }
 
@@ -248,8 +248,8 @@ type Date struct(Year I64, Month I64, Day I64, Hour I64 = 0, Minute I64 = 0, Sec
 # what Parse fails with: text that is not an RFC 3339 date and time (SYNTAX), or one naming a day, hour, minute, second
 # or offset that does not exist (RANGE)
 type Error error {
-    SYNTAX
-    RANGE
+    Syntax
+    Range
 }
 
 # days from 1970-01-01 to the date (negative before it) - Hinnant's days_from_civil, exact for every I64 year that fits
@@ -343,19 +343,19 @@ fn (d Date&) Str() String {
 fn Format(wall I64, offset I64 = 0) String { return DateOf(wall, offset).Str() }
 
 # n digits of t from at, as a number - failing with SYNTAX when they are not all there
-fn digitsAt(t String&, at I64, n I64) I64 ? Error.SYNTAX {
-    if at + n > t.Len() { error Error.SYNTAX }
+fn digitsAt(t String&, at I64, n I64) I64 ? Error.Syntax {
+    if at + n > t.Len() { error Error.Syntax }
     v I64 = 0
     for i in range n {
         c := t[at + i]
-        if not c.IsDigit() { error Error.SYNTAX }
+        if not c.IsDigit() { error Error.Syntax }
         v = v * 10 + I64(c - '0')
     }
     return v
 }
 
-fn expect(t String&, at I64, c Char) ? Error.SYNTAX {
-    if at >= t.Len() or t[at] != c { error Error.SYNTAX }
+fn expect(t String&, at I64, c Char) ? Error.Syntax {
+    if at >= t.Len() or t[at] != c { error Error.Syntax }
 }
 
 # an RFC 3339 date and time read into a Date: "YYYY-MM-DDTHH:MM:SS", a fraction of up to nine digits after a '.', and
@@ -367,7 +367,7 @@ fn Parse(t String&) Date ? Error {
     mo := try digitsAt(t, 5, 2)
     try expect(t, 7, '-')
     d := try digitsAt(t, 8, 2)
-    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.SYNTAX }
+    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.Syntax }
     h := try digitsAt(t, 11, 2)
     try expect(t, 13, ':')
     mi := try digitsAt(t, 14, 2)
@@ -380,14 +380,14 @@ fn Parse(t String&) Date ? Error {
         start := at
         scale I64 = 100000000
         for at < t.Len() and t[at].IsDigit() {
-            if at - start >= 9 { error Error.SYNTAX }
+            if at - start >= 9 { error Error.Syntax }
             nano += I64(t[at] - '0') * scale
             scale = scale / 10
             at++
         }
-        if at == start { error Error.SYNTAX }
+        if at == start { error Error.Syntax }
     }
-    if at >= t.Len() { error Error.SYNTAX }
+    if at >= t.Len() { error Error.Syntax }
     off I64 = 0
     if t[at] == 'Z' or t[at] == 'z' {
         at++
@@ -395,15 +395,15 @@ fn Parse(t String&) Date ? Error {
         oh := try digitsAt(t, at + 1, 2)
         try expect(t, at + 3, ':')
         om := try digitsAt(t, at + 4, 2)
-        if oh > 23 or om > 59 { error Error.RANGE }
+        if oh > 23 or om > 59 { error Error.Range }
         off = oh * 60 + om
         if t[at] == '-' { off = -off }
         at += 6
     } else {
-        error Error.SYNTAX
+        error Error.Syntax
     }
-    if at != t.Len() { error Error.SYNTAX }
-    if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59 { error Error.RANGE }
+    if at != t.Len() { error Error.Syntax }
+    if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59 { error Error.Range }
     return Date(y, mo, d, h, mi, s, nano, off)
 }
 
@@ -429,12 +429,12 @@ test "dates are written as RFC 3339 and read back" {
 test "Parse refuses what is not a date" {
     for bad in String&["", "2026-10-24", "2026-10-24T13:05:01", "2026-1-24T13:05:01Z", "2026-10-24T13:05:01.Z"
         "2026-10-24T13:05:01+0200", "2026-10-24T13:05:01Zx", "2026-10-24T13:05:01.1234567890Z"] {
-        try Parse(bad) catch Error.SYNTAX { continue } catch Error.RANGE { unreachable }
+        try Parse(bad) catch Error.Syntax { continue } catch Error.Range { unreachable }
         unreachable
     }
     for bad in String&["2026-13-01T00:00:00Z", "2025-02-29T00:00:00Z", "2026-10-24T24:00:00Z", "2026-10-24T13:60:00Z"
         "2026-10-24T13:05:01+24:00"] {
-        try Parse(bad) catch Error.RANGE { continue } catch Error.SYNTAX { unreachable }
+        try Parse(bad) catch Error.Range { continue } catch Error.Syntax { unreachable }
         unreachable
     }
 }

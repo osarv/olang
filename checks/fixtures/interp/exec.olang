@@ -13,7 +13,7 @@ fn main() ? os.Error, io.Error, json.Error {
     e := try os.Exec(String&["sh", "-c", "cat; echo err >&2; exit 4"], "fed in")
     try io.Print($e.Status " [" $e.Stdout "] [" $e.Stderr "]\n")
     missing := "no"
-    try os.Exec(String&["olang-no-such-program"]) catch os.Error.NOT_FOUND { missing = "yes" }
+    try os.Exec(String&["olang-no-such-program"]) catch os.Error.NotFound { missing = "yes" }
     try io.Print("missing " $missing "\n")
     try processes()
 }

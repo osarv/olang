@@ -144,17 +144,17 @@ fn wordAt(src String&, mask String&, i I64, w String&) Bool {
 }
 
 # how tightly each operator the expression goes on with after position e binds, at its own level and in order, as far
-# as the text says (the conditional's "if" ending it); false where an operand could not be read
-fn trailing(src String&, mask String&, br String&, e I64) Vec<I64>, Bool {
+# as the text says (the conditional's "if" ending it) - failing with Unreadable where an operand could not be read
+fn trailing(src String&, mask String&, br String&, e I64) Vec<I64> ? Unreadable {
     precs Vec<I64>
     j := e
     for {
         j = srcmask.SkipGap(src, mask, br, j)
         op := srcmask.OpAt(src[j:])
-        if op.Len() == 0 { return precs, true }
+        if op.Len() == 0 { return precs }
         if op == "if" {
             precs.Push(0)
-            return precs, true
+            return precs
         }
         j += op.Len()
         if op == "as" {
@@ -163,7 +163,7 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64>, Bool {
         }
         if op == "not" {
             j = srcmask.SkipGap(src, mask, br, j)
-            if not wordAt(src, mask, j, "in") { return precs, false }
+            if not wordAt(src, mask, j, "in") { error Unreadable }
             j += 2
             op = "in"
         }
@@ -179,7 +179,7 @@ fn trailing(src String&, mask String&, br String&, e I64) Vec<I64>, Bool {
             }
         }
         k := postfixEnd(src, mask, j)
-        if k == j { return precs, false }
+        if k == j { error Unreadable }
         j = k
     }
 }
@@ -340,8 +340,8 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
             continue
         }
         lop, lp := srcmask.OpBefore(src, i)
-        precs, read := trailing(src, mask, br, e)
-        same := read and lp >= 0
+        same := lp >= 0
+        precs := try trailing(src, mask, br, e) catch Unreadable { same = false } default Vec<I64>()
         for q in precs {
             if q <= lp { same = false }
         }

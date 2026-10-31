@@ -190,9 +190,9 @@ test "an integer's Sqrt beside every perfect square near the top of U64, where t
 }
 
 test "a negative signed integer has no square root" {
-    assert (try minusOne.Sqrt() catch NumberError.NEGATIVE default 99) == 99
-    assert (try I8(-128).Sqrt() catch NumberError.NEGATIVE default 99) == 99
-    assert (try I64(-9223372036854775807 - 1).Sqrt() catch NumberError.NEGATIVE default 99) == 99
+    assert (try minusOne.Sqrt() catch NumberError.Negative default 99) == 99
+    assert (try I8(-128).Sqrt() catch NumberError.Negative default 99) == 99
+    assert (try I64(-9223372036854775807 - 1).Sqrt() catch NumberError.Negative default 99) == 99
 }
 
 test "Abs, Min, Max and Clamp on the integers" {

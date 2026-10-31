@@ -258,15 +258,15 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
 
 # FindDecl's miss: no module of that identity, or no type of that name in it
 type Undeclared error {
-    TYPE
+    Type
 }
 
 # a declared type by its canonical name, "IDENTITY:Name"
 fn (p mut Program&) FindDecl(identity String&, name String&) types.DeclId ? {
     p.ensureModules()
-    mi := try p.identity.Get(identity) catch { error Undeclared.TYPE }
+    mi := try p.identity.Get(identity) catch { error Undeclared.Type }
     ei := p.TypeEntry(mi, p.L.Names.Intern(name))
-    if ei < 0 { error Undeclared.TYPE }
+    if ei < 0 { error Undeclared.Type }
     return p.DeclFor(mi, ei)
 }
 
@@ -555,8 +555,11 @@ fn (p mut Program&) errsHaveVar(l types.ListId, b Binding&) Bool {
 # an error list matched against one a value has (G9, QAH): the pattern's error-set variable takes what the value can
 # fail with beyond the pattern's other entries - unioned with what it holds, since every function value and iterator
 # passed adds to it. A pattern with no variable of the binding's matches as before, entry by entry
-fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Binding&) Bool {
-    if not p.errsHaveVar(pat, b) { return p.unifyLists(pat, actual, b) }
+fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Binding&) ? Mismatch {
+    if not p.errsHaveVar(pat, b) {
+        try p.unifyLists(pat, actual, b)
+        return
+    }
     fixed Vec<types.TypeId>
     vi I64 = -1
     for e in p.T.Items(pat) {
@@ -567,7 +570,7 @@ fn (p mut Program&) unifyErrs(pat types.ListId, actual types.ListId, b mut Bindi
         if e == types.DefaultErrT or e == types.UnknownT { continue }
         if not p.entryHeld(e, fixed) { rest.Push(e) }
     }
-    return p.bind(b, vi, p.ErrSetOf(p.T.List(rest.ToArray())), false, false)
+    try p.bind(b, vi, p.ErrSetOf(p.T.List(rest.ToArray())), false, false)
 }
 
 # the index of a function's error-set variable among its signature's (G1a), -1 for none
@@ -582,7 +585,7 @@ fn (p mut Program&) ErrVarIndex(f I64) I64 {
 
 fn (p mut Program&) ErrsArgOf(c Context&, t ast.TypeRef&) types.TypeId { return p.errsArg(c, t) }
 
-fn (p mut Program&) UnifyErrors(pat types.ListId, actual types.ListId, b mut Binding&) Bool { return p.unifyErrs(pat, actual, b) }
+fn (p mut Program&) UnifyErrors(pat types.ListId, actual types.ListId, b mut Binding&) ? Mismatch { try p.unifyErrs(pat, actual, b) }
 
 # whether an error set's entry is held by one of a list's (R1c: the same error type, its words among theirs)
 fn (p mut Program&) entryHeld(e types.TypeId, l Vec<types.TypeId>&) Bool {
@@ -850,6 +853,7 @@ MaxChain I64 = 1000
 # said once, read as no errors
 fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeId {
     f := p.sigType(c, s, types.UnknownT, source.NameId(0))
+    p.flagBans(c, s, f, false)
     es := p.T.Items(p.T.Errors(f))
     if es.Len() == 1 and es[0] == types.DefaultErrT {
         key := pair.Pair(c.Mi, I64(sp.Start))
@@ -860,6 +864,28 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
     return p.T.WithNames(f, p.SigNames(s))
+}
+
+# R23, R23a: a flag beside a value is no result - a Bool among several results, and a Bool given by a function that
+# writes through a reference parameter (an out-parameter, its receiver aside): what fails says so with "?" and an error.
+# Not for C's (an extern or export fn speaks C's convention)
+fn (p mut Program&) flagBans(c Context&, s ast.Sig&, sig types.TypeId, recv Bool) {
+    rs := p.T.Results(sig)
+    if rs.Len() > 1 {
+        for i in range rs.Len() {
+            if rs[i] == types.BoolT and i < s.Results.Len(): p.L.Diags.ErrorOncePerLine(p.at(c.Mi, s.Results[i].Span()), msgs.FlagAmongResults())
+        }
+        return
+    }
+    if rs.Len() != 1 or rs[0] != types.BoolT { return }
+    ps := p.T.Items(p.T.Params(sig))
+    first := 1 if recv else 0
+    for i in range first, ps.Len() {
+        k := i - first
+        if k >= s.Params.Len() or not p.T.IsRef(ps[i]) or (p.T.PermOf(ps[i]) & types.Writable) == 0 { continue }
+        prm := s.Params[k]
+        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, prm.Sp), msgs.FlagWithOutParam(msgs.Tok(p.text(prm.Name))))
+    }
 }
 
 # a signature's parameters' names, interned for a function type to render with (E11a)
@@ -898,16 +924,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     }
     if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.contractErrors(s, p.errorList(c, s.HasErrors, s.Errors)), scopes)
-}
-
-# D17: a declaration with value conditions and no "?" fails with ArgumentError - its set where it writes none; a
-# written or inferred set is its own, which the checker holds to name it
-fn (p mut Program&) contractErrors(s ast.Sig&, el types.ListId) types.ListId {
-    if s.Contract is null or s.Contract!.Items.Len() == 0 or s.HasErrors { return el }
-    t := p.preludeType("std/prelude/argument", "ArgumentError")
-    if t == types.UnknownT { return el }
-    return p.T.List1(t)
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
 }
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
@@ -995,7 +1012,7 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
     n := e.Parts.Len()
     if t != types.UnknownT or n < 2 { return t }
     et := p.errorType(c, ast.Path(e.Sp, e.Parts[:n - 1]))
-    if et == types.UnknownT { return et }
+    if et == types.UnknownT or p.IsRaisedError(p.T.DeclOf(et)) { return types.UnknownT }   # R3b: never qualified
     ws := p.ErrorWords(p.T.DeclOf(et))
     for i in range ws.Len() {
         if ws[i] == e.Parts[n - 1] { return p.T.ErrWords(et, U64(1) << i) if i < 64 else types.UnknownT }
@@ -1103,7 +1120,7 @@ fn (p mut Program&) ErrorItemKnown(c Context&, e ast.Path&) Bool {
             ws := p.ErrorWords(p.T.DeclOf(et))
             far := false
             for i in range ws.Len() {
-                if ws[i] == w { far = true }
+                if ws[i] == w and not p.IsRaisedError(p.T.DeclOf(et)) { far = true }
             }
             nm := p.text(p.T.DeclName(p.T.DeclOf(et)))
             if far {
@@ -1150,6 +1167,22 @@ fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
         case ast.Decl.Errors(_, _, words, _): words
         case _: Array<source.NameId>(0)
     }
+}
+
+# R3b: whether an error type is one raised by name, which nothing declares - one word, named as the type
+fn (p mut Program&) IsRaisedError(d types.DeclId) Bool {
+    ws := p.ErrorWords(d)
+    return ws.Len() == 1 and ws[0] == p.T.DeclName(d) and p.ErrorMembers(d).Len() == 0
+}
+
+# an error type's word w as source writes it, its module's alias left out: "Error.Full", or for an error raised by name
+# (R3b) the name alone, "NotFound"
+fn (p mut Program&) ErrorWordName(d types.DeclId, w I64) String {
+    name := p.text(p.T.DeclName(d))
+    if p.IsRaisedError(d) { return $name }
+    ws := p.ErrorWords(d)
+    if w < 0 or w >= ws.Len() { return $name "." $w }
+    return $name "." $p.text(ws[w])
 }
 
 # the members a named error set declares (T19a), in order, as written in its module
@@ -2479,8 +2512,7 @@ fn (p mut Program&) recvApplies(f I64, x types.TypeId) Bool {
     owner := FnOwner(f)
     n := p.VarCount(owner)
     if n == 0 { return p.T.Same(p.T.Plain(r), p.T.Plain(x)) }
-    b := Binding(owner, n)
-    return p.UnifyArg(r, x, b, false, true)
+    return p.Matches(r, x, owner, n, true)
 }
 
 # whether a declared type extends its base (T29f): it takes the base's methods and operators
@@ -2553,6 +2585,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
     if ast.FirstYield(row.F.Body).Start >= I32(0) {
@@ -2766,7 +2799,8 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
     if n == 0 { return sig }
     b := Binding(owner, n)
     ps := p.T.Items(p.T.Params(sig))
-    if ps.Len() == 0 or not p.UnifyArg(ps[0], t, b, false, true) { return types.UnknownT }
+    if ps.Len() == 0 { return types.UnknownT }
+    try p.UnifyArg(ps[0], t, b, false, true) catch { return types.UnknownT }
     return p.Subst(sig, owner, p.T.List(b.Vals))
 }
 
@@ -2981,7 +3015,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
         }
     }
     scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
-    el := p.contractErrors(errs, p.errorList(c, errs.HasErrors, errs.Errors)) if errs is not null else types.ListId(0)
+    el := p.errorList(c, errs.HasErrors, errs.Errors) if errs is not null else types.ListId(0)
     return p.T.Func(p.T.List(ps.ToArray()), result, el, scopes)
 }
 
@@ -3041,76 +3075,95 @@ fn (p mut Program&) bodiesOf(t types.TypeId) {
 
 # an argument's type matched against a parameter's (G9): the reference shape may differ at the top (E12c: a value
 # borrowed for a reference parameter, a reference's value copied out for a value one); literal says the argument is a
-# literal (G9a), receiver that it is the receiver (G9b)
-fn (p mut Program&) UnifyArg(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) Bool {
+# literal (G9a), receiver that it is the receiver (G9b). Failing with Mismatch where they do not match (R3b)
+fn (p mut Program&) UnifyArg(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) ? Mismatch {
     pr := p.T.KindOf(pat) == types.Kind.Ref
     ar := p.T.KindOf(actual) == types.Kind.Ref
-    if pr and not ar and not p.isVar(pat, b) { return p.Unify(p.T.Referent(pat), actual, b, literal, receiver) }
-    if ar and not pr and p.T.KindOf(pat) != types.Kind.Var { return p.Unify(pat, p.T.Referent(actual), b, literal, receiver) }
-    return p.Unify(pat, actual, b, literal, receiver)
+    if pr and not ar and not p.isVar(pat, b) {
+        try p.Unify(p.T.Referent(pat), actual, b, literal, receiver)
+    } else if ar and not pr and p.T.KindOf(pat) != types.Kind.Var {
+        try p.Unify(pat, p.T.Referent(actual), b, literal, receiver)
+    } else {
+        try p.Unify(pat, actual, b, literal, receiver)
+    }
+}
+
+# whether an argument's type matches a parameter's (UnifyArg), its binding thrown away
+fn (p mut Program&) Matches(pat types.TypeId, actual types.TypeId, owner I64, n I64, receiver Bool) Bool {
+    b := Binding(owner, n)
+    try p.UnifyArg(pat, actual, b, false, receiver) catch { return false }
+    return true
 }
 
 fn (p Program&) isVar(t types.TypeId, b Binding&) Bool { return p.T.KindOf(t) == types.Kind.Var and p.T.A(t) == b.Owner }
 
-# binds b's variables in a pattern so that it matches a type, structurally: whether it does
-fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) Bool {
-    if pat == actual or actual == types.UnknownT { return true }
+# binds b's variables in a pattern so that it matches a type, structurally - failing with Mismatch where it does not
+fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&, literal Bool, receiver Bool) ? Mismatch {
+    if pat == actual or actual == types.UnknownT { return }
     pk := p.T.KindOf(pat)
-    if pk == types.Kind.Var and p.T.A(pat) == b.Owner { return p.bind(b, p.T.B(pat), actual, literal, receiver) }
-    if pk == types.Kind.ConstExpr { return true }   # computed once its variables are bound, never solved for (T7c)
+    if pk == types.Kind.Var and p.T.A(pat) == b.Owner {
+        try p.bind(b, p.T.B(pat), actual, literal, receiver)
+        return
+    }
+    if pk == types.Kind.ConstExpr { return }   # computed once its variables are bound, never solved for (T7c)
     ak := p.T.KindOf(actual)
     # a declared type over an array or a number meets a pattern of its base (T29a: it flows into it), so a method of
     # every array binds its element through a String receiver (T29e)
     if ak == types.Kind.Named and (pk != ak or p.T.DeclOf(pat) != p.T.DeclOf(actual)) and p.Body(actual) and
        p.T.DeclKindOf(p.T.DeclOf(actual)) == types.DeclKind.Over {
-        return p.Unify(pat, p.T.Base(actual), b, literal, receiver)
+        try p.Unify(pat, p.T.Base(actual), b, literal, receiver)
+        return
     }
-    if pk != ak { return false }
+    if pk != ak { error Mismatch }
+    try p.unifyKind(pk, pat, actual, b, receiver)
+}
+
+# Unify's pattern and type of one kind
+fn (p mut Program&) unifyKind(pk types.Kind, pat types.TypeId, actual types.TypeId, b mut Binding&, receiver Bool) ? Mismatch {
     match pk {
         case types.Kind.Named {
-            return p.T.DeclOf(pat) == p.T.DeclOf(actual) and p.unifyLists(p.T.Args(pat), p.T.Args(actual), b, receiver)
+            if p.T.DeclOf(pat) != p.T.DeclOf(actual) { error Mismatch }
+            try p.unifyLists(p.T.Args(pat), p.T.Args(actual), b, receiver)
         }
         case types.Kind.Array {
-            if not p.Unify(p.T.Elem(pat), p.T.Elem(actual), b, false, receiver) { return false }
-            return p.Unify(p.T.Length(pat), p.T.Length(actual), b, false, receiver)
+            try p.Unify(p.T.Elem(pat), p.T.Elem(actual), b, false, receiver)
+            try p.Unify(p.T.Length(pat), p.T.Length(actual), b, false, receiver)
         }
-        case types.Kind.Ref { return p.Unify(p.T.Referent(pat), p.T.Referent(actual), b, false, receiver) }
+        case types.Kind.Ref { try p.Unify(p.T.Referent(pat), p.T.Referent(actual), b, false, receiver) }
         case types.Kind.Func {
-            if not p.unifyLists(p.T.Params(pat), p.T.Params(actual), b) { return false }
-            if not p.Unify(p.T.Result(pat), p.T.Result(actual), b, false, false) { return false }
-            return p.unifyErrs(p.T.Errors(pat), p.T.Errors(actual), b)
+            try p.unifyLists(p.T.Params(pat), p.T.Params(actual), b)
+            try p.Unify(p.T.Result(pat), p.T.Result(actual), b, false, false)
+            try p.unifyErrs(p.T.Errors(pat), p.T.Errors(actual), b)
         }
-        case types.Kind.ErrSet { return p.unifyErrs(p.T.ErrSetItems(pat), p.T.ErrSetItems(actual), b) }
-        case types.Kind.Tuple, types.Kind.Record { return p.unifyLists(p.T.Parts(pat), p.T.Parts(actual), b) }
+        case types.Kind.ErrSet { try p.unifyErrs(p.T.ErrSetItems(pat), p.T.ErrSetItems(actual), b) }
+        case types.Kind.Tuple, types.Kind.Record { try p.unifyLists(p.T.Parts(pat), p.T.Parts(actual), b) }
         case types.Kind.AnonEnum {
-            return p.T.ShapeNames(pat) == p.T.ShapeNames(actual) and p.unifyLists(p.T.ShapeCases(pat), p.T.ShapeCases(actual), b)
+            if p.T.ShapeNames(pat) != p.T.ShapeNames(actual) { error Mismatch }
+            try p.unifyLists(p.T.ShapeCases(pat), p.T.ShapeCases(actual), b)
         }
         # T32: an any's trait's arguments ("any Iterator<T>&" meeting "any Iterator<I64>&")
-        case types.Kind.Any { return p.Unify(p.T.AnyTrait(pat), p.T.AnyTrait(actual), b, false, receiver) }
-        case _ { return false }
+        case types.Kind.Any { try p.Unify(p.T.AnyTrait(pat), p.T.AnyTrait(actual), b, false, receiver) }
+        case _ { error Mismatch }
     }
 }
 
-fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&, receiver Bool = false) Bool {
+fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&, receiver Bool = false) ? Mismatch {
     xs := p.T.Items(a)
     ys := p.T.Items(c)
-    if xs.Len() != ys.Len() { return false }
-    for i in range xs.Len() {
-        if not p.Unify(xs[i], ys[i], b, false, receiver) { return false }
-    }
-    return true
+    if xs.Len() != ys.Len() { error Mismatch }
+    for i in range xs.Len() { try p.Unify(xs[i], ys[i], b, false, receiver) }
 }
 
 # a variable meeting a type (G9a-G9d): unbound, it takes it - a destructor-declaring type's value as its reference
 # (G9d: C11 leaves no other form); bound, a literal adapts and binds nothing while another argument can (G9a), a
 # number widens to a wider one of its family unless a receiver bound it (G9b), two references differing only in
 # permission meet at read-only (G9d)
-fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) Bool {
+fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) ? Mismatch {
     # G1a: an error-set variable takes the union of what binds it - a set never conflicts with another
     if p.T.KindOf(actual) == types.Kind.ErrSet {
         cur := b.Vals[i]
         b.Vals[i] = actual if cur == types.UnknownT or p.T.KindOf(cur) != types.Kind.ErrSet else p.ErrSetUnion(cur, actual)
-        return true
+        return
     }
     # a function type argument keeps where its references live (G16a, T22): fn(a mut N&, b N&a) is another argument
     # than fn(mut N&, N&); what holds one by its parts' identity (a declared type's arguments) is held plain
@@ -3124,38 +3177,38 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
         b.Vals[i] = v
         b.LiteralOnly[i] = literal
         b.Fixed[i] = receiver
-        return true
+        return
     }
-    if cur == v or p.T.Same(cur, v) { return true }
+    if cur == v or p.T.Same(cur, v) { return }
     if literal {
         # G9a: a variable only literals reach takes the widest of their types
         if b.LiteralOnly[i] and (p.Flows(cur, v) or (p.T.IsInt(cur) and p.T.IsFloat(v))) { b.Vals[i] = v }
-        return true
+        return
     }
     # a reference to what the variable holds by value: its value is read out (E12)
-    if p.T.KindOf(v) == types.Kind.Ref and p.T.KindOf(cur) != types.Kind.Ref and p.T.Plain(p.T.Referent(v)) == cur { return true }
+    if p.T.KindOf(v) == types.Kind.Ref and p.T.KindOf(cur) != types.Kind.Ref and p.T.Plain(p.T.Referent(v)) == cur { return }
     # G9a: arrays of one element type meet at the array whose length is known only at run time where their lengths
     # differ, or one is not known while compiling (T6b's meeting, for lengths) - a reference's elements read out (E12)
     va := p.T.Plain(p.T.Referent(v)) if p.T.KindOf(v) == types.Kind.Ref else v
     if p.T.KindOf(cur) == types.Kind.Array and p.T.KindOf(va) == types.Kind.Array and p.T.Same(p.T.Elem(cur), p.T.Elem(va)) and not b.Fixed[i] {
         if p.T.Length(cur) != types.TypeId(0) and p.T.Length(va) != p.T.Length(cur) { b.Vals[i] = p.T.Array(p.T.Elem(cur), types.TypeId(0)) }
-        return true
+        return
     }
     if p.T.IsNumber(p.numberOf(cur)) and p.T.IsNumber(p.numberOf(v)) {
-        if p.Flows(v, cur) { return true }
+        if p.Flows(v, cur) { return }
         if p.Flows(cur, v) and not b.Fixed[i] {
             b.Vals[i] = v
-            return true
+            return
         }
-        return false
+        error Mismatch
     }
     if p.T.KindOf(cur) == types.Kind.Ref and p.T.KindOf(v) == types.Kind.Ref and p.T.Referent(cur) == p.T.Referent(v) {
         # writable where both are, nullable where either is (T2c)
         pc, pv := p.T.PermOf(cur), p.T.PermOf(v)
         if not b.Fixed[i] { b.Vals[i] = p.T.Ref(p.T.Referent(v), (pc & pv & (types.Writable | types.Owning)) | ((pc | pv) & types.Nullable)) }
-        return true
+        return
     }
-    return false
+    error Mismatch
 }
 
 # G9c: a variable named only in a constraint inferred through it - the bound type's methods matched against the
@@ -3166,50 +3219,47 @@ fn (p mut Program&) InferThroughBounds(b mut Binding&) {
         for i in range b.N {
             row := p.VarAt(b.Owner, i)
             if row.Bound == types.UnknownT or b.Vals[i] == types.UnknownT { continue }
-            if p.unifyBound(b.Vals[i], row.Bound, b) { any = true }
+            if p.unifyBound(b.Vals[i], row.Bound, b) > 0 { any = true }
         }
         if not any { break }
     }
 }
 
 # G36: a trait case's arguments bound through what t's methods give (G9c's walk), for "case Iterator<E>"
-fn (p mut Program&) UnifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) Bool { return p.unifyBound(t, tr, b) }
+fn (p mut Program&) UnifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) I64 { return p.unifyBound(t, tr, b) }
 
-fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, depth I64 = 0) Bool {
-    if depth > 32 { return false }
+# how many of b's variables it moved (a count, R23a)
+fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, depth I64 = 0) I64 {
+    if depth > 32 { return 0 }
     if p.T.KindOf(tr) == types.Kind.Tuple {
-        any := false
-        for x in p.T.Items(p.T.Parts(tr)) {
-            if p.unifyBound(t, x, b, depth + 1) { any = true }
-        }
-        return any
+        n I64 = 0
+        for x in p.T.Items(p.T.Parts(tr)) { n += p.unifyBound(t, x, b, depth + 1) }
+        return n
     }
-    if p.T.KindOf(tr) != types.Kind.Named { return false }
+    if p.T.KindOf(tr) != types.Kind.Named { return 0 }
     d := p.T.DeclOf(tr)
     # T32c: an "any" binds what its trait's arguments give, where it answers to the constraint's trait
     ax := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     if p.T.KindOf(ax) == types.Kind.Any {
-        moved := false
+        moved I64 = 0
         for e in p.AnyCovers(p.T.AnyTrait(ax)) {
             if p.T.DeclOf(e) != d { continue }
             was := Array<types.TypeId>(b.N)
             for i in range b.N { was[i] = b.Vals[i] }
-            p.unifyLists(p.T.Args(tr), p.T.Args(e), b)
-            for i in range b.N {
-                if was[i] != b.Vals[i] { moved = true }
-            }
+            try p.unifyLists(p.T.Args(tr), p.T.Args(e), b) catch { }
+            moved += changedVals(was, b)
         }
         return moved
     }
     td := p.typeDecl(d)
-    if td is null or td.Body is null { return false }
+    if td is null or td.Body is null { return 0 }
     before := Array<types.TypeId>(b.N)
     for i in range b.N { before[i] = b.Vals[i] }
     match td.Body {
         case ast.TypeBody.Trait(methods, exts, _) {
             # T30a: what the traits it extends bind, too
             for e in exts {
-                if p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1) { }
+                p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1)
             }
             for m in methods {
                 f := p.MethodOf(t, m.Name)
@@ -3220,18 +3270,24 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
                 hs := p.T.Items(p.T.Params(have))
                 ws := p.T.Items(p.T.Params(want))
                 if hs.Len() != ws.Len() + 1 { continue }
-                for k in range ws.Len() { p.UnifyArg(ws[k], hs[k + 1], b, false, false) }
-                p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false)
+                for k in range ws.Len() { try p.UnifyArg(ws[k], hs[k + 1], b, false, false) catch { } }
+                try p.UnifyArg(p.T.Result(want), p.T.Result(have), b, false, false) catch { }
                 # QAH: "Next() T ? E, Exhausted" binds E to what the type's Next fails with beyond Exhausted
-                if p.errsHaveVar(p.T.Errors(want), b) { p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) }
+                if p.errsHaveVar(p.T.Errors(want), b) { try p.unifyErrs(p.T.Errors(want), p.T.Errors(have), b) catch { } }
             }
         }
         case _ { }
     }
+    return changedVals(before, b)
+}
+
+# how many of b's variables differ from what they were
+fn changedVals(was Array<types.TypeId>&, b Binding&) I64 {
+    n I64 = 0
     for i in range b.N {
-        if before[i] != b.Vals[i] { return true }
+        if was[i] != b.Vals[i]: n++
     }
-    return false
+    return n
 }
 
 # ---- constraints (G19) ----
@@ -3768,16 +3824,13 @@ fn (p mut Program&) AnyStored(t types.TypeId) types.TypeId {
     return t
 }
 
-# the table of an instance's type and a trait, made the first time it is asked for: its index; Fresh whether it was
-# made now, its slots for the checker to fill
-fn (p mut Program&) AnyTableFor(t types.TypeId, r types.TypeId, file I64, sp source.Span) I64, Bool {
-    key := pair.Pair(I64(p.T.Plain(t)), I64(r))
-    i := try p.anyTableOf.Get(key) catch default -1
-    if i >= 0 { return i, false }
+# the table of an instance's type and a trait, made now - its slots for the checker to fill: its index (AnyTableOf
+# says whether one was made already)
+fn (p mut Program&) NewAnyTable(t types.TypeId, r types.TypeId, file I64, sp source.Span) I64 {
     p.AnyTables.Push(AnyTable(p.T.Plain(t), r, p.AnyStored(p.T.Plain(t)), file, sp))
-    i = p.AnyTables.Len() - 1
-    p.anyTableOf.Put(key, i)
-    return i, true
+    i := p.AnyTables.Len() - 1
+    p.anyTableOf.Put(pair.Pair(I64(p.T.Plain(t)), I64(r)), i)
+    return i
 }
 
 # the table of a type and a trait, -1 for none made
@@ -4008,7 +4061,7 @@ fn (p mut Program&) ErrValWordText(t types.TypeId, code I64) String {
     w := code & 0xFFFF
     if w >= ws.Len() { return "" }
     dm := p.T.DeclModule(d)
-    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.text(p.T.DeclName(d)) "." $p.text(ws[w])
+    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w)
 }
 
 # what a declared type's name is (G32), as its own module writes it: its name and arguments, no module before them
@@ -4389,14 +4442,14 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
 
 # what a canonical text that names no type fails with
 type BadCanon error {
-    TEXT
+    Text
 }
 
 # the type a canonical text names (types.Canon's form): the inverse of Canon over a program's types
 fn (p mut Program&) ParseCanon(text String&) types.TypeId ? {
     cur := cursor(text)
     t := try p.canonType(cur)
-    if cur.At != text.Len() { error BadCanon.TEXT }
+    if cur.At != text.Len() { error BadCanon.Text }
     return t
 }
 
@@ -4420,7 +4473,7 @@ fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared
     if c.eat("mut ") { perm = perm | types.Writable }
     t := try p.canonInner(c)
     if c.eat("&") { return p.T.Ref(t, perm) }
-    if perm != types.ReadOnly { error BadCanon.TEXT }
+    if perm != types.ReadOnly { error BadCanon.Text }
     return t
 }
 
@@ -4433,7 +4486,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
         elem := try p.canonType(c)
         length := types.TypeId(0)
         if c.eat(", ") { length = p.T.Const(p.T.Prim("I64"), try canonNumber(c)) }
-        if not c.eat(">") { error BadCanon.TEXT }
+        if not c.eat(">") { error BadCanon.Text }
         return p.T.Array(elem, length)
     }
     start := c.At
@@ -4444,7 +4497,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
         if word == "default" { return types.DefaultErrT }
         if word == "noreturn" { return types.NoreturnT }
         t := p.T.Prim(word)
-        if t == types.UnknownT { error BadCanon.TEXT }
+        if t == types.UnknownT { error BadCanon.Text }
         return t
     }
     c.At++
@@ -4456,10 +4509,10 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
     args Vec<types.TypeId>
     for {
         i := args.Len()
-        if i >= p.T.DeclParams(d) { error BadCanon.TEXT }
+        if i >= p.T.DeclParams(d) { error BadCanon.Text }
         args.Push(try p.canonType(c))
         if c.eat(">") { break }
-        if not c.eat(", ") { error BadCanon.TEXT }
+        if not c.eat(", ") { error BadCanon.Text }
     }
     return p.Instance(d, p.T.List(args.ToArray()))
 }
@@ -4472,7 +4525,7 @@ fn canonNumber(c mut cursor&) I64 ? {
     for c.At < c.Text.Len() and c.peek().IsDigit() { c.At++ }
     txt := c.Text[start:c.At]
     v := try txt.ParseInt() catch {
-        u := try txt.ParseUint() catch { error BadCanon.TEXT }
+        u := try txt.ParseUint() catch { error BadCanon.Text }
         return I64(u)
     }
     return v
@@ -4484,7 +4537,7 @@ fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
     for {
         xs.Push(try p.canonType(c))
         if c.eat(close) { break }
-        if not c.eat(", ") { error BadCanon.TEXT }
+        if not c.eat(", ") { error BadCanon.Text }
     }
     return p.T.List(xs.ToArray())
 }
@@ -4521,9 +4574,9 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         for {
             xs.Push(try canonNumber(c))
             if c.eat("]") { break }
-            if not c.eat(",") { error BadCanon.TEXT }
+            if not c.eat(",") { error BadCanon.Text }
         }
-        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error BadCanon.TEXT }
+        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error BadCanon.Text }
         n := xs[1]
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
@@ -4535,7 +4588,7 @@ fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
     ns Vec<source.NameId>
     ps Vec<types.TypeId>
     for not c.eat("}") {
-        if ns.Len() > 0 and not c.eat(" ") { error BadCanon.TEXT }
+        if ns.Len() > 0 and not c.eat(" ") { error BadCanon.Text }
         start := c.At
         for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
         ns.Push(p.L.Names.Intern(c.Text[start:c.At]))
@@ -4666,21 +4719,31 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
     i64 := p.T.Prim("I64")
     # G9a: a literal binds nothing while another argument can
     b := Binding(owner, 1)
-    assert p.UnifyArg(ps[0], i64, b, true, false) and p.UnifyArg(ps[1], p.T.Prim("U8"), b, false, false)
+    try p.UnifyArg(ps[0], i64, b, true, false)
+    try p.UnifyArg(ps[1], p.T.Prim("U8"), b, false, false)
     assert b.Vals[0] == p.T.Prim("U8")
     # G9b: a number widens to a wider one of its family...
     b2 := Binding(owner, 1)
-    assert p.UnifyArg(ps[0], i32, b2, false, false) and p.UnifyArg(ps[1], i64, b2, false, false) and b2.Vals[0] == i64
+    try p.UnifyArg(ps[0], i32, b2, false, false)
+    try p.UnifyArg(ps[1], i64, b2, false, false)
+    assert b2.Vals[0] == i64
     # ... unless a receiver bound it, and never across families
     b3 := Binding(owner, 1)
-    assert p.UnifyArg(ps[0], i32, b3, false, true) and not p.UnifyArg(ps[1], i64, b3, false, false)
+    try p.UnifyArg(ps[0], i32, b3, false, true)
+    unified := true
+    try p.UnifyArg(ps[1], i64, b3, false, false) catch Mismatch { unified = false }
+    assert not unified
     b4 := Binding(owner, 1)
-    assert p.UnifyArg(ps[0], i32, b4, false, false) and not p.UnifyArg(ps[1], p.T.Prim("F64"), b4, false, false)
+    try p.UnifyArg(ps[0], i32, b4, false, false)
+    unified = true
+    try p.UnifyArg(ps[1], p.T.Prim("F64"), b4, false, false) catch Mismatch { unified = false }
+    assert not unified
     # G9d: two references differing only in permission meet at read-only, whichever comes first
     pt := try p.ParseCanon($m ":P") catch { unreachable }
     b5 := Binding(owner, 1)
-    assert p.UnifyArg(ps[0], p.T.Ref(pt, types.Writable), b5, false, false)
-    assert p.UnifyArg(ps[1], p.T.Ref(pt, types.ReadOnly), b5, false, false) and b5.Vals[0] == p.T.Ref(pt, types.ReadOnly)
+    try p.UnifyArg(ps[0], p.T.Ref(pt, types.Writable), b5, false, false)
+    try p.UnifyArg(ps[1], p.T.Ref(pt, types.ReadOnly), b5, false, false)
+    assert b5.Vals[0] == p.T.Ref(pt, types.ReadOnly)
     # an instance is named by its module, name and arguments (G16a), and made once
     one := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i64)))
     two := p.FnInstance(f, p.T.List(Array<types.TypeId>(1, i32)))

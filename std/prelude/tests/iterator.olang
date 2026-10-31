@@ -56,18 +56,18 @@ test "an adapter is evaluated while compiling" {
 # ---- the walks of the second survey (1.5): Reversed, Windows, TakeWhile, SkipWhile, StepBy, FlatMap, Partition ----
 
 type Bad error {
-    NO
+    No
 }
 
 fn odd(x I64) Bool ? Bad {
-    if x == 4 { error Bad.NO }
+    if x == 4 { error Bad.No }
     return x % 2 == 1
 }
 
 # 0 .. n-1, failing with Bad when it reaches 7
 fn upToSeven(n I64) Iterator<I64 ? Bad> {
     for i in range n {
-        if i == 7 { error Bad.NO }
+        if i == 7 { error Bad.No }
         yield i
     }
 }
@@ -92,7 +92,7 @@ test "Windows gives every run of n, overlapping, as views" {
     assert "abcd".Windows(3)[1] == "bcd"
     n := 3
     assert a.Windows(try ChunkSize(n)).Len() == 2
-    assert (try ChunkSize(n - 3) catch ArrayError.BAD_CHUNK default ChunkSize(7)) == ChunkSize(7)
+    assert (try ChunkSize(n - 3) catch ArrayError.BadChunk default ChunkSize(7)) == ChunkSize(7)
 }
 
 test "an array's TakeWhile and SkipWhile are views, Partition two arrays" {

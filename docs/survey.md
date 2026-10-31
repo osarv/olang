@@ -40,7 +40,7 @@ orders that only need a yes.
    will grow. *Recommendation:* build round 6 before announcing, or announce only with three things in place: the
    `-memory` report, the restart-a-block pattern written up with an example, and the known limit stated on the front
    page.
-4. **Errors that carry data.** An error is a word (T20, QAM). `io.Error.NOT_FOUND` cannot say which path, and
+4. **Errors that carry data.** An error is a word (T20, QAM). `io.Error.NotFound` cannot say which path, and
    `json.Parse` has to report its position through an out-parameter. Swift, Rust and Kotlin's rich errors carry fields,
    and Go wraps errors with context. Zig has olang's limit, and it is one of the most-asked Zig questions. *Decide*
    before QAM (errors as values) is built, because it changes the error ABI. *Recommendation:* let an error word have

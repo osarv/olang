@@ -30,8 +30,9 @@ DrivenArg I64 = 3      # tools_NAME COMPILER FILE...
 ToolNames Array<String&> = String&["bare_typevars", "perm_mut", "int_literal_i64", "errors_migrate", "cli_words"
     "donefail_migrate", "syntax_migrate", "math_methods", "arrays_migrate", "results_migrate", "equality_migrate"
     "helper_rename", "null_migrate", "checkerror_rename", "stutter_rename", "checked_migrate", "contracts_migrate"
-    "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "unused_migrate"]
-ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2]
+    "try_migrate", "as_migrate", "errortype_migrate", "list_vec", "link_migrate", "match_migrate", "question_migrate"
+    "unused_migrate", "errorcase_rename"]
+ToolKinds Array<I64> = I64[1, 2, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 1]
 
 fn driven(kind I64) Bool { return kind >= DrivenOpt }
 
@@ -129,25 +130,24 @@ fn BinDir(exe String&, tools String&) String {
 
 # the program for a tool, built into bin when it is not there, was built by another compiler (or this one before it
 # changed), or is older than the sources it is built from: the tools, the compiler's modules beside them (some tools
-# import them) and the standard library
-fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String&, said mut io.Writer&) Bool {
+# import them) and the standard library - failing with NotBuilt, said, where it cannot be
+fn ensureBuilt(exe String&, tools String&, bin String&, name String&, std String&, said mut io.Writer&) ? NotBuilt {
     program := filepath.Join(bin, "tools_" $name)
     stamp := $program ".from"
     from := try os.ReadFile(stamp) catch default ""
     lib := newest(std).Max(newest(filepath.Join(std, "prelude")))
     sources := newest(tools).Max(newest(filepath.Join(tools, "../compiler"))).Max(lib)
-    if from == builtBy(exe) and mtime(program) > sources { return true }
+    if from == builtBy(exe) and mtime(program) > sources { return }
     try os.Remove(stamp) catch os.Error { }
     out := try os.Exec(String&[exe, "build", "-output", program, filepath.Join(tools, $name ".olang")], "", true, bin) catch os.Error {
         said.Write("olang: fix: cannot run " $exe "\n")
-        return false
+        error NotBuilt
     }
     if out.Status != 0 {
         said.Write("olang: fix: tools/" $name ".olang does not build:\n" $out.Stdout $out.Stderr)
-        return false
+        error NotBuilt
     }
     try os.WriteFile(stamp, builtBy(exe)) catch os.Error { }
-    return true
 }
 
 # the files at once to a tool's command line: long lists are cut into runs so the line stays short
@@ -184,7 +184,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
     left I64 = 0
     for t in Order() {
         name := ToolNames[t]
-        if not ensureBuilt(exe, tools, bin, name, std, said) {
+        try ensureBuilt(exe, tools, bin, name, std, said) catch NotBuilt {
             status = 2
             break
         }

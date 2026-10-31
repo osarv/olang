@@ -368,11 +368,11 @@ fn lineAfter(text String&, at I64) I64 {
 
 # what IoAlias fails with: the text does not import std/io
 type NoIoImport error {
-    NONE
+    None
 }
 
 # the name the olang source "text", read from "path", imports std/io by - "io", or the alias written - and fails
-# (NoIoImport.NONE) when it does not import it. An import is a line whose first word is import, then optionally an
+# (NoIoImport.None) when it does not import it. An import is a line whose first word is import, then optionally an
 # alias, then a quoted path; it names std/io when the path is "std/io" or resolves to .../std/io from the file's own
 # directory
 fn IoAlias(text String&, path String&) String ? {
@@ -410,7 +410,7 @@ fn IoAlias(text String&, path String&) String ? {
         }
         at = next
     }
-    error NoIoImport.NONE
+    error NoIoImport.None
 }
 
 test "Mask tells code from comments and literals" {

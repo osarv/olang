@@ -3,10 +3,10 @@
 # -i and the built program disagree: a return inside an assert message's catch block
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 fn h(k I64) String ? {
-    if k < 5 { error Stop.HERE }
+    if k < 5 { error Stop.Here }
     return "ok"
 }
 fn f(k I64) I64 {

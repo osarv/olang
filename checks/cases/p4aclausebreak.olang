@@ -1,10 +1,10 @@
 # check: fail error[P4a]: 'break' may not leave a task's clause - it runs on the task, outside the spawner's loops
 # P4a: the clause runs on the task's thread, so the spawner's loop is not around it
 type E error {
-    BAD
+    Bad
 }
 fn work(n I32) ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
 }
 fn main() ? {
     for i in range 4 {

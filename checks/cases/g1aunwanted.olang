@@ -1,6 +1,6 @@
 # check: fail error[G1a]: Box has no error-set parameter, so its arguments end in no '?'
 # G1a: only a type whose list ends in "? E" takes an error set among its arguments
-type Bad error { NEG }
+type Bad error { Neg }
 
 type Box<T> struct(v T) { v }
 

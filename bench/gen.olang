@@ -8,8 +8,8 @@ import "std/io"
 import "std/os"
 
 type Usage error {
-    ARGS
-    MODE
+    Args
+    Mode
 }
 
 fn upto(n I64) Iterator<I64> {
@@ -32,7 +32,7 @@ type Upto struct(n I64) {
 }
 
 fn (u mut Upto&) Next() I64 ? Exhausted {
-    if u.i >= u.n { error Exhausted.END }
+    if u.i >= u.n { error Exhausted.End }
     v := u.i
     u.i++
     return v
@@ -49,12 +49,12 @@ fn (u mut Thirds&) Next() I64 ? Exhausted {
         u.i++
         if v % 3 == 0 { return v }
     }
-    error Exhausted.END
+    error Exhausted.End
 }
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error Usage.ARGS }
+    if args.Len() < 5 { error Usage.Args }
     mode := args[1]
     form := args[2]
     n := try args[3].ParseInt()
@@ -76,7 +76,7 @@ fn main() ? {
                 if x % 3 == 0 { t += x }
             }
         } else {
-            error Usage.MODE
+            error Usage.Mode
         }
         t += p
     }

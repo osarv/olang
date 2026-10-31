@@ -1,0 +1,7 @@
+# check: fail error[R3]: 'IoErr' is an error type of words - raise one of them, 'error IoErr.Word'
+# R3: a declared error type is raised by one of its words, never whole
+type IoErr error { Full, Denied }
+fn f() ? IoErr {
+    error IoErr
+}
+fn main() ? { try f() }

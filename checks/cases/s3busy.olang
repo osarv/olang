@@ -2,7 +2,7 @@
 # S3: a call statement that does something besides its value is no error - it writes a global or through a reference,
 # calls a function value, may fail, or is in a generic's body
 import "std/io"
-type E error { BAD }
+type E error { Bad }
 Count mut I64 = 0
 fn bump() I64 {
     Count++
@@ -14,7 +14,7 @@ fn (b mut Box&) Set(v I64) I64 {
     return v
 }
 fn check(n I64) I64 ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
     return n
 }
 fn call(f fn() I64) I64 { return f() }

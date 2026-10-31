@@ -22,15 +22,11 @@ type Request struct(Path String&, Line I64, Col I64, Kind String&, Arg String&, 
 Taken mut I64 = 0
 
 # what ParseRow fails with: the row is no compiler diagnostic
-type NotARow error {
-    ROW
-}
-
 # a compiler row "PATH:LINE:COL: error[RULE]: MESSAGE", "PATH:LINE:COL: error: MESSAGE" or "PATH:LINE:COL: note: MESSAGE"
 # as its parts: the path, line, column, whether it is an error (else a note), the rule ("" when it names none) and the
-# message. Any other row fails with NotARow.ROW. The path is the shortest start of the row that leaves the rest
-# matching, as the Python scripts' non-greedy (.*?) read it
-fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
+# message. Any other row fails with NotARow. The path is the shortest start of the row that leaves the rest matching, as
+# the Python scripts' non-greedy (.*?) read it
+fn ParseRow(row String&) Row ? {
     n := row.Len()
     for k in range n {
         if row[k] != ':' { continue }
@@ -63,9 +59,19 @@ fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
             continue
         }
         if not row[after:].StartsWith(": ") { continue }
-        return $row[:k], (try row[a:b].ParseInt()), (try row[c:d].ParseInt()), isError, rule, $row[after + 2:]
+        return Row($row[:k], try row[a:b].ParseInt(), try row[c:d].ParseInt(), isError, rule, $row[after + 2:])
     }
-    error NotARow.ROW
+    error NotARow
+}
+
+# a compiler row's parts (ParseRow): IsError where it is an error, else a note
+type Row struct(Path String&, Line I64, Col I64, IsError Bool, Rule String&, Msg String&) {
+    Path
+    Line
+    Col
+    IsError
+    Rule
+    Msg
 }
 
 # what a checks/cases program must fail with, from its first twelve lines "# check: fail TEXT" and "# also: TEXT" - an edit
@@ -255,12 +261,12 @@ fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, te
 }
 
 test "ParseRow reads errors and notes" {
-    path, line, col, isError, rule, msg := try ParseRow("a/b.olang:12:34: error[D9]: a: b") catch { unreachable }
-    assert path == "a/b.olang" and line == 12 and col == 34 and isError and rule == "D9" and msg == "a: b"
-    p2, l2, c2, e2, r2, m2 := try ParseRow("x.olang:1:2: note: 'x' is declared") catch { unreachable }
-    assert p2 == "x.olang" and l2 == 1 and c2 == 2 and not e2 and r2 == "" and m2 == "'x' is declared"
-    p3, l3, c3, e3, r3, m3 := try ParseRow("x:1:2: error: plain") catch { unreachable }
-    assert p3 == "x" and l3 == 1 and c3 == 2 and e3 and r3 == "" and m3 == "plain"
+    r := try ParseRow("a/b.olang:12:34: error[D9]: a: b")
+    assert r.Path == "a/b.olang" and r.Line == 12 and r.Col == 34 and r.IsError and r.Rule == "D9" and r.Msg == "a: b"
+    r2 := try ParseRow("x.olang:1:2: note: 'x' is declared")
+    assert r2.Path == "x.olang" and r2.Line == 1 and r2.Col == 2 and not r2.IsError and r2.Rule == "" and r2.Msg == "'x' is declared"
+    r3 := try ParseRow("x:1:2: error: plain")
+    assert r3.Path == "x" and r3.Line == 1 and r3.Col == 2 and r3.IsError and r3.Rule == "" and r3.Msg == "plain"
     ok := true
     try ParseRow("compilation failed with 1 error") catch { ok = false }
     assert not ok

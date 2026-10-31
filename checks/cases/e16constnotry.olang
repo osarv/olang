@@ -1,7 +1,7 @@
 # check: fail error[E16]: index 5 is outside the array's 2 elements
 # never: index 7
 # E16: a constant index known to be out of a fixed-length array's range is a compile-time error where it is written
-# - and none for "a.Get(i)" (E16d), which fails with ArrayError.OUT_OF_RANGE at run time
+# - and none for "a.Get(i)" (E16d), which fails with ArrayError.OutOfRange at run time
 import "std/io"
 fn main() ? {
     z Array<I32> = I32[1, 2]

@@ -17,12 +17,12 @@ ok - the other destructors ran once each
 ends.olang:96: unreachable reached
 FAIL - fails on another stack
 ok - the stack's code ran, and the caller's handle was destructed
-FAIL - an error leaves the test: FxErr.GONE
+FAIL - an error leaves the test: FxErr.Gone
 ends.olang:107: raised here
 ends.olang:111: try passed it on
 ends.olang:114: left the test
 ok - a try in a test that catches what it lets through passes
-ends.olang:124: FxErr.GONE
+ends.olang:124: FxErr.Gone
 ends.olang:107: raised here
 ends.olang:111: try passed it on
 FAIL - a ! takes an error

@@ -361,7 +361,7 @@ type Decl enum {
     # the path's span holds its quotes; link the library a C header's declarations are in (X9), its quotes too - (0, 0)
     # for none
     Import(sp source.Span, alias source.NameId, path source.Span, link source.Span)
-    # type Name error [Member, ...] [{ WORDS }] (T19, T19a): an error type's own words, and the members of a named set
+    # type Name error [Member, ...] [{ Words }] (T19, T19a): an error type's own words, and the members of a named set
     Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&)
     # test [Target] "description" { } (B14): Target a function, a type or Type.Method of the file, null for none
     Test(sp source.Span, name source.Span, body Array<Stmt&>&, target Path?&)

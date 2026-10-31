@@ -1,7 +1,7 @@
 # a matrix over the caller's storage or its own, the shape a module of views has: Data is a conditional - a slice of
 # the data it is given, else a new array - so a matrix View returns holds the caller's array
 type Error error {
-    MISMATCH
+    Mismatch
 }
 
 type Mat<T> struct(Rows I64, Cols I64, data mut Array<T>& = Array<T>(0)) {
@@ -13,7 +13,7 @@ type Mat<T> struct(Rows I64, Cols I64, data mut Array<T>& = Array<T>(0)) {
 # a rows x cols matrix over data, from data[offset]; it allocates nothing
 fn View<T>(data mut Array<T>&, offset I64, rows I64, cols I64) Mat<T> ? Error {
     n I64 = rows * cols
-    if rows < 0 or cols < 0 or offset < 0 or offset + n > data.Len() { error Error.MISMATCH }
+    if rows < 0 or cols < 0 or offset < 0 or offset + n > data.Len() { error Error.Mismatch }
     return Mat<T>(rows, cols, data[offset:offset + n])
 }
 

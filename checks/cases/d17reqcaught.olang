@@ -1,11 +1,11 @@
 # check: run
 # D17e (the lang25 review): a call with closed arguments and a false requirement compiles where a clause at it takes
 # its ArgumentError - in a branch that never runs, in a test of the failure path - and fails at run time as written
-fn pick(x I64, y I64) [y > x] I64 { return y - x }
+fn pick(x I64, y I64) [y > x] I64 ? { return y - x }
 fn main() {
     a := try pick(5, 3) catch ArgumentError default -1
     b := try pick(5, 3) catch default -2
     c I64 = 0
-    try pick(5, 3) catch ArgumentError.INVALID { c = -3 }
+    try pick(5, 3) catch ArgumentError.Invalid { c = -3 }
     assert a == -1 and b == -2 and c == -3
 }

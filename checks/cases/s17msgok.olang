@@ -2,10 +2,10 @@
 # S17: an assert's message may hold code that does not leave it - a catch block giving a default, a lambda returning from
 # itself, a loop broken inside it, unreachable
 type E error {
-    BAD
+    Bad
 }
 fn h(k I64) I64 ? E {
-    if k > 0 { error E.BAD }
+    if k > 0 { error E.Bad }
     return k
 }
 fn g(k I64) I64 {

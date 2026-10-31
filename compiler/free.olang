@@ -45,20 +45,20 @@ fn orig(k I64, v I64) I64 { return (k << 40) | v }
 fn okind(o I64) I64 { return o >> 40 }
 fn oval(o I64) I64 { return o & ((I64(1) << 40) - 1) }
 
-fn addTo(s mut Vec<I64>&, x I64) Bool {
+# x put in s where it is not there yet: how many were added, 0 or 1 (a count, never a flag - R23a)
+fn addTo(s mut Vec<I64>&, x I64) I64 {
     for y in s {
-        if y == x: return false
+        if y == x: return 0
     }
     s.Push(x)
-    return true
+    return 1
 }
 
-fn addAllTo(s mut Vec<I64>&, t Vec<I64>&) Bool {
-    any := false
-    for x in t {
-        if addTo(s, x): any = true
-    }
-    return any
+# every element of t put in s where it is not there yet: how many were added
+fn addAllTo(s mut Vec<I64>&, t Vec<I64>&) I64 {
+    n I64 = 0
+    for x in t { n += addTo(s, x) }
+    return n
 }
 
 fn has(s Vec<I64>&, x I64) Bool {
@@ -1066,7 +1066,7 @@ fn (w mut walker&) holds(ty types.TypeId) Bool {
 # a local given more origins
 fn (w mut walker&) give(l I64, o Vec<I64>&) {
     # another pass is needed only where a local grows after this pass read it
-    if addAllTo(w.origins[l], o) and w.seen[l] { w.grew = true }
+    if addAllTo(w.origins[l], o) > 0 and w.seen[l] { w.grew = true }
 }
 
 fn (w mut walker&) stmt(st typed.Stmt&) {
@@ -1180,7 +1180,7 @@ fn (w mut walker&) result(o Vec<I64>&) {
     f := w.F
     for x in o {
         if okind(x) == ONew or (okind(x) == OPl and f.isDestroy(oval(x))): continue
-        if addTo(f.resFrom[w.Id], x) { f.changed = true }
+        if addTo(f.resFrom[w.Id], x) > 0 { f.changed = true }
     }
 }
 
@@ -1474,7 +1474,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
     f := w.F
     if not w.Final {
         # a body that may let go of any place lists none
-        if k >= 0 and not f.letsAll[w.Id] and addTo(f.lets[w.Id], k) { f.changed = true }
+        if k >= 0 and not f.letsAll[w.Id] and addTo(f.lets[w.Id], k) > 0 { f.changed = true }
         return
     }
     if w.quiet > 0 { return }
@@ -1513,7 +1513,7 @@ fn (w mut walker&) storeField(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span)
     # held by the instance, which is what the constructor gives: its result's origins, but for what is new
     if not w.Final {
         for y in o {
-            if okind(y) != ONew and addTo(w.F.resFrom[w.Id], y) { w.F.changed = true }
+            if okind(y) != ONew and addTo(w.F.resFrom[w.Id], y) > 0 { w.F.changed = true }
         }
     }
 }
@@ -1526,7 +1526,7 @@ fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool,
     for y in o {
         k := okind(y)
         if k == OPar and not w.Final and oval(y) != inside {
-            if addTo(f.parEsc[w.Id], oval(y)) {
+            if addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
                 if f.Debug { try io.PrintErr($"esc " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " inside " $inside "\n") catch io.Error { } }
             }
@@ -2134,8 +2134,8 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     j := w.paramOf(x)
     if j >= 0 {
         if not w.Final {
-            if addTo(f.parStored[w.Id], (j << 32) | k) { f.changed = true }
-            if multi and addTo(f.parMulti[w.Id], j) { f.changed = true }
+            if addTo(f.parStored[w.Id], (j << 32) | k) > 0 { f.changed = true }
+            if multi and addTo(f.parMulti[w.Id], j) > 0 { f.changed = true }
         }
         w.parSite.Push(j)
         w.parSitePlace.Push(k)
@@ -2145,7 +2145,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
     if not w.Final {
         if contained { return }
         for y in o {
-            if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) {
+            if okind(y) == OPar and oval(y) != w.storeWithin and addTo(f.parEsc[w.Id], oval(y)) > 0 {
                 f.changed = true
                 if f.Debug { try io.PrintErr($"esc-store " $f.fnName(w.Id) " par " $oval(y) " at " $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) " within " $w.storeWithin "\n") catch io.Error { } }
             }
@@ -2178,7 +2178,7 @@ fn (w mut walker&) paramPaths() {
             if not w.loopAround(s, t) and ((lastS and t > s) or (has(w.lastAt, t) and s > t)): continue
             many = true
         }
-        if many and addTo(f.parMulti[w.Id], j) { f.changed = true }
+        if many and addTo(f.parMulti[w.Id], j) > 0 { f.changed = true }
     }
 }
 

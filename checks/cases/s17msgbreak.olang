@@ -1,9 +1,9 @@
 # check: fail error[S17]: 'break' may not leave an assert's message
 type E error {
-    BAD
+    Bad
 }
 fn h(k I64) I64 ? E {
-    if k > 0 { error E.BAD }
+    if k > 0 { error E.Bad }
     return k
 }
 fn main() ? {

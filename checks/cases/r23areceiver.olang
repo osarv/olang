@@ -1,0 +1,16 @@
+# check: run
+# R23a: a method's receiver is what it acts on, not an out-parameter - a Bool there says what happened to it
+type Bag struct() {
+    xs Vec<I64>
+}
+fn (b mut Bag&) Add(x I64) Bool {
+    for y in b.xs {
+        if y == x: return false
+    }
+    b.xs.Push(x)
+    return true
+}
+fn main() {
+    b := Bag()
+    assert b.Add(1) and not b.Add(1)
+}

@@ -6,8 +6,8 @@ import "std/io"
 import "std/os"
 
 type Usage error {
-    ARGS
-    MODE
+    Args
+    Mode
 }
 
 type Shape trait {
@@ -39,7 +39,7 @@ fn area(f Fig&) I64 {
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 4 { error Usage.ARGS }
+    if args.Len() < 4 { error Usage.Args }
     mode := args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
@@ -82,7 +82,7 @@ fn main() ? {
             for x in all { total += x.Area() ^ p }
         }
     } else {
-        error Usage.MODE
+        error Usage.Mode
     }
     try io.Print($total "\n")
 }

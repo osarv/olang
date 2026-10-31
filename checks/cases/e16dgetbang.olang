@@ -3,10 +3,10 @@
 At mut I64 = 1
 fn read(a Array<I64>&, i I64) I64 { return a.Get(i)! }
 fn plusOne(a Array<I64>&, i I64) I64 ? { return try a.Get(i) + 1 }
-fn guarded(a Array<I64>&, i I64) I64 { return try a.Get(i) catch ArrayError.OUT_OF_RANGE default -1 }
+fn guarded(a Array<I64>&, i I64) I64 { return try a.Get(i) catch ArrayError.OutOfRange default -1 }
 fn use(n I64) { }
 fn stmt(a Array<I64>&, i I64) I64 {
-    try use(a.Get(i)) catch ArrayError.OUT_OF_RANGE { return -5 }
+    try use(a.Get(i)) catch ArrayError.OutOfRange { return -5 }
     return 0
 }
 Baked I64 = guarded(I64[1, 2], 7) + stmt(I64[1], 4)

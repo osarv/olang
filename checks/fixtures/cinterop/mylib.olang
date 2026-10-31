@@ -8,8 +8,8 @@ type Point struct(x F64, y F64) {
 }
 
 type Bad error {
-    NEGATIVE
-    TOO_BIG
+    Negative
+    TooBig
 }
 
 Seen mut Vec<I64>& = Vec<I64>()
@@ -31,8 +31,8 @@ export fn greet(name String&) String { return $"hello, " $name "!" }
 export fn parse(t String&) I64 ? ParseError { return try t.ParseInt() }
 
 export fn check(n I64) I64 ? Bad {
-    if n < 0 { error Bad.NEGATIVE }
-    if n > 100 { error Bad.TOO_BIG }
+    if n < 0 { error Bad.Negative }
+    if n > 100 { error Bad.TooBig }
     return n * 2
 }
 
@@ -48,7 +48,7 @@ export fn mid(a Point, b Point) Point { return Point((a.x + b.x) / 2, (a.y + b.y
 export fn pidKnown() Bool { return Pid > 0 }
 
 export fn squares(n I64) Array<I64> ? Bad {
-    if n < 0 { error Bad.NEGATIVE }
+    if n < 0 { error Bad.Negative }
     out := Array<I64>(n)
     for i in range n { out[i] = i * i }
     return out

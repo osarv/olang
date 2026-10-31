@@ -17,17 +17,17 @@ import "Base"
 import rn "runner"
 
 type WorkerError error {
-    BAD_INPUT
+    BadInput
 }
 
 type InputError error {
-    NEGATIVE
-    TOO_BIG
+    Negative
+    TooBig
 }
 
 fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
     if n < 0 {
-        error WorkerError.BAD_INPUT
+        error WorkerError.BadInput
     }
     return try sh.CheckRange(n, 0, 100)
 }
@@ -37,13 +37,13 @@ fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
 # ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
 fn classifyInput(n I32) I32 ? WorkerError, InputError {
     if n < 0 {
-        error InputError.NEGATIVE
+        error InputError.Negative
     }
     if n > 1000 {
-        error InputError.TOO_BIG
+        error InputError.TooBig
     }
     if n == 0 {
-        error WorkerError.BAD_INPUT
+        error WorkerError.BadInput
     }
     return n
 }
@@ -160,7 +160,7 @@ test "cross-module: ComputeChecked identifies too-small correctly" {
 # catch in this file uses the whole-type "alias.Type" form (2 identifiers) instead
 test "cross-module: catching a specific word by its full alias.Type.word name" {
     caught Bool = false
-    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO, sh.MathError.OVERFLOW, sh.RangeError {
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DivByZero, sh.MathError.Overflow, sh.RangeError {
         caught = true
     }
     assert caught

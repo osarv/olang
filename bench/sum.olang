@@ -6,13 +6,13 @@ import "std/os"
 import "std/list"
 
 type Usage error {
-    ARGS
-    MODE
+    Args
+    Mode
 }
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 4 { error Usage.ARGS }
+    if args.Len() < 4 { error Usage.Args }
     mode := args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
@@ -44,7 +44,7 @@ fn main() ? {
             total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })
         }
     } else {
-        error Usage.MODE
+        error Usage.Mode
     }
     try io.Print($total "\n")
 }

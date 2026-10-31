@@ -417,12 +417,12 @@ fn (l mut Loader&) decide(mi I64, c I64) {
     from := m.chainCondFrom[c]
     to := m.conds.Len() if c + 1 == m.chainCondFrom.Len() else m.chainCondFrom[c + 1]
     for k in range from, to {
-        outcome, value := l.evalCond(mi, m.conds[k])
-        if outcome == cond.Outcome.Deferred {
+        d := l.evalCond(mi, m.conds[k])
+        if d.Of == cond.Outcome.Deferred {
             m.chainChosen[c] = Pending
             return
         }
-        if outcome == cond.Outcome.Decided and value {
+        if d.Of == cond.Outcome.Decided and d.Holds {
             m.chainChosen[c] = k - from
             return
         }
@@ -431,18 +431,18 @@ fn (l mut Loader&) decide(mi I64, c I64) {
 }
 
 # a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
-fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
+fn (l mut Loader&) evalCond(mi I64, i I64) cond.Decision {
     m := l.Mods[mi]
     l.CondParser(m)
-    x := try m.cparser!.ExprAt(i) catch { return cond.Outcome.Failed, false } # the parser reports it
-    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Outcome.Deferred, false }
+    x := try m.cparser!.ExprAt(i) catch { return cond.Decision(cond.Outcome.Failed, false) } # the parser reports it
+    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Decision(cond.Outcome.Deferred, false) }
     e mut cond.Eval&m = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
-    outcome, value := e.Top(x)
-    if outcome == cond.Outcome.Failed {
+    d := e.Top(x)
+    if d.Of == cond.Outcome.Failed {
         at, msg := e.Error()
         l.Diags.Error(l.at(m, at), msg)
     }
-    return outcome, value
+    return d
 }
 
 # the parser conditions are read with, and the globals they may read: "Name [mut] [type] = init" and "Name := init" at
@@ -531,7 +531,7 @@ fn (l mut Loader&) loadImports(mi I64) {
 
 # resolve's failure, already reported: an import that names no file it may reach
 type unresolved error {
-    IMPORT
+    Import
 }
 
 # where an import's file is, and the identity of its module (M23, M22a); what is wrong is reported
@@ -541,11 +541,11 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
     spec := imp.Spec
     if spec.Len() >= 4096 {
         l.Diags.Error(at, msgs.ImportPathTooLong())
-        error unresolved.IMPORT
+        error unresolved.Import
     }
     if spec.EndsWith(".olang") {
         l.Diags.Error(at, msgs.ImportHasExtension())
-        error unresolved.IMPORT
+        error unresolved.Import
     }
     slash := try spec.FindByte('/') catch default spec.Len()
     first := spec[:slash]
@@ -556,21 +556,21 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         identity = $Normalize(spec)
         if not identity.StartsWith("std/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot("std"))
-            error unresolved.IMPORT
+            error unresolved.Import
         }
     } else if first.Contains(".") and first != "." and first != ".." {
         # host/owner/repo[@ref]/path - a host always has a dot, which a relative path's first element never does
         parts := spec.Split("/")
         if parts.Len() < 4 {
             l.Diags.Error(at, msgs.ImportRemoteNeedsFile())
-            error unresolved.IMPORT
+            error unresolved.Import
         }
         dir := try l.Fetch.Fetch(parts[0], parts[1], parts[2])
-            catch fetch.FetchError.BAD_NAME { l.Diags.Error(at, msgs.ImportRemoteBadName()) } default ""
-            catch fetch.FetchError.NOT_A_COMMIT { l.Diags.Error(at, msgs.ImportLockNotACommit(key(parts))) } default ""
-            catch fetch.FetchError.FAILED { l.Diags.Error(at, msgs.ImportFetchFailed(key(parts))) } default ""
-            catch fetch.FetchError.LOCKED_FAILED { l.Diags.Error(at, msgs.ImportLockedFetchFailed(key(parts))) } default ""
-        if dir == "" { error unresolved.IMPORT }
+            catch fetch.FetchError.BadName { l.Diags.Error(at, msgs.ImportRemoteBadName()) } default ""
+            catch fetch.FetchError.NotACommit { l.Diags.Error(at, msgs.ImportLockNotACommit(key(parts))) } default ""
+            catch fetch.FetchError.Failed { l.Diags.Error(at, msgs.ImportFetchFailed(key(parts))) } default ""
+            catch fetch.FetchError.LockedFailed { l.Diags.Error(at, msgs.ImportLockedFetchFailed(key(parts))) } default ""
+        if dir == "" { error unresolved.Import }
         b := StringBuilder()
         b.Push(dir)
         for i in range 3, parts.Len() {
@@ -583,7 +583,7 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         root := key(parts)
         if not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error unresolved.IMPORT
+            error unresolved.Import
         }
     } else {
         rel := moduleDir(m.Path)
@@ -604,12 +604,12 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
         }
         if root != "" and not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error unresolved.IMPORT
+            error unresolved.Import
         }
     }
     if not os.Exists(path) or os.IsDir(path) {
         l.Diags.Error(at, msgs.ImportFileNotFound(path))
-        error unresolved.IMPORT
+        error unresolved.Import
     }
     return path, identity
 }

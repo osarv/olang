@@ -2,11 +2,11 @@
 # built, built -d with its trace (S18d) and interpreted alike
 import "std/io"
 type Err error {
-    LOUD
+    Loud
 }
 run mut I64 = 1
 fn inner(n I64) ? Err {
-    if n > 0 { error Err.LOUD }
+    if n > 0 { error Err.Loud }
 }
 fn outer(n I64) ? {
     try inner(n)

@@ -3,7 +3,7 @@
 import me "attrmod"
 
 # where a handler answers
-type Route struct(Path String&) [Path.StartsWith("/")] { Path }
+type Route struct(Path String&) [Path.StartsWith("/")] ? { Path }
 
 # a command-line word, and what it does
 type Command struct(Word String&, Help String& = "") { Word, Help }

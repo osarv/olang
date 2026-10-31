@@ -31,12 +31,12 @@ type ParamInfo<T, I> struct() { }
 type ResultInfo<T, I> struct() { }
 
 # why "x.Attr<A>()" gives no value (G40): the declaration it reads has no attribute of type A
-type AttrError error { MISSING }
+type AttrError error { Missing }
 
-# the call "x.Attr<A>()" is (G40): the attribute's value where the declaration has one, an AttrError.MISSING where it
+# the call "x.Attr<A>()" is (G40): the attribute's value where the declaration has one, an AttrError.Missing where it
 # has none - which the compiler knows, so a program asking either way is held to handling the failure
-fn attrGot<A>(a A) A ? AttrError.MISSING { return a }
-fn attrMissing<A>() A ? AttrError.MISSING { error AttrError.MISSING }
+fn attrGot<A>(a A) A ? AttrError.Missing { return a }
+fn attrMissing<A>() A ? AttrError.Missing { error AttrError.Missing }
 
 # a function, or a method (G41): F its type (a method's receiver first), K a key naming which - the compiler writes
 # both. "f(args)" calls it, a method's receiver first

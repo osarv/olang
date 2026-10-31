@@ -49,36 +49,10 @@ fn (s mut Scoper&) destructsAt(t types.TypeId) Bool {
 }
 
 # whether a value of a type may hold an instance whose destructor is to run (C11, O16) - through references, elements,
-# fields and cases - or a value of a type not known here: an any's instance, a type variable's (S21, as check's
-# holdsDtor reads a local's type)
+# fields and cases - or a value of a type not known here: an any's instance, a type variable's (S21, types.DtorWalk)
 fn (s mut Scoper&) mayHoldDtor(ty types.TypeId) Bool {
-    seen Map<types.TypeId, Bool>
-    return s.holdsDtorIn(ty, seen)
-}
-
-fn (s mut Scoper&) holdsDtorIn(ty types.TypeId, seen mut Map<types.TypeId, Bool>&) Bool {
-    t := s.P.T
-    r := t.Repr(ty)
-    if seen.Has(r) { return try seen.Get(r) catch default false }
-    seen.Put(r, false)
-    out := match t.KindOf(r) {
-        case types.Kind.Ref: s.holdsDtorIn(t.Referent(r), seen)
-        case types.Kind.Any, types.Kind.Var: true
-        case types.Kind.Array: s.holdsDtorIn(t.Elem(r), seen)
-        case types.Kind.Tuple, types.Kind.Record: s.someHoldsDtor(t.Items(t.Parts(r)), seen)
-        case types.Kind.Named: not t.HasBody(r) or t.Destructs(r) or s.someHoldsDtor(t.Items(t.Fields(r)), seen) or
-                                 s.someHoldsDtor(t.Items(t.Cases(r)), seen)
-        case _: false
-    }
-    seen.Put(r, out)
-    return out
-}
-
-fn (s mut Scoper&) someHoldsDtor(ts Array<types.TypeId>&, seen mut Map<types.TypeId, Bool>&) Bool {
-    for p in ts {
-        if p != types.TypeId(0) and s.holdsDtorIn(p, seen) { return true }
-    }
-    return false
+    w := types.DtorWalk(s.P.T)
+    return w.Holds(ty)
 }
 
 # whether a term is a block's scope - the frame's or one nested in it (S21)
@@ -4609,7 +4583,8 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         try s.targets.Pop() catch { }
         return
     }
-    slot, exact, kind := s.slotOf(p)
+    sl := s.slotOf(p)
+    slot, exact, kind := sl.T, sl.Exact, sl.Kind
     if s.isRef(t) { s.splitBorrow(x) }
     # a call assigned: what its result holds is said at the "=" (C2d through a function's result)
     savedLand, savedLandSp := s.landSite, s.landSp
@@ -4734,16 +4709,23 @@ FitOwn I64 = 7    # a reference or function value returned, living in this funct
 FitElem I64 = 8   # an array literal's element or an array's fill (O25c)
 FitAnyCopy I64 = 9 # an array copied into an "any", its elements' references kept (T32a)
 
-# a place's slot: its term, whether a value put there must be exactly in it, and its kind
-fn (s mut Scoper&) slotOf(p typed.Lvalue&) Term, Bool, I64 {
+# a place's slot: its term, whether a value put there must be exactly in it, and its kind (Fit...)
+type placeSlot struct(T Term, Exact Bool, Kind I64) {
+    T
+    Exact
+    Kind
+}
+
+
+fn (s mut Scoper&) slotOf(p typed.Lvalue&) placeSlot {
     t := p.Type()
     isRef := s.isRef(t)
     match p {
         case typed.Lvalue.Local(_, _, id) {
-            if isRef or s.isFunc(t) { return s.terms[I64(id)], s.narrowingMatters(t), FitLocal }
-            return s.terms[I64(id)], s.storeThrough(t), FitValue
+            if isRef or s.isFunc(t) { return placeSlot(s.terms[I64(id)], s.narrowingMatters(t), FitLocal) }
+            return placeSlot(s.terms[I64(id)], s.storeThrough(t), FitValue)
         }
-        case typed.Lvalue.Global(_, _, _, _) { return Term.Program, isRef and s.storeThrough(t), FitGlobal }
+        case typed.Lvalue.Global(_, _, _, _) { return placeSlot(Term.Program, isRef and s.storeThrough(t), FitGlobal) }
         case typed.Lvalue.Field(_, _, base, i) {
             bt := base.Type()
             mark := typed.Mark.None
@@ -4754,22 +4736,22 @@ fn (s mut Scoper&) slotOf(p typed.Lvalue&) Term, Bool, I64 {
                     # lived - the instance's construction binding, through a parameter its derived scope (C2d, O23a) - and
                     # be exactly there where something can be stored through it (O25g), so that building through the
                     # field builds where its referent is
-                    return s.fieldTerm(base, i), s.storeThrough(t), FitField
+                    return placeSlot(s.fieldTerm(base, i), s.storeThrough(t), FitField)
                 }
                 case _ { }
             }
-            return s.partsTerm(base), s.storeThrough(t), s.slotKind(base)
+            return placeSlot(s.partsTerm(base), s.storeThrough(t), s.slotKind(base))
         }
-        case typed.Lvalue.Elem(_, _, e) { return s.partsTerm(e.Base), s.storeThrough(t), s.slotKind(e.Base) }
-        case typed.Lvalue.Payload(_, _, pl) { return s.partsTerm(pl.Base), s.storeThrough(t), s.slotKind(pl.Base) }
+        case typed.Lvalue.Elem(_, _, e) { return placeSlot(s.partsTerm(e.Base), s.storeThrough(t), s.slotKind(e.Base)) }
+        case typed.Lvalue.Payload(_, _, pl) { return placeSlot(s.partsTerm(pl.Base), s.storeThrough(t), s.slotKind(pl.Base)) }
         case typed.Lvalue.Deref(_, _, r) {
             # the whole referent written over: its references are where it lives
-            return s.val(r, Term.None).T, s.storeThrough(t), FitField
+            return placeSlot(s.val(r, Term.None).T, s.storeThrough(t), FitField)
         }
-        case typed.Lvalue.Temp(_, _, _, _) { return s.here(), false, FitValue }
+        case typed.Lvalue.Temp(_, _, _, _) { return placeSlot(s.here(), false, FitValue) }
         case typed.Lvalue.Target(_, _) {
             if s.targets.Len() >= 2 { return s.slotOf(s.targets[s.targets.Len() - 2]) }
-            return Term.Untraced, false, FitValue
+            return placeSlot(Term.Untraced, false, FitValue)
         }
     }
 }
@@ -5290,7 +5272,7 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         t := p.Type()
         d := Term.None
         if s.holds(t) {
-            slot, _, _ := s.slotOf(p)
+            slot := s.slotOf(p).T
             d = slot
             # a slot no run-time scope stands for (a derived scope, one of several): nothing new is built there (C2d, O12)
             if not d.Runs() and d != Term.None and unknownAt < 0 { unknownAt = k }
@@ -5336,7 +5318,7 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     built := v.K == ValKind.Fresh or clauseBuilt
     if built and unknownAt >= 0 {
         p := sw.Targets[unknownAt]
-        slot, _, _ := s.slotOf(p!)
+        slot := s.slotOf(p!).T
         s.freshIntoUnknown(sp, p!, slot)
     } else if built and not agree {
         if s.report { s.err(s.firstToken(s.B!.File, sp), msgs.SpawnResultsDisagree()) }
@@ -5345,7 +5327,8 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     if v.K == ValKind.Existing {
         for p in sw.Targets {
             if p is null or not s.holds(p.Type()) { continue }
-            slot, exact, kind := s.slotOf(p)
+            sl := s.slotOf(p)
+            slot, exact, kind := sl.T, sl.Exact, sl.Kind
             if s.bindingUnknown(p, slot) {
                 # existing storage stored into a "&p" field of an instance whose binding is not known here (O23, O11)
                 if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
@@ -6384,7 +6367,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         } else if pr is not null and s.oldValue(pr.X) {
             # S4d's copy of a place's old value is built where a temporary put there would be: where the place's
             # references are, which it is not split from
-            slot, _, _ := s.slotOf(s.targets[s.targets.Len() - 1])
+            slot := s.slotOf(s.targets[s.targets.Len() - 1]).T
             t := slot if slot.Runs() else s.here()
             s.val(pr.X, Term.None)
             s.build(pr.Site, t)
@@ -7015,12 +6998,11 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
         ex := not viaField and pt != types.UnknownT and (s.admitsStores(pt) if s.isRef(pt) else s.valueAdmits(pt))
         t := beta[v]
         if not t.Runs() { continue }
-        nt, nx, ok := s.agreeStep(bt, bx, t, ex)
-        if not ok {
+        n := try s.agreeStep(bt, bx, t, ex) catch {
             s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
             return false
         }
-        bt, bx = nt, nx
+        bt, bx = n.T, n.Exact
     }
     return true
 }
@@ -7034,16 +7016,24 @@ fn (s mut Scoper&) isCtor() Bool {
     }
 }
 
-fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) Term, Bool, Bool {
-    if bt == Term.None { return t, ex, true }
-    if t == bt { return bt, bx, true }
+# a binding so far: its term, and whether something must be held exactly there
+type agreeAt struct(T Term, Exact Bool) {
+    T
+    Exact
+}
+
+# the binding so far (bt, bx) met by one more existing value (t, held exactly where ex) - failing with Disagree where
+# they agree on none
+fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) agreeAt ? Disagree {
+    if bt == Term.None { return agreeAt(t, ex) }
+    if t == bt { return agreeAt(bt, bx) }
     if ex != bx {
-        if bx and s.order(t, bt) == Holds { return bt, bx, true }
-        if ex and s.order(bt, t) == Holds { return t, true, true }
+        if bx and s.order(t, bt) == Holds { return agreeAt(bt, bx) }
+        if ex and s.order(bt, t) == Holds { return agreeAt(t, true) }
     }
     if not bx and not ex {
-        if s.order(bt, t) == Holds { return t, false, true }
-        if s.order(t, bt) == Holds { return bt, false, true }
+        if s.order(bt, t) == Holds { return agreeAt(t, false) }
+        if s.order(t, bt) == Holds { return agreeAt(bt, false) }
     }
     # two of this function's scope variables: the instance must not outlive either, kept by the obligations
     both := match t {
@@ -7053,7 +7043,8 @@ fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) Term, Bool, Bool
         }
         case _: false
     }
-    return bt, bx, both
+    if not both { error Disagree }
+    return agreeAt(bt, bx)
 }
 
 # whether the values an enum case's payload holds agree on one scope for it, as argsAgree for a constructor's (T17c):
@@ -7066,12 +7057,11 @@ fn (s mut Scoper&) payloadAgree(items Array<typed.Expr&>&, vs Array<Val>&) Bool 
         if vs[k].K != ValKind.Existing or not vs[k].T.Runs() or not s.holds(it.Type()) { continue }
         ty := it.Type()
         ex := s.admitsStores(ty) if s.isRef(ty) else s.valueAdmits(ty)
-        nt, nx, ok := s.agreeStep(bt, bx, vs[k].T, ex)
-        if not ok {
+        n := try s.agreeStep(bt, bx, vs[k].T, ex) catch {
             s.err(s.argAt(it), msgs.PayloadScopesDisagree())
             return false
         }
-        bt, bx = nt, nx
+        bt, bx = n.T, n.Exact
     }
     return true
 }

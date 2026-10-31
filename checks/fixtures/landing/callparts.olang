@@ -57,7 +57,7 @@ type TokIter struct(src String&, left I64) {
     at I64 = 0
 }
 fn (it mut TokIter&) Next() Token ? Exhausted {
-    if it.left == 0 { error Exhausted.END }
+    if it.left == 0 { error Exhausted.End }
     it.left--
     it.at++
     if it.at % 2 == 0 { return Token(1, it.src[0:3]) }

@@ -181,11 +181,11 @@ type CommandLine struct() {
 }
 
 # a mistake in the command line: reported to the diagnostics already
-type Bad error { USAGE }
+type Bad error { Usage }
 
 fn usage(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
-    error Bad.USAGE
+    error Bad.Usage
 }
 
 # args read as stage 0 reads them (B1): the mode the first word - running a file when it is a file or an option - then
@@ -231,7 +231,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 2 { c.Race = true }
             if o == 3 { c.San = true }
             if o == 4 { cl.Spec = $v }
-            if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.USAGE } }
+            if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.Usage } }
             if o == 6 { c.Update = true }
             if o == 7 { cl.Check = true }
             if o == 8 { c.Quick = true }
@@ -344,7 +344,7 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     # the tools that only analyze need no clang, as interpret does not (B12)
     tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp
     c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp or (tool and c.Clang == ""), d) catch target.Bad {
-        error Bad.USAGE
+        error Bad.Usage
     }
     # B12a: another architecture is compiled, built and linked for with its C library, and its programs and tests run
     # through an emulator; what runs in this process - interpret, the tools - is for this machine only
@@ -386,11 +386,11 @@ fn explainRule(rule String&, d mut diag.Diagnostics&) String ? Bad {
     path := diag.SpecPath()
     spec := try os.ReadFile(path) catch os.Error {
         d.Error(diag.Where.Nowhere, msgs.NoSpec(path))
-        error Bad.USAGE
+        error Bad.Usage
     }
     text := try diag.Explain(String(spec), rule) catch {
         d.Error(diag.Where.Nowhere, msgs.NoRule($rule[:1].ToUpper() $rule[1:]))
-        error Bad.USAGE
+        error Bad.Usage
     }
     return text
 }
@@ -492,13 +492,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
         if not d.HasFatal() { placement(c, cfg, -1, false) }
-        error build.Failed.REPORTED
+        error build.Failed.Reported
     }
     # a construct the checker does not check yet: never built as though it were not there (a store it left out was a
     # lost write - the second bulk review's F3), as lowering's and emission's gaps are not
     if c.Gaps.Len() > 0 {
         for g in c.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not check " $g.What " yet") }
-        error build.Failed.UNBUILT
+        error build.Failed.Unbuilt
     }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
@@ -509,7 +509,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print(fr.Report()) catch io.Error { } }
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
     keys Array<String&>&cfg = Array<String&>(0)
@@ -534,9 +534,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
-        error build.Failed.UNBUILT
+        error build.Failed.Unbuilt
     }
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     t := cfg.Target
     dyncall := false
     hashes Vec<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
@@ -548,7 +548,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             for k, id in r.Parts {
                 pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.Error {
                     build.Unbuildable($"its record " $base " was lost while it was read")
-                    error build.Failed.UNBUILT
+                    error build.Failed.Unbuilt
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
                 if e.Library { pir = libraryIr(pir) }
@@ -582,29 +582,29 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         if m.CUnit == "" { continue }
         ctext := try os.ReadFile(m.CUnit) catch os.Error {
             build.Unbuildable($"its C import's code " $m.CUnit " was lost while it was read")
-            error build.Failed.UNBUILT
+            error build.Failed.Unbuilt
         }
         cir := cIr&prog(m.CUnit, ctext, cfg)
         if cir == "" {
             build.Unbuildable($"clang cannot compile its C import's code " $m.CUnit)
-            error build.Failed.UNBUILT
+            error build.Failed.Unbuilt
         }
         prog.Units.Push(build.Unit($"c_" $m.Identity, build.UnitKind.Module, cir))
     }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     prog.Links = l.Links()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     if e.Library {
         for x in e.ExportNames() { prog.Exports.Push($x) }
         prog.Header = e.Header(build.LibName(root), root)
     }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
-        error build.Failed.REPORTED
+        error build.Failed.Reported
     }
     if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, cfg.FnAttrs(), cfg.San, cfg.Race, cfg.Profile) catch rt.Bad {
-            error build.Failed.REPORTED
+            error build.Failed.Reported
         }
         if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
     }
@@ -836,7 +836,7 @@ fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnost
     for x in cfg.CFlags() { l.CFlags.Push($x) }
     l.Load(root)
     p.Loaded = l.Mods.Len()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     return l
 }
 
@@ -853,7 +853,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
     for ln in l.Links() {
         why := interp.LoadLibrary(ln)
@@ -865,14 +865,14 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
         why := cLibrary(m.CUnit, cfg)
         if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink(m.CUnit, why)) }
     }
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
     # not run
     fr := placement(c, cfg, l.Root)
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     x.Lw.Plans = fr.Plans
     x.Lw.Free = fr
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
@@ -983,17 +983,17 @@ fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d 
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 { error build.Failed.Reported }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     text := try explain.Item(c, sc, x, l.Root, name) catch explain.Missing {
         d.Error(diag.Where.Nowhere, msgs.ExplainNoItem(name, root))
-        error build.Failed.REPORTED
+        error build.Failed.Reported
     }
     return text
 }
@@ -1114,19 +1114,19 @@ test "the modes: each said wrong as stage 0 says it" {
     assert prepared(String&["help"]) == "no mistake: help"
 }
 
-explainedSrc String& = ("type MathError error { ZERO }\n"
+explainedSrc String& = ("type MathError error { Zero }\n"
                      "type N struct(v I64, next N?&) { v, next }\n"
                      "fn (n N&) Value() I64 { return n.v }\n"
                      "type H struct(n N&) { n }\n"
                      "fn wrap(n N&) H { return H(n) }\n"
                      "fn divmod(a I64, b I64) I64, I64 ? {\n"
-                     "    if b == 0 { error MathError.ZERO }\n"
+                     "    if b == 0 { error MathError.Zero }\n"
                      "    return a / b, a % b\n"
                      "}\n"
                      "fn big<T>(a T, b T) T { return a if a > b else b }\n"
                      "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n"
                      "Answer I64 = 6 * 7\n"
-                     "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 { return part * 100 / whole }\n"
+                     "fn pct(part I64, whole I64) [whole > 0, part >= 0] I64 ? { return part * 100 / whole }\n"
                      "fn link(a mut N&, b N&) [b outlives a] { }\n"
                      "fn main() ? {\n"
                      "    nn := N(pct(1, 4)!, null)\n"
@@ -1166,16 +1166,16 @@ test "doc, lsp and mcp: their files, names and options (B14-B16)" {
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
-    assert explained("divmod") == "fn divmod(a I64, b I64) I64, I64 ? MathError.ZERO   # its error set inferred\n"
+    assert explained("divmod") == "fn divmod(a I64, b I64) I64, I64 ? MathError.Zero   # its error set inferred\n"
     assert explained("wrap") == "fn wrap(n N&) H\n    [n outlives return]\n"
     assert explained("big") == "fn big<T>(a T, b T) T\n    instance big<I64>: fn(a I64, b I64) I64\n"
     assert explained("N") == "type N struct(v I64, next N?&)\n    v I64\n    next N?&\n    fn (n N&) Value() I64\n"
     assert explained("N.Value") == "fn (n N&) Value() I64\n"
-    assert explained("MathError") == "type MathError error\n    ZERO\n"
+    assert explained("MathError") == "type MathError error\n    Zero\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
     # D17: a contract's conditions as written, its results named; a scope relation it writes among the obligations
-    assert explained("pct") == "fn pct(part I64, whole I64) I64 ? ArgumentError\n    [whole > 0]\n    [part >= 0]\n"
+    assert explained("pct") == "fn pct(part I64, whole I64) I64 ? ArgumentError   # its error set inferred\n    [whole > 0]\n    [part >= 0]\n"
     assert explained("link") == "fn link(a mut N&, b N&)\n    [b outlives a]\n"
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }

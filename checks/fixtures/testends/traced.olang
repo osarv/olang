@@ -1,10 +1,10 @@
 # S18d: an error escaping main - its trace in a -debug build and under interpret, a hint to rebuild with -debug in any other; and a "!"
 type FxErr error {
-    GONE
+    Gone
 }
 Depth mut I64 = 3
 fn inner(n I64) I64 ? {
-    if n > 0 { error FxErr.GONE }
+    if n > 0 { error FxErr.Gone }
     return n
 }
 fn middle(n I64) I64 ? {
