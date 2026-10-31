@@ -1,4 +1,4 @@
-# check: fail error[R9]: arith.Error.Overflow can escape here, and this function does not declare it
+# check: fail error[R1d]: arith.Error.Overflow can escape here, and this function writes no '?'
 # R9: a checked division (std/arith) fails with DivideByZero and Overflow, so catching one word is not complete
 import "std/arith"
 fn div(a I32, b I32) I32 {

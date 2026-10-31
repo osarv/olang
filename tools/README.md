@@ -42,6 +42,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `match_migrate.olang` | S12, S12b, S13f (QBQ, QBR): `nomatch` removed, the catch-all `case _`; a match used as a value gives each clause's value as `case P: v`, `=>` removed - `nomatch {` becomes `case _ {`, `nomatch => v` `case _: v`, `case P => v` `case P: v`, and a value match's clause block of one statement `case P: return 0`; a longer block there, or one holding a comment, is listed `by hand:` | `build/tools_match_migrate [--check] [-v] FILE\|DIR...` |
 | `unused_migrate.olang` | D3b, M5a: a local never read and an import nothing is reached through - a loop's, a binding's or one of several results' name made `_`, a declaration left out (its value kept as a statement where it is one call, a `try`'s kept without the `try` declaration), an unused import's line removed - from the compiler's diagnostics, in rounds; what it cannot do safely (a value with a `catch ... default`, a name used again in its block) listed `by hand:`; `--bare` makes only the `_` renames and removes imports (for files that must fail as written) | `build/tools_unused_migrate [--bare] [--olang PATH] [-j N] FILE\|DIR...` |
 | `errorcase_rename.olang` | R3 (QBZ): every error name is CamelCase - an upper-case word of an error type becomes its parts capitalized (`IoError.FULL` -> `IoError.Full`, `ListError.OUT_OF_RANGE` -> `ListError.OutOfRange`), in its declaration and wherever it is written qualified (code, comments, strings, Markdown); the words are read from the files' declarations and, with `--std`, std's; idempotent | `build/tools_errorcase_rename [--std DIR] [--check] [-v] FILE\|DIR...` |
+| `question_migrate.olang` | R1d (QBZ): a function that can fail writes `?` - where the compiler says a function "writes no '?'" (a `main` whose errors escaped, a function with conditions whose ArgumentError was implied), `?` is written before its body's brace, in rounds; a checks/cases program whose header names the diagnostic keeps it | `build/tools_question_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 | `list_vec.olang` | QZ2: the prelude's List moved to `std/list`, the iterator helpers and StringBuilder onto Vec, `ToList` renamed `ToVec` - by default a List is kept, qualified and imported (`list.List<T>`, `list.Error`, `list.Iter`; what `olang fix` runs), `--vec` moves it onto Vec (`Vec<T>`, `VecError`, `.ToVec()`), as this repository was; `ToList()` in the default mode, ListIter and RunFrom with `--vec`, a name `list` beside the import and text in strings listed | `build/tools_list_vec [--vec] [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -81,13 +82,14 @@ only the forms it was written for, so there is no version in a file and fixing t
 built into the cache (`fix/` in `OLANG_CACHE`) the first time, by the compiler that runs `fix`, from `tools/` beside it
 (`OLANG_TOOLS` names another place). The table is in `compiler/fix.olang`, in the order the changes were made, with the
 tools that read the text alone first and the ones driven by the compiler's diagnostics (`perm_mut`, `int_literal_i64`,
-`errors_migrate`, `null_migrate`, `as_migrate`, `unused_migrate`) after them - an old file does not parse, so the
+`errors_migrate`, `null_migrate`, `as_migrate`, `question_migrate`, `unused_migrate`) after them - an old file does not parse, so the
 compiler has nothing to say about it until the text tools have run:
 
 `bare_typevars`, `perm_mut`, `int_literal_i64`, `errors_migrate`, `cli_words`, `donefail_migrate`, `syntax_migrate`,
 `math_methods`, `arrays_migrate`, `results_migrate`, `equality_migrate`, `helper_rename`, `null_migrate`,
 `checkerror_rename`, `stutter_rename`, `checked_migrate`, `contracts_migrate`, `try_migrate`, `as_migrate`,
-`errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `errorcase_rename`, `unused_migrate` (last: D3b is
+`errortype_migrate`, `list_vec`, `link_migrate`, `match_migrate`, `errorcase_rename`, `question_migrate`,
+`unused_migrate` (last: D3b is
 said only of a file with no other error, so it runs once everything else has been fixed).
 
 **Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and

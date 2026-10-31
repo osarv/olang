@@ -1,6 +1,6 @@
 # check: fail error[E15]: this call can fail - write 'try', and catch or pass on its errors
 # D17b: a function with conditions fails with ArgumentError.Invalid, so every call is handled
-fn pick(x I32, y I32) [y > x] I32 { return y - x }
+fn pick(x I32, y I32) [y > x] I32 ? { return y - x }
 
 fn main() {
     a := I32(1)

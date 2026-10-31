@@ -15,7 +15,7 @@ type Error error { OutOfRange }
 # made from case-index bits: bits past the last case fail the call with ArgumentError.Invalid (D17), so a walk of the set
 # never meets a case that does not exist (std ends no program on a caller's mistake, R22); FromBits fails with
 # Error.OutOfRange instead, and Empty, Full and Of cannot fail
-type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] {
+type BitSet<T> struct(bits U64 = 0) [bits & ~mask<T>() == 0] ? {
     check<T>()
     bits
 }

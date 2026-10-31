@@ -1578,7 +1578,7 @@ if TestBuild {
         Gust(Speed F64, Dir Char)
     }
     type Report struct(Who Member, Air Wind, Days Array<I32>&, Ok Bool) { Who, Air, Days, Ok }
-    type Percent struct(V I64) [V >= 0 and V <= 100] { V }
+    type Percent struct(V I64) [V >= 0 and V <= 100] ? { V }
     type Hidden struct(Open I64, shut I64) { Open, shut }
 
     fn sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), I32[1, 2], true) }

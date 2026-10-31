@@ -2,7 +2,7 @@
 # also: note: the condition
 # D17e: a requirement is decided at a call whose arguments the evaluator computes, a false one an error at the call
 # where nothing there takes its ArgumentError - "!" ends the program, which is no handling
-fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
+fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 ? { return part * 100 / whole }
 
 Whole I64 = 0
 

@@ -2,7 +2,7 @@
 # failing input and saves
 import "std/prop"
 
-type Pt struct(x I64, y I64) [x >= 0] { x, y }
+type Pt struct(x I64, y I64) [x >= 0] ? { x, y }
 
 test "every element below 50" {
     prop.Check(fn(xs Array<I64>&, p Pt) {

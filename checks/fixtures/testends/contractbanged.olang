@@ -1,6 +1,6 @@
 # D17a, E35, S18d: a false requirement under "!" ends the program, naming the function and the condition in any build
 At mut I32 = 0
-fn pick(x I32, y I32) [y > x] I32 { return y - x }
+fn pick(x I32, y I32) [y > x] I32 ? { return y - x }
 fn main() {
     pick(1, At)!
     unreachable

@@ -1,4 +1,4 @@
-# check: fail error[R9]: E.Worse can escape here, and this function does not declare it - add it after '?', or catch it
+# check: fail error[R1d]: E.Worse can escape here, and this function writes no '?' - a function that can fail says so: write '?' after its result (its errors inferred), or catch it
 # P4c/R13: what the clauses of a "try join" do not take propagates, so the function declares it
 import "std/io"
 type E error {
