@@ -7620,6 +7620,12 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
         if c.P.T.SameButPerm(have, want) and c.P.T.WiderPerm(want, have) and c.followNull(x) { return c.convert(sp, x, want) }
         # (its top too: a view of a bare parameter handed back is read-only, as what the parameter reaches is)
         v := have
+        # (round 2d, D9g: its top read-only through a result written "T&", which is shared writably)
+        rr := c.writtenRefResult()
+        if rr is not null and hr and wr and c.writable(want) and not c.writable(have) and c.P.T.SameButPerm(v, want) {
+            c.roRefResult(sp, rr)
+            return x
+        }
         if c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.Attempts < 19 and c.P.NarrowResult(c.retInst, v) {
             c.copiesGrew = true
             return x
@@ -10004,6 +10010,31 @@ fn (c mut Checker&) roPlace(p typed.Lvalue?&) Bool {
     }
 }
 
+# the rework's round 2d (QCC, D9g): the result of the function whose return is being fitted, where it is written as a
+# reference ("T&") - neither "?&" nor kept "mut" by the migration - which says the caller shares what it hands back
+# writably: the type it refers to, else null
+fn (c mut Checker&) writtenRefResult() ast.TypeRef?&c {
+    if not source.NewParams or c.retInst < 0: return null
+    rs := c.P.FnDecl(c.P.InstanceFn(c.retInst)).S.Results
+    if rs.Len() != 1: return null
+    return match rs[0] {
+        case ast.TypeRef.Ref(_, inner, _, nullable): inner if not nullable else null
+        case _: null
+    }
+}
+
+# ... and a value read-only at its top handed back through it - what a bare parameter reaches, constant data, an
+# immutable global: D9g's error naming the value result, with a note at the result (what param_migrate rewrites)
+fn (c mut Checker&) roRefResult(sp source.Span, of ast.TypeRef&) {
+    f := c.P.InstanceFn(c.retInst)
+    mi := c.P.FnModule(f)
+    t := c.P.L.Mods[mi].Src!.Text
+    osp := of.Span()
+    rec := c.err(sp, msgs.RefResultReadOnly(t[I64(osp.Start):I64(osp.End)]))
+    rsp := c.P.FnDecl(f).S.Results[0].Span()
+    c.P.L.Diags.Note(rec, diag.Where.Span(c.P.L.Mods[mi].File, I64(rsp.Start), I64(rsp.End)), msgs.NoteRefResult())
+}
+
 # a writable reference given where one is wanted (T25b): read out of a read-only copy it is read-only - an error, false;
 # read out of a by-value parameter, that parameter needs a writable argument
 fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
@@ -10026,6 +10057,13 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
             # (round 2c: a view read through a field read-only by inference, in an instance: the field written - an
             # instance's results follow its arguments; in a plain function the result read-only, below)
             if c.instanceBody(c.fr().Body) and c.fieldsWrite(x) { return false }
+            # (round 2d, D9g: through a result written "T&" - shared writably - an error naming the value result, unless
+            # what makes it read-only is a field read-only by inference - the type's, so its views are: narrowed below)
+            rr := c.writtenRefResult()
+            if rr is not null and (c.bareRooted(c.rootLocal(readPlace(x))) or c.fieldRo.Len() == 0 or not c.roFieldX(x, 0)) {
+                c.roRefResult(sp, rr)
+                return true
+            }
             # a view of what a bare parameter reaches handed back: the result read-only, at every level (2.8)
             if c.retInst >= 0 and c.Attempts < 19 and c.P.NarrowResult(c.retInst, c.P.ReadOnlyAll(typeOf(x))) {
                 c.copiesGrew = true

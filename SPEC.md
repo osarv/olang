@@ -2084,6 +2084,15 @@ refused as section 8 refuses a view of storage that closes (O26, O17), naming `p
 nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a
 type with no reference form.
 
+**D9g (a reference result says shared; provisional, as D9 above).** A result written as a reference (`T&`, not
+`T?&`) hands the caller something it shares and may write: storage reached through a `&` parameter, a global or a
+shared field, or new storage. Handing back through it a value read-only at its top - what a bare parameter reaches,
+constant data, an immutable global - is a compile-time error naming the value result `T` (or `p T&` for the parameter
+it is reached through). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
+handed to the caller without a copy where the caller only reads it, and copied where it is kept or written (D9h).
+Excepted: a view read through a field read-only by inference (round 2c's per-type fields), whose result is read-only
+for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).
+
 **G29 under the rework's round 2b (provisional).** A bare array parameter is passed by pointer, one instance for every
 length - but where its body decides something on its length: `p.Len()` in an `if`'s, an `assert`'s or a `match`'s
 condition, after a conditional's or a guard's `if`, in a `comptime` or as the length of an array the body makes. Such a

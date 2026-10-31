@@ -385,6 +385,8 @@ type Diag enum {
     RefNeverUsed
     ConstToRefParam
     NoteBareParam
+    RefResultReadOnly
+    NoteRefResult
     ReadOnlyToBuiltResult
     ReadOnlyToBuiltResultNo
     ReadOnlyCopyDecl
@@ -1957,6 +1959,12 @@ fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefPa
 
 # NOTE_BARE_PARAM
 fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
+
+# ERR_REF_RESULT_READ_ONLY
+fn RefResultReadOnly(value String&) Msg { return Msg(Diag.RefResultReadOnly, "D9g", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and a result written '&' is shared with the caller writably: give the value '" $value "' (handed over without a copy where the caller only reads it), or take the parameter it is reached through as 'p T&'") }
+
+# NOTE_REF_RESULT
+fn NoteRefResult() Msg { return Msg(Diag.NoteRefResult, "", "the result is written as a reference here - a value result says it is read-only") }
 
 # ERR_READ_ONLY_TO_BUILT_RESULT
 fn ReadOnlyToBuiltResult(text String&) Msg { return Msg(Diag.ReadOnlyToBuiltResult, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '" $text "'") }

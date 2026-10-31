@@ -427,6 +427,8 @@ KindAmp String& = "amp"
 KindBare String& = "bare"
 KindCopy String& = "copy"
 KindOwn String& = "own"
+KindValue String& = "value"
+RefResultNote String& = "the result is written as a reference here"
 OwnStorage String& = "refers to this function's own storage"
 
 # the byte offset of a 1-based line and column in src, -1 past its end
@@ -494,6 +496,7 @@ fn (w mut walker&) request(kind String&, o I64, path String&) Bool {
         return true
     }
     if kind == KindOwn: return w.ownStorage(i, path)
+    if kind == KindValue: return w.valueResult(i)
     # the parameter's name: a note may point at its type ("CStr" of "p CStr") - walk back to the name
     n := i
     if w.kind(n - 1) == token.Tok.Iden and (w.kind(n - 2) == token.Tok.LParen or w.kind(n - 2) == token.Tok.Comma or w.ts[n - 1].Has(token.LineBreak)): n = n - 1
@@ -529,6 +532,48 @@ fn (w mut walker&) makeRef(n I64, path String&) Bool {
     at := I64(w.ts[last].End)
     w.edits.Push(edit(at, at, "&"))
     return true
+}
+
+# D9g's note (round 2d): a result written as a reference, starting at token i, that hands back what a bare parameter
+# reaches - made the value it refers to, its outermost "&" and the scope name after it dropped ("String&t" -> "String").
+# Whether it is one now
+fn (w mut walker&) valueResult(i I64) Bool {
+    depth I64 = 0
+    j := i
+    for j < w.ts.Len() {
+        k := w.kind(j)
+        if depth == 0 and j > i and (k == token.Tok.LBrace or k == token.Tok.Question or k == token.Tok.StmtEnd or w.ts[j].Has(token.LineBreak)): break
+        if k == token.Tok.Eof: break
+        if k == token.Tok.Lt or k == token.Tok.LParen or k == token.Tok.LBrack: depth++
+        if k == token.Tok.Gt or k == token.Tok.RParen or k == token.Tok.RBrack: depth--
+        if k == token.Tok.Shr: depth -= 2
+        j++
+    }
+    last := j - 1
+    if last < i: return false
+    named := w.kind(last) == token.Tok.Iden or w.kind(last) == token.Tok.Return
+    if named and w.kind(last - 1) == token.Tok.Amp and w.ts[last - 1].End == w.ts[last].Start and last - 1 > i {
+        w.edits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
+        return true
+    }
+    if w.kind(last) != token.Tok.Amp or w.kind(last - 1) == token.Tok.Question: return false
+    w.edits.Push(edit(I64(w.ts[last].Start), I64(w.ts[last].End), ""))
+    return true
+}
+
+# a source's text with valueResult applied at the result starting at text "at"
+fn valued(src String&, at String&) String {
+    ts := scan.Scan(src)
+    w := walker(src, ts.Toks)
+    o := try src.Find(at) catch { return "" }
+    if not w.valueResult(tokenAt(ts.Toks, o)): return ""
+    return apply(src, w.edits)
+}
+
+test valued "makes a reference result handing back a bare parameter's reach a value (D9g's note)" {
+    assert valued("fn (t String) Trim() String&t {\n}\n", "String&t") == "fn (t String) Trim() String {\n}\n"
+    assert valued("fn f(a T) Array<String&>& ? E {\n}\n", "Array") == "fn f(a T) Array<String&> ? E {\n}\n"
+    assert valued("fn f(a T) Node?& {\n}\n", "Node") == ""
 }
 
 # O26 at a call: a bare parameter of the function it is in, among the call's arguments, kept in what the call gives
@@ -598,6 +643,7 @@ fn requestOf(row String&, allowed Vec<String&>&) diagedit.Request ? {
     if r.IsError and r.Msg.Contains(NeverUsed): kind = KindBare
     if r.IsError and r.Msg.Contains(ConstData): kind = KindCopy
     if r.IsError and r.Msg.Contains(OwnStorage): kind = KindOwn
+    if not r.IsError and r.Msg.Contains(RefResultNote): kind = KindValue
     if kind == "" { error NotMine }
     return diagedit.Request($full, r.Line, r.Col, $kind, "", $row)
 }
