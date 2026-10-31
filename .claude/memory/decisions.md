@@ -2081,3 +2081,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   by doc/explain/hover; a call whose type lacks one is an error at the call naming the need, never inside the body; no
   written constraint required; match T and reflection stay per instance. Queued with the tooling batch (it moves G18's
   errors to the call).
+- B1.5 open enums DECLINED 2026-10-31 (the user: "Don't do them, force the API user to adapt to the API change, with a
+  new enum, the other entries might not mean the same thing anymore"): every enum stays closed; a new case breaks
+  importers' matches on purpose, and `olang api` reports it as breaking.
