@@ -1986,3 +1986,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   with ...`), and a raised name one edit away from an error of the module gets did-you-mean as an error unless written
   in the signature too (mine). With it: the Bool/out-parameter bans (QBZ ideas 1, 2) stay recommended, a prelude
   `Missing` is unneeded. ASKED.
+- QBZ, the user 2026-10-31: "Then we can also name error sets instead of naming them all word for word". Answered:
+  named sets (T19a) already do it; with errors declared where raised a set lists them - `type LookupError error
+  NotFound, Ambiguous`, then `? LookupError` in a signature and `catch LookupError` take them all; members may still
+  be other sets and error types (`type LoadError error os.Error, LookupError`). A set's own braces `{ ... }` keep
+  declaring errors qualified by the set (`IoError.FULL`) - needed by the prelude, whose bare names are reserved
+  everywhere (D3a), so its errors stay inside sets. ASKED: one casing for every error - a raised name is written like
+  a type (`NotFound`) while words today are upper case (`FULL`); rec: words become capitalized too (`IoError.Full`,
+  `ListError.Empty`), migrated by a tool, so an error reads one way wherever it is declared. In effect: upper-case words.
