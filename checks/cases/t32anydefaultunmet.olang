@@ -8,7 +8,7 @@ type aWords struct(n I64) {
     at I64 = 0
 }
 fn (w mut aWords&) Next() String ? Exhausted {
-    if w.at >= w.n { error Exhausted.END }
+    if w.at >= w.n { error Exhausted.End }
     w.at += 1
     return "w" $w.at
 }

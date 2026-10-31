@@ -24,12 +24,12 @@ extern {
 
 # the input libFuzzer hands the running test, failing with NONE where no fuzzer runs: a plain test run
 type Error error {
-    NONE
+    None
 }
 
 fn Input() Array<U8> ? Error {
     n := __olang_fuzz_input(Array<U8>(0), 0)
-    if n < 0 { error Error.NONE }
+    if n < 0 { error Error.None }
     data := Array<U8>(n)
     __olang_fuzz_input(data, n)
     return data

@@ -6,14 +6,14 @@
 # instance's (__olang_scope_mine)
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 type Node struct(v I64) {
     v
     next mut Node?& = null
 }
 fn find(n mut Node&) mut Node&n ? {
-    if n.v >= 0 { error Stop.HERE }
+    if n.v >= 0 { error Stop.Here }
     return n
 }
 fn setNext(n mut Node&, i I64) { n.next = n.next if i < 0 else Node(i) }

@@ -2,10 +2,10 @@
 # P4a: a task's clause is code of the task, a function of its own - a return there would leave the task, not the spawner
 import "std/io"
 type E error {
-    BAD
+    Bad
 }
 fn work(n I32) ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
 }
 fn run() I32 {
     join {

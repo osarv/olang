@@ -91,7 +91,7 @@ type cMacro struct(Name String&, Fn Bool, Params Array<String&>&, Body Array<Str
     Variadic Bool = false
 }
 
-type Skip error { WHY }
+type Skip error { Why }
 
 # what was read from clang's tree
 type gen struct(header String&) {
@@ -590,7 +590,7 @@ fn voidRef(ro Bool) String { return "CVoid?&" if ro else "mut CVoid?&" }
 
 fn (g mut gen&) skip(why String&) ? Skip {
     g.why = $why
-    error Skip.WHY
+    error Skip.Why
 }
 
 # whether node t is C's char; isByte also takes signed and unsigned char - what a pointer C gives back to text points to
@@ -1354,16 +1354,16 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
 
 # a character literal's value, as C reads it: 'a', '\n', '\x41', '\101'
 fn charValue(t String&) I64 ? Skip {
-    if t.Len() < 3 { error Skip.WHY }
+    if t.Len() < 3 { error Skip.Why }
     b := t[1:t.Len() - 1]
     if b[0] != '\\' {
-        if b.Len() != 1 { error Skip.WHY }
+        if b.Len() != 1 { error Skip.Why }
         return I64(U8(b[0]))
     }
-    if b.Len() < 2 { error Skip.WHY }
+    if b.Len() < 2 { error Skip.Why }
     c := b[1]
-    if c == 'x' { return try b[2:].ParseInt(16) catch { error Skip.WHY } }
-    if c.IsDigit() { return try b[1:].ParseInt(8) catch { error Skip.WHY } }
+    if c == 'x' { return try b[2:].ParseInt(16) catch { error Skip.Why } }
+    if c.IsDigit() { return try b[1:].ParseInt(8) catch { error Skip.Why } }
     return match c {
         case 'n': 10
         case 't': 9
@@ -1559,7 +1559,7 @@ fn (g mut gen&) macroFn(m cMacro&) String ? Skip {
 
 # clang's output for args, or why it could not be run
 fn clangSays(args Array<String&>&) os.Output ? Skip {
-    out := try os.Exec(args) catch os.Error { error Skip.WHY }
+    out := try os.Exec(args) catch os.Error { error Skip.Why }
     return out
 }
 
@@ -1667,12 +1667,12 @@ fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.J
     for a in String&["-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe] { args.Push($a) }
     o := try clangSays(args.ToArray()) catch Skip {
         g.why = "clang could not be run"
-        error Skip.WHY
+        error Skip.Why
     }
     if o.Stdout.Len() == 0 { try g.skip(firstError(o.Stderr)) }
     return try json.Parse(o.Stdout) catch json.Error {
         g.why = "clang's tree could not be read"
-        error Skip.WHY
+        error Skip.Why
     }
 }
 

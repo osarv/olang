@@ -2,10 +2,10 @@
 # E35/B4: "!" ends the program on what fails as written, so main needs no "?" for it; here nothing fails
 import "std/io"
 type E error {
-    BAD
+    Bad
 }
 fn half(n I64) I64 ? {
-    if n % 2 != 0 { error E.BAD }
+    if n % 2 != 0 { error E.Bad }
     return n / 2
 }
 fn main() {

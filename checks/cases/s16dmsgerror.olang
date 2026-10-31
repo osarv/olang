@@ -1,10 +1,10 @@
 # check: fail error[S17]: an error may not leave an unreachable's message - catch it here
 # S16d: an unreachable's message may not leave, as an assert's may not
 type E error {
-    BAD
+    Bad
 }
 fn h(k I64) I64 ? E {
-    if k > 0 { error E.BAD }
+    if k > 0 { error E.Bad }
     return k
 }
 fn f(k I64) I64 ? E {

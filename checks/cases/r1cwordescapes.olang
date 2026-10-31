@@ -1,12 +1,12 @@
-# check: fail error[R9]: LE.GONE can escape here, and this function does not declare it
+# check: fail error[R9]: LE.Gone can escape here, and this function does not declare it
 # R1c/R9: a try letting through a word the written set does not name
 type LE error {
-    EMPTY
-    GONE
+    Empty
+    Gone
 }
-fn g(n I64) I64 ? LE.GONE {
-    if n == 0 { error LE.GONE }
+fn g(n I64) I64 ? LE.Gone {
+    if n == 0 { error LE.Gone }
     return n
 }
-fn f(n I64) I64 ? LE.EMPTY { return try g(n) }
+fn f(n I64) I64 ? LE.Empty { return try g(n) }
 fn main() { x := f(1)! }

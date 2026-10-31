@@ -1,10 +1,10 @@
 # check: fail error[P4a]: this clause takes an error the targets would get no value for - end it with 'default v', or end the process
 # P4a: with targets a clause is in value position - it gives the targets' values, or ends the process
 type E error {
-    BAD
+    Bad
 }
 fn sq(n I32) I32 ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
     return n * n
 }
 fn main() ? {

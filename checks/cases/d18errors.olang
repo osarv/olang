@@ -1,6 +1,6 @@
 # check: fail error[D18]: a generator fails as its Next does - write its errors in its result: 'Iterator<I64 ? E>'
 # D18: a generator's errors are written in its result, Iterator<T ? E>
-type Bad error { NO }
+type Bad error { No }
 
 fn f() Iterator<I64> ? Bad {
     yield 1

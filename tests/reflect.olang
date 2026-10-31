@@ -22,10 +22,10 @@ type Tree<T> enum {
 
 type Meters extends F64
 
-type Bad error { ONE, TWO }
+type Bad error { One, Two }
 
 fn risky(x I64) I64 ? Bad {
-    if x < 0 { error Bad.ONE }
+    if x < 0 { error Bad.One }
     return x * 2
 }
 
@@ -229,8 +229,8 @@ test "a case descriptor called builds its case" {
 
 # error values (T20) reflected: TypeKind.Error, their words their cases (G32-G34) - named as "$" writes them, built by
 # calling one, tested by "==" - by name and in a generic, baked while compiling as at run time
-type ReflOops error { LOST, FOUND }
-type ReflAll error Bad, ReflOops { LATE }
+type ReflOops error { Lost, Found }
+type ReflAll error Bad, ReflOops { Late }
 
 fn errWords<T>() String {
     b := StringBuilder()
@@ -253,21 +253,21 @@ fn errLast<T>() T {
 }
 
 ReflErrWords := errWords<ReflAll>()
-ReflErrWhich := errWhich<ReflAll>(ReflOops.FOUND)
+ReflErrWhich := errWhich<ReflAll>(ReflOops.Found)
 ReflErrLast := errLast<ReflAll>()
 
 test "error values: their kind, and their words as cases" {
     assert ReflOops.Kind == TypeKind.Error and ReflAll.Kind == TypeKind.Error and kindWord<ReflOops>() == "other"
     assert ReflOops.Name == "ReflOops" and ReflAll.Name == "ReflAll"
     assert ReflOops.Cases.Len() == 2 and ReflAll.Cases.Len() == 5
-    assert errWords<ReflOops>() == "ReflOops.LOST ReflOops.FOUND "
-    assert ReflErrWords == errWords<ReflAll>() and ReflErrWords == "Bad.ONE Bad.TWO ReflAll.LATE ReflOops.LOST ReflOops.FOUND "
-    assert errWhich<ReflAll>(ReflOops.FOUND) == 4 and ReflErrWhich == 4 and errWhich<ReflOops>(null) == -1
-    assert errLast<ReflAll>() == ReflOops.FOUND and ReflErrLast == ReflOops.FOUND
-    e ReflOops = ReflOops.LOST
+    assert errWords<ReflOops>() == "ReflOops.Lost ReflOops.Found "
+    assert ReflErrWords == errWords<ReflAll>() and ReflErrWords == "Bad.One Bad.Two ReflAll.Late ReflOops.Lost ReflOops.Found "
+    assert errWhich<ReflAll>(ReflOops.Found) == 4 and ReflErrWhich == 4 and errWhich<ReflOops>(null) == -1
+    assert errLast<ReflAll>() == ReflOops.Found and ReflErrLast == ReflOops.Found
+    e ReflOops = ReflOops.Lost
     found := false
     for c in ReflOops.Cases {
-        if e == c { found = c.Name == "ReflOops.LOST" }
+        if e == c { found = c.Name == "ReflOops.Lost" }
     }
     assert found
 }

@@ -23,12 +23,12 @@ Taken mut I64 = 0
 
 # what ParseRow fails with: the row is no compiler diagnostic
 type NotARow error {
-    ROW
+    Row
 }
 
 # a compiler row "PATH:LINE:COL: error[RULE]: MESSAGE", "PATH:LINE:COL: error: MESSAGE" or "PATH:LINE:COL: note: MESSAGE"
 # as its parts: the path, line, column, whether it is an error (else a note), the rule ("" when it names none) and the
-# message. Any other row fails with NotARow.ROW. The path is the shortest start of the row that leaves the rest
+# message. Any other row fails with NotARow.Row. The path is the shortest start of the row that leaves the rest
 # matching, as the Python scripts' non-greedy (.*?) read it
 fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
     n := row.Len()
@@ -65,7 +65,7 @@ fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
         if not row[after:].StartsWith(": ") { continue }
         return $row[:k], (try row[a:b].ParseInt()), (try row[c:d].ParseInt()), isError, rule, $row[after + 2:]
     }
-    error NotARow.ROW
+    error NotARow.Row
 }
 
 # what a checks/cases program must fail with, from its first twelve lines "# check: fail TEXT" and "# also: TEXT" - an edit

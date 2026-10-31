@@ -1,10 +1,10 @@
 # E35, S18d: a "!" in a program with no "?" - the error and where it went, in a -d build and under -i
 type FxErr error {
-    GONE
+    Gone
 }
 Depth mut I64 = 3
 fn inner(n I64) I64 ? {
-    if n > 0 { error FxErr.GONE }
+    if n > 0 { error FxErr.Gone }
     return n
 }
 fn middle(n I64) I64 ? {

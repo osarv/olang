@@ -6117,7 +6117,7 @@ fn (e mut Emitter&) Header(lib String&, file String&) String {
             }
             ws := e.P.ErrorWords(t.DeclOf(et))
             for j in range ws.Len() {
-                b.Push($"#define " $up "_" $e.text(t.DeclName(t.DeclOf(et))).ToUpper() "_" $e.text(ws[j]).ToUpper() " ((int32_t)" $(((k + 1) << 16) | j) ")\n")
+                b.Push($"#define " $up "_" $cWordName(e.P.ErrorWordName(t.DeclOf(et), j)) " ((int32_t)" $(((k + 1) << 16) | j) ")\n")
             }
         }
         b.Push("\n")
@@ -6395,7 +6395,7 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
         for j in range ws.Len() {
             n++
             code := ((i + 1) << 16) | j
-            text := "unhandled error: " $e.errName(et) "." $e.text(ws[j]) "\n"
+            text := "unhandled error: " $e.errQualifier(et) $e.P.ErrorWordName(t.DeclOf(et), j) "\n"
             b.Push("  %q" $n " = icmp eq i32 %c, " $code "\n")
             b.Push("  %m" $n " = select i1 %q" $n ", ptr " $e.cstr(text) ", ptr " $msg "\n")
             msg = "%m" $n
@@ -6452,10 +6452,28 @@ fn (e mut Emitter&) dbgFunctions(text String&) String {
     return b.ToString()
 }
 
-# an error type's name as B5 says it escaping main: as source writes it outside its module ("io.Error")
-fn (e mut Emitter&) errName(et types.TypeId) String {
+# X14: an error's name in a library's header - its type and word in capitals, a word's parts apart: "Error.OutOfRange"
+# is ERROR_OUT_OF_RANGE, a raised "NotFound" NOTFOUND
+fn cWordName(name String&) String {
+    b := StringBuilder()
+    word := false
+    for i in range name.Len() {
+        ch := name[i]
+        if ch == '.' {
+            b.PushChar('_')
+            word = true
+            continue
+        }
+        if word and i > 0 and ch.IsUpper() and name[i - 1] != '.' and not name[i - 1].IsUpper(): b.PushChar('_')
+        b.PushChar(ch.ToUpper())
+    }
+    return b.ToString()
+}
+
+# B5: what goes before an error type's name where it prints - its module's alias, but the prelude's and the root's
+fn (e mut Emitter&) errQualifier(et types.TypeId) String {
     d := e.T.DeclOf(et)
-    return $load.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root) $e.text(e.T.DeclName(d))
+    return load.ErrQualifier(e.P.L.Mods[e.T.DeclModule(d)].Identity, e.T.DeclModule(d) == e.P.L.Root)
 }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending

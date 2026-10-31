@@ -602,7 +602,7 @@
 | ok - T29: a type over a declared number does not take its constructor
 | ok - D15: a cursor declared with := from a field read
 | ok - E6c: integer arithmetic wraps
-| ok - ArrayError.OUT_OF_RANGE from a.Get(i), caught by name and propagated
+| ok - ArrayError.OutOfRange from a.Get(i), caught by name and propagated
 | ok - E16d: a.Set(i, v) is a checked store - baked and run
 | ok - std/arith checks arithmetic and shifts, Narrow conversions, Get indices
 | ok - std/arith follows IEEE's exceptions
@@ -909,7 +909,7 @@
 | ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
 | ok - D17e: requirements hold where the evaluator computes the calls - baked and run
 | ok - D17e: a closed call whose ArgumentError is caught fails as written - baked, decided and run
-| ok - D17: requirements checked on entry, in every build, failing with ArgumentError.INVALID
+| ok - D17: requirements checked on entry, in every build, failing with ArgumentError.Invalid
 | ok - D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's contract
 | ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, checked
 | ok - D17g: a conversion checked at run time keeps its own words

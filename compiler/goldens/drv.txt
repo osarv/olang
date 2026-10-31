@@ -600,7 +600,7 @@
 === in a directory of programs: olang fails.olang
 | stdout:
 | stderr:
-| unhandled error: E.BAD
+| unhandled error: E.Bad
 | (build with -debug to see where it came from)
 | status 1
 === in a directory of programs: olang test tests.olang

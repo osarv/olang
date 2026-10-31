@@ -4510,7 +4510,7 @@ p4aclausecapture.olang:17:35: error[P2, D16e]: this lambda captures a variable d
 compilation failed with 1 error
 === p4aclauseerror.olang
 p4aclauseerror.olang:12:42: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
-   12 |         spawn try work(-1) catch E.BAD { error E.WORSE }
+   12 |         spawn try work(-1) catch E.Bad { error E.Worse }
       |                                          ^~~~~~~~~~~~~
 compilation failed with 1 error
 === p4aclausereturns.olang
@@ -4564,7 +4564,7 @@ p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write
       |     ^~~~~~
 compilation failed with 1 error
 === p4cjoinundeclared.olang
-p4cjoinundeclared.olang:12:9: error[R9]: E.WORSE can escape here, and this function does not declare it - add it after '?', or catch it
+p4cjoinundeclared.olang:12:9: error[R9]: E.Worse can escape here, and this function does not declare it - add it after '?', or catch it
    12 |     try join {
       |         ^~~~
 compilation failed with 1 error
@@ -4641,7 +4641,7 @@ protobothstr.olang:6:10: error[M6b]: K declares Str twice, public and private - 
     6 | fn (k K) Str() String { return "a" }
       |          ^~~
 protobothstr.olang:8:15: error[M6b]: K declares Next twice, public and private - keep one: Next, or next for its own module only
-    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.END }
+    8 | fn (k mut K&) Next() I32 ? Exhausted { error Exhausted.End }
       |               ^~~~
 protobothstr.olang:10:10: error[M6b]: K declares Hash twice, public and private - keep one: Hash, or hash for its own module only
    10 | fn (k K) Hash() I64 { return 1 }
@@ -4774,23 +4774,23 @@ r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? io.Er
       |     ^~~~
 compilation failed with 1 error
 === r1ccatchword.olang
-r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.EMPTY - it fails with LE.GONE
-   11 | fn main() { x := try g(1) catch LE.EMPTY default 0 catch LE.GONE default 1 }
+r1ccatchword.olang:11:36: error[R14]: the call does not fail with LE.Empty - it fails with LE.Gone
+   11 | fn main() { x := try g(1) catch LE.Empty default 0 catch LE.Gone default 1 }
       |                                    ^~~~~
 compilation failed with 1 error
 === r1cfuncword.olang
-r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
+r1cfuncword.olang:12:22: error[E12]: expected fn(n I64) I64 ? LE.Empty, found fn(n I64) I64 ? LE.Gone
    12 | fn main() { x := run(g) }
       |                      ^
 compilation failed with 1 error
 === r1cwordescapes.olang
-r1cwordescapes.olang:11:37: error[R9]: LE.GONE can escape here, and this function does not declare it - add it after '?', or catch it
-   11 | fn f(n I64) I64 ? LE.EMPTY { return try g(n) }
+r1cwordescapes.olang:11:37: error[R9]: LE.Gone can escape here, and this function does not declare it - add it after '?', or catch it
+   11 | fn f(n I64) I64 ? LE.Empty { return try g(n) }
       |                                     ^~~
 compilation failed with 1 error
 === r1cwordraised.olang
-r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not this word - add it after '?'
-    8 |     if n == 0 { error LE.GONE }
+r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.Empty, not this word - add it after '?'
+    8 |     if n == 0 { error LE.Gone }
       |                          ^~~~
 compilation failed with 1 error
 === r1functypeunknown.olang
@@ -4866,8 +4866,8 @@ r9adefaultlocal.olang:18:5: error[D3b]: 'keep' is declared and never read - read
       |     ^~~~
 compilation failed with 3 errors
 === r9arithpartial.olang
-r9arithpartial.olang:5:13: error[R9]: arith.Error.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
-    5 |     r I32 = try arith.Div(a, b) catch arith.Error.DIVIDE_BY_ZERO default 0
+r9arithpartial.olang:5:13: error[R9]: arith.Error.Overflow can escape here, and this function does not declare it - add it after '?', or catch it
+    5 |     r I32 = try arith.Div(a, b) catch arith.Error.DivideByZero default 0
       |             ^~~
 compilation failed with 1 error
 === r9atrydefaultassign.olang
@@ -5438,7 +5438,7 @@ s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while
 compilation failed with 1 error
 === s19error.olang
 s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch it here
-    8 |         if n > 1 { error E.BAD }
+    8 |         if n > 1 { error E.Bad }
       |                    ^~~~~
 compilation failed with 1 error
 === s19eyield.olang

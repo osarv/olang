@@ -1,17 +1,17 @@
 # checked_migrate - the checked keyword and CheckError removed (E15a, 2026-10-25, the user's call: "one error system:
 # try"). What can be rewritten from the text alone is:
 #
-#     checked a[i]           ->  try a.Get(i)                 (E16d: fails with ArrayError.OUT_OF_RANGE)
+#     checked a[i]           ->  try a.Get(i)                 (E16d: fails with ArrayError.OutOfRange)
 #     checked a[lo:hi]       ->  try a.SliceOf(lo, hi)        (E16c; an absent bound 0 or a.Len())
-#     checked T(x)           ->  try x.Narrow<T>()            (E26b: NumberError.OVERFLOW and INVALID), T a number
-#     checked f(x)           ->  try f(x)                     (D17: a contract is checked on entry, ArgumentError.INVALID)
+#     checked T(x)           ->  try x.Narrow<T>()            (E26b: NumberError.Overflow and INVALID), T a number
+#     checked f(x)           ->  try f(x)                     (D17: a contract is checked on entry, ArgumentError.Invalid)
 #     (checked ...)!         ->  ...!                         the same, with "!" in place of the try
 #
 # The try is parenthesized - "(try a.Get(n))" - where an operator goes on after it: checked bound as tightly as old
 # "try", and a try now reads to the end of its expression, so "2 * checked a[n] + 1" is "2 * (try a.Get(n)) + 1". And
 # CheckError's words are renamed where they name what such a rewrite now fails with: OUT_OF_BOUNDS is
-# ArrayError.OUT_OF_RANGE, OVERFLOW and INVALID of a narrowing NumberError's, WRONG_CASE CaseError's, CONTRACT
-# ArgumentError.INVALID. Everything else - "checked (a + b)", a checked store or step, a checked call to a Checked form,
+# ArrayError.OutOfRange, OVERFLOW and INVALID of a narrowing NumberError's, WRONG_CASE CaseError's, CONTRACT
+# ArgumentError.Invalid. Everything else - "checked (a + b)", a checked store or step, a checked call to a Checked form,
 # CheckError left over - is listed for a person: arithmetic that must not overflow goes through std/arith (try
 # arith.Checked(a) + b, try arith.Add(a, b)), and an "as" fails as written now (try e as C, (e as C)!), which the
 # compiler says where it is not handled. checked also checked every operation inside its operand, so one whose operand
@@ -134,7 +134,7 @@ fn rewrite(src String&, mask String&, parts Vec<I64>&) String, String {
         return $"(" $x ").Narrow<" $t ">()", "NumberError"
     }
     # a checked call of a function with a contract (D17): its requirements are checked on entry now, failing with
-    # ArgumentError.INVALID, so it is tried as any call that can fail is - Pow's checked form is std/arith's, by hand
+    # ArgumentError.Invalid, so it is tried as any call that can fail is - Pow's checked form is std/arith's, by hand
     if src[last] == '(' and not src[parts[0]:last].EndsWith(".Pow") { return $src[parts[0]:end], "ArgumentError" }
     return "", ""
 }
@@ -198,12 +198,12 @@ fn chainCovers(x String&) Bool {
 fn renameWords(seg String&, kind String&, c mut Result&) String {
     if kind.Len() == 0 { return $seg }
     s := $seg
-    pairs := String&[$OldError ".OUT_OF_BOUNDS", "ArrayError.OUT_OF_RANGE", $OldError ".WRONG_CASE", "CaseError.WRONG_CASE"
-                     $OldError ".OVERFLOW", "NumberError.OVERFLOW", $OldError ".INVALID", "NumberError.INVALID"]
+    pairs := String&[$OldError ".OUT_OF_BOUNDS", "ArrayError.OutOfRange", $OldError ".WRONG_CASE", "CaseError.WrongCase"
+                     $OldError ".OVERFLOW", "NumberError.Overflow", $OldError ".INVALID", "NumberError.Invalid"]
     if kind == "ArgumentError" {
         contract := $OldError ".CONTRACT"
         for s.Contains(contract) {
-            s = s.Replace(contract, "ArgumentError.INVALID")
+            s = s.Replace(contract, "ArgumentError.Invalid")
             c.changes++
         }
     }
@@ -341,7 +341,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
     res := out.ToString()
     # CheckError's WRONG_CASE is CaseError's wherever it is written; whatever else of it is left is listed
     if res.Contains($OldError ".WRONG_CASE") {
-        res = res.Replace($OldError ".WRONG_CASE", "CaseError.WRONG_CASE")
+        res = res.Replace($OldError ".WRONG_CASE", "CaseError.WrongCase")
         c.changes++
     }
     rm := srcmask.Mask(res, true)
@@ -414,17 +414,17 @@ fn main() ? {
 test "an index, a slice and a narrowing rewritten, their errors renamed" {
     r := Result()
     src := "x := " $Word " a[i + 1] catch " $OldError ".OUT_OF_BOUNDS default 0\n"
-    assert migrate("f", src, r) == "x := try a.Get(i + 1) catch ArrayError.OUT_OF_RANGE default 0\n"
+    assert migrate("f", src, r) == "x := try a.Get(i + 1) catch ArrayError.OutOfRange default 0\n"
     src2 := "s := " $Word " b.c[2:] catch default d\n"
     assert migrate("f", src2, r) == "s := try b.c.SliceOf(2, b.c.Len()) catch default d\n"
     src3 := "n := " $Word " U8(v + 1)\n    catch " $OldError ".OVERFLOW { }\n"
-    assert migrate("f", src3, r) == "n := try (v + 1).Narrow<U8>()\n    catch NumberError.OVERFLOW { }\n"
+    assert migrate("f", src3, r) == "n := try (v + 1).Narrow<U8>()\n    catch NumberError.Overflow { }\n"
     src4 := "y := (" $Word " a[0])! + 1\n"
     assert migrate("f", src4, r) == "y := a.Get(0)! + 1\n"
     lit := "w := " $Word " I32[x * 2 for x in l]\n"
     assert migrate("f", lit, r) == lit
     src6 := "w := " $Word " f(a, b) catch " $OldError ".CONTRACT default 0\n"
-    assert migrate("f", src6, r) == "w := try f(a, b) catch ArgumentError.INVALID default 0\n"
+    assert migrate("f", src6, r) == "w := try f(a, b) catch ArgumentError.Invalid default 0\n"
     src5 := "z := " $Word " I32(q.n) catch " $OldError " { }\n"
     assert migrate("f", src5, r) == "z := try q.n.Narrow<I32>() catch NumberError { }\n"
 }
@@ -460,7 +460,7 @@ test "a try written inside an operator expression is parenthesized, and the chec
 test "a checked 'as' is the try of today, where nothing else in it was checked" {
     r := Result()
     assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch default -1.0\n", r) == "    r := try s as Shape.Circle catch default -1.0\n"
-    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch " $OldError ".WRONG_CASE default -1.0\n", r) == "    r := try s as Shape.Circle catch CaseError.WRONG_CASE default -1.0\n"
+    assert migrate("f", "    r := " $Word " (s as Shape.Circle) catch " $OldError ".WRONG_CASE default -1.0\n", r) == "    r := try s as Shape.Circle catch CaseError.WrongCase default -1.0\n"
     assert migrate("f", "    r := 2.0 * " $Word " (a.s as Shape.Circle) + 1.0\n", r) == "    r := 2.0 * (try a.s as Shape.Circle) + 1.0\n"
     assert migrate("f", "    r := (" $Word " (s as Shape.Circle))!\n", r) == "    r := (s as Shape.Circle)!\n"
     assert r.left.Len() == 0

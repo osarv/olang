@@ -258,15 +258,15 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
 
 # FindDecl's miss: no module of that identity, or no type of that name in it
 type Undeclared error {
-    TYPE
+    Type
 }
 
 # a declared type by its canonical name, "IDENTITY:Name"
 fn (p mut Program&) FindDecl(identity String&, name String&) types.DeclId ? {
     p.ensureModules()
-    mi := try p.identity.Get(identity) catch { error Undeclared.TYPE }
+    mi := try p.identity.Get(identity) catch { error Undeclared.Type }
     ei := p.TypeEntry(mi, p.L.Names.Intern(name))
-    if ei < 0 { error Undeclared.TYPE }
+    if ei < 0 { error Undeclared.Type }
     return p.DeclFor(mi, ei)
 }
 
@@ -850,6 +850,7 @@ MaxChain I64 = 1000
 # said once, read as no errors
 fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeId {
     f := p.sigType(c, s, types.UnknownT, source.NameId(0))
+    p.flagBans(c, s, f, false)
     es := p.T.Items(p.T.Errors(f))
     if es.Len() == 1 and es[0] == types.DefaultErrT {
         key := pair.Pair(c.Mi, I64(sp.Start))
@@ -860,6 +861,28 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
     return p.T.WithNames(f, p.SigNames(s))
+}
+
+# R23, R23a: a flag beside a value is no result - a Bool among several results, and a Bool given by a function that
+# writes through a reference parameter (an out-parameter, its receiver aside): what fails says so with "?" and an error.
+# Not for C's (an extern or export fn speaks C's convention)
+fn (p mut Program&) flagBans(c Context&, s ast.Sig&, sig types.TypeId, recv Bool) {
+    rs := p.T.Results(sig)
+    if rs.Len() > 1 {
+        for i in range rs.Len() {
+            if rs[i] == types.BoolT and i < s.Results.Len(): p.L.Diags.ErrorOncePerLine(p.at(c.Mi, s.Results[i].Span()), msgs.FlagAmongResults())
+        }
+        return
+    }
+    if rs.Len() != 1 or rs[0] != types.BoolT { return }
+    ps := p.T.Items(p.T.Params(sig))
+    first := 1 if recv else 0
+    for i in range first, ps.Len() {
+        k := i - first
+        if k >= s.Params.Len() or not p.T.IsRef(ps[i]) or (p.T.PermOf(ps[i]) & types.Writable) == 0 { continue }
+        prm := s.Params[k]
+        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, prm.Sp), msgs.FlagWithOutParam(msgs.Tok(p.text(prm.Name))))
+    }
 }
 
 # a signature's parameters' names, interned for a function type to render with (E11a)
@@ -898,16 +921,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     }
     if s.NoReturn { result = types.NoreturnT }
     scopes := p.T.Scopes(types.RoleFn, shares.ToArray(), from)
-    return p.T.Func(p.T.List(ps.ToArray()), result, p.contractErrors(s, p.errorList(c, s.HasErrors, s.Errors)), scopes)
-}
-
-# D17: a declaration with value conditions and no "?" fails with ArgumentError - its set where it writes none; a
-# written or inferred set is its own, which the checker holds to name it
-fn (p mut Program&) contractErrors(s ast.Sig&, el types.ListId) types.ListId {
-    if s.Contract is null or s.Contract!.Items.Len() == 0 or s.HasErrors { return el }
-    t := p.preludeType("std/prelude/argument", "ArgumentError")
-    if t == types.UnknownT { return el }
-    return p.T.List1(t)
+    return p.T.Func(p.T.List(ps.ToArray()), result, p.errorList(c, s.HasErrors, s.Errors), scopes)
 }
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
@@ -1150,6 +1164,22 @@ fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
         case ast.Decl.Errors(_, _, words, _): words
         case _: Array<source.NameId>(0)
     }
+}
+
+# R3b: whether an error type is one raised by name, which nothing declares - one word, named as the type
+fn (p mut Program&) IsRaisedError(d types.DeclId) Bool {
+    ws := p.ErrorWords(d)
+    return ws.Len() == 1 and ws[0] == p.T.DeclName(d) and p.ErrorMembers(d).Len() == 0
+}
+
+# an error type's word w as source writes it, its module's alias left out: "Error.Full", or for an error raised by name
+# (R3b) the name alone, "NotFound"
+fn (p mut Program&) ErrorWordName(d types.DeclId, w I64) String {
+    name := p.text(p.T.DeclName(d))
+    if p.IsRaisedError(d) { return $name }
+    ws := p.ErrorWords(d)
+    if w < 0 or w >= ws.Len() { return $name "." $w }
+    return $name "." $p.text(ws[w])
 }
 
 # the members a named error set declares (T19a), in order, as written in its module
@@ -2553,6 +2583,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv!.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    if not p.FnIsExtern(f) and not row.F.Export { p.flagBans(c, row.F.S, sig, recv != types.UnknownT) }
     # D18: a function whose result is written Iterator<T ? E> and whose body yields is a generator - its result the
     # prelude's Generator<T ? E>, its errors its Next's alone (written on the signature, they are the checker's to say)
     if ast.FirstYield(row.F.Body).Start >= I32(0) {
@@ -2981,7 +3012,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
         }
     }
     scopes := p.T.Scopes(types.RoleCtor, shares.ToArray(), I64[types.OwnScope])
-    el := p.contractErrors(errs, p.errorList(c, errs.HasErrors, errs.Errors)) if errs is not null else types.ListId(0)
+    el := p.errorList(c, errs.HasErrors, errs.Errors) if errs is not null else types.ListId(0)
     return p.T.Func(p.T.List(ps.ToArray()), result, el, scopes)
 }
 
@@ -4008,7 +4039,7 @@ fn (p mut Program&) ErrValWordText(t types.TypeId, code I64) String {
     w := code & 0xFFFF
     if w >= ws.Len() { return "" }
     dm := p.T.DeclModule(d)
-    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.text(p.T.DeclName(d)) "." $p.text(ws[w])
+    return $load.ErrQualifier(p.L.Mods[dm].Identity, dm == p.L.Root) $p.ErrorWordName(d, w)
 }
 
 # what a declared type's name is (G32), as its own module writes it: its name and arguments, no module before them
@@ -4389,14 +4420,14 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
 
 # what a canonical text that names no type fails with
 type BadCanon error {
-    TEXT
+    Text
 }
 
 # the type a canonical text names (types.Canon's form): the inverse of Canon over a program's types
 fn (p mut Program&) ParseCanon(text String&) types.TypeId ? {
     cur := cursor(text)
     t := try p.canonType(cur)
-    if cur.At != text.Len() { error BadCanon.TEXT }
+    if cur.At != text.Len() { error BadCanon.Text }
     return t
 }
 
@@ -4420,7 +4451,7 @@ fn (p mut Program&) canonType(c mut cursor&) types.TypeId ? BadCanon, Undeclared
     if c.eat("mut ") { perm = perm | types.Writable }
     t := try p.canonInner(c)
     if c.eat("&") { return p.T.Ref(t, perm) }
-    if perm != types.ReadOnly { error BadCanon.TEXT }
+    if perm != types.ReadOnly { error BadCanon.Text }
     return t
 }
 
@@ -4433,7 +4464,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
         elem := try p.canonType(c)
         length := types.TypeId(0)
         if c.eat(", ") { length = p.T.Const(p.T.Prim("I64"), try canonNumber(c)) }
-        if not c.eat(">") { error BadCanon.TEXT }
+        if not c.eat(">") { error BadCanon.Text }
         return p.T.Array(elem, length)
     }
     start := c.At
@@ -4444,7 +4475,7 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
         if word == "default" { return types.DefaultErrT }
         if word == "noreturn" { return types.NoreturnT }
         t := p.T.Prim(word)
-        if t == types.UnknownT { error BadCanon.TEXT }
+        if t == types.UnknownT { error BadCanon.Text }
         return t
     }
     c.At++
@@ -4456,10 +4487,10 @@ fn (p mut Program&) canonInner(c mut cursor&) types.TypeId ? BadCanon, Undeclare
     args Vec<types.TypeId>
     for {
         i := args.Len()
-        if i >= p.T.DeclParams(d) { error BadCanon.TEXT }
+        if i >= p.T.DeclParams(d) { error BadCanon.Text }
         args.Push(try p.canonType(c))
         if c.eat(">") { break }
-        if not c.eat(", ") { error BadCanon.TEXT }
+        if not c.eat(", ") { error BadCanon.Text }
     }
     return p.Instance(d, p.T.List(args.ToArray()))
 }
@@ -4472,7 +4503,7 @@ fn canonNumber(c mut cursor&) I64 ? {
     for c.At < c.Text.Len() and c.peek().IsDigit() { c.At++ }
     txt := c.Text[start:c.At]
     v := try txt.ParseInt() catch {
-        u := try txt.ParseUint() catch { error BadCanon.TEXT }
+        u := try txt.ParseUint() catch { error BadCanon.Text }
         return I64(u)
     }
     return v
@@ -4484,7 +4515,7 @@ fn (p mut Program&) canonList(c mut cursor&, close String&) types.ListId ? {
     for {
         xs.Push(try p.canonType(c))
         if c.eat(close) { break }
-        if not c.eat(", ") { error BadCanon.TEXT }
+        if not c.eat(", ") { error BadCanon.Text }
     }
     return p.T.List(xs.ToArray())
 }
@@ -4521,9 +4552,9 @@ fn (p mut Program&) canonFunc(c mut cursor&) types.TypeId ? {
         for {
             xs.Push(try canonNumber(c))
             if c.eat("]") { break }
-            if not c.eat(",") { error BadCanon.TEXT }
+            if not c.eat(",") { error BadCanon.Text }
         }
-        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error BadCanon.TEXT }
+        if xs.Len() < 2 or xs[1] < 0 or xs.Len() < 2 + xs[1] { error BadCanon.Text }
         n := xs[1]
         all := xs.ToArray()
         scopes = p.T.Scopes(all[0], all[2:2 + n], all[2 + n:])
@@ -4535,7 +4566,7 @@ fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
     ns Vec<source.NameId>
     ps Vec<types.TypeId>
     for not c.eat("}") {
-        if ns.Len() > 0 and not c.eat(" ") { error BadCanon.TEXT }
+        if ns.Len() > 0 and not c.eat(" ") { error BadCanon.Text }
         start := c.At
         for c.At < c.Text.Len() and (c.peek().IsLetter() or c.peek().IsDigit() or c.peek() == '_') { c.At++ }
         ns.Push(p.L.Names.Intern(c.Text[start:c.At]))

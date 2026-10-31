@@ -121,7 +121,7 @@ ProgramTexts Array<String&> = String&[
     "import \"std/io\"\n\nfn main() {\n    io.Println(\"hello \" $(40 + 2))!\n}\n"
     ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.Println(a)! }\n}\n")
     "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
-    "type E error {\n    BAD\n}\n\nfn main() ? E {\n    error E.BAD\n}\n"
+    "type E error {\n    Bad\n}\n\nfn main() ? E {\n    error E.Bad\n}\n"
     ("test \"one passes\" {\n    assert 1 + 1 == 2\n}\n\nfn two() I64 { return 2 }\n\n" $
             "test \"one fails\" {\n    assert two() == 3\n}\n")
     "fn main() {\n    x := y\n}\n"

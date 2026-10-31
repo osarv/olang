@@ -11,13 +11,13 @@
 # ends the loop, so the read after it is reached with nothing assigned
 type Node struct(v I64) { v }
 type P struct(x I64) { x }
-type E error { STOP }
+type E error { Stop }
 fn g(i I64) I64 ? E {
-    if i >= 3 { error E.STOP }
+    if i >= 3 { error E.Stop }
     return i
 }
 fn pick(i I64) (fn(x I64) I64) ? E {
-    if i >= 3 { error E.STOP }
+    if i >= 3 { error E.Stop }
     return fn(x I64) I64 { return x + i }
 }
 fn sink(x I64) { }

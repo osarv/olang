@@ -7,7 +7,7 @@ error Bad { WORD }
 fn id(x <T>) <T> { return x }
 
 fn half(n I64) I64 ? Bad + io.IoError {
-    if n < 0 { error Bad.WORD }
+    if n < 0 { error Bad.Word }
     return n / 2
 }
 

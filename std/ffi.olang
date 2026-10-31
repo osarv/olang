@@ -21,9 +21,9 @@ extern {
 # why a call could not be made: no function by its name in what the process has loaded (nor in the C math library),
 # or a kind nothing can pass - a 16-bit float alone, an array as the result, a code that names no kind
 type Error error {
-    NOT_FOUND
-    UNSUPPORTED
-    BAD_ARGUMENTS
+    NotFound
+    Unsupported
+    BadArguments
 }
 
 # the number types a foreign function takes and gives (X2)
@@ -87,24 +87,24 @@ fn Has(name String&) Bool {
 fn Call(name String&, kinds Array<U8>&, words mut Array<U64>&, result U8 = 0, fixed I64 = -1) U64 ? Error {
     need I64 = 0
     for k in kinds {
-        if k == 0 { error Error.BAD_ARGUMENTS }
+        if k == 0 { error Error.BadArguments }
         if k < 0x80 {
             need += 1
             continue
         }
-        if need >= words.Len() { error Error.BAD_ARGUMENTS }
+        if need >= words.Len() { error Error.BadArguments }
         n := I64(words[need])
-        if n < 0 or n > (words.Len() - need - 1) * 8 { error Error.BAD_ARGUMENTS }
+        if n < 0 or n > (words.Len() - need - 1) * 8 { error Error.BadArguments }
         need += 1 + (n * width(k & 0x7F) + 7) / 8
     }
-    if need > words.Len() { error Error.BAD_ARGUMENTS }
+    if need > words.Len() { error Error.BadArguments }
     ended := Array<U8>(kinds.Len() + 1)
     for i, k in kinds { ended[i] = k }
     named := $name "\0"
-    if fixed > kinds.Len() { error Error.BAD_ARGUMENTS }
+    if fixed > kinds.Len() { error Error.BadArguments }
     match __olang_dyncall_var_check(named, ended, result, fixed) {
-        case 1 { error Error.NOT_FOUND }
-        case 2 { error Error.UNSUPPORTED }
+        case 1 { error Error.NotFound }
+        case 2 { error Error.Unsupported }
         case _ { }
     }
     return __olang_dyncall_var(named, ended, words, result, fixed)
@@ -169,12 +169,12 @@ test "Call hands an array over and reads back what the function wrote" {
 
 test "Call fails on a function it cannot find, and on a kind nothing can pass" {
     missing := false
-    try Call("olang_no_such_function_anywhere", U8[], Array<U64>(0)) catch Error.NOT_FOUND { missing = true } catch { }
+    try Call("olang_no_such_function_anywhere", U8[], Array<U64>(0)) catch Error.NotFound { missing = true } catch { }
     assert missing
     half := false
-    try Call("sqrtf", U8[Code(Kind.F16)], U64[0], Code(Kind.F32)) catch Error.UNSUPPORTED { half = true } catch { }
+    try Call("sqrtf", U8[Code(Kind.F16)], U64[0], Code(Kind.F32)) catch Error.Unsupported { half = true } catch { }
     assert half
     arrayResult := false
-    try Call("strlen", U8[ArrayOf(Kind.U8)], U64[0, 0], ArrayOf(Kind.U8)) catch Error.UNSUPPORTED { arrayResult = true } catch { }
+    try Call("strlen", U8[ArrayOf(Kind.U8)], U64[0, 0], ArrayOf(Kind.U8)) catch Error.Unsupported { arrayResult = true } catch { }
     assert arrayResult
 }

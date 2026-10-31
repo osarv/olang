@@ -4,7 +4,7 @@ type Ups struct(n I64) {
     at I64 = 0
 }
 fn (u mut Ups&) Next() I64 ? Exhausted {
-    if u.at >= u.n { error Exhausted.END }
+    if u.at >= u.n { error Exhausted.End }
     u.at += 1
     return u.at
 }

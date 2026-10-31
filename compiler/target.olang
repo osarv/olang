@@ -32,7 +32,7 @@ type Target struct() {
 }
 
 # a target that could not be resolved - its diagnostic said
-type Bad error { TARGET }
+type Bad error { Target }
 
 # ---- the architectures ----
 
@@ -133,7 +133,7 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         for w in env.Split(" ") {
             if w != "" { out.Push($w) }
         }
-        if out.Len() == 0 or not executable(out[0]) { error Bad.TARGET }
+        if out.Len() == 0 or not executable(out[0]) { error Bad.Target }
         out[0] = whereIs(out[0]) # run by its path: the program is put in this process's place by it
         return out.ToArray()
     }
@@ -149,7 +149,7 @@ fn (t Target&) Runner() Array<String&> ? Bad {
         }
         return out.ToArray()
     }
-    error Bad.TARGET
+    error Bad.Target
 }
 
 # ---- resolving ----
@@ -222,8 +222,8 @@ fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hos
         unreachable
     }
     if out.Status != 0 { try refuse(d, msgs.TargetUnknown(spec)) }
-    try t.FromProbe(out.Stdout) catch Probe.UNKNOWN { try refuse(d, msgs.TargetUnknown(spec)) }
-    catch Probe.UNSUPPORTED { try refuse(d, msgs.TargetUnsupported(spec)) }
+    try t.FromProbe(out.Stdout) catch Probe.Unknown { try refuse(d, msgs.TargetUnknown(spec)) }
+    catch Probe.Unsupported { try refuse(d, msgs.TargetUnsupported(spec)) }
     # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
     # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
     if t.Foreign and not canCompileBf16(clang, t.Triple) { try refuse(d, msgs.TargetNoBackend(spec)) }
@@ -233,27 +233,27 @@ fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hos
 
 fn refuse(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
     d.Error(diag.Where.Nowhere, m)
-    error Bad.TARGET
+    error Bad.Target
 }
 
 # why a probe's output names no target
 type Probe error {
-    UNKNOWN     # clang said nothing a target can be read from
-    UNSUPPORTED # not a 64-bit little-endian machine (T4's layouts)
+    Unknown     # clang said nothing a target can be read from
+    Unsupported # not a 64-bit little-endian machine (T4's layouts)
 }
 
 # the triple, CPU, features and the attributes every function carries, read from what clang compiled the probe to: its
 # "target triple", "target datalayout" and "attributes #0" lines
 fn (t mut Target&) FromProbe(out String&) ? Probe {
-    tl := try field(out, "target triple = \"") catch { error Probe.UNKNOWN }
-    dl := try field(out, "target datalayout = \"") catch { error Probe.UNKNOWN }
-    at := try out.Find("attributes #0 = {") catch { error Probe.UNKNOWN }
+    tl := try field(out, "target triple = \"") catch { error Probe.Unknown }
+    dl := try field(out, "target datalayout = \"") catch { error Probe.Unknown }
+    at := try out.Find("attributes #0 = {") catch { error Probe.Unknown }
     nl := try out[at:].FindByte('\n') catch default (out.Len() - at)
     al := out[at:at + nl]
     # the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
-    if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16") { error Probe.UNSUPPORTED }
+    if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16") { error Probe.Unsupported }
     t.Triple = $tl
-    t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.UNKNOWN })
+    t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
     features := StripUnsafe(try attrValue(al, "target-features") catch default "")
     # B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add
     if t.Arch == "aarch64" {
@@ -468,7 +468,7 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
 fn probeOutcome(text String&) String {
     t := Target()
     t.Arch = "x86_64"
-    try t.FromProbe(text) catch Probe.UNKNOWN { return "unknown" } catch Probe.UNSUPPORTED { return "unsupported" }
+    try t.FromProbe(text) catch Probe.Unknown { return "unknown" } catch Probe.Unsupported { return "unsupported" }
     return "ok"
 }
 

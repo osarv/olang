@@ -40,9 +40,9 @@
 # what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
 # (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
 type Error error {
-    EMPTY
-    NOT_FOUND
-    OUT_OF_RANGE
+    Empty
+    NotFound
+    OutOfRange
 }
 
 type List<T> struct() {
@@ -170,8 +170,8 @@ fn (l List<T>&) At(i I64) T {
 
 # the element at position i, failing with OUT_OF_RANGE where i is no position - "l[i]" checked, as an array's Get is
 # (E16d)
-fn (l List<T>&) Get(i I64) T ? Error.OUT_OF_RANGE {
-    if i < 0 or i >= l.s.count { error Error.OUT_OF_RANGE }
+fn (l List<T>&) Get(i I64) T ? Error.OutOfRange {
+    if i < 0 or i >= l.s.count { error Error.OutOfRange }
     return l.At(i)
 }
 
@@ -188,15 +188,15 @@ fn (l mut List<T>&) SetAt(i I64, x T) {
 
 # the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key:
 # "try l.First() catch default 0" gives a fallback
-fn (l List<T>&) First() T ? Error.EMPTY {
-    if l.s.count == 0 { error Error.EMPTY }
+fn (l List<T>&) First() T ? Error.Empty {
+    if l.s.count == 0 { error Error.Empty }
     return l.s.first[0]
 }
 
 # the last element - failing with EMPTY when there is none
-fn (l List<T>&) Last() T ? Error.EMPTY {
+fn (l List<T>&) Last() T ? Error.Empty {
     s := l.s
-    if s.count == 0 { error Error.EMPTY }
+    if s.count == 0 { error Error.Empty }
     if s.used == 0 {
         c := s.chunk(s.nChunks - 2)
         return c[c.Len() - 1]
@@ -206,9 +206,9 @@ fn (l List<T>&) Last() T ? Error.EMPTY {
 
 # removes the last element and gives it - failing with EMPTY when there is none, so a list used as a stack or a work
 # list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
-fn (l mut List<T>&) Pop() T ? Error.EMPTY {
+fn (l mut List<T>&) Pop() T ? Error.Empty {
     s := l.s
-    if s.count == 0 { error Error.EMPTY }
+    if s.count == 0 { error Error.Empty }
     s.dropLast()
     return s.tail[s.used]
 }
@@ -261,14 +261,14 @@ fn (l mut List<T>&) Truncate(n I64) {
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (l mut List<T>&) RemoveAt(i I64) ? Error.OUT_OF_RANGE { try l.TakeAt(i) }
+fn (l mut List<T>&) RemoveAt(i I64) ? Error.OutOfRange { try l.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
 # checked once per call
-fn (l mut List<T>&) TakeAt(i I64) T ? Error.OUT_OF_RANGE {
+fn (l mut List<T>&) TakeAt(i I64) T ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i >= s.count { error Error.OUT_OF_RANGE }
+    if i < 0 or i >= s.count { error Error.OutOfRange }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
@@ -293,9 +293,9 @@ fn (l mut List<T>&) TakeAt(i I64) T ? Error.OUT_OF_RANGE {
 # puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
 # and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not fails with OUT_OF_RANGE, checked once
 # per call
-fn (l mut List<T>&) Insert(i I64, x T) ? Error.OUT_OF_RANGE {
+fn (l mut List<T>&) Insert(i I64, x T) ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i > s.count { error Error.OUT_OF_RANGE }
+    if i < 0 or i > s.count { error Error.OutOfRange }
     if i == s.count {
         l.Push(x)
         return
@@ -392,7 +392,7 @@ type Iter<T> struct(of List<T>&) {
 }
 
 fn (it mut Iter<T>&) Next() T ? Exhausted {
-    if it.at >= it.list.count { error Exhausted.END }
+    if it.at >= it.list.count { error Exhausted.End }
     if it.i == it.room { # this chunk is used up: on to the next one
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
@@ -407,7 +407,7 @@ fn (it mut Iter<T>&) Next() T ? Exhausted {
 # moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
 # that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
 fn (it mut Iter<T>&) enter() ? Exhausted {
-    if it.at >= it.list.count { error Exhausted.END }
+    if it.at >= it.list.count { error Exhausted.End }
     if it.i == it.room {
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
         it.room = it.chunk.Len()
@@ -532,7 +532,7 @@ fn (it mut Iter<T>&) Filter<? E>(keep fn(x T) Bool ? E) Vec<T>& ? E {
 # the iterator would give it.
 fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
     s := l.s
-    if at >= s.count or at < 0 { error Exhausted.END }
+    if at >= s.count or at < 0 { error Exhausted.End }
     if s.nChunks == 1 { return s.first[at:s.used] } # a list in one chunk - most are - is one run
     return s.runIn(highBit(at + firstChunk) - firstChunkLog, at)
 }
@@ -593,11 +593,11 @@ fn (l List<T>&) Has(x T) Bool {
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none, as
 # Find does: "try l.IndexOf(x) catch default -1" gives a fallback
-fn (l List<T>&) IndexOf(x T) I64 ? Error.NOT_FOUND {
+fn (l List<T>&) IndexOf(x T) I64 ? Error.NotFound {
     for i, y in l {
         if y == x { return i }
     }
-    error Error.NOT_FOUND
+    error Error.NotFound
 }
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
@@ -609,14 +609,14 @@ fn (l mut List<T>&) Remove(x T) Bool {
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (l mut List<T>&) SwapRemove(i I64) ? Error.OUT_OF_RANGE { try l.SwapTake(i) }
+fn (l mut List<T>&) SwapRemove(i I64) ? Error.OutOfRange { try l.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
 # the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
 # one that is not fails with OUT_OF_RANGE, checked once per call, as TakeAt checks it
-fn (l mut List<T>&) SwapTake(i I64) T ? Error.OUT_OF_RANGE {
+fn (l mut List<T>&) SwapTake(i I64) T ? Error.OutOfRange {
     s := l.s
-    if i < 0 or i >= s.count { error Error.OUT_OF_RANGE }
+    if i < 0 or i >= s.count { error Error.OutOfRange }
     x := l.At(i)
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) } # the last element, just dropped, moved into the gap
@@ -874,7 +874,7 @@ if TestBuild {
         for i in range 20 { l.Push(I32(i)) }
         assert (try l.Get(19) catch default -1) == 19
         assert (try l.Get(20) catch default -1) == -1
-        assert (try l.Get(-1) catch Error.OUT_OF_RANGE default -1) == -1
+        assert (try l.Get(-1) catch Error.OutOfRange default -1) == -1
         e List<I32>& = List<I32>()
         assert (try e.Get(0) catch default 7) == 7
     }
@@ -1012,7 +1012,7 @@ if TestBuild {
         for x in l {
             if x > limit { return x }
         }
-        error Error.NOT_FOUND
+        error Error.NotFound
     }
 
     listRunsBaked := listRuns(40)
@@ -1500,13 +1500,13 @@ if TestBuild {
         for f in l {
             if f.First == key { return f.Second }
         }
-        error Error.NOT_FOUND
+        error Error.NotFound
     }
     fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
         for f in l.Iter() {
             if f.First == key { return f.Second }
         }
-        error Error.NOT_FOUND
+        error Error.NotFound
     }
     test "S9f: a List of references, walked by every route" {
         bags := List<listBag&>()

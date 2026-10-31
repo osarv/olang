@@ -32,7 +32,7 @@ extern {
 
 # a value a constructor refused: its case is dropped
 type skip error {
-    REFUSED
+    Refused
 }
 
 # the most bytes a case draws: past them every byte is 0
@@ -148,7 +148,7 @@ fn gen<T>(s mut source&) T ? skip {
                 for v.Len() < 64 and s.more() { v.Push(try gen<T.Element>(s)) }
                 return v.ToArray()
             } else if T.Kind == TypeKind.Struct {
-                return try T(field(p, s) for p in T.Params) catch { error skip.REFUSED }
+                return try T(field(p, s) for p in T.Params) catch { error skip.Refused }
             } else if T.Kind == TypeKind.Enum {
                 k := s.below(T.Cases.Len())
                 for i, c in T.Cases {

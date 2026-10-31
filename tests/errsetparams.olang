@@ -3,22 +3,22 @@
 # the empty set, where nothing given can fail, so that the call needs no try
 
 type Bad error {
-    NEG
-    BIG
+    Neg
+    Big
 }
 
-type Other error { ODD }
+type Other error { Odd }
 
 # a named set (T19a) as an error-set argument
 type Both error Bad, Other
 
 fn parsePos(x I64) I64 ? Bad {
-    if x < 0 { error Bad.NEG }
+    if x < 0 { error Bad.Neg }
     return x
 }
 
 fn even(x I64) I64 ? Other {
-    if x % 2 != 0 { error Other.ODD }
+    if x % 2 != 0 { error Other.Odd }
     return x
 }
 
@@ -77,9 +77,9 @@ type Reader struct(of Array<I64>&) {
 }
 
 fn (r mut Reader&) Next() I64 ? Bad, Exhausted {
-    if r.at == r.xs.Len() { error Exhausted.END }
+    if r.at == r.xs.Len() { error Exhausted.End }
     r.at++
-    if r.xs[r.at - 1] < 0 { error Bad.NEG }
+    if r.xs[r.at - 1] < 0 { error Bad.Neg }
     return r.xs[r.at - 1]
 }
 
@@ -135,7 +135,7 @@ counter mut I64 = 0
 
 fn flaky() I64 ? Bad {
     counter++
-    if counter < 3 { error Bad.BIG }
+    if counter < 3 { error Bad.Big }
     return counter
 }
 
@@ -186,9 +186,9 @@ test "G12: an instance named with its error set, and one whose set is left to in
 type Countdown struct(n I64) { n }
 
 fn (r mut Countdown&) Next() I64 ? Exhausted, Bad {
-    if r.n == 0 { error Exhausted.END }
+    if r.n == 0 { error Exhausted.End }
     r.n--
-    if r.n == 5 { error Bad.NEG }
+    if r.n == 5 { error Bad.Neg }
     return r.n
 }
 

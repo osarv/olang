@@ -114,7 +114,7 @@ fn (a Analysis&) RealOfFile(file I64) String {
 # ---- what is written at an offset ----
 
 # nothing to say: no name there, or nothing known of it
-type Nothing error { HERE }
+type Nothing error { Here }
 
 # the identifier at or just before offset at of t: its span, empty where none is there
 fn WordAt(t String&, at I64) source.Span {
@@ -153,10 +153,10 @@ type Found struct(Text String&, Real String&, At I64) {
 # its doc comment) and where it is declared
 fn (a Analysis&) Lookup(real String&, at I64) Found ? Nothing {
     mi := a.ModuleOf(real)
-    if mi < 0 or a.C is null { error Nothing.HERE }
+    if mi < 0 or a.C is null { error Nothing.Here }
     text := a.TextOf(mi)
     w := WordAt(text, at)
-    if w.Start == w.End { error Nothing.HERE }
+    if w.Start == w.End { error Nothing.Here }
     tg := a.target(mi, w)
     return try a.describe(tg)
 }
@@ -231,7 +231,7 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
     c := a.C
     match tg {
         case Target.Item(mi, name) {
-            line := try explain.Item(c!, a.Sc!, a.X!, mi, name) catch explain.Missing { error Nothing.HERE }
+            line := try explain.Item(c!, a.Sc!, a.X!, mi, name) catch explain.Missing { error Nothing.Here }
             at := declOf(c!, mi, name)
             text := $hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else "") $exampleText(c!, mi, name)
             return Found(text, $a.L.Mods[mi].Real, at)
@@ -259,7 +259,7 @@ fn (a Analysis&) describe(tg Target) Found ? Nothing {
             m := a.L.Mods[mi]
             return Found(hover($"import \"" $m.Identity "\"", doc.ModuleDoc(m.Src!.Text)), $m.Real, 0)
         }
-        case Target.None { error Nothing.HERE }
+        case Target.None { error Nothing.Here }
     }
 }
 
@@ -311,7 +311,7 @@ type memberInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&,
 fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
-    if c!.P.T.KindOf(tt) != types.Kind.Named { error Nothing.HERE }
+    if c!.P.T.KindOf(tt) != types.Kind.Named { error Nothing.Here }
     decl := c!.P.T.DeclOf(tt)
     for body in c!.Bodies {
         match body.Of {
@@ -319,7 +319,7 @@ fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
                 if c!.P.T.KindOf(bt) != types.Kind.Named or c!.P.T.DeclOf(bt) != decl or index >= body.Fields.Len() { continue }
                 l := body.Locals[I64(body.Fields[index])]
                 mi := a.moduleOfFile(body.File)
-                if mi < 0 { error Nothing.HERE }
+                if mi < 0 { error Nothing.Here }
                 text := a.TextOf(mi)
                 name := $text[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0) else $c!.P.L.Names.Text(l.Name)
                 tys := c!.P.T.Items(c!.P.T.Fields(tt))
@@ -329,7 +329,7 @@ fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
             case _ { }
         }
     }
-    error Nothing.HERE
+    error Nothing.Here
 }
 
 # the checked bodies' nodes naming the identifier [s, e): the innermost field read, method or function called, global
@@ -1234,7 +1234,7 @@ fn (r mut Reader&) Fill() Bool {
 }
 
 # no whole message is buffered yet
-type Incomplete error { MORE }
+type Incomplete error { More }
 
 # the next whole framed message's body, taken out of the buffer
 fn (r mut Reader&) Next() String ? Incomplete {
@@ -1242,7 +1242,7 @@ fn (r mut Reader&) Next() String ? Incomplete {
     n := v.Len()
     i I64 = 0
     for i + 3 < n and not (v[i] == 13 and v[i + 1] == 10 and v[i + 2] == 13 and v[i + 3] == 10) { i++ }
-    if i + 3 >= n { error Incomplete.MORE }
+    if i + 3 >= n { error Incomplete.More }
     headers := String(v[:i])
     length I64 = -1
     for h in headers.Lines() {
@@ -1254,9 +1254,9 @@ fn (r mut Reader&) Next() String ? Incomplete {
     start := i + 4
     if length < 0 {
         r.drop(start)            # no length: the header block is dropped, the stream read on
-        error Incomplete.MORE
+        error Incomplete.More
     }
-    if n < start + length { error Incomplete.MORE }
+    if n < start + length { error Incomplete.More }
     body := $String(v[start:start + length])
     r.drop(start + length)
     return body
@@ -1268,7 +1268,7 @@ fn (r mut Reader&) NextLine() String ? Incomplete {
     n := v.Len()
     i I64 = 0
     for i < n and v[i] != 10 { i++ }
-    if i >= n { error Incomplete.MORE }
+    if i >= n { error Incomplete.More }
     end := i - 1 if i > 0 and v[i - 1] == 13 else i
     line := $String(v[:end])
     r.drop(i + 1)

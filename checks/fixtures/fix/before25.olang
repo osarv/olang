@@ -7,8 +7,8 @@ type Shape enum {
   Circle(r F64)
   Square(s F64)
 }
-fn f(n I64) I64 ? E { if n > 100 { error E.BAD } return n }
-fn g(b Bool) Bool ? E { if not b { error E.BAD } return b }
+fn f(n I64) I64 ? E { if n > 100 { error E.Bad } return n }
+fn g(b Bool) Bool ? E { if not b { error E.Bad } return b }
 fn pick(x I64, y I64) I64 [y > x] { return y - x }
 fn main() ? {
   a := I64[1, 2, 3]

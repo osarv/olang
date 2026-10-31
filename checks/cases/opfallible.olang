@@ -2,13 +2,13 @@
 # E31/QQ1: a plain operator method may declare errors - the operator then fails as written, under 'try' like a call
 # (it used to be E31a's "Mul cannot fail")
 type VErr error {
-    ZERO
+    Zero
 }
 type V struct(x I32) {
     x
 }
 fn (a V) Mul(b V) V ? VErr {
-    if b.x == 0 { error VErr.ZERO }
+    if b.x == 0 { error VErr.Zero }
     return V(a.x * b.x)
 }
 fn main() ? {

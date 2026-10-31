@@ -1,7 +1,7 @@
 # check: fail an error may not leave deferred code
 # S19b: a try in deferred code must catch every error it can produce right there
 type E error {
-    BAD
+    Bad
 }
 fn g() I32 ? E { return 1 }
 fn f() I32 ? E {

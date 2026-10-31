@@ -3,7 +3,7 @@
 #     p := flags.Flags("grep", "search files for text")
 #     count := p.Int("count", 'n', 10, "stop after this many matches")
 #     quiet := p.Bool("quiet", 'q', "print nothing, only set the status")
-#     try p.Parse(os.Args()) catch flags.Error.HELP {
+#     try p.Parse(os.Args()) catch flags.Error.Help {
 #         try io.Print(p.Help())
 #         return
 #     } catch flags.Error {
@@ -24,18 +24,18 @@
 #
 #     type Options struct(@flags.Help("stop after this many matches") @flags.Short('n') Count I64 = 10
 #                         @flags.Help("print nothing") Quiet Bool = false) { Count, Quiet }
-#     opts := try p.Read<Options>(os.Args()) catch flags.Error.HELP { ... }
+#     opts := try p.Read<Options>(os.Args()) catch flags.Error.Help { ... }
 
 # why Parse failed - Message() says it in a sentence, naming the argument: HELP: "-h" or "--help" was given; UNKNOWN: a
 # flag nothing declared; MISSING: a flag that takes a value came last; BAD_VALUE: a value that is not the flag's type;
 # DECLARED_TWICE: two declarations share a name or a short name
 type Error error {
-    HELP
-    UNKNOWN
-    MISSING
-    BAD_VALUE
-    DECLARED_TWICE
-    REQUIRED            # Read: a flag declared by a parameter with no default was not given
+    Help
+    Unknown
+    Missing
+    BadValue
+    DeclaredTwice
+    Required            # Read: a flag declared by a parameter with no default was not given
 }
 
 # a flag's help, written on a parameter Read declares it from (G39)
@@ -132,18 +132,18 @@ fn (s mut state&) say(what String&) {
     s.message = $s.program ": " $what " (see --help)"
 }
 
-fn (s state&) byName(name String&) mut flag&s ? Error.UNKNOWN {
+fn (s state&) byName(name String&) mut flag&s ? Error.Unknown {
     for f in s.all {
         if f.name == name: return f
     }
-    error Error.UNKNOWN
+    error Error.Unknown
 }
 
-fn (s state&) byShort(c Char) mut flag&s ? Error.UNKNOWN {
+fn (s state&) byShort(c Char) mut flag&s ? Error.Unknown {
     for f in s.all {
         if f.short != 0 and f.short == c: return f
     }
-    error Error.UNKNOWN
+    error Error.Unknown
 }
 
 # value given to the flag f, read as its type
@@ -152,19 +152,19 @@ fn (s mut state&) setValue(f mut flag&, value String&, shown String&) ? Error {
         case Kind.Bool {
             if value == "true" { f.b = true } else if value == "false" { f.b = false } else {
                 s.say($shown " takes true or false, not \"" $value "\"")
-                error Error.BAD_VALUE
+                error Error.BadValue
             }
         }
         case Kind.Int {
             f.i = try value.ParseInt(0) catch ParseError {
                 s.say($shown " takes an integer, not \"" $value "\"")
-                error Error.BAD_VALUE
+                error Error.BadValue
             }
         }
         case Kind.Float {
             f.f = try value.ParseFloat() catch ParseError {
                 s.say($shown " takes a number, not \"" $value "\"")
-                error Error.BAD_VALUE
+                error Error.BadValue
             }
         }
         case Kind.Text { f.t = $value }
@@ -183,7 +183,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             b := s.all[j]
             if a.name == b.name or (a.short != 0 and a.short == b.short) {
                 s.say("--" $a.name " is declared twice")
-                error Error.DECLARED_TWICE
+                error Error.DeclaredTwice
             }
         }
     }
@@ -198,7 +198,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
             }
             break
         }
-        if arg == "-h" or arg == "--help" { error Error.HELP }
+        if arg == "-h" or arg == "--help" { error Error.Help }
         if arg.Len() < 2 or arg[0] != '-' {
             s.args.Push(arg)
             continue
@@ -209,29 +209,29 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         key := body[:eq] if eq >= 0 else body
         f mut flag?&s = null
         if long {
-            f = try s.byName(key) catch Error.UNKNOWN {
+            f = try s.byName(key) catch Error.Unknown {
                 s.say("unknown flag --" $key)
-                error Error.UNKNOWN
+                error Error.Unknown
             }
         } else if key.Len() > 1 and eq < 0 {
             # several one-letter Bools together: "-qv"
             for c in key {
-                g := try s.byShort(c) catch Error.UNKNOWN {
+                g := try s.byShort(c) catch Error.Unknown {
                     s.say("unknown flag -" $c)
-                    error Error.UNKNOWN
+                    error Error.Unknown
                 }
                 if g.kind != Kind.Bool {
                     s.say("-" $c " takes a value, and is written alone")
-                    error Error.MISSING
+                    error Error.Missing
                 }
                 g.b = true
                 g.isSet = true
             }
             continue
         } else {
-            f = try s.byShort(key[0]) catch Error.UNKNOWN {
+            f = try s.byShort(key[0]) catch Error.Unknown {
                 s.say("unknown flag -" $key)
-                error Error.UNKNOWN
+                error Error.Unknown
             }
         }
         fl := f!    # set by both branches that reach here
@@ -244,7 +244,7 @@ fn (p mut Flags&) Parse(args Array<String&>&) ? Error {
         } else {
             if i >= args.Len() {
                 s.say($shown " takes a value")
-                error Error.MISSING
+                error Error.Missing
             }
             try s.setValue(fl, args[i], shown)
             i++
@@ -303,10 +303,10 @@ fn (p mut Flags&) declare<Q>(q Q) {
 # a parameter's value: its flag's, as the parameter's type - REQUIRED where a parameter with no default was not given
 fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
     name := dashed(q.Name)
-    f := try s.byName(name) catch Error.UNKNOWN { unreachable }
+    f := try s.byName(name) catch Error.Unknown { unreachable }
     if not q.HasDefault and not f.isSet {
         s.say("--" $name " is required")
-        error Error.REQUIRED
+        error Error.Required
     }
     match Q.Type {
         case Bool { return f.b }
@@ -319,7 +319,7 @@ fn (s mut state&) valueOf<Q>(q Q) Q.Type ? Error {
             if Q.Type.Kind == TypeKind.Integer {
                 return Q.Type(try f.i.Narrow<Q.Type.Base>() catch NumberError {
                     s.say("--" $name " takes an integer of " $Q.Type.Name)
-                    error Error.BAD_VALUE
+                    error Error.BadValue
                 })
             } else {
                 return Q.Type(Q.Type.Base(f.f))
@@ -411,16 +411,16 @@ test "what the declarations do not allow fails, with a message" {
     p := Flags("tool")
     p.Int("count", 'n', 10, "how many")
     p.Bool("verbose", 'v', "say more")
-    try p.Parse(String&["tool", "--colour"]) catch Error.UNKNOWN { } catch Error { unreachable }
+    try p.Parse(String&["tool", "--colour"]) catch Error.Unknown { } catch Error { unreachable }
     assert p.Message() == "tool: unknown flag --colour (see --help)"
-    try p.Parse(String&["tool", "-n"]) catch Error.MISSING { } catch Error { unreachable }
-    try p.Parse(String&["tool", "-n", "ten"]) catch Error.BAD_VALUE { } catch Error { unreachable }
+    try p.Parse(String&["tool", "-n"]) catch Error.Missing { } catch Error { unreachable }
+    try p.Parse(String&["tool", "-n", "ten"]) catch Error.BadValue { } catch Error { unreachable }
     assert p.Message() == "tool: -n takes an integer, not \"ten\" (see --help)"
-    try p.Parse(String&["tool", "-vn"]) catch Error.MISSING { } catch Error { unreachable }
-    try p.Parse(String&["tool", "--verbose=maybe"]) catch Error.BAD_VALUE { } catch Error { unreachable }
-    try p.Parse(String&["tool", "x", "--help"]) catch Error.HELP { } catch Error { unreachable }
+    try p.Parse(String&["tool", "-vn"]) catch Error.Missing { } catch Error { unreachable }
+    try p.Parse(String&["tool", "--verbose=maybe"]) catch Error.BadValue { } catch Error { unreachable }
+    try p.Parse(String&["tool", "x", "--help"]) catch Error.Help { } catch Error { unreachable }
     p.Bool("very", 'v', "clash")
-    try p.Parse(String&["tool"]) catch Error.DECLARED_TWICE { } catch Error { unreachable }
+    try p.Parse(String&["tool"]) catch Error.DeclaredTwice { } catch Error { unreachable }
 }
 
 # flags declared by a struct (G39)
@@ -440,10 +440,10 @@ test Flags.Read "a struct's parameters are flags, its attributes their help" {
         "      --out TEXT\n"
         "  -h, --help         show this help\n")
     q := Flags("tool")
-    try q.Read<options>(String&["tool"]) catch Error.REQUIRED { } catch { unreachable }
+    try q.Read<options>(String&["tool"]) catch Error.Required { } catch { unreachable }
     assert q.Message() == "tool: --out is required (see --help)"
     r := Flags("tool")
-    try r.Read<options>(String&["tool", "--out", "y", "--max-len", "300"]) catch Error.BAD_VALUE { } catch { unreachable }
+    try r.Read<options>(String&["tool", "--out", "y", "--max-len", "300"]) catch Error.BadValue { } catch { unreachable }
     assert dashed("HTTPServer") == "http-server" and dashed("max_len") == "max-len"
 }
 

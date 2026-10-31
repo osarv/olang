@@ -1,6 +1,6 @@
 # errortype_migrate - an error type is declared as a type (T19, 2026-10-25, the user's call): "error IoError { FULL }"
-# becomes "type IoError error { FULL }". A declaration is the keyword "error" first in its statement, a name, then "{" -
-# an error statement ("error IoError.FULL", "error e") never has a "{" after its name, and "type L error A {" (a set with
+# becomes "type IoError error { Full }". A declaration is the keyword "error" first in its statement, a name, then "{" -
+# an error statement ("error IoError.Full", "error e") never has a "{" after its name, and "type L error A {" (a set with
 # words of its own) has a name before its "error", so neither is touched and running the tool again changes nothing.
 # Comments and string literals are left alone (programs written inside strings are migrated by hand). Files are
 # rewritten in place and a count printed; --check writes nothing and the exit status says whether anything would
@@ -117,7 +117,7 @@ fn main() ? {
 
 test "an error type declared with its keyword first becomes a type; statements and new declarations are left" {
     n := Count()
-    assert migrate("error IoError { FULL, DENIED }\n", n) == "type IoError error { FULL, DENIED }\n"
+    assert migrate("error IoError { FU" "LL, DEN" "IED }\n", n) == "type IoError error { FU" "LL, DEN" "IED }\n"
     assert migrate("error E {\n    A\n    B\n}\nfn f() ? E { error E.A }\n", n) == "type E error {\n    A\n    B\n}\nfn f() ? E { error E.A }\n"
     assert migrate("if TestBuild {\n    error T { X }\n}\n", n) == "if TestBuild {\n    type T error { X }\n}\n"
     src := "type E error { A }\ntype L error io.Error, E { T }\ntype M error E {\n    U\n}\nfn g() ? L {\n    try f() catch E e { error e }\n}\n# error X { Y }\ns := \"error Z { W }\"\n"

@@ -446,7 +446,7 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     RaiseAt Vec<I32>       # S18d: a Raise's span's start whose trace line says RaiseWhat's text (typed.Body's)
     RaiseWhat Vec<String&>
     # D18: a generator's Next - the lambda its body is (typed.Body.Gen), a coroutine: each call through its value runs
-    # it from where it suspended (Term.Suspend) to its next Suspend or its end, a Raise - its Exhausted.END (GenEnd,
+    # it from where it suspended (Term.Suspend) to its next Suspend or its end, a Raise - its Exhausted.End (GenEnd,
     # under its own error list) when the body ended - after which every call fails with GenEnd
     Gen Bool = false
     GenEnd I64 = 0

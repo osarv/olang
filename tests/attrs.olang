@@ -102,10 +102,10 @@ fn methods(r attrmod.Rec) String {
 }
 
 # a generic taking a function's descriptor, failing as the function does
-type Odd error { ODD }
+type Odd error { Odd }
 
 fn half(x I64) I64 ? Odd {
-    if x % 2 != 0 { error Odd.ODD }
+    if x % 2 != 0 { error Odd.Odd }
     return x / 2
 }
 
@@ -132,7 +132,7 @@ test Key "attributes are read on types, fields, puns, cases and their fields" {
         if p.Name == "Id" { assert (p.Attr<Key>()!).Name == "id" }
     }
     missing := false
-    try User.Attr<Skip>() catch AttrError.MISSING { missing = true }
+    try User.Attr<Skip>() catch AttrError.Missing { missing = true }
     assert missing
 }
 

@@ -6,10 +6,10 @@
 # give the value with "default" (study 4's r20)
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 fn half(n I64) I64 ? {
-    if n % 2 != 0 { error Stop.HERE }
+    if n % 2 != 0 { error Stop.Here }
     return n / 2
 }
 fn main() ? {

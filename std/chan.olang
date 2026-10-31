@@ -24,9 +24,9 @@ import ctime "time.h"
 # length is (D14b).
 #
 # Close says no more values will be sent: what is buffered is still received, in order, and after that Recv and
-# RecvUntil fail with Error.CLOSED, and "for v in c" ends. The side that sends is the side that closes - after its
+# RecvUntil fail with Error.Closed, and "for v in c" ends. The side that sends is the side that closes - after its
 # last Send, or after joining every task that sends - so a Send on a closed channel, or one still blocked when the
-# channel closes, is a mistake in the program, and fails with Error.CLOSED (std stops no program for a caller's
+# channel closes, is a mistake in the program, and fails with Error.Closed (std stops no program for a caller's
 # mistake). Closing twice changes nothing.
 #
 # What is sent lives where the channel does, being stored in it (O6): a value holding references - text, say - sent
@@ -83,10 +83,10 @@ fn oldest<T>(c mut Chan<T>&) T {
 
 # the failure of a Recv on a closed channel with nothing left in it
 type Error error {
-    CLOSED
+    Closed
 }
 
-# no more values will be sent: what is buffered is still received, then Recv fails with Error.CLOSED. Wakes every
+# no more values will be sent: what is buffered is still received, then Recv fails with Error.Closed. Wakes every
 # task waiting on the channel. Closing a closed channel changes nothing.
 fn Close<T>(c mut Chan<T>&) {
     pthread.pthread_mutex_lock(c.lock)
@@ -109,7 +109,7 @@ fn IsClosed<T>(c mut Chan<T>&) Bool {
 fn sendOpen<T>(c mut Chan<T>&) ? Error {
     if c.closed {
         pthread.pthread_mutex_unlock(c.lock)
-        error Error.CLOSED
+        error Error.Closed
     }
 }
 
@@ -141,7 +141,7 @@ fn Send<T>(c mut Chan<T>&, v T) ? Error {
     pthread.pthread_mutex_unlock(c.lock)
 }
 
-# blocks while the channel is empty and open, then takes the oldest value; fails with Error.CLOSED once the
+# blocks while the channel is empty and open, then takes the oldest value; fails with Error.Closed once the
 # channel is closed and everything sent before has been taken
 fn Recv<T>(c mut Chan<T>&) T ? Error {
     pthread.pthread_mutex_lock(c.lock)
@@ -152,7 +152,7 @@ fn Recv<T>(c mut Chan<T>&) T ? Error {
     c.waiting--
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
-        error Error.CLOSED
+        error Error.Closed
     }
     v := oldest(c)
     pthread.pthread_mutex_unlock(c.lock)
@@ -162,7 +162,7 @@ fn Recv<T>(c mut Chan<T>&) T ? Error {
 # a channel is its own iterator (S9a): "for v in c" receives until the channel is closed and drained - Recv, with the
 # end of a closed channel as the end of the walk
 fn (c mut Chan<T>&) Next() T ? Exhausted {
-    return try Recv(c) catch Error { error Exhausted.END }
+    return try Recv(c) catch Error { error Exhausted.End }
 }
 
 # Send, giving up - with the token's reason - once the token fires while the channel is still full, or, on a
@@ -199,7 +199,7 @@ fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, Error 
 }
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
-# with Error.CLOSED once it is closed and drained
+# with Error.Closed once it is closed and drained
 fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
     ts := Array<I64>(2)
     pthread.pthread_mutex_lock(c.lock)
@@ -215,7 +215,7 @@ fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, Error {
     }
     if c.count == 0 {
         pthread.pthread_mutex_unlock(c.lock)
-        error Error.CLOSED
+        error Error.Closed
     }
     v := oldest(c)
     pthread.pthread_mutex_unlock(c.lock)
@@ -272,16 +272,16 @@ test "a wait with a token returns what is there, and gives up when the deadline 
     try SendUntil(c, 5, tok)
     assert (try RecvUntil(c, tok) catch default -1) == 5
     start := cancel.NowNs()
-    v := try RecvUntil(c, tok) catch cancel.Stopped.TIMED_OUT default -2 catch default -3
+    v := try RecvUntil(c, tok) catch cancel.Stopped.TimedOut default -2 catch default -3
     assert v == -2
     assert cancel.NowNs() - start >= 20000000
     try SendUntil(c, 1, tok)
-    try SendUntil(c, 2, tok) catch cancel.Stopped.TIMED_OUT { return }
+    try SendUntil(c, 2, tok) catch cancel.Stopped.TimedOut { return }
     unreachable
 }
 
 fn waitFor(c mut Chan<I32>&, tok cancel.Token&, got mut sumBox&) {
-    got.v = try RecvUntil(c, tok) catch cancel.Stopped.CANCELLED default -1 catch default -2
+    got.v = try RecvUntil(c, tok) catch cancel.Stopped.Cancelled default -1 catch default -2
 }
 
 test "Cancel wakes a task blocked in a wait" {
@@ -308,7 +308,7 @@ fn recvOrStop(c mut Chan<I32>&, tok mut cancel.Token&) I32 {
         spawn v = try RecvUntil(c, tok)
         for cancel.NowNs() - start < 5000000 { }
         tok.Cancel()
-    } catch cancel.Stopped.CANCELLED { return -1 } catch { return -2 }
+    } catch cancel.Stopped.Cancelled { return -1 } catch { return -2 }
     return v
 }
 
@@ -319,7 +319,7 @@ test "P4: a task cancelled in RecvUntil fails into its join, or takes its own de
     tok mut cancel.Token& = cancel.Token()
     v, w I32
     join {
-        spawn v = try RecvUntil(c, tok) catch cancel.Stopped.CANCELLED default -1 catch default -2
+        spawn v = try RecvUntil(c, tok) catch cancel.Stopped.Cancelled default -1 catch default -2
         spawn w = try Recv(c) catch default -3
         try Send(c, 7) catch { unreachable }
         tok.Cancel()
@@ -386,10 +386,10 @@ test "a channel of capacity 0 is a rendezvous" {
     assert total.v == 4950 and sentAll.v == 1
     # nobody receives, so a send with a deadline gives up - and its value is withdrawn, not left behind
     tok := cancel.After(20)
-    try SendUntil(c, 7, tok) catch cancel.Stopped.TIMED_OUT { }
+    try SendUntil(c, 7, tok) catch cancel.Stopped.TimedOut { }
     assert c.count == 0
     tok2 := cancel.After(20)
-    assert (try RecvUntil(c, tok2) catch cancel.Stopped.TIMED_OUT default -1 catch default -2) == -1
+    assert (try RecvUntil(c, tok2) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
 }
 
 # Close: what was buffered before it is still received, in order, then Recv fails with CLOSED - again on every call
@@ -409,8 +409,8 @@ test "a closed channel gives what it holds, then fails with CLOSED" {
     sum := 0
     for v in c { sum += v }                  # the rest, then the loop ends
     assert sum == 3
-    assert (try Recv(c) catch Error.CLOSED default -7) == -7
-    assert (try RecvUntil(c, tok) catch Error.CLOSED default -8 catch cancel.Stopped default -9) == -8
+    assert (try Recv(c) catch Error.Closed default -7) == -7
+    assert (try RecvUntil(c, tok) catch Error.Closed default -8 catch cancel.Stopped default -9) == -8
 }
 
 # "for v in c" ends at the close: a producer sends and closes, the consumer walks the channel - buffered and rendezvous
@@ -460,7 +460,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
 
 fn waitClosed(c mut Chan<I32>&, tok cancel.Token&, seen mut sumBox&, got mut sumBox&) {
     for {
-        try RecvUntil(c, tok) catch Error.CLOSED { break } catch cancel.Stopped { return }
+        try RecvUntil(c, tok) catch Error.Closed { break } catch cancel.Stopped { return }
         seen.v.AtomicAdd(1)
     }
     got.v = 1
@@ -508,18 +508,18 @@ type SendOf<T> struct(c mut Chan<T>&, v T) {
 # what a case Select is not given stands for: never ready, of a value no program can hold
 type unused enum { }
 type idle struct() { }
-fn (i mut idle&) TryNow() unused ? Exhausted { error Exhausted.END }
+fn (i mut idle&) TryNow() unused ? Exhausted { error Exhausted.End }
 fn (i idle&) Due() I64 { return 0 }
 
-# the oldest value, without waiting: Exhausted while the channel is empty and open, Error.CLOSED once it is closed and
+# the oldest value, without waiting: Exhausted while the channel is empty and open, Error.Closed once it is closed and
 # drained
 fn (c mut Chan<T>&) TryNow() T ? Error, Exhausted {
     pthread.pthread_mutex_lock(c.lock)
     if c.count == 0 {
         closed := c.closed
         pthread.pthread_mutex_unlock(c.lock)
-        if closed { error Error.CLOSED }
-        error Exhausted.END
+        if closed { error Error.Closed }
+        error Exhausted.End
     }
     v := oldest(c)
     pthread.pthread_mutex_unlock(c.lock)
@@ -528,14 +528,14 @@ fn (c mut Chan<T>&) TryNow() T ? Error, Exhausted {
 
 fn (c Chan<T>&) Due() I64 { return 0 }
 
-# the send, without waiting for room: Exhausted while the channel is full, Error.CLOSED once it is closed
+# the send, without waiting for room: Exhausted while the channel is full, Error.Closed once it is closed
 fn (s mut SendOf<T>&) TryNow() Sent ? Error, Exhausted {
     c := s.c
     pthread.pthread_mutex_lock(c.lock)
     try sendOpen(c)
     if c.count == c.size or (c.rendezvous and c.waiting == 0) {
         pthread.pthread_mutex_unlock(c.lock)
-        error Exhausted.END
+        error Exhausted.End
     }
     ticket := place(c, s.v)
     for c.rendezvous and c.taken <= ticket and not c.closed {
@@ -553,7 +553,7 @@ fn (s SendOf<T>&) Due() I64 { return 0 }
 
 # the first of the cases ready, in the order given, taken - waiting until one is: a received value, a send done, a
 # timer's reading, as the Ready case of its position. Two to four cases; one left off is never ready. Fails with what a
-# case fails with (Error.CLOSED: a channel received from or sent on is closed). No case is given priority but by its
+# case fails with (Error.Closed: a channel received from or sent on is closed). No case is given priority but by its
 # position; a wait polls - holding no lock - backing off from a spin to a sleep of a millisecond at most, and wakes for
 # the earliest timer it has
 fn Select<A, B, C, D, I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&
@@ -704,6 +704,6 @@ test Select "fails with CLOSED once a channel it receives from is closed and dra
     b := Chan<I64>(1)
     Init(b)
     Close(a)
-    try Select(a, b) catch Error.CLOSED { return }
+    try Select(a, b) catch Error.Closed { return }
     unreachable
 }

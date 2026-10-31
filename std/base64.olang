@@ -1,11 +1,11 @@
 # base64 - bytes as text in 64 characters, as RFC 4648 writes them: Encode/Decode with the standard alphabet
 # ("A-Z a-z 0-9 + /") and '=' padding to a multiple of four, EncodeURL/DecodeURL with the URL- and file-name-safe one
 # ("- _" for "+ /") and no padding, as JWTs and URLs carry it. Decoding is strict: a character outside the alphabet, a
-# missing or misplaced '=', or bits left over that encoding would not have written, fail with Error.INVALID. Imported
+# missing or misplaced '=', or bits left over that encoding would not have written, fail with Error.Invalid. Imported
 # with `import "std/base64"`; text goes in as its bytes.
 
 type Error error {
-    INVALID
+    Invalid
 }
 
 standard String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -51,21 +51,21 @@ fn valueOf(c Char, url Bool) I64 {
     return -1
 }
 
-fn decodeWith(t String&, url Bool) Array<U8> ? Error.INVALID {
+fn decodeWith(t String&, url Bool) Array<U8> ? Error.Invalid {
     n := t.Len()
     if not url {
-        if n % 4 != 0 { error Error.INVALID }
+        if n % 4 != 0 { error Error.Invalid }
         if n > 0 and t[n - 1] == '=': n--
         if n > 0 and t[n - 1] == '=': n--
     }
-    if n % 4 == 1 { error Error.INVALID }
+    if n % 4 == 1 { error Error.Invalid }
     out := Array<U8>(n / 4 * 3 + (n % 4 - 1 if n % 4 > 0 else 0))
     o I64 = 0
     acc U32 = 0
     bits I64 = 0
     for i in range n {
         v := valueOf(t[i], url)
-        if v < 0 { error Error.INVALID }
+        if v < 0 { error Error.Invalid }
         acc = (acc << 6) | U32(v)
         bits += 6
         if bits >= 8 {
@@ -74,7 +74,7 @@ fn decodeWith(t String&, url Bool) Array<U8> ? Error.INVALID {
             o++
         }
     }
-    if (acc & ((U32(1) << U32(bits)) - 1)) != 0 { error Error.INVALID }    # bits encoding leaves zero
+    if (acc & ((U32(1) << U32(bits)) - 1)) != 0 { error Error.Invalid }    # bits encoding leaves zero
     return out
 }
 
@@ -82,13 +82,13 @@ fn decodeWith(t String&, url Bool) Array<U8> ? Error.INVALID {
 fn Encode(data Array<U8>&) String { return encodeWith(data, standard, true) }
 
 # what Encode wrote, back as bytes - failing with INVALID for anything else
-fn Decode(t String&) Array<U8> ? Error.INVALID { return try decodeWith(t, false) }
+fn Decode(t String&) Array<U8> ? Error.Invalid { return try decodeWith(t, false) }
 
 # data in the URL-safe alphabet, with no padding
 fn EncodeURL(data Array<U8>&) String { return encodeWith(data, urlSafe, false) }
 
 # what EncodeURL wrote, back as bytes - failing with INVALID for anything else ('=' included)
-fn DecodeURL(t String&) Array<U8> ? Error.INVALID { return try decodeWith(t, true) }
+fn DecodeURL(t String&) Array<U8> ? Error.Invalid { return try decodeWith(t, true) }
 
 if TestBuild {
 
@@ -112,11 +112,11 @@ test "every byte round-trips, in both alphabets" {
 
 test "decoding is strict" {
     for bad in String&["Zg", "Zg=", "Z===", "Zh==", "Zm9v!", "Zm=v", "Zg==Zg=="] {
-        try Decode(bad) catch Error.INVALID { continue }
+        try Decode(bad) catch Error.Invalid { continue }
         unreachable
     }
     for bad in String&["Zg==", "Z", "+/8", "Zh"] {
-        try DecodeURL(bad) catch Error.INVALID { continue }
+        try DecodeURL(bad) catch Error.Invalid { continue }
         unreachable
     }
 }

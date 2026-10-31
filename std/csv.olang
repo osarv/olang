@@ -29,12 +29,12 @@
 
 # why a text is not CSV
 type Error error {
-    BARE_QUOTE          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
-    TEXT_AFTER_QUOTE    # something other than a separator or a line break after a field's closing quote: "a"b
-    BAD_SEPARATOR       # a separator that is a quote or a line break, which could never be told apart from the text
-    UNCLOSED_QUOTE      # the text ends inside a quoted field
-    NO_COLUMN           # Decode: the header names no column for a parameter with no default
-    BAD_VALUE           # Decode: a field that is no value of its column's type (a number, a Bool, a Char)
+    BareQuote          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
+    TextAfterQuote    # something other than a separator or a line break after a field's closing quote: "a"b
+    BadSeparator       # a separator that is a quote or a line break, which could never be told apart from the text
+    UnclosedQuote      # the text ends inside a quoted field
+    NoColumn           # Decode: the header names no column for a parameter with no default
+    BadValue           # Decode: a field that is no value of its column's type (a number, a Bool, a Char)
 }
 
 # a text's records, one at a time: "for row in try csv.Rows(text) { ... } catch csv.Error { ... }". Each is an
@@ -57,10 +57,10 @@ type Rows struct(of String&, sep Char = ',') {
 # the next record's fields - failing with Exhausted when the text has no more, and with Error when the next one is
 # not CSV, the reader then staying where it was
 fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
-    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error Error.BAD_SEPARATOR }
+    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error Error.BadSeparator }
     t := r.text
     n I64 = t.Len()
-    if r.at >= n { error Exhausted.END }
+    if r.at >= n { error Exhausted.End }
     r.Line = r.next
     count I64 = 1                    # first the fields are counted, and the record checked, so the row is made once
     i I64 = try fieldEnd(t, r.at, r.sep)
@@ -103,7 +103,7 @@ fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
     if i < n and t[i] == '"' {
         j I64 = i + 1
         for {
-            if j >= n { error Error.UNCLOSED_QUOTE }
+            if j >= n { error Error.UnclosedQuote }
             if t[j] == '"' {
                 if j + 1 < n and t[j + 1] == '"' {
                     j += 2
@@ -115,13 +115,13 @@ fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
         }
         j++                          # past the closing quote: a separator, a line break or the end must follow
         if j < n and t[j] != sep and t[j] != '\n' and not (t[j] == '\r' and (j + 1 == n or t[j + 1] == '\n')) {
-            error Error.TEXT_AFTER_QUOTE
+            error Error.TextAfterQuote
         }
         return j
     }
     j I64 = i
     for j < n and t[j] != sep and t[j] != '\n' {
-        if t[j] == '"' { error Error.BARE_QUOTE }
+        if t[j] == '"' { error Error.BareQuote }
         j++
     }
     return j
@@ -145,7 +145,7 @@ fn unquote(inner String&, pairs I64) String {
 # Record(String&["a", "b c", "say \"hi\""]) is a,b c,"say ""hi"""\n. No fields at all is "\n", which reads back as
 # one empty field - CSV has no record of none. New text, built at its length once, where its result is put
 fn Record(fields Array<String&>&, sep Char = ',') String ? Error {
-    if sep == '"' or sep == '\n' or sep == '\r' { error Error.BAD_SEPARATOR }
+    if sep == '"' or sep == '\n' or sep == '\r' { error Error.BadSeparator }
     n I64 = fields.Len() if fields.Len() > 0 else 1    # the separators and the line break
     for f in fields {
         n += f.Len()
@@ -271,7 +271,7 @@ fn argument<P>(header Array<String&>&, row Array<String&>&, p P) P.Type ? Error 
         }
         if at < 0 or at >= row.Len() {
             if p.HasDefault { return p.Default }
-            error Error.NO_COLUMN
+            error Error.NoColumn
         }
         if P.Type.Kind == TypeKind.Reference {
             # text read as new text and moved where the argument lands (O26a), as json's member does
@@ -290,18 +290,18 @@ fn value<V>(f String&) V ? Error {
         case Bool {
             if f == "true" { return true }
             if f == "false" { return false }
-            error Error.BAD_VALUE
+            error Error.BadValue
         }
         case Char {
-            if f.Len() != 1 { error Error.BAD_VALUE }
+            if f.Len() != 1 { error Error.BadValue }
             return f[0]
         }
         case _ {
             if V.Kind == TypeKind.Integer {
-                return V(try f.ParseAs<V.Base>() catch ParseError { error Error.BAD_VALUE })
+                return V(try f.ParseAs<V.Base>() catch ParseError { error Error.BadValue })
             } else {
                 assert V.Kind == TypeKind.Float, "a csv column is text, a Char, a Bool or a number"
-                return V(V.Base(try f.ParseFloat() catch ParseError { error Error.BAD_VALUE }))
+                return V(V.Base(try f.ParseFloat() catch ParseError { error Error.BadValue }))
             }
         }
     }
@@ -325,13 +325,13 @@ fn show(text String&, sep Char = ',') String& {
             b.PushChar(']')
         }
         b.PushChar('|')
-    } catch Error.BARE_QUOTE {
+    } catch Error.BareQuote {
         return "bare"
-    } catch Error.TEXT_AFTER_QUOTE {
+    } catch Error.TextAfterQuote {
         return "after"
-    } catch Error.UNCLOSED_QUOTE {
+    } catch Error.UnclosedQuote {
         return "open"
-    } catch Error.BAD_SEPARATOR {
+    } catch Error.BadSeparator {
         return "separator"
     }
     return b.ToString()
@@ -368,7 +368,7 @@ test "Rows reports what is not CSV, and where" {
     rows := Rows("h,i\n\"x\ny\",1\nz,2\nbad\"\n")
     n I64 = 0
     for {
-        row := try rows.Next() catch Exhausted { break } catch Error.BARE_QUOTE {
+        row := try rows.Next() catch Exhausted { break } catch Error.BareQuote {
             assert rows.Line == 5 and n == 3
             n = -1
             break
@@ -433,8 +433,8 @@ test Decode "records read as structs by their header's names, written back by En
     assert (try RecordOf(xs[1])) == "\"a, b\",0.5,1,true\n"
     assert (try Encode(xs.View())) == "Name,price,Count,Fresh\nink,2.25,1,false\n\"a, b\",0.5,1,true\n"
     bad := ""
-    try Decode<item>("price,Name\nlots,ink\n") catch Error.BAD_VALUE { bad = "value" }
-    try Decode<item>("Name\nink\n") catch Error.NO_COLUMN { bad = $bad " column" }
+    try Decode<item>("price,Name\nlots,ink\n") catch Error.BadValue { bad = "value" }
+    try Decode<item>("Name\nink\n") catch Error.NoColumn { bad = $bad " column" }
     assert bad == "value column"
     assert (try Decode<item>("")).Len() == 0
 }

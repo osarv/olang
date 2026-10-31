@@ -1,11 +1,11 @@
 # check: fail error[G19]:
 # QAH: "Iterator<I64>" fails with nothing but Exhausted - an iterator whose Next fails with more does not meet it
-type Bad error { NEG }
+type Bad error { Neg }
 
 type R struct(n I64) { n }
 
 fn (r mut R&) Next() I64 ? Bad, Exhausted {
-    if r.n == 0 { error Exhausted.END }
+    if r.n == 0 { error Exhausted.End }
     r.n--
     return r.n
 }

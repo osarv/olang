@@ -14,10 +14,10 @@ import "std/os"
 import "std/io"
 
 type FetchError error {
-    BAD_NAME        # M23a: a part of the path git and the cache cannot be trusted with
-    NOT_A_COMMIT    # M23b: the lock line names no commit
-    FAILED          # M23a: git could not fetch it
-    LOCKED_FAILED   # M23b: the commit the lock names could not be fetched
+    BadName        # M23a: a part of the path git and the cache cannot be trusted with
+    NotACommit    # M23b: the lock line names no commit
+    Failed          # M23a: git could not fetch it
+    LockedFailed   # M23b: the commit the lock names could not be fetched
 }
 
 # the remote repositories of one compilation: the lock file it reads and writes, whether -u is given, and what it
@@ -80,7 +80,7 @@ fn (f mut Fetcher&) load() {
 
 # Locked's miss: the lock file has no line for the key
 type unlocked error {
-    KEY
+    Key
 }
 
 # the commit the lock file names for key, or a miss
@@ -89,7 +89,7 @@ fn (f mut Fetcher&) Locked(key String&) String&f ? {
     for i in range f.keys.Len() {
         if f.keys[i] == key { return f.commits[i] }
     }
-    error unlocked.KEY
+    error unlocked.Key
 }
 
 # records key at commit and writes the whole file back, sorted, so it reads the same however it was built up - a line
@@ -167,7 +167,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     repo := repoAt[:at]
     ref := repoAt[at + 1:] if at < repoAt.Len() else repoAt[repoAt.Len():]
     if not NamePart(host) or not NamePart(owner) or not NamePart(repo) or (at < repoAt.Len() and not NamePart(ref)) {
-        error FetchError.BAD_NAME
+        error FetchError.BadName
     }
     cache := f.Cache
     key := $host "/" $owner "/" $repoAt
@@ -183,13 +183,13 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         wasLocked = true
         hasLine = false
     }
-    if hasLine and not IsCommit(locked) { error FetchError.NOT_A_COMMIT }
+    if hasLine and not IsCommit(locked) { error FetchError.NotACommit }
     if hasLine {
         dir := $parent "/" $locked
         if os.IsDir(dir) { return dir }
     }
-    try os.MkDirAll(parent) catch os.Error { error FetchError.FAILED }
-    tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.FAILED }
+    try os.MkDirAll(parent) catch os.Error { error FetchError.Failed }
+    tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.Failed }
     if hasLine {
         f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
         dir := $parent "/" $locked
@@ -205,12 +205,12 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         }
         if head(tmp) != locked {
             try os.RemoveAll(tmp) catch os.Error { }
-            error FetchError.LOCKED_FAILED
+            error FetchError.LockedFailed
         }
         if not os.IsDir(dir) {
             try os.Rename(tmp, dir) catch os.Error {
                 try os.RemoveAll(tmp) catch os.Error { }
-                error FetchError.LOCKED_FAILED
+                error FetchError.LockedFailed
             }
         }
         try os.RemoveAll(tmp) catch os.Error { }   # another build placed it first
@@ -223,7 +223,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     if git(String&["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
     if h == "" {
         try os.RemoveAll(tmp) catch os.Error { }
-        error FetchError.FAILED
+        error FetchError.Failed
     }
     dir := $parent "/" $h
     if os.IsDir(dir) {
@@ -231,7 +231,7 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
     } else {
         try os.Rename(tmp, dir) catch os.Error {
             try os.RemoveAll(tmp) catch os.Error { }
-            error FetchError.FAILED
+            error FetchError.Failed
         }
     }
     f.lock(key, h)
@@ -317,11 +317,11 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     try os.WriteFile(lockPath, "example.com/me/tools nonsense\n") catch os.Error { unreachable }
     v := Fetcher(lockPath, cache, "file://" $base "/", false, true)
     bad := 0
-    try v.Fetch("example.com", "me", "tools") catch FetchError.NOT_A_COMMIT { bad++ }
+    try v.Fetch("example.com", "me", "tools") catch FetchError.NotACommit { bad++ }
         catch { unreachable }
-    try v.Fetch("example.com", "me", "x'y") catch FetchError.BAD_NAME { bad++ }
+    try v.Fetch("example.com", "me", "x'y") catch FetchError.BadName { bad++ }
         catch { unreachable }
-    try v.Fetch("example.com", "me", "absent") catch FetchError.FAILED { bad++ }
+    try v.Fetch("example.com", "me", "absent") catch FetchError.Failed { bad++ }
         catch { unreachable }
     assert bad == 3
 }

@@ -2,9 +2,9 @@
 # D13d: a catch clause runs from where its try began - nothing the try's operand assigned is assigned in it - so a
 # clause reading the target reads it unassigned
 type N struct(v I64) { v }
-type E error { BAD }
+type E error { Bad }
 fn g(k I64) N& ? E {
-    if k < 0 { error E.BAD }
+    if k < 0 { error E.Bad }
     return N(k)
 }
 fn a(k I64) I64 {

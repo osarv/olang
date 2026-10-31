@@ -4,14 +4,14 @@ import "std/os"
 import "std/io"
 
 type Bad error {
-    OUTPUT
+    Output
 }
 
 # B5a: the command line is there before any global is initialized
 Count := os.Args().Len()
 
 fn say(text String&) ? Bad {
-    try io.Write(io.Stdout, $text "\n") catch { error Bad.OUTPUT }
+    try io.Write(io.Stdout, $text "\n") catch { error Bad.Output }
 }
 
 fn main() ? Bad {
@@ -32,7 +32,7 @@ fn main() ? Bad {
         try say("in work/a: " $name)
     }
     try say("read back: " $(try os.ReadFile("work/a/g.txt") catch default "?"))
-    try os.Remove("work/a") catch os.Error.NOT_EMPTY { try say("work/a is not empty") } catch { }
-    try os.Stat("work/none") catch os.Error.NOT_FOUND { try say("work/none is not found") } catch { }
+    try os.Remove("work/a") catch os.Error.NotEmpty { try say("work/a is not empty") } catch { }
+    try os.Stat("work/none") catch os.Error.NotFound { try say("work/none is not found") } catch { }
     try say("real ends right: " $(try os.RealPath("work/a/../a/g.txt") catch default "").EndsWith("/work/a/g.txt"))
 }

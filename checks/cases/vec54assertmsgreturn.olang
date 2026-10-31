@@ -2,7 +2,7 @@
 # vec4 (f1e_assert_message_return): the review's repro
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 fn churn() I64 {
     t := 0
@@ -15,11 +15,11 @@ fn churn() I64 {
 # F1 evasion: a return hidden in an assert message's catch block
 fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
-    if k < 5 { error Stop.HERE }
+    if k < 5 { error Stop.Here }
     return k
 }
 fn h(k I64) String ? {
-    if k < 5 { error Stop.HERE }
+    if k < 5 { error Stop.Here }
     return "ok"
 }
 fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {

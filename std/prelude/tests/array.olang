@@ -170,10 +170,10 @@ test "Chunks cuts an array into consecutive pieces, the last holding what is lef
 test "a size computed while running is a ChunkSize, refused below one" {
     n I64 = 0
     failed := false
-    z := try ChunkSize(n) catch ArrayError.BAD_CHUNK { failed = true } default ChunkSize(1)
+    z := try ChunkSize(n) catch ArrayError.BadChunk { failed = true } default ChunkSize(1)
     assert failed and I64(z) == 1
     n = -3
-    assert (try ChunkSize(n) catch ArrayError.BAD_CHUNK default ChunkSize(7)) == ChunkSize(7)
+    assert (try ChunkSize(n) catch ArrayError.BadChunk default ChunkSize(7)) == ChunkSize(7)
     n = 3
     a := Array<I64>(7)
     assert a.Chunks(try ChunkSize(n) catch { unreachable }).Len() == 3

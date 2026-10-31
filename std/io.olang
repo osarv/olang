@@ -6,8 +6,8 @@ import unistd "unistd.h"
 import fcntl "fcntl.h"
 
 type Error error {
-    FAILED
-    PARTIAL
+    Failed
+    Partial
 }
 
 # thin wrappers so the tests can open a real descriptor; the raw calls take a NUL-terminated path, which
@@ -39,11 +39,11 @@ fn Write(fd I32, data Array<U8>&) ? Error {
         tail := data[sent:]
         n I64 = unistd.write(fd, tail, U64(tail.Len()))
         if n < 0 {
-            error Error.FAILED
+            error Error.Failed
         }
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
         if n == 0 {
-            error Error.PARTIAL
+            error Error.Partial
         }
         sent = sent + n
     } for sent < total
@@ -57,7 +57,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
 fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? Error {
     n I64 = unistd.read(fd, buf, U64(buf.Len()))
     if n < 0 {
-        error Error.FAILED
+        error Error.Failed
     }
     return buf[:n]
 }
@@ -129,7 +129,7 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 # Each line Next gives is new text, built where its caller puts it (O18a) and nowhere else, so it stays as it is
 # whatever is read after it: in "for line in", the loop body's own scope, reclaimed as each turn ends - to keep one
 # longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope; a line, or anything, put
-# into a scope that outlives the loop stays there until that scope closes, O8c). Next fails with Error.FAILED when
+# into a scope that outlives the loop stays there until that scope closes, O8c). Next fails with Error.Failed when
 # the read under it does, and with Exhausted when the file has no more lines - and either way calling it again reads
 # again, so the end of the file is never remembered: a file another program is still writing is followed by calling
 # Next again after a wait, as "tail -f" does:
@@ -169,9 +169,9 @@ fn (l mut Lines&) Next() String& ? Error, Exhausted {
             for k in range l.end { l.buf[k] = old[k] }
         }
         got := unistd.read(l.fd, l.buf[l.end:], U64(l.buf.Len() - l.end))
-        if got < 0 { error Error.FAILED }
+        if got < 0 { error Error.Failed }
         if got == 0 {                # the end of the file, as it is now: what is left is its last line
-            if l.start == l.end { error Exhausted.END }
+            if l.start == l.end { error Exhausted.End }
             first := l.start
             l.start = l.end
             return l.line(first, l.end)
@@ -200,7 +200,7 @@ fn (l Lines&) line(first I64, last I64) String& {
 # left when Flush is called; something larger than the buffer goes straight through. So nothing reaches the
 # descriptor until a Flush or a full buffer - what a program prints with Println meanwhile comes before it.
 # Writing never fails where it is written: a write the system refuses is remembered, everything after it is dropped,
-# and Flush fails with it - Error.FAILED, or PARTIAL for a descriptor taking nothing more - then and every time after,
+# and Flush fails with it - Error.Failed, or PARTIAL for a descriptor taking nothing more - then and every time after,
 # since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the first failure the same way).
 # Flush where the output is complete, so a failure is the caller's to handle; to have it written however a function is
 # left, an error included, defer it - "defer out.Flush()!", deferred code having no caller to pass a
@@ -240,8 +240,8 @@ fn (w mut Writer&) WriteChar(c Char) {
 # what waits in the buffer, written now - failing with the first write the system refused, now or before
 fn (w mut Writer&) Flush() ? Error {
     w.drain()
-    if w.broken == 1 { error Error.FAILED }
-    if w.broken == 2 { error Error.PARTIAL }
+    if w.broken == 1 { error Error.Failed }
+    if w.broken == 2 { error Error.Partial }
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
@@ -251,7 +251,7 @@ fn (w mut Writer&) drain() {
 }
 
 fn (w mut Writer&) send(t Array<U8>&) {
-    try Write(w.fd, t) catch Error.FAILED { w.broken = 1 } catch Error.PARTIAL { w.broken = 2 }
+    try Write(w.fd, t) catch Error.Failed { w.broken = 1 } catch Error.Partial { w.broken = 2 }
 }
 
 test "Write reports a failure from the underlying syscall" {
@@ -492,7 +492,7 @@ fn failedFlushes(fd I32) I64 {
     w.WriteChar('!')
     n I64 = 0
     for _ in range 3 {
-        try w.Flush() catch Error.FAILED { n++ } catch Error.PARTIAL { }
+        try w.Flush() catch Error.Failed { n++ } catch Error.Partial { }
     }
     return n
 }
@@ -511,7 +511,7 @@ fn reportTo(fd I32, n I64) ? Error {
     w := Writer(fd)
     defer w.Flush()!
     for i in range n {
-        if i == 3 { error Error.PARTIAL }
+        if i == 3 { error Error.Partial }
         w.Write("line " $i "\n")
     }
 }
@@ -521,7 +521,7 @@ test "a deferred Flush writes what was written however the function is left" {
     assert unistd.pipe(fds) == 0
     try reportTo(fds[1], 2)
     left := false
-    try reportTo(fds[1], 9) catch Error.PARTIAL { left = true } catch Error { }
+    try reportTo(fds[1], 9) catch Error.Partial { left = true } catch Error { }
     assert left
     unistd.close(fds[1])
     got := drained(fds[0])

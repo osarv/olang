@@ -198,13 +198,13 @@ type report struct() {
 }
 
 type Failed error {
-    CHECK
+    Check
 }
 
 # ends the scenario as failed, with what went wrong and what the compiler said in dir
 fn (r mut report&) failed(what String&, dir String&) ? Failed {
     r.text = failure(what, dir)
-    error Failed.CHECK
+    error Failed.Check
 }
 
 # ends the scenario as failed - as failed() does - unless ok
@@ -472,7 +472,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "testends" { try testends(r) }
         case _ {
             r.text = "check FAIL: no scenario is named " $name "\n"
-            error Failed.CHECK
+            error Failed.Check
         }
     }
 }
@@ -954,10 +954,10 @@ fn interp(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/interp/* " $os.Quote(dir))
     # built -debug, so the error escaping main prints its trace as -i does (S18d)
     try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1") == 0, "interp build", dir)
-    try r.expect(sh(dir, "./build/prog.debug > want.txt 2>&1") == 1, "prog did not end in Oops.BAD", dir)   # main ends in Oops.BAD
-    try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.BAD", dir)
+    try r.expect(sh(dir, "./build/prog.debug > want.txt 2>&1") == 1, "prog did not end in Oops.Bad", dir)   # main ends in Oops.Bad
+    try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 1, "-i prog.olang did not end in Oops.Bad", dir)
     try r.expect(sh(dir, "cmp -s want.txt out.txt") == 0, "-i printed what the built program did not", dir)
-    try r.expect(outOf(dir).Contains("unhandled error: Oops.BAD") and outOf(dir).Contains("read written 10 -1")
+    try r.expect(outOf(dir).Contains("unhandled error: Oops.Bad") and outOf(dir).Contains("read written 10 -1")
                  "-i prog.olang output", dir)
     # B3e: what a build refuses is not run - section 8's errors reported as a build reports them
     try r.expect(sh(dir, "\"$OLANG\" interpret refused.olang > out.txt 2>&1") == 1, "-i refused.olang ran", dir)
@@ -1043,7 +1043,7 @@ fn printing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
     try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
-    try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.FAILED\n"), "print to a closed output: the error", dir)
+    try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.Failed\n"), "print to a closed output: the error", dir)
 }
 
 # B19, B19a: a test fuzzed by libFuzzer finds the planted bug within seconds and saves its input beside the file, which
@@ -1135,7 +1135,7 @@ fn assertloc(r mut report&) ? Failed {
     # checked: its length is known while compiling, T7d)
     try r.expect(sh(dir, "\"$OLANG\" build guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
     wants := String&["guaranteed.olang:15: slice bounds out of range\n", "guaranteed.olang:16: array length out of range\n"
-                     "guaranteed.olang:19: CaseError.WRONG_CASE\n", "guaranteed.olang:21: null reached\n"
+                     "guaranteed.olang:19: CaseError.WrongCase\n", "guaranteed.olang:21: null reached\n"
                      "guaranteed.olang:17: lane lengths differ\n"]
     args := String&["", " a", " a b", " a b c", " a b c d e"]
     for i, w in wants {
@@ -1692,7 +1692,7 @@ fn agree(r mut report&) ? Failed {
                  "r17 did not end in its error, built and interpreted", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug r17.olang > out.txt 2>&1") == 0 and sh(dir, "./build/r17.debug > d.txt 2>&1") == 1
                  "r17 -d did not end in its error", dir)
-    try r.expect(sh(dir, ("printf 'before\\nunhandled error: Err.LOUD\\n(build with -debug to see where it came from)\\n' | cmp -s - b.txt"
+    try r.expect(sh(dir, ("printf 'before\\nunhandled error: Err.Loud\\n(build with -debug to see where it came from)\\n' | cmp -s - b.txt"
                           " && cmp -s d.txt i.txt && grep -q '^r17.olang:9: raised here$' d.txt")) == 0, "r17 output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build share.olang > out.txt 2>&1 && ./build/share") == 0, "share", dir)
     ll String& = "build/share.main.ll"
@@ -2138,10 +2138,10 @@ fn crashes(r mut report&) ? Failed {
     ni := crashRun(dir, $os.Quote(compiler) " interpret nullpeek.olang")
     try r.expect(ni.Status == 134 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.StartsWith("nullpeek.olang:22: null reached")
                  "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
-    # std/chan: a Send on a closed channel fails with chan.Error.CLOSED, here escaping main
+    # std/chan: a Send on a closed channel fails with chan.Error.Closed, here escaping main
     try r.expect(sh(dir, "\"$OLANG\" build chanclosed.olang > out.txt 2>&1") == 0, "chanclosed did not build", dir)
     cc := crashRun(dir, "./build/chanclosed")
-    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: chan.Error.CLOSED")
+    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: chan.Error.Closed")
                  "chanclosed: status " $cc.Status ", " $cc.Stdout $cc.Stderr, dir)
     # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
     # so no sanitizer runtime is needed to check it

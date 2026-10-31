@@ -1,5 +1,5 @@
 # what a call fails with when an argument breaks its function's contract (D17): a requirement in the block after the
 # parameter list false on entry. Part of the prelude, since any function with value conditions can fail with it
 type ArgumentError error {
-    INVALID
+    Invalid
 }

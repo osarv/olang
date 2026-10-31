@@ -1,5 +1,5 @@
 # contracts_migrate - a contract moved to right after the parameter list, its guarantees gone (D17, 2026-10-25, the
-# user's call: requirements checked on entry, failing with ArgumentError.INVALID). From the text alone:
+# user's call: requirements checked on entry, failing with ArgumentError.Invalid). From the text alone:
 #
 #     fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= p <= 100] {    ->  fn percent(part I64, whole I64) [whole > 0] I64 {
 #     type Ring struct(cap I64) ? E [cap > 0] { cap }                       ->  type Ring struct(cap I64) [cap > 0] ? E { cap }

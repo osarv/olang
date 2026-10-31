@@ -755,14 +755,14 @@ fn (x mut Exec&) unrolled(a typecheck.UnrollAsk&) Unrolled {
 
 # an evaluation that gave no value - what stopped it in the machine's Stopped
 type Unevaluated error {
-    STOPPED
+    Stopped
 }
 
 # a body giving an integer evaluated
 fn (x mut Exec&) intOf(body I64, ty types.TypeId) I64 ? Unevaluated {
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
-    if x.M.Eval(k, Array<I64>(0)) != eval.Stop.None: error Unevaluated.STOPPED
+    if x.M.Eval(k, Array<I64>(0)) != eval.Stop.None: error Unevaluated.Stopped
     return x.M.Int(x.M.Result, ty)
 }
 
@@ -858,7 +858,7 @@ fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
 # runs nothing at startup (std/time's counters). Any other is set at startup, as it was, and says nothing here
 fn (x mut Exec&) bakeMutable(m I64, n source.NameId) eval.Image ? eval.NotBaked {
     img := try x.M.Image(m, n, true)
-    if img.Blobs.Len() != 1 or img.Blobs[0].At.Len() != 0 { error eval.NotBaked.REFUSED }
+    if img.Blobs.Len() != 1 or img.Blobs[0].At.Len() != 0 { error eval.NotBaked.Refused }
     img.Mutable = true
     return img
 }
@@ -1142,12 +1142,8 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     if i < 0 or i >= errs.Len() { return "error " $code }
     et := x.P.T.ErrOf(errs[i])
     dl := x.P.T.DeclOf(et)
-    ws := x.P.ErrorWords(dl)
-    w := code & 0xFFFF
-    word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
     dm := x.P.T.DeclModule(dl)
-    name := x.P.T.Names.Text(x.P.T.DeclName(dl))
-    return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $name "." $word   # B5
+    return $load.ErrQualifier(x.P.L.Mods[dm].Identity, dm == x.P.L.Root) $x.P.ErrorWordName(dl, code & 0xFFFF)   # B5
 }
 
 fn say(t String&) { try io.Print(t) catch io.Error { } }

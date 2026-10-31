@@ -142,7 +142,7 @@ fn Join(a String&, b String&, c String& = "", d String& = "", e String& = "", f 
 
 # what Rel fails with: no relative path can be known from the text alone
 type Error error {
-    UNRELATED
+    Unrelated
 }
 
 # the path that names "target" when joined to "base" (Join(base, Rel(base, target)) cleans to Clean(target)), by
@@ -154,7 +154,7 @@ fn Rel(base String&, target String&) String ? Error {
     t := Clean(target)
     if t == b { return "." }
     if b == "." { b = b[:0] }
-    if IsAbs(b) != IsAbs(t) { error Error.UNRELATED }
+    if IsAbs(b) != IsAbs(t) { error Error.Unrelated }
     bl := b.Len()
     tl := t.Len()
     b0 I64 = 0
@@ -170,7 +170,7 @@ fn Rel(base String&, target String&) String ? Error {
         b0 = bi
         t0 = ti
     }
-    if b[b0:bi] == ".." { error Error.UNRELATED }
+    if b[b0:bi] == ".." { error Error.Unrelated }
     if b0 == bl { return t[t0:] }
     ups I64 = 1                                  # one ".." for each element of base left
     for i in range b0, bl {

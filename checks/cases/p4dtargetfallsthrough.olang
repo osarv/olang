@@ -2,10 +2,10 @@
 # P4d: a target a failed task leaves unwritten is never read after the join - every clause of the "try join" leaves
 import "std/io"
 type E error {
-    BAD
+    Bad
 }
 fn sq(n I32) I32 ? E {
-    if n < 0 { error E.BAD }
+    if n < 0 { error E.Bad }
     return n * n
 }
 fn main() ? {

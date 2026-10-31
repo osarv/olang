@@ -1,0 +1,307 @@
+# errorcase_rename - every error name is CamelCase (the user's decision, 2026-10-31): an error raised by name is
+# written like a type (`NotFound`), and so are the words an error type declares - `IoError.Full` is `IoError.Full`,
+# `ListError.OUT_OF_RANGE` is `ListError.OutOfRange`. A word written in upper case with underscores becomes its parts
+# joined, each capitalized; a word in any other case (`A`, `Full`, a private `notFound`) is left as it is.
+#
+# The words to rename are read from every error type declared (`type NAME error ... { Words }`) in the files named and,
+# with --std, in the standard library's files - so a program's `io.Error.Failed` is renamed by std's declaration. In
+# every file, wherever it is written - code, comments, strings, Markdown - a declaration's words are renamed, and so is
+# every qualified use: `NAME.WORD`, NAME any error type declaring that word, after an alias or not. A bare word is
+# never renamed outside a declaration: a word is always written qualified. Files are rewritten in place and a count
+# printed; --check writes nothing and the exit status says whether anything would change; running it again changes
+# nothing. It reads .olang, .md, .txt and .want files.
+#
+#     build/olang build tools/errorcase_rename.olang && build/tools_errorcase_rename [--std DIR] [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Count struct() { n I64 = 0 }
+
+# whether a word is written in upper case: a capital, then capitals, digits and underscores, with some letter or
+# underscore after the first - "A" and "X1" are already what they would become
+fn upperWord(w String&) Bool {
+    if w.Len() < 2 or not (w[0] >= 'A' and w[0] <= 'Z') { return false }
+    for c in w {
+        if c >= 'a' and c <= 'z' { return false }
+    }
+    return Camel(w) != w
+}
+
+# an upper-case word as CamelCase: its underscore-separated parts, each a capital and the rest small
+fn Camel(w String&) String {
+    b := StringBuilder()
+    up := true
+    for c in w {
+        if c == '_' {
+            up = true
+            continue
+        }
+        if up: b.PushChar(c.ToUpper()) else: b.PushChar(c.ToLower())
+        up = c.IsDigit()
+    }
+    return b.ToString()
+}
+
+# the words of an error type to rename: by the type's name, each old word to its new spelling
+type Words struct() {
+    byType Map<String&, Map<String&, String&>>
+}
+
+fn (ws mut Words&) add(name String&, word String&) {
+    if not ws.byType.Has(name) { ws.byType.Put($name, Map<String&, String&>()) }
+    m := ws.byType.Get(name)!
+    m.Put($word, Camel(word))
+}
+
+# the identifier starting at i, "" where none does
+fn identAt(t String&, i I64) String&t {
+    if i >= t.Len() or not srcmask.IsIdStart(t[i]) or (i > 0 and srcmask.IsWord(t[i - 1])) { return "" }
+    j := i
+    for j < t.Len() and srcmask.IsWord(t[j]) { j++ }
+    return t[i:j]
+}
+
+# the position after the spaces from i
+fn skipSpaces(t String&, i I64) I64 {
+    j := i
+    for j < t.Len() and (t[j] == ' ' or t[j] == '\t') { j++ }
+    return j
+}
+
+# a declaration "type NAME error ... {" at i: the position of its "{" and NAME, or -1 where none starts there - the
+# braces on the declaration's line
+fn declAt(t String&, i I64) I64, String&t {
+    if identAt(t, i) != "type" { return -1, "" }
+    j := skipSpaces(t, i + 4)
+    name := identAt(t, j)
+    if name.Len() == 0 { return -1, "" }
+    j = skipSpaces(t, j + name.Len())
+    if identAt(t, j) != "error" { return -1, "" }
+    j += 5
+    for j < t.Len() and t[j] != '\n' and t[j] != '{' and t[j] != '}' and t[j] != '"' { j++ }
+    if j >= t.Len() or t[j] != '{' { return -1, "" }
+    return j, name
+}
+
+# the "}" closing the braces at open, or -1
+fn closeAt(t String&, open I64) I64 {
+    for j in range open + 1, t.Len() {
+        if t[j] == '}' { return j }
+        if t[j] == '{' { return -1 }
+    }
+    return -1
+}
+
+# every error type's upper-case words in a text
+fn collect(t String&, ws mut Words&) {
+    i I64 = 0
+    for i < t.Len() {
+        open, name := declAt(t, i)
+        if open < 0 {
+            i++
+            continue
+        }
+        close := closeAt(t, open)
+        if close < 0 {
+            i = open + 1
+            continue
+        }
+        j := open + 1
+        for j < close {
+            w := identAt(t, j)
+            if w.Len() == 0 {
+                j++
+                continue
+            }
+            if upperWord(w) { ws.add(name, w) }
+            j += w.Len()
+        }
+        i = close + 1
+    }
+}
+
+# the text with every declaration's words and every qualified use renamed
+fn rename(t String&, ws Words&, c mut Count&) String {
+    out := StringBuilder()
+    at I64 = 0
+    i I64 = 0
+    inDecl := ""      # the type whose braces i is in, "" outside
+    declEnd I64 = -1
+    for i < t.Len() {
+        if inDecl.Len() > 0 and i >= declEnd { inDecl = "" }
+        if inDecl.Len() == 0 {
+            open, name := declAt(t, i)
+            close := closeAt(t, open) if open >= 0 else -1
+            if close >= 0 {
+                inDecl = name
+                declEnd = close
+            }
+        }
+        w := identAt(t, i)
+        if w.Len() == 0 {
+            i++
+            continue
+        }
+        to := newWord(t, i, w, inDecl, ws)
+        if to.Len() > 0 {
+            out.Push(t[at:i])
+            out.Push(to)
+            at = i + w.Len()
+            c.n++
+        }
+        i += w.Len()
+    }
+    if at == 0 { return $t }
+    out.Push(t[at:])
+    return out.ToString()
+}
+
+# what the word w at i becomes, "" for nothing: a word of the declaration it stands in (owner, "" for none), or one
+# written after "NAME." where NAME's type declares it
+fn newWord(t String&, i I64, w String&, owner String&, ws Words&) String {
+    if not upperWord(w) { return "" }
+    if owner.Len() > 0 and ws.byType.Has(owner) {
+        m := ws.byType.Get(owner)!
+        if m.Has(w) and inBraces(t, i) { return $m.Get(w)! }
+    }
+    if i < 2 or t[i - 1] != '.' { return "" }
+    j := i - 1
+    for j > 0 and srcmask.IsWord(t[j - 1]) { j-- }
+    name := t[j:i - 1]
+    if name.Len() == 0 or not ws.byType.Has(name) { return "" }
+    m := ws.byType.Get(name)!
+    if not m.Has(w) { return "" }
+    return $m.Get(w)!
+}
+
+# whether i stands after a "{" on its declaration's line or a later one, before the "}"
+fn inBraces(t String&, i I64) Bool {
+    j := i - 1
+    for j >= 0 {
+        if t[j] == '{' { return true }
+        if t[j] == '}' { return false }
+        j--
+    }
+    return false
+}
+
+fn wanted(path String&) Bool {
+    return path.EndsWith(".olang") or path.EndsWith(".md") or path.EndsWith(".txt") or path.EndsWith(".want")
+}
+
+# the files under a directory with one of the extensions read, build/ and .git/ left out
+fn walk(dir String&, out mut Vec<String&>&, all Bool) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "build" { continue }
+        p := srcmask.PathJoin(dir, n)
+        if os.IsDir(p) {
+            walk(p, out, all)
+        } else if wanted(p) and (all or p.EndsWith(".olang")) {
+            out.Push($p)
+        }
+    }
+}
+
+fn read(path String&) String {
+    return try srcmask.ReadText(path) catch {
+        srcmask.SayErr("errorcase_rename: cannot read " $path)
+        os.Exit(1)
+    }
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    std := ""
+    paths Vec<String&>
+    args := os.Args()
+    i := 1
+    for i < args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else if a == "--std" and i + 1 < args.Len() {
+            i++
+            std = $args[i]
+        } else {
+            paths.Push($a)
+        }
+        i++
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_errorcase_rename [--std DIR] [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    for p in paths {
+        if os.IsDir(p): walk(p, files, true) else: files.Push($p)
+    }
+    ws := Words()
+    if std.Len() > 0 {
+        decls Vec<String&>
+        walk(std, decls, false)
+        for p in decls { collect(read(p), ws) }
+    }
+    for p in files {
+        if wanted(p): collect(read(p), ws)
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not wanted(path) { continue }
+        src := read(path)
+        out := rename(src, ws, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if check { continue }
+        try os.WriteFile(path, out) catch {
+            srcmask.SayErr("errorcase_rename: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " words")
+    if check and changed > 0 { os.Exit(1) }
+}
+
+# the old spellings are written in pieces, so the tool run over itself changes nothing
+Full := "FU" "LL"
+Range := "OUT_OF" "_RANGE"
+Denied := "DEN" "IED"
+
+test Camel "an upper-case word becomes its parts, each capitalized" {
+    assert Camel(Full) == "Full" and Camel(Range) == "OutOfRange" and Camel("HTTP" "2") == "Http2"
+    assert upperWord(Full) and upperWord(Range) and not upperWord("A") and not upperWord("X1")
+    assert not upperWord("Full") and not upperWord("notFound") and not upperWord("_X")
+}
+
+test rename "a declaration's words and their qualified uses are renamed; a bare word and another type's are not" {
+    src := ("type IoError error { " $Full ", " $Denied " }\nfn f() ? IoError { error IoError." $Full " }\n# io.IoError." $Full
+           " and " $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+    ws := Words()
+    collect(src, ws)
+    n := Count()
+    out := rename(src, ws, n)
+    want := ("type IoError error { Full, Denied }\nfn f() ? IoError { error IoError.Full }\n# io.IoError.Full and "
+             $Full " and Other." $Full "\nx := \"IoError." $Range "\"\n")
+    assert out == want, out
+    assert n.n == 4
+    assert rename(out, ws, n) == out
+}
+
+test rename "a set's own words, words across lines and a declaration in a string" {
+    src := ("type L error os.Error, P { " $Full " }\ntype P error {\n    " $Range "\n    A\n}\nt := \"type Q error { "
+           $Full " }\\nfn f() ? Q { error Q." $Full " }\"\n")
+    ws := Words()
+    collect(src, ws)
+    n := Count()
+    out := rename(src, ws, n)
+    want := ("type L error os.Error, P { Full }\ntype P error {\n    OutOfRange\n    A\n}\nt := \"type Q error { Full"
+             " }\\nfn f() ? Q { error Q.Full }\"\n")
+    assert out == want, out
+}

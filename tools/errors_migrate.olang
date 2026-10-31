@@ -129,7 +129,7 @@ fn inTest(text String&, line I64) Bool {
 fn callExtent(l String&, col I64) I64, I64 ? {
     j := col - 1
     for j < l.Len() and isIdent(l[j]) { j++ }
-    if j >= l.Len() or l[j] != '(' { error Unparsed.CALL }
+    if j >= l.Len() or l[j] != '(' { error Unparsed.Call }
     depth I64 = 0
     k := j
     for k < l.Len() {
@@ -148,7 +148,7 @@ fn callExtent(l String&, col I64) I64, I64 ? {
         }
         k++
     }
-    if k >= l.Len() { error Unparsed.CALL }
+    if k >= l.Len() { error Unparsed.Call }
     start := col - 1
     for start > 0 and l[start - 1] == '.' {
         s := start - 1
@@ -165,7 +165,7 @@ fn callExtent(l String&, col I64) I64, I64 ? {
                 }
                 m--
             }
-            if m < 0 { error Unparsed.CALL }
+            if m < 0 { error Unparsed.Call }
             s = m
         }
         for s > 0 and isIdent(l[s - 1]) { s-- }
@@ -175,8 +175,8 @@ fn callExtent(l String&, col I64) I64, I64 ? {
 }
 
 type Unparsed error {
-    CALL
-    SIGNATURE
+    Call
+    Signature
 }
 
 # a call that can now fail, written "try CALL" - in a test too, where what it lets through fails the test (S16)
@@ -184,7 +184,7 @@ fn tryCall(text String&, line I64, col I64) String ? {
     ls, le := lineSpan(text, line)
     l := text[ls:le]
     a, b := try callExtent(l, col)
-    if b < a { error Unparsed.CALL }
+    if b < a { error Unparsed.Call }
     return splice(text, ls + a, 0, "try ")
 }
 
@@ -200,7 +200,7 @@ fn checkedAt(text String&, line I64, col I64) String ? {
         }
         k--
     }
-    error Unparsed.CALL
+    error Unparsed.Call
 }
 
 # errType added to the error list of the function the line is in - "? errType" written, or "+ errType" after a list
@@ -211,20 +211,20 @@ fn declareError(text String&, line I64, errType String&) String ? {
         l := text[ls:le]
         if l.StartsWith("fn ") or l.StartsWith("type ") {
             code := codeOf(l).TrimEnd()
-            if not code.EndsWith(" {") { error Unparsed.SIGNATURE }
+            if not code.EndsWith(" {") { error Unparsed.Signature }
             at := ls + code.Len() - 2
-            if code.EndsWith(" ? {") { error Unparsed.SIGNATURE }         # inferred: nothing to add
+            if code.EndsWith(" ? {") { error Unparsed.Signature }         # inferred: nothing to add
             q := try code.FindLast(" ? ") catch default -1
             if q < 0 { return splice(text, at, 0, " ?") }                  # no set yet: let it be inferred (R1a)
             for w in code[q + 3:code.Len() - 2].Split(" + ") {
-                if w.Trim() == errType { error Unparsed.SIGNATURE }         # already listed
+                if w.Trim() == errType { error Unparsed.Signature }         # already listed
             }
-            if not text.Contains("error " $errType " {") and not text.Contains("type " $errType " error") { error Unparsed.SIGNATURE }   # another module's: written by hand
+            if not text.Contains("error " $errType " {") and not text.Contains("type " $errType " error") { error Unparsed.Signature }   # another module's: written by hand
             return splice(text, at, 0, " + " $errType)
         }
         n--
     }
-    error Unparsed.SIGNATURE
+    error Unparsed.Signature
 }
 
 # the diagnostics compiling path (with -t, from its own directory) gives

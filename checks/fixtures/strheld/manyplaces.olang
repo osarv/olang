@@ -3,7 +3,7 @@
 # default, tasks and a for condition
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 type Big struct(n I64) {
     n
@@ -31,7 +31,7 @@ type Holder2 struct(k I64) {
     }
 }
 fn fails(k I64) String ? {
-    if k > 0 { error Stop.HERE }
+    if k > 0 { error Stop.Here }
     return "ok"
 }
 fn main() ? {

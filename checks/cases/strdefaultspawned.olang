@@ -2,7 +2,7 @@
 # E11c/R9a: the same in a spawned lambda's body (C1f)
 import "std/io"
 type Stop error {
-    HERE
+    Here
 }
 type Node struct(v I64) {
     v
@@ -25,7 +25,7 @@ fn nv(n Node&) I64 {
 }
 fn grow(x mut Node&) { x.next = Node(x.v + 100) }
 fn f(n mut Node&) mut Node&n ? {
-    if n.v > 0 { error Stop.HERE }
+    if n.v > 0 { error Stop.Here }
     return n
 }
 fn g(v I64) mut Node& { return Node(v) }

@@ -112,7 +112,7 @@ fn runProfiled(bin String&, file String&, args Array<String&>&, samples String&)
 # ---- the samples ----
 
 # a profile that is not one: no "OLPROF01" header, or records running past its end
-type Bad error { MALFORMED }
+type Bad error { Malformed }
 
 # one sample: the periods of CPU time it stands for (Weight - a tick of the kernel's may fold several), and its stack,
 # Count addresses from Start in Profile.Addrs - the interrupted instruction first, then each return address up to the
@@ -153,12 +153,12 @@ fn word(b Array<U8>&, i I64) I64 {
 # whose header is still zero was being written as the program ended: it and what follows are left out
 fn Read(b Array<U8>&) Profile ? Bad {
     p := Profile()
-    if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.MALFORMED }
+    if b.Len() < 40 or String(b[:8]) != "OLPROF01" { error Bad.Malformed }
     p.PeriodNs = word(b, 1)
     words := word(b, 2)
     p.Dropped = word(b, 3)
     p.Threads = word(b, 4)
-    if words < 0 or 40 + words * 8 > b.Len() { error Bad.MALFORMED }
+    if words < 0 or 40 + words * 8 > b.Len() { error Bad.Malformed }
     i I64 = 0
     for i < words {
         h := word(b, 5 + i)

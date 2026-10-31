@@ -5,10 +5,10 @@
 
 import "std/os"
 
-type ParseErr error { EMPTY, BAD }
+type ParseErr error { Empty, Bad }
 type NetErr error {
-    DOWN
-    SLOW
+    Down
+    Slow
 }
 type LoadErr error os.Error, ParseErr
 type AnyErr error LoadErr, NetErr
@@ -16,9 +16,9 @@ type AnyErr error LoadErr, NetErr
 Live mut I64 = 0
 
 fn load(n I64) I64 ? LoadErr {
-    if n == 0 { error ParseErr.EMPTY }
-    if n == 1 { error ParseErr.BAD }
-    if n == 2 { error os.Error.DENIED }
+    if n == 0 { error ParseErr.Empty }
+    if n == 1 { error ParseErr.Bad }
+    if n == 2 { error os.Error.Denied }
     return n * 10
 }
 
@@ -56,7 +56,7 @@ fn reraised(e LoadErr) I64 ? ParseErr {
 fn kind(e AnyErr) I64 {
     return match e {
         case null: 0
-        case ParseErr.EMPTY: 1
+        case ParseErr.Empty: 1
         case ParseErr: 2
         case os.Error: 3
         case NetErr: 4
@@ -92,10 +92,10 @@ fn captured(e LoadErr) String {
 }
 
 fn firstBad(from I64) I64 {
-    es := LoadErr[ParseErr.EMPTY, null, os.Error.DENIED]
+    es := LoadErr[ParseErr.Empty, null, os.Error.Denied]
     k I64 = 0
     for e in es {
-        if e is not null and e != ParseErr.EMPTY { return k }
+        if e is not null and e != ParseErr.Empty { return k }
         k++
     }
     return -1 + from
@@ -104,85 +104,85 @@ fn firstBad(from I64) I64 {
 BakedRendered := rendered(0, 4)
 BakedKinds := kinds(0, 4)
 BakedCount := counted(0, 5)
-BakedCaptured := captured(ParseErr.BAD)
+BakedCaptured := captured(ParseErr.Bad)
 BakedFirstBad := firstBad(0)
-BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.DENIED) catch default -1
-                     try reraised(ParseErr.BAD) catch ParseErr.BAD default 7 catch default -1]
-BakedSame := same(ParseErr.BAD, ParseErr.BAD) and not same(ParseErr.BAD, NetErr.DOWN) and isParse(ParseErr.EMPTY)
+BakedReraised := I64[try reraised(null) catch default -1, try reraised(os.Error.Denied) catch default -1
+                     try reraised(ParseErr.Bad) catch ParseErr.Bad default 7 catch default -1]
+BakedSame := same(ParseErr.Bad, ParseErr.Bad) and not same(ParseErr.Bad, NetErr.Down) and isParse(ParseErr.Empty)
 
 test "an error value is stored in a field, a local and a Vec, null where nothing failed" {
-    want := "Outcome(-1, ParseErr.EMPTY) Outcome(-1, ParseErr.BAD) Outcome(-1, os.Error.DENIED) Outcome(30, null) "
+    want := "Outcome(-1, ParseErr.Empty) Outcome(-1, ParseErr.Bad) Outcome(-1, os.Error.Denied) Outcome(30, null) "
     assert BakedRendered == want
     assert rendered(Live, 4) == want
     last LoadErr
     assert last is null
     assert $last == "null"
     for o in outcomes(Live, 3) { last = o.err }
-    assert last is not null and last == os.Error.DENIED
+    assert last is not null and last == os.Error.Denied
 }
 
 test "an error value is matched, null among the cases" {
     assert BakedKinds.Len() == 4 and BakedKinds[0] == 1 and BakedKinds[1] == 2 and BakedKinds[2] == 3 and BakedKinds[3] == 0
     assert kinds(Live, 4) == BakedKinds
-    assert kind(NetErr.SLOW) == 4 and kind(ParseErr.EMPTY) == 1
+    assert kind(NetErr.Slow) == 4 and kind(ParseErr.Empty) == 1
 }
 
 test "an error value is compared with words, types, sets and other values, passed and captured" {
     assert BakedSame
-    assert same(ParseErr.BAD, ParseErr.BAD) and not same(os.Error.DENIED, NetErr.DOWN)
-    assert BakedCaptured == "got ParseErr.BAD"
-    assert captured(ParseErr.EMPTY) == "got ParseErr.EMPTY"
+    assert same(ParseErr.Bad, ParseErr.Bad) and not same(os.Error.Denied, NetErr.Down)
+    assert BakedCaptured == "got ParseErr.Bad"
+    assert captured(ParseErr.Empty) == "got ParseErr.Empty"
     assert BakedFirstBad == 2 and firstBad(Live) == 2
 }
 
 test "an error value is a Map key, and is raised again" {
     assert BakedCount == 3 and counted(Live, 5) == 3
     assert BakedReraised == I64[0, 1, 7]
-    assert (try reraised(ParseErr.EMPTY) catch ParseErr e default (1 if e == ParseErr.EMPTY else 2)) == 1
+    assert (try reraised(ParseErr.Empty) catch ParseErr e default (1 if e == ParseErr.Empty else 2)) == 1
 }
 
 test "a caught error is held past its clause" {
     held AnyErr
     try load(Live + 1) catch e { held = e }
-    assert held == ParseErr.BAD and $held == "ParseErr.BAD"
-    held = NetErr.DOWN
-    assert held != ParseErr.BAD
+    assert held == ParseErr.Bad and $held == "ParseErr.Bad"
+    held = NetErr.Down
+    assert held != ParseErr.Bad
     xs := Vec<AnyErr>()
     for i in range 3 {
         try load(Live + i) catch e { xs.Push(e) }
     }
-    assert xs.Len() == 3 and xs[2] == os.Error.DENIED
+    assert xs.Len() == 3 and xs[2] == os.Error.Denied
 }
 
 # B5, E11a: an error type in a rendering's type is written as its values are - another module's qualified by its name
 fn errRendered() String {
     v := Vec<os.Error>()
-    v.Push(os.Error.DENIED)
-    a := os.Error[os.Error.DENIED]
+    v.Push(os.Error.Denied)
+    a := os.Error[os.Error.Denied]
     w := Vec<AnyErr>()
-    w.Push(NetErr.DOWN)
+    w.Push(NetErr.Down)
     return $v " " $a " " $w
 }
 
 ErrRenderedBaked := errRendered()
 
 test "an error type in a rendering is qualified as its values are" {
-    want := "Vec<os.Error>[os.Error.DENIED] os.Error[os.Error.DENIED] Vec<AnyErr>[NetErr.DOWN]"
+    want := "Vec<os.Error>[os.Error.Denied] os.Error[os.Error.Denied] Vec<AnyErr>[NetErr.Down]"
     assert errRendered() == want and ErrRenderedBaked == want
 }
 
 # E10b, T20: an error value hashes by the error it holds, so values equal across sets hash alike - a Map keyed by one
 # set finds a key put through another
 fn errHashes() Bool {
-    p ParseErr = ParseErr.BAD
+    p ParseErr = ParseErr.Bad
     l LoadErr = p
     a AnyErr = l
     m := Map<AnyErr, I64>()
     m.Put(p, 1)
-    m.Put(os.Error.DENIED, 2)
-    n LoadErr = os.Error.DENIED
+    m.Put(os.Error.Denied, 2)
+    n LoadErr = os.Error.Denied
     return p.Hash() == l.Hash() and l.Hash() == a.Hash() and p == a and (try m.Get(l) catch default 0) == 1 and
-           (try m.Get(n) catch default 0) == 2 and ParseErr.EMPTY.Hash() != ParseErr.BAD.Hash()
+           (try m.Get(n) catch default 0) == 2 and ParseErr.Empty.Hash() != ParseErr.Bad.Hash()
 }
 
 ErrHashesBaked := errHashes()

@@ -42,7 +42,7 @@ type BasePoint struct(X I32, Y I32) {
 }
 
 type BaseError error {
-    BROKEN
+    Broken
 }
 
 # the same rule for error words: a lowercase word is this module's own. "quiet" cannot be NAMED from
@@ -75,7 +75,7 @@ fn BumpBase() I32 {
 }
 
 fn AlwaysBaseBroken() ? BaseError {
-    error BaseError.BROKEN
+    error BaseError.Broken
 }
 
 # T30/T31: an exported trait. Satisfaction is structural, so an importing module satisfies it by declaring the

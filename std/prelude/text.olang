@@ -23,24 +23,24 @@ fn (c Char) ToLower() Char { return c + 32 if c.IsUpper() else c }
 type String extends Array<Char>
 
 type ParseError error {
-    EMPTY
-    INVALID
-    OVERFLOW
+    Empty
+    Invalid
+    Overflow
 }
 
 # what text's other operations fail with: a Find, FindLast or FindByte finding nothing (NOT_FOUND), a Radix - the base
 # Format, ParseInt and ParseUint take - made from a number outside 2 to 36 and not 0 (BAD_BASE), and ShortestDecimal given
 # a NaN or an infinity, which no digits write (NOT_FINITE). Each function names the one word it can fail with (R1c)
 type TextError error {
-    NOT_FOUND
-    BAD_BASE
-    NOT_FINITE
+    NotFound
+    BadBase
+    NotFinite
 }
 
 # where Eisel and Lemire's algorithm cannot settle a rounding, or the value is outside what it decides - the slower way
 # decides it (toF64)
 type undecided error {
-    NO
+    No
 }
 
 # FNV-1a over the bytes: text that SAYS the same thing hashes the same, whatever storage holds it
@@ -104,22 +104,22 @@ fn (a String&) EndsWith(suffix String&) Bool {
 
 # the index of the first occurrence of c - failing with NOT_FOUND when there is none, so a miss is never read as a
 # position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks
-fn (a String&) FindByte(c U8) I64 ? TextError.NOT_FOUND {
+fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
     for i in range a.Len() {
         if a[i] == c { return i }
     }
-    error TextError.NOT_FOUND
+    error TextError.NotFound
 }
 
 # the index of the first occurrence of sub, failing with NOT_FOUND when there is none. An empty sub is found
 # at 0. Compared where it stands - each candidate's first byte, then the rest one byte at a time - so nothing is
 # sliced per position
-fn (a String&) Find(sub String&) I64 ? TextError.NOT_FOUND {
+fn (a String&) Find(sub String&) I64 ? TextError.NotFound {
     return try a.findFrom(sub, 0)
 }
 
 # the index of the first occurrence of sub at or after from
-fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NOT_FOUND {
+fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NotFound {
     n I64 = sub.Len()
     if n == 0 { return from }
     first := sub[0]
@@ -130,7 +130,7 @@ fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NOT_FOUND {
             if j == n { return i }
         }
     }
-    error TextError.NOT_FOUND
+    error TextError.NotFound
 }
 
 # (Contains - whether sub occurs in it - is every array's, std/prelude/array.olang: text is an array of bytes)
@@ -267,7 +267,7 @@ fn (p CStr&) StringFromC(max I64) String {
 
 # the index of the last occurrence of sub, failing with NOT_FOUND when there is none, as Find does. An empty sub is
 # found at Len()
-fn (a String&) FindLast(sub String&) I64 ? TextError.NOT_FOUND {
+fn (a String&) FindLast(sub String&) I64 ? TextError.NotFound {
     n I64 = sub.Len()
     i I64 = a.Len() - n
     for i >= 0 {
@@ -276,7 +276,7 @@ fn (a String&) FindLast(sub String&) I64 ? TextError.NOT_FOUND {
         if j == n { return i }
         i--
     }
-    error TextError.NOT_FOUND
+    error TextError.NotFound
 }
 
 # bytewise lexicographic order, as Compare gives it - what "<" asks of two texts (E31), and with it ">", "<=" and ">=":
@@ -297,7 +297,7 @@ type LineIter struct(of String&) {
 }
 
 fn (it mut LineIter&) Next() String&it ? Exhausted {
-    if it.at >= it.text.Len() { error Exhausted.END }
+    if it.at >= it.text.Len() { error Exhausted.End }
     start := it.at
     end I64 = start
     for end < it.text.Len() and it.text[end] != '\n' { end++ }
@@ -388,9 +388,9 @@ fn padNumber(digits String&, width I64, fill Char) String {
 # a base integers are written and read back in: 2 to 36, or 0 - the base the text says, as olang writes an integer
 # literal (L10), which ParseInt and ParseUint read and Format writes in decimal. A literal is checked while compiling
 # ("n.Format(16)", "t.ParseInt(16)", and 40 is a compile-time error, T29d); a base computed while the program runs is
-# made one with Radix(b), which fails with TextError.BAD_BASE for another number - the one way a base is refused
-type Radix I64(v I64) ? TextError.BAD_BASE {
-    if v != 0 and (v < 2 or v > 36) { error TextError.BAD_BASE }
+# made one with Radix(b), which fails with TextError.BadBase for another number - the one way a base is refused
+type Radix I64(v I64) ? TextError.BadBase {
+    if v != 0 and (v < 2 or v > 36) { error TextError.BadBase }
 }
 
 # the integer written in "base", the digits past 9 being the letters, lowercase: I64(255).Format(16) is "ff" - with a
@@ -473,7 +473,7 @@ fn formatDigits(v U64, neg Bool, base Radix) String {
 # E6c). Fails with EMPTY for no text, INVALID for anything else that is not such a number - a sign with no digits after
 # it included - and OVERFLOW for a number beyond I64's range; a base is a Radix, refused where it is made
 fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
-    if t.Len() == 0 { error ParseError.EMPTY }
+    if t.Len() == 0 { error ParseError.Empty }
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
     if base == 0 and isPrefixed(digits) {
@@ -490,7 +490,7 @@ fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
 # value it is in a program: "18446744073709551615".ParseUint(0) and "0xFFFF_FFFF_FFFF_FFFF".ParseUint(0) are both U64's
 # largest, and a literal needing more than 64 bits fails with OVERFLOW, as it is an error in a program
 fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
-    if t.Len() == 0 { error ParseError.EMPTY }
+    if t.Len() == 0 { error ParseError.Empty }
     digits := t[1:] if t[0] == '+' else t[:]
     return try readDigits(digits, base, ~U64(0))
 }
@@ -503,7 +503,7 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
 # fitting T; a wider one's value read unsigned, up to 128 bits, fitting T where that value does
 # ("0x1FFFFFFFFFFFFFFFF".ParseAs<U128>(0) is 2^65 - 1)
 fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
-    if t.Len() == 0 { error ParseError.EMPTY }
+    if t.Len() == 0 { error ParseError.Empty }
     neg := t[0] == '-'
     digits := t[1:] if neg or t[0] == '+' else t[:]
     if T.Size > 8 and base == 0 and isPrefixed(digits) {
@@ -512,28 +512,28 @@ fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
         u := try readWide(digits)
         if u > U128(U64.Max) {
             if neg {
-                if T.Min == 0 { error ParseError.INVALID }
-                if u > U128(T.Max) + 1 { error ParseError.OVERFLOW }
+                if T.Min == 0 { error ParseError.Invalid }
+                if u > U128(T.Max) + 1 { error ParseError.Overflow }
                 return T(-I128(u))
             }
-            if u > U128(T.Max) { error ParseError.OVERFLOW }
+            if u > U128(T.Max) { error ParseError.Overflow }
             return T(u)
         }
     }
     if T.Size <= 8 or base == 0 and isPrefixed(digits) {
         if T.Min < 0 {
             v := try t.ParseInt(base)
-            if T.Size <= 8 and (v < I64(T.Min) or v > I64(T.Max)) { error ParseError.OVERFLOW }
+            if T.Size <= 8 and (v < I64(T.Min) or v > I64(T.Max)) { error ParseError.Overflow }
             return T(v)
         }
-        if neg { error ParseError.INVALID }
+        if neg { error ParseError.Invalid }
         u := try t.ParseUint(base)
-        if T.Size <= 8 and u > U64(T.Max) { error ParseError.OVERFLOW }
+        if T.Size <= 8 and u > U64(T.Max) { error ParseError.Overflow }
         return T(u)
     }
     # wider than 64 bits: each digit added in T itself - toward T's least for a negative number, so it fits
-    if neg and T.Min == 0 { error ParseError.INVALID }
-    if digits.Len() == 0 { error ParseError.INVALID }
+    if neg and T.Min == 0 { error ParseError.Invalid }
+    if digits.Len() == 0 { error ParseError.Invalid }
     b I64 = 10 if base == 0 else base
     tb := T(b)
     lim := T.Min if neg else T.Max
@@ -542,17 +542,17 @@ fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
     v T = 0
     for i, c in digits {
         if c == '_' and base == 0 {
-            if i == 0 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            if i == 0 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
             continue
         }
         d := digitWorth(c)
-        if d >= b { error ParseError.INVALID }
+        if d >= b { error ParseError.Invalid }
         td := T(d)
         if neg {
-            if v < cutoff or (v == cutoff and -td < cutlim) { error ParseError.OVERFLOW }
+            if v < cutoff or (v == cutoff and -td < cutlim) { error ParseError.Overflow }
             v = v * tb - td
         } else {
-            if v > cutoff or (v == cutoff and td > cutlim) { error ParseError.OVERFLOW }
+            if v > cutoff or (v == cutoff and td > cutlim) { error ParseError.Overflow }
             v = v * tb + td
         }
     }
@@ -563,20 +563,20 @@ fn (t String&) ParseAs<T Integer>(base Radix = 10) T ? ParseError {
 # to 128 bits - OVERFLOW past them
 fn readWide(digits String&) U128 ? ParseError {
     b U128 = 16 if digits[1] == 'x' or digits[1] == 'X' else 2
-    if digits.Len() == 2 { error ParseError.INVALID }
+    if digits.Len() == 2 { error ParseError.Invalid }
     cutoff := U128.Max / b
     cutlim := U128.Max % b
     v U128 = 0
     for i in range 2, digits.Len() {
         c := digits[i]
         if c == '_' {
-            if i == 2 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            if i == 2 or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
             continue
         }
         d := digitWorth(c)
-        if U128(d) >= b { error ParseError.INVALID }
+        if U128(d) >= b { error ParseError.Invalid }
         ud := U128(d)
-        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.OVERFLOW }
+        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.Overflow }
         v = v * b + ud
     }
     return v
@@ -610,7 +610,7 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
             from = 2
         }
     }
-    if from == digits.Len() { error ParseError.INVALID }
+    if from == digits.Len() { error ParseError.Invalid }
     ub := U64(b)
     cutoff U64 = most / ub                      # past this, one more digit is too many
     cutlim U64 = most % ub                      # ...and at it, so is a digit worth more than this
@@ -619,13 +619,13 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
         c := digits[i]
         if c == '_' and base == 0 {
             # between two digits: one before it, and the next one is checked as a digit when its turn comes
-            if i == from or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.INVALID }
+            if i == from or digits[i - 1] == '_' or i + 1 == digits.Len() { error ParseError.Invalid }
             continue
         }
         d := digitWorth(c)
-        if d >= b { error ParseError.INVALID }
+        if d >= b { error ParseError.Invalid }
         ud := U64(d)
-        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.OVERFLOW }
+        if v > cutoff or (v == cutoff and ud > cutlim) { error ParseError.Overflow }
         v = v * ub + ud
     }
     return v
@@ -644,7 +644,7 @@ fn readDigits(digits String&, base Radix, most U64) U64 ? ParseError {
 # narrower float is the F64 converted, "F32(t.ParseFloat())", which can round twice: rarely, a text lying within half
 # an F64 unit of an F32 halfway point rounds the wrong way
 fn (t String&) ParseFloat() F64 ? ParseError {
-    if t.Len() == 0 { error ParseError.EMPTY }
+    if t.Len() == 0 { error ParseError.Empty }
     neg Bool = false
     start I64 = 0
     if t[0] == '-' or t[0] == '+' {
@@ -656,7 +656,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
     if body.Len() > 0 and body[0] != '.' and not body[0].IsDigit() {
         if sameLetters(body, "inf") or sameLetters(body, "infinity") { return (sign | (U64(0x7FF) << 52)).F64FromBits() }
         if sameLetters(body, "nan") { return (sign | (U64(0xFFF) << 51)).F64FromBits() }
-        error ParseError.INVALID
+        error ParseError.Invalid
     }
     man U64 = 0                 # the first 19 significant digits
     taken I64 = 0               # how many man holds
@@ -698,7 +698,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
             i++
         }
     }
-    if digits == 0 { error ParseError.INVALID }
+    if digits == 0 { error ParseError.Invalid }
     if i < body.Len() and (body[i] == 'e' or body[i] == 'E') {
         i++
         esign I64 = 1
@@ -706,7 +706,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
             if body[i] == '-' { esign = -1 }
             i++
         }
-        if i == body.Len() or not body[i].IsDigit() { error ParseError.INVALID }
+        if i == body.Len() or not body[i].IsDigit() { error ParseError.Invalid }
         e I64 = 0
         for i < body.Len() and body[i].IsDigit() {
             if e < 100000 { e = e * 10 + I64(body[i] - '0') }
@@ -714,7 +714,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
         }
         dp += e * esign
     }
-    if i < body.Len() { error ParseError.INVALID }
+    if i < body.Len() { error ParseError.Invalid }
     return try toF64(man, dp - taken, trunc, neg, body)
 }
 
@@ -808,7 +808,7 @@ fn leadingZeros(x U64) I64 {
 # the bits of the F64 nearest man * 10^exp10 (man not 0), by Eisel and Lemire's algorithm as Go's strconv has it -
 # failing where the bits it keeps cannot settle the rounding, or the value is subnormal or too large
 fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
-    if exp10 < -348 or exp10 > 347 { error undecided.NO }
+    if exp10 < -348 or exp10 > 347 { error undecided.No }
     clz := leadingZeros(man)
     man <<= U64(clz)
     exp2 I64 = ((217706 * exp10) >> 16) + 64 + 1023 - clz
@@ -819,21 +819,21 @@ fn eiselLemire(man U64, exp10 I64) U64 ? undecided {
         mHi U64 = xHi
         mLo U64 = xLo + yHi
         if mLo < xLo { mHi++ }
-        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man { error undecided.NO }
+        if (mHi & 0x1FF) == 0x1FF and mLo + 1 == 0 and yLo + man < man { error undecided.No }
         xHi = mHi
         xLo = mLo
     }
     msb U64 = xHi >> 63
     mant U64 = xHi >> (msb + 9)
     exp2 -= I64(1 ^ msb)
-    if xLo == 0 and (xHi & 0x1FF) == 0 and (mant & 3) == 1 { error undecided.NO }    # exactly halfway: not decided here
+    if xLo == 0 and (xHi & 0x1FF) == 0 and (mant & 3) == 1 { error undecided.No }    # exactly halfway: not decided here
     mant += mant & 1
     mant >>= 1
     if mant >> 53 > 0 {
         mant >>= 1
         exp2++
     }
-    if exp2 <= 0 or exp2 >= 0x7FF { error undecided.NO }
+    if exp2 <= 0 or exp2 >= 0x7FF { error undecided.No }
     return (U64(exp2) << 52) | (mant & 0xFFFFFFFFFFFFF)
 }
 
@@ -1019,7 +1019,7 @@ decimalShifts := I64[1, 3, 6, 9, 13, 16, 19, 23, 26]       # 2^decimalShifts[i] 
 # the bits of the nearest F64, its sign aside - failing with OVERFLOW when it is too large for one
 fn (a mut decimal&) bits() U64 ? ParseError {
     if a.nd == 0 or a.dp < -330 { return 0 }
-    if a.dp > 310 { error ParseError.OVERFLOW }
+    if a.dp > 310 { error ParseError.Overflow }
     exp I64 = 0
     for a.dp > 0 {
         n I64 = 27 if a.dp >= 9 else decimalShifts[a.dp]
@@ -1037,13 +1037,13 @@ fn (a mut decimal&) bits() U64 ? ParseError {
         a.shift(-n)
         exp += n
     }
-    if exp + 1023 >= 0x7FF { error ParseError.OVERFLOW }
+    if exp + 1023 >= 0x7FF { error ParseError.Overflow }
     a.shift(53)
     mant := a.roundedInteger()
     if mant == U64(1) << 53 {
         mant >>= 1
         exp++
-        if exp + 1023 >= 0x7FF { error ParseError.OVERFLOW }
+        if exp + 1023 >= 0x7FF { error ParseError.Overflow }
     }
     biased I64 = exp + 1023
     if (mant & (U64(1) << 52)) == 0 { biased = 0 }
@@ -1136,9 +1136,9 @@ fn schubfach(q I64, c U64, dk I64) U64, I64 {
 # negative zero). Fails with NOT_FINITE for a NaN or an infinity, which no digits write. The digits are those of
 # Python's repr and JavaScript's toString, and those "$x" writes (E11a: the runtime and the evaluator compute them by the
 # same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
-fn (x F64) ShortestDecimal() U64, I64 ? TextError.NOT_FINITE {
+fn (x F64) ShortestDecimal() U64, I64 ? TextError.NotFinite {
     b := x.Bits()
-    if ((b >> 52) & 0x7FF) == 0x7FF { error TextError.NOT_FINITE }
+    if ((b >> 52) & 0x7FF) == 0x7FF { error TextError.NotFinite }
     if b << 1 == 0 { return 0, 0 }
     f, e := shortest(x)
     for f % 10 == 0 {
@@ -1259,15 +1259,15 @@ if TestBuild {
     # each of these lets exactly one word through and swallows the other two, so a test - which must catch
     # everything it tries - can still tell which word a failure was
     fn onlyEmpty(t String&) ? ParseError {
-        try t.ParseInt() catch ParseError.INVALID, ParseError.OVERFLOW { }
+        try t.ParseInt() catch ParseError.Invalid, ParseError.Overflow { }
     }
 
     fn onlyInvalid(t String&) ? ParseError {
-        try t.ParseInt() catch ParseError.EMPTY, ParseError.OVERFLOW { }
+        try t.ParseInt() catch ParseError.Empty, ParseError.Overflow { }
     }
 
     fn onlyOverflow(t String&) ? ParseError {
-        try t.ParseInt() catch ParseError.EMPTY, ParseError.INVALID { }
+        try t.ParseInt() catch ParseError.Empty, ParseError.Invalid { }
     }
 
     test "ParseInt reads decimals across the whole I64 range" {

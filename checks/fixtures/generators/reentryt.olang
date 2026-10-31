@@ -1,6 +1,6 @@
 # S20 in a test: the test it fails in fails, and the tests after it run
 type Cell struct() {
-    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.END })
+    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.End })
 }
 
 fn gen(c mut Cell&) Iterator<I64> {

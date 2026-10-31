@@ -16,7 +16,7 @@ MaxRune Rune = 0x10FFFF
 # what Decode, Encode, Count and FromRunes fail with: bytes that are not UTF-8 - a byte no sequence starts with, a
 # sequence cut short or written longer than it needs, a surrogate, a value past U+10FFFF - or such a value to write
 type Error error {
-    INVALID
+    Invalid
 }
 
 # whether r is a code point UTF-8 can hold
@@ -32,8 +32,8 @@ fn (r Rune) Len() I64 {
 }
 
 # the code point at byte "at" of t and how many bytes it takes - failing with INVALID where the bytes there are not one
-fn Decode(t String&, at I64) Rune, I64 ? Error.INVALID {
-    if at < 0 or at >= t.Len() { error Error.INVALID }
+fn Decode(t String&, at I64) Rune, I64 ? Error.Invalid {
+    if at < 0 or at >= t.Len() { error Error.Invalid }
     b0 := U32(t[at])
     if b0 < 0x80 { return Rune(b0), 1 }
     n I64 = 0
@@ -52,21 +52,21 @@ fn Decode(t String&, at I64) Rune, I64 ? Error.INVALID {
         r = b0 & 0x07
         least = 0x10000
     } else {
-        error Error.INVALID
+        error Error.Invalid
     }
-    if at + n > t.Len() { error Error.INVALID }
+    if at + n > t.Len() { error Error.Invalid }
     for i in range 1, n {
         b := U32(t[at + i])
-        if (b & 0xC0) != 0x80 { error Error.INVALID }
+        if (b & 0xC0) != 0x80 { error Error.Invalid }
         r = (r << 6) | (b & 0x3F)
     }
-    if r < least or not Rune(r).IsValid() { error Error.INVALID }
+    if r < least or not Rune(r).IsValid() { error Error.Invalid }
     return Rune(r), n
 }
 
 # r as UTF-8 - failing with INVALID when r is no code point
-fn Encode(r Rune) String ? Error.INVALID {
-    if not r.IsValid() { error Error.INVALID }
+fn Encode(r Rune) String ? Error.Invalid {
+    if not r.IsValid() { error Error.Invalid }
     n := r.Len()
     out := String(Array<Char>(n))
     v := U32(r)
@@ -103,7 +103,7 @@ fn Valid(t String&) Bool {
 }
 
 # how many code points t holds - failing with INVALID when t is not UTF-8
-fn Count(t String&) I64 ? Error.INVALID {
+fn Count(t String&) I64 ? Error.Invalid {
     at I64 = 0
     n I64 = 0
     for at < t.Len() {
@@ -127,7 +127,7 @@ type RuneIter struct(of String&) {
 }
 
 fn (it mut RuneIter&) Next() Rune ? Exhausted {
-    if it.Pos >= it.t.Len() { error Exhausted.END }
+    if it.Pos >= it.t.Len() { error Exhausted.End }
     c := it.t[it.Pos]
     if c < 0x80 {
         it.Pos++
@@ -144,7 +144,7 @@ fn (it mut RuneIter&) Next() Rune ? Exhausted {
 fn Runes(t String&) RuneIter { return RuneIter(t) }
 
 # t's code points, each its own element - failing with INVALID when t is not UTF-8
-fn ToRunes(t String&) Array<Rune> ? Error.INVALID {
+fn ToRunes(t String&) Array<Rune> ? Error.Invalid {
     out := Array<Rune>(try Count(t))
     at I64 = 0
     for i in range out.Len() {
@@ -156,7 +156,7 @@ fn ToRunes(t String&) Array<Rune> ? Error.INVALID {
 }
 
 # the code points of a written as UTF-8 - failing with INVALID when one is no code point
-fn FromRunes(a Array<Rune>&) String ? Error.INVALID {
+fn FromRunes(a Array<Rune>&) String ? Error.Invalid {
     b := StringBuilder()
     for r in a { b.Push(try Encode(r)) }
     return b.ToString()
@@ -201,11 +201,11 @@ test "what is not UTF-8 is refused, and walked as replacement characters" {
     bad[7] = bytes(U8[0x61, 0xC3, 0x28])
     for b in bad {
         assert not Valid(b)
-        try Count(b) catch Error.INVALID { continue }
+        try Count(b) catch Error.Invalid { continue }
         unreachable
     }
-    assert (try Encode(Rune(0xD800)) catch Error.INVALID default "x") == "x"
-    assert (try Encode(Rune(0x110000)) catch Error.INVALID default "y") == "y"
+    assert (try Encode(Rune(0xD800)) catch Error.Invalid default "x") == "x"
+    assert (try Encode(Rune(0x110000)) catch Error.Invalid default "y") == "y"
     seen := Vec<Rune>()
     for r in Runes(bytes(U8[0x61, 0xFF, 0x62, 0xE2, 0x82])) { seen.Push(r) }
     assert seen.Len() == 5 and seen[0] == Rune('a') and seen[1] == Replacement and seen[2] == Rune('b')

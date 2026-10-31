@@ -2,11 +2,11 @@
 import "std/io"
 
 type E error {
-    BAD
+    Bad
 }
 
 fn halves(x F16, y BF16) F16, BF16, U64 ? E {
-    if x > F16(100.0) { error E.BAD }
+    if x > F16(100.0) { error E.Bad }
     return x * F16(2.0), y + BF16(1.0), 5
 }
 

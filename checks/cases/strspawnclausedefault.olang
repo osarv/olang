@@ -9,9 +9,9 @@ type Node struct(v I64) {
 type Bag struct(head mut Node&) {
     head
 }
-type Odd error { NO }
+type Odd error { No }
 fn f(n mut Node&) mut Node&n ? Odd {
-    if n.v >= 0 { error Odd.NO }
+    if n.v >= 0 { error Odd.No }
     return n
 }
 fn (b Bag&) Str() String {

@@ -2,13 +2,13 @@
 # R9a: a returned call lands in the result scope, which the function's own by-value parameter does not live in. (A local
 # built here and returned as the default lives in the result scope instead, O26a.)
 type Stop error {
-    HERE
+    Here
 }
 type Node struct(v I32) {
     v
 }
 fn mk(k I64) Node& ? {
-    if k > -5 { error Stop.HERE }
+    if k > -5 { error Stop.Here }
     return Node(7)
 }
 fn get(seed Node) Node& {

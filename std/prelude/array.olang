@@ -64,10 +64,10 @@ fn (a Array<T>&) Every<? E>(keep fn(x T) Bool ? E) Bool ? E {
 # index or a slice outside the array, a.Get(i) and a.SliceOf(lo, hi), which the compiler supplies (E16c, E16d); and a
 # total that needs an element - a.Min(), a.Max() - of an array with none (EMPTY, E39)
 type ArrayError error {
-    NOT_FOUND
-    BAD_CHUNK
-    OUT_OF_RANGE
-    EMPTY
+    NotFound
+    BadChunk
+    OutOfRange
+    Empty
 }
 
 # the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
@@ -76,7 +76,7 @@ fn (a Array<T>&) FindIndex<? E>(keep fn(x T) Bool ? E) I64 ? ArrayError, E {
     for i, x in a {
         if try keep(x) { return i }
     }
-    error ArrayError.NOT_FOUND
+    error ArrayError.NotFound
 }
 
 # how many elements keep holds for
@@ -465,7 +465,7 @@ type ArrayIter<T> struct(of Array<T>&) {
 }
 
 fn (it mut ArrayIter<T>&) Next() T ? Exhausted {
-    if it.i >= it.arr.Len() { error Exhausted.END }
+    if it.i >= it.arr.Len() { error Exhausted.End }
     it.i++
     return it.arr[it.i - 1]
 }
@@ -488,9 +488,9 @@ fn (a Array<T>&) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
 
 # how many elements a piece Chunks hands out holds: at least one. A literal is checked while compiling ("a.Chunks(4)",
 # and 0 is a compile-time error, T29d); a size computed while the program runs is made one with ChunkSize(n), which
-# fails with ArrayError.BAD_CHUNK below one - the one way a size is refused
-type ChunkSize I64(v I64) ? ArrayError.BAD_CHUNK {
-    if v < 1 { error ArrayError.BAD_CHUNK }
+# fails with ArrayError.BadChunk below one - the one way a size is refused
+type ChunkSize I64(v I64) ? ArrayError.BadChunk {
+    if v < 1 { error ArrayError.BadChunk }
 }
 
 # the array cut into consecutive pieces of size elements each, the last holding what is left (fewer, never none): each
@@ -516,7 +516,7 @@ type ReversedIter<T> struct(of Array<T>&) {
 }
 
 fn (it mut ReversedIter<T>&) Next() T ? Exhausted {
-    if it.i <= 0 { error Exhausted.END }
+    if it.i <= 0 { error Exhausted.End }
     it.i--
     return it.arr[it.i]
 }
@@ -592,11 +592,11 @@ fn (a Array<T>&) LowerBound(x T) I64 {
 }
 
 # the first position whose element is equal to x ("==", E10), in an array sorted by "<" - a binary search, failing with
-# ArrayError.NOT_FOUND where there is none
-fn (a Array<T>&) BinarySearch(x T) I64 ? ArrayError.NOT_FOUND {
+# ArrayError.NotFound where there is none
+fn (a Array<T>&) BinarySearch(x T) I64 ? ArrayError.NotFound {
     i := a.LowerBound(x)
     if i < a.Len() and a[i] == x: return i
-    error ArrayError.NOT_FOUND
+    error ArrayError.NotFound
 }
 
 # a position in an array walked from its first element to its last and round again, without end - what Cycle gives
@@ -606,7 +606,7 @@ type CycleIter<T> struct(of Array<T>&) {
 }
 
 fn (it mut CycleIter<T>&) Next() T ? Exhausted {
-    if it.arr.Len() == 0: error Exhausted.END
+    if it.arr.Len() == 0: error Exhausted.End
     if it.i >= it.arr.Len(): it.i = 0
     it.i++
     return it.arr[it.i - 1]
@@ -662,7 +662,7 @@ if TestBuild {
     test Array.BinarySearch "the position of an element of a sorted array, the first of equal ones" {
         a := I64[1, 3, 3, 5, 8]
         assert (try a.BinarySearch(3) catch default -1) == 1 and (try a.BinarySearch(8) catch default -1) == 4
-        assert (try a.BinarySearch(4) catch ArrayError.NOT_FOUND default -1) == -1
+        assert (try a.BinarySearch(4) catch ArrayError.NotFound default -1) == -1
         assert (try I64[].BinarySearch(4) catch default -1) == -1 and (try "abcz".BinarySearch('c') catch default -1) == 2
     }
     test Array.LowerBound "where an element would go to keep a sorted array sorted" {

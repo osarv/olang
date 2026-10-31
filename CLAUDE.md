@@ -247,7 +247,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the chain's else, its guard dropped (`caughtLast`, `caughtCases`).
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
-  (fails as written with `CaseError.WRONG_CASE`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
+  (fails as written with `CaseError.WrongCase`, so `try e as C` or `(e as C)!`). `is` tests for null and nothing else: `x is null`, `x is not
   null` (E10c, the user's decision 2026-10-24); `x == null`, `a is b` and `x is E.Case` are errors naming the form.
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload too, `_`
@@ -391,12 +391,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
   `a[lo:hi]` is a borrow tagged with the base's scope and permission (an immutable global's array slices read-only,
-  2026-10-26); `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OUT_OF_RANGE` instead (E16c/E16d); an out-of-range index, a
+  2026-10-26); `try a.Get(i)`, `try a.Set(i, v)` and `try a.SliceOf(lo, hi)` fail with `ArrayError.OutOfRange` instead (E16c/E16d); an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
 - **Lane operators (E39, docs/ideas.md #4, the user's decision 2026-10-18; built 2026-10-26).** An array's operators
   work lane by lane (`a * b + c`, `x * 2.0`, `-a`, `and`/`or`/`not` on `Bool` lanes), each lane as the operation on two
   values (T6b, E6c, E31 - C64 and a user's types too); a whole expression is one loop, and `a.Sum()`, `Min()`/`Max()`
-  (`ArrayError.EMPTY` on an empty array, NaN propagating), `LanesEqual`/`LanesLess` (`Array<Bool>`), `mask.Select(a,
+  (`ArrayError.Empty` on an empty array, NaN propagating), `LanesEqual`/`LanesLess` (`Array<Bool>`), `mask.Select(a,
   b)`, `mask.Some()`/`Every()` take one with no array made. Lengths: a compile-time error where known, else one check per
   operation aborting with "lane lengths differ" (no checked form, mine). Fixed operands give a fixed result; run-time
   ones a new array where it lands, made with no fill. `x op= v` is in place: each lane computed and stored before the
@@ -435,7 +435,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
   are literals (an integer literal-only expression, a character literal; mine: no names, so the table needs nothing
   resolved), fit the type and are distinct. `op.Value()` is supplied (a case-by-case test, the constant itself where
-  the case is written); `try Op.From(v)` through the type's name fails with the prelude's `CaseError.NO_CASE`, a call of
+  the case is written); `try Op.From(v)` through the type's name fails with the prelude's `CaseError.NoCase`, a call of
   the prelude's generic `caseIndex` (std/prelude/enums.olang), so `try`, R8 and the evaluator need nothing new. Mine:
   `Value()` with parentheses as every supplied method; the raw type is `String` or an integer type (a declared one
   over an integer, `Char` included); `From` only where no case carries a payload, and then no case is named `From`; an
@@ -560,7 +560,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `any Iterator<T>&`; the any satisfies its
   trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
   trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `case _`) and `w as Button` (failing with
-  `CaseError.WRONG_CASE` as written); an open trait's never (the user). A trait's methods take contracts (D17f), checked before every call through an
+  `CaseError.WrongCase` as written); an open trait's never (the user). A trait's methods take contracts (D17f), checked before every call through an
   any; the implementation's own on its entry, after dispatch. Tables are `linkonce_odr`, named by
   type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
   has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
@@ -796,7 +796,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   no attribute's, an error where it is written (bulk review 4; it was T25c's at the reader, naming the prelude's
   `attrGot`). Built as a hidden immutable global beside the item
   (`VarDecl.Hidden`, named `@` and its offset), so names, check, K2 and the evaluator do it all. Read by reflection:
-  `try x.Attr<A>()` (fails with the prelude's `AttrError.MISSING`; elaborates to the prelude's `attrGot`/`attrMissing`)
+  `try x.Attr<A>()` (fails with the prelude's `AttrError.Missing`; elaborates to the prelude's `attrGot`/`attrMissing`)
   and `x.HasAttr<A>()` (a Bool decided while compiling, G35) on a type or a field/case/parameter/function descriptor; a
   pun field has its parameter's attributes (written on a pun: an error). `alias.Functions` (an import's plain, non-generic
   functions; another module's exported ones - a module walks its own through an import of itself, `import me "main"`) and
@@ -850,9 +850,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   expression either way), else wrapped with `--old` and listed without it; an `as` inside an old try's reach is given
   `!` where it reads a plain chain, else listed - a listing makes `olang fix` end with status 1 (2026-10-25, the review:
   fix must never change what old code computes silently). What `checked` checked is now a
-  call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OUT_OF_RANGE`, a List's and a Vec's `Get`
-  their own errors), `try x.Narrow<I32>()` (`NumberError.OVERFLOW`/`INVALID`, supplied by the compiler for every number
-  type), `as` failing as written (`CaseError.WRONG_CASE`), and arithmetic in `std/arith` (not the prelude): `try
+  call that fails: `try a.Get(i)` / `try a.SliceOf(lo, hi)` (`ArrayError.OutOfRange`, a List's and a Vec's `Get`
+  their own errors), `try x.Narrow<I32>()` (`NumberError.Overflow`/`INVALID`, supplied by the compiler for every number
+  type), `as` failing as written (`CaseError.WrongCase`), and arithmetic in `std/arith` (not the prelude): `try
   arith.Add(a, b)`, `Sub Mul Div Rem Neg ShiftLeft ShiftRight Pow`, and `Checked<T>` whose operators are those
   (`try arith.Checked(a) * b + c`), `arith.Error` `OVERFLOW DIVIDE_BY_ZERO INVALID`, each function's set inferred per
   number type (an integer's Add fails with OVERFLOW alone; `Rem` by -1 is 0, never OVERFLOW). Plain `/ %`, indexing and conversions stay unchecked; a
@@ -867,29 +867,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   declare errors, making the operator fallible as written (`try a - b`, `try x[i]`, `try x[i] = v`). The checked forms
   (`CheckedAt`, `CheckedPlus` ...) went with `checked` (2026-10-25): a method of that name is an ordinary method.
 - **The prelude's errors of the language's own operations (R20, 2026-10-25; `CheckError` removed with `checked`):**
-  `ArrayError.OUT_OF_RANGE` (`Get`, `SliceOf`), `NumberError.OVERFLOW`/`INVALID` (`Narrow`), `CaseError.WRONG_CASE`
-  (`as`), `ArgumentError.INVALID` (a false contract condition, D17);
+  `ArrayError.OutOfRange` (`Get`, `SliceOf`), `NumberError.Overflow`/`INVALID` (`Narrow`), `CaseError.WrongCase`
+  (`as`), `ArgumentError.Invalid` (a false contract condition, D17);
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
-  may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
+  may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.Missing`, `TextError`
   (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
-  `TextError.BAD_BASE`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
-  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.NEGATIVE` (a signed integer's `Sqrt`). Language guarantees still abort.
+  `TextError.BadBase`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NotFound`, `ChanError.CLOSED` on a Send,
+  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.Negative` (a signed integer's `Sqrt`). Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
 - **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
-  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL, DENIED }` (the
-  listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { TIMEOUT }`
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { Full, Denied }` (the
+  listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { Timeout }`
   is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
-  type then the last member of its own set; one grammar `type Name error [Member, ...] [{ WORDS }]`. A set is written
+  type then the last member of its own set; one grammar `type Name error [Member, ...] [{ Words }]`. A set is written
   wherever an error set is (`? LoadError`, `fn(I64) ? LoadError` - so no parentheses in a list -, trait methods,
   `catch LoadError`) and is the same set as its members written out (the same function type); never a code space of its
   own (R6 codes per member type, expanded in `generic.errorList`). A set reaching itself, a word repeating a member's,
   a word declared twice and a member naming nothing are errors (the last two, and `? Pt` with `Pt` a struct, and an
   unknown error type in a function type or a lambda's set, were never reported - fixed). **`catch os.Error e { }`,
   `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
-  caught by the rule that a clause's name must be used) name the error the clause took (an error value, below, never null and never assigned): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
+  caught by the rule that a clause's name must be used) name the error the clause took (an error value, below, never null and never assigned): `$e` (`os.Error.Denied`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
   something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
   combine), `match e` (read as the if-chain it is; exhaustive or `case _`; a value form with `case P: v`), `error e`
   (R3a, held to the function's set by what narrowing leaves). Representation (mine): the name is a hidden `I32` local holding
@@ -1189,7 +1189,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `x.Pow(y)`, `IsNan`... `Abs`, `Min`, `Max`, `Clamp` over `Number` (IEEE on floats). Integers: `x.Pow(n U32)`
   (wrapping as `*`; `try arith.Pow(x, n)` fails where it does not fit) and
   `Sqrt()` (the user's name, not ISqrt: the floor of the root in the receiver's type, hardware sqrt plus a one-step
-  correction, exact for every U64; signed fails with the prelude's `NumberError.NEGATIVE` - mine - unsigned cannot
+  correction, exact for every U64; signed fails with the prelude's `NumberError.Negative` - mine - unsigned cannot
   fail). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's, read by bare name everywhere and reserved (D3a);
   others are computed in place (`F64(2).Sqrt()`). **`x.Mod(n)`, `x.DivFloor(n)`, `x.DivCeil(n)` (QBP 2, the user's
   yes, 2026-10-27; built 2026-10-31)**: every integer's, defaults over `Integer` - the floored modulo (the divisor's
@@ -1261,17 +1261,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
 - **`std/bitset` and `std/order` (survey2 items 3-4, the user 2026-10-26; details mine).** `bitset.BitSet<T>` holds an enum's cases
   in one `U64` (bit k the k-th case), a plain value; the constructor's contract refuses bits past the last case
-  (`ArgumentError.INVALID`, bulk review 4 - a walk of one met a case that does not exist), and it asserts, decided per instance, that T is an enum of at most 64
+  (`ArgumentError.Invalid`, bulk review 4 - a walk of one met a case that does not exist), and it asserts, decided per instance, that T is an enum of at most 64
   cases with no payload. `x in s`, `Add`/`Remove` (say whether it changed), `Len`, `Has`, `Empty<T>()`, `Full<T>()`, `Of(array)`,
   operators `| & - ^` (union, intersection, difference, exactly-one; no `+`: one spelling), `Complement`, `IsSubset`, `for c in s` in
-  case order, `$` as `BitSet{Color.Red}`, `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OUT_OF_RANGE`
+  case order, `$` as `BitSet{Color.Red}`, `==`/Hash by the bits; `Bits()`/`FromBits` (case-index bits, failing `bitset.Error.OutOfRange`
   past the last case), `Flags()`/`FromFlags(w)` (OR of the raw values of an integer-raw enum, T17e). `order.ByFields<T>(a, b)` is the
   `less` an array's or Vec's `Sort` takes (`xs.Sort(order.ByFields<T>)`): a struct by its visible fields in order, an enum by case then
   that case's fields; a field by `<` (numbers, Bool, Char) or its own `Less` (text included), else a struct or enum in turn, anything
   else a compile-time error naming the type.
 - **The second survey's walks (M19d, docs/survey2.md 1.5, 2026-10-26).** Iterator defaults beside Take/Skip:
   `TakeWhile`, `SkipWhile` (keep not called again once it has said no), `StepBy(n)` (a `StepSize`, checked as a
-  `ChunkSize` is - `StepError.BAD_STEP`), `FlatMap(f)` (f gives any iterator; the inner walk held in a `Vec` of one,
+  `ChunkSize` is - `StepError.BadStep`), `FlatMap(f)` (f gives any iterator; the inner walk held in a `Vec` of one,
   since a walk may have no zero value, D13c) and `Partition` (two Vecs as two results); `Reversed()` on any `At`+`Len`
   type (a Vec) and on arrays and text (`ReversedIter`, measured level with the index loop: 50 x 10M sum 171 ms against
   185, Horner 847 against 874); an array's `Windows(size)` (read-only views, Chunks' shape), `TakeWhile`/`SkipWhile`
@@ -1286,7 +1286,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   each a `Vec` built where its Next lands - a `ToVec` of them is refused by section 8, a for-in works), `Dedup()`
   (consecutive equal values once), `Unzip()` (Zip's pairs into two Vecs), `Product()`, `Last()`, `Nth(n)` (Exhausted
   past the end or for n < 0); on arrays (text included) and At+Len types `LowerBound(x)`, `BinarySearch(x)` (the first
-  equal, `ArrayError.NOT_FOUND` for arrays and Vecs alike) and `Cycle()` (endless; an empty one gives nothing), and on
+  equal, `ArrayError.NotFound` for arrays and Vecs alike) and `Cycle()` (endless; an empty one gives nothing), and on
   arrays `ChunkBy(same)` as views. Each has B7a examples and a baked global beside its run-time test.
 - **`time.Virtual` and `chan.Select` (survey2 items 10 and 12, the user's decisions 2026-10-27; built 2026-10-31,
   details mine).** `time.Virtual(fn() { ... })` runs its body on a virtual clock: `Now`/`Wall` read it (from
@@ -1305,7 +1305,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
-  `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BAD_CHUNK` below one; a literal checked while
+  `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BadChunk` below one; a literal checked while
   compiling). Arrays only for now; Vec later (another branch is reworking Vec).
 - **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24, details mine).** Across the boundary: Bool and
   every numeric primitive (F16/BF16 as `_Float16`/`__bf16`, ext attributes per architecture), arrays of them (a
@@ -1331,7 +1331,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   chunk held on its own). `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows
   the receiver, an empty separator splits into characters; `Replace("", x)` inserts at every position; `ParseInt(0)`
-  reads olang literal syntax; every base is a `Radix` (`TextError.BAD_BASE`, a literal one decided while compiling);
+  reads olang literal syntax; every base is a `Radix` (`TextError.BadBase`, a literal one decided while compiling);
   `x.Fixed(n)` as `%.*f`, exact; `n.Format(base)`. `io.Writer` never fails on Write - the
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
   captures through memory files; `chan.Send` on a closed channel fails with `ChanError.CLOSED`; `std/csv` is RFC 4180 strict;
@@ -1501,7 +1501,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   hi I64, x I64) [hi >= lo, x >= lo and x <= hi] Bool`, `fn link(a mut List<Node&>&, b Node&) [b outlives a]`,
   `type Percent struct(v I64) [v >= 0 and v <= 100] { v }`. A condition is any `Bool` expression over the parameters and
   what a body reads at its top level - calls, fallible calls, lambdas included. **Checked on entry in every build**, in
-  order: a false one fails the call with the prelude's `ArgumentError.INVALID`, its trace line and `!`'s message naming
+  order: a false one fails the call with the prelude's `ArgumentError.Invalid`, its trace line and `!`'s message naming
   the function and the condition (`pick: y > x`) - in every build, a build keeping no trace keeping that one line (a
   thread-local write where the condition is false, cleared where a clause takes the error; 2026-10-25); an error from a call inside a condition leaves as itself. So
   `ArgumentError` is in the function's set: a bare `?` infers it, a function with no `?` has it, a written set must list
@@ -1516,7 +1516,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   conversion of a value the evaluator computes that does not fit (`U8(300)`) is a compile error naming
   `x.Narrow<T>()`. Decided (mine): a requirement body per condition, its error set inferred; a trait's conditions held
   caller-side before dispatch; the compile-time decision reports the first false condition per call; a false
-  requirement's trace line is the condition's (`FILE:LINE: f: cond`), `!`'s own line `ArgumentError.INVALID`.
+  requirement's trace line is the condition's (`FILE:LINE: f: cond`), `!`'s own line `ArgumentError.Invalid`.
   `tools/contracts_migrate.olang` moves old blocks and lists the dropped items. Found on the way (2026-10-24): the
   port's resolver accepted two functions of one name in a module (D2) - an error now.
 - **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that
@@ -1527,7 +1527,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   several error types names the others by subject (`http.HeaderError`, `regex.SyntaxError`). The
   prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `ArgumentError`,
   `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
-  its type qualified as source writes it outside the module (`unhandled error: io.Error.FAILED`, B5; see the next entry). `tools/stutter_rename.olang`
+  its type qualified as source writes it outside the module (`unhandled error: io.Error.Failed`, B5; see the next entry). `tools/stutter_rename.olang`
   renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and
   `olang fix` runs it. Migrated: std, compiler, tests, checks, fuzz, bench, docs, SPEC; goldens recaptured (diag.txt
   by `make diaggold`, tokens/ast/layout by their targets).
@@ -1559,8 +1559,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   every module's error named `Error`, a bare name said nothing: wherever the compiler or runtime prints an error's name -
   `unhandled error:` from `main`, a failed test's `FAIL - NAME: T.W`, the error trace, `!`'s FILE:LINE message, built
   or interpreted - it is written as source writes it outside its module, the module's alias (its identity's base name)
-  before it: `io.Error.FAILED`, `http.HeaderError.MISSING`. **Decided (mine):** the prelude's types stay bare
-  (`ListError.EMPTY`), and so do the root program's own (`Bad.WORD` for a `Bad` in the file being run - from outside it
+  before it: `io.Error.Failed`, `http.HeaderError.Missing`. **Decided (mine):** the prelude's types stay bare
+  (`ListError.EMPTY`), and so do the root program's own (`Bad.Word` for a `Bad` in the file being run - from outside it
   would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
   names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
   bang inside std/io said `Error.X`). The error a catch clause names renders the same way (`$e`, R11b); the rule is

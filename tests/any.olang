@@ -192,7 +192,7 @@ fn slide(w mut any Widget&) {
 }
 
 fn labelLen(w any Widget&) I64 {
-    b := try w as Button catch CaseError.WRONG_CASE default Button("none")
+    b := try w as Button catch CaseError.WrongCase default Button("none")
     return b.label.Len()
 }
 
@@ -227,7 +227,7 @@ fn (w mut Wallet&) Withdraw(n I64) [n <= 100] I64 {
     w.cash -= n
     return w.cash
 }
-fn draw(a mut any Account&, n I64) I64 { return try a.Withdraw(n) catch ArgumentError.INVALID default -1 }
+fn draw(a mut any Account&, n I64) I64 { return try a.Withdraw(n) catch ArgumentError.Invalid default -1 }
 
 test "D17f: a trait's contract and the instance's own, checked through an any" {
     w := Wallet(500)
@@ -335,10 +335,10 @@ test "T32a: arrays and conversions of them are copied into the box" {
 # existing storage too, so the box copies it - a block's text put in an any that outlives the block reads back after
 # the arena churns, and writing through a mut any changes the box, never the text it was made of
 type ChOops error {
-    BAD
+    Bad
 }
 fn chBad(k I64) String ? ChOops {
-    if k < 100 { error ChOops.BAD }
+    if k < 100 { error ChOops.Bad }
     return "never"
 }
 fn chosen(n I64) String {
@@ -422,7 +422,7 @@ type Words struct(n I64) {
     at I64 = 0
 }
 fn (w mut Words&) Next() String ? Exhausted {
-    if w.at >= w.n { error Exhausted.END }
+    if w.at >= w.n { error Exhausted.End }
     w.at += 1
     return "w" $w.at
 }
@@ -432,7 +432,7 @@ type WPtIt struct(n I64) {
     at I64 = 0
 }
 fn (w mut WPtIt&) Next() WPt ? Exhausted {
-    if w.at >= w.n { error Exhausted.END }
+    if w.at >= w.n { error Exhausted.End }
     w.at += 1
     return WPt(w.at)
 }
@@ -600,7 +600,7 @@ type AUps struct(n I64) {
     at I64 = 0
 }
 fn (u mut AUps&) Next() I64 ? Exhausted {
-    if u.at >= u.n { error Exhausted.END }
+    if u.at >= u.n { error Exhausted.End }
     u.at += 1
     return u.at * 10
 }
@@ -732,7 +732,7 @@ fn saTry(i I64) String {
     return try saFail&t(i) catch default "no"
 }
 fn saFail(i I64) String ? ChOops {
-    if i < 0 { error ChOops.BAD }
+    if i < 0 { error ChOops.Bad }
     return sArg(i)
 }
 fn aScoped(n I64) String {
@@ -865,7 +865,7 @@ test "E25, P1g: a spawn target set by a call given a scope argument" {
 # a catch default and an array of numbers alike; a target of the same length written in place, as T11b says
 fn spTwo(i I64) String, I64 { return "two" $i "-" $(i * 7), i }
 fn spTry(i I64) String ? ChOops {
-    if i > 100 { error ChOops.BAD }
+    if i > 100 { error ChOops.Bad }
     return "try" $i "-" $(i * 7)
 }
 fn spNums(i I64) Array<I64> { return I64[i, i * 7, i * 11] }
@@ -979,7 +979,7 @@ fn cvMatch(i I64) CvLab {
     return match i { case 0: CvLab(s) case _: CvLab(s) }
 }
 fn cvBad(k I64) CvLab ? ChOops {
-    if k < 100 { error ChOops.BAD }
+    if k < 100 { error ChOops.Bad }
     return CvLab("never")
 }
 fn cvTry(i I64) CvLab {

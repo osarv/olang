@@ -460,12 +460,12 @@ type PrimOp enum {
     RotateLeft
     RotateRight
     ByteSwap
-    # args [b]: b, once it holds - a contract's condition checked (D17e), failing with ArgumentError.INVALID
+    # args [b]: b, once it holds - a contract's condition checked (D17e), failing with ArgumentError.Invalid
     Holds
     # E39: args [n, m], two lanes' lengths: n, once they are equal - checked Abort, once per lane operation
     LaneLen
     # E39: args [n], a length: nothing, once it is above zero - a total that needs an element (Min, Max), checked Try:
-    # ArrayError.EMPTY
+    # ArrayError.Empty
     NonEmpty
     # T32: args [r, t], r a reference to an instance - a borrow, a temporary's, a copy's box (T32a) - made an "any", ty:
     # the pair of r and table t (a Lit, its index in generic.Program's AnyTables). Where the "any" lives is where r's

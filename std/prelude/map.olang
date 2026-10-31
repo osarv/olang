@@ -18,7 +18,7 @@
 
 # what a Map's Get and Take fail with: no value for the key
 type MapError error {
-    MISSING
+    Missing
 }
 
 # one key and its value, as a "for ... in" over a Map gives them
@@ -115,7 +115,7 @@ fn (m Map<K, V>&) Get(key K) V ? MapError {
     for f mut mapSlot<K, V>?&s = s.buckets[s.bucketOf(key)], f is not null, f = f.next {
         if f.entry.Key == key { return f.entry.Value }
     }
-    error MapError.MISSING
+    error MapError.Missing
 }
 
 # whether key has a value - what "key in m" asks (E29)
@@ -164,7 +164,7 @@ fn (m mut Map<K, V>&) Take(key K) V ? MapError {
         }
         prev = f
     }
-    error MapError.MISSING
+    error MapError.Missing
 }
 
 # removes every key and its value. The slots are kept for the keys put next, and the buckets stay as many as they
@@ -277,7 +277,7 @@ fn (it mut MapIter<K, V>&) Next() MapEntry<K, V> ? Exhausted {
 fn (it mut MapIter<K, V>&) advance() ? Exhausted {
     s := it.slot
     for s is null {
-        if it.bucket >= it.m.buckets.Len() { error Exhausted.END }
+        if it.bucket >= it.m.buckets.Len() { error Exhausted.End }
         s = it.m.buckets[it.bucket]
         it.bucket++
     }
@@ -312,7 +312,7 @@ type MapKeyIter<K, V> struct(of Map<K, V>&) {
 fn (it mut MapKeyIter<K, V>&) Next() K ? Exhausted {
     s := it.slot
     for s is null {
-        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        if it.bucket == it.m.buckets.Len() { error Exhausted.End }
         s = it.m.buckets[it.bucket]
         it.bucket++
     }
@@ -329,7 +329,7 @@ type MapValueIter<K, V> struct(of Map<K, V>&) {
 fn (it mut MapValueIter<K, V>&) Next() V ? Exhausted {
     s := it.slot
     for s is null {
-        if it.bucket == it.m.buckets.Len() { error Exhausted.END }
+        if it.bucket == it.m.buckets.Len() { error Exhausted.End }
         s = it.m.buckets[it.bucket]
         it.bucket++
     }

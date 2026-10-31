@@ -10,8 +10,8 @@ import "time"
 
 # why a wait gave up
 type Stopped error {
-    CANCELLED
-    TIMED_OUT
+    Cancelled
+    TimedOut
 }
 
 # Linux's clock ids
@@ -61,8 +61,8 @@ fn (t Token&) Why() I32 {
 
 # the error a wait gives up with, for a token that has fired
 fn (t Token&) Reason() ? Stopped {
-    if t.Why() == 1 { error Stopped.CANCELLED }
-    error Stopped.TIMED_OUT
+    if t.Why() == 1 { error Stopped.Cancelled }
+    error Stopped.TimedOut
 }
 
 # the wall-clock time, as a timespec, a wait should next wake at: the deadline if it is near, else soon enough
@@ -94,7 +94,7 @@ test "a token fires on Cancel, and not before" {
     assert not t.Cancelled()
     t.Cancel()
     assert t.Cancelled()
-    try t.Reason() catch Stopped.CANCELLED { return }
+    try t.Reason() catch Stopped.Cancelled { return }
 }
 
 # timed from before the token is made, so the bounds hold however long this thread is kept off a core: it has not
@@ -105,7 +105,7 @@ test "a token with a deadline fires by itself" {
     assert not t.Cancelled() or NowNs() - start >= 20000000
     for not t.Cancelled() { }
     assert NowNs() - start >= 20000000
-    try t.Reason() catch Stopped.TIMED_OUT { return }
+    try t.Reason() catch Stopped.TimedOut { return }
 }
 
 # inside time.Virtual a deadline fires on the virtual clock: when a task sleeps past it, and at once for a wait
@@ -152,7 +152,7 @@ test "a busy task stops when the token is cancelled" {
 # deferred Cancel() is what lets a worker stop, however the block is left, an error included. The worker records what
 # stopped it: 1 the Cancel, 2 its deadline - which would mean the join had waited the deadline out first.
 type stepFailed error {
-    BAD
+    Bad
 }
 type stopCount struct() {
     v I64 = 0
@@ -167,7 +167,7 @@ fn cancelOnExit(fails Bool, n mut stopCount&) ? stepFailed {
     join {
         defer t.Cancel()
         spawn spinRecord(t, n)
-        if fails { error stepFailed.BAD }
+        if fails { error stepFailed.Bad }
     }
 }
 

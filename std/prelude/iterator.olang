@@ -3,7 +3,7 @@
 
 # what Next fails with once there are no more values: running out is how a walk ends (S9a)
 type Exhausted error {
-    END
+    End
 }
 
 # what "for ... in" walks besides an array and a range (S9a): each Next() gives the following value, and fails
@@ -113,7 +113,7 @@ type IndexIter<T, C Indexable<T>> struct(of C&) {
 }
 
 fn (it mut IndexIter<T, C>&) Next() T ? Exhausted {
-    if it.i >= it.c.Len() { error Exhausted.END }
+    if it.i >= it.c.Len() { error Exhausted.End }
     it.i++
     return it.c.At(it.i - 1)
 }
@@ -135,7 +135,7 @@ type TakeIter<I, T ? E> struct(of I, n I64) {
 }
 
 fn (t mut TakeIter<I, T ? E>&) Next() T ? E, Exhausted {
-    if t.left <= 0 { error Exhausted.END }
+    if t.left <= 0 { error Exhausted.End }
     t.left--
     return try t.it.Next()
 }
@@ -379,11 +379,11 @@ type TakeWhileIter<I, T ? E> struct(of I, keep fn(x T) Bool ? E) {
 }
 
 fn (t mut TakeWhileIter<I, T ? E>&) Next() T ? E, Exhausted {
-    if t.done { error Exhausted.END }
+    if t.done { error Exhausted.End }
     x := try t.it.Next()
     if not try t.pred(x) {
         t.done = true
-        error Exhausted.END
+        error Exhausted.End
     }
     return x
 }
@@ -417,14 +417,14 @@ fn (it mut I&) SkipWhile<I Iterator<T ? E>, T ? E>(keep fn(x T) Bool ? E) SkipWh
 
 # what a StepSize below one fails with
 type StepError error {
-    BAD_STEP
+    BadStep
 }
 
 # how far StepBy steps: at least one. A literal is checked while compiling ("it.StepBy(2)", and 0 is a compile-time
 # error, T29d); a step computed while the program runs is made one with StepSize(n), which fails with
-# StepError.BAD_STEP below one - as ChunkSize is for Chunks and Windows
-type StepSize I64(v I64) ? StepError.BAD_STEP {
-    if v < 1 { error StepError.BAD_STEP }
+# StepError.BadStep below one - as ChunkSize is for Chunks and Windows
+type StepSize I64(v I64) ? StepError.BadStep {
+    if v < 1 { error StepError.BadStep }
 }
 
 # the first value, then every n-th after it: values 0, n, 2n ... of the walk; "range s, e, step" is the same for numbers
@@ -496,7 +496,7 @@ type ReversedIndexIter<T, C Indexable<T>> struct(of C&) {
 }
 
 fn (it mut ReversedIndexIter<T, C>&) Next() T ? Exhausted {
-    if it.i <= 0 { error Exhausted.END }
+    if it.i <= 0 { error Exhausted.End }
     it.i--
     return it.c.At(it.i)
 }
@@ -617,7 +617,7 @@ fn (it mut I&) Last<I Iterator<T ? E>, T ? E>() T ? E, Exhausted {
 # the value at position n, counted from 0 - the n before it read and dropped - failing with Exhausted where the walk
 # has no more than n values, and for a negative n
 fn (it mut I&) Nth<I Iterator<T ? E>, T ? E>(n I64) T ? E, Exhausted {
-    if n < 0: error Exhausted.END
+    if n < 0: error Exhausted.End
     for _ in range n { try it.Next() }
     return try it.Next()
 }
@@ -637,11 +637,11 @@ fn (c C&) LowerBound<C Indexable<T>, T>(x T) I64 {
 }
 
 # the first position whose element is equal to x ("==", E10), in a collection sorted by "<" - a binary search, failing
-# with ArrayError.NOT_FOUND where there is none
-fn (c C&) BinarySearch<C Indexable<T>, T>(x T) I64 ? ArrayError.NOT_FOUND {
+# with ArrayError.NotFound where there is none
+fn (c C&) BinarySearch<C Indexable<T>, T>(x T) I64 ? ArrayError.NotFound {
     i := c.LowerBound(x)
     if i < c.Len() and c.At(i) == x: return i
-    error ArrayError.NOT_FOUND
+    error ArrayError.NotFound
 }
 
 # a collection with positions walked from its first element to its last and round again, without end - an empty one
@@ -653,7 +653,7 @@ type CycleIndexIter<T, C Indexable<T>> struct(of C&) {
 
 fn (it mut CycleIndexIter<T, C>&) Next() T ? Exhausted {
     n := it.c.Len()
-    if n == 0: error Exhausted.END
+    if n == 0: error Exhausted.End
     if it.i >= n: it.i = 0
     it.i++
     return it.c.At(it.i - 1)
@@ -669,7 +669,7 @@ fn (c C&) Cycle<C Indexable<T>, T>() CycleIndexIter<T, C> { return CycleIndexIte
 if TestBuild {
     # what the walks below fail with when a callback does
     type walkBad error {
-        NO
+        No
     }
 
     # a count of the odd values so far, failing as walkOdd does
@@ -679,7 +679,7 @@ if TestBuild {
     }
 
     fn walkOdd(x I64) Bool ? walkBad {
-        if x == 4 { error walkBad.NO }
+        if x == 4 { error walkBad.No }
         return x % 2 == 1
     }
 

@@ -2,7 +2,7 @@
 # undefined (E6a) or giving IEEE's infinities and NaNs (E6b): one operation at a time, "try arith.Add(a, b)", or a
 # Checked whose operators are these functions, "try arith.Checked(a) * b + c". Every number type is taken - the integers,
 # and the floats where the operation is one of theirs; the words say what went wrong. Each set is inferred (R1a) for its
-# number type, so an integer's Add fails with OVERFLOW alone and "catch arith.Error.OVERFLOW" handles it whole.
+# number type, so an integer's Add fails with OVERFLOW alone and "catch arith.Error.Overflow" handles it whole.
 #
 # It is ordinary olang, written over the built-in operations, so the compile-time evaluator computes it as the program
 # does (K1): a global baked from "arith.Mul(a, b)" and an assert on one are decided while compiling. Plain "+ - * / %"
@@ -10,10 +10,10 @@
 
 # what a checked operation fails with
 type Error error {
-    OVERFLOW           # a result the type cannot hold: an integer's true result out of its range, a shift's true
+    Overflow           # a result the type cannot hold: an integer's true result out of its range, a shift's true
                        # value x * 2^n, a finite float result made infinite from finite operands
-    DIVIDE_BY_ZERO     # an integer "/" or "%" by zero, or a finite nonzero float divided by zero
-    INVALID            # IEEE's invalid operation - a NaN from operands that are not NaN (0.0 / 0.0, inf - inf) - or a
+    DivideByZero     # an integer "/" or "%" by zero, or a finite nonzero float divided by zero
+    Invalid            # Ieee's invalid operation - a NaN from operands that are not NaN (0.0 / 0.0, inf - inf) - or a
                        # shift amount outside [0, the type's width)
 }
 
@@ -23,7 +23,7 @@ fn Add<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
         case _ {
-            if (r < a) != (b < 0) { error Error.OVERFLOW }
+            if (r < a) != (b < 0) { error Error.Overflow }
         }
     }
     return r
@@ -35,7 +35,7 @@ fn Sub<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 { try floatResult(a, b, r) }
         case _ {
-            if (r > a) != (b < 0) { error Error.OVERFLOW }
+            if (r > a) != (b < 0) { error Error.Overflow }
         }
     }
     return r
@@ -53,10 +53,10 @@ fn Mul<T Number>(a T, b T) T ? {
             if a == 0 or b == 0 { return 0 }
             if T.Min < 0 {
                 # the least value times -1 does not fit, and "r / b" would divide it by -1 (E6a)
-                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.OVERFLOW }
+                if (a == -1 and b == T.Min) or (b == -1 and a == T.Min) { error Error.Overflow }
             }
             r := a * b
-            if r / b != a { error Error.OVERFLOW }
+            if r / b != a { error Error.Overflow }
             return r
         }
     }
@@ -66,15 +66,15 @@ fn Mul<T Number>(a T, b T) T ? {
 fn Div<T Number>(a T, b T) T ? {
     match T {
         case F16, BF16, F32, F64 {
-            if b == 0 and a != 0 and a.IsFinite() { error Error.DIVIDE_BY_ZERO }
+            if b == 0 and a != 0 and a.IsFinite() { error Error.DivideByZero }
             r := a / b
             try floatResult(a, b, r)
             return r
         }
         case _ {
-            if b == 0 { error Error.DIVIDE_BY_ZERO }
+            if b == 0 { error Error.DivideByZero }
             if T.Min < 0 {
-                if a == T.Min and b == -1 { error Error.OVERFLOW }
+                if a == T.Min and b == -1 { error Error.Overflow }
             }
             return a / b
         }
@@ -84,7 +84,7 @@ fn Div<T Number>(a T, b T) T ? {
 # a % b, an integer's remainder, of a's sign - the least value's by -1 is 0, which fits (the "%" itself is undefined
 # there, E6a, so it is not asked)
 fn Rem<T Integer>(a T, b T) T ? {
-    if b == 0 { error Error.DIVIDE_BY_ZERO }
+    if b == 0 { error Error.DivideByZero }
     if T.Min < 0 {
         if b == -1 { return 0 }
     }
@@ -97,10 +97,10 @@ fn Neg<T Number>(a T) T ? {
         case F16, BF16, F32, F64 { return -a }
         case _ {
             if T.Min < 0 {
-                if a == T.Min { error Error.OVERFLOW }
+                if a == T.Min { error Error.Overflow }
                 return -a
             }
-            if a != 0 { error Error.OVERFLOW }
+            if a != 0 { error Error.Overflow }
             return a
         }
     }
@@ -108,15 +108,15 @@ fn Neg<T Number>(a T) T ? {
 
 # a << n: INVALID for an amount outside [0, the width), OVERFLOW where the true value a * 2^n does not fit
 fn ShiftLeft<T Integer>(a T, n I64) T ? {
-    if n < 0 or n >= widthOf(a) { error Error.INVALID }
+    if n < 0 or n >= widthOf(a) { error Error.Invalid }
     r := a << n
-    if (r >> n) != a { error Error.OVERFLOW }
+    if (r >> n) != a { error Error.Overflow }
     return r
 }
 
 # a >> n: INVALID for an amount outside [0, the width)
 fn ShiftRight<T Integer>(a T, n I64) T ? {
-    if n < 0 or n >= widthOf(a) { error Error.INVALID }
+    if n < 0 or n >= widthOf(a) { error Error.Invalid }
     return a >> n
 }
 
@@ -125,7 +125,7 @@ fn ShiftRight<T Integer>(a T, n I64) T ? {
 # taken, not from 1, which I1 cannot hold: its x.Pow(0) fails
 fn Pow<T Integer>(x T, n U32) T ? {
     if n == 0 {
-        if T.Max < 1 { error Error.OVERFLOW } else { return 1 }
+        if T.Max < 1 { error Error.Overflow } else { return 1 }
     }
     r T = x
     started := false
@@ -156,8 +156,8 @@ fn (a Checked<T>) Neg() Checked<T> ? { return Checked<T>(try Neg(a.Value)) }
 # a float result r of a and b, checked: INVALID for a NaN made from operands that are not, OVERFLOW for an infinity
 # made from finite operands
 fn floatResult<T Float>(a T, b T, r T) ? {
-    if r.IsNan() and not a.IsNan() and not b.IsNan() { error Error.INVALID }
-    if r.IsInf() and a.IsFinite() and b.IsFinite() { error Error.OVERFLOW }
+    if r.IsNan() and not a.IsNan() and not b.IsNan() { error Error.Invalid }
+    if r.IsInf() and a.IsFinite() and b.IsFinite() { error Error.Overflow }
 }
 
 # an integer type's width in bits, of any width (T4a): the bits its largest value sets, and a signed one's sign bit
@@ -168,7 +168,7 @@ fn widthOf<T Integer>(a T) I64 {
 test "integers: what fits is the plain result, what does not fails" {
     assert Add(I8(100), I8(27))! == 127
     assert (try Add(I8(100), I8(28)) catch default 0) == 0
-    assert (try Add(I8(-100), I8(-29)) catch Error.OVERFLOW default 1) == 1
+    assert (try Add(I8(-100), I8(-29)) catch Error.Overflow default 1) == 1
     assert (try Add(U8(200), U8(56)) catch default 7) == 7
     assert Sub(U8(5), U8(5))! == 0
     assert (try Sub(U8(5), U8(6)) catch default 9) == 9
@@ -178,8 +178,8 @@ test "integers: what fits is the plain result, what does not fails" {
     assert (try Mul(I64(-1), I64.Min) catch default 5) == 5
     assert (try Mul(U64(1) << 32, U64(1) << 32) catch default 6) == 6
     assert Mul(I16(0), I16(-1))! == 0
-    assert (try Div(I32(7), I32(0)) catch Error.DIVIDE_BY_ZERO default 4) == 4
-    assert (try Div(I32.Min, I32(-1)) catch Error.OVERFLOW default 4) == 4
+    assert (try Div(I32(7), I32(0)) catch Error.DivideByZero default 4) == 4
+    assert (try Div(I32.Min, I32(-1)) catch Error.Overflow default 4) == 4
     assert Div(I32(-7), I32(2))! == -3
     assert (try Rem(I64(5), I64(0)) catch default 2) == 2
     assert Rem(I64(-7), I64(3))! == -1
@@ -188,15 +188,15 @@ test "integers: what fits is the plain result, what does not fails" {
     assert (try Neg(U8(1)) catch default 2) == 2
     assert Neg(U8(0))! == 0
     assert ShiftLeft(I32(1), 30)! == 1 << 30
-    assert (try ShiftLeft(I32(1), 31) catch Error.OVERFLOW default 0) == 0
-    assert (try ShiftLeft(U8(1), 8) catch Error.INVALID default 3) == 3
+    assert (try ShiftLeft(I32(1), 31) catch Error.Overflow default 0) == 0
+    assert (try ShiftLeft(U8(1), 8) catch Error.Invalid default 3) == 3
     assert ShiftLeft(I8(-1), 7)! == -128
     assert (try ShiftRight(I64(8), -1) catch default 5) == 5
     assert Pow(I64(3), 4)! == 81
     assert (try Pow(U8(2), 8) catch default 1) == 1
     assert (try Pow(three, 21) catch default -1) == -1 and Pow(three, 19)! == 1162261467
     assert Pow(I64(-2), 63)! == I64.Min and (try Pow(I64(2), 63) catch default 0) == 0
-    assert Pow(U8(2), 7)! == 128 and (try Pow(U8(16), 2) catch Error.OVERFLOW default 7) == 7
+    assert Pow(U8(2), 7)! == 128 and (try Pow(U8(16), 2) catch Error.Overflow default 7) == 7
     assert BakedPow == -1 and Pow(seventeen, 2)! == 289
 }
 
@@ -213,10 +213,10 @@ test "Rem by -1 is 0, the least value's too - while compiling as at run time (th
 
 test "floats: IEEE's exceptions as errors" {
     assert Add(1.5, 2.25)! == 3.75
-    assert (try Add(F64.Max, F64.Max) catch Error.OVERFLOW default 0.0) == 0.0
-    assert (try Sub(Inf, Inf) catch Error.INVALID default 1.0) == 1.0
-    assert (try Div(1.0, 0.0) catch Error.DIVIDE_BY_ZERO default 2.0) == 2.0
-    assert (try Div(0.0, 0.0) catch Error.INVALID default 3.0) == 3.0
+    assert (try Add(F64.Max, F64.Max) catch Error.Overflow default 0.0) == 0.0
+    assert (try Sub(Inf, Inf) catch Error.Invalid default 1.0) == 1.0
+    assert (try Div(1.0, 0.0) catch Error.DivideByZero default 2.0) == 2.0
+    assert (try Div(0.0, 0.0) catch Error.Invalid default 3.0) == 3.0
     assert (try Mul(F16(300), F16(300)) catch default F16(1)) == 1.0
     assert Neg(F32(2)) == -2.0                  # a float's cannot fail
     assert Add(Inf, 1.0)! == Inf        # an infinity in is no overflow
@@ -231,7 +231,7 @@ test "Checked: each step checked, left to right, the same while compiling as at 
     assert Baked == 43
     assert (try 2 * Checked(I32(5)) catch default Checked(I32(0))).Value == 10    # Mul commutes (E31c)
     assert (try Checked(I32(G / 3000)) * 2 catch default Checked(I32(-1))).Value == 2000000
-    assert (try Checked(I32(G / 2)) * 2 catch Error.OVERFLOW default Checked(I32(-1))).Value == -1
+    assert (try Checked(I32(G / 2)) * 2 catch Error.Overflow default Checked(I32(-1))).Value == -1
     assert (try Checked(U8(250)) + 5).Value == 255
     assert (try Checked(U8(250)) + 6 catch default Checked(U8(1))).Value == 1
 }
@@ -247,20 +247,20 @@ fn widths(k I64) String {
     e := try Neg(U7(k)) catch default U7(77)
     f := try ShiftLeft(I128(k), 100) catch default I128(77)
     g := try ShiftLeft(U7(k), 6) catch default U7(77)
-    h := try ShiftLeft(U7(k), 7) catch Error.INVALID default U7(77) catch default U7(66)
-    i := try ShiftLeft(I9(k), 8) catch Error.OVERFLOW default I9(77) catch default I9(66)
+    h := try ShiftLeft(U7(k), 7) catch Error.Invalid default U7(77) catch default U7(66)
+    i := try ShiftLeft(I9(k), 8) catch Error.Overflow default I9(77) catch default I9(66)
     j := try ShiftRight(I65(m), 64) catch default I65(77)
     l := try ShiftRight(U128(k) << 127, 127) catch default U128(77)
-    n := try ShiftRight(U128(k), 128) catch Error.INVALID default U128(77) catch default U128(66)
-    o := try Div(I24.Min, I24(m)) catch Error.OVERFLOW default I24(77) catch default I24(66)
-    p := try Mul(I24.Min, I24(m)) catch Error.OVERFLOW default I24(77) catch default I24(66)
-    q := try Mul(I24(m), I24.Min) catch Error.OVERFLOW default I24(77) catch default I24(66)
+    n := try ShiftRight(U128(k), 128) catch Error.Invalid default U128(77) catch default U128(66)
+    o := try Div(I24.Min, I24(m)) catch Error.Overflow default I24(77) catch default I24(66)
+    p := try Mul(I24.Min, I24(m)) catch Error.Overflow default I24(77) catch default I24(66)
+    q := try Mul(I24(m), I24.Min) catch Error.Overflow default I24(77) catch default I24(66)
     r := try Rem(I24.Min, I24(m)) catch default I24(77)
-    s := try Div(I65.Min, I65(m)) catch Error.OVERFLOW default I65(77) catch default I65(66)
+    s := try Div(I65.Min, I65(m)) catch Error.Overflow default I65(77) catch default I65(66)
     t := try Rem(I127.Min, I127(m)) catch default I127(77)
-    u := try Mul(I1(m), I1(m)) catch Error.OVERFLOW default I1(0) catch default I1(-1)
+    u := try Mul(I1(m), I1(m)) catch Error.Overflow default I1(0) catch default I1(-1)
     v := try Pow(I1(m), 1) catch default I1(0)
-    w := try Pow(I1(m), 0) catch Error.OVERFLOW default I1(0) catch default I1(-1)
+    w := try Pow(I1(m), 0) catch Error.Overflow default I1(0) catch default I1(-1)
     x := try Pow(I1(m) + I1(m), 3) catch default I1(-1)
     y := try Pow(U1(k), 0) catch default U1(0)
     z := try Pow(I24(-2) * I24(k), 23) catch default I24(77)

@@ -4140,7 +4140,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     rk := U8(0) if res == types.VoidT or res == types.NoreturnT else ffi.Code(ffi.Kind.U64) if foreignRes else ffi.Code(m.ffiKind(res))
     fixed := try m.variadic.Get(e) catch default -1
-    out := try ffi.Call(name, kinds, words, rk, fixed) catch ffi.Error.NOT_FOUND {
+    out := try ffi.Call(name, kinds, words, rk, fixed) catch ffi.Error.NotFound {
         m.refuse(WhyFfiFind)
         return false
     } catch {
@@ -4499,13 +4499,13 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
 }
 
 # a frame's block that ends in no call: the machine was asked for the call index of something else
-type NotACall error { TERM }
+type NotACall error { Term }
 
 fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? NotACall {
     t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
     match t {
         case mir.Term.Call(_, k) { return I64(k) }
-        case _ { error NotACall.TERM }
+        case _ { error NotACall.Term }
     }
 }
 
@@ -5329,20 +5329,20 @@ type Image struct() {
 }
 
 type NotBaked error {
-    REFUSED
+    Refused
 }
 
 # the image of global (module, name) once evaluated while compiling: a value that is plain data, and what it reaches,
 # the program's own storage made by its initializer. One reaching code (a function value), another global's storage
 # or storage the evaluator does not hold as data is set at startup instead
 fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) Image ? NotBaked {
-    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.REFUSED }
-    g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
+    if m.Global(module, name, true, mutable) != Stop.None { error NotBaked.Refused }
+    g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.Refused }
     img := Image()
     blobOf Map<I64, I64>
     work Vec<I64>
     root := m.globals[g].Store & slotMask
-    if m.al[root].Size == 0 { error NotBaked.REFUSED }
+    if m.al[root].Size == 0 { error NotBaked.Refused }
     blobOf.Put(root, 0)
     work.Push(root)
     k I64 = 0
@@ -5361,9 +5361,9 @@ fn (m mut Machine&) Image(module I64, name source.NameId, mutable Bool = false) 
             id := m.prov[a.Base / 8 + w]
             if id == 0 { continue }
             ts := id & slotMask
-            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.REFUSED }
-            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.REFUSED }
-            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.REFUSED }
+            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.Refused }
+            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.Refused }
+            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.Refused }
             # an instance another global's initializer made is that global's: written once, with it, and named here
             # (K2b) - the caller resolves which global's image holds it
             if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g {

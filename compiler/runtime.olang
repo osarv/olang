@@ -24,7 +24,7 @@ FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2, 168,
 FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1, 440, 416, 432]
 
 # a runtime file that is not there or cannot be read as a runtime file: said already
-type Bad error { UNREADABLE }
+type Bad error { Unreadable }
 
 fn archRow(arch String&) I64 {
     for i in range Archs.Len() {
@@ -37,13 +37,13 @@ fn fact(name String&, row I64) I64 ? {
     for i in range FactNames.Len() {
         if FactNames[i] == name { return FactX86[i] if row == 0 else FactArm[i] }
     }
-    error Bad.UNREADABLE
+    error Bad.Unreadable
 }
 
 # a stop at line n of the runtime file at path: a mistake in the repository, not in the program
 fn malformed(path String&, n I64, why String&) ? Bad {
     try io.PrintErrln($"olang: " $path ":" $n ": " $why) catch io.Error { }
-    error Bad.UNREADABLE
+    error Bad.Unreadable
 }
 
 # what a line is to Fill: "; @if", "; @else", "; @end" (0, 1, 2), or text (-1) - a comment that only begins as one
@@ -66,7 +66,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false) String ? Bad {
     path := $load.StdDir() "/runtime/" $file
     bytes := try os.ReadFile(path) catch os.Error {
         try io.PrintErrln($"olang: " $path ": cannot open this file") catch io.Error { }
-        error Bad.UNREADABLE
+        error Bad.Unreadable
     }
     text := String(bytes)
     row := archRow(arch)

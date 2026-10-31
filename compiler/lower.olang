@@ -77,17 +77,17 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
 }
 
 # what a check failing as written fails with (E15a, R20): a word of a prelude error type
-OutOfBounds I64 = 0    # ArrayError.OUT_OF_RANGE: an index or a slice outside its array
-Overflow I64 = 1       # NumberError.OVERFLOW: a narrowing that changes the value (E26b)
-Invalid I64 = 2        # NumberError.INVALID: a NaN or an infinity narrowed to an integer
-WrongCase I64 = 3      # CaseError.WRONG_CASE: an "as" naming a case the value is not (E32)
-Contract I64 = 4       # ArgumentError.INVALID: a call's requirement false on entry (D17)
-Empty I64 = 5          # ArrayError.EMPTY: a total that needs an element of an array that has none (E39)
+OutOfBounds I64 = 0    # ArrayError.OutOfRange: an index or a slice outside its array
+Overflow I64 = 1       # NumberError.Overflow: a narrowing that changes the value (E26b)
+Invalid I64 = 2        # NumberError.Invalid: a NaN or an infinity narrowed to an integer
+WrongCase I64 = 3      # CaseError.WrongCase: an "as" naming a case the value is not (E32)
+Contract I64 = 4       # ArgumentError.Invalid: a call's requirement false on entry (D17)
+Empty I64 = 5          # ArrayError.Empty: a total that needs an element of an array that has none (E39)
 
 FailIds Array<String&> = String&["std/prelude/array", "std/prelude/number", "std/prelude/number", "std/prelude/enums"
                                  "std/prelude/argument", "std/prelude/array"]
 FailTypes Array<String&> = String&["ArrayError", "NumberError", "NumberError", "CaseError", "ArgumentError", "ArrayError"]
-FailWords Array<String&> = String&["OUT_OF_RANGE", "OVERFLOW", "INVALID", "WRONG_CASE", "INVALID", "EMPTY"]
+FailWords Array<String&> = String&["OutOfRange", "Overflow", "Invalid", "WrongCase", "Invalid", "Empty"]
 
 # a check's word: its error type and the code it fails with under that type alone
 fn (lw mut Lowerer&) failure(word I64) types.TypeId, I64 {
@@ -139,7 +139,7 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
         f.RaiseWhat.Push(b.RaiseWhat[i])
     }
     if b.Gen {
-        # D18: a generator's Next, a coroutine - its end the code Exhausted.END has under its own list
+        # D18: a generator's Next, a coroutine - its end the code Exhausted.End has under its own list
         f.Gen = true
         ex := lw.P.PreludeType("std/prelude/iterator", "Exhausted")
         if ex != types.UnknownT { f.GenEnd = mir.ErrorCode(lw.P.T, lw.P.T.Errors(b.Ty), ex, 0) }
@@ -1581,7 +1581,7 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
-            out.Push(ln.textData($q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w]), sp))
+            out.Push(ln.textData($q $ln.L.P.ErrorWordName(d, w), sp))
         }
     }
     return out.ToArray()
@@ -2558,7 +2558,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         return a
     }
     if op == typed.PrimOp.NonEmpty {
-        # E39: a total that needs an element - failing with ArrayError.EMPTY where there is none
+        # E39: a total that needs an element - failing with ArrayError.Empty where there is none
         n := ln.val(args[0])
         if ln.dead { return mir.Operand.None }
         ok := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[n, ln.constI64(0)], sp)
@@ -2874,7 +2874,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     ln.start(ok)
 }
 
-# T20, B5: an error value rendered as an error's name prints ("os.Error.DENIED", the prelude's and the root program's
+# T20, B5: an error value rendered as an error's name prints ("os.Error.Denied", the prelude's and the root program's
 # bare), null as "null" - a test of its code per word its type holds
 fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
     t := ln.T
@@ -2894,7 +2894,7 @@ fn (ln mut lowering&) renderErr(b mir.ScopeRef, v mir.Operand, ty types.TypeId, 
         for w in range ws.Len() {
             if w < 64 and (t.ErrMask(es[j]) & (U64(1) << w)) == 0 { continue }
             codes.Push(((j + 1) << 16) | w)
-            texts.Push($q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w]))
+            texts.Push($q $p.ErrorWordName(d, w))
         }
     }
     after := ln.F.NewBlock()
@@ -3294,7 +3294,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = f
 }
 
 # T20, E10b: an error value's hash by the error it holds - its type's identity and its word - never by its code, which
-# numbers the error in its own set: so values equal across sets ("PErr.BAD" as a PErr and as a LoadError) hash alike.
+# numbers the error in its own set: so values equal across sets ("PErr.Bad" as a PErr and as a LoadError) hash alike.
 # null hashes as the number 0 does
 fn (ln mut lowering&) hashErr(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
@@ -3774,7 +3774,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
 }
 
 # T20: an error value's type as source writes it - its error type, the named set it was written as, else its entries
-# in braces; an entry holding some words of a type, those words ("os.Error.DENIED") - each qualified as its values are
+# in braces; an entry holding some words of a type, those words ("os.Error.Denied") - each qualified as its values are
 # (B5: "lib.Both", the prelude's and the root program's own bare), so "Vec<lib.Both>[lib.LibErr.B]" reads alike
 fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
     t := lw.P.T
@@ -3797,7 +3797,7 @@ fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
         for i in range ws.Len() {
             if i < 64 and (t.ErrMask(e) & (U64(1) << i)) != 0 {
                 if k > 0 { out.Push(", ") }
-                out.Push($name "." $t.Names.Text(ws[i]))
+                out.Push($name if lw.P.IsRaisedError(t.DeclOf(et)) else $name "." $t.Names.Text(ws[i]))
                 k++
             }
         }
@@ -3950,11 +3950,11 @@ test "a function lowers to straight-line MIR: its operands in temporaries, its f
 
 test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
     text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
-             "type E error {\n    BAD\n    WORSE\n}\n"
-             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
+             "type E error {\n    Bad\n    Worse\n}\n"
+             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.Bad }\n    if n > 100 { error E.Worse }\n    return n\n}\n"
              "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r): 3 * r * r\n        case Shape.Square: 1\n    }\n}\n"
              "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"
-             "        if x > 50 { break }\n        t += try pick(x) catch E.BAD default 0\n    }\n    for i in range 3 { t += i }\n"
+             "        if x > 50 { break }\n        t += try pick(x) catch E.Bad default 0\n    }\n    for i in range 3 { t += i }\n"
              "    return t\n}\n"
              "fn main() ? E {\n    s := try walk(I64[1, 2, 3]) + area(Shape.Circle(2))\n    assert s > 0, \"positive\"\n"
              "    q := try I64(s * 2).Narrow<I32>() catch default 0\n    assert $q \" \" $Shape.Square != \"\"\n}\n")
