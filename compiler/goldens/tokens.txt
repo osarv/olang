@@ -1924,7 +1924,7 @@ c8285ddbf1cbb114 fb2a509b6ebf03f6 std/prelude/float.olang
 7c4e21ded6a0cc5d daeecf7c4a5bd414 std/prelude/hash.olang
 cfbf45d5cfa2fd7d 2dc1c92d43588142 std/prelude/iterator.olang
 2be517b5856bc1f8 3d1d5382824ee0c4 std/prelude/map.olang
-e9cfac05cbbc7ea2 66e5bf1f1bb3e923 std/prelude/number.olang
+e865246f44b436ca f4412dbeb77ddf08 std/prelude/number.olang
 b281768945e7440c bfd77aea086ce2fa std/prelude/place.olang
 721e00dbb265fb72 2161208eb0ff24d3 std/prelude/reflect.olang
 4e6c30494e76d726 e5d8ef3ab8d01ab9 std/prelude/tests/array.olang
@@ -1933,6 +1933,7 @@ c60c6fb1d9724a29 22daf7f4875ff842 std/prelude/tests/folds.olang
 fb04e7d1483f1f31 268342b93f8a8de4 std/prelude/tests/iterator.olang
 ed0617bc924f6940 33e9a34f674c08b5 std/prelude/tests/map.olang
 f0ca92f42988413b acdd8c203f768d3d std/prelude/tests/number.olang
+6598ecdc4507cbef d2c3060510e28570 std/prelude/tests/pow.olang
 79532329974717f6 f2116b155a5ac822 std/prelude/tests/text.olang
 3cc41b7952fa8709 bc924e2b062fbc02 std/prelude/tests/vec.olang
 2e31c149532fb99b 6ccff90d7d2126b3 std/prelude/text.olang
