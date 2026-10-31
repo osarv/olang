@@ -26676,3 +26676,6 @@ could also infer was mine and is withdrawn - a contract function's implicit Argu
 with it. Typos: R14 already refuses a clause naming what the call never raises; a raised name one edit from one of the
 module's errors is refused with did-you-mean unless the signature names it (mine). Not built yet.
 
+The user then banned both flag shapes ("yes, ban both flag shapes"): a `Bool` among several results, and a
+success `Bool` beside a written `&` parameter, are compile errors naming `? E` - with errors this cheap, nothing needs
+them, and the rule "errors are errors" holds in every program.

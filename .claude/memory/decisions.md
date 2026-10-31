@@ -2001,4 +2001,4 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   private lower case, `?` required on every function that can fail (bare = inferred; contract functions and main
   included). Still ASKED: the two flag bans (a Bool among several results; a success Bool with a written `&`
   parameter) - rec yes. Queued as a language batch after wt-opt31 merges.
-
+- QBZ flag bans DECIDED 2026-10-31 (the user: "yes, ban both flag shapes"): in the errors batch.

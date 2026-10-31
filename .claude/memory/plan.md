@@ -608,6 +608,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   assert reading it.
 - QUEUED 2026-10-31: the errors batch (decisions.md QBZ): errors declared where raised, CamelCase error words with a
   migration tool in olang fix, `?` required (contract functions' implicit ArgumentError and main without `?` gone),
-  did-you-mean on near-miss raises, the flag bans if the user says yes, and the compiler's ~60 flag sites moved to
+  did-you-mean on near-miss raises, both flag bans (decided), and the compiler's ~60 flag sites moved to
   errors. After wt-opt31 merges. Not under the hold (no scope or signature rework).
 

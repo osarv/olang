@@ -820,7 +820,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   error name is CamelCase, exported capitalized and private lower case (`notFound`) - words included (`ListError.Empty`,
   migrated by a tool); a private error a caller outside cannot name. A function that can fail writes `?` - bare to infer
   the set, or the set as a promise; no function fails without it (contract functions and `main` included). A raised name
-  one edit from an error of the module is an error with did-you-mean unless the signature names it. The entry below is
+  one edit from an error of the module is an error with did-you-mean unless the signature names it. Flags are
+  banned (the user, 2026-10-31: "ban both flag shapes"): a `Bool` among several results, and a function giving a `Bool`
+  that also writes a `&` parameter, are compile errors naming `? E`. The entry below is
   today's rule until it lands.
 - **`?` alone infers the set (R1a, the user's call 2026-10-17: "Do 2", Zig's); every error has a type (R3, R22).**
   A bare `?` is what the body can fail with - a least fixed point over calls, cycles included, ordered canonically
