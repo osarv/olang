@@ -597,3 +597,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   convergence; an enum entry ending in `&` across lines parses. Left: `x2 := x1; return x2` of a constructed local gets
   O10d (over-rejection); becomedtor gives two errors for one cause; the profiler handler has no sigaltstack.
   `mut` stays (the user reversed its removal 2026-10-31). Running: wt-feat (survey2 items 6, 8, 9, 10, 12).
+- 2026-10-31 CET: wt-feat merged (dd1f4af + bfix4, goldens recaptured, full verify on the merged tip passed): S16e
+  `unreachable` as a value, K3 `comptime e` (a hidden baked global per site and instance) and K3a `comptime for`
+  (unrolled, at most 4096 copies), cold paths (ending runtime calls cold noreturn, error edges weighted 1:2000 - Vec push
+  188.7M -> 103.7M instructions, miss-heavy unchanged), `time.Virtual(f)` (test builds only), `chan.Select` over
+  channels, SendOf and time.After (polling; Chan counts blocked receivers). Agent's rules worth the user's look: G9e
+  (a left-off parameter binds its type variable to its default's type), T18/S13g (an enum may have no cases; a case
+  carrying one needs no clause). Left: Select(SendOf(...)) inside a join refused by C2d (a local first works); a mutable
+  global with a literal initializer still gets a startup call; a baked global that aborts gives a second error at an
+  assert reading it.
