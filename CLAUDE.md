@@ -604,7 +604,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   computing them bit by bit. Inherited through `extends`, never redeclared, as E33's.
 - **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an
   inherited array method is never overridden (T29e); `x.Bits()` and `u.F64FromBits()` etc. move a float's IEEE pattern
-  (E33); an `Array<T, 0>` has storage of its own (E10); a NaN renders `nan`.
+  (E33); every empty array names one static storage, made with no allocation (arrays compare by contents, E10; a
+  struct of no fields still has storage of its own, since a reference to one compares by identity); a NaN renders `nan`.
 - **Visibility details (M6a, M12, M4).** A member or error word is public by its own first letter; enum cases are
   alias-qualified across modules (`Lib.Dir.North`); an alias-less import takes the file's base name, so a file's
   capitalization is part of its interface; capitalized aliases re-export, through chains of any depth; a cycle in
@@ -1322,6 +1323,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
     the unused `olang.init.MODULE`; a mutable global whose initializer the evaluator computes to plain data is baked as its
     writable storage's first value (std/time's counters) - nothing at startup. 128-bit division by a constant not built.
   - 9: a text local copied from a literal, homed in its own block, gets a stack slot (`lower.slotCopy`), not arena storage.
+  - 14: an empty array's storage is `@__olang_empty_array` - no allocation (an `Array<T>(0)`, a Vec's first buffer).
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).

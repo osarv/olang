@@ -26634,3 +26634,16 @@ slot, and one it never writes LLVM replaces with the constant itself (memory onl
 gains nothing new, so the evaluator and `interpret` run it as before. bench/repro/text_local_copy 100000: 7.6M -> 0.3M
 Ir. tests/textslot.olang writes, slices, lends writably, assigns whole and keeps (into a `Vec<String&>`, which the scope
 pass homes elsewhere) such locals, built, `-quick`, `-debug` and `-sanitize`, beside a baked global of the same function.
+
+**14. Empty arrays allocate nothing.** E10's old rule that "an allocation of nothing still gets storage of its own, so
+two of them are two instances" was for identity, which arrays lost with `a is b` (2026-10-24): every array declares
+`Eq` by contents, so two empty arrays are equal however made, and nothing reads or writes an element of one. Checked
+what could still see the address: an `extern` given an empty array is given a pointer to no bytes; `retire()` of an
+empty buffer does nothing (`__olang_san_retire` returns for 0 bytes); a region's functions read the word before an
+object, so the static's first words are zero - constant data to them (O8d). So `__olang_scope_alloc` and
+`__olang_scope_alloc_min` - every array's and text's storage - give `@__olang_empty_array` (a 64-aligned constant, the
+storage at its offset 64) for a size of 0, a branch that folds where the size is known: `Array<T>(0)`, a Vec's first
+buffer, an empty comprehension, text of no bytes. A struct of no fields still gets storage of its own through
+`__olang_scope_alloc_a` (a reference to one compares by identity). A loop making a Vec, pushing twice and making an
+`Array<I64>(0)` each turn, 100,000 turns: 17.3M -> 16.2M Ir. SPEC E27's "an empty array with storage of its own"
+reworded.
