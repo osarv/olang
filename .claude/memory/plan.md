@@ -589,3 +589,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   work"): the scoping rework (QCB) and the nesting refactor (QCA) wait until QCC (references
   in signatures) and the rest of the ledger are answered (`mut` stays - its removal was reversed 2026-10-31) - one rework of section 8 and the
   signatures then, not two; the nesting refactor after it. The decided features batch and bulk review 4 run meanwhile.
+- 2026-10-31 CET: bulk review 4 (1dd87cf..f0e0743, /home/user/review/bulk4) and its fixes merged (bfix4 294f3d1,
+  verified; fast-forward): become refuses unscoped views of a closing scope (tailStorageGiven) and results that may hold
+  a destructor (mayHoldDtor); deferred code sees no narrowing a later statement ends; writes through a narrowed payload
+  copy refused (not lent - a reference to the enum may change case under it); a noreturn call leaves for S18c; bitset's
+  constructor a contract; attributes holding mut references refused where written; the scope pass's fixed point to
+  convergence; an enum entry ending in `&` across lines parses. Left: `x2 := x1; return x2` of a constructed local gets
+  O10d (over-rejection); becomedtor gives two errors for one cause; the profiler handler has no sigaltstack.
+  `mut` stays (the user reversed its removal 2026-10-31). Running: wt-feat (survey2 items 6, 8, 9, 10, 12).
