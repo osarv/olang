@@ -26579,3 +26579,12 @@ into `main`); what is left shows where a Push sits in a function of its own: a p
 struct through a method called per element, 2M calls, 86.4M (master) -> 50.1M (item 1) -> 48.1M; dispatch's enum row
 22.3M -> 22.1M. List's chunk growth (std/list, not the prelude) and Map's rehash (no `grown`) are left as they are:
 neither was measured costing its caller.
+
+**4. A generator's walk elided in any caller.** D18e's walk form folds only where LLVM inlines the walk's whole
+chain into the loop - the `.walk` function, the coroutine's ramp (`.coro`) and the `.wnext` its Generator calls - so
+that CoroElide sees the frame made and destroyed beside the resumes; in a large function the inliner declined them and
+the frame came from the arena. `.walk` and `.wnext` are now `alwaysinline` (both exist only for a for-in's own walk),
+and so is the ramp `.coro` (a few stores and the first suspend; the arena form inlines it too). The survey's prototype
+marked `.walk` alone; here that took bench/repro/gen_big_function's `genfor 100000 10` from 28.6M to 22.6M Ir only - the
+ramp stayed a call - and all three to 2.6M (the same walk alone in a small function: 1.4M). bench/gen's rows unchanged
+(range 0.3M, filter 17.6M at 1M x 2); tests/generators.olang passes built, `-debug` and `-sanitize`.

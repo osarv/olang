@@ -2059,7 +2059,8 @@ fn (e mut Emitter&) signature(ty types.TypeId) {
 
 # the function's LLVM header: linkage, result, name and parameters
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
-fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal") String {
+fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal"
+        inline String& = "") String {
     t := e.T
     e.signature(ty)
     b := StringBuilder()
@@ -2091,7 +2092,7 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
             case _ { b.Push($e.ty(ps[i]) " %a" $i) }
         }
     }
-    b.Push(")\n" if link == "declare" else $")" $e.inlining(k) " #0 {\n")
+    b.Push(")\n" if link == "declare" else $")" $(inline if inline != "" else e.inlining(k)) " #0 {\n")
     return b.ToString()
 }
 
@@ -2209,8 +2210,12 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     }
     if not e.writeBody(k, f, symbol, passed, env, hdr, false) { return }
     # D18e: a generator function's second form, the one a for-in that finishes its walk calls - written beside the
-    # first in every build, so whether one exists never depends on the program or the build it was compiled in
-    if e.isGenFn(k) { e.writeBody(k, f, $symbol ".walk", passed, env, e.header(k, f.Ty, $symbol ".walk", passed, env, linkFor(e.homeOf(k))), true) }
+    # first in every build, so whether one exists never depends on the program or the build it was compiled in. It is
+    # inlined wherever it is called (a for-in's own source, made for that one call), so CoroElide sees its frame made
+    # and destroyed beside the resumes even in a caller too large for the inliner to take it of its own accord
+    if not e.isGenFn(k) { return }
+    wh := e.header(k, f.Ty, $symbol ".walk", passed, env, linkFor(e.homeOf(k)), " alwaysinline")
+    e.writeBody(k, f, $symbol ".walk", passed, env, wh, true)
 }
 
 # a generator function's ".walk" form standing in for a body that could not be made (D18e)
@@ -2254,7 +2259,8 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
     b := StringBuilder()
     if fe.gen {
         # D18: the coroutine, its Next (the function value's code) beside it
-        hdr = $"define internal ptr @" $symbol ".coro(ptr %env, ptr %home) presplitcoroutine #0 {\n"
+        # its ramp inlined wherever it is made (D18e: the walk form's frame elided only where the ramp is seen)
+        hdr = $"define internal ptr @" $symbol ".coro(ptr %env, ptr %home) presplitcoroutine alwaysinline #0 {\n"
     }
     if fe.dbgSp >= 0 {
         # B2e: the define line names its subprogram
@@ -2297,7 +2303,7 @@ fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, 
     rt := t.RetLlvm(f.Ty)
     via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
     b := StringBuilder()
-    b.Push(e.header(k, f.Ty, $symbol ".wnext" if walk else symbol, passed, true, "internal"))
+    b.Push(e.header(k, f.Ty, $symbol ".wnext" if walk else symbol, passed, true, "internal", " alwaysinline" if walk else ""))
     b.Push("entry:\n  %p = call ptr @llvm.coro.promise(ptr %env, i32 8, i1 false)\n")
     if walk {
         b.Push("  %pr = getelementptr " $promTy ", ptr %p, i32 0, i32 1\n  %running = load i32, ptr %pr\n")
