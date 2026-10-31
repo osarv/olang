@@ -1804,7 +1804,7 @@ eb9442e134811bea f77c05003b459614 compiler/check.olang
 265c98124de5e633 15900b38472859a7 compiler/definit.olang
 18136e020ddde13f abfddd871befe114 compiler/diag.olang
 5bcc433c06ab8d11 b82e066d4d368e89 compiler/doc.olang
-e91709d38101b9b1 9ae44aab0f9b6e04 compiler/emit.olang
+bc846e60685183e0 99719aff0a0c05f4 compiler/emit.olang
 bf0f15ca10181910 92a4514f92d024fb compiler/eval.olang
 18c88404859447d7 7f675dadf09106f9 compiler/explain.olang
 ef930b01f743f859 3b6a762a9dd5bb66 compiler/fetch.olang

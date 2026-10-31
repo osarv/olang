@@ -26709,3 +26709,10 @@ local change; recorded here so the next round starts from what was found.
 - *11, Filter/Map chains fused.* Fusing `for y in a.Filter(f).Map(g)` interleaves f, g and the body, which reorders
   their effects and failures; sound only for callbacks that do nothing and cannot fail - S3's `settleIdle` knows that
   only after every body is checked, so the elaboration has to move after it.
+
+**The compiler's own build, before and after.** Measured on compiler/olang.olang from clean build directories, each
+compiler (1de5612 bootstrapped from the seed; this batch's, built by itself) on its own sources, interleaved, the
+machine loaded by other agents (load 11-22 on 4 cores), `OLANG_TIMES`: the front end (load, check, evaluate, scope,
+lower and emit) 6.79 s -> 6.53 s; clang's compile 27.6-28.1 s -> 28.7 s; peak memory 1.90 GB -> 1.85 GB. Measured on
+the way: the empty-array branch in `__olang_scope_alloc` (item 14's first form) had taken clang's compile to 30-33 s,
+and the inlined bump alone (item 1) to 28.5-30 s; item 14 moved to emit's constant-length case brought it back.
