@@ -1,0 +1,11 @@
+# check: fail error[S13h]: an array pattern has one '...', for the elements its other items do not name
+fn f(xs Array<I64>&) I64 {
+    match xs {
+        case I64[a, ...r, ...s] { return a + r.Len() + s.Len() }
+        case _ { return 0 }
+    }
+}
+
+fn main() {
+    assert f(I64[1]) == 1
+}

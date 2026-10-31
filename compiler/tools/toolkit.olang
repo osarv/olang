@@ -34,7 +34,7 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
         for e in env { full.Push(e) }
     }
     for a in args { full.Push(a) }
-    o := try os.Exec(full.ToArray(), "", true, dir) catch os.Error {
+    o := try os.Exec(...full.ToArray(), dir = dir) catch os.Error {
         Die("cannot run " $args[0])
         unreachable
     }

@@ -626,3 +626,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   then a bulk review with its fix rounds and a full verify - "the compiler's first version". Direction questions that
   come up are decided by me (recorded "mine, user absent" in decisions.md for their review on return). Stop at 0.92
   weekly; arm wake-ups past limits.
+- 2026-10-31 CET: wt-err31 merged (raised errors R3b, CamelCase errors, `?` required R1d, flag bans R23/R23a, seed
+  regenerated; verified on the merge) and wt-tool40 (fast-forward, verified on its tip): effects under signatures,
+  G42 function facts, `explain -caps` (B11c), G18a needs shown and errors at the call, `olang api` (B21), `# not a
+  value: why`. Running: rework round 1 (wt-rework), the language batch (wt-lang40), the dependency map (wt-deps).

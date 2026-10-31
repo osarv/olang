@@ -11,6 +11,8 @@ import "typed"
 import "names"
 import "scope"
 import "interp"
+import "effects"
+import "needs"
 import typecheck "check"
 
 # a name the root module does not declare
@@ -62,10 +64,14 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         b.Push($fnLine(c, f, c.P.InstanceSig(inst), body) "\n")
         contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
         obligations(b, c, sc, body, "    ")
+        noValue(b, c, sc, f, body, "    ")
+        effectLine(b, c, f, body, "    ")
         return b.ToString()
     }
     b.Push($fnLine(c, f, c.P.Sig(f), -1) "\n")
     contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
+    for line in needs.Lines(c, f) { b.Push($"    # " $line "\n") }
+    noValue(b, c, sc, f, -1, "    ")
     decl := c.P.FnDecl(f)
     for i in range c.P.InstanceCount() {
         if c.P.InstanceFn(i) != f { continue }
@@ -74,6 +80,7 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         sig := named(c, c.P.InstanceSig(i), decl.Recv, decl.S.Params)
         b.Push($"    instance " $c.P.L.Names.Text(decl.Name) $typeArgs(c, c.P.InstanceArgs(i)) ": " $sigOf(c, sig, body) "\n")
         obligations(b, c, sc, body, "        ")
+        effectLine(b, c, f, body, "        ")
     }
     return b.ToString()
 }
@@ -261,6 +268,42 @@ fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, 
 fn obligations(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
     if body < 0 { return }
     for o in sc.Obligations(body, c.P.L.Names) { b.Push($indent "[" $o "]\n") }
+}
+
+# A2.3: what a call may do beyond computing its result, read off the body and everything it may call (effects.olang)
+fn effectLine(b mut StringBuilder&, c mut typecheck.Checker&, f I64, body I64, indent String&) {
+    if body < 0 or c.P.FnIsExtern(f) { return }
+    decl := c.P.FnDecl(f)
+    ps Vec<String&>
+    if decl.Recv is not null { ps.Push($c.P.L.Names.Text(decl.Recv!.Name)) }
+    for p in decl.S.Params { ps.Push($c.P.L.Names.Text(p.Name)) }
+    fx := c.Effects()
+    b.Push($indent "# effects: " $effects.Describe(fx.Of(body), ps.ToArray()) "\n")
+}
+
+# T21, T22a, G12, G29: a function that cannot become a value, and why - nothing for one that can
+fn noValue(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64, indent String&) {
+    why := NoValueWhy(c, sc, f, body)
+    if why != "" { b.Push($indent "# not a value: " $why "\n") }
+}
+
+# why function f cannot become a value (T21) - "" where it can: a method is called as one, an extern by its name; one
+# taking an array by value is compiled per length (G29); a generic is a value only named with its type arguments
+# (G12); and one whose scope obligations relate its arguments' scopes cannot be checked through a function value (T22a)
+fn NoValueWhy(c mut typecheck.Checker&, sc scope.Scoper&, f I64, body I64) String {
+    decl := c.P.FnDecl(f)
+    name := c.P.L.Names.Text(decl.Name)
+    if decl.Recv is not null { return "a method is called as one (M19) - a lambda calling it is a value" }
+    if c.P.FnIsExtern(f) { return "an extern fn is called by its name (X1) - a lambda calling it is a value" }
+    owner := generic.FnOwner(f)
+    if c.P.VarCount(owner) > decl.TypeParams.Len() {
+        return "it is compiled once per length of an array it takes by value (G29) - pass a lambda calling it"
+    }
+    if c.P.VarCount(owner) > 0 { return $"a generic is a value only named with its type arguments, '" $name "<...>' (G12)" }
+    if body >= 0 and sc.Obligations(body, c.P.L.Names).Len() > 0 {
+        return "its scope obligations, above, relate its arguments' scopes, which a call through a function value cannot check (T22a) - call it directly"
+    }
+    return ""
 }
 
 # ---- types ----
@@ -465,6 +508,7 @@ fn methods(b mut StringBuilder&, c mut typecheck.Checker&, self types.TypeId) {
         if c.P.VarCount(generic.FnOwner(f)) == 0 {
             inst := c.P.FnInstance(f, types.ListId(0))
             b.Push($"    " $fnLine(c, f, c.P.InstanceSig(inst), c.BodyOfInstance(inst)) "\n")
+            effectLine(b, c, f, c.BodyOfInstance(inst), "        ")
         } else {
             b.Push($"    " $fnLine(c, f, c.P.Sig(f), -1) "\n")
         }
@@ -577,4 +621,45 @@ fn quoted(s String&) String {
     }
     b.PushChar('"')
     return b.ToString()
+}
+
+# ---- what imports reach (B11c) ----
+
+# each module the program loads - the root first, then the others in the order loaded, the prelude and C imports left
+# out - with the classes its code may reach through everything it calls, each with the module where it is reached
+# first; a call through a function value runs code of some module, whose own line says what it reaches
+fn Caps(c mut typecheck.Checker&) String {
+    fx := c.Effects()
+    mods := c.P.L.Mods
+    reach := Array<effects.Facts>(mods.Len(), effects.Facts())
+    for b in range c.Bodies.Len() {
+        mi := fx.ModuleOf(b)
+        if mi >= 0 { effects.Merge(reach[mi], fx.Of(b)) }
+    }
+    ids Vec<String&>
+    for m in mods { ids.Push($m.Identity) }
+    order Vec<I64>
+    order.Push(c.P.L.Root)
+    for mi in range mods.Len() {
+        if mi != c.P.L.Root and capsShown(mods[mi].Identity, mods[mi].Prelude) { order.Push(mi) }
+    }
+    width I64 = 0
+    for mi in order {
+        if ids[mi].Len() > width { width = ids[mi].Len() }
+    }
+    b := StringBuilder()
+    for mi in order {
+        f := reach[mi]
+        for k in range effects.CapCount {
+            if f.Via[k] == mi { f.Via[k] = -1 }     # reached in the module itself: no module to name
+        }
+        text := effects.CapText(f, ids.ToArray())
+        b.Push($ids[mi].PadEnd(width) "   " $(text if text != "" else "none") "\n")
+    }
+    return b.ToString()
+}
+
+# whether a module has a line of its own: not the prelude's, not a C header's or a C file's
+fn capsShown(identity String&, prelude Bool) Bool {
+    return not prelude and not identity.StartsWith("<") and not identity.EndsWith(".h") and not identity.EndsWith(".c")
 }

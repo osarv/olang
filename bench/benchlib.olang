@@ -43,12 +43,12 @@ fn Compiler() String {
 # runs args[0] with args in dir (the repository root for ""), its output gathered and given back; a program that cannot
 # be started ends the driver
 fn Capture(args Array<String&>&, dir String& = "") os.Output {
-    return try os.Exec(args, "", true, dir) catch os.Error { Fail("cannot run " $args[0], 1) }
+    return try os.Exec(...args, dir = dir) catch os.Error { Fail("cannot run " $args[0], 1) }
 }
 
 # runs args[0] with args in dir, its output going where ours does; says its exit status
 fn Run(args Array<String&>&, dir String& = "") I32 {
-    o := try os.Exec(args, "", false, dir) catch os.Error { Fail("cannot run " $args[0], 1) }
+    o := try os.Exec(...args, capture = false, dir = dir) catch os.Error { Fail("cannot run " $args[0], 1) }
     return o.Status
 }
 

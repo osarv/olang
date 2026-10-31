@@ -231,7 +231,7 @@ fn Compiler() String {
 # dir, killed when it has run for timeoutMs milliseconds - fails with the os.Error when it cannot be started and with
 # cancel.Stopped when the time ran out
 fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.Error, cancel.Stopped {
-    out := try os.ExecUntil(args, cancel.After(timeoutMs), "", true, dir)
+    out := try os.ExecUntil(cancel.After(timeoutMs), ...args, dir = dir)
     return $out.Stdout $out.Stderr
 }
 

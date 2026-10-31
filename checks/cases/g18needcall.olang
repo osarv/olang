@@ -1,0 +1,17 @@
+# check: fail g18needcall.olang:15:10: error[G18]: Largest needs Less ('<'), and Point has none - declare it for Point, or call Largest with a type that has it
+# also: g18needcall.olang:9:40: note: pick needs Less ('<') here
+# also: compilation failed with 1 error
+# never: instantiated here
+# G18 (B1.4): what a generic's body asks of a type variable's binding is its need - a call whose type lacks one is the
+# error, at the program's own call that bound it, through a chain of generics, never inside the generic's body
+type Point struct(X I64, Y I64) { X, Y }
+
+fn pick<T>(a T, b T) T { return b if a < b else a }
+
+fn Largest<T>(xs Array<T>&) T { return pick(xs[0], xs[1]) }
+
+fn main() {
+    ps := Point[Point(1, 2), Point(3, 4)]
+    p := Largest(ps)
+    assert p.X > 0
+}

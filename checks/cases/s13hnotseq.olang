@@ -1,0 +1,13 @@
+# check: fail error[S13h]: an array pattern matches an array, text or a type declaring At and Len - P is none of them
+type P struct(x I64) { x }
+
+fn f(p P) I64 {
+    match p {
+        case I64[a] { return a }
+        case _ { return 0 }
+    }
+}
+
+fn main() {
+    assert f(P(1)) == 1
+}

@@ -361,7 +361,7 @@ fn check(dump String&, dir String&, files Array<String&>&, root String&) String&
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)
     for f in files { args.Push(f) }
-    o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error {
+    o := try os.Exec(...args.ToArray(), dir = dir) catch os.Error {
         io.PrintErrln("scopediff: cannot run " $dump)!
         os.Exit(1)
     }

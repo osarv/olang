@@ -1,0 +1,12 @@
+# check: fail g18needmethod.olang:9:10: error[G18]: Describe needs Name, and String has none - declare it for String, or call Describe with a type that has it
+# also: g18needmethod.olang:6:39: note: Describe needs Name here
+# also: and I64 has none
+# never: instantiated here
+# G18 (B1.4): a method a generic's body calls on a type variable's value, missing from the bound type, said at the call
+fn Describe<T>(a T) String { return a.Name() }
+
+fn main() {
+    q := Describe("a")
+    r := Describe(4)
+    assert q.Len() + r.Len() > 0
+}

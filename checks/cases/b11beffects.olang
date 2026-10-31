@@ -1,0 +1,11 @@
+# check: doc Scale
+# also: # effects: writes through 'out'; allocates nothing; never blocks; always ends; may be computed while compiling
+# B11b, A2.3: explain and doc say under a signature what a call may do beyond computing its result
+fn Scale(out mut Array<F64>&, a Array<F64>&, k F64) {
+    for i in range a.Len(): out[i] = a[i] * k
+}
+
+fn main() {
+    out := Array<F64>(1)
+    Scale(out, F64[1.0], 2.0)
+}

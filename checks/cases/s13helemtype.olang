@@ -1,0 +1,11 @@
+# check: fail error[S13h]: this array pattern's elements are F64, and what is matched holds I64 - write 'I64[...]'
+fn f(xs Array<I64>&) I64 {
+    match xs {
+        case F64[x] { return I64(x) }
+        case _ { return 0 }
+    }
+}
+
+fn main() {
+    assert f(I64[1]) == 1
+}

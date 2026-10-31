@@ -1051,7 +1051,7 @@ fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
 }
 
 Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
-    "else", "for", "in", "range", "match", "case", "return", "break", "continue", "error", "try", "catch"
+    "else", "for", "do", "in", "range", "match", "case", "return", "break", "continue", "error", "try", "catch"
     "default", "join", "spawn", "defer", "errdefer", "embed", "yield", "become", "comptime", "assert", "unreachable", "noreturn", "mut"
     "and", "or", "not", "xor", "is", "as", "null", "true", "false", "destruct"]
 
@@ -1062,6 +1062,22 @@ fn Format(path String&, text String&) String ? fmt.Unparsable {
     said := StringBuilder()
     std := load.StdDir()
     return try fmt.FileLayout(source.Source($path, text), std, fmt.PreludeTypes(std), false, said)
+}
+
+# ---- explain -caps (B11c) ----
+
+# "olang explain -caps": what each module of the program file is the root of may reach, on the standard output; the
+# status 1 where the program does not check
+fn CapsMode(file String&, cfg mut build.Config&) I32 {
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+    a := Analyze(file, cfg, d, Map<String&, String&>(), false)
+    if d.Errors() > 0 or a.C is null {
+        say(d.Render())
+        say(d.Summary())
+        return 1
+    }
+    say(explain.Caps(a.C!))
+    return 0
 }
 
 # ---- doc (B14) ----

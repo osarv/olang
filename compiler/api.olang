@@ -1,0 +1,285 @@
+# api - `olang api OLD NEW PATH` (B21): what a module's exported interface gained, lost and changed between two
+# versions of it, each change marked as breaking its importers or not. OLD and NEW are each a directory or a commit of
+# the repository the command runs in; PATH a file or a directory relative to both (a commit's tree is read through git,
+# relative to where the command runs in the repository). Each side's modules are checked as doc checks a program
+# (B14), in a process of their own, and their exported items - doc's lines, the signatures explain gives - compared by
+# name.
+
+import "std/io"
+import "std/os"
+import "std/filepath"
+import "build"
+import "diag"
+import "msgs"
+import "doc"
+import "session"
+
+# one exported thing as one side has it: its key ("Point", "Point.X", "Point meets Shape"), its kind and its line
+type sig struct(Key String&, Kind String&, Line String&) { Key, Kind, Line }
+
+# a change found: whether it breaks an importer, what it is, and the lines before and after ("" for none)
+type change struct(Breaks Bool, What String&, Old String&, New String&) { Breaks, What, Old, New }
+
+# a side that is neither a directory nor a commit, or a file not readable: said already
+type Unread error { Side }
+
+# the status: 0 where nothing breaks, 1 where something does, 2 where a side could not be read or did not check
+fn Mode(old String&, now String&, path String&, cfg mut build.Config&) I32 {
+    d := diag.Diagnostics(diag.ColorWanted())
+    work := try os.MkTemp(prefix = "olang-api-") catch os.Error {
+        say("olang: a scratch directory cannot be made\n")
+        return 2
+    }
+    defer { try os.RemoveAll(work) catch os.Error { } }
+    a := try side(old, filepath.Join(work, "old"), d) catch Unread { return said(d) }
+    b := try side(now, filepath.Join(work, "new"), d) catch Unread { return said(d) }
+    files := union(sources(filepath.Join(a, path), path), sources(filepath.Join(b, path), path))
+    if files.Len() == 0 {
+        d.Error(diag.Where.Nowhere, msgs.ApiNoFiles(path))
+        return said(d)
+    }
+    broken I64 = 0
+    out := StringBuilder()
+    for f in files {
+        olds := try entries(a, f, filepath.Join(work, "old.sigs"), cfg) catch Unread { return 2 }
+        news := try entries(b, f, filepath.Join(work, "new.sigs"), cfg) catch Unread { return 2 }
+        cs := compare(olds, news)
+        if cs.Len() == 0 { continue }
+        out.Push($f "\n")
+        for c in cs {
+            if c.Breaks { broken++ }
+            out.Push(rowOf(c))
+        }
+    }
+    out.Push($broken " breaking change" $("" if broken == 1 else "s") "\n")
+    say(out.ToString())
+    return 1 if broken > 0 else 0
+}
+
+fn say(text String&) { try io.Print(text) catch io.Error { } }
+
+fn said(d mut diag.Diagnostics&) I32 {
+    say(d.Render())
+    return 2
+}
+
+fn rowOf(c change&) String {
+    mark := "breaking" if c.Breaks else "ok      "
+    if c.Old == "" { return $"  " $mark "  " $c.What ": " $c.New "\n" }
+    if c.New == "" { return $"  " $mark "  " $c.What ": " $c.Old "\n" }
+    return $"  " $mark "  " $c.What ": " $c.Old "\n              now: " $c.New "\n"
+}
+
+# ---- the two sides ----
+
+# the directory a side's tree is at: the directory named, or a commit's tree written into at
+fn side(name String&, at String&, d mut diag.Diagnostics&) String ? Unread {
+    if os.IsDir(name) { return $name }
+    commit := try git("git", "rev-parse", "--verify", "--quiet", $name "^{commit}")
+    if commit == "" {
+        d.Error(diag.Where.Nowhere, msgs.ApiNoSide(name))
+        error Unread.Side
+    }
+    top := try git("git", "rev-parse", "--show-toplevel")
+    prefix := try git("git", "rev-parse", "--show-prefix")
+    try os.MkDirAll(at) catch os.Error { error Unread.Side }
+    tar := $at ".tar"
+    try git("git", "-C", top, "archive", "--format=tar", "-o", tar, commit)
+    try git("tar", "-xf", tar, "-C", at)
+    return filepath.Join(at, prefix)
+}
+
+# what a command writes, its last line break taken off; "" where it fails
+fn git(args ...String&) String ? Unread {
+    o := try os.Exec(...args) catch os.Error { error Unread.Side }
+    if o.Status != 0 { return "" }
+    return $o.Stdout.TrimEnd()
+}
+
+# the .olang files at path under a side, as paths relative to the side's root: the file, or every one below the
+# directory (its testdata and hidden directories aside)
+fn sources(at String&, rel String&) Vec<String&> {
+    out Vec<String&>
+    if not os.IsDir(at) {
+        if os.Exists(at) and at.EndsWith(".olang") { out.Push($rel) }
+        return out
+    }
+    names := try os.ReadDir(at) catch os.Error default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "testdata" { continue }
+        for f in sources(filepath.Join(at, n), filepath.Join(rel, n)) { out.Push($f) }
+    }
+    return out
+}
+
+fn union(a Vec<String&>&, b Vec<String&>&) Vec<String&> {
+    out Vec<String&>
+    for f in a { out.Push($f) }
+    for f in b {
+        if not out.Has(f) { out.Push($f) }
+    }
+    out.Sort(fn(x String&, y String&) Bool { return x.Compare(y) < 0 })
+    return out
+}
+
+# the exported things of the module rel under root - none where the side has no such file - read in a process of its
+# own (each analysis's memory goes with it), written to scratch and read back
+fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Vec<sig> ? Unread {
+    out Vec<sig>
+    file := filepath.Join(root, rel)
+    if not os.Exists(file) { return out }
+    if session.InChild(fn() I32 { return writeSigs(file, scratch, cfg) }) != 0 {
+        say($"olang: " $file " does not check - api compares modules that do\n")
+        error Unread.Side
+    }
+    text := try os.ReadFile(scratch) catch os.Error { error Unread.Side }
+    for line in text.Lines() {
+        parts := line.Split("\t")
+        if parts.Len() == 3 { out.Push(sig($parts[0], $parts[1], $parts[2])) }
+    }
+    return out
+}
+
+# in the child: the module checked, its exported items and members written a line each, "key TAB kind TAB line"
+fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    a := session.Analyze(file, cfg, d, Map<String&, String&>())
+    if d.Errors() > 0 or a.C is null or a.Sc is null {
+        say(d.Render())
+        return 1
+    }
+    md := doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
+    b := StringBuilder()
+    for it in md.Items { itemSigs(b, it) }
+    try os.WriteFile(scratch, b.ToString()) catch os.Error { return 1 }
+    return 0
+}
+
+fn itemSigs(b mut StringBuilder&, it doc.Entry&) {
+    line := sigLine(it.Line)
+    kind := itemKind(line)
+    b.Push($it.Name "\t" $kind "\t" $line "\n")
+    for m in it.Members {
+        ml := sigLine(m.Line)
+        if ml.StartsWith("meets ") {
+            b.Push($it.Name " " $ml "\tmeets\t" $ml "\n")
+            continue
+        }
+        b.Push($it.Name "." $m.Name "\t" $memberKind(kind, ml, m.Builder) "\t" $ml "\n")
+    }
+}
+
+# a doc line's signature: its first line past its attributes, its comment taken off
+fn sigLine(line String&) String {
+    t := doc.PastAttrs(line)
+    nl := try t.Find("\n") catch default t.Len()
+    s := t[:nl]
+    c := try s.Find("   #") catch default s.Len()
+    return $s[:c].Trim()
+}
+
+fn itemKind(line String&) String {
+    if line.StartsWith("fn ") or line.StartsWith("extern fn ") { return "fn" }
+    if not line.StartsWith("type ") { return "global" }
+    for k in String&["enum", "error", "trait", "struct", "extends"] {
+        if line.Contains($" " $k) { return k }
+    }
+    return "type"
+}
+
+fn memberKind(parent String&, line String&, builder Bool) String {
+    if builder or line.StartsWith("fn ") { return "fn" }
+    return match parent {
+        case "enum": "case"
+        case "error": "word"
+        case "trait": "method"
+        case _: "field"
+    }
+}
+
+# ---- what changed ----
+
+# every change from olds to news: removed, added, changed - in the order news has them, the removed last
+fn compare(olds Vec<sig>&, news Vec<sig>&) Vec<change> {
+    out Vec<change>
+    was Map<String&, sig>
+    for s in olds { was.Put($s.Key, s) }
+    for n in news {
+        o := try was.Get(n.Key) catch MapError {
+            out.Push(change(addBreaks(n.Kind), $"added " $n.Kind, "", $n.Line))
+            continue
+        }
+        if o.Line != n.Line { out.Push(changed(o, n)) }
+    }
+    now Map<String&, Bool>
+    for n in news { now.Put($n.Key, true) }
+    for o in olds {
+        if not now.Has(o.Key) { out.Push(change(true, $"removed " $o.Kind, $o.Line, "")) }
+    }
+    return out
+}
+
+# whether adding a thing of a kind breaks an importer: an enum's case (its matches are no longer complete, S13a), an
+# error type's word (the same for its matches and clauses, R14), a trait's method (a type meeting it may now not)
+fn addBreaks(kind String&) Bool { return kind == "case" or kind == "word" or kind == "method" }
+
+# what a changed line is: a function's or a constructor's error set only - narrower breaks nothing, anything else does -
+# a global's value only, which breaks nothing; any other change breaks
+fn changed(o sig, n sig) change {
+    oh, oe := splitErrors(o.Line)
+    nh, ne := splitErrors(n.Line)
+    if oh == nh and oe != ne {
+        if subset(ne, oe) { return change(false, $"narrower error set of " $n.Kind, $o.Line, $n.Line) }
+        return change(true, $"wider error set of " $n.Kind, $o.Line, $n.Line)
+    }
+    if n.Kind == "global" and valueless(o.Line) == valueless(n.Line) {
+        return change(false, "value of global", $o.Line, $n.Line)
+    }
+    return change(true, $"changed " $n.Kind, $o.Line, $n.Line)
+}
+
+# a signature's text before its error set, and the set's items ("? A, B" - none for no set): split at the "?" outside
+# every bracket
+fn splitErrors(line String&) String, Array<String&> {
+    depth I64 = 0
+    for i in range line.Len() {
+        ch := line[i]
+        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if depth == 0 and ch == '?' and i > 0 and line[i - 1] == ' ' {
+            return $line[:i - 1], items(line[i + 1:].Trim())
+        }
+    }
+    return $line, Array<String&>(0)
+}
+
+# a list's items split at the commas outside every bracket
+fn items(t String&) Array<String&> {
+    out Vec<String&>
+    depth I64 = 0
+    from I64 = 0
+    for i in range t.Len() {
+        ch := t[i]
+        if ch == '(' or ch == '<' or ch == '[' { depth++ }
+        if (ch == ')' or ch == '>' or ch == ']') and depth > 0 { depth-- }
+        if depth == 0 and ch == ',' {
+            out.Push($t[from:i].Trim())
+            from = i + 1
+        }
+    }
+    if t.Len() > from { out.Push($t[from:].Trim()) }
+    return out.ToArray()
+}
+
+fn subset(a Array<String&>&, b Array<String&>&) Bool {
+    for x in a {
+        if not b.Has(x) { return false }
+    }
+    return true
+}
+
+# a global's line without its value: "Name Type"
+fn valueless(line String&) String {
+    at := try line.Find(" = ") catch default line.Len()
+    return $line[:at]
+}

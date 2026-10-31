@@ -1,0 +1,95 @@
+# G42: a function's facts read while compiling - through its name, an instance's, a descriptor's in a walk of a
+# module's functions - pinned by top-level asserts (S17a, decided by the evaluator) and read by the program itself; and
+# the declared facts of G41 (NoReturn, Exported, Extern, Commutes)
+import "std/io"
+import "std/os"
+import me "facts"
+
+Count mut I64 = 0
+
+fn Scale(out mut Array<F64>&, a Array<F64>&, k F64) {
+    for i in range a.Len(): out[i] = a[i] * k
+}
+
+fn Bump() { Count++ }
+
+fn Fact(n I64) I64 { return 1 if n < 2 else n * Fact(n - 1) }
+
+fn Shout(t String&) ? io.Error { try io.Println(t) }
+
+fn Label(n I64) String { return $"#" $n }
+
+fn Settle(x I64) I64 {
+    v := x
+    for v > 1: v = v / 2
+    return v
+}
+
+fn Gather(n I64) I64 {
+    total I64 = 0
+    join {
+        for i in range n { spawn Fact(i) }
+    }
+    return total
+}
+
+fn Leave() noreturn { os.Exit(3) }
+
+fn Twice(f fn(x I64) I64, x I64) I64 { return f(f(x)) }
+
+fn first<T>(a T, b T) T { return a }
+
+type Vec2 struct(X F64, Y F64) { X, Y }
+
+fn (v Vec2) Mul(k F64) Vec2 commutes { return Vec2(v.X * k, v.Y * k) }
+
+fn (v Vec2) Len2() F64 { return v.X * v.X + v.Y * v.Y }
+
+# through the name
+assert not Scale.Allocates, "Scale allocates nothing"
+assert Scale.Terminates and not Scale.Blocks and not Scale.CallsC and not Scale.Recursive
+assert Bump.WritesGlobals and not Scale.WritesGlobals
+assert Fact.Recursive and not Fact.Terminates
+assert Shout.CallsC and Shout.Blocks and not Shout.Terminates
+assert Label.Allocates and Label.Terminates
+assert not Settle.Terminates, "a loop on a condition is never bounded"
+assert Gather.Spawns and Gather.Blocks
+assert Twice.Allocates and Twice.Blocks and not Twice.Terminates, "a call through a function value is anything"
+assert not first<I64>.Allocates and first<I64>.Terminates
+# how it is declared
+assert Leave.NoReturn and not Scale.NoReturn
+assert not Scale.Exported and not Scale.Extern
+
+# through descriptors: each copy of the walk its own function's
+fn terminating() I64 {
+    n I64 = 0
+    for f in me.Functions {
+        if f.Terminates { n++ }
+    }
+    return n
+}
+
+fn commuting() I64 {
+    n I64 = 0
+    for m in Vec2.Methods {
+        if m.Commutes { n++ }
+    }
+    return n
+}
+
+Terminating := terminating()
+
+assert Terminating == 5, "Scale, Bump, Label, terminating, commuting"
+assert commuting() == 1
+
+test "facts are constants the running program reads too" {
+    assert terminating() == 5 and Terminating == 5
+    assert commuting() == 1
+    assert Scale.Terminates and not Settle.Terminates
+    out := Array<F64>(2)
+    Scale(out, F64[1.0, 2.0], 2.0)
+    assert out[1] == 4.0 and Fact(5) == 120 and Settle(9) == 1 and Label(3) == "#3"
+    Bump()
+    assert Count == 1 and Gather(3) == 0 and Twice(fn(x I64) I64: return x + 1, 1) == 3 and first(1, 2) == 1
+    assert (Vec2(1.0, 2.0) * 2.0).Len2() == 20.0 and (2.0 * Vec2(1.0, 0.0)).X == 2.0
+}

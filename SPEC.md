@@ -282,8 +282,8 @@ compile-time errors.
 valid token starting at the current position):
 
 ```
-+  -  *  /  %  ,  .  ?  =  :=
-+=  -=  *=  /=  %=  <<=  >>=  &=  |=  ^=
++  -  *  **  /  %  ,  .  ?  =  :=
++=  -=  *=  **=  /=  %=  <<=  >>=  &=  |=  ^=
 ++  --  !
 ==  !=
 <  <=  >  >=
@@ -945,6 +945,16 @@ types, not only against the generic's own declaration. A generic cannot answer s
 itself: a type variable contains no reference and no destructor-bearing struct, so a rule
 asking what a field of type `T` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
+
+**G18a (needs).** What a generic's body asks of a type variable - a method of a value of its type, an operator (its
+method: `Less` for a comparison, `Plus` for `+`), an index (`At`, `SetAt`), a slice, a walk, a membership test, a field,
+a call - is the variable's **need**, and a generic requires nothing more of a type than its needs and its written
+constraint (G19); no constraint has to be written for a need. A call binding a variable to a type lacking one of its
+needs is a compile-time error **at that call** - the program's own call that began the chain of instances, where the
+type it gave became the variable's binding: `Max needs Less ('<'), and Point has none`, with a note where the body
+asks for it - never an error inside the generic's body. What an arm of a `match` on a type variable (G15) or a branch
+decided by reflection (G35) asks is a need only of the instances that check it, as each instance's body is its own.
+The needs are read by `explain`, `doc` and the language server (B11b).
 
 **G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy, written
 after its name in the list introducing it: a function's (`fn area<S Shape>(s S)`, `fn drain<I Iterator<E>, E>(it mut
@@ -1764,7 +1774,7 @@ a method, whatever its first parameter's type.
 
 ```
 param-list      ::= list(param)                         (L18a)
-param           ::= { attribute } IDEN type-expr [ "=" expr ]   (attribute: G39 - not on a receiver)
+param           ::= { attribute } IDEN ( type-expr | "..." type-expr ) [ "=" expr ]   (attribute: G39 - not on a receiver; "...": D8g)
 ret-type        ::= result { "," result }                (on one line; several results, D8c)
 result          ::= type-expr
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
@@ -1870,6 +1880,25 @@ G16) share the one made for them, which is a function of that module's code wher
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
+
+**D8g (variadic parameters).** A parameter written `xs ...T` is **variadic**: a call gives it any number of arguments
+of type `T`, none included - `fn sum(xs ...I64) I64` is called `sum()`, `sum(1)`, `sum(1, 2, 3)` - and inside the body
+`xs` is a read-only `Array<T>&` holding them in order (T25b), its length the count given. It is the last of its
+function's parameters but the defaulted ones (D8b), which then follow it and are given by name (E14b) -
+`fn Exec(args ...String&, dir String& = "")` is called `Exec("ls", "-l", dir = "/tmp")` - so a function has at most one,
+it has no default, and the parameters before it are required. Every argument by position from its place on, up to the
+first argument by name, is one of its arguments; each is checked against `T` as an argument is (E12, a literal adapting
+as it would there, T6). They are evaluated in the order written, after the arguments before them and before those by
+name (S4, E14b), and held as a **fixed array in the caller's frame** (T7c) - no storage made, lent to the call (E12) for
+as long as it runs. An existing array of `T` - of a known length or not, a slice, `v.View()` of a `Vec` - is passed on
+whole with `...a` written as all of the variadic parameter's arguments: `sum(...xs)`; `...a` beside other arguments
+there, or anywhere but a variadic parameter's place, is a compile-time error. A generic's `T` is inferred from the
+arguments as from any (G9: `fn largest<T>(first T, rest ...T) T` gives `largest(3, 9, 2)` an `I64` and
+`largest("b", "a")` a `String`). A method, a lambda and a function type may have one (`fn(xs ...I64) I64`, T21); a
+function type's says how a call through it is written, and the value either way is a function taking the array, so a
+function fits a function type of either form (T22). A constructor, an enum case's payload and an `extern fn` (whose
+variable arguments are C's `...`, X21) have none - a compile-time error naming an array parameter. `explain`, `doc` and
+`$` of a function type write it `...T`.
 
 ### 3.4.1 Contracts
 
@@ -2971,7 +3000,8 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | "embed" unary | { unary-op } postfix   (embed: E38)
+unary    ::= "not" binary | text | "embed" unary | { unary-op } power   (embed: E38)
+power    ::= postfix [ "**" unary ]                                    (E5a)
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
@@ -3082,7 +3112,22 @@ The bitwise operators bind tighter than the comparisons and looser than the shif
 is `(x & 1) == 0`, `a | b < c` is `(a | b) < c`.
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
-exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
+exception (E7a), and `**` binds tighter than they do (E5a). The conditional `a if c else b` (E28) binds looser than
+every binary operator.
+
+**E5a (`**`, the power).** `a ** b` is `a` raised to the power `b`: the call of `a`'s type's `Pow` with `b` (E31), so
+on a number it is the prelude's method - `x ** 2.0` is `x.Pow(2.0)` for a float, its exponent of the float's own type,
+and `n ** 3` is `n.Pow(3)` for an integer, its exponent a `U32` (M19d) - and a type declaring `Pow` takes it as it takes
+`+` through `Plus`. It binds **tighter than the prefix operators** and **to the right**, as in mathematics: `-x ** 2`
+is `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`, and the exponent is a `unary`, so `2.0 ** -1.0` needs no parentheses; a
+`$` renders the `postfix` after it, so `$x ** 2` raises the text and `$(x ** 2)` is written. The exponent adapts to
+`Pow`'s parameter as an argument does (T6: a literal, a literal-only expression); a literal base adapts to the number
+type wanted where one is (an initializer's, an operand's beside a typed one, E6d), and is otherwise of its own type
+(T6a), as a literal receiver is (E13c) - so `e F32 = 2.0 ** 3.0` is an `F32` and `2.0 ** f` with `f` an `F32` an
+`F64`. An integer exponent that is no literal is a `U32` or converted to one (`n ** U32(k)`), as `n.Pow(k)` asks. A
+type with no `Pow` - a `Bool`, a struct declaring none - has no power, a compile-time error naming `Pow`. On arrays
+`**` works lane by lane (E39), each lane its element type's `Pow`. `x **= y` is `x = x ** y` (S4), its exponent adapting
+as `**`'s does. `Pow` folds where its exponent is constant (M19d), so `x ** 2.0` is `x * x`.
 
 **E6.** `+ - * / %` require both operands to be of one numeric type (T5, T27) and produce that
 type, subject to T6's numeric-literal adaptation and T6b's meeting of two numbers at the wider. `%` requires both operands to be integer types.
@@ -3844,6 +3889,7 @@ type declares one:
 |---|---|---|
 | `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | `Plus`, `Minus`, `Mul`, `Div`, `Rem` | one operand, a result |
 | `a @ b` | `MatMul` | one operand, a result |
+| `a ** b` | `Pow` | one operand, a result (E5a) |
 | `-a` | `Neg` | none, a result |
 | `a < b` | `Less` | one operand, a `Bool` |
 | `x[i]`, `x[i, j, ...]` | `At` | one operand per index (at least one), a result |
@@ -4351,7 +4397,7 @@ names written, never by where references lead: storage reached through a referen
 `x = E.Neg(r)`, or `q.a` where `q` and `p` name one instance in `p.a = E.Neg(q.a)` - is the program's own, and makes the
 cycle it says.
 
-**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "<<=" | ">>="
+**S5.** `assign-op ::= "=" | "+=" | "-=" | "*=" | "**=" | "/=" | "%=" | "<<=" | ">>="
 | "&=" | "|=" | "^="`. Every compound form `X=` is defined as `lvalue = lvalue X expr`, using the
 corresponding binary operator (§5.2) - or the operator method the target's type declares for it (E31) - and its own
 operand-type requirements, except that the place is evaluated **once**: `a[next()] += 5` calls `next` once, reads that
@@ -4587,11 +4633,13 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | type-case | "_" | binary
+case-alt       ::= pattern | array-pattern | type-case | "_" | binary
 type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
 case-body      ::= block | ":" line-stmnt
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
-sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+sub-pattern    ::= IDEN | pattern | array-pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
+array-pattern  ::= elem-type "[" [ list(array-item) ] "]"                (S13h)
+array-item     ::= sub-pattern | "..." [ IDEN ]
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
@@ -4711,6 +4759,27 @@ there. A type match (G13) takes no guard: its arm is chosen while compiling.
 by a reference never null - is never the value matched: S13a asks no clause for it, a nested position counts it as
 covered, and a match over a type all of whose cases are such needs no clause at all. std/chan's `Ready` of a Select
 given two cases has four, the last two carrying such a value, so a match of two clauses is exhaustive.
+
+**S13h (array patterns).** `case String&["test", file, ...words]` matches an array element by element. The element
+type is written before the `[` as an array literal writes it (`I64[...]`, `String&[...]`, `Char[...]`), and is the
+matched value's element type (a compile-time error otherwise). Each item is a `sub-pattern` matched against one
+element, as a payload's position is (S13b): a literal compares the element by `==`, a name binds a copy of it - always a
+fresh name, never a local's value read, so comparing with a local is a guard (`case I64[x] if x == want`), and a name
+already in scope is D3a's error - `_` ignores it, and a nested pattern matches it. One item may be `...name`: the
+elements the other items do not name, bound as a **view** of the matched array's storage - a slice of it (E16a), with
+its permission - or a bare `...`, binding nothing. Items before it match from the start, items after it from the end:
+`case I64[first, ..., last]`. With no `...` the array has exactly as many elements as items; with one, at least as many
+as the other items. The **length is tested first**, so no element is read outside the array, then the items in order.
+What is matched is an array - text too, its elements `Char`s (`case Char['-', '-', ...name]` on a `String`, the rest a
+`String`) - or a value of a type declaring `At` and `Len` (E31, a `Vec`), whose elements are its `At`'s copies and whose
+named rest is its `Slice` (a bare `...` where it declares none; a named one is then a compile-time error naming the
+array to match instead). An array pattern stands at a case's top or in a payload position: `case
+Cmd.Run(String&["ls", ...args])`. Its lengths are what S13a covers: for exhaustiveness the length is the array's
+constructor, so `case I64[]` and `case I64[first, ...rest]` cover every array of `I64`, and `case String&[]`, `case
+String&[only]` and `case String&[first, ...rest, last]` every array of text; a match used as a value (S12b) that leaves a
+length to no case is a compile-time error naming it ("an array of 1 element", "3 elements or more"). A `...` anywhere but
+among an array pattern's items is a compile-time error. An alternative written as an array literal after a path that
+names no type (`case table[k]`) is a value compared by `==` (S13).
 
 **S13f (`case _`).** The alternative `_` matches every value, so it is its case's only alternative. With a guard,
 `case _ if cond` is selected when `cond` holds, whatever the value - the multiway test a range or a NaN asks for, the
@@ -6845,16 +6914,16 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
-            | "bindgen" | "profile"
+            | "bindgen" | "profile" | "api"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
-            | "-fuzz" NAME | "-fuzztime" SECONDS
+            | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16) and `profile` (B20). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17), `bindgen` (§11 X16), `profile` (B20) and `api` (B21). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -6871,8 +6940,10 @@ beginning with `-` that is no option is an error:
 | `-library` | build | §11 X14 |
 | `-memory` | running a file, build, test | B18 |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
+| `-caps` | explain | B11c |
 
-`build`, `compile`, `bindgen` and `profile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
+`build`, `compile`, `bindgen` and `profile` take exactly one file, `api` two versions (commits or directories) and a
+file or directory, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file, for `interpret` and for `profile`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
@@ -7381,6 +7452,31 @@ its name (a pun's being its parameter's). A global is printed with its type and,
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
 tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 
+Under a function's signature (and each instance's, and each method's under its type) a line `# effects: ...` says what a
+call may do beyond computing its result, read off its body and every body it may call: `none`, or each of - the
+parameters it writes through (`writes through 'out'`), `writes a global`, `allocates` or `allocates nothing`, `may grow a
+Vec`, `starts tasks`, the classes of B11c it reaches (`files`, `network`, `processes`, `environment`, `threads`, `C`),
+else `calls C`, `may end the program`, `may block` or `never blocks`, `recursive`, `always ends` (G42's `Terminates`),
+and `may be computed while compiling` (K1a: no C but C's math, no mutable global read or written). A call through a
+function value or an `any` is `anything`; a body that did not check is `not known`. Under a generic function, a line
+`# T needs: Less, a walk ...` for each type variable says what its body asks of it beyond its written constraint
+(G18a). Under a function that cannot become a value (T21), a line `# not a value: ...` says why: a method is called as
+one (M19), an extern by its name (X1), a generic is a value only named with its type arguments (G12), one compiled per
+length of an array it takes by value (G29) has none, and one whose scope obligations relate its arguments' scopes cannot
+be called through a function value (T22a). `doc` (B14) and the language server's hover (B15) show the same lines.
+
+**B11c (what imports reach).** `explain -caps FILE` prints, for the program `FILE` is the root of once it has checked,
+each module it loads - the root first, then its imports in the order loaded - with what code of the module may reach,
+through everything it calls: `files` (opening, creating, removing or renaming one, a directory, a path read through
+the file system), `network` (a socket, a connection, a name looked up), `processes` (starting, waiting for or signalling
+one), `environment` (reading or setting its variables), `threads` (a task started, `spawn` or a thread C makes) and `C`
+(an extern or a C import the module calls itself, outside the standard library); each class with the module where it is
+first reached - `files (std/os)` - or `none`. A class is counted where it is gained, by the C function gaining it:
+reading, writing or closing a descriptor already open (the standard streams among them) gains nothing. A module's line
+covers all of its own code - its functions, lambdas and the instances of its generics the program makes - so what a
+call through a function value or an `any` runs is some module's code, said on that module's line. The prelude and C
+imports have no line. The mode reads what the checker already holds; no other build computes it.
+
 ### 10.8 Formatting
 
 **B13.** `format <file> ...` rewrites each file in place in olang's one layout; with `-check` it rewrites nothing and
@@ -7538,6 +7634,22 @@ anywhere else. The samples themselves are kept in `build/profile/NAME.samples`. 
 build's debug information by `llvm-symbolizer` - beside the clang the build uses (a release's own, B12d), else on
 `PATH`; with none, functions are named by their addresses. Profiling what a program allocates, per site, is not part
 of the mode.
+
+### 10.11 Interface differences
+
+**B21.** `api OLD NEW PATH` lists what the exported interface of each module at `PATH` - a file, or every `.olang`
+file below a directory, its `testdata` and hidden directories aside - gained, lost and changed between two versions:
+`OLD` and `NEW` are each a directory or a commit of the repository the command runs in (whose tree is read relative to
+where the command runs in it). Each side's module is checked as `doc` checks a program (B14) - with this compiler and
+its standard library - and its exported items and members (functions, types, their constructors, fields, cases, words,
+methods and builders, globals, the traits a type meets) are compared by name and by the signature B11b gives them. A
+row is written per change, `breaking` or `ok`, and the count of breaking changes last; the status is 0 where nothing
+breaks, 1 where something does, 2 where a side is neither a directory nor a commit, or a module on it does not check.
+What breaks an importer: a name removed; a signature changed - its parameters, results or receiver, a field's type, a
+constructor's parameters, a global's type; an error set grown (a complete `catch` or match of the old set no longer
+is); an enum's case, an error type's word or a trait's method added (S13a, R14, T31); a trait no longer met. What does
+not: a name added - a function, a type, a method, a field, a global; an error set narrowed; a global's value changed; a
+trait newly met.
 
 ## 11. External Functions
 
@@ -8541,7 +8653,9 @@ the copies differ as instances do.
   (`Box<I64>.Methods`), with the instance's types.
 
 Calling a descriptor, `f(args)`, is the call its name would be - defaults, named arguments, errors and all; a
-method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A descriptor names its function by its
+method's receiver is its first argument, `m(v, args)` being `v.Name(args)`. A function's descriptor also says how it is
+declared, each a `Bool` known while compiling (G35): `f.NoReturn` (D8e), `f.Exported` (`export fn`, X12), `f.Extern` (an
+extern fn, X1), `f.Commutes` (E31c); and the facts G42 reads. A descriptor names its function by its
 module, its receiver's type and its name, so an instance a descriptor is an argument of is the same one in every
 compilation. A table collected while compiling:
 
@@ -8554,6 +8668,31 @@ fn routes() Map<String&, fn(r Request&) Response> {
     return m
 }
 ```
+
+**G42 (function facts).** What a function may do is read while compiling, through its name - `mix.Allocates`,
+`dsp.mix.Allocates` through an import's alias, `pick<I64>.Allocates` for a generic's instance (a generic named without
+its type arguments has no facts: an error naming that form) - and on a function's descriptor (G41, `f.Allocates` in a
+walk of `m.Functions` or `T.Methods`, each copy its own function's). Each is a `Bool`, true where the function or any
+body it may call:
+
+| fact | holds where it may |
+|---|---|
+| `Allocates` | ask the runtime for storage in any scope, its frame's included: a text, an array, a comprehension, a temporary given storage, a lambda's environment (a value in place, a fixed array in place does not count) |
+| `Blocks` | wait: a join, a lock, a channel, a sleep, a C function not known to return at once |
+| `WritesGlobals` | store into a global's own storage |
+| `CallsC` | call an extern or a C import's function, C's math functions (X8) and the runtime's own aside |
+| `Spawns` | start a task |
+| `Recursive` | call itself, directly or through others |
+| `Terminates` | **always end**: every loop of it is a for-in over an array or a range (a count known before the loop starts), it is not recursive, and nothing of it waits or calls C not known to return - the one fact true where nothing is known against it |
+
+A call through a function value or an `any` may do anything, and so may a body that did not check: such a function
+has every fact but `Terminates`, so no fact is claimed that a run could prove false. A fact is decided once the
+program has checked, from every body: read in a body, it is the constant the bodies give - an attempt reads each as
+its cautious value first and the program is checked again with the values found, until what is read is what is found
+(as R1a's sets are); a fact whose value changes the code it is read from (a function reading its own fact to choose
+what it calls) is an error naming it. So a top-level `assert` (S17a) pins one: `assert not mix.Allocates, "the audio
+callback must not allocate"`; a fact is no condition the checker decides a branch by while checking (G35's), as a
+branch is part of what it is read from.
 
 ## 13. Compile-time evaluation
 

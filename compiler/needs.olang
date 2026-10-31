@@ -1,0 +1,447 @@
+# needs - what a generic function's body asks of each of its type variables (B1.4, G18), for explain, doc and the
+# language server: "# T needs: Less". Read off the declaration's own text, the way a reader would: a value of a
+# variable's type - a parameter of type T (or a reference to one), a local made from one, an element of an Array<T> or
+# a Vec<T> - asked for a method, an operator (its method: Less for a comparison, Plus for +), an index, a slice, a walk,
+# a membership test, a call or a field; and, through a call of another generic function of the program giving such a
+# value where its own variable stands, what that one needs. What only some instances check - a `match T` and an `if`
+# on a type's reflected members, decided per instance (G15, G35) - is left out, and so is what the variable's written
+# constraint already promises (its trait's methods; a closed trait's operators, which its members have built in).
+# It is a reading for people: the checker judges each instance (G18), and a need it finds missing is said at the call.
+
+import "source"
+import "token"
+import "ast"
+import "names"
+import "types"
+import "generic"
+import typecheck "check"
+
+# the lines of what f's variables need, "T needs: Less, Plus" - none for a function of no variables or no needs
+fn Lines(c mut typecheck.Checker&, f I64) Array<String&> {
+    w mut walker&c = walker(c, f, 0)
+    w.run()
+    out Vec<String&>
+    owner := generic.FnOwner(f)
+    for k in range w.found.Len() {
+        kept := w.unpromised(k)
+        if kept.Len() == 0 { continue }
+        out.Push($c.P.L.Names.Text(c.P.VarAt(owner, k).Name) " needs: " $kept.Join(", "))
+    }
+    return out.ToArray()
+}
+
+type walker struct(C mut typecheck.Checker&, F I64, Depth I64) {
+    C
+    F
+    Depth                              # calls followed into other generics, at most 3 deep
+    file I64 = -1
+    vars Map<source.NameId, I64>       # a type variable's name -> its index
+    vals Map<source.NameId, I64>       # a local or parameter holding a value of variable k, or a reference to one
+    elems Map<source.NameId, I64>      # one holding values of variable k as its elements: an Array<T>, a Vec<T>
+    found Vec<Vec<String&>>            # by variable: what is asked of it, first met first
+}
+
+fn (w mut walker&) run() {
+    owner := generic.FnOwner(w.F)
+    decl := w.C.P.FnDecl(w.F)
+    w.file = w.C.P.L.Mods[w.C.P.FnModule(w.F)].File
+    for i in range w.C.P.VarCount(owner) {
+        w.found.Push(Vec<String&>())
+        if not w.C.P.ErrVarAt(owner, i) { w.vars.Put(w.C.P.VarAt(owner, i).Name, i) }
+    }
+    if w.vars.Len() == 0 { return }
+    if decl.Recv is not null { w.param(decl.Recv!.Name, decl.Recv!.Ty) }
+    for p in decl.S.Params { w.param(p.Name, p.Ty) }
+    w.stmts(decl.Body)
+}
+
+fn (w mut walker&) param(n source.NameId, t ast.TypeRef?&) {
+    k := w.varOf(t)
+    if k >= 0 { w.vals.Put(n, k) }
+    e := w.elemOf(t)
+    if e >= 0 { w.elems.Put(n, e) }
+}
+
+# the variable a written type is, a reference to it or a permission over it included; -1 for none
+fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
+    if t is null { return -1 }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            if path.Len() != 1 or args.Len() > 0 { return -1 }
+            return try w.vars.Get(path[0]) catch default -1
+        }
+        case ast.TypeRef.Ref(_, of, _, _) { return w.varOf(of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return w.varOf(of) }
+        case _ { return -1 }
+    }
+}
+
+# the variable a written type holds as its elements - Array<T>, Vec<T> - -1 for none
+fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
+    if t is null { return -1 }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            last := w.C.P.L.Names.Text(path[path.Len() - 1])
+            if args.Len() != 1 or (last != "Array" and last != "Vec") { return -1 }
+            return w.varOf(args[0])
+        }
+        case ast.TypeRef.Ref(_, of, _, _) { return w.elemOf(of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return w.elemOf(of) }
+        case _ { return -1 }
+    }
+}
+
+# the variable an expression's value is of, -1 for none known
+fn (w mut walker&) valOf(x ast.Expr?&) I64 {
+    if x is null { return -1 }
+    match x {
+        case ast.Expr.Name(_, n) { return try w.vals.Get(n) catch default -1 }
+        case ast.Expr.Paren(_, y) { return w.valOf(y) }
+        case ast.Expr.Index(_, y, _) { return w.elemsOf(y) }
+        case _ { return -1 }
+    }
+}
+
+fn (w mut walker&) elemsOf(x ast.Expr&) I64 {
+    match x {
+        case ast.Expr.Name(_, n) { return try w.elems.Get(n) catch default -1 }
+        case ast.Expr.Paren(_, y) { return w.elemsOf(y) }
+        case _ { return -1 }
+    }
+}
+
+fn (w mut walker&) need(k I64, what String&) {
+    if k < 0 or k >= w.found.Len() or w.found[k].Has(what) { return }
+    w.found[k].Push($what)
+}
+
+# what variable k needs that its written constraint does not promise
+fn (w mut walker&) unpromised(k I64) Vec<String&> {
+    v := w.C.P.VarAt(generic.FnOwner(w.F), k)
+    out Vec<String&>
+    promised Vec<String&>
+    closed := false
+    if v.Bound != types.UnknownT {
+        for tr in w.C.P.BoundTraits(v.Bound) {
+            if w.C.P.IsClosedTrait(tr) { closed = true }
+            w.traitMethods(tr, promised)
+        }
+    }
+    for n in w.found[k] {
+        if promised.Has(n) or (closed and opNeed(n)) { continue }
+        out.Push(n)
+    }
+    return out
+}
+
+# a trait's methods by name as its declaration writes them, and those of the traits it extends
+fn (w mut walker&) traitMethods(tr types.TypeId, out mut Vec<String&>&) {
+    if w.C.P.T.KindOf(tr) != types.Kind.Named { return }
+    td := w.C.P.TypeDecl(w.C.P.T.DeclOf(tr))
+    if td is null { return }
+    match td.Body {
+        case ast.TypeBody.Trait(ms, _, _) {
+            for m in ms { out.Push($w.C.P.L.Names.Text(m.Name)) }
+        }
+        case _ { }
+    }
+}
+
+# whether a need is an operator's, which a closed trait's members (numbers) have built in
+fn opNeed(n String&) Bool {
+    for o in String&["Less", "Plus", "Minus", "Mul", "Div", "Rem", "Neg", "BitAnd", "BitOr", "BitXor", "ShiftLeft", "ShiftRight"] {
+        if n == o { return true }
+    }
+    return false
+}
+
+fn binaryNeed(op token.Tok) String {
+    return match op {
+        case token.Tok.Plus: "Plus"
+        case token.Tok.Minus: "Minus"
+        case token.Tok.Star: "Mul"
+        case token.Tok.Slash: "Div"
+        case token.Tok.Percent: "Rem"
+        case token.Tok.At: "MatMul"
+        case token.Tok.Lt, token.Tok.Gt, token.Tok.Le, token.Tok.Ge: "Less"
+        case token.Tok.Amp: "BitAnd"
+        case token.Tok.Pipe: "BitOr"
+        case token.Tok.Caret: "BitXor"
+        case token.Tok.Shl: "ShiftLeft"
+        case token.Tok.Shr: "ShiftRight"
+        case _: ""
+    }
+}
+
+# ---- statements ----
+
+fn (w mut walker&) stmts(ss Array<ast.Stmt&>&) {
+    for s in ss { w.stmt(s) }
+}
+
+fn (w mut walker&) stmt(s ast.Stmt&) {
+    match s {
+        case ast.Stmt.ExprS(_, x), ast.Stmt.Become(_, x), ast.Stmt.Yield(_, x) { w.expr(x) }
+        case ast.Stmt.Var(_, v) { w.decl(v) }
+        case ast.Stmt.Multi(_, m) {
+            for x in m.Values { w.expr(x) }
+        }
+        case ast.Stmt.Assign(_, _, t, v) { w.assign(t, v) }
+        case ast.Stmt.TryStore(_, st, cls) {
+            w.stmt(st)
+            w.catches(cls)
+        }
+        case ast.Stmt.If(_, i) { w.ifStmt(i) }
+        case ast.Stmt.Forever(_, body), ast.Stmt.Block(_, body) { w.stmts(body) }
+        case ast.Stmt.While(_, cond, body), ast.Stmt.DoFor(_, body, cond) {
+            w.expr(cond)
+            w.stmts(body)
+        }
+        case ast.Stmt.For3(_, f) {
+            w.stmt(f.Init)
+            w.expr(f.Cond)
+            w.stmt(f.Post)
+            w.stmts(f.Body)
+        }
+        case ast.Stmt.ForIn(_, f) { w.forIn(f) }
+        case ast.Stmt.MatchS(_, m) { w.matchOf(m) }
+        case ast.Stmt.Return(_, vs) {
+            for x in vs { w.expr(x) }
+        }
+        case ast.Stmt.Jump(_, _, msg) { w.expr(msg) }
+        case ast.Stmt.Assert(_, cond, msg) {
+            w.expr(cond)
+            w.expr(msg)
+        }
+        case ast.Stmt.Spawn(_, _, call) { w.expr(call) }
+        case ast.Stmt.Join(_, j) {
+            w.stmts(j.Body)
+            w.catches(j.Clauses)
+        }
+        case ast.Stmt.Defer(_, st, _) { w.stmt(st) }
+        case ast.Stmt.Raise(_, _) { }
+    }
+}
+
+# a declaration: a name written of a variable's type, or made from a value of one, holds one
+fn (w mut walker&) decl(v ast.VarDecl&) {
+    for i in range v.Names.Len() {
+        w.param(v.Names[i], v.Ty)
+        if not v.Infer or i >= v.Values.Len() { continue }
+        k := w.valOf(v.Values[i])
+        if k >= 0 { w.vals.Put(v.Names[i], k) }
+        e := w.elemsOf(v.Values[i])
+        if e >= 0 { w.elems.Put(v.Names[i], e) }
+    }
+    for x in v.Values { w.expr(x) }
+}
+
+fn (w mut walker&) assign(t ast.Expr&, v ast.Expr&) {
+    match t {
+        case ast.Expr.Index(_, y, items) {
+            # x[i] = v stores through the type's SetAt (E31b)
+            w.need(w.valOf(y), "SetAt")
+            w.expr(y)
+            for it in items { w.expr(it) }
+        }
+        case _ { w.expr(t) }
+    }
+    w.expr(v)
+}
+
+# an if on a type's reflected members is decided per instance (G35): what its branches ask is no need of every one
+fn (w mut walker&) ifStmt(i ast.If&) {
+    if w.reflects(i.Cond) { return }
+    w.expr(i.Cond)
+    if i.Then is not null { w.stmts(i.Then!.Body) }
+    if i.Else is not null { w.stmt(i.Else!) }
+}
+
+# whether a condition reads a type variable's reflected member ("T.Kind == ...")
+fn (w mut walker&) reflects(x ast.Expr?&) Bool {
+    if x is null { return false }
+    match x {
+        case ast.Expr.Member(_, ast.Expr.Name(_, n), _) { return w.vars.Has(n) }
+        case ast.Expr.Member(_, y, _) { return w.reflects(y) }
+        case ast.Expr.Binary(_, _, a, b) { return w.reflects(a) or w.reflects(b) }
+        case ast.Expr.Unary(_, _, y), ast.Expr.Paren(_, y) { return w.reflects(y) }
+        case ast.Expr.Call(_, f, args) {
+            if w.reflects(f) { return true }
+            for a in args {
+                if w.reflects(a) { return true }
+            }
+            return false
+        }
+        case _ { return false }
+    }
+}
+
+fn (w mut walker&) forIn(f ast.ForIn&) {
+    e := w.elemsOf(f.Source)
+    if e >= 0 {
+        w.vals.Put(f.Name, e)
+    } else {
+        w.need(w.valOf(f.Source), "a walk (Next, Iter, or At and Len)")
+    }
+    w.expr(f.Source)
+    w.stmts(f.Body)
+    w.catches(f.Clauses)
+}
+
+# a match on a type variable picks its arm per instance (G15): no arm's asking is every instance's need
+fn (w mut walker&) matchOf(m ast.Match&) {
+    if m.OnType { return }
+    w.expr(m.Subject)
+    for cs in m.Cases {
+        w.expr(cs.Guard)
+        w.stmts(cs.Body)
+        w.expr(cs.Value)
+    }
+}
+
+fn (w mut walker&) catches(cls Array<ast.Catch&>&) {
+    for cl in cls {
+        w.stmts(cl.Body)
+        for d in cl.Defaults { w.expr(d) }
+    }
+}
+
+# ---- expressions ----
+
+fn (w mut walker&) expr(x ast.Expr?&) {
+    if x is null { return }
+    match x {
+        case ast.Expr.Unary(_, op, y) {
+            if op == token.Tok.Minus { w.need(w.valOf(y), "Neg") }
+            w.expr(y)
+        }
+        case ast.Expr.Binary(_, op, a, b) { w.binary(op, a, b) }
+        case ast.Expr.NotIn(_, a, b) {
+            w.need(w.valOf(b), "Has")
+            w.expr(a)
+            w.expr(b)
+        }
+        case ast.Expr.Chain(_, ch) {
+            for y in ch.Xs {
+                w.need(w.valOf(y), "Less")
+                w.expr(y)
+            }
+        }
+        case ast.Expr.Call(_, f, args) { w.call(f, args) }
+        case ast.Expr.Member(_, y, n) {
+            w.need(w.valOf(y), $"a field '" $w.C.P.L.Names.Text(n) "'")
+            w.expr(y)
+        }
+        case ast.Expr.Index(_, y, items) {
+            w.need(w.valOf(y), "At")
+            w.expr(y)
+            for it in items { w.expr(it) }
+        }
+        case ast.Expr.Slice(_, y, lo, hi) {
+            w.need(w.valOf(y), "Slice")
+            w.expr(y)
+            w.expr(lo)
+            w.expr(hi)
+        }
+        case _ { w.parts(x) }
+    }
+}
+
+# the parts of the expressions that ask nothing of themselves
+fn (w mut walker&) parts(x ast.Expr&) {
+    match x {
+        case ast.Expr.Paren(_, y), ast.Expr.Postfix(_, _, y), ast.Expr.Named(_, _, y), ast.Expr.As(_, y, _) { w.expr(y) }
+        case ast.Expr.IsType(_, y, _, _) { w.expr(y) }
+        case ast.Expr.Is(_, a, b, _) {
+            w.expr(a)
+            w.expr(b)
+        }
+        case ast.Expr.Cond(_, a, cd, b) {
+            w.expr(a)
+            w.expr(cd)
+            w.expr(b)
+        }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            for y in items { w.expr(y) }
+        }
+        case ast.Expr.Try(_, y, cls) {
+            w.expr(y)
+            w.catches(cls)
+        }
+        case ast.Expr.MatchE(_, m) { w.matchOf(m) }
+        case ast.Expr.Compr(_, cm) {
+            w.expr(cm.Source)
+            w.expr(cm.Value)
+            w.expr(cm.Filter)
+        }
+        case ast.Expr.Unreachable(_, msg) { w.expr(msg) }
+        case _ { }
+    }
+}
+
+fn (w mut walker&) binary(op token.Tok, a ast.Expr&, b ast.Expr&) {
+    if op == token.Tok.In {
+        w.need(w.valOf(b), "Has")
+    } else {
+        n := binaryNeed(op)
+        if n != "" { w.need(w.valOf(a), n) }
+    }
+    w.expr(a)
+    w.expr(b)
+}
+
+# a call: a method of a variable's value, a value of one called, or another generic given such a value where a
+# variable of its own stands - what that one needs of it
+fn (w mut walker&) call(f ast.Expr&, args Array<ast.Expr&>&) {
+    match f {
+        case ast.Expr.Member(_, y, n) {
+            w.need(w.valOf(y), $w.C.P.L.Names.Text(n))
+            w.expr(y)
+        }
+        case _ {
+            w.need(w.valOf(f), "Call")
+            w.through(f, args)
+        }
+    }
+    for a in args { w.expr(a) }
+}
+
+fn (w mut walker&) through(f ast.Expr&, args Array<ast.Expr&>&) {
+    if w.Depth >= 3 { return }
+    g := w.called(f)
+    if g < 0 or g == w.F or w.C.P.VarCount(generic.FnOwner(g)) == 0 { return }
+    ps := w.C.P.FnDecl(g).S.Params
+    for j in range args.Len() {
+        k := w.valOf(args[j])
+        if k < 0 or j >= ps.Len() { continue }
+        for n in innerNeeds(w.C, g, ps[j].Ty, w.Depth + 1) { w.need(k, n) }
+    }
+}
+
+# what generic g needs of the variable a parameter of it is written as (t), followed depth calls deep
+fn innerNeeds(c mut typecheck.Checker&, g I64, t ast.TypeRef?&, depth I64) Vec<String&> {
+    inner mut walker&c = walker(c, g, depth)
+    inner.run()
+    out Vec<String&>
+    u := inner.varOf(t)
+    if u < 0 or u >= inner.found.Len() { return out }
+    for n in inner.found[u] { out.Push($n) }
+    return out
+}
+
+# the function a callee expression names, -1 for none: a bare name or one through an import's alias, type arguments
+# written or not
+fn (w mut walker&) called(f ast.Expr&) I64 {
+    match f {
+        case ast.Expr.Name(sp, n) {
+            ref := w.C.P.R.Use(w.file, sp.Start)
+            return w.C.P.FnNamed(ref.Module, n) if ref.Kind == names.What.Func else -1
+        }
+        case ast.Expr.Member(sp, _, n) {
+            ref := w.C.P.R.Member(w.file, sp.End)
+            return w.C.P.FnNamed(ref.Module, n) if ref.Kind == names.What.Func else -1
+        }
+        case ast.Expr.Generic(_, g, _) { return w.called(g) }
+        case _ { return -1 }
+    }
+}

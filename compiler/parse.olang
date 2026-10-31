@@ -128,6 +128,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     attrGlobals Vec<ast.Decl&>        # the hidden globals holding the attributes of the item being read (G39), put
                                        # beside it when it is done
     sawVariadic Bool = false
+    spreadOk Bool = false     # D8g: the parameter list being read may hold a variadic parameter - a signature's
 }
 
 # ---- reading tokens ----
@@ -1101,6 +1102,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
     p.sawVariadic = false
     wasNo := p.noAttrs
     p.noAttrs = value
+    p.spreadOk = true
     params := try p.params(lambda) catch {
         p.noAttrs = wasNo
         error Fail.Syntax
@@ -1271,7 +1273,42 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
     p.skip = wasSkip
     p.brackets--
     try p.want(token.Tok.RParen)
-    return gather(p.prms, from)
+    ps := gather(p.prms, from)
+    p.spreadRules(ps, ok, p.spreadOk)
+    p.spreadOk = false
+    return ps
+}
+
+# D8g: a variadic parameter is a function's (a method's, a lambda's, a function type's), never an extern's - whose
+# variable arguments are C's "..." - a constructor's or a case's; one of them, with no default, only defaulted
+# parameters after it (given by name)
+fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Bool) {
+    seen := -1
+    for i in range ps.Len() {
+        ty := ps[i].Ty
+        if seen >= 0 and ps[i].Dflt is null {
+            p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
+            return
+        }
+        if ty is null or not isSpreadType(ty) { continue }
+        if inExtern or not allowed {
+            p.report(ty.Span().Start, ty.Span().End, msgs.VariadicHere("an extern's - C's variable arguments are '...'" if inExtern else "a constructor's or a case's - take an array, 'xs Array<T>&'"))
+            return
+        }
+        if seen >= 0 {
+            p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
+            return
+        }
+        if ps[i].Dflt is not null { p.report(ps[i].Dflt!.Span().Start, ps[i].Dflt!.Span().End, msgs.VariadicDefault()) }
+        seen = i
+    }
+}
+
+fn isSpreadType(t ast.TypeRef&) Bool {
+    match t {
+        case ast.TypeRef.Spread(_, _) { return true }
+        case _ { return false }
+    }
 }
 
 # whether "..." stands here: three dots, nothing between them
@@ -1290,7 +1327,13 @@ fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
     at := p.here()
     name := try p.name()
     ty ast.TypeRef?&p = null
-    if not (lambda and (p.sees(token.Tok.Comma) or p.sees(token.Tok.RParen) or p.sees(token.Tok.StmtEnd))) {
+    if p.ellipsis() {
+        # D8g: "xs ...T" - a variadic parameter, the call's arguments there gathered into a read-only array
+        sat := p.here()
+        for _ in range 3 { p.advance() }
+        of := try p.typeExpr()
+        ty = ast.TypeRef.Spread(p.from(sat), of)
+    } else if not (lambda and (p.sees(token.Tok.Comma) or p.sees(token.Tok.RParen) or p.sees(token.Tok.StmtEnd))) {
         ty = try p.typeExpr()
     }
     dflt ast.Expr?&p = null
@@ -2014,6 +2057,7 @@ fn (p Parser&) one(n source.NameId, sp source.Span) NameList&p {
 fn isAssignOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Assign, token.Tok.PlusEq, token.Tok.MinusEq, token.Tok.StarEq, token.Tok.SlashEq: true
+        case token.Tok.StarStarEq: true
         case token.Tok.PercentEq, token.Tok.ShlEq, token.Tok.ShrEq, token.Tok.AmpEq, token.Tok.PipeEq: true
         case token.Tok.CaretEq: true
         case _: false
@@ -2533,7 +2577,43 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
             }
             return ast.Pattern.Value(sp, x)
         }
+        case ast.Expr.Index(sp, ty, items) {
+            if isPath(ty) { return p.elemsPattern(sp, x, items) }
+            return ast.Pattern.Value(sp, x)
+        }
+        case ast.Expr.ArrayLit(sp, _, items) { return p.elemsPattern(sp, x, items) }
+        case ast.Expr.Spread(sp, y) {
+            match y {
+                case ast.Expr.Name(_, n) { if not top: return ast.Pattern.Rest(sp, n) }
+                case _ { }
+            }
+            return ast.Pattern.Value(sp, x)
+        }
         case _ { return ast.Pattern.Value(x.Span(), x) }
+    }
+}
+
+# S13h: an array literal's form as a pattern - each item an element's pattern, "...name" its rest; one item that is no
+# pattern (an expression but a literal) makes the whole a value, compared by "==" as written
+fn (p mut Parser&) elemsPattern(sp source.Span, x ast.Expr&p, items Array<ast.Expr&>&p) ast.Pattern&p {
+    from := p.pats.Len()
+    for it in items {
+        sub := p.pattern(it, false)
+        if not valuePattern(sub) {
+            p.pats.Push(sub)
+            continue
+        }
+        p.pats.Truncate(from)
+        return ast.Pattern.Value(sp, x)
+    }
+    return ast.Pattern.Elems(sp, x, gather(p.pats, from))
+}
+
+# a value alternative that is no literal: what makes the pattern around it a value
+fn valuePattern(q ast.Pattern&) Bool {
+    match q {
+        case ast.Pattern.Value(_, v) { return not isLiteral(v) }
+        case _ { return false }
     }
 }
 
@@ -2670,6 +2750,7 @@ fn (p Parser&) prec(k token.Tok) I64 {
         case token.Tok.Shl, token.Tok.Shr: 0 if p.noGt else 9
         case token.Tok.Plus, token.Tok.Minus: 10
         case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: 11
+        case token.Tok.StarStar: 12
         case _: 0
     }
 }
@@ -2792,6 +2873,7 @@ fn (p mut Parser&) isTypePath(n I64) Bool {
 # (L21, as stage 0 counts)
 fn (p mut Parser&) unary() ast.Expr&p ? Fail {
     at := p.here()
+    if p.ellipsis() { return try p.spread() }
     match p.peek() {
         case token.Tok.Not {
             p.advance()
@@ -2825,9 +2907,35 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) { p.exprs.Push(try p.piece()) }
             return ast.Expr.Join(p.from(at), gather(p.exprs, from))
         }
-        case _ { return try p.postfix() }
+        case _ { return try p.power() }
     }
     unreachable
+}
+
+# "...x" (D8g: an array passed on as a call's variadic arguments; S13h: an array pattern's rest), and a bare "..." -
+# what follows it no operand - holding the name "_"
+fn (p mut Parser&) spread() ast.Expr&p ? Fail {
+    at := p.here()
+    for _ in range 3 { p.advance() }
+    k := p.peek()
+    if k == token.Tok.Comma or k == token.Tok.RBrack or k == token.Tok.RParen or k == token.Tok.StmtEnd {
+        return ast.Expr.Spread(p.from(at), ast.Expr.Name(p.from(at), p.names.Intern("_")))
+    }
+    x := try p.unary()
+    return ast.Expr.Spread(p.from(at), x)
+}
+
+# E5a: a postfix expression raised to a power - "x ** y", tighter than a prefix operator ("-x ** 2" is "-(x ** 2)")
+# and right-associative ("2 ** 3 ** 2" is "2 ** 9"): the exponent a unary, so "2 ** -1" is read too
+fn (p mut Parser&) power() ast.Expr&p ? Fail {
+    x := try p.postfix()
+    if not p.sees(token.Tok.StarStar) { return x }
+    p.advance()
+    y := try p.unary()
+    sp := source.Span(x.Span().Start, p.prevEnd)
+    try p.enter()
+    p.leave()
+    return ast.Expr.Binary(sp, token.Tok.StarStar, x, y)
 }
 
 # a piece of text: a literal, or "$" rendering what follows
@@ -3343,6 +3451,7 @@ fn (p mut Parser&) reportAt(i I64, m msgs.Msg) {
 fn isJoiningOp(k token.Tok) Bool {
     return match k {
         case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At: true
+        case token.Tok.StarStar: true
         case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le: true
         case token.Tok.Gt, token.Tok.Ge, token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr: true
         case _: false

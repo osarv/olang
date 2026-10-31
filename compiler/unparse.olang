@@ -518,6 +518,10 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             w.put("any ")
             w.ty(of)
         }
+        case ast.TypeRef.Spread(_, of) {
+            w.put("...")
+            w.ty(of)
+        }
         case ast.TypeRef.Errs(_, items) {
             w.put("? ")
             for k, e in items {
@@ -832,6 +836,11 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
             w.put(" ")
             w.name(n)
         }
+        case ast.Pattern.Elems(_, x, _) { w.expr(x) }
+        case ast.Pattern.Rest(_, n) {
+            w.put("...")
+            if w.names.Text(n) != "_": w.name(n)     # a bare "..." holds the name "_"
+        }
     }
 }
 
@@ -1029,6 +1038,24 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.put(" = ")
             w.expr(y)
         }
+        case ast.Expr.Spread(_, y) {
+            w.put("...")
+            if not bareSpread(y, w.names): w.expr(y)
+        }
+        case ast.Expr.Variadic(_, items) {
+            for k, it in items {
+                if k > 0 { w.put(", ") }
+                w.expr(it)
+            }
+        }
+    }
+}
+
+# whether what "..." holds is the "_" a bare one is given (S13h)
+fn bareSpread(y ast.Expr&, names source.Names&) Bool {
+    match y {
+        case ast.Expr.Name(_, n) { return names.Text(n) == "_" }
+        case _ { return false }
     }
 }
 

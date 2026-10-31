@@ -523,6 +523,19 @@ type Diag enum {
     JoinPieceCalled
     UnhandledFallibleCall
     OperatorCallFails
+    PowNone
+    MatchLengthUncovered
+    RestNotHere
+    RestTwice
+    RestNoSlice
+    ElemsNotSeq
+    ElemsType
+    VariadicNotLast
+    VariadicHere
+    VariadicDefault
+    SpreadNotHere
+    SpreadAlone
+    VariadicArgCount
     IsOnlyNull
     IsCaseWritten
     IsNullOfValue
@@ -879,6 +892,15 @@ type Diag enum {
     LaneMaskBool
     ByteSwapWidth
     AtomicWidth
+    GenericNeeds
+    NoteGenericNeeds
+    FactOfGeneric
+    FactUndecided
+    FactNoFunction
+    ApiNoSide
+    ApiNoFiles
+    CapsOneFile
+    ApiUsage
 }
 
 # one function each, under the id it is known by
@@ -938,7 +960,7 @@ fn ReflMatchSubject() Msg { return Msg(Diag.ReflMatchSubject, "G13", "'match' on
 fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
 
 # ERR_NOT_A_MODE
-fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen and profile, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix, bindgen, profile and api, and a file ending in .olang is built and run") }
 
 # ERR_MODE_ONE_FILE
 fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
@@ -2340,6 +2362,45 @@ fn JoinPieceCalled() Msg { return Msg(Diag.JoinPieceCalled, "E11b", "'(' after a
 fn UnhandledFallibleCall() Msg { return Msg(Diag.UnhandledFallibleCall, "E15", "this call can fail - write 'try', and catch or pass on its errors") }
 
 # ERR_OPERATOR_CALL_FAILS
+# ERR_VARIADIC_NOT_LAST
+fn VariadicNotLast() Msg { return Msg(Diag.VariadicNotLast, "D8g", "a variadic parameter is the last one but defaulted ones - one variadic parameter, and only parameters with a default after it, given by name") }
+
+# ERR_VARIADIC_HERE
+fn VariadicHere(what String&) Msg { return Msg(Diag.VariadicHere, "D8g", "a variadic parameter is a function's, not " $what) }
+
+# ERR_VARIADIC_DEFAULT
+fn VariadicDefault() Msg { return Msg(Diag.VariadicDefault, "D8g", "a variadic parameter takes no default - a call giving it no argument gives it the empty array") }
+
+# ERR_SPREAD_NOT_HERE
+fn SpreadNotHere() Msg { return Msg(Diag.SpreadNotHere, "D8g", "'...a' passes an array on as a variadic parameter's arguments, and stands nowhere else - pass the array itself, 'a'") }
+
+# ERR_SPREAD_ALONE
+fn SpreadAlone() Msg { return Msg(Diag.SpreadAlone, "D8g", "'...a' passes an array on as all of a variadic parameter's arguments - alone, with no others beside it") }
+
+# ERR_VARIADIC_ARG_COUNT
+fn VariadicArgCount(n1 I64, text String&, n2 I64) Msg { return Msg(Diag.VariadicArgCount, "E14", "expected at least " $n1 " argument" $text ", found " $n2) }
+
+# ERR_REST_NOT_HERE
+fn RestNotHere() Msg { return Msg(Diag.RestNotHere, "S13h", "'...' stands among an array pattern's items, for the elements they do not name - 'case String&[first, ...rest]'") }
+
+# ERR_REST_TWICE
+fn RestTwice() Msg { return Msg(Diag.RestTwice, "S13h", "an array pattern has one '...', for the elements its other items do not name") }
+
+# ERR_REST_NO_SLICE
+fn RestNoSlice(ty String&) Msg { return Msg(Diag.RestNoSlice, "S13h", "a named rest is a slice of what is matched, and " $ty " declares no Slice - write a bare '...', or match the elements as an array (a Vec's View())") }
+
+# ERR_ELEMS_NOT_SEQ
+fn ElemsNotSeq(ty String&) Msg { return Msg(Diag.ElemsNotSeq, "S13h", "an array pattern matches an array, text or a type declaring At and Len - " $ty " is none of them") }
+
+# ERR_ELEMS_TYPE
+fn ElemsType(written String&, elem String&) Msg { return Msg(Diag.ElemsType, "S13h", "this array pattern's elements are " $written ", and what is matched holds " $elem " - write '" $elem "[...]'") }
+
+# ERR_MATCH_LENGTH_UNCOVERED
+fn MatchLengthUncovered(ty String&, what String&) Msg { return Msg(Diag.MatchLengthUncovered, "S13h", "a match over " $ty " gives a value only when its cases cover every value - none matches an array of " $what "; add a case for it, or 'case _: v'") }
+
+# ERR_POW_NONE
+fn PowNone(ty String&, hint String&) Msg { return Msg(Diag.PowNone, "E5a", "'**' calls Pow, which " $ty " has none of" $hint) }
+
 fn OperatorCallFails(text String&) Msg { return Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
 
 # ERR_IS_NOT_REFERENCES
@@ -3121,6 +3182,32 @@ fn ContractFalse(cond String&, name String&) Msg { return Msg(Diag.ContractFalse
 fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty " - write a value that fits, or 'try x.Narrow<" $ty ">()' to fail with an error") }
 
 fn NoteContractCondition() Msg { return Msg(Diag.NoteContractCondition, "", "the condition") }
+
+# ERR_GENERIC_NEEDS
+fn GenericNeeds(text String&, need String&, ty String&) Msg { return Msg(Diag.GenericNeeds, "G18", $text " needs " $need ", and " $ty " has none - declare it for " $ty ", or call " $text " with a type that has it") }
+
+fn NoteGenericNeeds(text String&, need String&) Msg { return Msg(Diag.NoteGenericNeeds, "", $text " needs " $need " here") }
+
+# ERR_FACT_OF_GENERIC
+fn FactOfGeneric(text String&, fact String&) Msg { return Msg(Diag.FactOfGeneric, "G42", $text " is generic, and each of its instances has facts of its own - name one with its type arguments: '" $text "<T>." $fact "'") }
+
+# ERR_FACT_UNDECIDED
+fn FactUndecided(text String&) Msg { return Msg(Diag.FactUndecided, "G42", "'" $text "' cannot be decided: the code it reads it from changes with its value - read it outside what it decides") }
+
+# ERR_FACT_NO_FUNCTION
+fn FactNoFunction(fact String&) Msg { return Msg(Diag.FactNoFunction, "G42", $fact " is read through a function's name or a function's descriptor ('f." $fact "', 'd." $fact "' in a walk of 'm.Functions')") }
+
+# ERR_CAPS_ONE_FILE
+fn CapsOneFile() Msg { return Msg(Diag.CapsOneFile, "B11c", "explain -caps takes one program's file, as 'olang explain -caps main.olang'") }
+
+# ERR_API_USAGE
+fn ApiUsage() Msg { return Msg(Diag.ApiUsage, "B21", "api takes two versions and a path, as 'olang api HEAD~1 HEAD std/io.olang' - each version a commit or a directory") }
+
+# ERR_API_NO_SIDE
+fn ApiNoSide(text String&) Msg { return Msg(Diag.ApiNoSide, "B21", "'" $text "' is neither a path nor a commit of the repository here") }
+
+# ERR_API_NO_FILES
+fn ApiNoFiles(text String&) Msg { return Msg(Diag.ApiNoFiles, "B21", "'" $text "' names no .olang file on either side") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))

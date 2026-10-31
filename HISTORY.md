@@ -26958,6 +26958,144 @@ parameter, a global or a shared field; read-only is a value result (or parameter
 caller only reads it and nothing changes the source, copying only what may change otherwise. Functions handing back
 views of their input (Split, Trim, First) take `&` or give values.
 
+
+## The tooling batch: effects, facts, -caps, needs at the call, olang api (2026-10-31)
+
+The decided tooling of docs/survey3.md - A2.3 (effects shown, QBP 6), B1.1 (function facts, QBP 9), B1.2 (`explain
+-caps`, QBP 11), B1.4 (a generic's needs, QBP 13, the user's option d) and B1.6 (`olang api`, QBP 15) - with the
+declared facts FuncInfo gained (the "keywords into reflection" answer: NoReturn, Exported, Extern, Commutes) and the
+"not a value" line docs/rework.md's first point asked for, built as one batch on one summary pass.
+
+**One summary pass, made on demand.** compiler/effects.olang walks a body's typed core once for what it does itself -
+stores into a global or through which parameter (a store whose place goes through a reference rooted at it, an atomic
+on a place under it), storage asked of the runtime (a text, an array made with a site, a comprehension, a temporary
+given storage, a lambda's environment), a Vec's growth (the prelude's `retire`, the one operation every growth reaches),
+C (extern and C-import calls but C's math and the runtime's `__olang_` functions), waits (a join; any C function not on
+a short list known to return at once), tasks, its loops, its calls - and then settles the call graph's strongly
+connected components callees first (Tarjan), each component sharing one set of facts and `Recursive` where it is a
+cycle; which parameters a body writes through is a fixed point over its calls' arguments within the component. It is
+asked only by explain, doc, the language server, `-caps` and a fact read in code (the Checker's `Effects()`, reset with
+each attempt), so the self-build - which reads no fact - computes none of it: its check phase measured the same before
+and after (see below). settleIdle (S3) was left as it was: its "does nothing" counts asserts and ends of the program as
+doing something, which the effects line need not say, and S3's verdicts are pinned by checks cases.
+
+**Facts are constants found after checking.** A fact depends on bodies the checker produces lazily, so `mix.Allocates`
+cannot be computed where it is read: the first attempt reads each fact as the value that claims nothing (true, but
+Terminates false), and after the attempt the summaries say what the bodies do; a read that differs makes the checker
+check the program again with the found values (`factPresets`, kept across attempts as R1a's sets are), until reads and
+findings agree. A fact whose value changes the code it is read from would never agree and is an error (none could be
+made in testing: both branches of an `if` are checked whatever its condition). A fact read in a plain function's `if`
+is a constant condition, S8a's dead branch, as any other; in a walk unrolled over `m.Functions` it differs per copy and
+is no error. Terminates needed to know which loops are bounded, which the typed core no longer says (every loop is a
+`Loop`), so the checker marks them as it makes them: counted for-ins over arrays and ranges, and the unrolled walks
+(`typed.Body.Bounded`). A for-in over a Vec (At and Len, re-read each turn) or an iterator is not bounded.
+
+**Capabilities.** Classified by the C function that gains them (open, mkdir, rename ...; socket, connect,
+getaddrinfo ...; posix_spawn, waitpid, kill ...; getenv, setenv ...; pthread_create, and any spawn) - never by the
+read or write of a descriptor, so `io.Println` gains nothing and std/io's line says only `files` (its file opening).
+"C" is said only of C a module outside std calls itself; std's C is said by what it gains. A module's line is the union
+over all of its bodies - functions, lambdas, its generics' instances - so a call through a function value runs code
+whose own module's line says what it reaches; `-caps` therefore prints no "anything" (the facts, which speak of one
+function's calls, do count a function value as anything).
+
+**Needs at the call.** Before, `Max(Point(1, 2), p)` with `a < b` in Max's body said `'<' takes numbers, found Point`
+inside Max with "instantiated here" notes. Now the checker's member, operator, index, slice, walk, membership and field
+errors go through `needErr`: where the type lacking the member is one of the outermost instance's type arguments (the
+type the program's own call gave), the error is said at that call - `Max needs Less ('<'), and Point has none` - with a
+note where the body asks (`diag.ErrorBare`, no context notes); otherwise (a concrete type inside the generic) it stays
+where it is, the generic's own mistake. The shown needs (`# T needs: ...`) are a separate syntactic reading
+(compiler/needs.olang) of the declaration, so a generic no program instantiates still shows them in doc; it follows
+values of a variable's type through parameters, locals, Array/Vec elements and for-ins, and into other generics the
+program calls with such a value, leaving out `match T` arms and `if`s on reflected members.
+
+**olang api.** Built on doc's entries: each side's module checked in a forked child (session.InChild), its exported
+items and members written as key, kind and signature, compared by key. An error set is the text after the top-level
+` ? `: a subset is narrower (ok), anything else wider (breaking). A commit's tree comes from `git archive` and `tar`,
+run without a shell.
+
+**Measured.** The self-build computes no summary: the master compiler and this one checking the same source
+(master's compiler/olang.olang, `OLANG_TIMES`, on a machine loaded by other builds) took 1.54 and 1.33 s against 1.27
+and 1.12 s - no cost beyond noise; this tree's own, larger source checks in 1.76-2.02 s, the new modules' share.
+`olang api` over two small directories 0.35 s; `explain -caps` of a program using std/net, std/http and std/json 0.45 s;
+tests/facts.olang (facts read, so the program is checked twice) builds in 1.7 s.
+
+## The power operator `**` (E5a, QCG, 2026-10-31)
+
+The user, on QBV's folding of constant exponents: "should we add the ** operator?" - then "Yes add the operator". `a
+** b` is the call of `a`'s type's `Pow` with `b`, so it is E31's operator method as `+` is `Plus`: the prelude's
+float and integer `Pow` on the numbers, a type's own elsewhere, `std/arith`'s `Checked<T>` given one (`try
+arith.Checked(n) ** 3`). It binds tighter than the prefix operators and to the right, as in mathematics and Python:
+`-x ** 2` is `-(x ** 2)`, `2 ** 3 ** 2` is `2 ** 9`, and the exponent is a `unary`, so `2.0 ** -1.0` reads. Two new
+tokens, `**` and `**=` (L16); the parser reads a power where a prefix operator would read its operand, and the
+precedence table gives `**` 12 so a statement that read its first operand already continues it.
+
+Decided (mine): the exponent is typed as `Pow`'s parameter (a float's own type, an integer's `U32`), so a literal
+adapts there and a variable is converted as `n.Pow(k)` asks (`n ** U32(k)`); a literal base adapts to the number type
+wanted where one is (`e F32 = 2.0 ** 3.0`) and is otherwise its own type, as a literal receiver is (E13c) - a first
+version adapted the base to a float exponent's type, which made `2 ** 3 ** 2` an error (the inner power typed before
+its U32 was known), so it went; `2.0 ** f` with `f` an `F32` is an `F64`. On arrays `**` works lane by lane (E39),
+each lane the element's `Pow` (laneTok, laneBinType, opValues). `**=` is `x = x ** y`, through `x[i]` (E31b) too. A
+type with no `Pow` is an error naming it (with the declaration to write where the type is a program's). `Pow` joins
+E31's shapes (one operand, a result), so a `Pow` of one parameter is held to it. The folding QBV built applies to
+both spellings: `x ** 2.0` is `x * x`. Built in check (`power`, `powValues`, `powMethod`, `powExponent`) as a call,
+so lowering, the evaluator and `interpret` needed nothing. Tests: tests/power.olang (baked globals and a decided
+assert beside the run time), checks/cases/e5apow*.
+
+## Variadic parameters (D8g, QCF, 2026-10-31)
+
+The user: "Is variadic args anything to have?", then "yes, add variadic args". Found in std beforehand:
+filepath.Join faked one with six defaulted parameters, os.Exec took an `Array<String&>&` written as a literal at almost
+every call. `xs ...T` is a function's parameter whose arguments a call gives any number of; inside, a read-only
+`Array<T>&`; `...a` passes an existing array on whole. Go's form.
+
+Decided (mine): it is the last parameter but defaulted ones, which then come after it and are given by name (Python's
+keyword-only parameters) - `os.Exec(args ...String&, input = "", capture = true, dir = "")` is called
+`os.Exec("ls", "-l", dir = d)`; one per function, no default on it, the parameters before it required (D8b already
+says so). Methods, lambdas and function types may have one; constructors, enum payloads and externs may not (an
+extern's variable arguments are C's `...`, X21). A function type writes the parameter with its name as every
+function type does (`fn(xs ...I64) I64`; the decision's `fn(...I64)` assumed unnamed parameters, which olang's
+function types do not have). The arguments are held in a hidden local of the caller - fixed storage in its frame
+(T7c), lent to the call - so a call makes nothing in an arena: measured, a loop of 50M `sum(i, i + 1, i + 2)` calls
+under -debug went from an arena allocation per call (the temporary built in the loop's scope, 1.37 s) to an alloca
+(0.67 s), and inlines away at -O3. Holding them there could run them before the arguments written before them, so
+where any variadic argument is more than a literal or a place read, the earlier ones are held first, in order
+(`heldArray`). A generic's variable is inferred from the arguments (`largest<T>(first T, rest ...T)`): literals as
+literal arguments, the others as one array of what they are. `...a` beside other variadic arguments, or anywhere but
+a variadic parameter's place, is an error. A function fits a function type of either form - the value is a function
+taking the array either way, and a call through the type is written as the type says (T22, mine).
+
+Representation (mine): `TypeRef.Spread(of)` in the AST, resolved to `Ref(Array<T>, Spread)` - a permission bit of
+its own on the signature's parameter, so substitution, identity and every rebuilding of a function type keep it; the
+body's local is the plain read-only array (`check.param`), and the MIR verifier reads the bit as the array it is. The
+checker gathers a call's variadic arguments into one `Expr.Variadic` (a node only it makes) before arguments are put
+in place by name, so named arguments, inference and fitting see one argument. `$`, `explain` and `doc` write `...T`;
+the formatter spaces `...` as a prefix. std moved: filepath.Join, os.Exec/Start/ExecUntil/ExecInPlace (ExecUntil's
+token now first), http.Get/Post's headers, csv.Record's fields; `tools/variadic_migrate.olang` (in `olang fix`)
+rewrites their calls - a literal's items into the call, an array a call gives passed on with `...`, positions after it
+by name, a plain name listed for a person (it could be a String in the new form). Tests: tests/variadic.olang,
+checks/cases/d8g*.
+
+## Array patterns (S13h, QBP 10, 2026-10-31)
+
+The user: "Do it Ig", and the rest spelled `...` ("Could we do ... for the array match?"). `case String&["test", file,
+...words]` matches an array element by element: literals compare, names bind (always new names - S13b's rule; a
+local's value is compared by a guard, a name in scope is D3a's error), `...name` binds the elements the others do not
+name as a view, a bare `...` skips them, no `...` means the exact length.
+
+Decided (mine): the element type is written before `[` as a literal writes it and must be the matched value's; items
+after the rest count from the end (`case I64[first, ..., last]`); the length is tested first, the items' tests joined
+after it by `and`, so nothing is read out of range. Text matches as an array of `Char` (`case Char['-', '-',
+...name]`, the rest a `String` view), and a type with `At` and `Len` (a `Vec`) element by element through `At` - a
+named rest there needs its `Slice`, a bare `...` works without (a Vec has none: the error says to match `View()`).
+Exhaustiveness treats the length as the array's constructor (Maranget over the lengths 0 to one past the longest item
+count written, past which every pattern with a rest reads alike): `I64[]` and `I64[first, ...rest]` cover every
+array, and a value match leaving a length to no case says which ("an array of 1 element", "3 elements or more").
+An alternative written like an array literal after a path naming no type (`case table[k]`) stays the value it was.
+Built as the parser's conversion of the alternative's expression (`Pattern.Elems`, `Pattern.Rest`; the resolver binds
+its names only where the path names a type, as the checker then reads it) and the checker's elaboration into the tests
+and bindings a match already has (`elemsPattern`: `Len`, element places, a slice for the rest), so lowering, the
+evaluator and `interpret` needed nothing new. Tests: tests/arraypat.olang, checks/cases/s13h*.
+
 ## The scoping rework, round 1: scopes inferred behind a switch (2026-10-31)
 
 docs/rework.md section 6's first round, built on `wt-rework` and measured there (section 9 of the note has every

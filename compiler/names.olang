@@ -1329,7 +1329,55 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut Vec<source.NameId>&) {
                 r.declareRead(n, sp, true)
             }
         }
+        case ast.Pattern.Elems(_, x, subs) { r.elemsPattern(x, subs, bound) }
+        case ast.Pattern.Rest(sp, n) {
+            if r.text(n) != "_" and n not in bound {
+                bound.Push(n)
+                r.declareRead(n, sp, true)
+            }
+        }
         case _ { }
+    }
+}
+
+# S13h: an array pattern - its element type resolved and its items' patterns read; written after what names no type,
+# it is a value the expression compares (S13d)
+fn (r mut Resolver&) elemsPattern(x ast.Expr&, subs Array<ast.Pattern&>&, bound mut Vec<source.NameId>&) {
+    match x {
+        case ast.Expr.ArrayLit(_, elem, _) { if elem is not null: r.typeRef(elem) }
+        case ast.Expr.Index(_, ty, _) {
+            if not r.namesType(ty) {
+                r.expr(x)
+                return
+            }
+            r.expr(ty)
+        }
+        case _ {
+            r.expr(x)
+            return
+        }
+    }
+    for s in subs { r.pattern(s, bound) }
+}
+
+# whether a path names a type: a name the module, the prelude or the language declares as one, or an import's
+fn (r mut Resolver&) namesType(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Name(_, n) {
+            k := r.lookup(n).Kind
+            return k == What.Type or k == What.Builtin or k == What.TypeVar
+        }
+        case ast.Expr.Member(_, a, n) {
+            match a {
+                case ast.Expr.Name(_, an) {
+                    ref := r.lookup(an)
+                    if ref.Kind != What.Import or ref.Module < 0 { return false }
+                    return r.Tables[ref.Module].types.Has(n)
+                }
+                case _ { return false }
+            }
+        }
+        case _ { return false }
     }
 }
 
@@ -1339,7 +1387,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
     if x is null { return }
     match x {
         case ast.Expr.Name(sp, n) { r.name(sp, n) }
-        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a) { r.expr(a) }
+        case ast.Expr.Paren(_, a), ast.Expr.Named(_, _, a), ast.Expr.Spread(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a) { r.expr(a) }
         case ast.Expr.Unreachable(_, msg) { r.expr(msg) }
         case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
             r.expr(a)
@@ -1603,7 +1651,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
             }
         }
         case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
-        case ast.TypeRef.Any(_, of) { r.typeRef(of) }
+        case ast.TypeRef.Any(_, of), ast.TypeRef.Spread(_, of) { r.typeRef(of) }
         case ast.TypeRef.Errs(_, items) {
             for e in items { r.path(e) }
         }

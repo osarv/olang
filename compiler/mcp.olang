@@ -99,12 +99,12 @@ fn call(name String&, args json.Json&, cfg mut build.Config&, exe String&) Strin
     file := str(args, "file")
     if name == "test" {
         if file == "" { return toolError("test needs a file") }
-        out := try os.Exec(String&[exe, "test", file]) catch os.Error { return toolError("the compiler could not be run") }
+        out := try os.Exec(exe, "test", file) catch os.Error { return toolError("the compiler could not be run") }
         return testResult($out.Stdout $out.Stderr, out.Status)
     }
     if name == "explain" and file == "" {
         rule := str(args, "name")
-        out := try os.Exec(String&[exe, "explain", rule]) catch os.Error { return toolError("the compiler could not be run") }
+        out := try os.Exec(exe, "explain", rule) catch os.Error { return toolError("the compiler could not be run") }
         return textResult($out.Stdout $out.Stderr, out.Status != 0)
     }
     if name != "check" and name != "explain" and name != "doc" and name != "format" { return toolError($"no tool " $name) }
@@ -289,7 +289,7 @@ test "olang mcp answers a scripted session: tools/list, check, explain, doc, for
     lines.Push(callLine(7, "format", $"{\"file\":\"" $good "\"}"))
     lines.Push(callLine(8, "test", $"{\"file\":\"" $good "\"}"))
     lines.Push(callLine(9, "nothing", "{}"))
-    out := try os.Exec(String&[compilerUnderTest(), "mcp"], lines.ToString()) catch os.Error { unreachable "olang mcp did not run" }
+    out := try os.Exec(compilerUnderTest(), "mcp", input = lines.ToString()) catch os.Error { unreachable "olang mcp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for line in out.Stdout.Lines() {

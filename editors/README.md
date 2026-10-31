@@ -3,7 +3,8 @@
 What the compiler offers tools, and the editor support built on it:
 
 - `olang lsp` (SPEC B15) - a Language Server Protocol server on the standard input and output: diagnostics as the
-  compiler reports them, hover (an item's signature as `olang explain` gives it, and its doc comment), go to
+  compiler reports them, hover (an item's signature as `olang explain` gives it - with its effects, a generic's needs and
+  whether it can be a value - and its doc comment), go to
   definition, document symbols, completion after `.` (a module's names, a value's fields and methods) and of the names
   in scope, and formatting (`olang format`). Any LSP client can use it.
 - `olang mcp` (B16) - a Model Context Protocol server on the standard input and output, for agents: the tools `check`,
@@ -11,6 +12,8 @@ What the compiler offers tools, and the editor support built on it:
 - `olang doc FILE [NAME]`, `olang doc -html DIR [FILE...]` (B14) - a module's documentation, its doc comments (L4b:
   the `#` lines directly above a declaration) with the signatures the compiler sees; HTML for a whole library (std's
   when no file is named).
+- `olang explain -caps FILE` (B11c) - what each module of a program may reach (files, network, processes, environment,
+  threads, C); `olang api OLD NEW PATH` (B21) - a module's interface changes between two versions, breaking or not.
 - `nvim/` - a Neovim plugin: filetype, syntax highlighting, `:make` through the compiler, `K` on a rule, format on
   save, and the language server. Its own README says how to install it.
 

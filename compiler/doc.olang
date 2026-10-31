@@ -333,7 +333,7 @@ fn firstLines(text String&) String {
     b := StringBuilder()
     for line in text.Lines() {
         if line.StartsWith("    instance ") or line.StartsWith("        ") { break }
-        if b.Len() > 0 and not line.StartsWith("    [") { break }
+        if b.Len() > 0 and not line.StartsWith("    [") and not line.StartsWith("    #") { break }
         if b.Len() > 0 { b.PushChar('\n') }
         b.Push(line)
     }
@@ -375,6 +375,12 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
         line := lines[k].TrimStart()
         # explain's builder lines (no receiver) are pushed above, with their documentation
         if line.StartsWith("fn ") and not line.StartsWith("fn (") { continue }
+        # A2.3: a method's effects, the line explain writes under it, are part of its entry
+        if line.StartsWith("#") and e.Members.Len() > 0 {
+            last := e.Members.Len() - 1
+            e.Members[last].Line = $e.Members[last].Line "\n    " $line
+            continue
+        }
         if line.StartsWith("meets ") {
             e.Members.Push(Entry($line, "", ""))
             continue

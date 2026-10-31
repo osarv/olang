@@ -1,0 +1,55 @@
+# E5a: "a ** b" calls a's type's Pow (E31) - the prelude's on the numbers, a type's own - binding tighter than a prefix
+# operator and to the right; "**=" with it; the exponent adapting to Pow's parameter (a float's own type, an integer's
+# U32), lane by lane on arrays (E39). Each computation is a global the evaluator bakes and an assert it decides (K2,
+# S18c), and on an input it cannot see (Live), at run time
+import "std/arith"
+
+Live mut I64 = 0
+
+type Poly struct(c F64) { c }
+
+fn (p Poly) Pow(n U32) Poly { return Poly(p.c.Pow(F64(n))) }
+
+fn powers(z I64) String {
+    x := 3.0 + F64(z)
+    n := 5 + z
+    e F32 = 2.0 ** 3.0
+    w := 2.0
+    w **= 3.0
+    k := n
+    k **= 2
+    return $(x ** 2.0) " " $(-x ** 2.0) " " $(2 ** 3 ** 2) " " $(n ** 3) " " $e " " $(Poly(2.0) ** 10) " " $(2.0 ** 0.5) " " $w " " $k
+}
+
+PowersBaked := powers(0)
+
+fn lanes(z I64) String {
+    a := F64[1.0, 2.0, 3.0 + F64(z)]
+    b := I64[2, 3, 4 + z]
+    sq := a ** 2.0
+    a **= 0.5
+    return $sq " " $(b ** 2) " " $a[0]
+}
+
+LanesBaked := lanes(0)
+
+fn checkedPow(x I32) I32 { return (try arith.Checked(x) ** 21 catch default arith.Checked(I32(-1))).Value }
+
+CheckedBaked := checkedPow(3)
+
+test "E5a: '**' calls Pow - tighter than '-', to the right, '**=' with it" {
+    want := "9 -9 512 125 8 Poly(1024) 1.4142135623730951 8 25"
+    assert powers(Live) == want
+    assert PowersBaked == want
+    assert powers(0) == want # decided while compiling (S18c)
+}
+
+test "E5a, E39: '**' lane by lane" {
+    want := "F64[1, 4, 9] I64[4, 9, 16] 1"
+    assert lanes(Live) == want and LanesBaked == want
+}
+
+test "E5a: a type's Pow that fails makes '**' fail as written (E31)" {
+    assert checkedPow(I32(Live) + 3) == -1 and CheckedBaked == -1
+    assert checkedPow(I32(Live) + 2) == 2097152
+}

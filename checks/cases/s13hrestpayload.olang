@@ -1,0 +1,16 @@
+# check: fail error[S13h]: '...' stands among an array pattern's items, for the elements they do not name
+# S13h: a case's payload is no array - each of its fields is named
+type Cmd enum {
+    Run(a I64)
+}
+
+fn f(c Cmd) I64 {
+    match c {
+        case Cmd.Run(...rest) { return 1 }
+        case _ { return 0 }
+    }
+}
+
+fn main() {
+    assert f(Cmd.Run(1)) == 1
+}

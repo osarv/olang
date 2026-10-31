@@ -143,8 +143,8 @@ fn Pow<T Integer>(x T, n U32) T ? {
 }
 
 # a number whose operators are the checked operations above: each step fails where its true result does not fit, and
-# the next step goes on from the checked result - "try arith.Checked(a) * b + c". The other operand is a plain number;
-# "+" and "*" commute (E31c), so "b * arith.Checked(a)" is checked too. Value is the number
+# the next step goes on from the checked result - "try arith.Checked(a) * b + c", "try arith.Checked(n) ** 3". The other
+# operand is a plain number; "+" and "*" commute (E31c), so "b * arith.Checked(a)" is checked too. Value is the number
 type Checked<T Number> struct(Value T) { Value }
 
 fn (a Checked<T>) Plus(b T) Checked<T> commutes ? { return Checked<T>(try Add(a.Value, b)) }
@@ -152,6 +152,7 @@ fn (a Checked<T>) Minus(b T) Checked<T> ? { return Checked<T>(try Sub(a.Value, b
 fn (a Checked<T>) Mul(b T) Checked<T> commutes ? { return Checked<T>(try Mul(a.Value, b)) }
 fn (a Checked<T>) Div(b T) Checked<T> ? { return Checked<T>(try Div(a.Value, b)) }
 fn (a Checked<T>) Neg() Checked<T> ? { return Checked<T>(try Neg(a.Value)) }
+fn (a Checked<T>) Pow(n U32) Checked<T> ? { return Checked<T>(try Pow(a.Value, n)) } # "**" (E5a), an integer's
 
 # a float result r of a and b, checked: Invalid for a NaN made from operands that are not, Overflow for an infinity
 # made from finite operands

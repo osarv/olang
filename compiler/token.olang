@@ -65,6 +65,7 @@ type Tok enum {
     Plus
     Minus
     Star
+    StarStar
     Slash
     Percent
     At
@@ -77,6 +78,7 @@ type Tok enum {
     PlusEq
     MinusEq
     StarEq
+    StarStarEq
     SlashEq
     PercentEq
     ShlEq
@@ -184,6 +186,7 @@ fn (k Tok) Text() String& {
         case Tok.Plus: "+"
         case Tok.Minus: "-"
         case Tok.Star: "*"
+        case Tok.StarStar: "**"
         case Tok.Slash: "/"
         case Tok.Percent: "%"
         case Tok.At: "@"
@@ -196,6 +199,7 @@ fn (k Tok) Text() String& {
         case Tok.PlusEq: "+="
         case Tok.MinusEq: "-="
         case Tok.StarEq: "*="
+        case Tok.StarStarEq: "**="
         case Tok.SlashEq: "/="
         case Tok.PercentEq: "%="
         case Tok.ShlEq: "<<="

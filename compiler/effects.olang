@@ -1,0 +1,758 @@
+# effects - what a function may do beyond computing its result, read off the typed core (typed.olang) of a checked
+# program: the line explain, doc and the language server print under a signature (A2.3), the facts a program reads
+# through a function's name (G42, B1.1) and the reach `olang explain -caps` reports (B1.2).
+#
+# Each body's own facts are read off its statements, once: what it stores into (a global, through which parameter),
+# what it makes storage for (a text, an array, a temporary given storage, a closure's environment, a comprehension), the
+# C it calls and what that reaches outside the program (files, the network, processes, the environment, threads), the
+# operations that wait (a join, a lock, a channel, a C call not known to return at once), its loops not bounded by a
+# count known before they start, and its calls. A call through a function value or an "any" is a body not known, and
+# counts as everything; so does a body that did not check. The facts of a body are then its own and those of every
+# body it may call - a least fixed point over the call graph's strongly connected components, callees' first (Tarjan),
+# found only for the bodies asked about and what they reach: nothing of it runs in a build that asks nothing.
+
+import "source"
+import "generic"
+import "typed"
+
+# the classes of what a body may reach outside the program (B1.2), one bit each of Facts.Caps
+CapFiles I64 = 1
+CapNetwork I64 = 2
+CapProcesses I64 = 4
+CapEnvironment I64 = 8
+CapC I64 = 16
+CapThreads I64 = 32
+
+# the classes in the order they are said, and their names
+CapCount I64 = 6
+
+fn CapName(k I64) String {
+    return match k {
+        case 0: "files"
+        case 1: "network"
+        case 2: "processes"
+        case 3: "environment"
+        case 4: "C"
+        case _: "threads"
+    }
+}
+
+# what a body may do, its own and through what it may call
+type Facts struct() {
+    Allocates Bool = false      # asks the runtime for storage in some scope, its frame's included
+    Blocks Bool = false         # may wait: a join, a lock, a channel, a sleep, C not known to return at once
+    WritesGlobals Bool = false  # stores into a global
+    ReadsGlobals Bool = false   # reads a mutable global
+    CallsC Bool = false         # calls an extern or a C import, C's math functions and the runtime's own aside
+    Opaque Bool = false         # calls C not known to return
+    Spawns Bool = false         # starts a task
+    Recursive Bool = false      # may call itself, directly or through others
+    Unbounded Bool = false      # holds a loop no count known before it starts bounds
+    Unknown Bool = false        # calls through a function value or an "any": anything may happen
+    Grows Bool = false          # may grow a Vec (M19d: a buffer retired)
+    Exits Bool = false          # may end the program on purpose (os.Exit, a C exit)
+    Unchecked Bool = false      # reaches a body that did not check
+    Caps I64 = 0                # the classes reached (CapFiles ...)
+    Via := Array<I64>(6, -1)    # by class: the module reaching it first, -1 for none
+    Writes I64 = 0              # by parameter, the receiver first (bit k parameter k): stores through what it is given
+}
+
+# whether a body always ends (B1.1's Terminates): every loop bounded, no recursion, no unknown call, nothing that waits,
+# no C not known to return
+fn (f Facts&) Terminates() Bool {
+    return not (f.Unbounded or f.Recursive or f.Unknown or f.Blocks or f.Opaque or f.Unchecked)
+}
+
+# whether the compile-time evaluator may compute a call of it where its arguments are known (K1a): no C but its math,
+# no global read that changes or written, nothing unknown
+fn (f Facts&) Evaluable() Bool {
+    return not (f.CallsC or f.WritesGlobals or f.ReadsGlobals or f.Unknown or f.Unchecked or f.Exits)
+}
+
+# whether it does nothing but compute its result
+fn (f Facts&) Idle() Bool {
+    if f.Allocates or f.Blocks or f.WritesGlobals or f.CallsC or f.Spawns or f.Unknown or f.Grows or f.Unchecked { return false }
+    return not f.Exits and f.Caps == 0 and f.Writes == 0
+}
+
+# the facts of B1.1 a program reads through a function's name (G42), by name; Unknown for none
+type Fact enum {
+    Allocates
+    Blocks
+    WritesGlobals
+    CallsC
+    Spawns
+    Recursive
+    Terminates
+    Unknown
+}
+
+fn FactNamed(name String&) Fact {
+    return match name {
+        case "Allocates": Fact.Allocates
+        case "Blocks": Fact.Blocks
+        case "WritesGlobals": Fact.WritesGlobals
+        case "CallsC": Fact.CallsC
+        case "Spawns": Fact.Spawns
+        case "Recursive": Fact.Recursive
+        case "Terminates": Fact.Terminates
+        case _: Fact.Unknown
+    }
+}
+
+# a fact's value; what is said of a body not known, the one that claims nothing (Allocates, ... true; Terminates false)
+fn (f Facts&) Holds(k Fact) Bool {
+    return match k {
+        case Fact.Allocates: f.Allocates or f.Unknown or f.Unchecked
+        case Fact.Blocks: f.Blocks or f.Unknown or f.Unchecked
+        case Fact.WritesGlobals: f.WritesGlobals or f.Unknown or f.Unchecked
+        case Fact.CallsC: f.CallsC or f.Unknown or f.Unchecked
+        case Fact.Spawns: f.Spawns or f.Unknown or f.Unchecked
+        case Fact.Recursive: f.Recursive or f.Unknown or f.Unchecked
+        case Fact.Terminates: f.Terminates()
+        case _: true
+    }
+}
+
+fn Conservative(k Fact) Bool { return k != Fact.Terminates }
+
+# a call's argument rooted at a parameter of the body making it: the callee's parameter At given what parameter Param
+# reaches
+type link struct(Callee I64, At I64, Param I64) {
+    Callee
+    At
+    Param
+}
+
+# where a place starts, and whether a reference is gone through on the way: a store there writes what the start
+# refers to, not the start itself
+type root struct(Local I64, Through Bool) {
+    Local
+    Through
+}
+
+# the summaries of a checked program: P the program, Bodies the checker's bodies (one attempt's)
+type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
+    P
+    Bodies
+    own Vec<Facts>       # by body: what it does itself, once walked
+    calls Vec<Vec<I64>>  # by body: the bodies it calls
+    links Vec<Vec<link>> # by body: its arguments rooted at its parameters
+    whole Vec<Facts>     # by body: with what it may call, once settled
+    state Vec<I64>       # by body: 0 unseen, 1 walked, 2 settled
+    fileMod Map<I64, I64>
+    mutGlobals Map<pair, Bool>
+    # Tarjan's walk
+    tIndex Vec<I64>
+    tLow Vec<I64>
+    tOn Vec<Bool>
+    tStack Vec<I64>
+    tNext I64 = 0
+    # the body walked
+    cur Facts = Facts()
+    curCalls Vec<I64>
+    curLinks Vec<link>
+    paramAt Map<I64, I64>
+    bounded Map<I64, Bool>
+    curMod I64 = -1
+}
+
+type pair struct(A I64, B I64) {
+    A
+    B
+}
+
+fn (e mut Effects&) grow() {
+    for e.state.Len() < e.Bodies.Len() {
+        e.own.Push(Facts())
+        e.calls.Push(Vec<I64>())
+        e.links.Push(Vec<link>())
+        e.whole.Push(Facts())
+        e.state.Push(0)
+        e.tIndex.Push(-1)
+        e.tLow.Push(0)
+        e.tOn.Push(false)
+    }
+    if e.fileMod.Len() == 0 {
+        for mi in range e.P.L.Mods.Len() {
+            if e.P.L.Mods[mi].File >= 0 { e.fileMod.Put(e.P.L.Mods[mi].File, mi) }
+        }
+    }
+}
+
+# what body b may do, with everything it may call
+fn (e mut Effects&) Of(b I64) Facts {
+    if b < 0 or b >= e.Bodies.Len() {
+        f := Facts()
+        f.Unchecked = true
+        return f
+    }
+    e.grow()
+    if e.state[b] < 2 { e.visit(b) }
+    return e.whole[b]
+}
+
+# the module body b is written in, -1 for none
+fn (e mut Effects&) ModuleOf(b I64) I64 {
+    e.grow()
+    return try e.fileMod.Get(e.Bodies[b].File) catch default -1
+}
+
+# what an extern or a C import's function may do (X1, X17), as a call of it does
+fn (e mut Effects&) OfExtern(f I64) Facts {
+    e.grow()
+    was := e.cur
+    e.cur = Facts()
+    e.curMod = -1
+    e.extern(f)
+    out := e.cur
+    e.cur = was
+    return out
+}
+
+# ---- the call graph ----
+
+fn (e mut Effects&) visit(b I64) {
+    e.walk(b)
+    e.tIndex[b] = e.tNext
+    e.tLow[b] = e.tNext
+    e.tNext++
+    e.tStack.Push(b)
+    e.tOn[b] = true
+    for w in e.calls[b] {
+        if w < 0 or w >= e.Bodies.Len() or e.state[w] == 2 { continue }
+        if e.tIndex[w] < 0 {
+            e.visit(w)
+            if e.tLow[w] < e.tLow[b] { e.tLow[b] = e.tLow[w] }
+        } else if e.tOn[w] and e.tIndex[w] < e.tLow[b] {
+            e.tLow[b] = e.tIndex[w]
+        }
+    }
+    if e.tLow[b] != e.tIndex[b] { return }
+    comp Vec<I64>
+    for {
+        w := try e.tStack.Pop() catch { break }
+        e.tOn[w] = false
+        comp.Push(w)
+        if w == b { break }
+    }
+    e.settle(comp)
+}
+
+# a component's facts: its bodies' own, and those of every body outside it they call, settled already - one fact for
+# the lot, but for the parameters each writes through, found to a fixed point
+fn (e mut Effects&) settle(comp Vec<I64>&) {
+    all := Facts()
+    inComp Map<I64, Bool>
+    for b in comp { inComp.Put(b, true) }
+    cyclic := comp.Len() > 1
+    for b in comp {
+        Merge(all, e.own[b])
+        for w in e.calls[b] {
+            if w == b { cyclic = true }
+            if inComp.Has(w) { continue }
+            if w < 0 or w >= e.Bodies.Len() {
+                all.Unchecked = true
+                continue
+            }
+            Merge(all, e.whole[w])
+        }
+    }
+    if cyclic { all.Recursive = true }
+    for b in comp {
+        f := all
+        f.Writes = e.own[b].Writes
+        e.whole[b] = f
+    }
+    # the parameters written through: a callee writing through what an argument rooted at one reaches
+    changed := true
+    for changed {
+        changed = false
+        for b in comp {
+            for l in e.links[b] {
+                if l.Callee < 0 or l.Callee >= e.Bodies.Len() or e.state[l.Callee] < 1 { continue }
+                if inComp.Has(l.Callee) or e.state[l.Callee] == 2 {
+                    if not hasBit(e.whole[l.Callee].Writes, l.At) or hasBit(e.whole[b].Writes, l.Param) { continue }
+                    e.whole[b].Writes = e.whole[b].Writes | paramBit(l.Param)
+                    changed = true
+                }
+            }
+        }
+    }
+    for b in comp { e.state[b] = 2 }
+}
+
+# parameter k's bit of a Writes set: none past the 63rd, said of no parameter
+fn paramBit(k I64) I64 { return (1 << k) if k >= 0 and k < 63 else 0 }
+
+fn hasBit(set I64, k I64) Bool { return set & paramBit(k) != 0 }
+
+# what from does added to into: every fact, and each class's first module
+fn Merge(into mut Facts&, from Facts&) {
+    into.Allocates = into.Allocates or from.Allocates
+    into.Blocks = into.Blocks or from.Blocks
+    into.WritesGlobals = into.WritesGlobals or from.WritesGlobals
+    into.ReadsGlobals = into.ReadsGlobals or from.ReadsGlobals
+    into.CallsC = into.CallsC or from.CallsC
+    into.Opaque = into.Opaque or from.Opaque
+    into.Spawns = into.Spawns or from.Spawns
+    into.Recursive = into.Recursive or from.Recursive
+    into.Unbounded = into.Unbounded or from.Unbounded
+    into.Unknown = into.Unknown or from.Unknown
+    into.Grows = into.Grows or from.Grows
+    into.Exits = into.Exits or from.Exits
+    into.Unchecked = into.Unchecked or from.Unchecked
+    into.Caps = into.Caps | from.Caps
+    for k in range CapCount {
+        if into.Via[k] < 0 { into.Via[k] = from.Via[k] }
+    }
+}
+
+# ---- one body's own facts ----
+
+fn (e mut Effects&) walk(b I64) {
+    e.state[b] = 1
+    body := e.Bodies[b]
+    e.cur = Facts()
+    e.curCalls = Vec<I64>()
+    e.curLinks = Vec<link>()
+    e.paramAt = Map<I64, I64>()
+    for i in range body.Params.Len() { e.paramAt.Put(I64(body.Params[i]), i) }
+    e.bounded = Map<I64, Bool>()
+    for id in body.Bounded { e.bounded.Put(I64(id), true) }
+    e.curMod = try e.fileMod.Get(body.File) catch default -1
+    if body.Root is null {
+        # a payload's constructor has no code (T17c); a function, a constructor or a test with none did not check
+        match body.Of {
+            case typed.BodyOf.Case(_, _), typed.BodyOf.Slot(_, _) { }
+            case _ { e.cur.Unchecked = true }
+        }
+    } else {
+        e.block(body.Root)
+    }
+    # a body's lambdas are its own: what they do is what making and calling them may do
+    e.own[b] = e.cur
+    e.calls[b] = e.curCalls
+    e.links[b] = e.curLinks
+}
+
+fn (e mut Effects&) block(b typed.Block?&) {
+    if b is null { return }
+    for st in b.Stmts { e.stmt(st) }
+}
+
+fn (e mut Effects&) stmt(st typed.Stmt&) {
+    match st {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Yield(_, x) { e.expr(x) }
+        case typed.Stmt.Assign(_, t, v) {
+            e.place(t, true)
+            e.expr(v)
+        }
+        case typed.Stmt.If(_, i) {
+            e.expr(i.Test)
+            e.block(i.Then)
+            e.block(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            if not e.bounded.Has(I64(body.Id)) { e.cur.Unbounded = true }
+            e.block(body)
+            e.block(post)
+        }
+        case typed.Stmt.Return(_, v), typed.Stmt.Suspend(_, v) { e.expr(v) }
+        case typed.Stmt.Reraise(_, code, _) { e.expr(code) }
+        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { e.block(b) }
+        case typed.Stmt.Exit(_, _, msg) { e.expr(msg) }
+        case typed.Stmt.Assert(_, cond, msg) {
+            e.expr(cond)
+            e.expr(msg)
+        }
+        case typed.Stmt.Join(_, j) {
+            e.cur.Blocks = true
+            e.block(j.Code)
+            for cl in j.Clauses { e.clause(cl) }
+        }
+        case typed.Stmt.Spawn(_, s) {
+            e.cur.Spawns = true
+            e.cap(CapThreads)
+            for t in s.Targets {
+                if t is not null { e.place(t, true) }
+            }
+            e.expr(s.Task)
+            for cl in s.Clauses { e.expr(cl.Handler) }
+        }
+    }
+}
+
+fn (e mut Effects&) clause(cl typed.Clause&) {
+    e.block(cl.Code)
+    for d in cl.Defaults { e.expr(d) }
+}
+
+fn (e mut Effects&) expr(x typed.Expr?&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { e.place(p, false) }
+        case typed.Expr.Promote(_, _, pr) {
+            e.cur.Allocates = true
+            e.expr(pr.X)
+        }
+        case typed.Expr.Text(_, _, t) {
+            e.cur.Allocates = true
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(y) { e.expr(y) }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Collect(_, _, cl) {
+            e.cur.Allocates = true
+            e.expr(cl.Reserve)
+            e.block(cl.Loop)
+        }
+        case typed.Expr.Call(_, _, cl) { e.call(cl) }
+        case typed.Expr.Make(_, _, m) {
+            if I64(m.Site) >= 0 { e.cur.Allocates = true }
+            e.expr(m.Length)
+            for y in m.Items { e.expr(y) }
+        }
+        case typed.Expr.Prim(_, _, op, _, args) { e.prim(op, args) }
+        case typed.Expr.Slice(_, _, sl) {
+            e.place(sl.Base, false)
+            e.expr(sl.Lo)
+            e.expr(sl.Hi)
+        }
+        case typed.Expr.Cond(_, _, cd) {
+            e.expr(cd.C)
+            e.expr(cd.A)
+            e.expr(cd.B)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { e.stmt(st) }
+            e.expr(q.X)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { e.stmt(st) }
+            for a in m.Arms { e.arm(a) }
+            if m.NoMatch is not null { e.arm(m.NoMatch!) }
+        }
+        case typed.Expr.Try(_, _, tr) {
+            e.expr(tr.X)
+            for cl in tr.Clauses { e.clause(cl) }
+        }
+        case typed.Expr.Fn(_, _, f) { e.fnVal(f) }
+        case typed.Expr.Away(_, _, y) { e.expr(y) }
+    }
+}
+
+fn (e mut Effects&) arm(a typed.Arm&) {
+    for alt in a.Alts {
+        e.expr(alt.Test)
+        for bd in alt.Binds { e.expr(bd.From) }
+    }
+    e.expr(a.Guard)
+    e.block(a.Code)
+    e.expr(a.Value)
+}
+
+# a function made a value: a lambda's environment is storage, and what the lambda does may happen wherever it is
+# called - so its body counts as one this body may call
+fn (e mut Effects&) fnVal(f typed.FnVal&) {
+    match f {
+        case typed.FnVal.Named(_) { }
+        case typed.FnVal.Lambda(body, caps, _) {
+            if caps.Len() > 0 { e.cur.Allocates = true }
+            for cp in caps { e.expr(cp.Outer) }
+            e.curCalls.Push(I64(body))
+        }
+        case typed.FnVal.Adapter(call, recv, _) {
+            e.cur.Allocates = true
+            e.expr(recv)
+            e.curCalls.Push(I64(call))
+        }
+    }
+}
+
+fn (e mut Effects&) prim(op typed.PrimOp, args Array<typed.Expr&>&) {
+    match op {
+        case typed.PrimOp.Retire { e.cur.Grows = true }
+        case typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap, typed.PrimOp.AtomicCompareSwap {
+            # args[0] borrows the integer place written
+            if args.Len() > 0 { e.written(args[0]) }
+        }
+        case _ { }
+    }
+    for y in args { e.expr(y) }
+}
+
+# an argument a store goes through: a borrow of a place, or a reference read
+fn (e mut Effects&) written(x typed.Expr&) {
+    match x {
+        case typed.Expr.Borrow(_, _, p) { e.store(p) }
+        case typed.Expr.Read(_, _, p, _) {
+            r := e.placeRoot(p)
+            if r.Local >= 0 { e.through(r.Local) }
+        }
+        case typed.Expr.Away(_, _, y) { e.written(y) }
+        case _ { }
+    }
+}
+
+fn (e mut Effects&) call(cl typed.Call&) {
+    match cl.Target {
+        case typed.Callee.Body(id) {
+            e.curCalls.Push(I64(id))
+            for j in range cl.Args.Len() {
+                k := e.argParam(cl.Args[j])
+                if k >= 0 { e.curLinks.Push(link(I64(id), j, k)) }
+            }
+        }
+        case typed.Callee.Extern(f) { e.extern(f) }
+        case typed.Callee.Value(v) {
+            e.cur.Unknown = true
+            e.expr(v)
+        }
+        case typed.Callee.Dispatch(_, _, _) { e.cur.Unknown = true }
+        case typed.Callee.Helper(_, _) { }
+    }
+    for a in cl.Args { e.expr(a) }
+}
+
+# a place read (store false) or stored into
+fn (e mut Effects&) place(p typed.Lvalue&, store Bool) {
+    if store { e.store(p) }
+    e.placeParts(p)
+}
+
+# the subexpressions a place evaluates, and the globals it reads
+fn (e mut Effects&) placeParts(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Target(_, _) { }
+        case typed.Lvalue.Global(_, _, mi, n) {
+            if e.mutGlobal(mi, n) { e.cur.ReadsGlobals = true }
+        }
+        case typed.Lvalue.Deref(_, _, r) { e.expr(r) }
+        case typed.Lvalue.Field(_, _, base, _) { e.placeParts(base) }
+        case typed.Lvalue.Elem(_, _, el) {
+            e.placeParts(el.Base)
+            e.expr(el.Index)
+        }
+        case typed.Lvalue.Payload(_, _, pl) { e.placeParts(pl.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { e.expr(v) }
+    }
+}
+
+# a store into a place: a global's, or through a reference a parameter reaches
+fn (e mut Effects&) store(p typed.Lvalue&) {
+    if e.globalRoot(p) {
+        e.cur.WritesGlobals = true
+        return
+    }
+    r := e.placeRoot(p)
+    if r.Local >= 0 and r.Through { e.through(r.Local) }
+}
+
+fn (e mut Effects&) through(local I64) {
+    k := try e.paramAt.Get(local) catch default -1
+    e.cur.Writes = e.cur.Writes | paramBit(k)
+}
+
+# whether a place is part of a global's own storage: the global, its fields and elements, none of it through a reference
+fn (e mut Effects&) globalRoot(p typed.Lvalue&) Bool {
+    match p {
+        case typed.Lvalue.Global(_, _, _, _) { return true }
+        case typed.Lvalue.Field(_, _, base, _) { return e.globalRoot(base) }
+        case typed.Lvalue.Elem(_, _, el) { return not e.P.T.IsRef(el.Base.Type()) and e.globalRoot(el.Base) }
+        case typed.Lvalue.Payload(_, _, pl) { return e.globalRoot(pl.Base) }
+        case _ { return false }
+    }
+}
+
+# the local a place starts at, -1 for none, and whether a reference is gone through on the way to it
+fn (e mut Effects&) placeRoot(p typed.Lvalue&) root {
+    match p {
+        case typed.Lvalue.Local(_, _, id) { return root(I64(id), false) }
+        case typed.Lvalue.Field(_, _, base, _) { return e.placeRoot(base) }
+        case typed.Lvalue.Elem(_, _, el) {
+            r := e.placeRoot(el.Base)
+            return root(r.Local, r.Through or e.P.T.IsRef(el.Base.Type()))
+        }
+        case typed.Lvalue.Payload(_, _, pl) { return e.placeRoot(pl.Base) }
+        case typed.Lvalue.Deref(_, _, r) {
+            l := e.exprRoot(r)
+            return root(l, true)
+        }
+        case _ { return root(-1, false) }
+    }
+}
+
+fn (e mut Effects&) exprRoot(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return e.placeRoot(p).Local }
+        case typed.Expr.Away(_, _, y) { return e.exprRoot(y) }
+        case _ { return -1 }
+    }
+}
+
+# the parameter an argument hands on what it reaches, -1 for none: a read or a borrow of a place rooted at one, of a
+# type holding references (a borrow holds the place's own)
+fn (e mut Effects&) argParam(x typed.Expr&) I64 {
+    match x {
+        case typed.Expr.Read(_, ty, p, _) {
+            if not e.P.T.HoldsRefs(ty) { return -1 }
+            return try e.paramAt.Get(e.placeRoot(p).Local) catch default -1
+        }
+        case typed.Expr.Borrow(_, _, p) {
+            r := e.placeRoot(p)
+            if not r.Through { return -1 }
+            return try e.paramAt.Get(r.Local) catch default -1
+        }
+        case typed.Expr.Away(_, _, y) { return e.argParam(y) }
+        case _ { return -1 }
+    }
+}
+
+fn (e mut Effects&) mutGlobal(mi I64, n source.NameId) Bool {
+    key := pair(mi, I64(n))
+    if e.mutGlobals.Has(key) { return try e.mutGlobals.Get(key) catch default true }
+    m := false
+    if mi >= 0 and mi < e.P.R.Tables.Len() {
+        for en in e.P.R.Tables[mi].Entries {
+            if en.Name == n and en.Mut { m = true }
+        }
+    }
+    e.mutGlobals.Put(key, m)
+    return m
+}
+
+# ---- C ----
+
+fn (e mut Effects&) cap(bit I64) {
+    e.cur.Caps = e.cur.Caps | bit
+    k := capIndex(bit)
+    if k >= 0 and e.cur.Via[k] < 0 { e.cur.Via[k] = e.curMod }
+}
+
+fn capIndex(bit I64) I64 {
+    for k in range CapCount {
+        if (1 << k) == bit { return k }
+    }
+    return -1
+}
+
+# a call of an extern or a C import's function (X1, X17): C's math functions do nothing else (X8); the runtime's own
+# (__olang_) are the language's; any other is C, and what it reaches is read off its name - a capability counted where
+# it is gained (opening a file or a socket, starting a process, reading the environment), never where a descriptor
+# already open is read, written or closed (the standard streams are open from the start)
+fn (e mut Effects&) extern(f I64) {
+    fd := e.P.FnDecl(f)
+    name := e.P.L.Names.Text(fd.Name)
+    if typed.MathExtern(name, fd.S.Params.Len()) { return }
+    if not name.StartsWith("__olang_") { e.cur.CallsC = true }
+    if not quickC(name) {
+        e.cur.Blocks = true
+        e.cur.Opaque = true
+    }
+    if name == "exit" or name == "_exit" or name == "abort" { e.cur.Exits = true }
+    bit := capOf(name)
+    if bit != 0 { e.cap(bit) }
+    # C the program calls itself - from a module outside the standard library - is a class of its own (B1.2); what std
+    # calls C for is said by what it gains
+    own := e.curMod >= 0 and not e.P.L.Mods[e.curMod].Identity.StartsWith("std/")
+    if own and not name.StartsWith("__olang_") { e.cap(CapC) }
+}
+
+# the capability a C function gains (B1.2), 0 for none
+fn capOf(name String&) I64 {
+    for n in fileNames {
+        if name == n { return CapFiles }
+    }
+    for n in netNames {
+        if name == n { return CapNetwork }
+    }
+    for n in procNames {
+        if name == n { return CapProcesses }
+    }
+    for n in envNames {
+        if name == n { return CapEnvironment }
+    }
+    if name == "pthread_create" { return CapThreads }
+    return 0
+}
+
+fileNames := String&["open", "openat", "creat", "fopen", "mkdir", "rmdir", "remove", "unlink", "rename", "link", "symlink"
+    "readlink", "realpath", "opendir", "chdir", "getcwd", "truncate", "chmod", "access", "mkstemp", "mkdtemp"
+    "__olang_stat", "__olang_dir", "__olang_realpath", "__olang_mkdtemp"]
+netNames := String&["socket", "connect", "bind", "listen", "accept", "accept4", "getaddrinfo"]
+procNames := String&["fork", "vfork", "execv", "execve", "execvp", "posix_spawn", "posix_spawnp", "system", "kill"
+    "waitpid", "__olang_spawn", "__olang_exec"]
+envNames := String&["getenv", "setenv", "unsetenv", "putenv", "__olang_env"]
+
+# C functions known to return at once, never waiting: the runtime's queries, memory and text helpers, clocks, unlocking
+fn quickC(name String&) Bool {
+    for n in quickNames {
+        if name == n { return true }
+    }
+    return false
+}
+
+quickNames := String&["__olang_err", "__olang_arg_count", "__olang_arg", "__olang_env", "memcpy", "memmove", "memset", "memcmp"
+    "strlen", "strcmp", "strncmp", "clock_gettime", "time", "getenv", "isatty", "getpid", "pthread_mutex_unlock"
+    "pthread_rwlock_unlock", "pthread_cond_signal", "pthread_cond_broadcast", "pthread_mutex_init", "pthread_cond_init"
+    "freeaddrinfo", "getsockname", "getpeername", "setsockopt"]
+
+# ---- what is said ----
+
+# the line under a signature (A2.3), names the parameters' names (the receiver first): "none", or what it may do
+fn Describe(f Facts&, names Array<String&>&) String {
+    if f.Unchecked { return "not known - it reaches code that did not check" }
+    if f.Unknown { return $"anything - it calls through a function value or an 'any'" $endsNote(f) }
+    if f.Idle() {
+        if f.Evaluable() { return $"none - it may be computed while compiling where its arguments are known" $endsNote(f) }
+        return $"none" $endsNote(f)
+    }
+    parts Vec<String&>
+    ws Vec<String&>
+    for i in range names.Len() {
+        if hasBit(f.Writes, i) { ws.Push($"'" $names[i] "'") }
+    }
+    if ws.Len() > 0 { parts.Push($"writes through " $ws.Join(", ")) }
+    if f.WritesGlobals { parts.Push("writes a global") }
+    parts.Push("allocates" if f.Allocates else "allocates nothing")
+    if f.Grows { parts.Push("may grow a Vec") }
+    if f.Spawns { parts.Push("starts tasks") }
+    reach := capText(f)
+    if reach != "" { parts.Push(reach) } else if f.CallsC { parts.Push("calls C") }
+    if f.Exits { parts.Push("may end the program") }
+    parts.Push("may block" if f.Blocks else "never blocks")
+    if f.Recursive { parts.Push("recursive") }
+    if f.Terminates() { parts.Push("always ends") }
+    if f.Evaluable() { parts.Push("may be computed while compiling") }
+    return parts.Join("; ")
+}
+
+fn endsNote(f Facts&) String {
+    if f.Recursive { return "; recursive" }
+    return "; always ends" if f.Terminates() else ""
+}
+
+# the classes a body reaches, "files, network": with the module each is reached in first where via
+fn CapText(f Facts&, mods Array<String&>&) String {
+    parts Vec<String&>
+    for k in range CapCount {
+        if f.Caps & (1 << k) == 0 { continue }
+        at := f.Via[k]
+        if at >= 0 and at < mods.Len() { parts.Push($CapName(k) " (" $mods[at] ")") } else { parts.Push(CapName(k)) }
+    }
+    return parts.Join(", ")
+}
+
+fn capText(f Facts&) String {
+    parts Vec<String&>
+    for k in range CapCount {
+        if f.Caps & (1 << k) != 0 { parts.Push(CapName(k)) }
+    }
+    return parts.Join(", ")
+}

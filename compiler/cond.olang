@@ -418,7 +418,7 @@ fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
     if c is null { return false }
     return match c {
         case ast.Expr.Name(_, n): e.isLocal(n)
-        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _): e.mentionsLocal(x)
+        case ast.Expr.Paren(_, x), ast.Expr.Named(_, _, x), ast.Expr.Spread(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _): e.mentionsLocal(x)
         case ast.Expr.Binary(_, _, a, b): e.mentionsLocal(a) or e.mentionsLocal(b)
         case ast.Expr.Call(_, f, args): e.mentionsLocal(f) or e.anyLocal(args)
         case ast.Expr.Index(_, x, items): e.mentionsLocal(x) or e.anyLocal(items)
@@ -429,7 +429,7 @@ fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
         case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _): e.mentionsLocal(a) or e.mentionsLocal(b)
         case ast.Expr.ScopeCall(_, f, _, args): e.mentionsLocal(f) or e.anyLocal(args)
         case ast.Expr.Slice(_, x, lo, hi): e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items): e.anyLocal(items)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Join(_, items): e.anyLocal(items)
         # what declares names of its own is the running program's whatever it reads
         case ast.Expr.Compr(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _): true
         case _: false

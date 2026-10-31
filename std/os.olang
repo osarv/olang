@@ -150,7 +150,8 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
     Stderr
 }
 
-# runs the program args[0] with args as its command line - no shell between, so each argument reaches it as it is,
+# runs the program args[0] with args as its command line - written as the call's arguments, os.Exec("ls", "-l"), or an
+# array of them passed on, os.Exec(...argv) - no shell between, so each argument reaches it as it is,
 # whatever it holds - and waits for it to end. Its standard input is "input" and then the end of the file; what it
 # writes to its standard output and error is gathered, in full, into what Exec gives back, built where the caller puts
 # it - or, with "capture" false, goes where this program's own do (a compiler or a test binary run for its output to
@@ -162,24 +163,24 @@ type Output struct(Status I32, Stdout String&, Stderr String&) {
 # can carry), or the system refuses what Exec needs. Output is gathered in memory files the program writes into as fast
 # as it likes, so it never waits on a pipe, and Exec never deadlocks on a large output. Start and Wait are the same, in
 # two halves; ExecUntil the same with a deadline.
-fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? Error {
-    p := try Start(args, input, capture, dir)
+fn Exec(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? Error {
+    p := try Start(...args, input = input, capture = capture, dir = dir)
     return try p.Wait()
 }
 
-# Exec, with the program killed once tok fires - its deadline passes (cancel.After) or it is cancelled - when it has not
+# Exec, its arguments after the token, with the program killed once tok fires - its deadline passes (cancel.After) or it is cancelled - when it has not
 # ended by then: ExecUntil then fails with the token's reason, once the program has ended
-fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? Error, cancel.Stopped {
-    p := try Start(args, input, capture, dir)
+fn ExecUntil(tok cancel.Token&, args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? Error, cancel.Stopped {
+    p := try Start(...args, input = input, capture = capture, dir = dir)
     return try p.WaitUntil(tok)
 }
 
-# runs the program at path in this program's place, args its command line (args[0] the name it runs by, which need not
+# runs the program at path in this program's place, the arguments after it its command line (args[0] the name it runs by, which need not
 # be path): what this program would do next is the program's, its status this process's - a shell's script handing on
 # to another program, a driver running what it built. path is not looked up through PATH. Returns only when the
 # program cannot be started, failing as Exec does - NotFound, Denied, or Failed for no arguments or one holding a zero
 # byte
-fn ExecInPlace(path String&, args Array<String&>&) ? Error {
+fn ExecInPlace(path String&, args ...String&) ? Error {
     if args.Len() == 0 { error Error.Failed }
     size I64 = 0
     for a in args {
@@ -222,7 +223,7 @@ fn (p Process&) Pid() I32 { return p.pid }
 # starts the program args[0] as Exec does - its command line, input, capture and directory alike - and gives it back
 # running, without waiting for it: a program to run beside this one (a server a test talks to, several commands at
 # once), or one to give up on. Fails as Exec does when it cannot be started
-fn Start(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
+fn Start(args ...String&, input Array<U8>& = "", capture Bool = true, dir String& = "") Process ? Error {
     if args.Len() == 0 { error Error.Failed }
     size I64 = 0
     for a in args {
@@ -841,64 +842,64 @@ test "IsTerminal tells a terminal from a file, a pipe and no descriptor" {
 }
 
 test "Exec runs a program without a shell, and gathers what it writes" {
-    r := try Exec(String&["printf", "%s|%s|%s", "two words", "it's", "$HOME;*"])
+    r := try Exec("printf", "%s|%s|%s", "two words", "it's", "$HOME;*")
     assert r.Status == 0 and r.Stdout == "two words|it's|$HOME;*" and r.Stderr == ""
-    e := try Exec(String&["sh", "-c", "echo out; echo err >&2; exit 3"])
+    e := try Exec("sh", "-c", "echo out; echo err >&2; exit 3")
     assert e.Status == 3 and e.Stdout == "out\n" and e.Stderr == "err\n"
-    k := try Exec(String&["sh", "-c", "kill -9 $$"])
+    k := try Exec("sh", "-c", "kill -9 $$")
     assert k.Status == 137 and k.Stdout == ""                 # ended by signal 9: 128 + 9, as a shell says
 }
 
 test "Exec feeds its input to the program's standard input" {
-    c := try Exec(String&["cat"], "line one\nline two")
+    c := try Exec("cat", input = "line one\nline two")
     assert c.Status == 0 and c.Stdout == "line one\nline two"
-    w := try Exec(String&["wc", "-c"])             # no input: the end of the file at once
+    w := try Exec("wc", "-c")             # no input: the end of the file at once
     assert w.Stdout.Trim() == "0"
     bytes := Array<U8>(70000, 'x')
-    big := try Exec(String&["wc", "-c"], bytes)
+    big := try Exec("wc", "-c", input = bytes)
     assert big.Stdout.Trim() == "70000"
 }
 
 test "Exec takes any amount of output without waiting on it" {
-    big := try Exec(String&["head", "-c", "3000000", "/dev/zero"])
+    big := try Exec("head", "-c", "3000000", "/dev/zero")
     assert big.Status == 0 and big.Stdout.Len() == 3000000 and big.Stdout[2999999] == 0
-    both := try Exec(String&["sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2"])
+    both := try Exec("sh", "-c", "head -c 200000 /dev/zero; head -c 300000 /dev/zero >&2")
     assert both.Stdout.Len() == 200000 and both.Stderr.Len() == 300000
 }
 
 test "Exec fails only when the program cannot be started" {
     missing := false
-    try Exec(String&["olang-no-such-program"]) catch Error.NotFound { missing = true } catch { }
+    try Exec("olang-no-such-program") catch Error.NotFound { missing = true } catch { }
     assert missing
     assert Run("mkdir -p build/os_files && printf '#!/bin/sh\\necho hi\\n' > build/os_files/noexec.sh && chmod -x build/os_files/noexec.sh") == 0
     denied := false
-    try Exec(String&["build/os_files/noexec.sh"]) catch Error.Denied { denied = true } catch { }
+    try Exec("build/os_files/noexec.sh") catch Error.Denied { denied = true } catch { }
     assert denied
     nothing := false
-    try Exec(Array<String&>(0)) catch Error.Failed { nothing = true } catch { }
+    try Exec(...Array<String&>(0)) catch Error.Failed { nothing = true } catch { }
     assert nothing
     zero := false
-    try Exec(String&["echo", String(U8['a', 0, 'b'])]) catch Error.Failed { zero = true } catch { }
+    try Exec("echo", String(U8['a', 0, 'b'])) catch Error.Failed { zero = true } catch { }
     assert zero
     assert Run("chmod +x build/os_files/noexec.sh") == 0
-    ok := try Exec(String&["build/os_files/noexec.sh"])
+    ok := try Exec("build/os_files/noexec.sh")
     assert ok.Status == 0 and ok.Stdout == "hi\n"
 }
 
 # Exec runs the program in a directory of its own when asked: a relative program and relative paths are found from it
 test "Exec runs a program in the directory it is given" {
     assert Run("mkdir -p build/os_files/indir && printf '#!/bin/sh\\necho here\\n' > build/os_files/indir/here.sh && chmod +x build/os_files/indir/here.sh") == 0
-    where := try Exec(String&["pwd"], default, default, "build/os_files/indir")
+    where := try Exec("pwd", dir = "build/os_files/indir")
     assert where.Status == 0 and where.Stdout.EndsWith("/build/os_files/indir\n")
-    ran := try Exec(String&["./here.sh"], default, default, "build/os_files/indir")
+    ran := try Exec("./here.sh", dir = "build/os_files/indir")
     assert ran.Stdout == "here\n"
-    cat := try Exec(String&["cat", "here.sh"], default, default, "build/os_files/indir")
+    cat := try Exec("cat", "here.sh", dir = "build/os_files/indir")
     assert cat.Stdout.EndsWith("echo here\n")
     nowhere := false
-    try Exec(String&["pwd"], default, default, "build/os_files/no-such-dir") catch Error.NotFound { nowhere = true } catch { }
+    try Exec("pwd", dir = "build/os_files/no-such-dir") catch Error.NotFound { nowhere = true } catch { }
     assert nowhere
     notDir := false
-    try Exec(String&["pwd"], default, default, "build/os_files/indir/here.sh") catch Error.NotDir { notDir = true } catch { }
+    try Exec("pwd", dir = "build/os_files/indir/here.sh") catch Error.NotDir { notDir = true } catch { }
     assert notDir
 }
 
@@ -907,21 +908,21 @@ test "Exec runs a program in the directory it is given" {
 test "ExecUntil kills a program that outlives its token" {
     start := cancel.NowNs()
     timedOut := false
-    try ExecUntil(String&["sleep", "5"], cancel.After(100)) catch cancel.Stopped.TimedOut { timedOut = true } catch { }
+    try ExecUntil(cancel.After(100), "sleep", "5") catch cancel.Stopped.TimedOut { timedOut = true } catch { }
     assert timedOut and cancel.NowNs() - start < 4000000000
-    quick := try ExecUntil(String&["echo", "in time"], cancel.After(60000))
+    quick := try ExecUntil(cancel.After(60000), "echo", "in time")
     assert quick.Status == 0 and quick.Stdout == "in time\n"
     tok mut cancel.Token& = cancel.Token()
     tok.Cancel()
     stopped := false
-    try ExecUntil(String&["sleep", "5"], tok) catch cancel.Stopped.Cancelled { stopped = true } catch { }
+    try ExecUntil(tok, "sleep", "5") catch cancel.Stopped.Cancelled { stopped = true } catch { }
     assert stopped
 }
 
 # Start runs programs beside this one; Wait gives what each did, once; Kill ends one sooner
 test "Start, Wait, Kill and Pid" {
-    slow := try Start(String&["sleep", "5"])
-    fed := try Start(String&["cat"], "fed in")
+    slow := try Start("sleep", "5")
+    fed := try Start("cat", input = "fed in")
     assert slow.Pid() > 0 and fed.Pid() > 0 and slow.Pid() != fed.Pid()
     slow.Kill()
     killed := try slow.Wait()
@@ -932,17 +933,17 @@ test "Start, Wait, Kill and Pid" {
     assert again
     got := try fed.Wait()
     assert got.Status == 0 and got.Stdout == "fed in" and got.Stderr == ""
-    failing := try Start(String&["sh", "-c", "echo oops >&2; exit 3"])
+    failing := try Start("sh", "-c", "echo oops >&2; exit 3")
     f := try failing.WaitUntil(cancel.After(60000))
     assert f.Status == 3 and f.Stderr == "oops\n"
     missing := false
-    try Start(String&["olang-no-such-program"]) catch Error.NotFound { missing = true } catch { }
+    try Start("olang-no-such-program") catch Error.NotFound { missing = true } catch { }
     assert missing
 }
 
 # what Exec gathers is built where the caller puts it - here, through a function's result, the caller's block
 fn echoed(i I64) Output {
-    return Exec(String&["echo", "run " $i])!
+    return Exec("echo", "run " $i)!
 }
 
 test "what Exec gives back lives where it is put" {
@@ -999,13 +1000,13 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
 # where a program's standard output goes: a memory file Exec reads back, or - not captured - this program's own
 test "Exec without capture leaves the program this one's output and error" {
     mine := try ReadLink("/proc/self/fd/1") catch default "none"
-    seen := try Exec(String&["sh", "-c", "readlink /proc/$$/fd/1"])
+    seen := try Exec("sh", "-c", "readlink /proc/$$/fd/1")
     assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine "\n"
     assert Run("mkdir -p build/os_files") == 0
-    free := try Exec(String&["sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4"], "", false)
+    free := try Exec("sh", "-c", "r=$(readlink /proc/$$/fd/1); echo \"$r\" > build/os_files/fd1; exit 4", capture = false)
     assert free.Status == 4 and free.Stdout == "" and free.Stderr == ""
     assert (try ReadFile("build/os_files/fd1") catch default "") == $mine "\n"
-    fed := try Exec(String&["sh", "-c", "cat > build/os_files/fed"], "fed in", false)
+    fed := try Exec("sh", "-c", "cat > build/os_files/fed", input = "fed in", capture = false)
     assert fed.Status == 0 and (try ReadFile("build/os_files/fed") catch default "") == "fed in"
 }
 

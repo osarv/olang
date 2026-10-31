@@ -1,0 +1,8 @@
+# check: fail error[E5a]: '**' calls Pow, which Pt has none of - declare 'fn (x Pt) Pow(y E) Pt'
+# E5a: "**" is the operator of a type's Pow (E31); a type with none has no power
+type Pt struct(x I64) { x }
+
+fn main() {
+    p := Pt(2) ** 3
+    assert p.x == 8
+}

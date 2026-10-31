@@ -46,7 +46,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "testfuzz", "bench", "agree", "la
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
                      "nestparse", "words", "diag", "sidebyside", "cinterop", "embed", "earlyfree", "widealign", "definit"
-                     "profile"]
+                     "profile", "apicaps"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -434,6 +434,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "widealign" { try widealign(r) }
         case "definit" { try definit(r) }
         case "profile" { try profiled(r) }
+        case "apicaps" { try apicaps(r) }
         case "tbaa" { try tbaa(r) }
         case "opvis" { try opvis(r) }
         case "protopriv" { try protopriv(r) }
@@ -1083,6 +1084,30 @@ fn testfuzz(r mut report&) ? Failed {
 # writes a flame graph (where -output says); a plain build carries none of the sampler, and options that do not apply
 # are refused
 test "olang profile names the hot function, its line and its callers" { assert passed("profile") }
+
+# B21, B11c: olang api between two directories marks each change breaking or not, its status 1 where one breaks; and
+# explain -caps names what each module may reach
+test "olang api lists a module's interface changes, and explain -caps what each module reaches" { assert passed("apicaps") }
+
+fn apicaps(r mut report&) ? Failed {
+    dir := fresh("apicaps")
+    os.Run("cp -r checks/fixtures/apicaps/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" api old new lib.olang > out.txt 2>&1") == 1, "api: a breaking change gives status 1", dir)
+    out := outOf(dir)
+    for want in String&["  breaking  added case: Blue\n", "  ok        added fn: fn (p Point) Max() I64\n"
+            "  breaking  changed fn: fn Grow(a I64) I64\n              now: fn Grow(a I64, b I64) I64\n"
+            "  ok        value of global: Limit I64 = 3\n", "  breaking  removed fn: fn Old() I64\n", "3 breaking changes\n"] {
+        try r.expect(out.Contains(want), $"api: " $want.Trim(), dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" api old old lib.olang > out.txt 2>&1") == 0 and outOf(dir) == "0 breaking changes\n"
+                 "api: a version against itself", dir)
+    try r.expect(sh(dir, "\"$OLANG\" api old nowhere lib.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("error[B21]")
+                 "api: a side that is neither", dir)
+    try r.expect(sh(dir, "\"$OLANG\" explain -caps caps.olang > out.txt 2>&1") == 0, "caps", dir)
+    caps := outOf(dir)
+    try r.expect(caps.StartsWith("caps   ") and caps.Contains("files (std/os)") and caps.Contains("\nstd/os ")
+                 "caps: the root first, a class with the module it is reached in", dir)
+}
 
 fn profiled(r mut report&) ? Failed {
     dir := fresh("profile")
@@ -2103,7 +2128,7 @@ test "os.OnCrash reports a crash on every thread, and os.RunOnStack makes room" 
 
 # the fixture program, run in dir with its arguments and no core file left behind, through no shell of its own
 fn crashRun(dir String&, args String&) os.Output {
-    return try os.Exec(String&["sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args]) catch { unreachable }
+    return try os.Exec("sh", "-c", "cd " $os.Quote(dir) " && ulimit -c 0 && exec " $args) catch { unreachable }
 }
 
 fn crashes(r mut report&) ? Failed {

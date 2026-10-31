@@ -1,0 +1,12 @@
+# check: fail error[S13h]: a match over Array<I64>& gives a value only when its cases cover every value - none matches an array of 1 element; add a case for it, or 'case _: v'
+# S13a, S13h: a match used as a value covers every length
+fn f(xs Array<I64>&) I64 {
+    return match xs {
+        case I64[]: 0
+        case I64[a, b, ...]: a + b
+    }
+}
+
+fn main() {
+    assert f(I64[1, 2]) == 3
+}

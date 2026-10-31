@@ -348,6 +348,6 @@ fn check(dump String&, dir String&, files Array<String&>&, root String&) String&
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)
     for f in files { args.Push(f) }
-    o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { return "" }
+    o := try os.Exec(...args.ToArray(), dir = dir) catch os.Error { return "" }
     return $o.Stdout $o.Stderr
 }
