@@ -2050,3 +2050,5 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   SPEC states it. Added to wt-opt31. QCG (`**`) still ASKED.
 - QCG DECIDED 2026-10-31 (the user: "Yes add the operator"): `a ** b` calls Pow (E31), tighter than unary minus,
   right-associative, `**=`; a type declaring Pow gets it. Queued with array patterns and variadic parameters.
+- QBY ANSWERED 2026-10-31 (the user: "wait with the experiments for now"): no settling experiments yet, oagent's
+  included; the user says when.
