@@ -696,6 +696,9 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # D18e: the hidden iterators of for-ins over a generator made by a direct call right there - the call's walk made
     # and finished in the for-in's block, no one else holding the generator (check.walkIter)
     Walks Vec<LocalId>
+    # a collection's growth (M19d: a body calling the prelude's grown) - emitted out of line and cold, so the Push
+    # that calls it only when its buffer is full stays small enough to inline wherever it is called
+    Cold Bool = false
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {

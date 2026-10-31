@@ -1315,6 +1315,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Optimizations from the survey (docs/optsurvey.md; built 2026-10-31, HISTORY.md "Optimizations from the survey,
   built"; none changes meaning).** Its items 2 and 5 wait for the scoping rework (section 8 placement); `Pow(2.0)` is QBV's.
   - 1: the arena's bump path `alwaysinline`, the rest `__olang_scope_alloc_slow` (`noinline`) - binary-trees 185 -> 131M Ir.
+  - 3: a body calling `grown` (a Vec's growth) is `typed.Body.Cold`, emitted `noinline cold`, so `Push` inlines.
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).

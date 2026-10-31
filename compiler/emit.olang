@@ -2091,8 +2091,19 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
             case _ { b.Push($e.ty(ps[i]) " %a" $i) }
         }
     }
-    b.Push(")\n" if link == "declare" else ") #0 {\n")
+    b.Push(")\n" if link == "declare" else $")" $e.inlining(k) " #0 {\n")
     return b.ToString()
+}
+
+# what a definition says of its inlining: a collection's growth (typed.Body.Cold) never inlined and cold
+fn (e Emitter&) inlining(k mir.FnKey) String {
+    match k {
+        case mir.FnKey.Body(id) {
+            if e.Lw.Bodies[I64(id)].Cold { return " noinline cold" }
+        }
+        case _ { }
+    }
+    return ""
 }
 
 # the linkage a function is defined with for its home

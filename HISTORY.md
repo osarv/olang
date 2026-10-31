@@ -26569,3 +26569,13 @@ references are followed, so the slow path's declaration comes with it. Measured 
 (the C arena 127.4M); text 200000 100.3M -> 94.7M; k-nucleotide 200000 247.0M -> 243.4M; Vec push 2M 36.5M -> 32.5M;
 regex 1 172.4M -> 165.2M; sha256 and the generator filter unchanged; dispatch's enum row 21.3M -> 22.3M (its setup's
 pushes, laid out differently).
+
+**3. A Vec's growth out of line.** LLVM inlined `vecState.room` - and `grown`'s copy loop with it - into `Push`, which
+then cost too much to inline at its callers. A body that calls the prelude's `grown` (M19d - a collection's buffer
+grown, so only the prelude's growth paths) is marked `typed.Body.Cold` by check, and emit defines it `noinline cold`
+(`emit.inlining`), so `Push` is a test, a store and an increment wherever it is called. Most of the survey's gap had
+already gone with the cold paths' error-edge weights (Vec push 2M is 32.5M Ir with or without, Push already inlined
+into `main`); what is left shows where a Push sits in a function of its own: a probe pushing onto two Vecs held in a
+struct through a method called per element, 2M calls, 86.4M (master) -> 50.1M (item 1) -> 48.1M; dispatch's enum row
+22.3M -> 22.1M. List's chunk growth (std/list, not the prelude) and Map's rehash (no `grown`) are left as they are:
+neither was measured costing its caller.
