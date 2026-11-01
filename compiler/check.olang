@@ -5843,7 +5843,14 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     ox typed.Expr?&c = null
     # a generator's Next holds a copy of a value array it is given, made where the generator lives (D18b): it is walked
     # after the call that gave it has returned
-    if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT and not fr.Gen {
+    # (the rework's round 2d: a bare struct or enum passed by pointer is a value - captured as one, a copy of the
+    # caller's, not its pointer, so keeping the lambda keeps nothing of the call's argument: D16c as by value)
+    pbody := c.frames[fr.Parent].Body
+    byPtr := source.NewParams and c.isRef(ot) and c.bareLocals.Has(pair.Pair(pbody, outer)) and c.arrayOf(c.P.T.Referent(ot)) == types.UnknownT
+    if byPtr {
+        it = c.P.T.Referent(ot)
+        ox = typed.Expr.Read(sp, it, typed.Lvalue.Deref(sp, it, typed.Expr.Read(sp, ot, op, typed.SiteId(-1))), typed.SiteId(-1))
+    } else if not c.isRef(ot) and c.arrayOf(ot) != types.UnknownT and not fr.Gen {
         it = c.P.T.Ref(ot, types.ReadOnly)
         ox = typed.Expr.Borrow(sp, it, op)
     } else {
