@@ -33,6 +33,7 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   is the callee's own copy; `Map<String, V>` owns its keys. Baked and decided while compiling beside the run time.
 - `handover.olang`, `inplace.olang` - D9h: value results viewing what a function is given handed over uncopied where the
   caller only reads them, copied where it keeps them; locals holding views in place of copies where nothing could tell.
+  `handoverglobal.olang` - the same with a global reaching writable storage, which keeps every such view a copy.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.
