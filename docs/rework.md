@@ -2276,3 +2276,114 @@ programs, every object). The prelude and the rest of std are unchanged but list'
    the self-build (stage 2 == stage 3), the suite with it, and the measurements (peak memory, wall time, bench
    instructions and RSS, `-memory`'s copies).
 6. Then round 4's flip.
+
+## 17. Round 3b: views kept in place of copies; json, http and list under the switches
+
+Built on `wt-rework` behind the same switches; without them the compiler checks and builds as before (17.4).
+
+### 17.1 The value-result handover, for every value (16.6, 1)
+
+The rule is D9h's, made general - the two guarantees: no copy where (A) nothing writes the value and (B) nothing
+changes what it views while it lives (and that storage outlives it). Round 2d had it for an array result read where
+it stands; round 3 made Split, Lines and Iter copy because their results became values holding text by value. Now:
+
+- **What a body uses its locals for** is read once (`typed.Uses`, a `LocalUses`): per local, whether it is written but
+  by part stores (WrOther) or only in scalar fields (WrScalar), assigned whole, escaping (captured, boxed, spawned with,
+  yielded, a reference to it stored or given anything but a bare parameter - which keeps nothing, D9e), handed back,
+  its part stores' values, its writable lends whole to a body's parameter, and the local a reference, held or bound
+  local names (aliases close over all of it); also the temporaries lent writably whole, and every returned value.
+- **Callee side** (`typed.ViewWalk.Settle`, shared by check and lowering): a local the body hands back - a
+  constructor's fields, of which its instance is made - holding storage by value, never written but by part stores,
+  never lent writably, escaping nowhere but its return, whose declaration and part stores are views of the parameters'
+  arguments (a copy of one: `MakeKind.Copy`, or T7b's of a value array read) is handed back with those copies left
+  out, its bits recorded at the returns (check's `settleViews`, after the body is checked; a constructor's in
+  `load.CtorViews` by its type). `viewable` takes any value result holding storage of its own (a struct of text, an
+  iterator holding its array), and a parameter held by value names its argument's storage (`localRoots`). So Split
+  allocates its array of pieces and copies none, `LineIter(t)` and `ArrayIter(a)` hold their text and array as given,
+  and Lines, Iter, Rest, Next hand those views back. The callers copy where they keep (lowering's `call`, deep through
+  the type's Copy helper for any value holding storage).
+- **Caller side** (lowering's `viewLocals`, `viewTemps`): a local holding views in place of the copy its declaration
+  makes - a view call's result, a value array read, a value's Copy of existing storage, a read-only reference local
+  naming such storage (a for-in's collection) - is kept a view where nothing could tell: it is never written but in a
+  scalar field or lent whole to a body keeping its parts as they are (`preserves`: a walk's Next writing its position,
+  and helpers lending it on to such a Next - Fold), never escapes, is never handed back, and what it views is stable
+  while it lives (`heldSrc`): constant data, a bare parameter's own storage (its type sharing no reference - what a
+  reference it holds names may change under another name), an immutable global's, a local's own storage nothing
+  writes, lends to a changing body or keeps (declared around it), another such local's, or a reference local given a
+  built result no one else holds (`freshResult`: every return a value made there or such a call's, kept nowhere, lent
+  only to bodies keeping nothing of it). A temporary lent whole to a preserving body (`a.Iter().Fold(...)`) likewise.
+  So `for w in t.Split(" ")` reads its pieces and each `w` in place, `for l in t.Lines()` walks `t`'s text, and
+  `a.Iter().Fold(...)` walks `a` - with nothing copied.
+- The evaluator lowers without a plan, so every copy is made there and a baked global or decided assert agrees by
+  construction; tests/params/inplace.olang writes every source after its views are taken and reads them back after an
+  arena churn, and bakes a global through the same functions.
+- `OLANG_VIEWDUMP=1` lists each local's and temporary's decision; `-memory` counts them.
+
+### 17.2 json, http, list and the rest of std's tests under the switches (16.6, 2 and 3)
+
+- json takes its text bare (hand forms: `Parse(text String)`, `Decode<T>(text String)`, the reader holding the text
+  as its own - the tree's strings were already decoded into new text). An immutable global's text (a baked JSON
+  document) is then given as it is; it was S6's error at every `Decode(bakedReport)`.
+- **A value sharing no reference stored where it may be written needs no writable argument** (check's `roStore`): `t
+  T.Target = v` in an instance for a reference type, over an array of numbers, had made Encode's parameter "keep what
+  it reaches writably" - a copy of numbers writes nothing of its source. So `json.Encode` of an immutable global holding
+  a reference to an array is accepted.
+- http's test builds its server fixture with `$OLANG`: verify-params now copies checks/fixtures, migrates
+  checks/fixtures/http with std, and sets OLANG.
+- list: `Last` reads through the receiver's fields, not through `chunk(k)` (hand form): a reference a call on a bare
+  parameter's reach hands back was read-only for every caller, so `f.next = k` with `k := l.Last()` was refused - the
+  follow from a result to its argument does not pass through a nested call (recorded). FRO now joins the fields one
+  store makes name one storage (`joinFields`: a list's `tail` given its `first` chunk or a `chunk(k)`): written through
+  one, all of its type in the struct are - marking a field written only makes it the plain writable field it is.
+- array: `Reversed` takes its receiver bare and `ReversedIter` holds the array by value (as ArrayIter).
+- `$` and `T.Name` write no `mut` under the switches (`List<Pair<String&, F64>>`, not `mut String&`): no `mut` is
+  written there.
+- `make verify-params` takes every std and prelude file with a test, indented ones in `if TestBuild` included (json,
+  http, list, the prelude's array, iterator, map, text and vec), and passes: std's migration leaves no error.
+
+### 17.3 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **Views kept where nothing could tell, decided structurally per body** - not a borrow checker: a local's whole
+   body is read once, and anything unproved keeps the copy (an escape, a lend to a body not proved to keep its parts,
+   a source a reference reaches). Unobservable in what a program computes.
+2. **A constructor hands back views of its by-value parameters** as a function does; its callers copy where they keep
+   the instance (one copy, the same as the constructor's was, now made by the caller - deep: the instance's fresh parts
+   are copied again where the instance is kept; the partial copy is 2.10's item, left).
+3. **`ToString()` gives a value** (hand form): a built text result of a builder is a value result, as QCC asks of a
+   result that is new storage - a reference result there kept every caller's text from being read in place.
+4. **json's tree keeps decoded text** (it always did); only the API took text bare - `Json.Str` stays a reference to
+   the tree's own text (no `String` payloads yet: nothing needed them).
+
+### 17.4 Found on the way
+
+- **Constant data given to a writable `&` parameter is neither refused nor copied under the switches**
+  (`take("abc")` with `fn take(a Array<Char>&)`, a plain function or a generic's method alike): the checker fits the
+  text to a read-only `Array<Char>&` and lowering passes the constant itself to the writable parameter - the MIR
+  verifier refuses it in a test build ("argument 0 is a Array<Char>&, where a mut Array<Char>& is wanted"), and in
+  any other build a write through it would write the program's constant data. Not fixed (the fit through text's base
+  type skips the writable branch's T25d test - found too late in the round); std's two cases avoided (list's test gives
+  `$"abc"`, Reversed is bare). Reproducer: `/tmp/rw4/repro/constref.olang`.
+- `List.Last`'s result read-only for every caller (above): a reference handed back through a nested call on a bare
+  parameter's reach loses the follow to the outer call's argument.
+
+### 17.5 Today's path
+
+Every rule is behind `source.NewParams` (Uses and Settle run only for bodies viewable there; lowering's views only
+with a plan under the switch). bench's IR is identical to round 3's (`/tmp/rw3/irdiff.sh`, 15 programs).
+
+### 17.6 Measured
+
+- bench migrated, under the switches, callgrind on baseline x86-64 at reduced sizes, round 3's compiler against this
+  one: text 132.2M -> 105.0M instructions (-20.6%: the pieces and each word read in place, ToString's text a value),
+  sum arrayfold 21.0M -> 5.0M (-76%: `a.Iter().Fold` walks the array, no copy per pass), every other row within
+  +-26 instructions but listfold (+2.3K of 5.1M, its startup); outputs identical.
+- std under the switches: every test file passes (48 with the newly included ones), tests/params 22 run files.
+
+### 17.7 Left, in order
+
+1. The constant-data hole (17.4) - a fix in the fit, with a must-fail case.
+2. 2.10's partial copies: copy only the parts that may change - a value kept whose fresh parts are copied again
+   (a constructor's instance), a reader whose position is written (json's reader copies its text once per Parse).
+3. Handles as values (16.6, 4) - not begun.
+4. compiler/ to zero under the switches, the self-build, its measurements (16.6, 5) - see 17.8.
+5. Then round 4's flip.

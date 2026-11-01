@@ -486,8 +486,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Lines`, `filepath.Dir`, `os.ReadDir`, `ArrayIter` holding its array, flags' parser holding its text) are
   param_migrate's hand forms (`tools/params/`, folded into std at the flip) - copying where views would do; a part
   owning storage is stored through (O25g), so its container's scope is passed exactly. verify-params' 40 files pass.
-  Left: the handover of parts uncopied (D9h for structs and elements), json's text, compiler/'s readers, handles as
-  values.
+  **Round 3b** (docs/rework.md section 17): the two-guarantee rule (the coordinator's) - no copy where nothing writes a
+  value and nothing changes what it views while it lives: a body hands back a local holding its parameters' views
+  with their copies left out (D9h for every value holding storage, a constructor's fields too; its callers copy where
+  they keep it), and a local or a temporary holds views in place of its copy where its whole body proves it written by
+  nothing but a scalar field or a body keeping its parts (a walk's Next), escaping nowhere and viewing stable storage
+  (mine, the user absent: decided structurally per body, anything unproved copies) - `for w in t.Split(" ")`, `for l
+  in t.Lines()`, `a.Iter().Fold(...)` copy nothing (bench's text -21% instructions, an Iter Fold -76%); json takes its
+  text bare, list's Last reads through its fields, a copy sharing no reference asks no writable argument, FRO joins
+  fields one store makes name one storage, no `mut` rendered; verify-params runs every std test file (48), all pass.
+  Found, not fixed: constant data given a writable `&` parameter through text's base type is passed as it is.
+  Left: the constant-data hole, 2.10's partial copies, handles as values, compiler/'s readers.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at

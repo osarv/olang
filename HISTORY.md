@@ -27723,3 +27723,53 @@ local (a flag found by a lookup) claiming its own frame, and the text was built 
 `Array<String>` copies each element into its loop variable. Handing parts over uncopied where nothing changes the source
 and the holder neither writes nor keeps them - the rest of the brief's first item, with 2.10's partial copies - is the
 next work, and the measure of whether these readers are as cheap as the views they replace.
+
+## The rework, round 3b: views kept in place of copies; json, http and list under the switches (2026-11-01)
+
+Behind `OLANG_PARAMS=new OLANG_SCOPES=infer` (docs/rework.md section 17); the default path's bench IR is unchanged.
+
+**Why the copies had to go, and how they went.** Round 3 gave the readers value forms - `Split` an `Array<String>`,
+`Lines` a `LineIter` holding its text, `Iter` an `ArrayIter` holding its array - and every one of them copied where the
+old form had handed back a view: each piece, the walked text, the walked array once per walk, each element of a walk
+into its loop variable. The coordinator's direction was the two-guarantee rule: no copy where (A) nothing writes the
+value and (B) nothing changes what it views while it lives. It is now one analysis with two sides, read off the typed
+tree once per body (`typed.Uses`: for each local whether it is written, escapes, is handed back, what its part stores
+store, where it is lent):
+
+- *The callee* hands back a local holding its parameters' views with their copies left out (`ViewWalk.Settle`, shared
+  by check, which records the bits at the returns once the body is checked, and lowering, which leaves the copies out
+  where they were recorded) - Split's array of pieces, a constructor's fields (`load.CtorViews`); any value result
+  holding storage of its own is viewable now, and a parameter held by value names its argument's storage. Its callers
+  copy where they keep the result, as D9h's did for arrays.
+- *The caller* keeps a view in place of the copy where nothing could tell (`viewLocals`, `viewTemps`): the local is
+  written by nothing but a scalar field or a body proved to keep its parts as they are (a walk's Next - `preserves`,
+  through helpers that lend it on, as Fold does), escapes nowhere, is not handed back, and its source is stable while it
+  lives (a bare parameter's own storage, constant data, an immutable global's, a local's own storage nothing writes or
+  keeps, another such view, a built result no one else holds - `freshResult`).
+
+Each condition fell out of a test that failed: `nameOf(e)` of an `entry` whose name is a reference (a view through a
+reference a source holds may change under another name for it - sources must share no reference); `holder(c)` of a
+local copy given a constructor's `&` field (a reference given anything but a bare parameter may be kept - it escapes);
+a constructor's fields are what it hands back (they were not counted as returned, so a parameter only stored into one
+looked preserved); `t := b.ToString()` was a reference local, so its text was not a stable source until ToString gave
+a value (a hand form) and, generally, a built result no one else holds counts as its holder's own.
+
+**Measured** (callgrind, baseline x86-64, bench migrated, reduced sizes): text 132.2M -> 105.0M instructions, sum's
+`a.Iter().Fold` 21.0M -> 5.0M; the rest unchanged to the startup's few instructions.
+
+**json, http and list.** json's API takes its text bare (its tree's strings were always decoded into new text);
+`Decode(bakedReport)` of an immutable global had been S6's error. `json.Encode` of a global holding a reference to an
+array of numbers was T25c's "keeps what v reaches writably": `t T.Target = v` in the instance for the reference type
+asked for a writable argument though a copy of numbers writes nothing of its source - a value sharing no reference
+stored anywhere asks nothing now. http's test builds its server fixture with `$OLANG`, so verify-params copies and
+migrates `checks/fixtures` and sets OLANG. list's `f.next = k` with `k := l.Last()` was refused: Last read its element
+through `s.chunk(k)`, and a reference a call on a bare parameter's reach hands back does not follow the outer call's
+argument (the follow stops at the nested call) - Last reads through its fields now. The diagnosis carried over from
+round 3 (FRO not seeing `tail` and `first` naming one chunk) was not the cause here, but it is real: FRO now joins the
+fields one store makes name one storage. `$` and `T.Name` rendered `mut String&` under the switches, where no `mut` is
+written. verify-params takes every std file with a test, indented ones included - 48 of them, all passing.
+
+**Found, not fixed.** Constant data given to a writable `&` parameter is neither refused nor copied under the switches
+(`take("abc")`, `fn take(a Array<Char>&)`): the text is fitted to a read-only `Array<Char>&` through its base type and
+handed to the writable parameter as the constant itself - the MIR verifier refuses it in test builds, and elsewhere a
+write would land in the program's constant data. std's two cases were avoided (list's test, array's Reversed).
