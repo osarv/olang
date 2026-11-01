@@ -2193,7 +2193,8 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
   its receiver's type and name, a type, a test; several of one key all replace the file's first). In it: `Split` gives
   `Array<String>`, `Lines` a `LineIter` holding its text by value, `filepath.Dir` bare, `os.ReadDir` gives
   `Array<String>`, `ArrayIter` holds its array (`Iter`, `Rest` by value), `Join` for `Array<String>`, `Vec<String>` and
-  `List<String>` (beside the `String&` ones of Named types - M21 keeps both), and the tests their callers changed with
+  `List<String>` (beside the `String&` ones of Named types - M21 keeps both), flags' parser holding its text by value
+  (its names, help, values, defaults and arguments, the API taking text bare), and the tests their callers changed with
   (a test helper keeping lines in a `Vec<String>`, FlatMap's lambda giving `ArrayIter<String>`). One std edit valid in
   both forms: list's two tests sharing a line take `line := $"to be or not"`, their own text, not constant data.
 - tests/params/owned.olang: part stores from a block's text, Vec and Map ownership (the QCE hole closed), payloads,
@@ -2218,6 +2219,9 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
 7. **Correct first**: `Split` copies each piece, `Lines`/`Iter` copy their array, a walk of an `Array<String>` copies
    each element into its loop variable. Measured only on std's tests so far.
 
+8. **Owned parts in `storeThrough` but not in `admitsAt`** (16.3's last item): the exactness a part store needs is
+   asked; derived scopes' admission is left as it was - a relaxation for the bulk review.
+
 ### 16.3 Found and fixed on the way
 
 - A part store had been written over in place where the lengths agreed (lowering's `arrayStore`, T11b) - reading the
@@ -2226,6 +2230,12 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
 - Comprehension elements owning storage were built in the comprehension's loop turn (the scope pass judged a Yield in
   `here()`), freed before the array was read - `-sanitize` found it.
 - A constructor's value-array field local was copied into its frame's block, freed as the constructor returned.
+- **A part stored through a `&` parameter was built in a scope its caller had not said exactly** (flags' `setValue`,
+  `f.t = $value`, its argument a local found by a lookup: the inference left the local's claim at the caller's frame,
+  since nothing was "stored through" a type holding no reference - O25g's exactness was not asked): a use after free
+  under `-sanitize`. A part owning storage now counts where `storeThrough` asks what can be stored through a reference
+  (`holdsPart` in `assignableHolds`), as a reference field does. Not in `admitsAt` (C2d/O23a's derived scopes: there it
+  refused lending a Map's key walk, O17) - for the bulk review (16.2, 8). tests/params/owned.olang's last test.
 
 ### 16.4 Today's path
 
@@ -2235,10 +2245,13 @@ programs, every object). The prelude and the rest of std are unchanged but list'
 
 ### 16.5 Measured
 
-- std under the switches (a fresh migration with the hand forms, 207 edits, 13 rows left by hand): 36 of its 40 test
-  files pass (30 at the round's start - the readers' class gone: filepath, fuzz, prop, the prelude's iterator, map and
-  text tests, and os); left flags and json (text held in their structures by reference, kept from what bare parameters
-  reach), http (json's) and list (one pre-existing refusal, `f.next = k` through `List.First()`'s result: 16.6, 3). tests/params: 21 run files and 26 must-fail cases pass.
+- std under the switches (a fresh migration with the hand forms, 207 edits, 13 rows left by hand): every one of
+  `make verify-params`' 40 test files passes (33 at the round's start - the readers' class gone: filepath, flags, fuzz,
+  prop, the prelude's iterator, map and text tests); flags' hand forms hold its text by value. Outside that set - it
+  takes the files with a test at column 0, and json's, list's and http's tests are inside `if TestBuild` (found here,
+  not changed) - json (text held in its tree by reference, kept from what bare parameters reach), http (json's) and
+  list (one pre-existing refusal, `f.next = k` through `List.First()`'s result: 16.6, 3) fail to check. tests/params:
+  21 run files and 26 must-fail cases pass.
 
 ### 16.6 Left, in order
 
@@ -2248,8 +2261,8 @@ programs, every object). The prelude and the rest of std are unchanged but list'
    whose sources nothing changes while it lives, judged by section 8 as existing storage of those sources; then the
    walk element of an array of text read in place. With it 2.10's partial copies (the brief's fifth item): only the
    parts that may change (an iterator's position, not its array).
-2. **flags and json** under the switches: their structures' text held by value (flags' names and help, json's decoded
-   strings), their API taking bare text; then http.
+2. **json** under the switches: its tree's text held by value (decoded strings), its API taking bare text; then http;
+   and `make verify-params` widened to the files whose tests are in `if TestBuild` (json, list, http).
 3. **list's `First`**: it reads its first chunk through `first`, a field read-only by inference (round 2c's FRO -
    no code writes through it), though its elements are written through `tail`, which names the same chunk; so the
    reference `First` hands back is read-only for every caller (13.2's first exception). FRO does not see two fields

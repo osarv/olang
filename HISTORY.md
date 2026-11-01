@@ -27707,9 +27707,17 @@ them where they held the pieces as references - a test's helper keeping lines (`
 `Vec`s and `List`s of values. And one language rule came with it (mine): an array of references to arrays fits where an
 array of those values is wanted - lent as it is to a bare parameter, which only reads it (one `Join` serves
 `String&[...]` and `Array<String>`), copied element by element anywhere else (`catch default Array<String&>(0)` where
-`ReadDir` now gives `Array<String>`). std under the switches: 36 of its 40 test files pass (30 at the round's start) and
-every tests/params case; left are flags and json (text held in their structures by reference), http (json's), and
-list's one pre-existing refusal (`f.next = k` through `List.First()`'s result).
+`ReadDir` now gives `Array<String>`; flags' parser holds its text by value). std under the switches: all 40 of
+verify-params' test files pass (33 at the round's start) and every tests/params case. Found: that set takes only files
+with a test at column 0, so json's, list's and http's (inside `if TestBuild`) were never in it - json (its tree's text
+held by reference), http (json's) and list (one pre-existing refusal, `f.next = k` through `List.First()`'s result)
+still fail to check.
+
+**A use after free found by flags.** A part stored through a `&` parameter (`f.t = $value` in flags' `setValue`) is
+built where the container's references are, the parameter's scope variable - which needs the caller to say exactly
+where that is (O25g). Nothing asked it: `storeThrough` counted only references, so the inference left the caller's
+local (a flag found by a lookup) claiming its own frame, and the text was built there and freed as it returned.
+`-sanitize` caught it; an owned part counts there now, as a reference field does.
 
 **What these copies cost.** Correct first: `Split` copies each piece, `Lines` and `Iter` copy their array, a walk of an
 `Array<String>` copies each element into its loop variable. Handing parts over uncopied where nothing changes the source
