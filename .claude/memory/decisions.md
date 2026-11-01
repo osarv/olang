@@ -2240,3 +2240,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `V&`, D9g allows it) or `Update` - `v := try m.Get(k); v.Push(x)` no longer changes the map (mine); a migration tool
   marks every old handle copy whose sharing is observed (either side written after) as `&` before the flip (mine).
   Built with QCE in round 3. ASKED: confirm (c), and that it covers every handle type, not only Vec. Rec yes.
+- Handles DECIDED 2026-11-01 (the user: "Lists should have a clone method to clone the entire list since holding a
+  list just means holding the first entry ... Whether or not arrays and thus vecs etc should hold the array by ref or
+  by value is up to you"): a copy is shallow at every `&` (the user's rule: owning a reference is never a deep copy).
+  list.List stays a handle - its value is one reference, all its state behind it, so a value copy is a second name -
+  and keeps `l.Clone()`; `Clone()` stays exactly on types whose value is a reference. Mine (delegated): Vec, Map, Set,
+  Deque, Heap and StringBuilder hold their storage by value (they own their arrays; a copy copies them, shallow at
+  references; growth replaces the owned array) - one copy rule with Array, QCC's bare-parameter promise without the
+  handle special case, bulk review 5's handle aliasing (F2/F3) gone, QCE's Map<String, V> the same rule, tasks get
+  their own; costs: O(n) `w := v` (visible, elided where neither side is written or kept), sharing written `&`,
+  in-place change of a nested collection through a `&` accessor (`m.At(k).Push(x)`), a migration tool marking
+  observed-sharing copies `&`. Their Clone() goes (a value assignment copies). Round 3, with QCE.
