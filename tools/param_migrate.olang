@@ -11,8 +11,9 @@
 #        pointer); a struct C is handed stays a reference (X11: a bare struct is C's by-value one).
 # driven the compiler, run with OLANG_PARAMS=new, then says what the text phase got wrong, and each is fixed from its
 #        diagnostic until none is left: a bare parameter written through, kept or handed back is made "&" again (D9e,
-#        T25b); a "&" one never written or kept is made bare (D9d); constant data passed to a "&" parameter is given a
-#        copy ("$"). Anything else is listed for a person.
+#        T25b, an O17 or O26 noting it); a "&" one never written or kept is made bare (D9d); a result written "T&"
+#        handing back what a bare parameter reaches is made the value "T" (D9g, round 2d); constant data passed to a
+#        "&" parameter is given a copy ("$"). Anything else is listed for a person.
 #
 # Running it again changes nothing. Files are rewritten in place; --check writes nothing and the status says whether
 # anything would change.
@@ -426,10 +427,8 @@ ConstData String& = "hands data written in the program to"
 KindAmp String& = "amp"
 KindBare String& = "bare"
 KindCopy String& = "copy"
-KindOwn String& = "own"
 KindValue String& = "value"
 RefResultNote String& = "the result is written as a reference here"
-OwnStorage String& = "refers to this function's own storage"
 
 # the byte offset of a 1-based line and column in src, -1 past its end
 fn offsetOf(src String&, line I64, col I64) I64 {
@@ -495,7 +494,6 @@ fn (w mut walker&) request(kind String&, o I64, path String&) Bool {
         w.edits.Push(edit(o, o, "$"))
         return true
     }
-    if kind == KindOwn: return w.ownStorage(i, path)
     if kind == KindValue: return w.valueResult(i)
     # the parameter's name: a note may point at its type ("CStr" of "p CStr") - walk back to the name
     n := i
@@ -576,31 +574,6 @@ test valued "makes a reference result handing back a bare parameter's reach a va
     assert valued("fn f(a T) Node?& {\n}\n", "Node") == ""
 }
 
-# O26 at a call: a bare parameter of the function it is in, among the call's arguments, kept in what the call gives
-# back - made "&", so what is kept is the caller's (D9e). Whether one was
-fn (w mut walker&) ownStorage(call I64, path String&) Bool {
-    f := call
-    for f > 0 and not (w.kind(f) == token.Tok.Fn and w.stmtStart(f)) { f-- }
-    if f <= 0: return false
-    lp := call
-    for lp < w.ts.Len() and w.kind(lp) != token.Tok.LParen { lp++ }
-    close := w.closer(lp)
-    if close < 0: return false
-    names Vec<String&>
-    for j in range lp, close {
-        if w.kind(j) == token.Tok.Iden: names.Push($w.text(j))
-    }
-    made := false
-    j := f + 1
-    for j < call and w.kind(j) != token.Tok.LBrace {
-        if w.kind(j) == token.Tok.Iden and names.Has(w.text(j)) and (w.kind(j - 1) == token.Tok.LParen or w.kind(j - 1) == token.Tok.Comma) {
-            if w.makeRef(j, path) { made = true }
-        }
-        j++
-    }
-    return made
-}
-
 # the requests made of each file, applied: how many edits, the ones that found nothing listed for a person
 fn applyRequests(reqs Vec<diagedit.Request>&, left mut Vec<String&>&) I64 ? os.Error {
     byFile := Map<String&, Vec<diagedit.Request>>()
@@ -642,7 +615,8 @@ fn requestOf(row String&, allowed Vec<String&>&) diagedit.Request ? {
     if r.IsError and r.Msg.Contains(ExternBare): kind = KindAmp
     if r.IsError and r.Msg.Contains(NeverUsed): kind = KindBare
     if r.IsError and r.Msg.Contains(ConstData): kind = KindCopy
-    if r.IsError and r.Msg.Contains(OwnStorage): kind = KindOwn
+    # (O26 at a call notes the by-value parameter it rests on, since round 2d - its note's request makes it "&"; the
+    # error's own row asks for nothing, so a parameter given beside it to the call is not made "&" as well)
     if not r.IsError and r.Msg.Contains(RefResultNote): kind = KindValue
     if kind == "" { error NotMine }
     return diagedit.Request($full, r.Line, r.Col, $kind, "", $row)

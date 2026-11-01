@@ -7205,7 +7205,10 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         }
         if s.inRet and r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
             # a result returned holding this function's own storage, through the call that put it there (O26)
-            s.err(s.nameSpan(sp), msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage())
+            rec := s.err(s.nameSpan(sp), msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage())
+            # (round 2d: the by-value parameter whose own storage it is, noted - what the migration makes "&")
+            ai := s.argOfVar(c, r.Hi)
+            if ai >= 0 { s.noteBareArg(rec, c.Args[ai]) }
             continue
         }
         if r.Why != 0 {
@@ -8956,7 +8959,11 @@ fn (s mut Scoper&) err(sp source.Span, m msgs.Msg) I64 {
 # O17 at an argument: said at it - and where it is a by-value parameter of this function (a bare one under the rework's
 # round 2, by value where it is no struct: an enum), a note there, which names what to make a reference (round 2c)
 fn (s mut Scoper&) splitErr(a typed.Expr&) {
-    rec := s.err(s.argAt(a), msgs.BorrowSplitScopes())
+    s.noteBareArg(s.err(s.argAt(a), msgs.BorrowSplitScopes()), a)
+}
+
+# ... and an error resting on an argument that is such a parameter (O17, O26 at a call): the note naming it
+fn (s mut Scoper&) noteBareArg(rec I64, a typed.Expr&) {
     if not source.NewParams: return
     p := s.placeRead(s.unAway(a))
     if p is null: return
