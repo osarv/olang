@@ -793,6 +793,31 @@ fn WrittenBare(tr ast.TypeRef&) Bool {
     }
 }
 
+# whether a value of t holds a reference, every declared type it holds by value laid out first: HoldsRefs takes one not
+# laid out yet for one that may (an enum of a case "Block(b BlockId)", BlockId a declared I32, was passed by pointer as
+# a reference holder when its parameter's signature was made before BlockId's body - round 2d, found by compiler/'s
+# migration as obligations on plain values)
+fn (p mut Program&) holdsLaidOut(t types.TypeId) Bool {
+    p.layOut(t, 0)
+    return p.T.HoldsRefs(t)
+}
+
+fn (p mut Program&) layOut(t types.TypeId, depth I64) {
+    if depth > 12: return
+    k := p.T.KindOf(t)
+    if k == types.Kind.Array: p.layOut(p.T.Elem(t), depth + 1)
+    if k == types.Kind.Tuple or k == types.Kind.Record {
+        for x in p.T.Items(p.T.Parts(t)) { p.layOut(x, depth + 1) }
+    }
+    if k != types.Kind.Named or not p.Body(t): return
+    match p.T.DeclKindOf(p.T.DeclOf(t)) {
+        case types.DeclKind.Struct { for f in p.T.Items(p.T.Fields(t)) { p.layOut(f, depth + 1) } }
+        case types.DeclKind.Enum { for r in p.T.Items(p.T.Cases(t)) { p.layOut(r, depth + 1) } }
+        case types.DeclKind.Over { p.layOut(p.T.Base(t), depth + 1) }
+        case _ { }
+    }
+}
+
 fn (p mut Program&) byPointer(t types.TypeId) Bool {
     match p.T.KindOf(t) {
         case types.Kind.Array { return true }
@@ -802,7 +827,7 @@ fn (p mut Program&) byPointer(t types.TypeId) Bool {
             # (round 2d: an enum holding references too - by value its copy's references would live where the copy does
             # not, so handing back what it holds, or keeping it in a value made, would keep the frame's copy; plain ones
             # stay in registers)
-            if k == types.DeclKind.Enum: return not p.cabi and p.Body(t) and p.T.HoldsRefs(t)
+            if k == types.DeclKind.Enum: return not p.cabi and p.Body(t) and p.holdsLaidOut(t)
             if k != types.DeclKind.Over or not p.Body(t): return false
             b := p.T.Base(t)
             for _ in range 16 {
