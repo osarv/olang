@@ -2209,3 +2209,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   bare parameter's is (boxed where it is made, uncopied where nothing may change the source, copied where it may);
   copying an `any W` copies the handle, never the instance (nothing writes through it, so unobservable). Recommended
   yes - read-only said by a value, everywhere. In effect: `any W&` / `mut any W&`.
+- QCJ ANSWERED 2026-11-01 (the user: "Ye, that is good for any, but we must still refuse where there might be side
+  effects"): `any W&` shares and may write, `any W` is the read-only value form, copying an `any W` copies the handle.
+  But no hidden copy: an `any W` made from a source something may change while the any lives (a write the compiler
+  cannot rule out, a call to C, a function value, another `any`) is an ERROR naming `.Clone()` (a copy written) or
+  `any W&` (shared) - never a silent box copy. Built in round 4 with `mut`'s removal. ASKED with it: should the same
+  "refuse, never copy silently" rule replace the rework's hidden copies for bare parameters too (D9e: a kept bare
+  parameter copied by the caller; 2.10: a bare argument copied where the call may write its type; a task's bare
+  argument at a spawn)? Recommended: yes for kept parameters and spawns (an error naming `.Clone()` or `p T&` -
+  rare, and a copy then is written); for 2.10's call-may-write case an error would hit ordinary calls into C and
+  callbacks, so keep that copy. In effect: the rework's copies.
