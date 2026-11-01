@@ -705,3 +705,7 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   compiler/ to zero (tree readers as values or following their argument's permission, nested-call permission link,
   built `T&` results to values, the tool's value-form rewrite), the self-build under the switches with its numbers;
   then handles as values; then 2.10 partial copies; then round 4 (the flip).
+- QUEUED 2026-11-01 after the rework (the checker's files): QCI 3 + QCI 4 as one batch - function types reference-only
+  (`fn&(...)`, `fn?&(...)`, declared `type Handler fn(...)` used as `Handler&`/`Handler?&`, bare an error), never-null
+  function values with no zero value (D13d), nullable arrays `Array<T>?&` (null distinct from empty); migration tools
+  in `olang fix`; the compiler's absent-vs-empty flags back to `?&`.

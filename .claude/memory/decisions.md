@@ -2337,3 +2337,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and its never-written-`&` check (D9d) do not apply to them - nothing writes through a function value, so no reader
   can wonder whether a callee changes one; every function type in the repository gains its `&` by a tool in `olang
   fix`. ASKED to confirm. In effect: function values nullable (T21), written bare.
+- QCI 3 DECIDED 2026-11-01 (the user: "g Handler should not be possible because a function can never be a value" -
+  read as yes to the reference-only proposal, stated to the user): function types are reference-only - `fn&(...)` /
+  `Handler&` never null, `fn?&(...)` / `Handler?&` nullable, a bare `fn(...)` or `Handler` as a type an error naming
+  the `&`; declarations and lambdas carry no `&`; declared function types `type Handler fn(e Event)` added; QCC's
+  "may write" and D9d's check do not apply to them. Queued after the rework with QCI 4 (nullable arrays), migrated by a
+  tool in `olang fix`.
