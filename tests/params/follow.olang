@@ -45,6 +45,9 @@ type holder struct(s shape) {
 # a struct's field read through a bare one, handed back
 fn held(h holder) shape { return h.s }
 
+# an instance built from what a bare parameter reaches
+fn boxed(s shape) holder { return holder(innermost(s)) }
+
 test innermost "hands back what a bare parameter reaches, as writable as the caller's own" {
     s := shape.Wrap(shape.Wrap(shape.Leaf(cell(4))))
     bump(innermost(s))
@@ -55,6 +58,8 @@ test innermost "hands back what a bare parameter reaches, as writable as the cal
     h := holder(s)
     bump(innermost(held(h)))
     assert value(h.s) == 8 and value(s) == 8
+    bump(held(boxed(s)))
+    assert value(s) == 9
 }
 
 # the evaluator agrees: a baked global and a decided assert read through the followed results

@@ -10326,6 +10326,11 @@ fn (c mut Checker&) noteWritable(rec I64, ref typed.Expr&) {
 
 fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     id := c.roRoot(p)
+    # (a bare parameter read-only at its top only - nothing writable below it to make a copy read-only: its own reach)
+    if id < 0 and source.NewParams {
+        r := c.rootLocal(p)
+        if r >= 0 and c.bareLocals.Has(c.roKey(r)) and c.bareNamed(r) { id = r }
+    }
     if id < 0 {
         # (a capture: read-only as the lambda holds it - a bare parameter's around, named)
         q := c.levelRoot(p)
@@ -10386,7 +10391,7 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
     if kind == 2 { m = msgs.ReadOnlyCopyReturned(c.ty(t), fix) }
     if kind == 3 { m = msgs.ReadOnlyCopyGlobal(c.ty(t), fix) }
     rec := c.err(sp, m)
-    c.noteRo(rec, readPlace(x!))
+    c.noteRoX(rec, x!, 0)
     return true
 }
 
@@ -11704,10 +11709,37 @@ fn (c mut Checker&) armPlace(x typed.Expr?&) Bool {
 fn (c mut Checker&) roLend(x typed.Expr&, sp source.Span) {
     if c.roValue(x) {
         if c.lendLater(c.roCallAt(x, sp), c.roFix(c.roName(x), typeOf(x))) { return }
-        c.noteRo(c.err(c.roCallAt(x, sp), msgs.ReadOnlyCopyLent(c.roFix(c.roName(x), typeOf(x)))), readPlace(x))
+        c.noteRoX(c.err(c.roCallAt(x, sp), msgs.ReadOnlyCopyLent(c.roFix(c.roName(x), typeOf(x)))), x, 0)
         return
     }
     c.roDeepNeed(x)
+}
+
+# noteRo of a value: a place's, else the read-only arguments a call builds or follows into it, each one's (a value
+# built from a bare parameter's reach names that parameter - what param_migrate makes "&", round 2d)
+fn (c mut Checker&) noteRoX(rec I64, x typed.Expr&, depth I64) {
+    p := readPlace(unwrapped(x))
+    if p is not null or depth > 8 or not source.NewParams {
+        c.noteRo(rec, p)
+        return
+    }
+    match x {
+        case typed.Expr.Call(_, _, cl) {
+            id := c.bodyOfCallee(cl.Target)
+            if id < 0: return
+            for k, a in cl.Args {
+                if (c.builds(id) or c.followsAt(id, k)) and c.roBelow(a): c.noteRoX(rec, a, depth + 1)
+            }
+        }
+        # (a conversion, or a reference's permission or nullability changed: what it is made from)
+        case typed.Expr.Prim(_, _, _, _, args) {
+            if args.Len() > 0: c.noteRoX(rec, args[0], depth + 1)
+        }
+        case typed.Expr.Promote(_, _, pr) { c.noteRoX(rec, pr.X, depth + 1) }
+        case typed.Expr.Borrow(_, _, bp) { c.noteRo(rec, bp) }
+        case typed.Expr.Slice(_, _, sl) { c.noteRo(rec, sl.Base) }
+        case _ { }
+    }
 }
 
 # where a call's result is said: an index through At at its "[" (stage 0's token for it), any other where it is written
@@ -21363,38 +21395,71 @@ fn (c mut Checker&) handsBackParams(x typed.Expr&) Bool {
 
 # the bare parameters a value's read-only-ness rests on, into ks - Elsewhere where it may rest on anything else (constant
 # data, a global, a read-only copy made otherwise); with bare false, any parameter it is reached through
-fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bool) ? Elsewhere {
+fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bool, lent Bool = false) ? Elsewhere {
     if depth > 16: error Elsewhere
     u := unwrapped(x)
     match u {
         case typed.Expr.Call(_, _, cl) {
             id := c.bodyOfCallee(cl.Target)
-            # (the callee's own result writable below its top: read-only only by the arguments it follows)
+            # (the callee's own result writable below its top: read-only only by the arguments it follows - or, for a
+            # constructor's or a case's, holds as given)
             if id < 0 or not c.holdsWritable(c.P.T.Result(c.Bodies[id].Ty)): error Elsewhere
+            made := c.builds(id)
             n := ks.Len()
             for k, a in cl.Args {
-                if not c.followsAt(id, k) or bare and not c.roBelow(a): continue
-                try c.paramsOf(a, ks, depth + 1, bare)
+                if not made and not c.followsAt(id, k) or bare and not c.roBelow(a): continue
+                if made and not c.P.T.HoldsRefs(typeOf(a)): continue
+                # (a followed call hands back what its argument reaches, never its own storage; what is built holds what
+                # it is given)
+                try c.paramsOf(a, ks, depth + 1, bare, not made)
             }
             if ks.Len() == n: error Elsewhere
             return
         }
         case typed.Expr.Cond(_, _, k) {
-            if k.A is not null and (not bare or c.roBelow(k.A!)): try c.paramsOf(k.A!, ks, depth + 1, bare)
-            if not bare or c.roBelow(k.B): try c.paramsOf(k.B, ks, depth + 1, bare)
+            if k.A is not null and (not bare or c.roBelow(k.A!)): try c.paramsOf(k.A!, ks, depth + 1, bare, lent)
+            if not bare or c.roBelow(k.B): try c.paramsOf(k.B, ks, depth + 1, bare, lent)
             return
         }
         case typed.Expr.Prim(_, _, op, _, args) {
             if not typed.PassesRefs(op) or args.Len() == 0: error Elsewhere
-            try c.paramsOf(args[0], ks, depth + 1, bare)
+            try c.paramsOf(args[0], ks, depth + 1, bare, lent)
+            return
+        }
+        # (a temporary lent to a followed call: what it holds is the value's)
+        case typed.Expr.Promote(_, _, pr) {
+            if not lent: error Elsewhere
+            try c.paramsOf(pr.X, ks, depth + 1, bare)
             return
         }
         case _ { }
     }
+    # a reference kept: one read out of what the parameter reaches, never its own storage (the function's copy, by
+    # value - D9e) or a part of it borrowed
+    if not lent and c.isRef(typeOf(u)) and not c.storedRef(u): error Elsewhere
     r := c.rootLocal(c.placeOfX(u))
     k := c.bareParamAt(r) if bare else c.paramPos(r)
     if k < 0: error Elsewhere
     if not ks.Has(k): ks.Push(k)
+}
+
+# whether a reference is one held in a place - read out of a field, an element, a reference local made by reading one -
+# rather than storage borrowed, or a by-pointer bare parameter itself
+fn (c mut Checker&) storedRef(x typed.Expr&) Bool {
+    p := readPlace(x)
+    for _ in range 16 {
+        if p is null: return false
+        match p {
+            case typed.Lvalue.Local(_, _, id) {
+                if c.bareLocals.Has(c.roKey(I64(id))) or c.cur().Local(id).Kind == typed.LocalKind.Param: return false
+                o := try c.roFrom.Get(c.roKey(I64(id))) catch { return false }
+                if o.View: return false
+                p = o.P
+            }
+            case _ { return true }
+        }
+    }
+    return false
 }
 
 # the index of the bare parameter local id is, is its copy on entry, or names through what it was made from; -1 for none
