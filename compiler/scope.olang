@@ -473,7 +473,7 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
 fn (s mut Scoper&) fnValues() {
     for u in s.fnUses {
         rels := s.sums[u.F].Rels
-        if rels.Len() == 0 { continue }
+        if rels.Len() == 0 or u.Kind != FnCall and s.valueCovered(u.F, rels) { continue }
         at := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
         if u.Kind == FnCall {
             t := u.Of
@@ -526,6 +526,49 @@ fn (s mut Scoper&) fnValues() {
             s.P.L.Diags.Error(at, msgs.LambdaValueObligations(kept) if kept != "" else msgs.LambdaValueRelates())
         }
     }
+}
+
+# open point 5 (the rework's round 2e): what a function type says of its calls under the switches - a result holding
+# references may hand back what its "&" parameters reach (QCC: every "&" in a signature is shared), so each of their
+# arguments outlives the call's result scope; a function whose only obligations are these is a value of the type
+# (valueCovered). Without the switches none: a borrowed result is written ("T&p", T22)
+fn (s mut Scoper&) valueRels(fty types.TypeId, vars Array<I64>&, rv I64, sp source.Span) Vec<rel> {
+    rs Vec<rel>
+    if not source.NewParams or rv < 0 { return rs }
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    for v in range vars.Len() {
+        i := vars[v]
+        if i < 0 or i >= ps.Len() or not s.sharedParam(ps[i]) { continue }
+        rs.Push(rel(Term.Var(v), Term.Var(rv), false, sp, 0))
+    }
+    return rs
+}
+
+# whether a parameter's type is a "&" one under the switches: a writable reference
+fn (s Scoper&) sharedParam(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Ref and (s.P.T.PermOf(t) & types.Writable) != 0 }
+
+# whether body b's obligations are only what a function type says of a call through a value (valueRels): each a "&"
+# parameter's scope outliving its result scope, not exactly - so it is a value of its type (explain's "not a value")
+fn (s Scoper&) ValueCovered(b I64) Bool { return b >= 0 and b < s.sums.Len() and s.valueCovered(b, s.sums[b].Rels) }
+
+fn (s Scoper&) valueCovered(b I64, rels Vec<rel>&) Bool {
+    if not source.NewParams { return false }
+    body := s.Bodies[b]
+    for r in rels {
+        if r.Exact { return false }
+        hi := match r.Hi {
+            case Term.Var(k): k
+            case _: -1
+        }
+        lo := match r.Lo {
+            case Term.Var(k): k
+            case _: -1
+        }
+        if hi < 0 or lo < 0 or hi >= body.Vars.Len() or lo >= body.Vars.Len() or body.Vars[lo] != typed.ScopeVar.Result { return false }
+        bv := body.Vars[hi]
+        if bv != typed.ScopeVar.Param or not s.sharedParam(body.Locals[I64(bv.local)].Ty) { return false }
+    }
+    return true
 }
 
 # T32a: a method an "any" calls through its table may require nothing of its arguments' scopes its trait's signature
@@ -7208,6 +7251,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
+    if callee < 0 and c.Target == typed.Callee.Value { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     s.resAt = beta[rv] if rv >= 0 else here
     # a result a scope argument put where it says (E25) is existing storage there - an array of numbers or text too, whose
     # storage lives there whatever it holds - judged where it is stored, passed, returned or made an any as the same value
@@ -7513,7 +7557,12 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    for r in s.sums[callee].Rels {
+    s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
+}
+
+# ... rels judged so - a body's (callee), or what a function type says of a call through a value (-1, valueRels)
+fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
+    for r in rels {
         hi := s.through(r.Hi, beta, c, true)
         lo := s.through(r.Lo, beta, c, false)
         if hi == Term.None or lo == Term.None { continue }
@@ -7606,8 +7655,10 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
         if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
         rec := s.err(s.nameSpan(sp), m)
-        cb := s.Bodies[callee]
-        s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+        if callee >= 0 {
+            cb := s.Bodies[callee]
+            s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+        }
         # the argument too short a loop's copy of an element (B11, r06)
         ai := s.argOfVar(c, r.Hi)
         li := s.argOfVar(c, r.Lo)

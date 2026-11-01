@@ -1101,6 +1101,12 @@ outlive its result scope - and to be exactly it where something can be stored th
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
 such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
 best })` keeps the longest element.
+**T22a under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** A function type whose result is a reference
+or a value holding references says what QCC's `&` says: its result may hand back what its `&` parameters reach (or new
+storage), so a call through a value of it holds each `&` argument to outlive the call's result scope, as a direct call
+is held to its callee's obligations. A function whose only obligations are those - each `&` parameter's scope outliving
+its result scope, not exactly - is a value of such a type: `fn first(a Array<I64>&) Array<I64>&` fits `fn(a
+Array<I64>&) Array<I64>&`. One relating a bare parameter (a value it keeps, D9e) or two parameters to each other is not.
 A value adapted to a function type through its `Call` (E31) is a function value of that `Call`: one whose `Call` carries
 an obligation - keeps an argument beyond the call - is not adapted, as such a function is not used as a value.
 
