@@ -7318,7 +7318,8 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 {
                 csp := c.chosenAt(x)
-                if csp.Start >= 0 and c.condChoosesPlace(x) {
+                # (not for an instance's type variable's reference parameter under the round 2: held as given)
+                if csp.Start >= 0 and c.condChoosesPlace(x) and not (source.NewParams and c.argFollows) {
                     # E28: a conditional's value is a copy, which the callee would write and drop
                     c.err(csp, msgs.CondLentWritable())
                 } else {
@@ -13620,7 +13621,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
                     e = c.unknown(asp)
                 } else {
-                    if c.writable(ps[k]) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
+                    # (an instance's type variable's reference parameter holds what it is given as given - the round 2's
+                    # rule, its permission the argument's, settled later: no write through it is known here)
+                    if c.writable(ps[k]) and not (source.NewParams and c.argFollows) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
                     ex := c.cPointerArg(target, e!, ps[k], c.argSpan(args[i]))
                     if ex is null { ex = c.externArray(target, e!, ps[k], c.argSpan(args[i])) }
                     wasNull := c.nullDecl

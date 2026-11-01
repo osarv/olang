@@ -3410,6 +3410,24 @@ fn regionLocal(r typed.Expr&) I64 {
 
 # ---- writes through x[i] (E31b) ----
 
+# whether a call's parameter i is written as a bare type variable (an instance's binding), under the rework's round 2
+fn (s mut Scoper&) tvParam(c typed.Call&, i I64) Bool {
+    if not source.NewParams: return false
+    match c.Target {
+        case typed.Callee.Body(id) {
+            match s.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) {
+                    ds := s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))
+                    return i < ds.Len() and s.P.T.KindOf(ds[i]) == types.Kind.Var
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
 # a call's argument i, for a writable reference parameter: a copy of an element no one holds - x[i] read through At, a
 # field or an element of it, a "try ... catch default" value, a conditional or a match choosing places - is written
 # where the write is lost, an error; but a handle element lent as its reference to a callee using it only through it
@@ -3451,6 +3469,9 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
     handle := s.isHandle(et)
     if spawned and handle and how == 1 { at = s.nameSpan(callSp) }
     if how == 0 { return }
+    # (a choice given a bare type variable's parameter - an instance's reference binding, held as given under the
+    # rework's round 2, as the checker's argFollows: nothing written through it is known here - round 2d)
+    if how == 2 and s.tvParam(c, i) { return }
     if not spawned {
         match c.Target {
             case typed.Callee.Body(id) {
