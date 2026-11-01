@@ -27614,3 +27614,46 @@ reference has no value form - with the read-only-ness entering through a bare re
 parameters read-only by inference and locals whose level the inference made read-only rather than widening their
 source. The self-build under the switches therefore waits for round 2g; the choice it needs first is whether such a
 reader's borrowed result follows its argument's permission, as an instance's already does.
+
+**A kept bare parameter refused (the user's decision, 2026-11-01).** Round 2e had made a bare parameter's own storage
+kept in what its function hands back the callee's copy, made by each caller whose argument might change - a hidden
+copy, decided by the scope pass. The user, asked through the coordinator, preferred the copy written: "copying by
+assigning to a value variable from a reference variable should be fine. No copy needed. In fact, copy should go as a
+method." So the scope pass now refuses such a parameter (D9e), naming `c T = p` and `p T&`, and no caller copies for
+it; `param_migrate` takes the `&` (the edit a token tool can make). The other copies stay for now - the spawn's (F7)
+and the call-may-write ones (2.10), on which the user has not decided - and `.Clone()` stays until round 3 decides
+whether the handles (Vec, Map) become values. One guess came out with it: bulk review 5's "kept where unsure" took a
+Vec's `At` as keeping its receiver whenever `T` was a function type (a function value may name anything); an instance
+whose declared result is a type variable builds no such value, so it is not guessed kept.
+
+**The hidden copies settled, and C's pointers (the user's decisions, 2026-11-01).** With the caller's copy for a kept
+parameter gone, the user settled what copies remain: a bare value passed by pointer is copied exactly where one of two
+guarantees cannot be proved - (A) the callee does not write it, (B) nothing else changes it during the call - copying
+only the parts that may change, each listed by `-memory`. An olang callee's body is checked, so (A) never needs a copy
+there; seen code (bodies, a lambda written at the call) is read for (B), unseen code (a function value, an `any`, a
+spawn's join block - F7) copies. For C, (A): `const T*` is trusted (breaking it is X1a's unchecked hole), a non-const
+`T*` (`p T&`) given an owned value borrows it writably as E12c does, and given what may not be lent writably - a bare
+parameter, constant data, an immutable global, a read-only view - it is copied, "because old C APIs often leave out
+const" (where an olang `&` is given those, T25c refuses). (B): a C call copies only if some export fn of the program may
+write that storage type, since C may call back into it; another thread outside a join is the program's own race.
+Built in the round (mine, details): the checker leaves such an argument typed read-only - converting a reference typed
+writable but read-only by what it is read out of (an immutable global's, a view of a read-only level) - and the scope
+pass's `externCopies` marks it in `ArgTemp`; lowering copies it as the argument's own type holds it before it is made
+the pointer C takes (a `CVoid?&` too). A bare parameter given whole stays the body's own copy, made on entry, as for an
+olang `&` parameter, so the body sees what C wrote (D9's rule; the coordinator's summary had read "for an olang callee
+those cases are errors", which holds for the global, the view and the data, not for a bare parameter whole - left to
+the user). For (B) `exportWrites` runs the F7 write walk over every export fn's body, by type (an export fn calling C may
+write anything, so a program with one copies a C call's mutable global argument). Two things came out with it: under
+the switch an export fn taking `CStr?&` did not fit a C function pointer's (`CStr?&` read-only in a C import where `mut`
+is left out, writable in olang) - an extern type's reference has no permission that says anything (X10), so function
+types now ignore it there, and the fn is passed as it is (its C entry); and std/io's `Write` would have copied each
+`tail := data[sent:]` before `write` once a program had an export fn - a read-only view local never assigned, made from
+what cannot change (a bare parameter's slice), is itself stable now, for olang calls' copies too (a relaxation for the
+bulk review). Not built: copying only the parts that may change (a whole array or struct is copied), for round 3.
+
+**Found on the way (both paths): a value local from a choice was a view.** `c String = t if k == 0 else u` - a value
+array local declared, or assigned, from a conditional, a match or a try's default of existing arrays - held no copy:
+lowering's `copiesValue` looked through none of them, so a later write to the chosen source showed through the local,
+built and in the evaluator alike (both run the same MIR). tests/params/keptroutes.olang's written copy through a choice
+found it; it now copies wherever any value the choice may give is existing storage, as a returned choice already did
+(`retCopies`). tests/textslot.olang holds it beside a baked global.

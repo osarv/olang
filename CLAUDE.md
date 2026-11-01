@@ -450,7 +450,22 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   D9g's note naming the parameter `&` where a caller writes through the result (a value result had made std/flags'
   callers write a copy); G30's decided `if` that leaves no longer checks what follows it in that instance (an E16 at
   `ts[0]` after `if ts.Len() == 0 { return }`, the default path too). A function with a bare parameter is a value of a
-  function type passing it by value through a wrapper (F5). Left before the flip: compiler/'s migrated root
+  function type passing it by value through a wrapper (F5). **A kept bare parameter is refused (D9e, the user's
+  decision 2026-11-01: "copying by assigning to a value variable from a reference variable should be fine. No copy
+  needed. In fact, copy should go as a method")**: where a body keeps a bare parameter's own storage in what it hands
+  back, the error at the parameter names the written copy (`c T = p`) or `p T&` - round 2e's hidden caller copy is gone;
+  `.Clone()` waits on the handles decision (round 3). **The hidden copies left (the user, 2026-11-01)**: a bare value
+  passed by pointer is copied exactly where one of two guarantees cannot be proved, each copy listed by `-memory` -
+  (A) the callee does not write it: an olang body is checked, so never; C's `const T*` is trusted (X1a: breaking it
+  unchecked); a non-const `T*` (`p T&`) given an owned value (a local, a field reached from one) borrows it writably,
+  given what may not be lent writably (a bare parameter - the body's own copy on entry, as for an olang `&` -, constant
+  data, an immutable global, a read-only view) is copied for the call, since old C APIs leave `const` out; (B) nothing
+  else changes it during the call: seen code (bodies, a lambda written at the call) is read, unseen code (a function
+  value, an `any`, a spawn's join block - F7) copies, a C call copies only where some export fn may write that storage
+  type (C may call back), another thread outside a join is the program's race (X22, D9; built 2026-11-01 but copying
+  only the parts that may change, round 3). Mine: an export fn's `CStr?&` fits a C function pointer's whatever their
+  permissions (X10 - it was a type mismatch under the switch); a read-only view local never assigned made from what
+  cannot change is itself stable. Left before the flip: compiler/'s migrated root
   115 -> 53 errors, none the tool can fix - readers of read-only trees taking `&`, read-only copies kept, section 8
   over a bare reach's temporaries (docs/rework.md 15.6) - then the self-build under the switches, the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
   The entry below is today's rule until it lands.

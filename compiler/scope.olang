@@ -335,6 +335,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ownKept Map<pair.Pair<I64, I64>, Bool>
     ownT Vec<Term>                          # by local: a bare parameter's own storage's term, None for any other local
     ctorOwn Map<pair.Pair<I64, I64>, I64>   # ctorKeepsOwn's answers, by (constructor body, parameter): 1 no, 2 yes
+    exportWrite Map<I64, I64>                # exportWrites' answers, by type: 1 no export fn may write it, 2 one may
     walk walked = walked()                  # the body being judged's locals assigned, written and borrowed (stable)
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
@@ -5661,6 +5662,56 @@ fn (s mut Scoper&) argCopies(c typed.Call&, spawned Bool) {
     s.plan.ArgTemp[I64(c.Site)] = t
 }
 
+# the rework's round 2 (X22, docs/rework.md 2.10): the arguments a C function is given copies of, made for the call
+# alone. (A) One its pointer not "const" takes that may not be lent writably - the checker leaves it read-only: a bare
+# parameter, constant data, an immutable global, a read-only view - since old C interfaces leave "const" out of what
+# they only read. (B) One passed by pointer that an export fn of the program may write - C may call back into one,
+# handing it what it was given - read-only here and able to change (not stableArg), or a mutable global's. A pointer C
+# writes given what may be written is lent as it is; C's "const" is trusted (X1a: breaking it is unchecked)
+fn (s mut Scoper&) externCopies(c typed.Call&) {
+    if not source.NewParams or c.Site < typed.SiteId(0) or I64(c.Site) >= s.plan.ArgTemp.Len() { return }
+    f := match c.Target {
+        case typed.Callee.Extern(k): k
+        case _: -1
+    }
+    if f < 0 { return }
+    T := s.P.T
+    ps := T.Items(T.Params(s.P.Sig(f)))
+    t I64 = 0
+    for i in range c.Args.Len().Min(ps.Len()).Min(62) {
+        a := c.Args[i]
+        at := a.Type()
+        if not T.IsRef(at) or T.IsNullable(at) or T.ForeignRef(at): continue
+        ro := (T.PermOf(at) & types.Writable) == 0
+        written := T.IsRef(ps[i]) and (T.PermOf(ps[i]) & types.Writable) != 0
+        copied := ro if written else s.exportWrites(T.Referent(at)) and (s.mutGlobalArg(a) or ro and not s.stableArg(a))
+        if not copied: continue
+        t |= I64(1) << i
+        if s.Trace { s.TraceLog.Push($"copied argument " $i " for a C function | " $s.traceAt(a.Span().Start)) }
+    }
+    s.plan.ArgTemp[I64(c.Site)] = t
+}
+
+# whether some export fn of the program may write storage of type own (WriteWalk over its body): C may call one while a
+# C function runs, handing it what that function was given
+fn (s mut Scoper&) exportWrites(own types.TypeId) Bool {
+    m := try s.exportWrite.Get(I64(own)) catch default 0
+    if m != 0: return m == 2
+    w := typed.WriteWalk(s.P.T, s.Bodies, own)
+    r := false
+    for b in s.Bodies {
+        inst := match b.Of {
+            case typed.BodyOf.Fn(k): k
+            case _: -1
+        }
+        if inst < 0 or not s.P.FnDecl(s.P.InstanceFn(inst)).Export: continue
+        if b.Root is null or w.Block(b.Root): r = true
+        if r: break
+    }
+    s.exportWrite.Put(I64(own), 2 if r else 1)
+    return r
+}
+
 # a task's bare arguments passed by pointer that something may write before its join (bulk review 5, F7; 2.10): the task
 # runs beside its spawner, so one is copied at the spawn, on the spawning thread, unless nothing in the join block - its
 # statements, its other tasks, a call through a function value or an any - may write storage of its type
@@ -5730,7 +5781,7 @@ fn (s mut Scoper&) stableArg(a typed.Expr?&) Bool {
 
 fn (s mut Scoper&) stablePlace(p typed.Lvalue&) Bool {
     match p {
-        case typed.Lvalue.Local(_, _, id) { return s.bareParam(I64(id)) or s.unwritten(I64(id)) or s.refStable(I64(id)) }
+        case typed.Lvalue.Local(_, _, id) { return s.bareParam(I64(id)) or s.unwritten(I64(id)) or s.refStable(I64(id)) or s.roViewStable(I64(id)) }
         case typed.Lvalue.Global(_, ty, mi, n) {
             v := s.P.GlobalDecl(mi, n)
             return v is not null and not s.isRef(ty) and not generic.WrittenMut(v.Ty)
@@ -5766,6 +5817,15 @@ fn (s mut Scoper&) refStable(l I64) Bool {
         if i >= ps.Len() or (s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0) { return false }
     }
     return whole == args
+}
+
+# whether a read-only reference local is never assigned and made from what cannot change - a view of a bare parameter
+# of the caller ("tail := data[sent:]"): what it names cannot change either
+fn (s mut Scoper&) roViewStable(l I64) Bool {
+    loc := s.B!.Locals[l]
+    if loc.Kind != typed.LocalKind.Var or not s.isRef(loc.Ty) or (s.P.T.PermOf(loc.Ty) & types.Writable) != 0 or flHas(s.walk.Assigned, l): return false
+    init := try s.inits.Get(l) catch { return false }
+    return s.stableArg(init)
 }
 
 # whether a value local of the body being judged is never assigned, written or borrowed writably after it is made
@@ -7192,6 +7252,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     if fty == types.UnknownT {
         for a in c.Args { s.val(a, Term.None) }
+        s.externCopies(c)
         return plain() if not s.holds(ty) else fresh(dest if dest.Runs() else s.here())
     }
     s.argCopies(c, spawned)

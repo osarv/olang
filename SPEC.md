@@ -2083,7 +2083,10 @@ a type variable's binding are passed by value, and
 an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
 may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
 mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot
-change (D9e's list). A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
+change: constant data, a value made for the call, a bare parameter of the caller, an immutable global, a value local
+nothing assigns, writes or lends writably once it is made, a read-only view never assigned made from one of these. A
+lambda written at the call is read, not taken for unseen code: it may write the caller's storage only through what it
+captures writably. Each copy is listed by `-memory` (B18); a C function's pointers are X22's. A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
 block may write storage of its type - its statements, its other tasks, a call through a function value or an `any`, a
 call handing such a value or a `&` argument reaching the type - and the copy lasts until the join; a generator's bare
 parameters are copied where the generator lives, its walk running after the call. An `any` made from a bare parameter
@@ -7797,7 +7800,9 @@ undefined behaviour, and a wrong *size* for a foreign type reached through a res
 This is unavoidable rather than an omission: the foreign side is compiled by another toolchain and olang
 has no view into it. Every other guarantee in this specification is stated as holding for programs that do
 not declare an incorrect prototype. Keeping the vocabulary deliberately narrow (X2) reduces how much can
-be got wrong, but does not close it.
+be got wrong, but does not close it. So is C writing through a pointer its prototype says is `const`, or handing one
+back writable to an export fn that writes it (X22): the compiler trusts `const`, and breaking it is undefined behaviour
+as a wrong prototype is.
 
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C boundary (its **vocabulary**) is:
@@ -8152,6 +8157,20 @@ wrong prototype is (X1a). An olang function is never variadic.
   `struct timespec *` given as two `I64`s); that the buffer holds what C reads there is the program's word (X1a).
 
 What C does with the pointer is X3's: it is the storage's own address, for the call.
+
+Under the rework's round 2 (`OLANG_PARAMS=new` only, provisional as D9 is), a pointer parameter C writes - one not
+`const`, `T *` read as `p T&` - given what may be written - a local or a part reached from one, a `&` parameter's
+storage, new storage - borrows it writably (E12c): no copy. Given what may not be lent writably it is given a copy,
+since old C interfaces leave `const` out of what they only read: a bare parameter whole is the body's own copy, made on
+entry as where an olang function's `&` parameter is given it (D9); constant data, an immutable global and a read-only
+view - a view of a bare parameter, of what a read-only level reaches - are copied for the call, in the block of the
+call (where an olang function's `&` parameter is given one, T25c's error). A `const` pointer is trusted: what it is given
+is passed as it is, never copied, unless an export fn of the program may write storage of its type (C may call back
+into one while it runs, handing it what it holds): then an argument that may change during the call - a mutable
+global's storage, a read-only view not made from what cannot change - is copied for the call, as an olang call's
+argument is that the same call may write another way (D9). `-memory` lists each copy (B18). A `?&` given a pointer not
+`const` keeps T25c's rule, and an extern type's reference has no permission that says anything (X10), in a function
+type too: an export fn taking `CStr?&` fits a C function pointer's.
 
 ## 12. Generics
 

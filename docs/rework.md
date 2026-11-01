@@ -2011,6 +2011,11 @@ seventh (F7), found after it, is fixed too.
   finds nothing in the join block writing its type.
 - `lendLater` in `mustWrite`'s dereference branches: a read-only reference lent to a `&` parameter accepted at the
   lend, refused once settled where the callee writes through it (round 2c's rule for read-only copies, widened).
+- `roViewStable` in `stablePlace` (15.8): a read-only reference local never assigned whose initializer is stable is
+  stable - for C calls' copies (B) and for F3's olang copies alike.
+- X22 under the switch (15.8): what may not be lent writably given a C pointer not `const` is accepted and copied
+  for the call (`externCopies`) instead of refused; an export fn's extern-type reference parameters fit a C function
+  pointer's whatever their permissions (`foreignPermOnly`, funcFits).
 
 ### 15.5 Today's path
 
@@ -2063,3 +2068,66 @@ under the switches (stage 2 == stage 3), the suite with it, and the measurements
 StringBuilder's buffer may hold storage of `t`'s type - the cost to measure on the self-build), and the field loop's
 incremental form (the scope phase's cost under OLANG_SCOPES=infer, round 1). Not begun, as briefed: round 3 (QCE's
 value arrays in structures, `Map<String, V>` owning its keys) and round 4 (the flip).
+
+### 15.7 A kept bare parameter is refused (the user's decision)
+
+The user, through the coordinator: "copying by assigning to a value variable from a reference variable should be fine.
+No copy needed. In fact, copy should go as a method." So round 2e's caller copy (D9e: a bare parameter's own storage
+kept in what its function hands back was copied by every caller whose argument might change, `plan.ArgCopy`) is gone:
+where a body keeps a bare parameter's own storage - KeptOwn, by the frame term's lift into the result scope or by
+bulk review 5's unsure routes (a Push, a Put, a local, a choice, a captured slice) - the scope pass refuses it at the
+parameter (`refuseKept`, D9e's error), naming the two ways out: a copy of its own written in the body, a value assigned
+from the parameter (`c T = p`, E12's reference into value, the copy then kept - O26a lifts the local to the result
+scope), or the parameter taken `p T&`, sharing the caller's storage. The error carries the bare-parameter note, so
+`param_migrate` takes the second (a token edit; a written copy would be a body rewrite) - so std's `Split` and `Lines`,
+made bare by D9d and kept as copies by their callers until now, share their receiver again (`t String&`), as their
+views say. Left as they were (the user's points 2-4): F7's copy at a spawn and 2.10's call-may-write copies (undecided),
+and `.Clone()` (it waits on the handles decision, round 3). And `keptByResult` no longer guesses "kept" for an instance
+whose declaration's result is a type variable (a Vec's `At` giving a `T` bound to a function type): such a body builds no
+value of it, it gives back what it was given (mine); nor for a parameter whose own storage the body never names - never
+given whole to a call, a local other than a match's held subject, a choice's alternative or a capture, never viewed
+through (`ownNamed`): json's `AsArr` returns its bare `j`'s `Arr` payload, a reference read out of it, and had been
+refused (mine). tests/params/{kept, keptroutes}.olang now write their copies;
+tests/params/fail/keptbare{, struct, push}.olang hold the error.
+
+### 15.8 The hidden copies settled; C's pointers (the user's decisions)
+
+The rule (the user, through the coordinator): a bare value passed by pointer is copied exactly where one of two
+guarantees cannot be proved, copying only the parts that may change, each copy listed by `-memory`.
+
+- **(A) The callee does not write it.** An olang body is checked: never a copy. C's `const T*` is trusted (breaking
+  it is X1a's unchecked hole, stated in SPEC). A non-const `T*` - `p T&`, written `mut` in a C import's translation,
+  which reads C's `const` off it - given an owned value (a local, a field reached from one, a `&` parameter's storage)
+  borrows it writably (E12c): no copy. Given what may not be lent writably it is copied, because old C APIs leave out
+  `const`: a bare parameter whole is the body's own copy, made on entry (D9's rule for an olang `&` parameter, so the body
+  sees what C wrote); constant data, an immutable global and a read-only view are copied for the call, in its block.
+- **(B) Nothing else changes it during the call.** Seen code (bodies, a lambda written at the call) is analysed as
+  before (`AliasCopies`, `lambdaWritesNothing`); unseen code (a function value, an `any`, a spawn's join block, F7)
+  copies. A C call copies only where some export fn of the program may write that storage type, since C may call back
+  into one (`exportWrites`: the F7 write walk over every export fn's body, by type) - and then only what may change: a
+  mutable global's storage, a read-only view not made from what cannot change. Another thread outside a join is the
+  program's own race: no copy.
+
+How it is built: the checker (`argExtern`, `externLent`) leaves an argument for a C pointer not `const` typed
+read-only where it may not be lent writably - converting a reference typed writable that is read-only by what it is
+read out of (an immutable global's, a view of a read-only level), lending an immutable global's place read-only -
+instead of T25c's or X22's error; a bare parameter whole and a field read-only by inference take their usual ways
+(the body's own copy on entry, the field written). The scope pass's `externCopies` marks each argument to copy in
+`ArgTemp`; lowering (`externCopy`) copies it as the argument's own type holds it, before it is made the pointer C takes
+(a `CVoid?&` too), and counts it (`-memory`: "N for a C function"). A `?&` given a pointer not `const` keeps T25c.
+
+Found with it: an export fn taking `CStr?&` did not fit a C function pointer's under the switch (read-only in the C
+import, writable in olang) - an extern type's reference has no permission that says anything (X10), so function types
+ignore it there, and the function is passed as it is, its C entry. And a read-only view local never assigned, made from
+what cannot change (`tail := data[sent:]` of a bare `data`), is stable itself (`roViewStable`) - else std/io's `Write`
+would copy every tail before `write` in a program with an export fn; it relaxes 2.10's copies for olang calls too (for
+the bulk review, 15.4).
+
+Not built: copying only the parts that may change (a whole array or struct is copied) - round 3. And one point for the
+user: the coordinator's summary said a bare parameter, constant data, an immutable global or a read-only view given an
+olang `&` parameter is an error; under D9 a bare parameter given whole is the body's own copy, made on entry, not an
+error - kept so, C and olang alike, until the user says otherwise.
+
+tests/params/cpointers.olang (with cptr/cptr.c) runs the cases: a bare parameter (C's write seen by the body, not the
+caller), a view and an immutable global (copied for the call), an owned array (lent), a `const` pointer (read in place),
+and a mutable global under an export fn that writes it (copied).

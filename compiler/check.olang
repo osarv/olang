@@ -279,6 +279,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     retFollows Bool = false   # an instance's result written as a type variable being returned (T25c's generic rule)
     argFollows Bool = false   # an argument for an instance's type variable's reference parameter (judged at the settle)
     argCtor Bool = false      # an argument for a constructor's or a case's "&" parameter: what it builds holds it as given
+    argExtern Bool = false    # an argument for an extern's writable pointer: what may not be lent writably is copied (X22)
     levelOn Vec<levelSite>    # the written reference levels a store being checked reaches (levelRo): its target's local's
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
     walkBind Bool = false     # a for-in's collection bound to its hidden reference: no use of its own (walkBound, D9d)
@@ -7254,6 +7255,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         return x
     }
     if have == want or c.P.T.Same(have, want) {
+        # (X22: read-only by what it is read out of, given a C function's pointer not "const" - typed read-only, so
+        # the scope pass copies it for the call)
+        if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 and source.NewParams and c.argExtern and not c.P.T.IsNullable(have) and c.roRef(x) {
+            if c.externLent(x) { return x }
+            return c.convert(sp, x, c.P.T.Ref(c.P.T.Referent(have), c.P.T.PermOf(have) & ~types.Writable))
+        }
         if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 { c.roWritableRef(x, sp) }
         return x
     }
@@ -7335,7 +7342,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     }
     # a function value where one of looser permissions is wanted (T22): a read-only parameter for a writable one, a
     # writable result for a read-only one
-    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
+    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) {
+        # (an export fn given C as it is - its C entry - where the two differ only in an extern type's reference's
+        # permission, which says nothing, X10, X13)
+        if source.NewParams and namedFn(x) and c.foreignPermOnly(have, want) { return x }
+        return c.convert(sp, x, want)
+    }
     # (bulk review 5, F5: a named function taking a bare parameter by pointer, where a function type passes it by value
     # - a generic's "fn(x T) T" with T the value type: a value of that type, lowering's by-value wrapper calling it)
     if source.NewParams and hk == types.Kind.Func and wk == types.Kind.Func and namedFn(x) and c.funcFits(c.byValueType(have, want), want, true) and x == typed.Expr.Fn {
@@ -7393,6 +7405,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             }
             p := readPlace(x)
             if p is not null {
+                # (X22, as above: a place that may not be written - an immutable global's - lent read-only, copied for
+                # the call)
+                if source.NewParams and c.argExtern and not c.placeWritable(p) { return typed.Expr.Borrow(sp, c.P.T.Ref(r, c.P.T.PermOf(want) & ~types.Writable), p) }
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
@@ -7462,6 +7477,14 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 return c.fit(c.convert(sp, x, c.P.T.Ref(hr, (c.P.T.PermOf(have) & types.Writable) | (c.P.T.PermOf(want) & types.Owning))), want, sp)
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
+                # the rework's round 2 (X22): a C function's pointer not "const" given what may not be lent writably -
+                # constant data, an immutable global, a read-only view - is given a copy, made for the call (the scope
+                # pass's ArgTemp): old C interfaces leave "const" out of what they only read. A bare parameter whole is
+                # the body's own copy, made on entry, as where an olang function's "&" parameter is given it (D9)
+                if source.NewParams and c.argExtern and not c.P.T.IsNullable(have) {
+                    c.externLent(x)
+                    return x
+                }
                 # an instance's type variable's reference parameter: as read-only as this argument (settled)
                 if source.NewParams and c.argCtor { c.ctorRoArg(sp, x) }
                 if source.NewParams and (c.argFollows or c.argCtor) { return c.convert(sp, x, want) }
@@ -7492,6 +7515,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
                 return x
+            }
+            # (X22, as above: a reference typed writable but read-only by what it is read out of - an immutable
+            # global's, a view of a read-only level - typed read-only, so the scope pass copies it)
+            if (c.P.T.PermOf(want) & types.Writable) != 0 and source.NewParams and c.argExtern and not c.P.T.IsNullable(have) and c.roRef(x) {
+                if c.externLent(x) { return x }
+                return c.convert(sp, x, c.P.T.Ref(hr, c.P.T.PermOf(have) & ~types.Writable))
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp) { return x }
             if c.P.T.Same(hr, wr) { return x }
@@ -7634,6 +7663,11 @@ fn (c mut Checker&) cStruct(t types.TypeId) Bool {
 fn (c mut Checker&) cBorrow(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     if c.isRef(have) {
+        # (the rework's round 2: what may not be lent writably is copied for the call, the scope pass's ArgTemp)
+        if c.writable(want) and source.NewParams and not c.P.T.IsNullable(have) and (not c.writable(have) or c.roRef(x)) {
+            if c.externLent(x) or not c.writable(have) { return x }
+            return c.convert(sp, x, c.P.T.Ref(c.P.T.Referent(have), c.P.T.PermOf(have) & ~types.Writable))
+        }
         if c.writable(want) and not c.writable(have) { c.err(sp, msgs.CPointerReadOnly(c.ty(have))) }
         return x
     }
@@ -7643,8 +7677,16 @@ fn (c mut Checker&) cBorrow(x typed.Expr&c, want types.TypeId, sp source.Span) t
         c.err(sp, msgs.CPointerTemporary(c.ty(have)))
         return x
     }
+    if c.writable(want) and source.NewParams and not c.placeWritable(p) { return typed.Expr.Borrow(sp, c.P.T.Ref(have, 0), p) }
     if c.writable(want) { c.mustWrite(p, sp, false) }
     return typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable if c.writable(want) else 0), p)
+}
+
+# the rework's round 2 (X22): a read-only argument for a C function's pointer not "const" - a bare parameter whole made
+# the body's own copy, on entry (as for an olang "&" parameter, D9), or a field read-only by inference written; true
+# where either is asked for (the program checked again), else the argument is copied for the call (scope.externCopies)
+fn (c mut Checker&) externLent(x typed.Expr&) Bool {
+    return c.wantCopy(c.bareWhole(x)) or c.fieldsWrite(x)
 }
 
 # whether t is a reference to the prelude's CVoid (X18)
@@ -9454,6 +9496,18 @@ fn (c mut Checker&) byValueType(h types.TypeId, w types.TypeId) types.TypeId {
     return c.P.T.Func(c.P.T.List(out), c.P.T.Result(h), c.P.T.Errors(h), c.P.T.ScopesOf(h))
 }
 
+# whether two function types differ only in the permission of extern types' references among their parameters (X10)
+fn (c mut Checker&) foreignPermOnly(h types.TypeId, w types.TypeId) Bool {
+    hp := c.P.T.Items(c.P.T.Params(h))
+    wp := c.P.T.Items(c.P.T.Params(w))
+    if hp.Len() != wp.Len() or not c.P.T.Same(c.P.T.Result(h), c.P.T.Result(w)) or c.P.T.Errors(h) != c.P.T.Errors(w): return false
+    for i in range hp.Len() {
+        if c.P.T.Same(hp[i], wp[i]): continue
+        if not (c.foreignRef(hp[i]) and c.foreignRef(wp[i]) and c.P.T.Same(c.deref(hp[i]), c.deref(wp[i]))): return false
+    }
+    return true
+}
+
 fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     hp := c.P.T.Items(c.P.T.Params(h))
     wp := c.P.T.Items(c.P.T.Params(w))
@@ -9461,7 +9515,9 @@ fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     for i in range hp.Len() {
         if c.P.T.Same(hp[i], wp[i]) { continue }
         if not (c.isRef(hp[i]) and c.isRef(wp[i]) and c.P.T.Same(c.deref(hp[i]), c.deref(wp[i]))) { return false }
-        if (c.P.T.PermOf(hp[i]) & types.Writable) != 0 and (c.P.T.PermOf(wp[i]) & types.Writable) == 0 { return false }
+        # (X10: an extern type's reference has no permission that says anything - an export fn's "CStr?&" fits a C
+        # function pointer's, which a C import reads as read-only where "mut" is left out)
+        if (c.P.T.PermOf(hp[i]) & types.Writable) != 0 and (c.P.T.PermOf(wp[i]) & types.Writable) == 0 and not (source.NewParams and c.foreignRef(hp[i])) { return false }
     }
     hr := c.P.T.Result(h)
     wr := c.P.T.Result(w)
@@ -10927,6 +10983,7 @@ fn (c mut Checker&) argFor(ps Array<types.TypeId>&, k I64, target typed.Callee&,
     c.argK = k
     c.argFollows = c.argRef and c.argBody >= 0 and c.instanceBody(c.argBody) and c.tvRefParam(c.argBody, k)
     c.argCtor = c.argRef and c.argBody >= 0 and c.builds(c.argBody)
+    c.argExtern = c.argRef and target == typed.Callee.Extern
     if not c.argRef { return }
     c.argName = "the parameter"
     if f < 0 { return }
@@ -14136,6 +14193,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.argBody = -1
         c.argFollows = false
         c.argCtor = false
+        c.argExtern = false
         c.roArgFor(c.bodyOfCallee(target), 0, rx, recv.Span(), c.calleeName(f))
         c.exprs.Push(rx)
         k = 1
@@ -14183,6 +14241,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             c.argBody = -1
             c.argFollows = false
             c.argCtor = false
+            c.argExtern = false
             c.nullDecl = wasPre
         } else if args.Len() > 0 and i < args.Len() {
             isDefault := false
@@ -14219,6 +14278,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.argBody = -1
                     c.argFollows = false
                     c.argCtor = false
+                    c.argExtern = false
                     c.nullDecl = wasNull
                     if c.cCallback(target, f) and c.P.T.KindOf(ps[k]) == types.Kind.Func { c.callbackArg(e!, c.argSpan(args[i])) }
                 }
