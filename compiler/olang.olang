@@ -689,7 +689,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
 # each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
 # paths and those of every module its imports reach, in their order, and the prelude's
 fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>&cfg {
-    mods := l.Mods
+    mods Vec<mut load.Module&>&l = l.Mods
     n := mods.Len()
     keys mut Array<String&>&cfg = Array<String&>(n, "")     # "" for none
     # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
@@ -1122,7 +1122,7 @@ test "the options are recorded wherever they stand, and passed on as written" {
     assert cl.Mode == Test and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
     assert c.Race and c.Debug and not c.San and not c.Update and cl.Spec == "x86-64"
     assert c.Consts.Raw("N") == "3"
-    p := cl.Passed
+    p Vec<String&>&cl = cl.Passed
     assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
     assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()

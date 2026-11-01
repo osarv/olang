@@ -112,7 +112,7 @@ fn (w mut walker&) elemsOf(x ast.Expr&) I64 {
 
 fn (w mut walker&) need(k I64, what String&) {
     if k < 0 or k >= w.found.Len() or w.found[k].Has(what) { return }
-    w.found[k].Push($what)
+    w.found.Ref(k).Push($what)
 }
 
 # what variable k needs that its written constraint does not promise
@@ -127,7 +127,7 @@ fn (w mut walker&) unpromised(k I64) Vec<String&> {
             w.traitMethods(tr, promised)
         }
     }
-    for n in w.found[k] {
+    for n in w.found.Ref(k) {
         if promised.Has(n) or (closed and opNeed(n)) { continue }
         out.Push(n)
     }

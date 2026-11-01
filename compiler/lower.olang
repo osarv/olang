@@ -636,8 +636,8 @@ fn (ln mut lowering&) regionSite(x typed.Expr&) I64 {
 
 # the sole places a place's let-go releases: the place itself, or the leaves of a struct held in it - each by the
 # fields that reach it from the place, and a handle's reference, field 0
-fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I64>&> {
-    out Vec<Array<I64>&>
+fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I64>> {
+    out Vec<Array<I64>>
     if not ln.freeing { return out }
     # an element given a value lets go of nothing: the program's copies between elements are not known positions, and
     # the prelude's chunks are filled with the very value pushed (docs/memory.md 2.6 item 7) - only a vacate does
@@ -667,7 +667,7 @@ fn (ln mut lowering&) releases(p typed.Lvalue&, assign Bool = false) Vec<Array<I
 }
 
 # what local l holds released, at each of the paths: a sole place's old value let go of
-fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>&>&, sp source.Span) {
+fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>>&, sp source.Span) {
     for path in paths {
         q := pl(mir.Base.Local(l))
         for i in path { q = ln.with(q, mir.Proj.Field(i)) }
@@ -813,15 +813,16 @@ fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs ty
     for ln.levels.Len() > i { saved.Push(try ln.levels.Pop() catch { unreachable }) }
     savedT mut Vec<tryCtx>&ln = Vec<tryCtx>()
     for ln.tries.Len() > 0 and ln.tries[ln.tries.Len() - 1].Depth > i { savedT.Push(try ln.tries.Pop() catch { unreachable }) }
-    pushed := false
+    pushed := -1
     for k in range ln.joinS.Len() {
         if ln.joinS[k] == s {
             ln.tries.Push(ln.joins[k])
-            pushed = true
+            pushed = k
         }
     }
     ln.dispatch(code, errs, sp)
-    if pushed { try ln.tries.Pop() catch { } }
+    # (the entries its clauses were given, back in the join's own record)
+    if pushed >= 0 { ln.joins[pushed] = try ln.tries.Pop() catch { unreachable } }
     for savedT.Len() > 0 { ln.tries.Push(try savedT.Pop() catch { unreachable }) }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
 }
@@ -1147,7 +1148,7 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
     ln.start(head)
     ln.loops.Push(loopCtx(body.Id, ln.levels.Len()))
     ln.block(body)
-    lc := ln.loops[ln.loops.Len() - 1]
+    lc := ln.loops.Ref(ln.loops.Len() - 1)
     # falling off the body's end continues, as a continue does
     ln.leaveOpen(lc.conts)
     if lc.conts.Len() > 0 {
@@ -1155,13 +1156,13 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
         if post is not null { ln.block(post) }
         ln.goto(head)
     }
-    try ln.loops.Pop() catch { }
-    ln.patch(lc.brk)
+    done := try ln.loops.Pop() catch { return }
+    ln.patch(done.brk)
 }
 
 fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.BlockId) {
     for k := ln.loops.Len() - 1, k >= 0, k-- {
-        lc := ln.loops[k]
+        lc := ln.loops.Ref(k)
         if lc.Body == loop {
             ln.leave(lc.Depth)
             if kind == typed.JumpKind.Break { ln.leaveOpen(lc.brk) } else { ln.leaveOpen(lc.conts) }
@@ -1366,11 +1367,11 @@ fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
     ln.joinS.Push(ln.top().S)
     for s in j.Code.Stmts { ln.stmt(s) }
     ln.closeBlock()
-    try ln.joins.Pop() catch { }
+    done := try ln.joins.Pop() catch { return }
     try ln.joinS.Pop() catch { }
     ends Vec<mir.BlockId>
     ln.leaveOpen(ends)
-    ln.clauses(tc, j.Clauses, mir.NoLocal, types.VoidT, ends)
+    ln.clauses(done, j.Clauses, mir.NoLocal, types.VoidT, ends)
     ln.patch(ends)
 }
 
@@ -1701,7 +1702,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     covered := Array<Bool>(xs.Len())
     left := xs.Len()
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
-        tc := ln.tries[ti]
+        tc := ln.tries.Ref(ti)
         for ci in range tc.Clauses.Len() {
             if ln.dead { return }
             cl := tc.Clauses[ci]
@@ -1769,7 +1770,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
 
 # from here to clause ci of try tc: the error, where the clause names it, recoded from its list to the clause's own set
 # (R11b), then the scopes opened since the try closed, then a jump to the clause's entry
-fn (ln mut lowering&) toClause(tc tryCtx, ci I64, code mir.Operand, from types.ListId) {
+fn (ln mut lowering&) toClause(tc mut tryCtx&, ci I64, code mir.Operand, from types.ListId) {
     cl := tc.Clauses[ci]
     if cl.Caught >= 0 {
         bind := mir.L(mir.LocalId(I32(cl.Caught)))
@@ -1795,18 +1796,19 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     for _ in t.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.tries.Push(tc)
     v := ln.val(t.X)
-    try ln.tries.Pop() catch { }
+    # (the clauses' entries the errors reaching them made, as the try's record on the stack has them)
+    done := try ln.tries.Pop() catch { return mir.Operand.None }
     ends Vec<mir.BlockId>
     if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
         ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
         if relK >= 0 {
-            rel Vec<Array<I64>&>
+            rel Vec<Array<I64>>
             rel.Push(I64[0] if relK == 1 else Array<I64>(0))
             ln.releaseAt(slot, rel, sp)
         }
     }
     ln.leaveOpen(ends)
-    ln.clauses(tc, t.Clauses, slot, ty, ends)
+    ln.clauses(done, t.Clauses, slot, ty, ends)
     ln.patch(ends)
     if slot == mir.NoLocal { return mir.Operand.None }
     return mir.Operand.Copy(mir.L(slot))
@@ -2024,7 +2026,7 @@ fn (ln mut lowering&) take(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
 # a statement's value dropped (S3): a vacate of a sole place releases what it held, and so does a call's result that is
 # a value moved out of one (Pop, TakeAt, Take), once the statement has it (O8d)
 fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
-    rel Vec<Array<I64>&>
+    rel Vec<Array<I64>>
     match x {
         case typed.Expr.Take(_, _, p) { rel = ln.releases(p) }
         case _ {
@@ -4836,7 +4838,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
 # in braces; an entry holding some words of a type, those words ("os.Error.Denied") - each qualified as its values are
 # (B5: "lib.Both", the prelude's and the root program's own bare), so "Vec<lib.Both>[lib.LibErr.B]" reads alike
 fn (lw mut Lowerer&) ErrValSpelling(ty types.TypeId) String {
-    t := lw.P.T
+    t types.Table&lw = lw.P.T
     nd := t.ErrValName(ty)
     if nd >= types.DeclId(0) { return $lw.errQualifier(nd) $t.Names.Text(t.DeclName(nd)) }
     es := t.Items(t.ErrValItems(ty))

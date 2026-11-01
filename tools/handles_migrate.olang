@@ -8,6 +8,8 @@
 #   - a local declared from an element a Vec gives ("e := vv[i]") or a value a Map gives ("g := try m.Get(k)"), and
 #     written, takes the element where the collection holds it ("vv.Ref(i)", "try m.Ref(k)");
 #   - a by-value parameter its body writes ("fn add(v Vec<I64>, x I64)") is lent writably ("v mut Vec<I64>&");
+#   - an element a call would change in place where "x[i]" gives a copy (E31b) is taken where its Vec holds it,
+#     "x.Ref(i).Push(y)";
 #   - "x.Clone()" on one of the six becomes "x": a value place given it copies (E12) - but "y := x.Clone()" of a
 #     reference x, where ":=" would name the same storage, is listed for a person.
 # What the report cannot decide is listed for a person to look at: a copy a function hands back, a local given another
@@ -66,12 +68,23 @@ fn cloneRow(row String&) edit ? NoRow {
     return edit($r.Path, r.Line, r.Col, "clone", "", $ty, "")
 }
 
+# a diagnostic that a call would write the copy "x[i]" gives (E31b) - an element of a Vec changed in place - as an edit
+fn elemRow(row String&) edit ? NoRow {
+    r := try diagedit.ParseRow(row) catch { error NoRow }
+    if not r.IsError or not r.Msg.StartsWith("x[i] gives a copy"): error NoRow
+    return edit($r.Path, r.Line, r.Col, "elem", "", "", "")
+}
+
 # the edits a compilation's output asks for in the allowed paths - none from a must-fail case's expected rows
 fn editsFrom(out String&, allowed Vec<String&>&, expected Vec<String&>&, eds mut Vec<edit>&) {
     for row in out.Lines() {
         if diagedit.ContainsAny(row, expected): continue
         e := try reportRow(row) catch {
-            c := try cloneRow(row) catch { continue }
+            c := try cloneRow(row) catch {
+                x := try elemRow(row) catch { continue }
+                if diagedit.Allowed(diagedit.RealPathOf(x.Path), allowed): eds.Push(x)
+                continue
+            }
             if diagedit.Allowed(diagedit.RealPathOf(c.Path), allowed): eds.Push(c)
             continue
         }
@@ -182,6 +195,41 @@ fn asLent(line String&, e edit&) String ? NoEdit {
     return $line[:t0] "mut " $ty "&" $line[t0 + ty.Len():]
 }
 
+# the line with the element "x[i]" at col - its "[", or the member read out of it - taken where its collection holds it:
+# "x.Ref(i)"
+fn asElem(line String&, e edit&) String ? NoEdit {
+    i := e.Col - 1
+    if i < 0 or i >= line.Len(): error NoEdit
+    if line[i] != '[' {
+        if i < 2 or line[i - 1] != '.' or line[i - 2] != ']': error NoEdit
+        # the "[" matching the "]" before the member
+        d := 0
+        k := i - 2
+        for k >= 0 {
+            if line[k] == ']': d++
+            if line[k] == '[' {
+                d--
+                if d == 0: break
+            }
+            k--
+        }
+        if k <= 0: error NoEdit
+        i = k
+    }
+    d := 0
+    j := i
+    for j < line.Len() {
+        if line[j] == '[': d++
+        if line[j] == ']' {
+            d--
+            if d == 0: break
+        }
+        j++
+    }
+    if j >= line.Len(): error NoEdit
+    return $line[:i] ".Ref(" $line[i + 1:j] ")" $line[j + 1:]
+}
+
 # the line with ".Clone()" at col left out
 fn asValue(line String&, e edit&) String ? NoEdit {
     i := e.Col - 2
@@ -248,6 +296,7 @@ fn changed(line String&, e edit&) String ? NoEdit {
         case "call": try asRef(line, e)
         case "param": try asLent(line, e)
         case "clone": try asValue(line, e)
+        case "elem": try asElem(line, e)
         case _: error NoEdit
     }
 }
@@ -376,6 +425,13 @@ test asLent "a written by-value parameter lent writably" {
     assert (try asLent("fn pushTo(v Vec<I64>, x I64) {", e)) == "fn pushTo(v mut Vec<I64>&, x I64) {"
     m := edit("f", 1, 11, "param", "m", "", "")
     assert (try asLent("fn pushTo(m Map<K, V>) {", m)) == "fn pushTo(m mut Map<K, V>&) {"
+}
+
+test asElem "an element changed where its Vec holds it" {
+    e := edit("f", 1, 12, "elem", "", "", "")
+    assert (try asElem("    w.found[k].Push($what)", e)) == "    w.found.Ref(k).Push($what)"
+    m := edit("f", 1, 19, "elem", "", "", "")
+    assert (try asElem("        g.recs[r].Names.Push(x)", m)) == "        g.recs.Ref(r).Names.Push(x)"
 }
 
 test asValue "a Clone left out" {

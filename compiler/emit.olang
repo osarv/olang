@@ -206,7 +206,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 fn (e mut Emitter&) Objects() Vec<Object> {
     e.emitAll()
     out Vec<Object>
-    mods := e.P.L.Mods
+    mods Vec<mut load.Module&>&e = e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
         if not e.dbg() { e.mergeSame() }
@@ -285,7 +285,7 @@ fn (e mut Emitter&) Objects() Vec<Object> {
 # imports from - stay as they were, where with the instances cut by their symbols' hashes alone a new instance changed
 # a part every module imported, and the link redid nearly every module's code
 fn (e mut Emitter&) instGroups() {
-    mods := e.P.L.Mods
+    mods Vec<mut load.Module&>&e = e.P.L.Mods
     root := e.P.L.Root
     order Vec<I64>
     for m in range mods.Len() {
@@ -428,7 +428,7 @@ fn (e mut Emitter&) parts(out mut Vec<Object>&, identity String&, kind ObjectKin
 fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
     its Vec<I64>
     for l in locs { its.Push(l.Key) }
-    syms := e.itemSym
+    syms Vec<String&>&e = e.itemSym
     sorted := its.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     b := StringBuilder()
@@ -811,7 +811,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             mine.Push(i)
         }
     }
-    syms := e.itemSym
+    syms Vec<String&>&e = e.itemSym
     sorted := mine.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     order Vec<I64>
@@ -974,7 +974,7 @@ fn (e mut Emitter&) initOrder() Vec<I64> {
     with := e.Lw.InitModules()
     done Map<I64, Bool>
     order Vec<I64>
-    mods := e.P.L.Mods
+    mods Vec<mut load.Module&>&e = e.P.L.Mods
     for m in range mods.Len() {
         if mods[m].Prelude { e.visit(m, done, order) }
     }

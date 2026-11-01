@@ -2402,7 +2402,7 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
         case _ { }
     }
-    t := s.P.T
+    t types.Table&s = s.P.T
     if t.Role(fty) == types.RoleCtor { return true }
     sj := t.ShareOf(fty, j)
     if sj == types.FromTypeVar { return true }
@@ -4288,7 +4288,9 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         # storage's (O17a)
         match x {
             case typed.Expr.Borrow(_, _, bp) {
-                if s.splitPlace(bp) { s.splitHome.Put(I64(l), s.partsTerm(bp)) }
+                # (QCE: a value holding references by value in parts of its own - a Vec of structs holding text - read
+                # where they live too, whatever could be stored through them)
+                if s.splitPlace(bp) or s.splitHeld(bp) { s.splitHome.Put(I64(l), s.partsTerm(bp)) }
             }
             case _ { }
         }
@@ -4492,7 +4494,7 @@ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
     }
     first := not s.late.Has(l)
     if first { s.late.Put(l, Vec<Term>()) }
-    ts := try s.late.Get(l) catch { return }
+    ts := try s.late.Ref(l) catch { return }
     for w in range n {
         t := s.bindTerms[s.ctorFrom + w]
         if first {
@@ -5579,6 +5581,18 @@ fn (s mut Scoper&) splitPlace(p typed.Lvalue&) Bool {
     match refs {
         case Term.Set(_) { return true }
         case Term.None, Term.Untraced { return false }
+        case _ { }
+    }
+    return stor != Term.None and stor != Term.Untraced and refs != stor
+}
+
+# whether a place holds a value owning storage (QCE: types.OwnsParts) whose references live elsewhere than its storage
+fn (s mut Scoper&) splitHeld(p typed.Lvalue&) Bool {
+    if flThroughRef(p) or s.isRef(p.Type()) or not s.P.T.OwnsParts(p.Type()) or not s.P.T.SharesRefs(p.Type()) { return false }
+    refs := s.peekPlace(p, true)
+    stor := s.peekPlace(p, false)
+    match refs {
+        case Term.Set(_), Term.None, Term.Untraced { return false }
         case _ { }
     }
     return stor != Term.None and stor != Term.Untraced and refs != stor

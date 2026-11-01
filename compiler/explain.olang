@@ -630,7 +630,7 @@ fn quoted(s String&) String {
 # first; a call through a function value runs code of some module, whose own line says what it reaches
 fn Caps(c mut typecheck.Checker&) String {
     fx := c.Effects()
-    mods := c.P.L.Mods
+    mods := c.P.L.Mods.View()
     reach := Array<effects.Facts>(mods.Len(), effects.Facts())
     for b in range c.Bodies.Len() {
         mi := fx.ModuleOf(b)

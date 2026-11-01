@@ -98,24 +98,24 @@ type state struct() {
 fn (s state&) copy() state {
     c := state()
     c.Dead = s.Dead
-    c.Holds = s.Holds.Clone()
-    c.Names = s.Names.Clone()
-    c.Named = s.Named.Clone()
-    c.Tasks = s.Tasks.Clone()
+    c.Holds = s.Holds
+    c.Names = s.Names
+    c.Named = s.Named
+    c.Tasks = s.Tasks
     return c
 }
 
 fn (s mut state&) set(o state&) {
     s.Dead = o.Dead
-    s.Holds = o.Holds.Clone()
-    s.Names = o.Names.Clone()
-    s.Named = o.Named.Clone()
-    s.Tasks = o.Tasks.Clone()
+    s.Holds = o.Holds
+    s.Names = o.Names
+    s.Named = o.Named
+    s.Tasks = o.Tasks
 }
 
 # what local id holds forgotten, and its being a second name
 fn (s mut state&) forget(id I64) {
-    hs := s.Holds.Clone()
+    hs Vec<holding>&s = s.Holds
     s.Holds.Clear()
     for h in hs {
         if h.L != id { s.Holds.Push(h) }
@@ -124,12 +124,12 @@ fn (s mut state&) forget(id I64) {
 }
 
 fn (s mut state&) unname(id I64) {
-    ns := s.Names.Clone()
+    ns Vec<naming>&s = s.Names
     s.Names.Clear()
     for n in ns {
         if n.L != id { s.Names.Push(n) }
     }
-    ls := s.Named.Clone()
+    ls Vec<I64>&s = s.Named
     s.Named.Clear()
     for l in ls {
         if l != id { s.Named.Push(l) }
@@ -377,7 +377,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
                             match st {
                                 case ast.Stmt.Var(_, vd) {
                                     if vd.Field {
-                                        for n in vd.Names { v.nameLists[k].Push(n) }
+                                        for n in vd.Names { v.nameLists.Ref(k).Push(n) }
                                     }
                                 }
                                 case _ { }
@@ -1316,7 +1316,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     argRefs Vec<Vec<view>>
     for i in range n {
         argRefs.Push(Vec<view>())
-        v.expr(c.Args[i], st, argRefs[i])
+        v.expr(c.Args[i], st, argRefs.Ref(i))
     }
     tok := v.callTok(sp, c)
     name := v.str(v.quoted(callee))

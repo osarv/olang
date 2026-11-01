@@ -308,8 +308,8 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
         if k == "RecordDecl" { g.recordDecl(f, text(f, "name"), own) }
         if k != "FieldDecl" { continue }
         if flag(f, "isBitfield") { g.recs[r].Bitfields = true }
-        g.recs[r].Names.Push(text(f, "name"))
-        g.recs[r].Types.Push(typeOf(f))
+        g.recs.Ref(r).Names.Push(text(f, "name"))
+        g.recs.Ref(r).Types.Push(typeOf(f))
     }
 }
 

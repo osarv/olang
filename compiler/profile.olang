@@ -571,7 +571,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         b.Push("  no samples: the program used less CPU time than one period\n")
         return b.ToString()
     }
-    fns := t.Fns.Clone()
+    fns mut Vec<I64>&t = t.Fns
     fns.Sort(fn(x I64, y I64) Bool {
         sx := try t.Self.Get(x) catch default 0
         sy := try t.Self.Get(y) catch default 0
@@ -590,7 +590,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         b.Push($"  " $pct(sw, total).PadStart(6) " " $pct(tw, total).PadStart(6) "  " $pl.Names[f] "\n")
         shown++
     }
-    lines := t.LineKeys.Clone()
+    lines mut Vec<I64>&t = t.LineKeys
     lines.Sort(fn(x I64, y I64) Bool {
         wx := try t.Lines.Get(x) catch default 0
         wy := try t.Lines.Get(y) catch default 0
@@ -704,7 +704,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
             if next < 0 {
                 next = nodes.Len()
                 nodes.Push(node(fun, nodes[at].Depth + 1))
-                nodes[at].Kids.Push(next)
+                nodes.Ref(at).Kids.Push(next)
             }
             nodes[next].Weight += s.Weight
             at = next
@@ -725,7 +725,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
     for _ in nodes { xs.Push(0) }
     for i := 0, i < order.Len(), i++ {
         id := order[i]
-        kids := nodes[id].Kids.Clone()
+        kids := nodes[id].Kids
         kids.Sort(fn(a I64, b I64) Bool { return pl.Names[nodes[a].Fn] < pl.Names[nodes[b].Fn] })
         x := xs[id]
         for c in kids {

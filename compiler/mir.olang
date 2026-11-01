@@ -502,7 +502,7 @@ fn (f mut Fn&) NewBlock() BlockId {
 # through a local: stage 0 builds the first chunk of a list pushed to as `f.Blocks[i].Stmts.Push(s)` (E31b's held copy
 # of an element of a parameter's list) where the call's frame is, and frees it on return
 fn (f mut Fn&) Add(b BlockId, s Stmt&) {
-    blk := f.Blocks[I64(b)]
+    blk := f.Blocks.Ref(I64(b))
     blk.Stmts.Push(s)
 }
 

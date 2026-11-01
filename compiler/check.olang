@@ -197,8 +197,6 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     queued I64 = 0
     state Vec<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
-    capSaid Map<pair.Pair<I64, I64>, Bool> # D9c: the parameters already reported, by file and position - once each
-    byValSaid Map<pair.Pair<I64, I64>, Bool>   # D9a: parameters reported as arrays by value - a pun of one adds no T7a
     ctorBodies Map<pair.Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
     instsOf Map<I64, I64>                  # by generic function: how many instances were made (G17)
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
@@ -845,7 +843,7 @@ fn (c mut Checker&) onlyFixed(x ast.Expr?&) Map<source.NameId, I64> ? NotFixed {
     c.fixedOut = Map<source.NameId, I64>()
     defer c.fixedOut = saved
     if not c.readsFixed(x) { error NotFixed }
-    return c.fixedOut.Clone()
+    return c.fixedOut
 }
 
 # whether an expression reads no local but fixed ones (S8c), each found put in fixedOut
@@ -3087,19 +3085,17 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, fd.Sp)
     ps := c.P.T.Items(c.P.T.Params(sig))
     k I64 = 0
-    big := false   # D9c broken: an instance's body is not checked, so a length growing by value asks for no larger one
     if fd.Recv is not null {
         if ps.Len() > 0 {
             c.param(fd.Recv!.Name, fd.Recv!.Sp, ps[0], 0, fd.Recv!.Ty)
             c.mutParam(fd.Recv!.Ty!, ps[0])
-            if c.capParam(fd.Recv!, ps[0]) { big = true }
         }
         k = 1
     }
     for prm in fd.S.Params {
         if k < ps.Len() {
             c.param(prm.Name, prm.Sp, ps[k], k, prm.Ty)
-            if c.paramWritten(prm, ps[k], true) { big = true }
+            c.paramWritten(prm, ps[k])
             # D8a: a literal default fits its parameter where it is written, called without it or not (a null for a
             # reference never null, T2c); a parameter of a type variable's is fitted per call (G18)
             if prm.Dflt is not null and c.P.T.Closed(ps[k]) and c.P.T.Items(c.P.InstanceArgs(inst)).Len() == 0 {
@@ -3116,9 +3112,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     # D8e: a noreturn function declares no errors - an error is a way back to its caller
     if nr and fd.S.HasErrors { c.err(c.noreturnSpan(fd.Sp), msgs.NoreturnErrors()) }
     body := fd.Body
-    dropped := big and c.P.T.Items(c.P.InstanceArgs(inst)).Len() > 0
-    if dropped { body = Array<ast.Stmt&>(0) }
-    if gen and not dropped {
+    if gen {
         c.cur().Root = c.genRoot(fd, sig, c.P.GenElem(f))
         c.pop()
         for _ in range pushed { c.P.L.Diags.PopContext() }
@@ -3128,8 +3122,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     root := c.rootStmts(body)
     c.cur().Root = root
     c.viewBody()
-    if dropped and fd.Bodied {
-    } else if nr {
+    if nr {
         if not c.fr().Gapped and not leavesBlock(root) { c.err(c.nameSpan(fd), msgs.NoreturnFallsOff()) }
     } else if c.P.T.Result(sig) != types.VoidT and not c.fr().Gapped and not leavesBlock(root) and not c.P.L.Diags.ErrorWithin(c.fr().File, I64(fd.Sp.Start), I64(fd.Sp.End), c.syntaxMark) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
@@ -3250,41 +3243,11 @@ fn (c mut Checker&) noreturnSpan(sp source.Span) source.Span {
     return source.Span(sp.Start + I32(at + 2), sp.Start + I32(at + 10))
 }
 
-# a parameter as written (D9, D9a, D9c): no "mut" before a value; an array by value only a declared function's, of a
-# plain array (G29: an instance per length), and not over D9c's 128 bytes - a bare type variable aside, which any type
-# may bind (QP4)
-fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId, fnParam Bool = false, ctor Bool = false) Bool {
+# a parameter as written (D9): no "mut" before a value. An array may be taken by value whatever its length (D9a) and a
+# value of any size (D9c's cap is gone): a by-value parameter is the callee's own, copied at the call where anything
+# could tell (check's valueArg, lowering's argView) or by the callee where its body writes a run-time array (D9b)
+fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId) {
     c.mutParam(prm.Ty!, t)
-    if prm.Ty is not null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and fnParam and c.P.T.KindOf(t) == types.Kind.Array {
-        return c.capParam(prm, t)
-    }
-    big := false
-    if c.P.T.KindOf(t) != types.Kind.Array { big = c.capParam(prm, t) }
-    # QCE: a constructor's parameter holding an array of a run-time length by value is what its field keeps, a copy
-    if ctor and c.runArrayValue(t): return big
-    if prm.Ty is not null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and c.P.T.KindOf(c.under(t)) == types.Kind.Array {
-        nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
-        c.err(nsp, msgs.ArrayParamByValue(c.tok(prm.Name), c.src(prm.Ty!.Span()))) # as written: a variable bare (G8b)
-    }
-    return big
-}
-
-# D9c: a by-value parameter written as an aggregate - a struct, an enum, an array - holds at most 128 bytes, its size
-# known where it is laid out (an instance's, an instantiation's); a bare type variable is not covered (QP4). Reported
-# once for a parameter, by the first instance breaking it; whether this one breaks it
-fn (c mut Checker&) capParam(prm ast.Param&, t types.TypeId) Bool {
-    if prm.Ty is null or c.namesTypeVar(prm.Ty) or c.isRef(t) or not c.P.T.Closed(t) { return false }
-    k := c.P.T.KindOf(t)
-    if k != types.Kind.Array and not (c.isStruct(t) or c.isEnum(t)) { return false }
-    if not c.P.Layout(t) { return false }
-    n := c.P.T.Size(t)
-    if n <= 128 { return false }
-    key := pair.Pair(c.fr().File, I64(prm.Sp.Start))
-    if try c.capSaid.Get(key) catch default false { return true }
-    c.capSaid.Put(key, true)
-    nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
-    c.err(nsp, msgs.ParamTooLarge(c.tok(prm.Name), n, c.src(prm.Ty!.Span())))
-    return true
 }
 
 # D9: a by-value parameter is the callee's own copy - "mut" is for a reference (only on the generic's own check: an
@@ -3355,7 +3318,7 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                     for i in range s.Params.Len() {
                         if i < ps.Len() {
                             c.param(s.Params[i].Name, s.Params[i].Sp, ps[i], i, s.Params[i].Ty)
-                            c.paramWritten(s.Params[i], ps[i], ctor = true)
+                            c.paramWritten(s.Params[i], ps[i])
                         }
                     }
                 }
@@ -4485,13 +4448,14 @@ fn (c mut Checker&) hasContract(b I64) Bool {
         c.written(b, sig, sr, k)
     }
     if k.Items.Len() == 0 { return false }
-    info mut typed.ContractInfo&c = typed.ContractInfo(sr.Name, c.P.L.Mods[sr.Mi].File)
-    c.Contracts.Put(b, info)
+    c.Contracts.Put(b, typed.ContractInfo(sr.Name, c.P.L.Mods[sr.Mi].File))
     for i in range k.Items.Len() {
         it := k.Items[i]
         id := c.ctBody(b, i, sig, it.Span())
         c.ctItems(it)
         c.ctFinish(id)
+        # (the requirements in the map's own record - a requirement's check may ask for it while the rest are read)
+        info := try c.Contracts.Ref(b) catch { return true }
         info.Reqs.Push(id)
         info.ReqSps.Push(it.Span())
         info.ReqTexts.Push($c.P.L.Mods[sr.Mi].Src!.Text[I64(it.Span().Start):I64(it.Span().End)])
@@ -5125,7 +5089,7 @@ type factsCopy struct(Nulls Vec<nullNarrow>, Cases Vec<narrowed>, Errs Vec<errNa
 
 fn (c mut Checker&) factsCopied() factsCopy {
     fr := c.fr()
-    return factsCopy(fr.nulls.Clone(), fr.narrows.Clone(), fr.errNarrows.Clone())
+    return factsCopy(fr.nulls, fr.narrows, fr.errNarrows)
 }
 
 fn (c mut Checker&) factsRestored(f factsCopy) {
@@ -7240,7 +7204,7 @@ fn (c mut Checker&) askValue(kind ValueKind, sp source.Span, t types.TypeId, x a
     outer := c.fr()
     mi := outer.Mi
     file := outer.File
-    ctx := outer.Ctx
+    ctx generic.Context&outer = outer.Ctx
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), t, types.ListId(0)), mi, sp)
     c.state[id] = 1
     fr := c.push(id, mi, t, types.ListId(0))
@@ -9847,7 +9811,7 @@ fn (c mut Checker&) roKeepVal(b I64, id I64, x typed.Expr?&) {
     if x is null { return }
     key := pair.Pair(b, id)
     if not c.roVals.Has(key) { c.roVals.Put(key, Vec<typed.Expr&>()) }
-    l := try c.roVals.Get(key) catch { return }
+    l := try c.roVals.Ref(key) catch { return }
     l.Push(x)
 }
 
@@ -11392,15 +11356,13 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 at := c.deref(typeOf(vals[kk]))
                 aa := c.arrayOf(at)
                 if pl != types.TypeId(0) and c.P.T.KindOf(pl) == types.Kind.Var and c.P.T.A(pl) == owner and c.P.T.B(pl) == i and aa != types.UnknownT and c.P.T.Length(aa) == types.TypeId(0) {
-                    pn := c.text(c.P.VarAt(owner, i).Name)
-                    lk := try pn.Find(".Len()") catch default -1
-                    lk = try pn.Find("[0]") catch default lk
-                    if lk >= 0 {
-                        c.err(args[kk].Span() if pre.Len() == 0 else nsp, msgs.ArrayByValueRunTime(msgs.Tok(pn[0:lk]), c.ty(at)))
-                        return c.unknown(sp)
-                    }
+                    # (D9a lifted: an array of a run-time length given where the body decides on its length - an instance
+                    # whose length is known only at run time, deciding there)
+                    b.Vals[i] = types.TypeId(0)
+                    break
                 }
             }
+            if b.Vals[i] != types.UnknownT { continue }
             # G4: one no parameter names is written at the call, or nothing gives it
             seen := Array<Bool>(nv, false)
             for q in ps { c.varsIn(q, owner, seen, 0) }
@@ -15557,9 +15519,9 @@ fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, n source.NameId, now V
                 if c.errLocalName(a) == n {
                     o = b
                 } else if c.errLocalName(b) != n {
-                    return now.Clone()
+                    return now
                 }
-                xs := try c.caughtItems(o) catch NotError { return now.Clone() }
+                xs := try c.caughtItems(o) catch NotError { return now }
                 return c.setMeet(now, xs) if (op == token.Tok.EqEq) == holds else c.setLess(now, xs)
             }
             if op == token.Tok.And {
@@ -15579,7 +15541,7 @@ fn (c mut Checker&) caughtNarrow(x ast.Expr&, holds Bool, n source.NameId, now V
         }
         case _ { }
     }
-    return now.Clone()
+    return now
 }
 
 # R3a, T20: "error e" - an error value raised: what it can be here (its type's set, as narrowing leaves a local's) held
@@ -16426,8 +16388,10 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
-        # (QCE: a value whose parts own storage, given existing storage, is its own copy)
-        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) { x = c.ownCopy(x!) }
+        # (QCE: a value whose parts own storage, given existing storage, is its own copy - but a call's value a scope
+        # argument placed (E25) is made for this declaration alone, and the local takes it where it was put, as an
+        # array's local does, T7b)
+        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) and not scopedValue(x!) { x = c.ownCopy(x!) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
     }
@@ -17646,13 +17610,6 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     for i in range n {
         if ps[i].Ty is not null {
             pts[i] = c.resolve(ps[i].Ty)
-            # D9a: a lambda is a function type's value, which carries no length - its array parameter written by value is
-            # an error (one whose type is left out is the expected type's)
-            if not c.isRef(pts[i]) and c.P.T.KindOf(c.under(pts[i])) == types.Kind.Array and not c.namesTypeVar(ps[i].Ty) {
-                nsp := source.Span(ps[i].Sp.Start, ps[i].Sp.Start + I32(c.text(ps[i].Name).Len()))
-                c.err(nsp, msgs.ArrayParamByValue(c.tok(ps[i].Name), c.src(ps[i].Ty!.Span())))
-                return c.unknown(sp)
-            }
             if w != types.UnknownT and not c.mentionsVar(wps[i], -1) and not c.P.T.Same(pts[i], wps[i]) {
                 if c.isRef(pts[i]) != c.isRef(wps[i]) and c.P.T.Same(c.deref(pts[i]), c.deref(wps[i])) {
                     c.gap(ps[i].Sp, "a lambda parameter written as a reference where a value is expected (D16a)")
@@ -19443,6 +19400,16 @@ fn (c mut Checker&) ownCopy(x typed.Expr&c) typed.Expr&c {
                                                      c.site(typed.SiteKind.Make, sp), typed.Check.None))
 }
 
+# whether x is the value of a call given a scope argument (E25), through a try or a statement-less sequence
+fn scopedValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Call(_, _, cl): typed.ScopedCall(cl)
+        case typed.Expr.Try(_, _, tr): tr.X is not null and scopedValue(tr.X!)
+        case typed.Expr.Away(_, _, y): scopedValue(y)
+        case _: false
+    }
+}
+
 # whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local, global or
 # referent
 fn partPlace(p typed.Lvalue&) Bool {
@@ -19616,7 +19583,7 @@ fn (c mut Checker&) becomeWhere() String {
 # whether two functions' signatures are one jump's (S21): the same parameters in order - types, permissions and where
 # their references live - and the same result, so that the call is made with what the function was given
 fn (c mut Checker&) sameJump(a types.TypeId, b types.TypeId) Bool {
-    t := c.P.T
+    t types.Table&c = c.P.T
     pa := t.Items(t.Params(a))
     pb := t.Items(t.Params(b))
     if pa.Len() != pb.Len() { return false }
@@ -22425,7 +22392,7 @@ fn (c mut Checker&) anyTable(t types.TypeId, r types.TypeId, sp source.Span) I64
             return -1
         }
     }
-    tab := c.P.AnyTables[ti]
+    tab := c.P.AnyTables.Ref(ti)
     mi := c.fr().Mi
     for k in range slots.Len() {
         sl := slots[k]
@@ -22469,7 +22436,7 @@ fn (c mut Checker&) recvReplaced(sig types.TypeId, recv types.TypeId) types.Type
 # T32a: whether a method's signature says of where its references live what the trait's slot does - each parameter after
 # the receiver sharing the same one (none sharing the receiver's), each result built or borrowed from the same one
 fn (c mut Checker&) anyScopesAgree(impl types.TypeId, slot types.TypeId) Bool {
-    t := c.P.T
+    t types.Table&c = c.P.T
     ips := t.Items(t.Params(impl))
     sps := t.Items(t.Params(slot))
     if ips.Len() != sps.Len() { return true }   # what does not meet the trait is said by T31

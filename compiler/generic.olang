@@ -2602,10 +2602,13 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     # G29, D9a: each array level a parameter holds by value takes its length from the argument - a variable of the
     # function's own, no name the program can write ("a.Len()" in a note), one instance per set of lengths
     levels Vec<I64>
+    # ... but only where the body decides something on that length (LengthDecided): any other array by value is one of a
+    # run-time length, its function one instance whatever the lengths given (D9a)
+    decided := p.lengthsDecided(row)
     # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
-    if not p.FnIsExtern(f) and row.F.Recv is not null { p.lengthLevels(p.Resolve(c, row.F.Recv!.Ty), true, row.F.Recv!.Name, 0, ns, levels) }
-    for prm in row.F.S.Params {
-        if prm.Ty is not null and not p.FnIsExtern(f) { p.lengthLevels(p.Resolve(c, prm.Ty), true, prm.Name, 0, ns, levels) }
+    if not p.FnIsExtern(f) and row.F.Recv is not null and decided[0] { p.lengthLevels(p.Resolve(c, row.F.Recv!.Ty), true, row.F.Recv!.Name, 0, ns, levels) }
+    for j, prm in row.F.S.Params {
+        if prm.Ty is not null and not p.FnIsExtern(f) and decided[j + 1] { p.lengthLevels(p.Resolve(c, prm.Ty), true, prm.Name, 0, ns, levels) }
     }
     p.addVars(owner, ns.ToArray())
     i64 := p.T.Prim("I64")
@@ -2648,8 +2651,9 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         out := Array<types.TypeId>(ps.Len())
         k := written
         for j in range ps.Len() {
-            out[j] = p.withLengths(ps[j], true, owner, k)
-            k += p.levelCount(ps[j], true)
+            on := decided[j + (0 if row.F.Recv is not null else 1)]
+            out[j] = p.withLengths(ps[j], true, owner, k) if on else ps[j]
+            k += p.levelCount(ps[j], true) if on else 0
         }
         sig = p.T.Func(p.T.List(out), p.T.Result(sig), p.T.Errors(sig), p.T.ScopesOf(sig))
     }
@@ -2707,6 +2711,42 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
 # G29: the array levels a parameter's type holds by value - itself, where it is an Array<T> value, and the elements of
 # an array held in place (an Array<Array<T>>, under a reference too) - each a variable named for its parameter's
 # length ("a.Len()") or its elements' ("a[0].Len()"), pushed to ns
+# G29, G30: by parameter, the receiver first (false where there is none), whether the body decides something on the
+# length of an array it is given by value (LengthDecided) - an extern's and a bodiless function's never
+fn (p mut Program&) lengthsDecided(row fnRow&) Array<Bool>& {
+    out := Array<Bool>(row.F.S.Params.Len() + 1, false)
+    if row.F.Body.Len() == 0 or row.Extern: return out
+    text := p.L.Mods[row.Mi].Src!.Text
+    from := I64(row.F.Body[0].Span().Start)
+    to := I64(row.F.Body[row.F.Body.Len() - 1].Span().End)
+    if row.F.Recv is not null: out[0] = LengthDecided(text, from, to, p.text(row.F.Recv!.Name))
+    for j, prm in row.F.S.Params { out[j + 1] = LengthDecided(text, from, to, p.text(prm.Name)) }
+    return out
+}
+
+# G29, G30: whether a body decides something on a parameter's length - "n.Len()" written in an if's, an assert's or a
+# match's line before its block, after a conditional's or a guard's "if", in a comptime or in an array's length: the
+# instances per length that decide it while compiling are kept for it alone. Read from the text, so a length held in a
+# local first decides at run time (no meaning changes: only what is decided while compiling)
+fn LengthDecided(text String&, from I64, to I64, name String&) Bool {
+    pat := $name ".Len()"
+    at := from
+    for at < to {
+        k := try text[at:to].Find(pat) catch { return false }
+        q := at + k
+        at = q + pat.Len()
+        if q > 0 and (text[q - 1].IsLetter() or text[q - 1].IsDigit() or text[q - 1] == '_' or text[q - 1] == '.'): continue
+        ls := q
+        for ls > from and text[ls - 1] != '\n' { ls-- }
+        line := text[ls:q].TrimStart()
+        if line.StartsWith("if ") or line.StartsWith("} else if ") or line.StartsWith("assert ") or line.StartsWith("match "): return true
+        if line.Contains(" if ") or line.Contains("comptime") or line.EndsWith("Array<") or line.Contains(">("): return true
+        # (a comprehension counting to it: its array's length, T7c)
+        if line.Contains("[") and line.Contains(" for ") and line.EndsWith("range "): return true
+    }
+    return false
+}
+
 fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, depth I64, ns mut Vec<source.NameId>&, out mut Vec<I64>&) {
     if depth > 8 { return }
     match p.T.KindOf(t) {

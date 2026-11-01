@@ -164,7 +164,7 @@ type orStore struct(Body I64, PlaceId I64, X typed.Expr&, Root typed.Expr&) {
 }
 
 # a leaf of a value held in place: a candidate place inside it, by the fields that reach it
-type leaf struct(Path Array<I64>&, PlaceId I64) {
+type leaf struct(Path Array<I64>, PlaceId I64) {
     Path
     PlaceId
 }
@@ -453,7 +453,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
     }
     known := try f.leafAsked.Get(r) catch default Vec<leaf>()
     if f.leafAsked.Has(r) { return known }
-    f.leafAsked.Put(r, out)          # a struct holds itself in place only through a reference: no cycle
+    f.leafAsked.Put(r, out)          # (none while asked: a struct holds itself in place only through a reference - no cycle)
     fs := t.Items(t.Fields(r))
     for i in range fs.Len() {
         k := f.placeKey(r, i)
@@ -471,6 +471,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
             }
         }
     }
+    f.leafAsked.Put(r, out)
     return out
 }
 
@@ -592,7 +593,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
     for _ in range n { mustCallers.Push(Vec<I64>()) }
     for b in range n {
         for c in f.Sc.CalleesOf(b) {
-            if c >= 0 and c < n: mustCallers[c].Push(b)
+            if c >= 0 and c < n: mustCallers.Ref(c).Push(b)
         }
     }
     rm I64 = 0
@@ -1266,7 +1267,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         return out
     }
     match x {
-        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { return o.Clone() }
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { return o }
         case _ { }
     }
     if w.Final and w.quiet == 0 {
@@ -1275,7 +1276,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
             f.keep(lf.PlaceId, RMade, w.body().File, sp, $"its new value is existing storage: '" $w.text(x.Span()) "'; give it new storage - a constructor call, '$...', 'Clone()'")
         }
     }
-    return o.Clone()
+    return o
 }
 
 # the local holding the object a place is part of, where every value it holds is an object this body made - -1 for
@@ -3363,7 +3364,7 @@ fn (f mut Free&) writePlans() {
     # a call given a value of a sole place: what it builds where that value lives is built in its region
     for oc in f.ors {
         if not f.Sole[oc.PlaceId]: continue
-        pl := f.Plans[oc.Body]
+        pl := f.Plans.Ref(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
         if v < 0: continue
@@ -3536,7 +3537,7 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
 # through a temporary's value, an array's items, a constructor's arguments - so the region holds them; never through
 # a branch or a call that is not a constructor's
 fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bool, copied Bool = false) {
-    pl := f.Plans[b]
+    pl := f.Plans.Ref(b)
     region := typed.Scope.Region(typed.SiteId(I32(top)))
     match x {
         case typed.Expr.Promote(_, _, pr) {
