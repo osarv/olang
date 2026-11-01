@@ -414,7 +414,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a function is given is handed back uncopied, its callers copying where they keep it, and a local holds views in place
   of its copy where its body proves nothing could tell (`typed.ViewWalk`, lowering's `viewLocals`) - an optimization, no
   meaning; on the default path a reference parameter is taken to keep what it is given and its referent to be changeable
-  by another `mut` name. **T25d** (found by round 3b, on the default path too): text written in the program given a
+  by another `mut` name, and a view is read where it stands only where no call in its statement could write it (no
+  closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage`).
+  Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a
   `mut` reference of the type it is declared over was handed over as the constant itself - refused, naming `$"abc"`.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
@@ -942,7 +944,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
   gone (the user: "error should always require an actual error"). `main` writes `?` when it can fail (R1d). Stage 0 checks
   the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
-  attempts' memory; a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
+  attempts' memory, every signature signed before the first (an attempt done again had lost what signing said); a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
   **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one word, so a function
   promises exactly what it raises and `catch ListError.EMPTY` is complete (R14 judges word by word); inferred sets carry
   words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/

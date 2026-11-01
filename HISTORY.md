@@ -27840,10 +27840,38 @@ so nothing went behind `OLANG_SCOPES=infer`.
   optimization's, nothing of the checking rests on them.
 - *The same loss on master, through R1a.* A program whose inferred error sets grow through a cycle is checked again,
   and an R23 error in it was gone the same way (checks case `r23reattempt`, which compiled before): every signature is
-  now signed before the first attempt, so what signing says is said once and kept.
+  now signed before the first attempt, so what signing says is said once and kept. It had hidden one in the corpus:
+  tests/shared.olang's `scBump(c mut Array<I32>&) Bool` (R23a, a flag beside what it writes) - now a count. Signing
+  that early met one rule that read a type's body: `String?&` is T2c's error because String is an array, and its body
+  was not made yet - `refType` asks for the bodies of what a type is declared over first.
+- *D9h's quiet statements trusted a call given only read-only arguments to write nothing.* A view read where it stands
+  in a statement (a join's pieces render after all its operands are evaluated, E11b) was read after such a call - which
+  may still write what the view names: through a closure an argument holds that captured a `mut` reference
+  (`$inner(t) $fired(s)`, `s.f` writing `t` - the view showed the write), or through a global - a `mut` one, or an
+  immutable one holding a `mut` reference (`Held.a[1] = 'Y'`). Round 2's reading had called this 2.10's provisional
+  hole; on the default path it was a wrong answer. A quiet call's arguments now reach no function value or `any`
+  (`types.ReachesCode`), and a program some global of which can be written so - a `mut` global of anything but a number,
+  a Bool or a payload-free enum, or any global reaching a writable reference, a function value or an `any`
+  (`check.mutStorage`, `types.ReachesWrite`, read by lowering through `load.MutStorage`) - reads no view in place in a
+  quiet statement. Only the build's chosen branches count (std/os's test-only `mut` global would have turned it off
+  everywhere). Bench: one cold text-padding function in vec's program, which has a `mut` function-value global.
+- *Rows laid out in place given where rows of a run-time length are wanted* - `Grid(a)` with `type Grid extends
+  Array<Array<I64>>` and `a := Array<Array<I64>>(2, Array<I64>(2, 5))`, or `Box(a)` for a field `rows
+  Array<Array<I64>>` - copied the rows' bytes as if they were (length, pointer) pairs and segfaulted (`t7aoverrows`,
+  converted from T7a's error to a run case, had failed since). QCE made that target type possible; lowering's widening
+  now makes each row in turn where the elements are laid out apart (`laidApart`), and a conversion names its argument's
+  storage only where every level is laid out alike (`check.laidAlike`). The evaluator agreed already.
 
 **Tests.** `tests/valueparts.olang` (round 3's owned.olang in today's spelling, with a by-value parameter and a clone),
 `tests/handover.olang` and `tests/inplace.olang` (D9h; three of inplace's tests rested on the readers' value forms and
 went); checks cases `qcevaluearg`, `t25dconstmut`, `r23reattempt`; checks' T7a and D9a cases QCE now accepts became run
 and build cases of what they now do (`t7aelem`, `t7anested`, `t7aoverrows`, `t7alambdaresult`, `t7adeclaredelem`,
-`t7adeclaredfield`, `d9apayloadstring`, `d9abarevariable`). docs/rework.md section 18 has the detail.
+`t7adeclaredfield`, `d9apayloadstring`, `d9abarevariable`); `tests/handoverglobal.olang` and handover's closure test for
+the quiet statements. docs/rework.md section 18 has the detail.
+
+**Measured.** Bench's IR on the default path against master d8c8daf: identical but std/prelude/text's integer
+`PadStart`/`PadEnd` (they copy the view `String.PadStart` now hands back - the copy D9h moves to the caller), and in
+knucleotide's main one copy fewer. Callgrind, baseline x86-64, reduced sizes: every row within 14 instructions of
+master's (nbody 40,267,580 -> 40,267,594, knucleotide 66,722,130 -> 66,722,116, text, regex, sha256, matmul, mandelbrot,
+binarytrees and the sum/vec rows identical or within that). `OLANG_SCOPES=infer`: std, the corpus's D9h and QCE files
+52 of 52, as before.

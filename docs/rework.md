@@ -2503,7 +2503,10 @@ switch's own rules and went with it.
 
 ### 18.5 Measured
 
-(see HISTORY.md "The rework, round 3d") 
+Bench's IR on the default path against master: identical but std/prelude/text's integer `PadStart`/`PadEnd`, which
+copy the view `String.PadStart` now hands back, and one copy fewer in knucleotide's main; in vec's program also one
+cold function (its `mut` function-value global turns the quiet reading off, 18.8). Callgrind (baseline x86-64, reduced
+sizes): every row within 14 instructions of master's. `OLANG_SCOPES=infer`: 52 of 52 std and corpus files, as before.
 
 ### 18.6 Left
 
@@ -2523,6 +2526,12 @@ are not begun. `OLANG_SCOPES=infer` passes what it passed.
 5. D9h's facts are settled once the program has checked (`check.settleAllViews`, a fixed point over the bodies), not by
    checking the program again: they are an optimization's, and checking again lost every signature error said in the
    first attempt (18.8).
+6. Every signature is signed before the checker's first attempt (R1a's re-attempts then lose nothing signing said).
+7. D9h's quiet statements: a call's arguments reach no function value or `any`, and the program has no global through
+   which storage could be written (a `mut` global of anything but a number, a Bool or a payload-free enum, or a global
+   reaching a writable reference, a function value or an `any`) - a program-wide fact rather than effect summaries per
+   call, kept cheap; a lost optimization where such a global exists, never a wrong answer.
+8. `-memory` always prints D9h's line (its counts), the switch's copy counts gone with it.
 
 ### 18.8 Found and fixed
 
@@ -2538,3 +2547,11 @@ are not begun. `OLANG_SCOPES=infer` passes what it passed.
   (the round-2d copying wrapper is chosen by `CodeOf`) - its result, a view, was kept uncopied: `apply(inner, t)` then
   a write to `t` changed it. handover.olang's test.
 - **T25d on the default path** (18.3).
+- **D9h's quiet statements read a write** a call given only read-only arguments made through a closure an argument
+  holds, or through storage a global reaches (`$inner(t) $fired(s)` showed `s.f`'s write to `t`) - on the default path;
+  closed as 18.7 item 7 says. `tests/handoverglobal.olang`, handover's closure test.
+- **Rows laid out in place widened as pairs**: `Grid(a)`, `Box(a)` with run-time rows wanted segfaulted
+  (`t7aoverrows`); lowering's widening makes each row in turn where the layouts differ.
+- **Eager signing lost T2c's `String?&`**: String's body was not made yet, so it was no array; `refType` makes the
+  bodies of what a type is declared over first. With signatures no longer lost, tests/shared.olang's `scBump` (R23a)
+  became a count.
