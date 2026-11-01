@@ -477,7 +477,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   storage lives with its container, a store copies into it), a run-time-length array may be passed by value (D9a/QP3's
   error goes) and the 128-byte cap on by-value parameters goes (D9c): a bare parameter is passed by pointer as the
   compiler chooses, copied only where the callee keeps or writes it. The entries below are today's rules until it
-  lands.
+  lands. **Begun behind `OLANG_PARAMS=new`** (round 3, 2026-11-01, docs/rework.md section 16): run-time value arrays
+  held by value in fields, elements, payloads and type arguments, the container's own (stores copy in, a copy of the
+  whole copies them, deep through values and shallow at references - `typed.MakeKind.Copy`, lowering's Copy helper; a
+  part counts for `HoldsRefs` so a copy missed aliases and never frees early, mine); `Map<String, V>` owns its keys by
+  construction; an array of references reads as an array of values where only read (a bare parameter), copied where
+  held (mine); D9a/D9c were already gone under the switch. The readers that give values (`Split` an `Array<String>`,
+  `Lines`, `filepath.Dir`, `os.ReadDir`, `ArrayIter` holding its array) are param_migrate's hand forms
+  (`tools/params/`, folded into std at the flip) - copying where views would do: the handover of parts uncopied (D9h
+  for structs and elements), flags' and json's text fields, compiler/'s readers and handles as values are left.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at

@@ -717,6 +717,24 @@ checked once where it is evaluated (E16b; `v.SliceOf(0, 16)` fails instead, E16c
 implicitly. An element length is part of its storage's layout, so a local whose stored values' element lengths
 disagree is a compile-time error, not a length kept at run time.
 
+**T7a under the rework's round 3 (provisional - `OLANG_PARAMS=new` only).** An array of a run-time length may be held
+by value inside another value - a struct's field (`name String`), an array's element (`Array<String>`, `String["a",
+"bc"]` of any lengths), an enum's payload, a type argument (`Vec<String>`, `Map<String, V>`) - and is then that value's
+own: its elements are storage of the container's, living where the container's references do (§8), and nothing
+another name holds changes them. A store into such a part - an assignment, a constructor's field, a case's payload, an
+element of a literal, a fill (each element its own copy of it) or a comprehension - copies what it is given in where
+that is existing storage (a place read, a slice, constant data, a choice of such), and takes new storage as it is; a
+copy of a value holding such parts - a local declared or assigned from existing storage, a bare parameter's copy on
+entry (D9) - copies them too, deep through values and shallow at references (a reference it holds names what it named);
+a read of one by value copies it out (T7b). So `Map<String, V>` keeps its own key text, copied in where `Put` adds a
+key (an update or a lookup copies nothing), and `Map<String&, V>` shares the caller's, which the `&` says. Fixed
+storage (T7d) is unchanged where a declaration gives a known length. Elsewhere T7a's error stands.
+
+**E12 under the rework's round 3 (provisional).** An array of references to arrays fits where an array of those arrays'
+values is wanted (`String&["a"]` where `Array<String>` is): given a bare parameter (D9), which only reads it, it is lent
+as it is (a reference to an array and an array value are one pair); anywhere else - a local, a field, a default - each
+element's referent is copied in (T7a above). The other way round is no fit: references wanted are not values given.
+
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.6 E19). `n` is any integer expression; a negative `n`
 aborts the program (D14b), and a negative `n` evaluable at compile time is a compile-time error. The fill is **one

@@ -2157,3 +2157,106 @@ no errors, no copy for a C function, no task copy; one call-may-write copy (std/
 spectral, 16 in regex, and regex's `Replace`/`ReplaceFunc` copy their text on entry - they hand a bare `t` to
 `FindAll`, which takes `&` for the same reason. The default path: `make verify` passed (but for goldens recaptured
 after, f1dbb75).
+
+## 16. Round 3, first part: arrays held by value inside values; readers giving values
+
+Built on `wt-rework` behind the same switches; without them the compiler checks and builds as before (16.4).
+
+### 16.1 What was built
+
+- **QCE's parts (2.11).** An array of a run-time length held by value as a struct's field, an array's element, an
+  enum's payload or a type argument (`Vec<String>`, `Map<String, V>`): T7a's errors lifted under the switch at each of
+  the checker's places (fields, puns, payloads, written element types, `Array<String>(n)` with or without a fill,
+  literals of several lengths, a lambda's result held in an array, a type over an array of arrays). The layout is the
+  one a `String&` part has (a pair). The part is the container's own:
+  - *stores copy in* - check's `storeCopy` (an assignment into a part, or of a value with such parts anywhere),
+    `partCopy` (a case's payload, a literal's items, a comprehension's elements) and `ownCopy` (a `:=`/typed local of a
+    value with such parts, a bare parameter's copy on entry) wrap existing storage (`existingValue`: a place read, a
+    slice, constant data, a choice of such, a scoped call) in `typed.MakeKind.Copy` - a site of its own;
+  - *the scope pass* judges a Copy as new storage built where its site lands (`ownCopy`: fit only for the references the
+    copy still shares, `types.SharesRefs`), a part store builds where the container's references are (`assign`'s part
+    branch, exact), a constructor's run-time value-array field lives in the instance scope, and a comprehension's
+    elements owning storage are built where its array is (`collectAt`; they had been built in the loop's turn);
+  - *lowering* calls the type's Copy helper (`mir.HelperKind.Copy`, `fn(x T&) T` with its result scope: `copyAt`,
+    `copyPart`, `ownCopyOf` - deep through values, shallow at references, an aggregate through its own helper so a type
+    coming round to itself through an array is one function); `arrayCopy` is deep for elements owning storage (T7b's
+    returns, D9h's caller copies); a fill copies its value per element; a part store takes its copy as it is.
+  - *types*: `OwnedPart` (such a part counts for `HoldsRefs`), `OwnsParts`, `SharesRefs`.
+  - `Map<String, V>` keeps its own key text by construction: `Put` of a new key builds a `MapEntry`, whose constructor
+    copies the key in; an update or a lookup copies nothing (`Get(key K)` reads a bare key by pointer).
+  - D9a's and D9c's errors were already gone under the switch (round 2).
+- **E12, an array of references read as values** (`check.refsAsValues`, `refsCopied`): `Array<R&>` given where
+  `Array<R>` is wanted (R an array type) - lent as it is to a bare parameter, which only reads it, and copied element by
+  element anywhere else (lowering's `derefCopy`). So one `Join` serves `String&[...]` and `Split`'s `Array<String>`.
+- **Readers giving values, through param_migrate's hand phase** (`--hand tools/params`, `tools/params/README.md`):
+  declarations written in the new form replacing the old ones after the text phase, by key (a function, a method by
+  its receiver's type and name, a type, a test; several of one key all replace the file's first). In it: `Split` gives
+  `Array<String>`, `Lines` a `LineIter` holding its text by value, `filepath.Dir` bare, `os.ReadDir` gives
+  `Array<String>`, `ArrayIter` holds its array (`Iter`, `Rest` by value), `Join` for `Array<String>`, `Vec<String>` and
+  `List<String>` (beside the `String&` ones of Named types - M21 keeps both), and the tests their callers changed with
+  (a test helper keeping lines in a `Vec<String>`, FlatMap's lambda giving `ArrayIter<String>`). One std edit valid in
+  both forms: list's two tests sharing a line take `line := $"to be or not"`, their own text, not constant data.
+- tests/params/owned.olang: part stores from a block's text, Vec and Map ownership (the QCE hole closed), payloads,
+  literals and fills, whole copies, comprehension elements, entry copies; top-level asserts the evaluator decides.
+
+### 16.2 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **Item 2 before item 1.** The readers' value form is an array of text held by value, so QCE's parts are its
+   prerequisite; the readers are built on them, copying where the brief asks for views - the uncopied handover of parts
+   (16.6, 1) is what makes them as cheap as the views they replace.
+2. **A part counts as a reference for section 8** (`OwnedPart` in `HoldsRefs`), so a container's parts are tracked
+   where its references are: a copy the checker missed would alias - wrong values where one side writes in place - and
+   never let storage be freed early. The cost is a merged term for a value holding both parts and references (a
+   reference read out of it is taken to live as long as its parts: over-rejection only).
+3. **Copies explicit in the typed tree** (`MakeKind.Copy` with a site), so section 8 places them and the evaluator runs
+   them, rather than decided by lowering alone: one decision, seen by every pass.
+4. **A part store never reuses the old storage in place** (T11b's reuse kept for whole value-array locals): a part may
+   be a Vec's room no store has filled.
+5. **Hand forms beside the tool**, one file per file of std, folded into std at the flip; edits valid in both forms go
+   straight into std.
+6. **Arrays of references read as values** where only read, copied where held - the one way round only.
+7. **Correct first**: `Split` copies each piece, `Lines`/`Iter` copy their array, a walk of an `Array<String>` copies
+   each element into its loop variable. Measured only on std's tests so far.
+
+### 16.3 Found and fixed on the way
+
+- A part store had been written over in place where the lengths agreed (lowering's `arrayStore`, T11b) - reading the
+  length of a Vec's unfilled room (`grown` never fills past the count): garbage, and in a test run the in-place copy
+  wrote into another string's storage. `-sanitize` did not see it (a garbage pointer, not a closed chunk).
+- Comprehension elements owning storage were built in the comprehension's loop turn (the scope pass judged a Yield in
+  `here()`), freed before the array was read - `-sanitize` found it.
+- A constructor's value-array field local was copied into its frame's block, freed as the constructor returned.
+
+### 16.4 Today's path
+
+Every rule is behind `source.NewParams` (`OwnedPart` and `OwnsParts` are false without it, the checker's lifts are
+gated, Copy nodes are made only where they are). bench's IR is identical to round 2f's (`/tmp/rw3/irdiff.sh`: 15
+programs, every object). The prelude and the rest of std are unchanged but list's two test lines.
+
+### 16.5 Measured
+
+- std under the switches (a fresh migration with the hand forms, 207 edits, 13 rows left by hand): 36 of its 40 test
+  files pass (30 at the round's start - the readers' class gone: filepath, fuzz, prop, the prelude's iterator, map and
+  text tests, and os); left flags and json (text held in their structures by reference, kept from what bare parameters
+  reach), http (json's) and list (one pre-existing refusal, `f.next = k` through `List.First()`'s result, which Vec's
+  `First` does not have). tests/params: 21 run files and 26 must-fail cases pass.
+
+### 16.6 Left, in order
+
+1. **The handover of parts uncopied** (the brief's first item): a value result's parts that are views of what a
+   function is given (`Split`'s pieces, a `LineIter`'s text, an `ArrayIter`'s array, a tree reader's struct) handed
+   over by pointer and copied by the caller only where it keeps or writes them - a local holding views only read,
+   whose sources nothing changes while it lives, judged by section 8 as existing storage of those sources; then the
+   walk element of an array of text read in place. With it 2.10's partial copies (the brief's fifth item): only the
+   parts that may change (an iterator's position, not its array).
+2. **flags and json** under the switches: their structures' text held by value (flags' names and help, json's decoded
+   strings), their API taking bare text; then http.
+3. **list's `First`** result read-only through a bare receiver (Vec's is not): round 2's instance-follows rule.
+4. **Handles as values** (the brief's third item): Vec, Map, Set, Deque, Heap, StringBuilder owning their storage by
+   value - their records' buffers become parts held by value (this round's mechanism), `w := v` a Copy, sharing
+   written `Vec<T>&`, nested change through `&` accessors (`m.At(k).Push(x)`), `Clone()` removed from value types, and a
+   migration tool marking every observed sharing copy `&`.
+5. **compiler/ to zero** under the switches (15.6's items 2-7, the tree readers giving values with errors for absence),
+   the self-build (stage 2 == stage 3), the suite with it, and the measurements (peak memory, wall time, bench
+   instructions and RSS, `-memory`'s copies).
+6. Then round 4's flip.

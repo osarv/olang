@@ -27667,3 +27667,51 @@ a bare parameter is the function's own value, which no other thread writes - so 
 read of a bare parameter's own storage is an error naming `p T&`, and so is a bare parameter given whole to a `&`
 parameter read atomically, directly or through those it hands it to (a settle over the D9d dependencies). Both carry
 the bare-parameter note, so the tool takes `&` again.
+
+## The rework, round 3 (first part): arrays held by value inside values, readers giving values (2026-11-01)
+
+Behind `OLANG_PARAMS=new` and `OLANG_SCOPES=infer`, as round 2 (docs/rework.md section 16). The round's brief, in the
+coordinator's order: value results handed over uncopied generally (D9h for structs and elements), QCE's value arrays
+inside values and `Map<String, V>` owning its keys, handles as values, compiler/ to zero errors and the self-build under
+the switches. Built: the second item's core, and the first item's std readers in their value form, copying where views
+would do. The order was turned round (mine, the user absent): the readers' value form is `Array<String>`, an array of
+text held by value, so QCE's parts come first.
+
+**Arrays inside values.** The representation needed no change: an array of a run-time length is one pair (length,
+elements) whether it is a value or what a reference names, so a `String` field or a `Vec<String>` element is laid out
+as a `String&` one is. What changed is whose the elements are. T7a's errors are lifted under the switch at every place
+the checker said them (fields, puns, payloads, written element types, `Array<String>(n)`, literals of several lengths,
+a lambda's result held in an array, a type over an array of arrays). A part holding one is the container's own: a
+store copies existing storage in (the checker's `storeCopy`/`partCopy` wrap the value in `typed.MakeKind.Copy`, a site
+the scope pass places where the container's references are, lowering a call of the type's Copy helper - `mir.
+HelperKind.Copy`, deep through values, shallow at references); a value holding such parts copied from existing storage
+(a local, a bare parameter's copy on entry) is a Copy too; fills copy their value per element; comprehension elements are
+built where their array is (they had been built in the loop's turn). The evaluator runs the same MIR, so a baked global
+and a top-level assert agree with the run time (tests/params/owned.olang decides two while compiling).
+
+**Memory-safe by default (mine).** Such a part counts for `HoldsRefs` (`types.OwnedPart`): section 8 tracks a
+container's parts as references into where it lives, so a copy the checker missed would share storage - wrong values
+where one side is written in place, never storage freed early. A Copy's own fit is only for the references it still
+shares (`types.SharesRefs`). Found on the way: a part store had been written over in place where the lengths agreed
+(T11b's reuse) - reading the length of a Vec's room past its count, which `grown` never fills: garbage, and once in a
+test run the in-place copy wrote into another string's storage. `-sanitize` did not see it (the pointer read was
+garbage, not a closed chunk); a part store now always takes its copy as it is.
+
+**Readers giving values.** `Split` is `fn (t String) Split(sep String) Array<String>`, `Lines` a `LineIter` holding its
+text by value, `filepath.Dir` and `os.ReadDir` take and give values, `ArrayIter` holds its array. They change bodies,
+not only signatures, so no rule of param_migrate can make them; and the repository's std stays in the old form until the
+flip, where `Array<String>` is T7a's error. So the tool gained a hand phase (`--hand tools/params`): declarations written
+by hand in the new form, each replacing the one of its key in the migrated file after the text phase (decided, mine:
+the hand forms live beside the tool, one file per file of std, and fold into std at the flip). Callers changed with
+them where they held the pieces as references - a test's helper keeping lines (`Vec<String>`), `Join` for arrays,
+`Vec`s and `List`s of values. And one language rule came with it (mine): an array of references to arrays fits where an
+array of those values is wanted - lent as it is to a bare parameter, which only reads it (one `Join` serves
+`String&[...]` and `Array<String>`), copied element by element anywhere else (`catch default Array<String&>(0)` where
+`ReadDir` now gives `Array<String>`). std under the switches: 36 of its 40 test files pass (30 at the round's start) and
+every tests/params case; left are flags and json (text held in their structures by reference), http (json's), and
+list's one pre-existing refusal (`f.next = k` through `List.First()`'s result).
+
+**What these copies cost.** Correct first: `Split` copies each piece, `Lines` and `Iter` copy their array, a walk of an
+`Array<String>` copies each element into its loop variable. Handing parts over uncopied where nothing changes the source
+and the holder neither writes nor keeps them - the rest of the brief's first item, with 2.10's partial copies - is the
+next work, and the measure of whether these readers are as cheap as the views they replace.

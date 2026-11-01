@@ -361,7 +361,8 @@ verify-infer: $(OLANG)
 	@echo "verify-infer: the suite and the self-build pass under OLANG_SCOPES=infer"
 
 # the rework's round 2 (docs/rework.md sections 10-11): std copied into build/params, migrated there by
-# tools/param_migrate.olang (its text, driven and finish phases under the switches), then every test file of std, the
+# tools/param_migrate.olang (its text, driven and finish phases under the switches, and round 3's hand forms from
+# tools/params - docs/rework.md 16), then every test file of std, the
 # prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer, and tests/params (written in
 # the rework's spelling). Not part of verify until the flip (round 4): std is 40 of its 40 test files there (round 2c)
 PARAMS_DIR = build/params
@@ -372,7 +373,7 @@ PARAMS_ENV = OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES
 verify-params: $(OLANG)
 	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params
 	$(OLANG) build -output $(PARAMS_DIR)/param_migrate tools/param_migrate.olang
-	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) -j $(PARALLEL) std
+	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) --hand $(CURDIR)/tools/params -j $(PARALLEL) std
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
 	@for f in $(PARAMS_FAILS); do want=$$(sed -n 's/^# check: fail //p' $$f | head -1); \
