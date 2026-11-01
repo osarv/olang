@@ -7,7 +7,7 @@ fn main() ? {
     for k in range 4 {
         rec := Vec<String&>()
         rec.Push($k "-text")
-        rows.Push(rec.Clone())
+        rows.Push(rec)
     }
     for r in rows { try io.Println(r[0]) }
 }

@@ -593,7 +593,7 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64, destroys Bool = true) {
     for _ in range n { mustCallers.Push(Vec<I64>()) }
     for b in range n {
         for c in f.Sc.CalleesOf(b) {
-            if c >= 0 and c < n: mustCallers.Ref(c).Push(b)
+            if c >= 0 and c < n: mustCallers.RefMut(c).Push(b)
         }
     }
     rm I64 = 0
@@ -1952,7 +1952,7 @@ fn (f mut Free&) destructs(ty types.TypeId) Bool {
 # whether a call passes one of body b's scope variables for one of its callee's
 fn (f mut Free&) passesVar(b I64, c typed.Call&, b2 I64) Bool {
     if c.Site < typed.SiteId(0) { return false }
-    pl := f.Plans[b]
+    pl := f.Plans.Ref(b)
     for i in range f.Bodies[b2].Vars.Len() {
         if isVar(pl.Passed(c.Site, i)) { return true }
     }
@@ -3211,7 +3211,7 @@ fn (f mut Free&) destroyErrors() {
 # the scope a site is built in, as the plan says: a temporary's, an array's, a text's, a comprehension's (Built) - a
 # call's built result or a constructor's instance (Passed, its result variable)
 fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
-    pl := f.Plans[b]
+    pl := f.Plans.Ref(b)
     return match x {
         case typed.Expr.Promote(_, _, pr): pl.Built[I64(pr.Site)]
         case typed.Expr.Make(_, _, m): pl.Built[I64(m.Site)] if m.Site >= typed.SiteId(0) else typed.Scope.Unset
@@ -3290,7 +3290,7 @@ fn ctorCall(x typed.Expr&) typed.Call?&x {
 # outlive something not in them, or an equality across
 fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63 { return -1 }
-    pl := f.Plans[b]
+    pl := f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
@@ -3326,7 +3326,7 @@ fn (f mut Free&) writePlans() {
         x := st.X!
         top := f.topSite(x)
         if top < 0: continue
-        pl := f.Plans[st.Body]
+        pl := f.Plans.Ref(st.Body)
         if pl.RegionKind[top] != 0: continue
         at := f.siteScope(st.Body, x)
         pl.RegionKind[top] = 1
@@ -3348,7 +3348,7 @@ fn (f mut Free&) writePlans() {
         if not f.Sole[os.PlaceId]: continue
         top := f.topSite(os.X)
         if top < 0: continue
-        pl := f.Plans[os.Body]
+        pl := f.Plans.Ref(os.Body)
         at := f.siteScope(os.Body, os.X)
         if not runs(at) and pl.RegionKind[top] == 0: continue
         if pl.RegionKind[top] == 1 {
@@ -3364,7 +3364,7 @@ fn (f mut Free&) writePlans() {
     # a call given a value of a sole place: what it builds where that value lives is built in its region
     for oc in f.ors {
         if not f.Sole[oc.PlaceId]: continue
-        pl := f.Plans.Ref(oc.Body)
+        pl := f.Plans.RefMut(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
         if v < 0: continue
@@ -3400,7 +3400,7 @@ fn (f mut Free&) writePlans() {
 # - -1 where the callee's obligations ask more
 fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63 { return -1 }
-    pl := f.Plans[b]
+    pl := f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
@@ -3537,7 +3537,7 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
 # through a temporary's value, an array's items, a constructor's arguments - so the region holds them; never through
 # a branch or a call that is not a constructor's
 fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bool, copied Bool = false) {
-    pl := f.Plans.Ref(b)
+    pl := f.Plans.RefMut(b)
     region := typed.Scope.Region(typed.SiteId(I32(top)))
     match x {
         case typed.Expr.Promote(_, _, pr) {

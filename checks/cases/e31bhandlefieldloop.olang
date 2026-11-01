@@ -16,7 +16,7 @@ fn churn() ? io.Error {
 fn main() ? {
     bs := Vec<Blk>()
     bs.Push(Blk())
-    for i in range 3 { bs[0].S.Push(i + 7) }
+    for i in range 3 { bs.RefMut(0).S.Push(i + 7) }
     try churn()
     assert bs[0].S.Len() == 3 and bs[0].S[0] == 7 and bs[0].S[2] == 9, $bs[0].S
 }

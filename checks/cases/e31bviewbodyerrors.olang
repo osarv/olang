@@ -26,7 +26,7 @@ fn main() ? {
     s := Es(Node(1))
     for k in range 3 {
 
-        hang(s[k], 100 + k)
+        hang(s.RefMut(k), 100 + k)
     }
     try churn()
     try io.Println($s.head.next!.v)

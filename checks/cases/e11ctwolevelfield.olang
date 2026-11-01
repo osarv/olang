@@ -8,7 +8,7 @@ fn (w W&) Str() String { return "W" $w.ll[0].Len() }
 fn main() ? {
     ll := Vec<Vec<I64>>()
     ll.Push(Vec<I64>())
-    ll[0].Push(5)
+    ll.RefMut(0).Push(5)
     w := W(ll)
     assert $w == "W1", $w
 }

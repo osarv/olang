@@ -191,7 +191,7 @@ fn migrate(src String&, hand mut Vec<String&>&, path String&) String {
     w.walk()
     for h in w.r.hand { hand.Push($path ":" $h) }
     if w.r.edits.Len() == 0: return src
-    es := w.r.edits
+    es mut Vec<edit>&w = w.r.edits
     es.Sort(fn(a edit, b edit): return a.Start < b.Start)
     out := StringBuilder()
     at I64 = 0

@@ -514,7 +514,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
     c.TermGlobal = Array<Bool>(nb)
     k I64 = 0
     for bi in range nb {
-        b := f.Blocks[bi]
+        b := f.Blocks.Ref(bi)
         c.Start[bi] = k
         for st in b.Stmts {
             c.Stmts[k] = st
@@ -1156,7 +1156,7 @@ fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
     file, sp := m.stopFile, m.stopSp
     k := fi
     for k >= 0 {
-        f := m.fns[m.fs[k].Fn]
+        f := m.fns.Ref(m.fs[k].Fn)
         if not m.Library.Has(f.File) {
             if k < fi {
                 match f.Blocks[m.fs[k].Block].T {
@@ -1565,7 +1565,7 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
     }
     fr := m.pushFrame(fi, rDtor, 0)
     if fr < 0 { return }
-    f := m.fns[fi]
+    f := m.fns.Ref(fi)
     if f.Params.Len() > 0 { m.wrPtr(m.localPtr(fr, f.Params[0]), p) }
     for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = closing }
 }
@@ -1587,7 +1587,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
             k := m.nFs - 1
             for k > 0 and m.cf[m.fs[k].Fn].Equal { k-- }
             if k >= 0 {
-                f := m.fns[m.fs[k].Fn]
+                f := m.fns.Ref(m.fs[k].Fn)
                 match f.Blocks[m.fs[k].Block].T {
                     case mir.Term.Call(csp, _) { m.stopFile, m.stopSp = f.File, csp }
                     case _ { }
@@ -1650,7 +1650,7 @@ fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
     return Ptr(id, 0)
 }
 
-fn (m mut Machine&) fnOfFrame(fi I64) mir.Fn { return m.fns[m.fs[fi].Fn] }
+fn (m Machine&) fnOfFrame(fi I64) mir.Fn&m { return m.fns.Ref(m.fs[fi].Fn) }
 
 # statement i of frame fi's function (fk) in its flat form (cfn.Fast): what assign makes of it, its operands read
 # and its destination written through the same checks
@@ -2506,7 +2506,7 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     }
     rec.WsN = n
     for i in range n { m.genWords[rec.At + i] = m.ws[fr.Locals + i] }
-    f := m.fns[fr.Fn]
+    f := m.fns.Ref(fr.Fn)
     k := rec.At + n
     for i in range held.N {
         match f.Refs[I64(held.At) + i] {
@@ -3713,7 +3713,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 # -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
 # mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
-    f := m.fns[m.fs[fi].Fn]
+    f := m.fns.Ref(m.fs[fi].Fn)
     if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _): m.operandReady(fi, x)
@@ -3793,7 +3793,7 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Lvalue) Bool {
 # increment or a compound assignment, whose read is lowered first: refused as the write it is, as stage 0's scan of the
 # statement meets it (K1)
 fn (m Machine&) writesAfter(fi I64, module I64, name source.NameId) Bool {
-    f := m.fns[m.fs[fi].Fn]
+    f := m.fns.Ref(m.fs[fi].Fn)
     stmts := f.Blocks[m.fs[fi].Block].Stmts
     k := m.fs[fi].Stmt
     if k >= stmts.Len() { return false }
@@ -3929,7 +3929,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
             m.refuse(WhyNullCall)
             return -2
         }
-        ri = m.genIndex(m.fns[callee], env)
+        ri = m.genIndex(m.fns.Ref(callee), env)
         st := m.gens[ri].State
         if st == 2 {
             # S20: a guaranteed check, as the built program's genNext makes it
@@ -3944,7 +3944,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     }
     nf := m.restoreGen(ri, ret, retArg) if restored else m.pushFrame(callee, ret, retArg)
     if nf < 0 { return -2 }
-    g := m.fns[callee]
+    g := m.fns.Ref(callee)
     dispatched := match c {
         case mir.Callee.Dispatch(_, _, _): true
         case _: false
@@ -4400,7 +4400,7 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
         case mir.Term.Call(sp, ci) {
             m.atK(k, sp)
             c := m.cf[k].Calls[I64(ci)]
-            if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
+            if glob and not m.rangeReady(fi, m.fns.Ref(k), c.Args) { return }
             match c.Target {
                 case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
                 case mir.Callee.Value(_) {
@@ -4424,7 +4424,7 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
         case mir.Term.Tail(sp, ci) {
             m.atK(k, sp)
             c := m.cf[k].Calls[I64(ci)]
-            if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
+            if glob and not m.rangeReady(fi, m.fns.Ref(k), c.Args) { return }
             m.tail(fi, c)
         }
         case mir.Term.Suspend(sp, x, resume, held) {
@@ -4822,7 +4822,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
 
 fn (m mut Machine&) startTask(fi I64, slot I64) {
     tk := m.tasks[slot]
-    f := m.fns[tk.Fn]
+    f := m.fns.Ref(tk.Fn)
     k := f.Tasks[tk.Task]
     offs, total := m.taskLayout(f, k, fi)
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
@@ -4852,7 +4852,7 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
     m.traceStack.Push(m.TraceDropped)
     m.trace.Clear()
     m.TraceDropped = 0
-    g := m.fns[callee]
+    g := m.fns.Ref(callee)
     for i in range k.Args.N {
         if i < g.Params.Len() {
             l := g.Params[i]
@@ -4892,7 +4892,7 @@ fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
 # a task's result stored into its targets (P1g): one result whole, several part by part
 fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) {
     tk := m.tasks[slot]
-    f := m.fns[tk.Fn]
+    f := m.fns.Ref(tk.Fn)
     k := f.Tasks[tk.Task]
     _, total := m.taskLayout(f, k, fi - 1)
     nt := I64(k.Targets.N)
@@ -4948,7 +4948,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
     }
     slot := fr.RetArg
     tk := m.tasks[slot]
-    f := m.fns[tk.Fn]
+    f := m.fns.Ref(tk.Fn)
     k := f.Tasks[tk.Task]
     waiter := m.nFs - 1
     ty := match k.Target {
@@ -4986,7 +4986,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
         }
         nf := m.pushFrame(hf, rClause, slot)
         if nf < 0 { return }
-        g := m.fns[hf]
+        g := m.fns.Ref(hf)
         passed I64 = 0
         for kv in g.Vars {
             match kv {
@@ -5100,7 +5100,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
         m.refuse(WhyNoBody)
         return m.Stopped
     }
-    f := m.fns[fi]
+    f := m.fns.Ref(fi)
     # where a refusal is reported until a statement with a place of its own is reached: the function itself
     m.stopFile, m.stopSp = f.File, f.Sp
     base := m.nFs
@@ -5467,7 +5467,7 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen.Put(start, true)
     for work.Len() > 0 {
         fi := try work.Pop() catch { break }
-        f := m.fns[fi]
+        f := m.fns.Ref(fi)
         for bb in f.Blocks {
             for s in bb.Stmts {
                 match s {

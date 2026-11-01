@@ -370,13 +370,13 @@ test "a copy of a Map is a map of its own" {
 test "a value changed where a Map holds it" {
     g := Map<String&, Vec<I64>>()
     g.Put("a", Vec<I64>())
-    for i in range 20 { (try g.Ref("a")).Push(i) }
+    for i in range 20 { (try g.RefMut("a")).Push(i) }
     v := try g.Get("a")
     v.Push(99)                                  # a copy: the map's is not changed
     t I64 = 0
     for i in range 300 { t += Array<I64>(64, I64(i))[0] }
-    assert t > 0 and (try g.Get("a")).Len() == 20 and v.Len() == 21 and (try g.Ref("a"))[19] == 19
-    assert (try g.Ref("b") catch MapError default Vec<I64>()).Len() == 0
+    assert t > 0 and (try g.Get("a")).Len() == 20 and v.Len() == 21 and (try g.RefMut("a"))[19] == 19
+    assert (try g.RefMut("b") catch MapError default Vec<I64>()).Len() == 0
 }
 
 test "a copy of a Map outlives the map it copies" {

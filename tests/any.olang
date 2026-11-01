@@ -773,9 +773,9 @@ fn snAlias(lst mut Vec<String&>&, i I64) String {
     l.Push(s)
     return s
 }
-fn snHandle(lst Vec<String&>, i I64) String {
+fn snHandle(lst mut Vec<String&>&, i I64) String {
     s := "hnd" $i
-    l := lst
+    l mut Vec<String&>&lst = lst
     l.Push(s)
     return s
 }

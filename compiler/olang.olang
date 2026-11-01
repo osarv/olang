@@ -566,7 +566,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     for o in objs {
         if o.From >= 0 {
             # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
-            r := e.Reuse[o.From]
+            r := e.Reuse.Ref(o.From)
             base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
             for k, id in r.Parts {
                 pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.Error {

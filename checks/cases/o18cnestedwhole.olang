@@ -13,13 +13,13 @@ fn churn() ? io.Error {
     }
 }
 fn add(ll mut Vec<Vec<Blk>>&, x I64) {
-    e := ll[0][0]
+    e := ll.RefMut(0).RefMut(0)
     e.S.Push(x)
 }
 fn main() ? {
     ll := Vec<Vec<Blk>>()
     ll.Push(Vec<Blk>())
-    ll[0].Push(Blk())
+    ll.RefMut(0).Push(Blk())
     add(ll, 7)
     try churn()
     assert ll[0][0].S.Len() == 1 and ll[0][0].S[0] == 7, $ll[0][0].S

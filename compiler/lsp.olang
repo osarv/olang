@@ -494,7 +494,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
             lists.Push(StringBuilder())
             at = files.Len() - 1
         }
-        b := lists.Ref(at)
+        b := lists.RefMut(at)
         if b.Len() > 0 { b.PushChar(',') }
         w.diagnostic(b, a, d, items, i, real)
     }

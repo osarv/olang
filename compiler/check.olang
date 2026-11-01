@@ -4455,7 +4455,7 @@ fn (c mut Checker&) hasContract(b I64) Bool {
         c.ctItems(it)
         c.ctFinish(id)
         # (the requirements in the map's own record - a requirement's check may ask for it while the rest are read)
-        info := try c.Contracts.Ref(b) catch { return true }
+        info := try c.Contracts.RefMut(b) catch { return true }
         info.Reqs.Push(id)
         info.ReqSps.Push(it.Span())
         info.ReqTexts.Push($c.P.L.Mods[sr.Mi].Src!.Text[I64(it.Span().Start):I64(it.Span().End)])
@@ -4484,7 +4484,7 @@ fn (c mut Checker&) entryChecks() {
 # beginning: its parameters' locals, its first Next failing where one is false (D18)
 fn (c mut Checker&) contractChecks(b I64, args Vec<I64>&, gen Bool) {
     if not c.hasContract(b) { return }
-    info := try c.Contracts.Get(b) catch { return }
+    info := try c.Contracts.Ref(b) catch { return }
     if info.Reqs.Len() == 0 { return }
     fr := c.fr()
     ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
@@ -4540,7 +4540,7 @@ fn (c mut Checker&) contractChecked(b I64) {
         c.hasContract(b)
         return
     }
-    info := try c.Contracts.Get(b) catch { return }
+    info := try c.Contracts.Ref(b) catch { return }
     faulty := false
     for id in info.Reqs { faulty = faulty or c.Faulty.Has(id) }
     if not faulty { return }
@@ -4690,7 +4690,7 @@ fn (c mut Checker&) ctErr(mi I64, sp source.Span, m msgs.Msg) I64 {
 # function checks its own on entry
 fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, call typed.Expr&c, target typed.Callee&c
     args Array<typed.Expr&>&c, site typed.SiteId, cb I64) typed.Expr&c {
-    info := try c.Contracts.Get(cb) catch { return call }
+    info := try c.Contracts.Ref(cb) catch { return call }
     # a body only the evaluator runs (an assert's condition, S18c) asks nothing: its call is asked where it is written
     if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return call }
     # a generator's are its first Next's (D18), which this call does not run
@@ -9811,7 +9811,7 @@ fn (c mut Checker&) roKeepVal(b I64, id I64, x typed.Expr?&) {
     if x is null { return }
     key := pair.Pair(b, id)
     if not c.roVals.Has(key) { c.roVals.Put(key, Vec<typed.Expr&>()) }
-    l := try c.roVals.Ref(key) catch { return }
+    l := try c.roVals.RefMut(key) catch { return }
     l.Push(x)
 }
 
@@ -9877,7 +9877,7 @@ fn (c mut Checker&) roDeepPlace(b I64, p typed.Lvalue?&, out mut Vec<I64>&, seen
             }
             if l.Kind == typed.LocalKind.Capture or seen.Has(I64(id)) { return }
             seen.Put(I64(id), true)
-            vs := try c.roVals.Get(pair.Pair(b, I64(id))) catch { return }
+            vs := try c.roVals.Ref(pair.Pair(b, I64(id))) catch { return }
             for v in vs { c.roDeepIn(b, v, out, seen, depth + 1) }
         }
         case typed.Lvalue.Deref(_, _, ref) { c.roDeepIn(b, ref, out, seen, depth + 1) }
@@ -22392,7 +22392,7 @@ fn (c mut Checker&) anyTable(t types.TypeId, r types.TypeId, sp source.Span) I64
             return -1
         }
     }
-    tab := c.P.AnyTables.Ref(ti)
+    tab := c.P.AnyTables.RefMut(ti)
     mi := c.fr().Mi
     for k in range slots.Len() {
         sl := slots[k]
@@ -22456,7 +22456,7 @@ fn (c mut Checker&) anyScopesAgree(impl types.TypeId, slot types.TypeId) Bool {
 # a table's slot (T32b): its parameters the slot's, the instance first as a reference to what it is stored as - a
 # call of the method the instance's type meets the slot with, its own or the default it takes, as "x.M(...)" calls it
 fn (c mut Checker&) checkThunk(id I64, ti I64, slot I64) {
-    tab := c.P.AnyTables[ti]
+    tab := c.P.AnyTables.Ref(ti)
     n := c.P.AnySlots(tab.Trait).Len()
     k := slot % n
     sl := c.P.AnySlots(tab.Trait)[k]
@@ -22971,7 +22971,8 @@ test "a top-level condition is checked with no body around it (B9c)" {
 #   "handles: PATH:LINE:COL: KIND NAME|TYPE|ROOT"
 # KIND: "ref" - a local declared as a copy of a place, never written, which a read-only reference to the place keeps
 # meaning what it did; "mut" - one written, a writable reference; "kept" - one escaping or handed back (a person decides);
-# "call" - a local declared from a call's value and written (the copy may have been the container's own); "param" - a
+# "call" - a local declared from a call's value and written (the copy may have been the container's own); "view" - one
+# declared from an element a Vec or a Map gives, never written, which reads it where it is held; "param" - a
 # by-value parameter the body writes, which the caller saw (a "mut T&" parameter now)
 fn (c mut Checker&) handleReport() {
     for b in c.Bodies {
@@ -23012,7 +23013,9 @@ fn (c mut Checker&) handleLocal(b typed.Body&, u typed.LocalUses&, mi I64, i I64
         return
     }
     cl := handleCall(x)
-    if written and cl is not null and c.viewCallee(cl) { c.handleLine(b, l, mi, "call", c.handleCallee(cl)) }
+    if cl is null or not c.viewCallee(cl): return
+    name := c.handleCallee(cl)
+    if written { c.handleLine(b, l, mi, "call", name) } else if not u.Ret[i] and (name == "At" or name == "Get") { c.handleLine(b, l, mi, "view", name) }
 }
 
 # whether a call's value may be a view of what the callee is given or reaches (D9h's views) - where a handle copied

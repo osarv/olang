@@ -697,6 +697,7 @@ type LocalUses struct(T types.Table&, B Body&) {
     WrScalar Vec<Bool>
     Whole Vec<Bool>
     Esc Vec<Bool>
+    EscHard Vec<Bool>    # Esc but for the read-only references given a body's call (RefAt)
     Ret Vec<Bool>
     AliasOf Vec<I64>
     Init Vec<Expr?&>
@@ -705,6 +706,11 @@ type LocalUses struct(T types.Table&, B Body&) {
     LendAt Vec<I64>
     LendBody Vec<I64>
     LendParam Vec<I64>
+    # the locals a read-only reference to whose storage is given a body's call - the callee may keep it, so each is Esc
+    # too: the body and the parameter, for a reader that knows what the callee keeps
+    RefAt Vec<I64>
+    RefBody Vec<I64>
+    RefParam Vec<I64>
     Rets Vec<Expr&>      # every value a return hands back
     # the temporaries lent writably whole as an argument of a body's call (a walk made by a call and lent to a helper,
     # "a.Iter().Fold(...)"): each one's value, the body and the parameter
@@ -724,6 +730,7 @@ fn Uses(t types.Table&, b Body&) LocalUses {
         u.WrScalar.Push(false)
         u.Whole.Push(false)
         u.Esc.Push(false)
+        u.EscHard.Push(false)
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
         u.Init.Push(null)
@@ -750,6 +757,13 @@ fn (u mut LocalUses&) aliasInto(i I64, a I64) {
     if u.WrOther[i] or u.Whole[i]: u.WrOther[a] = true
     if u.WrScalar[i]: u.WrScalar[a] = true
     if u.Esc[i] or u.Ret[i]: u.Esc[a] = true
+    if u.EscHard[i] or u.Ret[i]: u.EscHard[a] = true
+    for k in range u.RefAt.Len() {
+        if u.RefAt[k] != i: continue
+        u.RefAt.Push(a)
+        u.RefBody.Push(u.RefBody[k])
+        u.RefParam.Push(u.RefParam[k])
+    }
     # (a lend of the alias whole lends its storage: the source's, to the same parameter)
     n := u.LendAt.Len()
     for k in range n {
@@ -976,18 +990,24 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
     }
     if u.spawning > 0 {
         u.Esc[root] = true
+        u.EscHard[root] = true
         return
     }
     match ctx {
         case Ctx.Op, Ctx.Arg { }
-        case Ctx.Store { if ref: u.Esc[root] = true }
+        case Ctx.Store { if ref: u.escape(root) }
         case Ctx.Ret { u.Ret[root] = true }
         case Ctx.Alias(of) {
-            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.Esc[root] = true
+            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.escape(root)
             u.AliasOf[I64(of)] = root
         }
-        case Ctx.Esc { u.Esc[root] = true }
+        case Ctx.Esc { u.escape(root) }
     }
+}
+
+fn (u mut LocalUses&) escape(root I64) {
+    u.Esc[root] = true
+    u.EscHard[root] = true
 }
 
 fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
@@ -1105,8 +1125,28 @@ fn (u mut LocalUses&) call(c Call&) {
             u.TempIn.Push(u.at)
         }
         kept := u.T.IsRef(a.Type()) and not helper
+        if kept and body >= 0 and u.spawning == 0 and u.refArg(a, body, i): continue
         u.expr(a, Ctx.Esc if kept else Ctx.Arg)
     }
+}
+
+# a read-only reference to a place of a local given parameter k of a body's call: Esc (the callee may keep it), recorded
+# in RefAt rather than EscHard - false for any other argument
+fn (u mut LocalUses&) refArg(a Expr&, body I64, k I64) Bool {
+    p := match a {
+        case Expr.Borrow(_, ty, q): q if (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case Expr.Read(_, ty, q, _): q if not scalarType(u.T, ty) and (u.T.PermOf(ty) & types.Writable) == 0 else null
+        case _: null
+    }
+    if p is null: return false
+    root := u.rootOf(p)
+    if root < 0: return false
+    u.placeExprs(p)
+    u.Esc[root] = true
+    u.RefAt.Push(root)
+    u.RefBody.Push(body)
+    u.RefParam.Push(k)
+    return true
 }
 
 # the value a writable borrow of a temporary whole lends (a value given storage for the call, Promote), else null

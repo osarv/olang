@@ -308,7 +308,12 @@ fn (it mut LineIter&) Next() String&it ? Exhausted {
 
 # the texts one after another with sep between each two: String&["a", "b", "c"].Join(", ") is "a, b, c" - the empty array
 # joins to the empty text. Built at its exact length, once; "$" renders the array itself as source instead (E11a)
-fn (parts Array<String&>&) Join(sep String&) String {
+fn (parts Array<String&>&) Join(sep String&) String { return joinTexts(parts, sep) }
+
+# ...the same of texts held by value (an array's own, a Vec<String>'s)
+fn (parts Array<String>&) Join(sep String&) String { return joinTexts(parts, sep) }
+
+fn joinTexts<T>(parts Array<T>&, sep String&) String {
     n I64 = 0
     for p in parts { n += p.Len() }
     if parts.Len() > 1 { n += sep.Len() * (parts.Len() - 1) }

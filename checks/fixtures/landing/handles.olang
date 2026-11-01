@@ -29,7 +29,7 @@ fn group(n I64) Map<I64, Vec<String&>> ? {
     for i in range n {
         k := i % 3
         if not m.Has(k) { m.Put(k, Vec<String&>()) }
-        l := try m.Get(k)
+        l := try m.RefMut(k)
         l.Push("v" $i)
         churn()
     }
@@ -37,16 +37,16 @@ fn group(n I64) Map<I64, Vec<String&>> ? {
 }
 
 # a second name for a list in an inner block, and lists passed by value - the same collection (T8)
-fn addTo(l Vec<String&>, t String&) { l.Push(t) }
-fn putIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
+fn addTo(l mut Vec<String&>&, t String&) { l.Push(t) }
+fn putIn(m mut Map<I64, I64>&, k I64) { m.Put(k, k * k) }
 fn aliases() String& ? {
     l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
-        l2 := l
+        l2 mut Vec<String&>&l = l
         l2.Push($i)
         addTo(l2, "a" $i)
-        m2 := m
+        m2 Map<I64, I64>&m = m
         putIn(m2, i)
         churn()
     }
@@ -60,7 +60,7 @@ fn builders() String& ? {
     m := Map<I64, StringBuilder>()
     for k in range 2 { m.Put(k, StringBuilder()) }
     for i in range 6 {
-        b := try m.Get(i % 2)
+        b := try m.RefMut(i % 2)
         b.Push("<" $i ">")
         churn()
     }

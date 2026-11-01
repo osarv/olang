@@ -13,13 +13,13 @@ fn churn() ? io.Error {
     }
 }
 fn add(lll mut Vec<Vec<Vec<I64>>>&, x I64) {
-    h := lll[0][0]
+    h := lll.RefMut(0).RefMut(0)
     h.Push(x)
 }
 fn main() ? {
     lll := Vec<Vec<Vec<I64>>>()
     lll.Push(Vec<Vec<I64>>())
-    lll[0].Push(Vec<I64>())
+    lll.RefMut(0).Push(Vec<I64>())
     add(lll, 7)
     try churn()
     assert lll[0][0].Len() == 1 and lll[0][0][0] == 7, $lll[0][0]

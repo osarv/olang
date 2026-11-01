@@ -8,7 +8,7 @@ import "std/io"
 fn group() Vec<I64> ? {
     m := Map<I64, Vec<I64>>()
     m.Put(1, Vec<I64>())
-    l := try m.Get(1)
+    l := try m.RefMut(1)
     for i in range 40 {
         l.Push(i * 3)
     }

@@ -1116,7 +1116,7 @@ fn (e mut Emitter&) canonOf(ty types.TypeId) String {
 
 # table ti's name: its instance's type and its trait - the same in every object, so that the linker keeps one
 fn (e mut Emitter&) tableName(ti I64) String {
-    tab := e.P.AnyTables[ti]
+    tab := e.P.AnyTables.Ref(ti)
     return $e.canonOf(tab.Concrete) "|" $e.canonOf(tab.Trait)
 }
 
@@ -1132,7 +1132,7 @@ fn (e mut Emitter&) typeid(ty types.TypeId) String {
 fn (e mut Emitter&) anyTable(ti I64) String {
     s := types.Symbol($"olang.table." $e.tableName(ti))
     if e.has(s) { return s }
-    tab := e.P.AnyTables[ti]
+    tab := e.P.AnyTables.Ref(ti)
     words := StringBuilder()
     words.Push("ptr @" $e.typeid(tab.Concrete))
     for top in Bool[false, true] {
@@ -1779,7 +1779,7 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if e.has(s) { return "@" $s }
     b := e.globalBody(m, n)
     if b >= 0 and e.Baked.Has(b) {
-        img := try e.Baked.Get(b) catch default eval.Image()
+        img := try e.Baked.Ref(b) catch default eval.Image()
         text := e.bakedText(s, img)
         if img.Mutable {
             # a mutable global's first value written as its storage's (interp.bakeMutable): plain data, declared
@@ -1810,7 +1810,7 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
 fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
     out := StringBuilder()
     for j in range img.Blobs.Len() {
-        b := img.Blobs[j]
+        b := img.Blobs.Ref(j)
         q I64 = 0       # the next of its references another global's image holds (K2b)
         name := "@" $s if j == 0 else "@" $s ".k" $j
         # K2: an immutable global's own storage is never written once set, so it is a constant, whose loads LLVM folds;
@@ -2743,7 +2743,7 @@ fn (fe mut fnEm&) run() {
     for b in f.Taken { taken.Put(I64(b), true) }
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
-        bb := f.Blocks[b]
+        bb := f.Blocks.Ref(b)
         # S18d: a clause takes the error - the trace it left is no one's now
         if taken.Has(b) and fe.E.traced() {
             fe.E.runtime("__olang_ert_clear")
@@ -3706,7 +3706,7 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
         for work.Len() > 0 {
             b := try work.Pop() catch { unreachable }
             x := st[b]
-            bb := f.Blocks[b]
+            bb := f.Blocks.Ref(b)
             for i in range bb.Stmts.Len() {
                 match bb.Stmts[i] {
                     case mir.Stmt.Open(_, s) { if I64(s) == sc: x = 0 }

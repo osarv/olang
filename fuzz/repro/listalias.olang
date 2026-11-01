@@ -18,7 +18,7 @@
 # anything where the copy's own storage is. The generator now makes second names only in the collection's own block
 # and passes collections by reference.
 import "std/io"
-fn byValue(l Vec<I64>, m Map<I32, I32>) I64 {
+fn byValue(l mut Vec<I64>&, m mut Map<I32, I32>&) I64 {
     l.Push(9)
     m.Put(7, 7)
     return l.Len()

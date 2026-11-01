@@ -53,7 +53,7 @@ type Words struct() {
 
 fn (ws mut Words&) add(name String&, word String&) {
     if not ws.byType.Has(name) { ws.byType.Put($name, Map<String&, String&>()) }
-    m := ws.byType.Get(name)!
+    m := ws.byType.RefMut(name)!
     m.Put($word, Camel(word))
 }
 

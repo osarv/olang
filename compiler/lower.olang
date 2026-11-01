@@ -87,6 +87,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # ... per body: whether it keeps its parameter's referent's parts as they are (preserves: body * 64 + k), its reference
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
+    keptRefs Map<I64, Bool>     # keepsNoRef's answers, by body * 64 + parameter
     CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
@@ -194,7 +195,7 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
 # $ of an "any"'s instance (T33): a Render helper over the type the instance is stored as, rendering the instance's
 # value as $ renders its own type - at the top of a piece, or inside another value
 fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
-    tab := lw.P.AnyTables[ti]
+    tab := lw.P.AnyTables.Ref(ti)
     hty := mir.HelperType(lw.P.T, mir.HelperKind.Render, tab.Stored)
     b := standIn(hty)
     ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.AnyRender(ti, top), hty))
@@ -677,7 +678,7 @@ fn (ln mut lowering&) releaseAt(l mir.LocalId, paths Vec<Array<I64>>&, sp source
 
 # ---- scopes and the exit sequence ----
 
-fn (ln mut lowering&) top() level { return ln.levels[ln.levels.Len() - 1] }
+fn (ln lowering&) top() level&ln { return ln.levels.Ref(ln.levels.Len() - 1) }
 
 # a typed block lowered: a scope of its own where its id is not the enclosing block's, its statements, and on falling
 # off its end the exit sequence for it
@@ -1148,7 +1149,7 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
     ln.start(head)
     ln.loops.Push(loopCtx(body.Id, ln.levels.Len()))
     ln.block(body)
-    lc := ln.loops.Ref(ln.loops.Len() - 1)
+    lc := ln.loops.RefMut(ln.loops.Len() - 1)
     # falling off the body's end continues, as a continue does
     ln.leaveOpen(lc.conts)
     if lc.conts.Len() > 0 {
@@ -1162,7 +1163,7 @@ fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&
 
 fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.BlockId) {
     for k := ln.loops.Len() - 1, k >= 0, k-- {
-        lc := ln.loops.Ref(k)
+        lc := ln.loops.RefMut(k)
         if lc.Body == loop {
             ln.leave(lc.Depth)
             if kind == typed.JumpKind.Break { ln.leaveOpen(lc.brk) } else { ln.leaveOpen(lc.conts) }
@@ -1702,7 +1703,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     covered := Array<Bool>(xs.Len())
     left := xs.Len()
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
-        tc := ln.tries.Ref(ti)
+        tc := ln.tries.RefMut(ti)
         for ci in range tc.Clauses.Len() {
             if ln.dead { return }
             cl := tc.Clauses[ci]
@@ -2477,6 +2478,18 @@ fn (ln mut lowering&) readHere(x typed.Expr&) {
         case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.readHere(args[0]) }
         case typed.Expr.Away(_, _, y) { ln.readHere(y) }
         case typed.Expr.Seq(_, _, q) { if q.X is not null and q.Stmts.Len() == 0: ln.readHere(q.X!) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { ln.readPlace(p) }
+        case _ { }
+    }
+}
+
+# (a part of a temporary read or borrowed where it stands - `v[i].xs.Len()`: the temporary is only read too)
+fn (ln mut lowering&) readPlace(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Field(_, _, base, _) { ln.readPlace(base) }
+        case typed.Lvalue.Payload(_, _, py) { ln.readPlace(py.Base) }
+        case typed.Lvalue.Elem(_, _, e) { ln.readPlace(e.Base) }
+        case typed.Lvalue.Temp(_, _, x, _) { ln.readHere(x) }
         case _ { }
     }
 }
@@ -2815,7 +2828,7 @@ fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     k := l.Kind
     if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
-    if l.Unset or u.Esc[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or not ln.lendsKeep(u, i): return false
+    if l.Unset or ln.escapes(u, i) or u.Ret[i] or u.WrOther[i] or u.Whole[i] or not ln.lendsKeep(u, i): return false
     for k2 in range u.StoreAt.Len() {
         if u.StoreAt[k2] == i: return false
     }
@@ -2826,7 +2839,7 @@ fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
 
 # why local i holds no views (OLANG_VIEWDUMP)
 fn (ln mut lowering&) whyNot(u typed.LocalUses&, i I64) String {
-    return $(" escapes" if u.Esc[i] else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
+    return $(" escapes" if ln.escapes(u, i) else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
 }
 
 # whether every writable lend of local i whole goes to a body keeping its parts as they are (a walk's Next, which
@@ -2941,7 +2954,61 @@ fn (ln mut lowering&) heldReferent(u typed.LocalUses&, i I64) Bool {
     # (one given storage made for it by the call declaring it - a built result no one else holds: its own, as a value
     # local's is)
     x := u.Init[i]
-    return x is not null and ln.freshCall(x) and ln.heldUnchanged(u, i)
+    if x is not null and ln.freshCall(x) and ln.heldUnchanged(u, i): return true
+    # (what any reference names - a parameter's, which may change under a "mut" name for it - is changed by nothing
+    # while every statement of the block the view lives in writes nothing it could reach: quietLife)
+    return not u.Whole[i] and not u.WrOther[i] and ln.quietLife()
+}
+
+# whether the block a local holding views is declared in (vlIn) writes nothing storage outside it could be: each of its
+# statements, nested ones too, quiet (no call giving a writable reference, through a function value or an "any"), its
+# stores a scalar local's - in a program none of whose globals can be written through (check.mutStorage)
+fn (ln mut lowering&) quietLife() Bool {
+    if ln.L.P.L.MutStorage or ln.B.Root is null: return false
+    b := findBlock(ln.B.Root!, ln.vlIn)
+    return b is not null and ln.quietBlock(b)
+}
+
+# the block of a body named id, null for none
+fn findBlock(b typed.Block&, id typed.BlockId) typed.Block?&b {
+    if b.Id == id: return b
+    for s in b.Stmts {
+        r := match s {
+            case typed.Stmt.Block(_, k), typed.Stmt.Loop(_, k, _): findBlock(k, id)
+            case typed.Stmt.If(_, f): findIn(f.Then, f.Else, id)
+            case _: null
+        }
+        if r is not null: return r
+    }
+    return null
+}
+
+fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?&a {
+    r := findBlock(a, id)
+    if r is not null or e is null: return r
+    return findBlock(e, id)
+}
+
+fn (ln mut lowering&) quietBlock(b typed.Block&) Bool {
+    for s in b.Stmts {
+        if not ln.quietNested(s): return false
+    }
+    return true
+}
+
+fn (ln mut lowering&) quietNested(s typed.Stmt&) Bool {
+    t := ln.T
+    return match s {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x): ln.quietX(x)
+        case typed.Stmt.Assign(_, p, x): p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT) and ln.quietX(x)
+        case typed.Stmt.If(_, f): ln.quietX(f.Test) and ln.quietBlock(f.Then) and (f.Else is null or ln.quietBlock(f.Else!))
+        case typed.Stmt.Block(_, k): ln.quietBlock(k)
+        case typed.Stmt.Loop(_, k, post): ln.quietBlock(k) and (post is null or ln.quietBlock(post))
+        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _): true
+        case typed.Stmt.Return(_, x): ln.quietX(x)
+        case typed.Stmt.Assert(_, c, m): ln.quietX(c) and ln.quietX(m)
+        case _: false
+    }
 }
 
 # whether a value is a call of a body whose result is storage made for it, which nothing else holds (freshResult)
@@ -2972,9 +3039,54 @@ fn (ln mut lowering&) heldLocal(u typed.LocalUses&, i I64) Bool {
 fn (ln mut lowering&) heldUnchanged(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     if l.Kind == typed.LocalKind.Capture or not ln.encloses(l.In, ln.vlIn): return false
-    if u.WrOther[i] or u.Whole[i] or u.Esc[i] or not ln.lendsKeep(u, i): return false
+    if u.WrOther[i] or u.Whole[i] or ln.escapes(u, i) or not ln.lendsKeep(u, i): return false
     for k in range u.StoreAt.Len() {
         if u.StoreAt[k] == i: return false
+    }
+    return true
+}
+
+# whether local i's storage escapes: stored, captured, handed to a task, or given as a read-only reference to a body
+# that may keep it (typed.LocalUses.RefAt)
+fn (ln mut lowering&) escapes(u typed.LocalUses&, i I64) Bool {
+    if u.EscHard[i]: return true
+    for k in range u.RefAt.Len() {
+        if u.RefAt[k] == i and not ln.L.keepsNoRef(u.RefBody[k], u.RefParam[k]): return true
+    }
+    return false
+}
+
+# whether a body keeps nothing of the read-only reference its parameter k is given: the parameter stored nowhere,
+# captured by nothing, handed back by no return, named by no other local, and given on only to bodies keeping nothing
+# of it. Asked once a body and parameter (a body reaching itself keeps what it is given, as proved by nothing)
+fn (lw mut Lowerer&) keepsNoRef(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    known := try lw.keptRefs.Get(key) catch {
+        lw.keptRefs.Put(key, false)
+        ok := lw.noRefKept(lw.Bodies[body], k)
+        lw.keptRefs.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (lw mut Lowerer&) noRefKept(b typed.Body&, k I64) Bool {
+    if b.Root is null or k >= b.Params.Len(): return false
+    u := typed.Uses(lw.P.T, b)
+    p := I64(b.Params[k])
+    if u.EscHard[p] or u.Ret[p] or u.WrOther[p] or u.Whole[p]: return false
+    for j in range u.AliasOf.Len() {
+        if u.AliasOf[j] == p: return false
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p: return false
+    }
+    for j in range u.StoreAt.Len() {
+        if u.StoreAt[j] == p: return false
+    }
+    for j in range u.RefAt.Len() {
+        if u.RefAt[j] == p and not lw.keepsNoRef(u.RefBody[j], u.RefParam[j]): return false
     }
     return true
 }

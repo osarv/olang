@@ -12,8 +12,9 @@
 # A Map is a VALUE, as a Vec is: it holds its entries by value (QCE), so a copy of a Map ("c := m", a field, an element,
 # a by-value argument, a task's argument) is a map of its own holding the same keys and values - deep through values,
 # shallow at references - and a Put to one is never seen through the other. Sharing one map is written with "&" ("m mut
-# Map<K, V>&"); a value is changed where the map holds it through Ref(key) ("m.Ref(k).Push(x)" for a Map of Vecs) or
-# Update. Everything a Map allocates lives where it does, so it is reclaimed with that scope and needs no destructor.
+# Map<K, V>&"); a value is read where the map holds it through Ref(key), and changed there through RefMut(key)
+# ("m.RefMut(k).Push(x)" for a Map of Vecs) or Update. Everything a Map allocates lives where it does, so it is
+# reclaimed with that scope and needs no destructor.
 #
 # A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
 # map, which every call checks (O10b). A key held by value ("Map<String, I32>") is the map's own copy, made when the key
@@ -130,9 +131,12 @@ fn (m mut Map<K, V>&) Update(key K, init V, f fn(v V) V) {
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<K, V>&) Get(key K) V ? MapError { return m.ents[try m.slotOf(key)].Value }
 
-# the value for key where the map holds it, to change in place - "m.Ref(k).Push(x)" for a Map of Vecs, where Get gives
-# a copy - failing with Missing when there is none. Good until the map grows (a Put of a new key may move the values)
-fn (m mut Map<K, V>&) Ref(key K) mut V&m ? MapError { return m.ents[try m.slotOf(key)].Value }
+# the value for key where the map holds it, read with no copy made (Get gives one) - failing with Missing when there is
+# none. Good until the map grows (a Put of a new key may move the values) or loses the key
+fn (m Map<K, V>&) Ref(key K) V&m ? MapError { return m.ents[try m.slotOf(key)].Value }
+
+# ...writable, to change in place - "m.RefMut(k).Push(x)" for a Map of Vecs
+fn (m mut Map<K, V>&) RefMut(key K) mut V&m ? MapError { return m.ents[try m.slotOf(key)].Value }
 
 # whether key has a value - what "key in m" asks (E29)
 fn (m Map<K, V>&) Has(key K) Bool {

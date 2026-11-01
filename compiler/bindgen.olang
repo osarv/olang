@@ -308,8 +308,8 @@ fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
         if k == "RecordDecl" { g.recordDecl(f, text(f, "name"), own) }
         if k != "FieldDecl" { continue }
         if flag(f, "isBitfield") { g.recs[r].Bitfields = true }
-        g.recs.Ref(r).Names.Push(text(f, "name"))
-        g.recs.Ref(r).Types.Push(typeOf(f))
+        g.recs.RefMut(r).Names.Push(text(f, "name"))
+        g.recs.RefMut(r).Types.Push(typeOf(f))
     }
 }
 
@@ -577,7 +577,7 @@ fn (g mut gen&) plain(i I64) Bool {
 # whether a struct or a union is held as opaque words (X18): complete, given back by no function, not plain data - its
 # size and alignment asked of clang, an alignment of 8 at most
 fn (g mut gen&) opaque(i I64) Bool {
-    r := g.recs[i]
+    r := g.recs.Ref(i)
     if not r.Complete or r.Returned or g.plain(i) { return false }
     return r.Size > 0 and r.Align > 0 and r.Align <= 8 and r.Size % r.Align == 0
 }
@@ -744,7 +744,7 @@ fn preludeName(n String&) Bool {
 
 # how a C type is spelled for a size probe (X18): the typedef naming it, else its tag
 fn (g gen&) spell(i I64) String {
-    r := g.recs[i]
+    r := g.recs.Ref(i)
     if r.Typedef != "" { return $r.Typedef }
     return $r.Key
 }
@@ -840,7 +840,7 @@ fn resultText(t String&) String {
 
 fn (g mut gen&) structDecl(i I64) String {
     b := StringBuilder()
-    r := g.recs[i]
+    r := g.recs.Ref(i)
     b.Push("type " $r.Name " struct() {\n")
     if not g.plain(i) {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place
@@ -921,7 +921,7 @@ fn (g mut gen&) write(head String&) String {
     opaque := StringBuilder()
     plains := StringBuilder()
     for i in range g.recs.Len() {
-        r := g.recs[i]
+        r := g.recs.Ref(i)
         if r.Name == "" or not g.wantRecord(i) { continue }
         if g.holdable(i) {
             plains.Push($"\n" $g.structDecl(i))
@@ -949,7 +949,7 @@ fn (g mut gen&) write(head String&) String {
 # whether a record is declared: one a declaration reaches, or one the header defines - for an import, every complete
 # one with a name of its own
 fn (g gen&) wantRecord(i I64) Bool {
-    r := g.recs[i]
+    r := g.recs.Ref(i)
     if r.Used { return true }
     if not g.all { return r.Own and r.Complete }
     return r.Complete and not r.Name.StartsWith("c_")
@@ -1689,7 +1689,7 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     }
     want Vec<I64>
     for i in range g.recs.Len() {
-        r := g.recs[i]
+        r := g.recs.Ref(i)
         if not r.Complete or r.Returned or g.plain(i) { continue }
         if r.Key == "" and r.Typedef == "" { continue }
         want.Push(i)

@@ -520,7 +520,7 @@ fn main() ? {
             unreachable
         }
         if keepsOldSpelling(src) { continue }
-        known := std.Clone()
+        known := std
         typeDecls(src, known)
         changedText, n := migrate(src, path, known, report)
         if changedText == src { continue }

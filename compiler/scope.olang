@@ -4418,7 +4418,7 @@ fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
         s.noteLate(I64(l), x)
         if s.lateGather { s.lateDecl.Put(I64(l), true) }
         if s.lateGather or s.lateBody != s.Id or s.lateNone.Has(I64(l)) or not s.lateDecl.Has(I64(l)) { return }
-        ts := try s.late.Get(I64(l)) catch { return }
+        ts := try s.late.Ref(I64(l)) catch { return }
         s.bindFrom.Put(I64(l), s.bindTerms.Len())
         for t in ts {
             s.bindTerms.Push(t)
@@ -4494,7 +4494,7 @@ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
     }
     first := not s.late.Has(l)
     if first { s.late.Put(l, Vec<Term>()) }
-    ts := try s.late.Ref(l) catch { return }
+    ts := try s.late.RefMut(l) catch { return }
     for w in range n {
         t := s.bindTerms[s.ctorFrom + w]
         if first {

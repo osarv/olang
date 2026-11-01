@@ -172,7 +172,7 @@ test "Vec: held in a List, a Map and a Vec - a type argument like any other, eac
     vv := Vec<Vec<I64>>()
     for i in range 5 {
         vv.Push(Vec<I64>())                             # made where vv lives
-        for k in range i + 1 { vv.Ref(i).Push(k * 10) } # changed where vv holds it
+        for k in range i + 1 { vv.RefMut(i).Push(k * 10) } # changed where vv holds it
         e := vv[i]                                      # a copy
         l.Push(e)
         m.Put($i, e)
@@ -180,7 +180,7 @@ test "Vec: held in a List, a Map and a Vec - a type argument like any other, eac
     churn()
     g := try m.Get("3") catch { unreachable }
     g.Push(99)                                          # g's own: the List's, the Vec's and the Map's are not changed
-    (try m.Ref("4")).Push(7)                            # the Map's, where it holds it
+    (try m.RefMut("4")).Push(7)                            # the Map's, where it holds it
     assert l[3].Len() == 4 and vv[3].Len() == 4 and g.Len() == 5 and vv[4].Len() == 5 and l[4][4] == 40
     assert (try m.Get("4")).Len() == 6 and (try m.Get("3")).Len() == 4
 }
@@ -255,6 +255,20 @@ test "Vec: room made up front, Reserve, Cap, Remove and Join" {
     t.Push("b")
     t.Push("c")
     assert t.Join(", ") == "a, b, c" and Vec<String&>().Join("-") == ""
+    o := Vec<String>()
+    for i in range 3 { o.Push($i) }
+    assert o.Join("+") == "0+1+2" and Vec<String>().Join("-") == "" and String["x", "y"].Join("") == "xy"
+}
+
+fn vecJoined(n I64) String {
+    o := Vec<String>()
+    for i in range n { o.Push($"w" $i) }
+    return o.Join(" ")
+}
+VecJoinedBaked String = vecJoined(3)            # K2: computed while compiling
+
+test "Vec: texts held by value joined, while compiling and at run time" {
+    assert VecJoinedBaked == "w0 w1 w2" and vecJoined(3 * Run) == "w0 w1 w2"
 }
 
 # ---- a Vec held by value in a field or a global, elements that are values holding references ----

@@ -17,7 +17,7 @@ type B2 struct() {
     t I64 = 0
 }
 fn add(bs mut Vec<B2>&, x I64) {
-    bs[0].names.Push($x)
+    bs.RefMut(0).names.Push($x)
 }
 fn main() ? {
     bs := Vec<B2>()

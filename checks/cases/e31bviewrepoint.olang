@@ -12,5 +12,5 @@ fn f(v mut V&) { v.d = Array<I64>(3) }
 
 fn main() ? {
     s := Vs(Array<I64>(4))
-    f(s[0])
+    f(s.RefMut(0))
 }

@@ -12,7 +12,7 @@ fn churn() ? io.Error {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-fn add(bs mut Vec<Blk>&, b I64, x I64) { bs[b].S.Push(x) }
+fn add(bs mut Vec<Blk>&, b I64, x I64) { bs.RefMut(b).S.Push(x) }
 fn main() ? {
     bs := Vec<Blk>()
     bs.Push(Blk())

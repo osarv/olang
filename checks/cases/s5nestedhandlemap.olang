@@ -8,7 +8,7 @@ fn main() ? {
     (try mm.Get(0)).Push(Vec<String&>())
     for k in range 3 {
         t := $k "-loop-text"
-        (try mm.Get(0))[0].Push(t)
-        pushFn((try mm.Get(0))[0], t)
+        (try mm.Get(0)).RefMut(0).Push(t)
+        pushFn((try mm.Get(0)).RefMut(0), t)
     }
 }

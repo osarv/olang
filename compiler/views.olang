@@ -377,7 +377,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
                             match st {
                                 case ast.Stmt.Var(_, vd) {
                                     if vd.Field {
-                                        for n in vd.Names { v.nameLists.Ref(k).Push(n) }
+                                        for n in vd.Names { v.nameLists.RefMut(k).Push(n) }
                                     }
                                 }
                                 case _ { }
@@ -389,7 +389,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
             }
         }
     }
-    ns := v.nameLists[k]
+    ns := v.nameLists.Ref(k)
     return $v.text(ns[i]) if i < ns.Len() else $i
 }
 
@@ -1316,7 +1316,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     argRefs Vec<Vec<view>>
     for i in range n {
         argRefs.Push(Vec<view>())
-        v.expr(c.Args[i], st, argRefs.Ref(i))
+        v.expr(c.Args[i], st, argRefs.RefMut(i))
     }
     tok := v.callTok(sp, c)
     name := v.str(v.quoted(callee))

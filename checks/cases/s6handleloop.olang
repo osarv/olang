@@ -19,7 +19,7 @@ fn main() ? {
     }
     for i in range 5 {
         for j in range 20 {
-            users[i].Push(i * 10 + j)
+            users.RefMut(i).Push(i * 10 + j)
             boxes[i].items.Push(i * 100 + j)
             (try m.Get(i)).Push(i * 1000 + j)
         }
@@ -27,7 +27,7 @@ fn main() ? {
     names := Vec<Vec<String&>>()
     for i in range 5 {
         names.Push(Vec<String&>())
-        names[i].Push("init")
+        names.RefMut(i).Push("init")
     }
     kept := "kept-text-of-moderate-length"
     for i in range 5 {

@@ -269,7 +269,7 @@ fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
                 t1 := time.Now()
                 if o.Stderr.Len() > 0 { benchlib.Warn(o.Stderr) }
                 if key not in times { times.Put(key, Vec<I64>()) }
-                (try times.Get(key) catch default Vec<I64>()).Push((t1 - t0) / 1000)
+                (try times.RefMut(key) catch MapError { continue }).Push((t1 - t0) / 1000)
             }
         }
     }
@@ -278,7 +278,7 @@ fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
 
 # the median and the minimum of a list of microsecond counts
 fn stat(us Vec<I64>&) I64, I64 {
-    sorted := us.Clone()
+    sorted Vec<I64> = us
     sorted.Sort(fn(a I64, b I64) Bool { return a < b })
     n := sorted.Len()
     med := sorted[n / 2]

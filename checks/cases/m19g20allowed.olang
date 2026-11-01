@@ -45,7 +45,7 @@ fn main() {
     n := g.Len()                                # used before the growth only
     v.Push(1)
     assert n > 0
-    c := v                                      # a second name, no view
+    c mut Vec<I64>&v = v                                      # a second name, no view
     c.Push(3)
     v.Push(4)
     assert c.Len() == v.Len()
@@ -61,7 +61,7 @@ fn main() {
     vv := Vec<Vec<I64>>()
     vv.Push(Vec<I64>())
     outer := vv.View()
-    inner := vv[0]
+    inner := vv.RefMut(0)
     inner.Push(9)                               # the inner Vec grows; the outer buffer is not replaced
     assert outer.Len() == 1
 }

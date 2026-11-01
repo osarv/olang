@@ -9,6 +9,6 @@ fn main() ? {
     l := Vec<Vec<I64>>()
     first := Vec<I64>()
     l.Push(first)
-    work(l[0], l)
+    work(l.RefMut(0), l)
     assert l[0].Len() == 0 and first.Len() == 1, "element " $l[0].Len() " replaced " $first.Len()
 }

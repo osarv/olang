@@ -5,6 +5,6 @@ fn main() ? {
     users := Vec<Vec<I64>>()
     for _ in range 4 { users.Push(Vec<I64>()) }
     join {
-        for i in range 4 { spawn users[i].Push(i) }
+        for i in range 4 { spawn users.RefMut(i).Push(i) }
     }
 }

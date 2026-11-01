@@ -5,7 +5,7 @@ import "std/io"
 fn main() ? {
     v := Vec<I64>()
     v.Push(1)
-    b := v
+    b Vec<I64>&v = v
     v.Push(2)
     try io.Println($b.Len())
 }

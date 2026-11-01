@@ -3,7 +3,7 @@
 # E31b/P2: the spawned form of "users[i].Push(v)" is a function taking the collection, one task per inner list - what
 # it builds is built where the inner lists' state lives, so it is there after the join and an arena churn
 fn pushTo(users mut Vec<Vec<I64>>&, i I64) {
-    for j in range 20 { users[i].Push(i * 100 + j) }
+    for j in range 20 { users.RefMut(i).Push(i * 100 + j) }
 }
 
 fn main() ? {

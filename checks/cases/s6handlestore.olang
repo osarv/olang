@@ -5,7 +5,7 @@ fn main() ? {
     names := Vec<Vec<String&>>()
     for i in range 3 {
         names.Push(Vec<String&>())
-        names[i].Push("init")
+        names.RefMut(i).Push("init")
     }
     for i in range 3 {
         t := $i "-loop-text"

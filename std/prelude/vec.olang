@@ -7,7 +7,8 @@
 # element, a by-value argument, a task's argument) is a Vec of its own holding the same elements - deep through values,
 # shallow at references, as any value's copy is - and a Push to one is never seen through the other. Sharing one Vec is
 # written with "&": "v mut Vec<I64>&" names another's Vec and may change it, "v Vec<I64>&" reads it. An element is
-# changed in place through Ref(i) ("vv.Ref(i).Push(x)" for a Vec of Vecs), as a Map's value is through Map.Ref.
+# read where the Vec holds it through Ref(i) and changed there through RefMut(i) ("vv.RefMut(i).Push(x)" for a Vec of
+# Vecs), as a Map's value is through Map.Ref and Map.RefMut - where "vv[i]" gives a copy.
 #
 # Growth replaces the buffer: a new one, twice the size (8 at first), the elements moved into it, and the old one
 # retired - nothing in a Vec uses it again. The old buffer stays where the Vec lives until that scope closes, so a view of
@@ -100,9 +101,12 @@ fn (v Vec<T>&) Get(i I64) T ? VecError.OutOfRange {
     return v.data[i]
 }
 
-# the element at position i where the Vec holds it, to change in place - "vv.Ref(i).Push(x)" for a Vec of Vecs, where
-# "vv[i]" gives a copy. Unchecked, as At is; good until the Vec grows, as a view is (View)
-fn (v mut Vec<T>&) Ref(i I64) mut T&v { return v.data[i] }
+# the element at position i where the Vec holds it, read with no copy made - "vv[i]" gives a copy. Unchecked, as At is;
+# good until the Vec grows or loses it, as a view is (View)
+fn (v Vec<T>&) Ref(i I64) T&v { return v.data[i] }
+
+# ...writable, to change in place - "vv.RefMut(i).Push(x)" for a Vec of Vecs
+fn (v mut Vec<T>&) RefMut(i I64) mut T&v { return v.data[i] }
 
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is
 fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
@@ -219,6 +223,27 @@ fn (v Vec<T>&) Has(x T) Bool {
 
 # the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
 fn (v Vec<String&>&) Join(sep String&) String { return v.data[:v.n].Join(sep) }
+
+# ...of texts the Vec holds by value
+fn (v Vec<String>&) Join(sep String&) String {
+    n I64 = sep.Len() * (v.n - 1) if v.n > 1 else 0
+    for i in range v.n { n += v.data[i].Len() }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i in range v.n {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in v.data[i] {
+            out[w] = c
+            w++
+        }
+    }
+    return out
+}
 
 # the elements copied into one array in the CALLER's scope - independent of the Vec, which may grow
 fn (v Vec<T>&) ToArray() mut Array<T>& {

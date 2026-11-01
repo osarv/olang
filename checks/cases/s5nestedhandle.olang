@@ -5,9 +5,9 @@
 fn main() ? {
     users := Vec<Vec<Vec<String&>>>()
     users.Push(Vec<Vec<String&>>())
-    users[0].Push(Vec<String&>())
+    users.RefMut(0).Push(Vec<String&>())
     for k in range 3 {
         t := $k "-loop-text"
-        users[0][0].Push(t)
+        users.RefMut(0).RefMut(0).Push(t)
     }
 }

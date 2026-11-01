@@ -15321,22 +15321,22 @@ fn o17bGroup(n I64) Map<I64, Vec<String&>> ? {
     for i in range n {
         k := i % 3
         if not m.Has(k) { m.Put(k, Vec<String&>()) }
-        l := try m.Get(k)
+        l := try m.RefMut(k)
         l.Push("v" $i)
         sbChurn()
     }
     return m
 }
-fn o17bAddTo(l Vec<String&>, t String&) { l.Push(t) }
-fn o17bPutIn(m Map<I64, I64>, k I64) { m.Put(k, k * k) }
+fn o17bAddTo(l mut Vec<String&>&, t String&) { l.Push(t) }
+fn o17bPutIn(m mut Map<I64, I64>&, k I64) { m.Put(k, k * k) }
 fn o17bAliases() String& ? {
     l := Vec<String&>()
     m := Map<I64, I64>()
     for i in range 4 {
-        l2 := l
+        l2 mut Vec<String&>&l = l
         l2.Push($i)
         o17bAddTo(l2, "a" $i)
-        m2 := m
+        m2 Map<I64, I64>&m = m
         o17bPutIn(m2, i)
         sbChurn()
     }
@@ -15348,7 +15348,7 @@ fn o17bBuilders() String& ? {
     m := Map<I64, StringBuilder>()
     for k in range 2 { m.Put(k, StringBuilder()) }
     for i in range 6 {
-        b := try m.Get(i % 2)
+        b := try m.RefMut(i % 2)
         b.Push("<" $i ">")
         sbChurn()
     }
@@ -15487,7 +15487,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     b := QcBoxG
     assert b.P[1] == 5 and qcFirst(b) == 4
     w := Vec<I64>()
-    v := w
+    v mut Vec<I64>&w = w
     v.Push(7 + k)
     assert w.Len() == 1 and w[0] == 7
     c := QcList.Clone()
@@ -15906,22 +15906,22 @@ test "C11/O16: a constructor call's instance is destructed once wherever it is u
     assert CtorTempDestructs == 8 and k == 42
 }
 
-# T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, Clone, ToList
-# and Filter over collections of Lists work on writable ones (the copies they give are writable, and the lists inside
-# are the same lists), and on a read-only one read what they give
+# T25c: an instantiation's read-only reference parameter is as read-only as its argument - Map.Get, At, ToVec and
+# Filter over collections of Vecs work on writable ones (the copies they give are writable, and - Vec a value - each
+# its own), and on a read-only one read what they give
 fn rv3First<T>(l Vec<T>&) T { return l[0] }
 fn rv3ReadOnly(ls Vec<Vec<I64>>&) I64 { return ls[0].Len() + rv3First(ls).Len() }
 fn rv3Handles(k I64, n I64) I64 {
     m := Map<I64, Vec<I64>>()
     m.Put(1, I64[1, 2].ToVec())
-    g := try m.Get(1) catch { return -1 }
+    g := try m.RefMut(1) catch { return -1 }
     g.Push(3 + k)
     mm := try m.Get(1) catch { return -2 }
     ll := Vec<Vec<I64>>()
     ll.Push(Vec<I64>())
     ll.Push(I64[5].ToVec())
-    c := ll.Clone()
-    c[0].Push(6)
+    c := ll
+    c.RefMut(0).Push(6)
     first := rv3First(ll)
     first.Push(8)
     arr := Array<Vec<I64>>(1, I64[7].ToVec())
@@ -15933,7 +15933,7 @@ fn rv3Handles(k I64, n I64) I64 {
 Rv3HandlesBaked := rv3Handles(0, 2)
 test "T25c: a generic's read-only parameter gives copies as writable as its argument" {
     k I64 = I64(ctRuntimeZero)
-    assert rv3Handles(k, 300) == 4311 and Rv3HandlesBaked == 4311
+    assert rv3Handles(k, 300) == 311 and Rv3HandlesBaked == 311
 }
 
 # P2: a spawned lambda building through a reference it captured from the spawner's block builds into its task's own

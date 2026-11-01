@@ -1016,7 +1016,7 @@ fn (d mut dfa&) closure(pc0 I64) {
 
 # the state whose list is work and whose flags are f - found among those made, or made now
 fn (d mut dfa&) intern(f I64) I64 {
-    w := d.work
+    w Vec<I64>&d = d.work
     h I64 = f * 1099511628211
     for i in range w.Len() { h = (h ^ w[i]) * 1099511628211 }
     k := try d.byHash.Get(h) catch MapError default -1
@@ -1229,7 +1229,7 @@ fn (m Match&) Span(i I64) I64, I64 ? NotFound {
 
 # the number of the group named "name", for Match's Group - failing with NotFound when the pattern names none so
 fn (re Regex&) GroupNamed(name String&) I64 ? NotFound {
-    names := re.s.names
+    names Vec<String&>&re = re.s.names
     for i in range names.Len() {
         if names[i] == name and name.Len() > 0 { return i }
     }

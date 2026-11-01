@@ -362,7 +362,7 @@ fn Resolve(p Profile&, tool String&) Places {
             off := a - m.Start + m.Offset
             if path.StartsWith("/") {
                 if not segs.Has(path) { segs.Put($path, segments(path)) }
-                ss := try segs.Get(path) catch default Vec<I64>()
+                ss := try segs.Ref(path) catch default Vec<I64>()
                 for j in range 0, ss.Len(), 3 {
                     if off >= ss[j] and off < ss[j] + ss[j + 1] { r = off - ss[j] + ss[j + 2] }
                 }
@@ -403,7 +403,7 @@ fn Resolve(p Profile&, tool String&) Places {
                 file, line := fileLine(place)
                 if fun == "??" and files[i].StartsWith("/") {
                     if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
-                    ss := try syms.Get(files[i]) catch default Vec<elfFn>()
+                    ss := try syms.Ref(files[i]) catch default Vec<elfFn>()
                     fun = symbolAt(ss, rel[i])
                     if fun == "" { fun = "??" }
                 }
@@ -420,7 +420,7 @@ fn Resolve(p Profile&, tool String&) Places {
         if frames == 0 and rel[i] >= 0 and files[i].StartsWith("/") {
             # no symbolizer: the symbol table alone
             if not syms.Has(files[i]) { syms.Put($files[i], functionSymbols(files[i])) }
-            ss := try syms.Get(files[i]) catch default Vec<elfFn>()
+            ss := try syms.Ref(files[i]) catch default Vec<elfFn>()
             fun := symbolAt(ss, rel[i])
             if fun != "" {
                 pl.Frames.Push(Frame(pl.name(Readable(fun)), pl.name("??"), 0))
@@ -704,7 +704,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
             if next < 0 {
                 next = nodes.Len()
                 nodes.Push(node(fun, nodes[at].Depth + 1))
-                nodes.Ref(at).Kids.Push(next)
+                nodes.RefMut(at).Kids.Push(next)
             }
             nodes[next].Weight += s.Weight
             at = next
@@ -735,7 +735,7 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
         }
     }
     for id in order {
-        n := nodes[id]
+        n := nodes.Ref(id)
         label := "all" if id == 0 else pl.Names[n.Fn]
         tip := $label " - " $millis(n.Weight, p.PeriodNs) " ms, " $pct(n.Weight, total)
         hue := (label.Hash() & 0xFFFF)

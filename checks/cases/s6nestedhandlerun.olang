@@ -7,14 +7,14 @@ fn pushFn(l mut Vec<String&>&, s String&) { l.Push(s) }
 fn main() ? {
     users := Vec<Vec<Vec<String&>>>()
     users.Push(Vec<Vec<String&>>())
-    users[0].Push(Vec<String&>())
+    users.RefMut(0).Push(Vec<String&>())
     mm := Map<I64, Vec<Vec<String&>>>()
     mm.Put(0, Vec<Vec<String&>>())
     (try mm.Get(0)).Push(Vec<String&>())
     for k in range 20 {
-        users[0][0].Push($k "-rendered-where-the-list-lives")
-        pushFn(users[0][0], "lit")
-        (try mm.Get(0))[0].Push($k "-map-text")
+        users.RefMut(0).RefMut(0).Push($k "-rendered-where-the-list-lives")
+        pushFn(users.RefMut(0).RefMut(0), "lit")
+        (try mm.Get(0)).RefMut(0).Push($k "-map-text")
     }
     churn := Vec<String&>()
     for i in range 1000 { churn.Push("x" $i) }

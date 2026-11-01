@@ -5,11 +5,12 @@
 #   - a local declared as a copy of a place holding one by value ("t := c.items", "e := l.toks") becomes a reference to
 #     the place - "t Vec<I64>&c = c.items" where it is never written, "t mut Vec<I64>&c = c.items" where it is - so it
 #     names the same storage as the copy did;
-#   - a local declared from an element a Vec gives ("e := vv[i]") or a value a Map gives ("g := try m.Get(k)"), and
-#     written, takes the element where the collection holds it ("vv.Ref(i)", "try m.Ref(k)");
+#   - a local declared from an element a Vec gives ("e := vv[i]") or a value a Map gives ("g := try m.Get(k)") takes
+#     the element where the collection holds it - "vv.RefMut(i)", "try m.RefMut(k)" where it is written, "vv.Ref(i)",
+#     "try m.Ref(k)" where it is only read (no copy made of it);
 #   - a by-value parameter its body writes ("fn add(v Vec<I64>, x I64)") is lent writably ("v mut Vec<I64>&");
 #   - an element a call would change in place where "x[i]" gives a copy (E31b) is taken where its Vec holds it,
-#     "x.Ref(i).Push(y)";
+#     "x.RefMut(i).Push(y)";
 #   - "x.Clone()" on one of the six becomes "x": a value place given it copies (E12) - but "y := x.Clone()" of a
 #     reference x, where ":=" would name the same storage, is listed for a person.
 # What the report cannot decide is listed for a person to look at: a copy a function hands back, a local given another
@@ -43,7 +44,7 @@ fn reportRow(row String&) edit ? NoRow {
     at := try rest.Find(": ") catch { error NoRow }
     for {
         tail := rest[at + 2:]
-        if tail.StartsWith("ref ") or tail.StartsWith("mut ") or tail.StartsWith("kept ") or tail.StartsWith("call ") or tail.StartsWith("param "): break
+        if tail.StartsWith("ref ") or tail.StartsWith("mut ") or tail.StartsWith("kept ") or tail.StartsWith("call ") or tail.StartsWith("view ") or tail.StartsWith("param "): break
         next := try rest[at + 1:].Find(": ") catch { error NoRow }
         at += next + 1
     }
@@ -135,8 +136,9 @@ fn asReference(line String&, e edit&) String ? NoEdit {
 }
 
 # the line with an element or a value read where its collection holds it: "x := a[i]" or "x := a.At(i)" as
-# "x := a.Ref(i)", "x := try m.Get(k)" as "x := try m.Ref(k)"
+# "x := a.RefMut(i)", "x := try m.Get(k)" as "x := try m.RefMut(k)"
 fn asRef(line String&, e edit&) String ? NoEdit {
+    m := ".Ref(" if e.Kind == "view" else ".RefMut("
     j := declAfter(line, e.Col, e.Name)
     if j == 0: error NoEdit
     rhs := line[j + 2:]
@@ -148,7 +150,7 @@ fn asRef(line String&, e edit&) String ? NoEdit {
     }
     if e.Root == "Get" {
         g := try rhs.Find(".Get(") catch { error NoEdit }
-        return $line[:j + 2] $rhs[:g] ".Ref(" $rhs[g + 5:] $note
+        return $line[:j + 2] $rhs[:g] $m $rhs[g + 5:] $note
     }
     if e.Root != "At": error NoEdit
     a := try rhs.Find(".At(") catch {
@@ -166,9 +168,9 @@ fn asRef(line String&, e edit&) String ? NoEdit {
             k--
         }
         if k <= 0: error NoEdit
-        return $line[:j + 2] $t[:k] ".Ref(" $t[k + 1:t.Len() - 1] ")" $rhs[t.Len():] $note
+        return $line[:j + 2] $t[:k] $m $t[k + 1:t.Len() - 1] ")" $rhs[t.Len():] $note
     }
-    return $line[:j + 2] $rhs[:a] ".Ref(" $rhs[a + 4:] $note
+    return $line[:j + 2] $rhs[:a] $m $rhs[a + 4:] $note
 }
 
 # the line with the parameter at col lent writably: "name T" as "name mut T&"
@@ -196,7 +198,7 @@ fn asLent(line String&, e edit&) String ? NoEdit {
 }
 
 # the line with the element "x[i]" at col - its "[", or the member read out of it - taken where its collection holds it:
-# "x.Ref(i)"
+# "x.RefMut(i)"
 fn asElem(line String&, e edit&) String ? NoEdit {
     i := e.Col - 1
     if i < 0 or i >= line.Len(): error NoEdit
@@ -227,7 +229,7 @@ fn asElem(line String&, e edit&) String ? NoEdit {
         j++
     }
     if j >= line.Len(): error NoEdit
-    return $line[:i] ".Ref(" $line[i + 1:j] ")" $line[j + 1:]
+    return $line[:i] ".RefMut(" $line[i + 1:j] ")" $line[j + 1:]
 }
 
 # the line with ".Clone()" at col left out
@@ -293,7 +295,7 @@ fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Ve
 fn changed(line String&, e edit&) String ? NoEdit {
     return match e.Kind {
         case "ref", "mut": try asReference(line, e)
-        case "call": try asRef(line, e)
+        case "call", "view": try asRef(line, e)
         case "param": try asLent(line, e)
         case "clone": try asValue(line, e)
         case "elem": try asElem(line, e)
@@ -413,11 +415,13 @@ test reassigned "a copy kept as the old value" {
 }
 
 test asRef "an element or a value read where its collection holds it" {
+    r := edit("f", 1, 5, "view", "f", "", "At")
+    assert (try asRef("    f := m.fns[k]", r)) == "    f := m.fns.Ref(k)"
     e := edit("f", 1, 5, "call", "e", "Vec<I64>", "At")
-    assert (try asRef("    e := vv[i]", e)) == "    e := vv.Ref(i)"
-    assert (try asRef("    e := vv[a[i]]  # x", e)) == "    e := vv.Ref(a[i])  # x"
+    assert (try asRef("    e := vv[i]", e)) == "    e := vv.RefMut(i)"
+    assert (try asRef("    e := vv[a[i]]  # x", e)) == "    e := vv.RefMut(a[i])  # x"
     g := edit("f", 1, 5, "call", "g", "Vec<I64>", "Get")
-    assert (try asRef("    g := try m.Get(k) catch { continue }", g)) == "    g := try m.Ref(k) catch { continue }"
+    assert (try asRef("    g := try m.Get(k) catch { continue }", g)) == "    g := try m.RefMut(k) catch { continue }"
 }
 
 test asLent "a written by-value parameter lent writably" {
@@ -429,9 +433,9 @@ test asLent "a written by-value parameter lent writably" {
 
 test asElem "an element changed where its Vec holds it" {
     e := edit("f", 1, 12, "elem", "", "", "")
-    assert (try asElem("    w.found[k].Push($what)", e)) == "    w.found.Ref(k).Push($what)"
+    assert (try asElem("    w.found[k].Push($what)", e)) == "    w.found.RefMut(k).Push($what)"
     m := edit("f", 1, 19, "elem", "", "", "")
-    assert (try asElem("        g.recs[r].Names.Push(x)", m)) == "        g.recs.Ref(r).Names.Push(x)"
+    assert (try asElem("        g.recs[r].Names.Push(x)", m)) == "        g.recs.RefMut(r).Names.Push(x)"
 }
 
 test asValue "a Clone left out" {

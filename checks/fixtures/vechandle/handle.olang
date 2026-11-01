@@ -22,13 +22,13 @@ fn churn() I64 {
     }
     return t
 }
-fn pushTo(v Vec<I64>, n I64) { for i in range n { v.Push(i * i) } }
+fn pushTo(v mut Vec<I64>&, n I64) { for i in range n { v.Push(i * i) } }
 fn main() {
     v := Vec<I64>()
     pushTo(v, 50)                                   # a copy is a second name: v sees the Pushes
-    w := v
+    w mut Vec<I64>&v = v
     w.Push(-1)
-    c := v.Clone()
+    c := v
     for i in range 1000 { v.Push(i) }               # the buffer replaced; w follows, c does not
     churn()
     t := 0
@@ -44,7 +44,7 @@ fn main() {
     m := Map<String&, Vec<I64>>()
     for k in range 5 {
         m.Put($k, Vec<I64>())
-        e := try m.Get($k) catch { unreachable }
+        e := try m.RefMut($k) catch { unreachable }
         for j in range k * 10 { e.Push(j) }
     }
     churn()

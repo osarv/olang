@@ -502,7 +502,7 @@ fn (f mut Fn&) NewBlock() BlockId {
 # through a local: stage 0 builds the first chunk of a list pushed to as `f.Blocks[i].Stmts.Push(s)` (E31b's held copy
 # of an element of a parameter's list) where the call's frame is, and frees it on return
 fn (f mut Fn&) Add(b BlockId, s Stmt&) {
-    blk := f.Blocks.Ref(I64(b))
+    blk := f.Blocks.RefMut(I64(b))
     blk.Stmts.Push(s)
 }
 
@@ -778,7 +778,7 @@ fn (v mut verifier&) shape() Bool {
     }
     for b in range f.Blocks.Len() {
         v.at = b
-        bb := f.Blocks[b]
+        bb := f.Blocks.Ref(b)
         for i in range bb.Stmts.Len() {
             v.idx = i
             v.stmtShape(bb.Stmts[i])
@@ -1042,7 +1042,7 @@ fn (v mut verifier&) types() {
     for b in range f.Blocks.Len() {
         if not v.reached[b] { continue }
         v.at = b
-        bb := f.Blocks[b]
+        bb := f.Blocks.Ref(b)
         for i in range bb.Stmts.Len() {
             v.idx = i
             v.stmtTypes(bb.Stmts[i])
@@ -1832,7 +1832,7 @@ fn (v mut verifier&) walk(b BlockId) {
     v.stack.Clear()
     for k in range v.stackN[bi] { v.stack.Push(v.stacks[v.stackAt[bi] + k]) }
     v.at = bi
-    bb := f.Blocks[bi]
+    bb := f.Blocks.Ref(bi)
     for i in range bb.Stmts.Len() {
         v.idx = i
         v.stmtFlow(bb.Stmts[i])
@@ -2158,7 +2158,7 @@ fn (w mut dumper&) all() {
     }
     for b in range f.Blocks.Len() {
         w.line(0, "bb" $b ":")
-        bb := f.Blocks[b]
+        bb := f.Blocks.Ref(b)
         for s in bb.Stmts { w.line(1, w.stmt(s)) }
         w.line(1, w.term(bb.T))
     }

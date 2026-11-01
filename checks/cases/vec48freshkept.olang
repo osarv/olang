@@ -26,7 +26,7 @@ fn main() ? {
     a := v.ToArray()
     b := flat(v)
     c := flat2(v)
-    d := v.Clone()
+    d := v
     for _ in range 100 { v.Push("y") }
     churn()
     assert a[1] == "2b" and b[0] == "a" and c[1] == "2b" and d.Len() == 2 and v.Len() == 102
