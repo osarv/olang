@@ -1824,7 +1824,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 }
             } else if c.P.T.KindOf(b) == types.Kind.Array and c.holdsSelf(d, b) {
                 c.err(nsp, msgs.ArrayTypeHoldsItself(name, name, c.ty(b)))
-            } else if c.P.T.KindOf(b) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(b)) {
+            } else if c.P.T.KindOf(b) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(b)) and not source.NewParams {
                 # T7a: a type over an array of arrays holds its rows by reference, or at a length its declaration gives -
                 # a value of it is made elsewhere, so no row of it can be laid out in place (as a field's cannot)
                 c.err(base.Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(b))))
@@ -1857,7 +1857,8 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 for prm in cd.Payload {
                     if prm.Ty is null { continue }
                     pt := c.P.Resolve(fr.Ctx, prm.Ty)
-                    if not c.isRef(pt) and c.runArrayValue(pt) {
+                    # (the rework's round 3, QCE: a payload's run-time array held by value, its own)
+                    if not c.isRef(pt) and c.runArrayValue(pt) and not source.NewParams {
                         psp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
                         c.err(psp, msgs.ArrayParamByValue(c.tok(prm.Name), c.src(prm.Ty!.Span())))
                     }
@@ -3513,6 +3514,7 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
     if deep { c.roCopies.Put(c.roKey(id), n) }
     cp := c.fit(c.readLocal(sp, hid), c.P.T.Referent(t), sp)
     if v != c.P.T.Referent(t): cp = c.convert(sp, cp, v)
+    if c.P.T.OwnsParts(v): cp = c.ownCopy(cp)   # (round 3: its parts the copy's own too, QCE)
     c.fr().entryLets.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), cp))
     c.entryCopies++
     key := pair.Pair(c.fr().File, I64(sp.Start))
@@ -13260,7 +13262,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             rt := c.P.Resolve(c.fr().Ctx, tr)
             # T7a: an array's element that is a run-time array is held by reference - but in a declared function's
             # parameter, whose by-value levels take their lengths from the argument (G29)
-            if not c.paramTypes and not c.declMade and c.P.T.KindOf(rt) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(rt)) {
+            if not c.paramTypes and not c.declMade and not source.NewParams and c.P.T.KindOf(rt) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(rt)) {
                 c.err(args[0].Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(rt))))
                 return false
             }
@@ -13564,7 +13566,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                     return c.unknown(sp)
                 }
                 # T7d: elements held by value take their length from the fill, where it has one known while compiling
-                if c.runArrayValue(el) and args.Len() == 2 {
+                if c.runArrayValue(el) and args.Len() == 2 and not source.NewParams {
                     fx := c.expr(args[1], types.UnknownT)
                     ft := typeOf(fx)
                     if c.P.T.KindOf(ft) == types.Kind.Array and c.P.T.Length(ft) != types.TypeId(0) and c.P.T.Same(c.P.T.Elem(ft), c.P.T.Elem(c.under(el))) {
@@ -13574,8 +13576,9 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                     c.exprTo(args[0], c.i64())
                     return c.unknown(sp)
                 }
-                # T7a: an array's element that is a run-time array is held by reference
-                if c.runArrayValue(el) {
+                # T7a: an array's element that is a run-time array is held by reference (but under the rework's round
+                # 3, QCE: by value, each element's storage the array's own)
+                if c.runArrayValue(el) and not source.NewParams {
                     c.err(c.leadWord(targs[0].Span()), msgs.ArrayNestedByValue(c.ty(el)))
                     c.dropArgs(args)
                     return c.unknown(sp)
@@ -13962,7 +13965,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 lr := c.resolve(lf!.S.Results[0])
                 pr := c.P.T.Result(ps[pk])
                 # T7a: a run-time array bound to a variable the call holds in an array is held by reference
-                if c.P.T.KindOf(pr) == types.Kind.Var and c.P.T.A(pr) == owner and c.runArrayValue(c.under(lr)) and not c.isRef(lr) and c.holdsVarInArray(sig, owner, c.P.T.B(pr)) {
+                if c.P.T.KindOf(pr) == types.Kind.Var and c.P.T.A(pr) == owner and c.runArrayValue(c.under(lr)) and not c.isRef(lr) and not source.NewParams and c.holdsVarInArray(sig, owner, c.P.T.B(pr)) {
                     c.err(lf!.S.Results[0].Span(), msgs.LambdaResultHeld(c.text(c.P.VarAt(owner, c.P.T.B(pr)).Name), c.ty(lr), c.ty(lr)))
                     return c.unknown(sp)
                 }
@@ -16668,7 +16671,7 @@ fn (c mut Checker&) caseFit(t types.TypeId, tag I64, i I64, want types.TypeId, e
     c.fieldOn = wasField
     # (a reference a "&" parameter reaches kept in the value - a use of it, D9d's "kept")
     if source.NewParams and c.isRef(want) { c.refUseX(x) }
-    return x
+    return c.partCopy(x)
 }
 
 # ---- raw values (T17e) ----
@@ -17018,7 +17021,10 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
                 ok = false
             }
         }
-        if not ok {
+        if not ok and source.NewParams {
+            # the rework's round 3 (QCE): elements of several lengths held by value, each its own run-time array
+            first = elem
+        } else if not ok {
             c.err(sp, msgs.ArrayNestedByValue(c.ty(elem)))
             return c.unknown(sp)
         }
@@ -17026,7 +17032,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
         for i in range items.Len() {
             x := c.fit(ys[i], first, items[i].Span())
             c.roStore(x, items[i].Span(), RoStored)   # T25c: an element is writable storage
-            c.exprs.Push(x)
+            c.exprs.Push(c.partCopy(x))
         }
         return typed.Expr.Make(sp, c.P.T.Array(first, c.P.T.Const(c.i64(), items.Len())), typed.Make(typed.MakeKind.Array, 0
                                gather(c.exprs, from), null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
@@ -17035,7 +17041,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
     for it in items {
         x := c.exprTo(it, elem)
         if not c.isRef(elem) { c.roStore(x, it.Span(), RoStored) }   # T25c: an element is writable storage
-        c.exprs.Push(x)
+        c.exprs.Push(c.partCopy(x))
     }
     n := items.Len()
     xs := gather(c.exprs, from)
@@ -19009,7 +19015,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             nsp := v.NameSps[i]
             # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
             said := try c.byValSaid.Get(pair.Pair(c.fr().File, I64(c.cur().Locals[pid].Sp.Start))) catch default false
-            if c.runArrayValue(c.localType(pid)) and not said { c.err(nsp, msgs.ArrayNestedByValue(c.ty(c.localType(pid)))) }
+            if c.runArrayValue(c.localType(pid)) and not said and not source.NewParams { c.err(nsp, msgs.ArrayNestedByValue(c.ty(c.localType(pid)))) }
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Lvalue.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
             c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), c.readLocal(nsp, pid)))
@@ -19145,9 +19151,9 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Lvalue.Deref(nsp, t, x!)) }
         # T7a: a field holding a run-time array by value - held by reference instead
-        if v.Field and c.runArrayValue(t) { c.err(nsp, msgs.ArrayNestedByValue(c.ty(t))) }
+        if v.Field and c.runArrayValue(t) and not source.NewParams { c.err(nsp, msgs.ArrayNestedByValue(c.ty(t))) }
         # T7a, T7d: an array of arrays held by value whose value gave its elements no one known length
-        if v.Ty is not null and not v.Infer and i < v.Values.Len() and c.P.T.KindOf(t) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(t)) {
+        if v.Ty is not null and not v.Infer and i < v.Values.Len() and c.P.T.KindOf(t) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(t)) and not source.NewParams {
             c.err(v.Ty!.Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(t))))
         }
         # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
@@ -19172,6 +19178,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
+        # (the rework's round 3: a value whose parts own storage, given existing storage, is its own copy)
+        if i < v.Values.Len() and not c.isRef(t) and c.P.T.OwnsParts(t) { x = c.ownCopy(x!) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x!))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
     }
@@ -19440,7 +19448,7 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&c, value ast.Expr&,
     if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, t, x)) }
     # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
     if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
-    c.emit(typed.Stmt.Assign(sp, p, x))
+    c.emit(typed.Stmt.Assign(sp, p, c.storeCopy(p, x)))
 }
 
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
@@ -21325,7 +21333,8 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     }
     sp := cm.Value.Span()
     out, idx := c.comprOut, c.comprIdx
-    v := c.exprTo(cm.Value, ce)
+    # (the rework's round 3, QCE: an element owning storage, given existing storage, is its own copy)
+    v := c.partCopy(c.exprTo(cm.Value, ce))
     if cm.Filter is null and out >= 0 {
         # T7c: the fixed array's element at the counter
         ot := c.localType(out)
@@ -22217,6 +22226,79 @@ fn (c Checker&) ViewsOf(id typed.BodyId) I64 {
         case typed.BodyOf.Fn(inst): try c.P.L.ViewResults.Get(inst) catch default I64(0)
         case _: 0
     }
+}
+
+# ---- values that own their parts (the rework's round 3, QCE: T7a relaxed) ----
+
+# x stored into p as its own copy where p owns what it holds: a part of a value - a field, an element, a payload's field -
+# holding an array of a run-time length by value, or any place given a value with such parts (types.OwnsParts). A whole
+# value array's store copies by itself (T7b, T11b); a reference holds what it is given
+fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&c) typed.Expr&c {
+    t := p.Type()
+    if c.isRef(t) { return x }
+    if c.P.T.OwnsParts(t) or (c.P.T.OwnedPart(t) and partPlace(p)) { return c.ownCopy(x) }
+    return x
+}
+
+# x given to a part of a value being made - an element, a payload's field - as its own copy where it owns storage
+fn (c mut Checker&) partCopy(x typed.Expr&c) typed.Expr&c {
+    t := typeOf(x)
+    if c.isRef(t) or not (c.P.T.OwnsParts(t) or c.P.T.OwnedPart(t)) { return x }
+    return c.ownCopy(x)
+}
+
+# x as a value of its own where it names existing storage (typed.MakeKind.Copy: built where the scope pass places its
+# site, as any value made is)
+fn (c mut Checker&) ownCopy(x typed.Expr&c) typed.Expr&c {
+    if not existingValue(x) { return x }
+    sp := x.Span()
+    from := c.exprs.Len()
+    c.exprs.Push(x)
+    return typed.Expr.Make(sp, typeOf(x), typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null
+                                                     c.site(typed.SiteKind.Make, sp), typed.Check.None))
+}
+
+# whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local, global or
+# referent
+fn partPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _), typed.Lvalue.Payload(_, _, _): true
+        case _: false
+    }
+}
+
+# whether a value names storage that exists apart from it - a place read, a slice, constant data, a choice of such -
+# rather than storage made for it: a call's result, a value made, one moved out of its place
+fn existingValue(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): p != typed.Lvalue.Temp
+        case typed.Expr.Slice(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Cond(_, _, k): (k.A is not null and existingValue(k.A!)) or existingValue(k.B)
+        case typed.Expr.Match(_, _, m): matchExisting(m)
+        case typed.Expr.Try(_, _, tr): tryExisting(tr)
+        case typed.Expr.Seq(_, _, q): q.X is not null and existingValue(q.X!)
+        case typed.Expr.Away(_, _, y): existingValue(y)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and existingValue(args[0])
+        case typed.Expr.Call(_, _, cl): typed.ScopedCall(cl)
+        case _: false
+    }
+}
+
+fn matchExisting(m typed.Match&) Bool {
+    for a in m.Arms {
+        if a.Value is not null and existingValue(a.Value!): return true
+    }
+    return m.NoMatch is not null and m.NoMatch!.Value is not null and existingValue(m.NoMatch!.Value!)
+}
+
+fn tryExisting(tr typed.Try&) Bool {
+    if tr.X is not null and existingValue(tr.X!): return true
+    for cl in tr.Clauses {
+        for d in cl.Defaults {
+            if existingValue(d): return true
+        }
+    }
+    return false
 }
 
 # whether x is a value made where it is - an array, a case, a comprehension, a constructor's or a case's call - which no

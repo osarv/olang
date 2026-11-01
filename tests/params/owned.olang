@@ -1,0 +1,146 @@
+# The scoping and parameters rework, round 3 (docs/rework.md section 16, QCE): an array of a run-time length held by
+# value inside another value - a struct's field, an array's element, an enum's payload, a type argument - is that
+# value's own, its elements stored where the value is. A store copies what it is given in, a copy of the whole copies
+# them too, and nothing another name holds changes it. Run by `make verify-params` under OLANG_PARAMS=new
+# OLANG_SCOPES=infer, as fields.olang is.
+
+type person struct(name String, age I64) {
+    name, age
+}
+
+type shape enum {
+    Named(label String, n I64)
+    Plain
+}
+
+type team struct(title String) {
+    title
+    members Vec<String> = Vec<String>()
+    tags Array<String> = String["a", "bc"]
+}
+
+# a holder of what a bare parameter is: its own copy, not the caller's storage kept (D9e has nothing to refuse)
+type holder struct(s String) {
+    s
+}
+
+fn mk(t String) holder { return holder(t) }
+
+# a part stored from a block's own text outlives the block, and a later write to that text is not seen
+fn stored() person {
+    p := person($"x", 1)
+    {
+        t := $"inner"
+        p.name = t
+        t[0] = 'X'
+    }
+    return p
+}
+
+fn words() Array<String> {
+    out := Array<String>(3)
+    for i in range 3 {
+        w := $"w" $i
+        out[i] = w
+        w[0] = 'z'
+    }
+    return out
+}
+
+fn renamed() person {
+    p := person($"bob", 3)
+    q := p
+    q.name[0] = 'B'
+    return q
+}
+
+# evaluated while compiling (K2, S17a): the evaluator copies as the run time does
+Baked person = renamed()
+assert renamed().name == "Bob" and stored().name == "inner"
+assert words()[2] == "w2"
+
+test "a part store copies its value in" {
+    p := stored()
+    assert p.name == "inner"
+    a := words()
+    assert a[0] == "w0" and a[2] == "w2"
+    h := mk($"kept")
+    assert h.s == "kept"
+    t := $"abc"
+    g := mk(t)
+    t[0] = 'x'
+    assert g.s == "abc"
+}
+
+test "a Vec and a Map own what they hold" {
+    v := Vec<String>()
+    for i in range 4 {
+        t := $"n" $i
+        v.Push(t)
+        t[0] = '?'
+    }
+    assert v[0] == "n0" and v[3] == "n3" and v.Len() == 4
+    m := Map<String, I64>()
+    k := $"abc"
+    m.Put(k, 1)
+    k[0] = 'x'
+    assert m.Has("abc") and not m.Has("xbc") and (try m.Get("abc")) == 1
+}
+
+test "payloads, literals and fills" {
+    t := $"lab"
+    s := shape.Named(t, 2)
+    t[0] = 'L'
+    assert s == shape.Named("lab", 2)
+    xs := String["a", "bc", "def"]
+    assert xs[2] == "def" and xs.Len() == 3
+    f := Array<String>(3, "ab")
+    f[0][0] = 'X'
+    assert f[0] == "Xb" and f[1] == "ab"
+}
+
+test "a whole copy is its own" {
+    p := person($"bob", 3)
+    q := p
+    q.name[0] = 'B'
+    assert p.name == "bob" and q.name == "Bob"
+    tm := team($"t")
+    tm.members.Push($"m1")
+    tm.tags[0] = $"z"
+    assert tm.members.Len() == 1 and tm.members[0] == "m1" and tm.title == "t" and tm.tags[0] == "z"
+    assert Baked.name == "Bob" and renamed() == Baked
+}
+
+type node struct(v I64) { v }
+
+fn churn() I64 {
+    n I64 = 0
+    for i in range 100 {
+        s := $"xyzw" $i
+        n += s.Len()
+    }
+    return n
+}
+
+test "a comprehension's elements are its own" {
+    ws := String["ab", "c", "def"]
+    up := String[$w "!" for w in ws]
+    same := String[w for w in ws]
+    some := String[w for w in ws if w.Len() > 1]
+    ns := node[node(i) for i in range 3]
+    ws[0][0] = 'X'
+    assert churn() > 0
+    assert up[0] == "ab!" and up[2] == "def!" and same[0] == "ab" and same[1] == "c" and some[1] == "def" and some[0] == "ab"
+    assert ns[2].v == 2 and ws[0] == "Xb"
+}
+
+# a bare parameter whose body writes it is its own copy on entry, its parts too
+fn shout(p person) String {
+    p.name[0] = 'X'
+    return p.name
+}
+
+test "an entry copy owns its parts" {
+    p := person($"amy", 9)
+    assert shout(p) == "Xmy" and p.name == "amy"
+}

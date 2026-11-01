@@ -800,8 +800,9 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
                 case _ { }
             }
         }
-        case Kind.Array { holds = t.HoldsRefs(t.Elem(id)) }
-        case Kind.Tuple, Kind.Record { holds = t.listHolds(t.Parts(id)) }
+        case Kind.Array { holds = t.HoldsRefs(t.Elem(id)) or t.OwnedPart(t.Elem(id)) }
+        case Kind.Tuple { holds = t.listHolds(t.Parts(id), false, false) }
+        case Kind.Record { holds = t.listHolds(t.Parts(id)) }
         case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id), true) }
         case _ { }
     }
@@ -833,13 +834,95 @@ fn (t mut Table&) setHolds(id TypeId, state U8) {
 # a list's holding: a part's 0 is one not typed yet - but among cases (cases), a case without a payload, which holds
 # nothing (taken for a part not typed, no enum with a payload-less case was ever remembered, and every type holding
 # one was worked out again at each asking: 4% of the front end's work on the compiler's own build)
-fn (t mut Table&) listHolds(l ListId, cases Bool = false) Bool {
+fn (t mut Table&) listHolds(l ListId, cases Bool = false, owned Bool = true) Bool {
     for x in t.Items(l) {
         if x == TypeId(0) {
             if not cases { t.holdsUnsure = true }
-        } else if t.HoldsRefs(x) {
+        } else if t.HoldsRefs(x) or (owned and t.OwnedPart(x)) {
             return true
         }
+    }
+    return false
+}
+
+# the rework's round 3 (QCE, T7a relaxed): whether a part of a value - a field, an element, a payload's - is an array
+# of a run-time length held by value, its elements its container's own storage, which lives where the container's
+# references do. Section 8 takes such a part for a reference into that scope (HoldsRefs), so a container sharing a
+# part's storage with what it was made from is judged as sharing it, never as owning it; a part store copies its value
+# in (check's ownCopy), so a container owns its parts' storage. A run-time array is no part of several results (a
+# Tuple's parts are the results' own). Never on the default path, where such a part is T7a's error
+fn (t Table&) OwnedPart(x TypeId) Bool {
+    if not source.NewParams { return false }
+    r := t.Repr(x)
+    return t.KindOf(r) == Kind.Array and t.Length(r) == TypeId(0)
+}
+
+# whether a value of a type holds, by value, a part that is an array of a run-time length (OwnedPart) - in a field, an
+# element, a payload, through any value it holds by value: so a copy of it copies those parts' elements too, deep through
+# values and shallow at references (the rework's round 3, QCE). A reference never does (its referent is shared), nor do
+# several results (a Tuple), nor a plain run-time array, whose copy is its elements'
+fn (t mut Table&) OwnsParts(id TypeId) Bool { return source.NewParams and t.ownsParts(id, 0) }
+
+fn (t mut Table&) ownsParts(id TypeId, depth I64) Bool {
+    if depth > 16 { return true }
+    r := t.Repr(id)
+    match t.KindOf(r) {
+        case Kind.Array { return t.OwnedPart(t.Elem(r)) or t.ownsParts(t.Elem(r), depth + 1) }
+        case Kind.Record { return t.partsOwn(t.Parts(r), depth) }
+        case Kind.AnonEnum { return t.partsOwn(t.ShapeCases(r), depth) }
+        case Kind.Named {
+            if not t.HasBody(r) { return false }
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case DeclKind.Struct: t.partsOwn(t.Fields(r), depth)
+                case DeclKind.Enum: t.partsOwn(t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
+# whether a value of a type holds a reference, a function value or an "any": HoldsRefs with its owned parts aside - what
+# a copy of it made by OwnsParts' rule still shares with the original (the references it holds name what they named)
+fn (t mut Table&) SharesRefs(id TypeId) Bool { return t.sharesRefs(id, 0) }
+
+fn (t mut Table&) sharesRefs(id TypeId, depth I64) Bool {
+    if depth > 16 { return true }
+    if t.ForeignRef(id) { return false }
+    k := t.KindOf(id)
+    if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
+    match k {
+        case Kind.Named {
+            if not t.HasBody(id) { return true }
+            return match t.DeclKindOf(t.DeclOf(id)) {
+                case DeclKind.Struct: t.listShares(t.Fields(id), depth, false)
+                case DeclKind.Enum: t.listShares(t.Cases(id), depth, true)
+                case DeclKind.Over: t.sharesRefs(t.Base(id), depth + 1)
+                case _: false
+            }
+        }
+        case Kind.Array { return t.sharesRefs(t.Elem(id), depth + 1) }
+        case Kind.Tuple, Kind.Record { return t.listShares(t.Parts(id), depth, false) }
+        case Kind.AnonEnum { return t.listShares(t.ShapeCases(id), depth, true) }
+        case _ { return false }
+    }
+}
+
+# (a part not typed yet may hold one; among cases, 0 is a case without a payload)
+fn (t mut Table&) listShares(l ListId, depth I64, cases Bool) Bool {
+    for x in t.Items(l) {
+        if x == TypeId(0) {
+            if not cases { return true }
+        } else if t.sharesRefs(x, depth + 1) {
+            return true
+        }
+    }
+    return false
+}
+
+fn (t mut Table&) partsOwn(l ListId, depth I64) Bool {
+    for x in t.Items(l) {
+        if x != TypeId(0) and (t.OwnedPart(x) or t.ownsParts(x, depth + 1)) { return true }
     }
     return false
 }

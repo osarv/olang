@@ -73,6 +73,9 @@ type HelperKind enum {
     Equal      # "==" part by part (E10): fn(a T&, b T&) Bool, pure data, calling nothing
     Hash       # the supplied Hash (E10b): fn(x T&) I64, pure data, calling nothing
     Zero       # the type's zero value (D13c): fn() T - its constructor called on its parameters' defaults or zeros
+    # the rework's round 3 (QCE): a value's own copy, fn(x T&) T with its result scope its one scope - its parts that are
+    # arrays of a run-time length copied there, deep through values, shallow at references (typed.MakeKind.Copy)
+    Copy
 }
 
 # a decision taken about a node after check made it, by eval (or check) and read by lowering and emit: kept under
@@ -595,6 +598,7 @@ fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId
         case HelperKind.Equal: t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
         case HelperKind.Hash: t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero: t.Func(types.ListId(0), ty, types.ListId(0))
+        case HelperKind.Copy: t.Func(t.List1(r), ty, types.ListId(0))
     }
 }
 
@@ -606,6 +610,7 @@ I64T types.TypeId = types.TypeId(6)
 fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
     return match c {
         case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _): 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Copy, _), _): 1
         case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _): 0
         case Callee.Extern(_, _): 0
         case Callee.Dispatch(_, sl, _) if sl < 0: 1     # $'s rendering, through the table: a Render helper's builder

@@ -881,7 +881,9 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.targets.Push(p)
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
-            if ln.valueArray(target.Type()) and not ln.dead {
+            # (the rework's round 3, QCE: a part holding an array by value takes the copy check made, or the new storage
+            # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
+            if ln.valueArray(target.Type()) and not ln.dead and not (source.NewParams and partLvalue(target)) {
                 copies := ln.copiesArray(value, target.Type())
                 ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
             } else {
@@ -1011,6 +1013,14 @@ fn (ln mut lowering&) unconvert(x typed.Expr&) typed.Expr&x {
     return x
 }
 
+# whether a place is a part of a value - a field, an element, a payload's field - rather than a whole local or global
+fn partLvalue(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Field(_, _, _, _), typed.Lvalue.Elem(_, _, _), typed.Lvalue.Payload(_, _, _): true
+        case _: false
+    }
+}
+
 # the reference a read of what it names reads through, else null
 fn derefOf(x typed.Expr&) typed.Expr?&x {
     return match x {
@@ -1024,6 +1034,8 @@ fn derefOf(x typed.Expr&) typed.Expr?&x {
 
 # an array value's elements copied into storage of its own (T7b), made in scope at
 fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
+    # (the rework's round 3: elements owning storage of their own - arrays of a run-time length - copied too)
+    if ln.T.OwnsParts(ty) { return ln.ownCopyOf(v, ty, at, sp) }
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
     buf := ln.temp(ty, sp)
@@ -2870,6 +2882,11 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         }
         case typed.MakeKind.Array { return ln.arrayLit(m, ty, sp) }
         case typed.MakeKind.Fill { return ln.fill(m, ty, sp) }
+        case typed.MakeKind.Copy {
+            v := ln.val(m.Items[0])
+            if ln.dead { return mir.Operand.None }
+            return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
+        }
     }
 }
 
@@ -2961,11 +2978,14 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         }
     }
     if ln.dead { return mir.Operand.None }
+    # (the rework's round 3, QCE: a fill owning storage - text, an array, a value with such parts - is each element's
+    # own copy of it, made where the array is)
+    owned := m.Items.Len() > 0 and ln.ownsStorage(el) and fv != mir.Operand.None and fv != mir.Operand.Const
     fixed := ln.fixedLen(at)
     if fixed >= 0 {
         ops := Array<mir.Operand>(fixed)
         if fv == mir.Operand.None { fv = mir.Operand.Const(el, 0) }   # a fixed array's no clear is its local's (Unset)
-        for i in range fixed { ops[i] = fv }
+        for i in range fixed { ops[i] = ln.ownCopyOf(fv, el, ln.madeAt(m.Site), sp) if owned else fv }
         v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
         if not t.IsRef(t.Repr(ty)) { return v }
         return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
@@ -2986,7 +3006,16 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
             ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
         }
     }
-    return ln.into(ty, mir.Rvalue.NewArray(into if adopt else ln.madeAt(m.Site), ty, n64, fv), sp)
+    where := into if adopt else ln.madeAt(m.Site)
+    r := ln.into(ty, mir.Rvalue.NewArray(where, ty, n64, fv), sp)
+    if not owned { return r }
+    buf := ln.local(r, ty, sp)
+    bp := pl(mir.Base.Local(buf))
+    if t.IsRef(t.Repr(ty)) { bp = ln.with(bp, mir.Proj.Deref) }
+    ln.eachIndex(n64, sp, fn(i mir.LocalId) {
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(bp, mir.Proj.Index(i))), mir.Rvalue.Use(ln.ownCopyOf(fv, el, where, sp))))
+    })
+    return mir.Operand.Copy(mir.L(buf))
 }
 
 # a comprehension (E27): its buffer made at its reservation (or 100), each Yield stored at its count, the buffer grown
@@ -3581,7 +3610,78 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
+        case mir.HelperKind.Copy {
+            ln.prologue(mir.VarKind[mir.VarKind.Result])
+            ln.epilogue(ln.copyAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true))
+        }
     }
+}
+
+# ---- owned copies (the rework's round 3, QCE: T7a relaxed) ----
+
+# whether a copy of a value of the type is more than its bytes: an array of a run-time length (its elements are its
+# storage), or a value holding one as a part (types.OwnsParts)
+fn (ln mut lowering&) ownsStorage(ty types.TypeId) Bool { return ln.T.OwnedPart(ty) or ln.T.OwnsParts(ty) }
+
+# v, a value of type ty, as one of its own made in scope at (typed.MakeKind.Copy): an array value's elements copied, and
+# every part of it that is an array of a run-time length - deep through values, shallow at references - through the
+# type's Copy helper where a part owns any
+fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    if not ln.T.OwnsParts(ty) { return ln.arrayCopy(v, ty, sp, at) if ln.T.OwnedPart(ty) else v }
+    src := ln.local(v, ty, sp)
+    return ln.helperCall(mir.HelperKind.Copy, ty, mir.Operand[ln.refTo(pl(mir.Base.Local(src)), ty, sp)], mir.ScopeRef[at]
+                         ty, sp)
+}
+
+# the copy of what place a holds, of type ty, made in scope at - a part owning nothing its bytes, an array of a run-time
+# length a new one there, and a value's owning parts each copied in turn, an aggregate's through its own Copy helper (so
+# a type that comes round to itself through an array is one function); top: in that helper, its own parts
+fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false) mir.Operand {
+    t := ln.T
+    if not ln.ownsStorage(ty) { return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp) }
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0) {
+        if not t.OwnsParts(ty) { return ln.arrayCopy(mir.Operand.Copy(ln.mk(a)), ty, sp, at) }
+        if not top {
+            return ln.helperCall(mir.HelperKind.Copy, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[at], ty, sp)
+        }
+        el := t.Elem(r)
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        buf := ln.temp(ty, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+        ln.eachIndex(n, sp, fn(i mir.LocalId) {
+            e := ln.copyAt(ln.with(a, mir.Proj.Index(i)), el, at, sp)
+            ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
+        })
+        return mir.Operand.Copy(mir.L(buf))
+    }
+    if not top { return ln.helperCall(mir.HelperKind.Copy, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[at], ty, sp) }
+    # its bytes, then each owning part copied over the part it shares
+    d := ln.local(ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp), ty, sp)
+    dp := pl(mir.Base.Local(d))
+    if ln.hasParts(ty) {
+        parts := ln.partsOf(ty)
+        for i in range parts.Len() { ln.copyPart(ln.with(dp, mir.Proj.Field(i)), parts[i], at, sp) }
+    } else if ln.hasCases(ty) {
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(dp)), sp)
+        ln.payloads(ln.casesOf(ty), tag, sp, fn(c I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i in range fs.Len() { ln.copyPart(ln.with(ln.with(dp, mir.Proj.Payload(c)), mir.Proj.Field(i)), fs[i], at, sp) }
+        })
+    } else if t.KindOf(r) == types.Kind.Array {
+        el := t.Elem(r)
+        ln.eachIndex(ln.constI64(t.ConstValue(t.Length(r))), sp, fn(i mir.LocalId) { ln.copyPart(ln.with(dp, mir.Proj.Index(i)), el, at, sp) })
+    } else {
+        ln.gap(sp, "a Copy helper for a type with no parts")
+    }
+    return mir.Operand.Copy(mir.L(d))
+}
+
+# a part of a copy being made, of type ty, its own copy where it owns storage - over the bytes it shares with the original
+fn (ln mut lowering&) copyPart(p pl, ty types.TypeId, at mir.ScopeRef, sp source.Span) {
+    if not ln.ownsStorage(ty) { return }
+    v := ln.copyAt(p, ty, at, sp)
+    ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
 }
 
 # what reference parameter l names, as a place
