@@ -119,6 +119,9 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # ... and the instances whose array value result is a view of what they are given, handed back as it is: by
     # instance, a bit per parameter whose argument it may view (typed.ViewRoots, recorded by check at each return)
     ViewResults Map<I64, I64>
+    # ... and the constructors whose instances hold views of what they are given in their fields (round 3b): by the type
+    # constructed (one with no constructor variables of its own, G10d), the bits as ViewResults'
+    CtorViews Map<I64, I64>
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1

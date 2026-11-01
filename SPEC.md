@@ -2155,10 +2155,18 @@ Excepted: a view read through a field read-only by inference (round 2c's per-typ
 for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).
 
 **D9h (a value result handed over; provisional, as D9 above).** A value result is the caller's own: it may write it
-and what it holds. Where a function's array result (text included) is a view of what its arguments reach, the view is
-handed back with no copy and the caller copies it where it keeps it - unless it reads it where it stands (an argument for
-a read-only parameter, a text piece, a discarded value) and nothing the statement does can change what it views. A
-function value, an `any`'s table and an operator's adapter copy it at the call, since their caller cannot know. A
+and what it holds. Where a function's value result holding storage of its own by value - an array (text included), a
+struct or an enum holding such arrays as parts, a constructor's instance - is, or holds in its parts, views of what its
+arguments reach, the views are handed back with no copy and the caller copies them where it keeps them - unless it
+reads the result where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing
+the statement does can change what it views, or holds it in a local that nothing could tell from a copy: a local never
+written but in a scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never
+escaping, never handed back, whose views are of storage nothing changes while it lives and that outlives it - constant
+data, a bare parameter's own storage, an immutable global's, a local's own storage nothing writes, lends or keeps, or
+another such local's. The same holds for the copies a function makes itself where nothing could tell: a value local
+made from existing storage, a walk's element, a temporary lent whole to such a body, and the part stores and fields of
+a value the function hands back made of its parameters' views. A function value, an `any`'s table and an operator's
+adapter copy at the call, since their caller cannot know. A
 plain function's value result holding references that hands back what its bare parameters reach - a copy of a bare
 enum or struct, a value a call following such a parameter hands back - **follows** those parameters: at a call given a
 read-only argument for one of them the result is read-only below its top (a read-only copy, T25c), else it is as

@@ -406,7 +406,14 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
 # what an array value a body returns is a view of, handed back as it is (ViewRoots): the body B, the parameters whose
 # arguments it may view (Elig: a bit each, by position in Params - those its body never assigns whole), and a callee's
 # own bits (Views: a function that hands back views of what it is given, as check recorded them, load.ViewResults)
-type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64) { T, B, Elig, Views }
+# - and (round 3b) the locals it hands back holding views of its parameters' arguments in their parts (Held: the
+# parameters a local views, -1 for none - Settle), a constructor's fields its instance is made of
+type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64, Held fn(id LocalId) I64) {
+    T, B, Elig, Views, Held
+}
+
+# no local holding views (Held's answer where none is known)
+fn NoLocalViews(id LocalId) I64 { return -1 }
 
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
@@ -484,6 +491,7 @@ fn (w ViewWalk&) CallViews(c Call&) I64 {
 # parts of such a place; a local's or a global's own storage is none of them (-1)
 fn (w ViewWalk&) placeRoots(p Lvalue&) I64 {
     return match p {
+        case Lvalue.Local(_, _, id): w.localRoots(id)
         case Lvalue.Deref(_, _, r): w.refRoots(r)
         case Lvalue.Field(_, _, base, _): w.placeRoots(base)
         case Lvalue.Elem(_, _, e): w.placeRoots(e.Base)
@@ -526,6 +534,81 @@ fn (w ViewWalk&) arrayValue(x Expr&) Bool {
     return w.T.KindOf(t) == types.Kind.Array and w.T.Length(t) == types.TypeId(0)
 }
 
+# the parameters a local's own storage views (round 3b): one the body hands back holding views of them (Locals), a
+# parameter held by value holding storage of its own - the argument's, unless the body writes it (then its copy, not in
+# Elig); -1 for any other local's own storage
+fn (w ViewWalk&) localRoots(id LocalId) I64 {
+    held := w.Held(id)
+    if held >= 0: return held
+    l := w.B.Local(id)
+    if l.Kind != LocalKind.Param or w.T.IsRef(l.Ty) or not HoldsOwned(w.T, l.Ty): return -1
+    return w.paramBit(id)
+}
+
+# the locals the body hands back - a constructor's fields, of which its instance is made - holding views of its
+# parameters' arguments in their parts, each with the parameters it views (round 3b, D9h for every value): a local of
+# the body's own holding storage by value, never written but by stores into its parts (a scalar field's aside), never
+# lent writably, escaping nowhere but its return, whose value and part stores are views of the parameters - their copies
+# left out where the body hands it back (ElidedCopy) - or values of their own: put in out, which the walk's Held reads
+# (so a local may hold another's views). One function for check, which records the bits at its returns, and
+# lowering, which leaves the copies out where they were recorded
+fn (w ViewWalk&) Settle(u LocalUses&, out mut Map<I64, I64>&) {
+    ctor := w.B.Of == BodyOf.Ctor
+    for i in range w.B.Locals.Len() {
+        if not w.resultLocal(u, i, ctor): continue
+        bits := w.copyViews(u.Init[i])
+        for k in range u.StoreAt.Len() {
+            if u.StoreAt[k] == i: bits |= w.copyViews(u.StoreX[k])
+        }
+        if bits > 0: out.Put(i, bits)
+    }
+}
+
+fn (w ViewWalk&) resultLocal(u LocalUses&, i I64, ctor Bool) Bool {
+    l := w.B.Locals[i]
+    k := l.Kind
+    if k != LocalKind.Var and k != LocalKind.Hidden and k != LocalKind.Field: return false
+    if w.T.IsRef(l.Ty) or not HoldsOwned(w.T, l.Ty): return false
+    if u.Esc[i] or u.WrOther[i] or u.Whole[i]: return false
+    for k2 in range u.LendAt.Len() {
+        if u.LendAt[k2] == i: return false
+    }
+    if u.Ret[i]: return true
+    if not ctor: return false
+    for f in w.B.Fields {
+        if I64(f) == i: return true
+    }
+    return false
+}
+
+# the parameters a value stored into a local's storage views, where its copy may be left out (ElidedCopy): a copy
+# (MakeKind.Copy, or T7b's of a value array read) of a view of them; 0 for one copied as it was - a value of its own
+fn (w ViewWalk&) copyViews(x Expr?&) I64 {
+    if x is null: return 0
+    y := copied(w.T, x)
+    if y is null: return 0
+    r := w.Roots(y)
+    return r if r > 0 else 0
+}
+
+# whether a value stored into a local the body hands back is a view of its parameters' arguments whose copy the body
+# leaves out, its caller copying where it keeps the result (D9h)
+fn (w ViewWalk&) ElidedCopy(x Expr?&) Bool { return w.copyViews(x) > 0 }
+
+# (exported for lowering's views kept in place of copies)
+fn CopiedOf(t types.Table&, x Expr&) Expr?&x { return copied(t, x) }
+
+# what a stored value copies: a MakeKind.Copy's item where it keeps the type (an array of references read as values is
+# no view - its elements are copied out, E12), a value array or part read as it is (copied by T7b where it is stored); null
+# where nothing is copied
+fn copied(t types.Table&, x Expr&) Expr?&x {
+    return match x {
+        case Expr.Make(_, ty, m): m.Items[0] if m.Kind == MakeKind.Copy and m.Items.Len() == 1 and t.Same(m.Items[0].Type(), ty) else null
+        case Expr.Read(_, _, _, _), Expr.Slice(_, _, _): x
+        case _: null
+    }
+}
+
 # a parameter local's bit, -1 for any other local and for a parameter the body assigns whole (not in Elig)
 fn (w ViewWalk&) paramBit(id LocalId) I64 {
     for k in range w.B.Params.Len().Min(ViewBits) {
@@ -546,6 +629,550 @@ fn arenaArray(t types.Table&, ty types.TypeId) Bool {
             return false
         }
         case _ { return false }
+    }
+}
+
+# ---- views held in place of copies (the rework's round 3b: D9h for every value - docs/rework.md 17) ----
+
+# whether a value of type ty holds storage of its own in an arena by value - an array of a run-time length, or a part of
+# one in a field, an element, a payload, through any value held by value (types.OwnedPart, OwnsParts); never through a
+# reference, a function value or an "any", whose storage is shared
+fn HoldsOwned(t types.Table&, ty types.TypeId) Bool { return holdsOwned(t, ty, 0) }
+
+fn holdsOwned(t types.Table&, ty types.TypeId, depth I64) Bool {
+    if depth > 16: return true
+    r := t.Repr(ty)
+    match t.KindOf(r) {
+        case types.Kind.Array { return t.Length(r) == types.TypeId(0) or holdsOwned(t, t.Elem(r), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { return listOwned(t, t.Parts(r), depth) }
+        case types.Kind.AnonEnum { return listOwned(t, t.ShapeCases(r), depth) }
+        case types.Kind.Named {
+            if not t.HasBody(r): return false
+            return match t.DeclKindOf(t.DeclOf(r)) {
+                case types.DeclKind.Struct: listOwned(t, t.Fields(r), depth)
+                case types.DeclKind.Enum: listOwned(t, t.Cases(r), depth)
+                case _: false
+            }
+        }
+        case _ { return false }
+    }
+}
+
+fn listOwned(t types.Table&, l types.ListId, depth I64) Bool {
+    if l == types.ListId(0): return false
+    for p in t.Items(l) {
+        if p != types.TypeId(0) and holdsOwned(t, p, depth + 1): return true
+    }
+    return false
+}
+
+# whether a value of type ty is a number, a Bool or a Char - no storage of its own, nothing it shares
+fn scalarType(t types.Table&, ty types.TypeId) Bool {
+    return match t.KindOf(t.Repr(ty)) {
+        case types.Kind.Bool, types.Kind.I8, types.Kind.I16, types.Kind.I32, types.Kind.I64, types.Kind.U8, types.Kind.U16: true
+        case types.Kind.U32, types.Kind.U64, types.Kind.F16, types.Kind.BF16, types.Kind.F32, types.Kind.F64: true
+        case _: false
+    }
+}
+
+# where a use of a local's storage stands (LocalUses): read and dropped (an operand, a test, a text's piece), an
+# argument of a call, stored into value storage of its own (copied there: a value local, a part, an element made), the
+# body's result, an alias's value (a reference local, a held or bound local, which may name the storage itself), or
+# anywhere else (it escapes: captured, boxed, spawned with, yielded, stored as a reference)
+type Ctx enum {
+    Op
+    Arg
+    Store
+    Ret
+    Alias(of LocalId)
+    Esc
+}
+
+# how a body uses its locals, read off its typed tree once (Uses): per local, whether something writes its storage but
+# a part store or a scalar field's store (WrOther), whether only scalar fields are stored into (WrScalar), whether it
+# is assigned whole after its declaration (Whole), escapes (Esc), is handed back (Ret), and the values stored into its
+# parts with no reference crossed (StoreAt/StoreX); its Let's value (Init); the writable lends of it whole as an argument
+# of a body's call (LendAt/LendBody/LendParam); the local whose storage a reference, held or bound local names (AliasOf)
+type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
+    T
+    B
+    Sig        # a body's function type: whether a call's argument is given a bare parameter (bareArg)
+    WrOther Vec<Bool>
+    WrScalar Vec<Bool>
+    Whole Vec<Bool>
+    Esc Vec<Bool>
+    Ret Vec<Bool>
+    AliasOf Vec<I64>
+    Init Vec<Expr?&>
+    StoreAt Vec<I64>
+    StoreX Vec<Expr&>
+    LendAt Vec<I64>
+    LendBody Vec<I64>
+    LendParam Vec<I64>
+    Rets Vec<Expr&>      # every value a return hands back
+    # the temporaries lent writably whole as an argument of a body's call (a walk made by a call and lent to a helper,
+    # "a.Iter().Fold(...)"): each one's value, the body and the parameter
+    TempX Vec<Expr&>
+    TempBody Vec<I64>
+    TempParam Vec<I64>
+    TempIn Vec<BlockId>     # ... the block its statement is in
+    spawning I64 = 0
+    at BlockId = BlockId(0) # the block being walked
+}
+
+# the uses of b's locals, sig giving another body's function type
+fn Uses(t types.Table&, b Body&, sig fn(id BodyId) types.TypeId) LocalUses {
+    u := LocalUses(t, b, sig)
+    for _ in range b.Locals.Len() {
+        u.WrOther.Push(false)
+        u.WrScalar.Push(false)
+        u.Whole.Push(false)
+        u.Esc.Push(false)
+        u.Ret.Push(false)
+        u.AliasOf.Push(-1)
+        u.Init.Push(null)
+    }
+    if b.Root is not null: u.block(b.Root!)
+    # (a constructor's fields are what it hands back: its instance is made of them)
+    for f in b.Fields { u.Ret[I64(f)] = true }
+    u.closeAliases()
+    return u
+}
+
+# what an alias does to its storage, its source's: written or escaping, through chains of aliases
+fn (u mut LocalUses&) closeAliases() {
+    i := u.AliasOf.Len() - 1
+    for i >= 0 {
+        a := u.AliasOf[i]
+        i--
+        if a < 0 or a > i: continue
+        u.aliasInto(i + 1, a)
+    }
+}
+
+fn (u mut LocalUses&) aliasInto(i I64, a I64) {
+    if u.WrOther[i] or u.Whole[i]: u.WrOther[a] = true
+    if u.WrScalar[i]: u.WrScalar[a] = true
+    if u.Esc[i] or u.Ret[i]: u.Esc[a] = true
+    # (a lend of the alias whole lends its storage: the source's, to the same parameter)
+    n := u.LendAt.Len()
+    for k in range n {
+        if u.LendAt[k] != i: continue
+        u.LendAt.Push(a)
+        u.LendBody.Push(u.LendBody[k])
+        u.LendParam.Push(u.LendParam[k])
+    }
+    for k in range u.StoreAt.Len() {
+        if u.StoreAt[k] == i: u.WrOther[a] = true
+    }
+}
+
+fn (u mut LocalUses&) block(bl Block?&) {
+    if bl is null: return
+    was := u.at
+    u.at = bl.Id
+    for st in bl.Stmts { u.stmt(st) }
+    u.at = was
+}
+
+fn (u mut LocalUses&) stmts(ss Array<Stmt&>&) {
+    for st in ss { u.stmt(st) }
+}
+
+fn (u mut LocalUses&) stmt(st Stmt&) {
+    match st {
+        case Stmt.Let(_, l, x) { u.let(l, x) }
+        case Stmt.Assign(_, p, x) {
+            u.assign(p, x)
+            u.expr(x, Ctx.Esc if u.T.IsRef(p.Type()) else Ctx.Store)
+        }
+        case Stmt.Eval(_, x), Stmt.Reraise(_, x, _) { u.expr(x, Ctx.Op) }
+        case Stmt.Return(_, x) {
+            if x is not null: u.Rets.Push(x)
+            u.expr(x, Ctx.Ret)
+        }
+        case Stmt.Yield(_, x) { u.expr(x, Ctx.Esc) }
+        case Stmt.Suspend(_, x) { u.expr(x, Ctx.Esc) }
+        case Stmt.If(_, i) {
+            u.expr(i.Test, Ctx.Op)
+            u.block(i.Then)
+            u.block(i.Else)
+        }
+        case Stmt.Loop(_, body, post) {
+            u.block(body)
+            u.block(post)
+        }
+        case Stmt.Exit(_, _, msg) { u.expr(msg, Ctx.Op) }
+        case Stmt.Assert(_, c, msg) {
+            u.expr(c, Ctx.Op)
+            u.expr(msg, Ctx.Op)
+        }
+        case Stmt.Block(_, bl), Stmt.Defer(_, bl) { u.block(bl) }
+        case Stmt.Join(_, j) {
+            u.block(j.Code)
+            u.clauses(j.Clauses, Ctx.Esc)
+        }
+        case Stmt.Spawn(_, sw) {
+            u.targets(sw.Targets)
+            u.spawning++
+            u.expr(sw.Task, Ctx.Esc)
+            for c in sw.Clauses { u.expr(c.Handler, Ctx.Esc) }
+            u.spawning--
+        }
+        case Stmt.Jump(_, _, _), Stmt.Raise(_, _, _) { }
+    }
+}
+
+# a spawn's targets: each written
+fn (u mut LocalUses&) targets(ps Array<Lvalue?&>&) {
+    for p in ps {
+        if p is not null: u.write(p, false)
+    }
+}
+
+# a local declared: its value an alias's where the local may name that storage itself (a reference, a held or bound
+# local), else stored into the local's own (copied there where it is existing storage)
+fn (u mut LocalUses&) let(l LocalId, x Expr&) {
+    u.Init[I64(l)] = x
+    k := u.B.Local(l).Kind
+    alias := u.T.IsRef(u.B.Local(l).Ty) or k == LocalKind.Held or k == LocalKind.Binding
+    u.expr(x, Ctx.Alias(l) if alias else Ctx.Store)
+}
+
+# a store: its place written - a part store recorded with its value where no reference is crossed, a scalar field's
+# store said apart (what a walk's position is)
+fn (u mut LocalUses&) assign(p Lvalue&, x Expr&) {
+    u.placeExprs(p)
+    root := u.valueRoot(p)
+    if root >= 0 and p == Lvalue.Local {
+        u.Whole[root] = true
+        return
+    }
+    if root >= 0 and p != Lvalue.Local and not u.T.IsRef(p.Type()) and not u.scalarField(p) {
+        u.StoreAt.Push(root)
+        u.StoreX.Push(x)
+        return
+    }
+    u.write(p, false)
+}
+
+# a place written (or lent writably): its local root's storage - only a scalar field's where that is all it is
+fn (u mut LocalUses&) write(p Lvalue&, lent Bool) {
+    u.placeExprs(p)
+    root := u.rootOf(p)
+    if root < 0 {
+        u.tempsWritten(p)
+        return
+    }
+    if not lent and u.scalarField(p) {
+        u.WrScalar[root] = true
+        return
+    }
+    u.WrOther[root] = true
+}
+
+# whether a place is a field holding a scalar, reached from a local's storage by fields only (a walk's position)
+fn (u mut LocalUses&) scalarField(p Lvalue&) Bool {
+    if not scalarType(u.T, p.Type()): return false
+    return match p {
+        case Lvalue.Field(_, _, base, _): u.fieldsOnly(base)
+        case _: false
+    }
+}
+
+fn (u mut LocalUses&) fieldsOnly(p Lvalue&) Bool {
+    return match p {
+        case Lvalue.Local(_, _, _): true
+        case Lvalue.Field(_, _, base, _): u.fieldsOnly(base)
+        case Lvalue.Deref(_, _, r): r == Expr.Read and u.refLocal(r) >= 0
+        case _: false
+    }
+}
+
+# a place rooted at a temporary holding a value: whatever that value reads is written through it
+fn (u mut LocalUses&) tempsWritten(p Lvalue&) {
+    match p {
+        case Lvalue.Field(_, _, base, _) { u.tempsWritten(base) }
+        case Lvalue.Elem(_, _, e) { u.tempsWritten(e.Base) }
+        case Lvalue.Payload(_, _, py) { u.tempsWritten(py.Base) }
+        case Lvalue.Temp(_, _, v, _) {
+            r := u.exprRoot(v)
+            if r >= 0: u.WrOther[r] = true
+        }
+        case _ { }
+    }
+}
+
+# the local whose own storage a place is, no reference crossed; -1 for any other
+fn (u mut LocalUses&) valueRoot(p Lvalue&) I64 {
+    return match p {
+        case Lvalue.Local(_, _, id): I64(id)
+        case Lvalue.Field(_, _, base, _): u.valueRoot(base)
+        case Lvalue.Elem(_, _, e): u.valueRoot(e.Base)
+        case Lvalue.Payload(_, _, py): u.valueRoot(py.Base)
+        case _: -1
+    }
+}
+
+# the local whose storage a place is: its own, or what a reference local of it names (through Deref); -1 for a
+# global's, a temporary's, constant data or what a call gives
+fn (u mut LocalUses&) rootOf(p Lvalue&) I64 {
+    return match p {
+        case Lvalue.Local(_, _, id): I64(id)
+        case Lvalue.Field(_, _, base, _): u.rootOf(base)
+        case Lvalue.Elem(_, _, e): u.rootOf(e.Base)
+        case Lvalue.Payload(_, _, py): u.rootOf(py.Base)
+        case Lvalue.Deref(_, _, r): u.refLocal(r)
+        case _: -1
+    }
+}
+
+# the local a reference value is read out of, as itself (its value names that local's referent): -1 for any other
+fn (u mut LocalUses&) refLocal(r Expr&) I64 {
+    return match r {
+        case Expr.Read(_, _, p, _): match p {
+            case Lvalue.Local(_, _, id): I64(id)
+            case _: -1
+        }
+        case Expr.Away(_, _, y): u.refLocal(y)
+        case Expr.Prim(_, _, op, _, args): u.refLocal(args[0]) if op == PrimOp.Convert and args.Len() == 1 else -1
+        case _: -1
+    }
+}
+
+# the local whose storage a value names: a read, a borrow or a slice of a place of one
+fn (u mut LocalUses&) exprRoot(x Expr&) I64 {
+    return match x {
+        case Expr.Read(_, _, p, _), Expr.Borrow(_, _, p): u.rootOf(p)
+        case Expr.Slice(_, _, sl): u.rootOf(sl.Base)
+        case Expr.Promote(_, _, pr): u.exprRoot(pr.X)
+        case Expr.Away(_, _, y): u.exprRoot(y)
+        case Expr.Prim(_, _, op, _, args): u.exprRoot(args[0]) if op == PrimOp.Convert and args.Len() == 1 else -1
+        case _: -1
+    }
+}
+
+# the expressions a place evaluates: its indices, a dereferenced reference's own value, a temporary's
+fn (u mut LocalUses&) placeExprs(p Lvalue&) {
+    match p {
+        case Lvalue.Field(_, _, base, _) { u.placeExprs(base) }
+        case Lvalue.Elem(_, _, e) {
+            u.placeExprs(e.Base)
+            u.expr(e.Index, Ctx.Op)
+        }
+        case Lvalue.Payload(_, _, py) { u.placeExprs(py.Base) }
+        case Lvalue.Deref(_, _, r) { if u.refLocal(r) < 0: u.expr(r, Ctx.Op) }
+        case Lvalue.Temp(_, _, v, _) { u.expr(v, Ctx.Op) }
+        case _ { }
+    }
+}
+
+# a use of a place's storage where ctx says; a reference read out of it names something else, never its storage
+fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
+    u.placeExprs(p)
+    root := u.rootOf(p)
+    if root < 0 {
+        match p {
+            case Lvalue.Temp(_, _, v, _) { u.expr(v, ctx) }
+            case _ { }
+        }
+        return
+    }
+    if u.spawning > 0 {
+        u.Esc[root] = true
+        return
+    }
+    match ctx {
+        case Ctx.Op, Ctx.Arg { }
+        case Ctx.Store { if ref: u.Esc[root] = true }
+        case Ctx.Ret { u.Ret[root] = true }
+        case Ctx.Alias(of) {
+            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.Esc[root] = true
+            u.AliasOf[I64(of)] = root
+        }
+        case Ctx.Esc { u.Esc[root] = true }
+    }
+}
+
+fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
+    if x is null: return
+    match x {
+        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _) { }
+        case Expr.Read(_, ty, p, _) { if not scalarType(u.T, ty): u.use(p, ctx, u.T.IsRef(ty)) }
+        case Expr.Borrow(_, ty, p) { u.borrow(p, ty, ctx) }
+        case Expr.Take(_, _, p) { u.write(p, false) }
+        case Expr.Promote(_, _, pr) { u.expr(pr.X, ctx) }
+        case Expr.Call(_, _, c) { u.call(c) }
+        case Expr.Make(_, _, m) {
+            for it in m.Items { u.expr(it, ctx if m.Kind == MakeKind.Tuple else Ctx.Store) }
+            u.expr(m.Length, Ctx.Op)
+        }
+        case Expr.Collect(_, _, c) {
+            u.expr(c.Reserve, Ctx.Op)
+            u.block(c.Loop)
+        }
+        case Expr.Prim(_, _, op, _, args) { u.prim(op, args, ctx) }
+        case Expr.Slice(_, _, sl) {
+            u.use(sl.Base, ctx, false)
+            u.expr(sl.Lo, Ctx.Op)
+            u.expr(sl.Hi, Ctx.Op)
+        }
+        case Expr.Cond(_, _, k) {
+            u.expr(k.C, Ctx.Op)
+            u.expr(k.A, ctx)
+            u.expr(k.B, ctx)
+        }
+        case Expr.Seq(_, _, q) {
+            u.stmts(q.Stmts)
+            u.expr(q.X, ctx)
+        }
+        case Expr.Match(_, _, m) {
+            u.stmts(m.Held)
+            for a in m.Arms { u.arm(a, ctx) }
+            if m.NoMatch is not null: u.arm(m.NoMatch!, ctx)
+        }
+        case Expr.Try(_, _, tr) {
+            u.expr(tr.X, ctx)
+            u.clauses(tr.Clauses, ctx)
+        }
+        case Expr.Fn(_, _, f) { u.fnVal(f) }
+        case Expr.Text(_, _, tx) { u.pieces(tx.Pieces) }
+        case Expr.Away(_, _, y) { u.expr(y, ctx) }
+    }
+}
+
+# a reference to a place: one lent writably writes it, and escapes but as a call's argument; a read-only one is the
+# place's storage itself, which escapes stored or handed back (a reference result is no copy of it)
+fn (u mut LocalUses&) borrow(p Lvalue&, ty types.TypeId, ctx Ctx) {
+    if (u.T.PermOf(ty) & types.Writable) != 0 {
+        u.write(p, true)
+        if ctx != Ctx.Arg: u.use(p, Ctx.Esc, true)
+        return
+    }
+    if ctx == Ctx.Ret or ctx == Ctx.Store: ctx = Ctx.Esc
+    u.use(p, ctx, true)
+}
+
+# a text's renderings: each read where it stands
+fn (u mut LocalUses&) pieces(ps Array<Piece&>&) {
+    for pc in ps {
+        match pc {
+            case Piece.Render(y) { u.expr(y, Ctx.Op) }
+            case _ { }
+        }
+    }
+}
+
+fn (u mut LocalUses&) arm(a Arm&, ctx Ctx) {
+    for alt in a.Alts {
+        u.expr(alt.Test, Ctx.Op)
+        for bd in alt.Binds { u.expr(bd.From, Ctx.Alias(bd.To)) }
+    }
+    u.expr(a.Guard, Ctx.Op)
+    u.block(a.Code)
+    u.expr(a.Value, ctx)
+}
+
+fn (u mut LocalUses&) clauses(cs Array<Clause&>&, ctx Ctx) {
+    for c in cs {
+        u.block(c.Code)
+        for d in c.Defaults { u.expr(d, ctx) }
+    }
+}
+
+# a call's arguments: each one where an argument stands - a reference given anything but a bare parameter (which keeps
+# nothing of it, D9e) escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
+# callee may keep its parts as they are), any other writable lend a write
+fn (u mut LocalUses&) call(c Call&) {
+    body := -1
+    helper := false
+    match c.Target {
+        case Callee.Body(id) { body = I64(id) }
+        case Callee.Value(x) { u.expr(x, Ctx.Op) }
+        case Callee.Helper(_, _) { helper = true }
+        case _ { }
+    }
+    ps := u.T.Items(u.T.Params(u.Sig(BodyId(I32(body))))) if body >= 0 else Array<types.TypeId>(0)
+    for i in range c.Args.Len() {
+        a := c.Args[i]
+        lent := u.lendOf(a)
+        if lent >= 0 and body >= 0 and u.spawning == 0 {
+            u.LendAt.Push(lent)
+            u.LendBody.Push(body)
+            u.LendParam.Push(i)
+            continue
+        }
+        if lent >= 0: u.WrOther[lent] = true
+        tv := u.tempLent(a)
+        if tv is not null and body >= 0 and u.spawning == 0 {
+            u.TempX.Push(tv)
+            u.TempBody.Push(body)
+            u.TempParam.Push(i)
+            u.TempIn.Push(u.at)
+        }
+        kept := u.T.IsRef(a.Type()) and not helper and not (i < ps.Len() and u.bareParam(ps[i]))
+        u.expr(a, Ctx.Esc if kept else Ctx.Arg)
+    }
+}
+
+# the value a writable borrow of a temporary whole lends (a value given storage for the call, Promote), else null
+fn (u LocalUses&) tempLent(a Expr&) Expr?&a {
+    return match a {
+        case Expr.Borrow(_, ty, p): match p {
+            case Lvalue.Temp(_, _, v, _): v if (u.T.PermOf(ty) & types.Writable) != 0 else null
+            case _: null
+        }
+        case Expr.Promote(_, ty, pr): pr.X if (u.T.PermOf(ty) & types.Writable) != 0 else null
+        case _: null
+    }
+}
+
+# whether a parameter of type pt is bare (D9e: its own storage kept nowhere past the call) - a read-only reference that
+# is never null and gathers no arguments
+fn (u LocalUses&) bareParam(pt types.TypeId) Bool {
+    return u.T.IsRef(pt) and (u.T.PermOf(pt) & types.Writable) == 0 and not u.T.IsNullable(pt) and not u.T.IsSpread(pt)
+}
+
+# the local a writable borrow of it whole (or of what a reference local of it names) lends, else -1
+fn (u mut LocalUses&) lendOf(a Expr&) I64 {
+    match a {
+        case Expr.Borrow(_, ty, p) {
+            if (u.T.PermOf(ty) & types.Writable) == 0: return -1
+            return match p {
+                case Lvalue.Local(_, _, id): I64(id)
+                case Lvalue.Deref(_, _, r): u.refLocal(r)
+                case _: -1
+            }
+        }
+        case Expr.Read(_, ty, p, _) {
+            # a writable reference local given on as it is: what it names lent
+            if not u.T.IsRef(ty) or (u.T.PermOf(ty) & types.Writable) == 0: return -1
+            return match p {
+                case Lvalue.Local(_, _, id): I64(id) if u.T.IsRef(u.B.Local(id).Ty) else -1
+                case _: -1
+            }
+        }
+        case _ { return -1 }
+    }
+}
+
+fn (u mut LocalUses&) prim(op PrimOp, args Array<Expr&>&, ctx Ctx) {
+    for a in args {
+        match op {
+            case PrimOp.Convert { u.expr(a, ctx) }
+            case PrimOp.AnyMake { u.expr(a, Ctx.Esc) }
+            case _ { u.expr(a, Ctx.Op) }
+        }
+    }
+}
+
+fn (u mut LocalUses&) fnVal(f FnVal&) {
+    match f {
+        case FnVal.Lambda(_, caps, _) {
+            for cp in caps { u.expr(cp.Outer, Ctx.Esc) }
+        }
+        case FnVal.Adapter(_, recv, _) { u.expr(recv, Ctx.Esc) }
+        case FnVal.Named(_) { }
     }
 }
 

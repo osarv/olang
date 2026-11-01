@@ -97,3 +97,7 @@ fn (parts Array<String>) Join(sep String) String {
     }
     return out
 }
+
+# everything added so far, as one String of its own - a copy, so the builder may be discarded, or keep growing, without
+# affecting it (round 3b: a value result, its storage the caller's)
+fn (b StringBuilder) ToString() String { return String(b.chars.ToArray()) }

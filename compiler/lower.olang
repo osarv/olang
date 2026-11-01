@@ -83,6 +83,13 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     TempCopies I64 = 0           # bulk review 5, F3: for a bare parameter the same call may write another way
     TaskCopies I64 = 0           # bulk review 5, F7: for a task's bare parameter something may write before its join
     CCopies I64 = 0              # the rework's round 2, X22: for a C function (a pointer not "const", an export fn)
+    # round 3b: copies left out - a body's handing back a local holding views of its arguments (ElidedReturns), a
+    # local's holding views of storage nothing changes while it lives (ViewLocals)
+    ElidedReturns I64 = 0
+    ViewLocals I64 = 0
+    # ... per body: whether it keeps its parameter's referent's parts as they are (preserves: body * 64 + k), its reference
+    # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
+    preserved Map<I64, Bool>
     CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
@@ -327,6 +334,16 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
     # handing back views copies its result at every other site
     reads Map<I64, Bool>
+    # round 3b (docs/rework.md 17): the locals this body hands back holding views of its arguments, with the parameters
+    # each views (typed.ViewWalk.Settle, as check recorded them); the copies left out for them and for the locals holding
+    # views in place of their copies (viewLocals) - a MakeKind.Copy by its site, a value array local's T7b copy at its
+    # declaration - and the view calls such a local reads where they stand
+    rvl Map<I64, I64>
+    vl Map<I64, Bool>
+    noCopy Map<I64, Bool>
+    noLetCopy Map<I64, Bool>
+    vlSites Map<I64, Bool>
+    vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
     stmts Vec<typed.Stmt&>       # ... the statements being lowered, innermost last, and whether each writes nothing
     stmtSafe Vec<I64>            # it reaches but through its own last store (quietStmt): -1 not yet asked, 0 no, 1 yes
 }
@@ -387,6 +404,7 @@ fn (ln mut lowering&) run() {
     ln.emit(mir.Stmt.Open(b.Sp, frame))
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
     ln.bareEntryCopies()
+    ln.settleViews()
     for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
     # falling off the end
@@ -869,7 +887,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             # a fixed array widened is made where the local keeps it, the local's own (T7b, T7c)
             v := ln.fitAt(init, ty, sp, ln.storageOf(l))
             ln.walkSite = typed.SiteId(-1)
-            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead {
+            if ln.copiesArray(init, ty) and not ln.fits(init, ty) and not ln.widens(init, ty) and not ln.dead and not ln.noLetCopy.Has(I64(l)) {
                 n := ln.slotLen(l, init)
                 v = ln.slotCopy(v, ty, n, sp) if n >= 0 else ln.arrayCopy(v, ty, sp, ln.storageOf(l))
             }
@@ -2524,7 +2542,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     # function would have, unless the value is only read here before anything can change what it views
     if ln.viewCall(c, ty) {
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
-        if ln.reads.Has(I64(c.Site)) and ln.stableViews(c) {
+        if ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)) {
             ln.L.ViewReads++
         } else {
             ln.L.ViewCopies++
@@ -2542,6 +2560,8 @@ fn (lw Lowerer&) ViewsOf(id typed.BodyId) I64 {
     if not source.NewParams or I64(id) < 0 or I64(id) >= lw.Plans.Len() or I64(id) >= lw.Bodies.Len(): return 0
     return match lw.Bodies[I64(id)].Of {
         case typed.BodyOf.Fn(inst): try lw.P.L.ViewResults.Get(inst) catch default I64(0)
+        # (round 3b: a constructor whose fields hold views of what it is given - check.ctorViewKey's)
+        case typed.BodyOf.Ctor(t, twin): (try lw.P.L.CtorViews.Get(I64(t)) catch default I64(0)) if twin == types.ListId(0) else 0
         case _: 0
     }
 }
@@ -2555,12 +2575,13 @@ fn (ln mut lowering&) viewWalk() typed.ViewWalk {
         if not ln.L.P.L.ParamWritten.Has(key) and not ln.L.P.L.BareWritten.Has(key): m |= I64(1) << k
     }
     lw := ln.L
-    return typed.ViewWalk(ln.T, b, m, fn(id typed.BodyId) I64 { return lw.ViewsOf(id) })
+    return typed.ViewWalk(ln.T, b, m, fn(id typed.BodyId) I64 { return lw.ViewsOf(id) }
+                          fn(id typed.LocalId) I64 { return try ln.rvl.Get(I64(id)) catch default I64(-1) })
 }
 
 # whether a return hands back a view of what the arguments reach, as it is: its calls handing back views marked read
 fn (ln mut lowering&) retView(x typed.Expr&) Bool {
-    if ln.L.ViewsOf(ln.B.Id) <= 0 or not ln.valueArray(ln.T.Result(ln.B.Ty)): return false
+    if ln.L.ViewsOf(ln.B.Id) <= 0 or not ln.viewValue(ln.T.Result(ln.B.Ty)): return false
     w := ln.viewWalk()
     if w.Roots(x) <= 0: return false
     ln.markViews(w, x)
@@ -2600,8 +2621,11 @@ fn (ln mut lowering&) viewCall(c typed.Call&, ty types.TypeId) Bool {
         case typed.Callee.Body(i): i
         case _: typed.BodyId(-1)
     }
-    return id >= typed.BodyId(0) and ln.L.ViewsOf(id) > 0 and ln.valueArray(ty)
+    return id >= typed.BodyId(0) and ln.L.ViewsOf(id) > 0 and ln.viewValue(ty)
 }
+
+# whether a value of type ty may be handed back as a view (D9h; round 3b: any value holding storage of its own)
+fn (ln mut lowering&) viewValue(ty types.TypeId) Bool { return not ln.T.IsRef(ty) and typed.HoldsOwned(ln.T, ty) }
 
 # x, where it stands, is only read before its statement ends: the call of a function handing back views it is (through
 # a conversion or a temporary's storage given to it) may give its view as it is (call)
@@ -2859,6 +2883,446 @@ fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span, site typed.SiteId = 
     return mir.Operand.Copy(mir.L(dest))
 }
 
+# ---- views kept in place of copies (the rework's round 3b, docs/rework.md 17) ----
+
+# the copies this body leaves out, where the two could not be told apart: where it hands back a local holding views of
+# its arguments, as check recorded (typed.ViewWalk.Settle - its callers copying where they keep the result), and where a
+# local holds views of storage nothing changes while it lives (viewLocals). Only lowered with the scope pass's plan under
+# the rework's round 2: while compiling, every copy is made, so what the evaluator computes is the copies' and agrees
+fn (ln mut lowering&) settleViews() {
+    if not ln.planned or not source.NewParams: return
+    lw := ln.L
+    u := typed.Uses(ln.T, ln.B, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    views := ln.L.ViewsOf(ln.B.Id)
+    if views > 0 { ln.resultViews(u, views) }
+    ln.viewLocals(u)
+    ln.viewTemps(u)
+}
+
+# the temporaries holding a view call's result lent whole to a body keeping its parts as they are (a walk made and
+# handed to a helper, "a.Iter().Fold(...)"): the call read where it stands where what it views is stable
+fn (ln mut lowering&) viewTemps(u typed.LocalUses&) {
+    for k in range u.TempX.Len() {
+        keeps := ln.L.preserves(u.TempBody[k], u.TempParam[k])
+        c := viewCallIn(u.TempX[k])
+        if c is null: continue
+        ln.vlIn = u.TempIn[k]
+        held := keeps and ln.heldViews(u, c)
+        if held { ln.L.ViewLocals++ }
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(u.TempX[k].Span().Start)) ": a temporary " $("holds views" if held else "copies" if keeps else "copies (lent to a body that may change its parts)")) }
+    }
+}
+
+# the locals handed back holding views (D9h for every value): those whose views check recorded, each one's copies of
+# them left out - its declaration's and its part stores'
+fn (ln mut lowering&) resultViews(u typed.LocalUses&, views I64) {
+    ln.viewWalk().Settle(u, ln.rvl)
+    # (only where check recorded the views of every one - a local may hold another's: all copies are kept otherwise)
+    for i in range ln.B.Locals.Len() {
+        bits := try ln.rvl.Get(i) catch { continue }
+        if (views & bits) != bits {
+            ln.rvl.Clear()
+            return
+        }
+    }
+    w := ln.viewWalk()
+    for i in range ln.B.Locals.Len() {
+        if not ln.rvl.Has(i): continue
+        ln.elide(w, u.Init[i], i)
+        for k in range u.StoreAt.Len() {
+            if u.StoreAt[k] == i: ln.elide(w, u.StoreX[k], -1)
+        }
+    }
+}
+
+# a stored value's copy left out where it is a view of the arguments (ElidedCopy): a MakeKind.Copy by its site, a value
+# array local's T7b copy at its declaration
+fn (ln mut lowering&) elide(w typed.ViewWalk&, x typed.Expr?&, l I64) {
+    if x is null or not w.ElidedCopy(x): return
+    match x {
+        case typed.Expr.Make(_, _, m) { ln.noCopy.Put(I64(m.Site), true) }
+        case _ { if l >= 0: ln.noLetCopy.Put(l, true) }
+    }
+    ln.L.ElidedReturns++
+}
+
+# the locals holding views in place of the copies their declarations make - a view call's result (D9h), a value array
+# read (T7b), a value's MakeKind.Copy of existing storage, a read-only reference local naming such storage (a walk's
+# collection) - where nothing could tell the view from the copy: the local is never written but in a scalar field or
+# lent whole to bodies keeping its parts as they are (preserves), never escapes, never handed back, and the storage it
+# views is changed by nothing while it lives and outlives it (heldSrc). In declaration order, so one may view another
+fn (ln mut lowering&) viewLocals(u typed.LocalUses&) {
+    for i in range ln.B.Locals.Len() {
+        if ln.rvl.Has(i): continue
+        if not ln.viewCand(u, i) {
+            if ln.L.ViewDump and u.Init[i] is not null and typed.HoldsOwned(ln.T, ln.B.Locals[i].Ty) { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) ": local L" $i " no candidate" $ln.whyNot(u, i)) }
+            continue
+        }
+        x := u.Init[i]
+        if x is null: continue
+        ln.vlIn = ln.B.Locals[i].In
+        held := ln.viewInit(u, x, i)
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(ln.B.Locals[i].Sp.Start)) ": local L" $i $(" holds views" if held else " copies")) }
+        if held {
+            ln.vl.Put(i, true)
+            ln.L.ViewLocals++
+        }
+    }
+}
+
+fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
+    l := ln.B.Locals[i]
+    k := l.Kind
+    if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
+    if l.Unset or u.Esc[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or not ln.lendsKeep(u, i): return false
+    for k2 in range u.StoreAt.Len() {
+        if u.StoreAt[k2] == i: return false
+    }
+    t := ln.T
+    if t.IsRef(l.Ty): return (t.PermOf(l.Ty) & types.Writable) == 0 and typed.HoldsOwned(t, t.Referent(l.Ty))
+    return typed.HoldsOwned(t, l.Ty)
+}
+
+# why local i holds no views (OLANG_VIEWDUMP)
+fn (ln mut lowering&) whyNot(u typed.LocalUses&, i I64) String {
+    return $(" escapes" if u.Esc[i] else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
+}
+
+# whether every writable lend of local i whole goes to a body keeping its parts as they are (a walk's Next, which
+# writes its position only)
+fn (ln mut lowering&) lendsKeep(u typed.LocalUses&, i I64) Bool {
+    for k in range u.LendAt.Len() {
+        if u.LendAt[k] == i and not ln.L.preserves(u.LendBody[k], u.LendParam[k]): return false
+    }
+    return true
+}
+
+# what a local's declaration gives it, where it may hold views in place of a copy: the copy left out (or the view call
+# read where it stands) where what it views is stable
+fn (ln mut lowering&) viewInit(u typed.LocalUses&, x typed.Expr&, i I64) Bool {
+    ty := ln.B.Locals[i].Ty
+    if ln.T.IsRef(ty) {
+        pc := promoted(x)
+        if pc is not null {
+            c := viewCallIn(pc)
+            if c is not null: return ln.heldViews(u, c)
+            return true   # (a value of its own given storage for the local: what it names is its own)
+        }
+        return ln.heldSrc(u, x)
+    }
+    c := viewCallIn(x)
+    if c is not null { return ln.heldViews(u, c) }
+    y := typed.CopiedOf(ln.T, x)
+    if y is null or not ln.heldSrc(u, y): return false
+    match x {
+        case typed.Expr.Make(_, _, m) { ln.noCopy.Put(I64(m.Site), true) }
+        case _ { if ln.copiesArray(x, ty): ln.noLetCopy.Put(i, true) }
+    }
+    return true
+}
+
+# whether every argument a view call may hand back a view of is stable while the local reading it lives: the call then
+# read where it stands
+fn (ln mut lowering&) heldViews(u typed.LocalUses&, c typed.Call&) Bool {
+    id := match c.Target {
+        case typed.Callee.Body(b): b
+        case _: typed.BodyId(-1)
+    }
+    v := ln.L.ViewsOf(id)
+    if v <= 0 or (v & typed.ViewOther) != 0: return false
+    for k in range c.Args.Len().Min(typed.ViewBits) {
+        if (v & (I64(1) << k)) != 0 and not ln.heldSrc(u, c.Args[k]): return false
+    }
+    ln.vlSites.Put(I64(c.Site), true)
+    return true
+}
+
+# whether the storage a value names - the storage itself, a view of it, what a reference names - is changed by nothing
+# while a local of this body holding it lives, and outlives it: constant data, what a bare parameter reaches (its caller
+# copies it where anything could change it during the call), an immutable global's, a local's own storage nothing
+# writes, one holding views of such storage (viewLocals), or a parameter held by value nothing writes
+fn (ln mut lowering&) heldSrc(u typed.LocalUses&, x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, ty, p, _): ln.heldRefPlace(u, p) if ln.T.IsRef(ty) else ln.heldPlace(u, p)
+        case typed.Expr.Borrow(_, _, p): ln.heldPlace(u, p)
+        case typed.Expr.Slice(_, _, sl): ln.heldPlace(u, sl.Base)
+        case typed.Expr.Promote(_, _, pr): ln.heldMadeOf(u, pr.X)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and ln.heldSrc(u, args[0])
+        case typed.Expr.Away(_, _, y): ln.heldSrc(u, y)
+        case _: false
+    }
+}
+
+# a value given storage for a call - an array value's pair names its elements' storage, a place read
+fn (ln mut lowering&) heldMadeOf(u typed.LocalUses&, x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _), typed.Expr.Data(_, _, _, _): ln.heldSrc(u, x)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and ln.heldMadeOf(u, args[0])
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) heldPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): ln.heldLocal(u, I64(id))
+        case typed.Lvalue.Global(_, _, mi, n): ln.immutableGlobal(mi, n)
+        case typed.Lvalue.Field(_, _, base, _): ln.heldPlace(u, base)
+        case typed.Lvalue.Elem(_, _, e): ln.heldPlace(u, e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.heldPlace(u, py.Base)
+        case typed.Lvalue.Deref(_, _, r): ln.heldSrc(u, r)
+        case _: false
+    }
+}
+
+# what a reference read out of a place names: a reference local's referent - and a value array local's own storage,
+# read as the reference its pair is (an argument given a bare parameter)
+fn (ln mut lowering&) heldRefPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): ln.heldReferent(u, I64(id)) if ln.T.IsRef(ln.B.Locals[I64(id)].Ty) else ln.heldLocal(u, I64(id))
+        case _: false
+    }
+}
+
+# what reference local i names: a bare parameter's argument (passed by pointer, its body never assigning it), or a
+# reference local holding views of stable storage (viewLocals)
+fn (ln mut lowering&) heldReferent(u typed.LocalUses&, i I64) Bool {
+    l := ln.B.Locals[i]
+    # (its own storage only: what a reference it holds names may change under any other name for it)
+    if ln.T.SharesRefs(ln.T.Referent(l.Ty)): return false
+    if l.Kind == typed.LocalKind.Param {
+        decl := ln.declParams()
+        return typed.BarePointer(ln.T, ln.B, i, decl) and ln.paramElig(i)
+    }
+    if ln.vl.Has(i): return true
+    # (one given storage made for it by the call declaring it - a built result no one else holds: its own, as a value
+    # local's is)
+    x := u.Init[i]
+    return x is not null and ln.freshCall(x) and ln.heldUnchanged(u, i)
+}
+
+# whether a value is a call of a body whose result is storage made for it, which nothing else holds (freshResult)
+fn (ln mut lowering&) freshCall(x typed.Expr&) Bool {
+    c := viewCallIn(x)
+    if c is null: return false
+    return match c.Target {
+        case typed.Callee.Body(id): not typed.ScopedCall(c) and ln.L.freshResult(I64(id))
+        case _: false
+    }
+}
+
+# a local's own storage: one nothing writes while it lives (its writes a scalar field's, its lends bodies keeping its
+# parts) - a parameter held by value its body never writes, or one holding views of stable storage
+fn (ln mut lowering&) heldLocal(u typed.LocalUses&, i I64) Bool {
+    l := ln.B.Locals[i]
+    if ln.T.SharesRefs(l.Ty): return false
+    if l.Kind == typed.LocalKind.Param: return not ln.T.IsRef(l.Ty) and ln.paramElig(i)
+    if not ln.heldUnchanged(u, i): return false
+    a := u.AliasOf[i]
+    if a >= 0 and not ln.vl.Has(i): return ln.heldLocal(u, a)
+    return true
+}
+
+# whether local i's storage - its own, or its referent where it is a reference local - is written by nothing while a
+# local declared in vlIn lives: declared around it, its writes a scalar field's, its lends to bodies keeping its parts
+fn (ln mut lowering&) heldUnchanged(u typed.LocalUses&, i I64) Bool {
+    l := ln.B.Locals[i]
+    if l.Kind == typed.LocalKind.Capture or not ln.encloses(l.In, ln.vlIn): return false
+    if u.WrOther[i] or u.Whole[i] or u.Esc[i] or not ln.lendsKeep(u, i): return false
+    for k in range u.StoreAt.Len() {
+        if u.StoreAt[k] == i: return false
+    }
+    return true
+}
+
+# whether block a is block b or one around it - a local declared in a lives as long as one declared in b
+fn (ln mut lowering&) encloses(a typed.BlockId, b typed.BlockId) Bool {
+    at := b
+    for _ in range ln.B.Blocks.Len() + 1 {
+        if at == a: return true
+        if I64(at) < 0 or I64(at) >= ln.B.Blocks.Len(): return false
+        at = ln.B.Blocks[I64(at)].Parent
+    }
+    return false
+}
+
+# whether this body's parameter local i is one its body never assigns whole (names' ParamWritten and BareWritten)
+fn (ln mut lowering&) paramElig(i I64) Bool {
+    key := pair.Pair(ln.B.File, I64(ln.B.Locals[i].Sp.Start))
+    return not ln.L.P.L.ParamWritten.Has(key) and not ln.L.P.L.BareWritten.Has(key)
+}
+
+# the parameter types this body's function declares (a type variable's binding stays by value), none for any other body
+fn (ln mut lowering&) declParams() Array<types.TypeId> {
+    inst := match ln.B.Of {
+        case typed.BodyOf.Fn(k): k
+        case _: -1
+    }
+    if inst < 0: return Array<types.TypeId>(0)
+    P := ln.L.P
+    return P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
+}
+
+fn (ln mut lowering&) immutableGlobal(mi I64, n source.NameId) Bool {
+    v := ln.L.P.GlobalDecl(mi, n)
+    return v is not null and not generic.WrittenMut(v.Ty)
+}
+
+# a body keeping its parameter k's referent's parts as they are (round 3b): it writes nothing through it but scalar
+# fields, assigns it nowhere, lends it to nothing, keeps it nowhere, hands it back nowhere - a walk's Next writing its
+# position. Asked once a body and parameter
+fn (lw mut Lowerer&) preserves(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
+    key := body * 64 + k
+    known := try lw.preserved.Get(key) catch {
+        lw.preserved.Put(key, false)   # (a body reaching itself keeps nothing proved)
+        ok := lw.keepsParts(lw.Bodies[body], k)
+        lw.preserved.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+# whether a body's reference result is storage made for it that nothing else holds (round 3b): every value it returns
+# a value given storage there (Promote of one made: an array, a case, a comprehension, a text, another such call's), or
+# a reference local holding one, kept nowhere but its return - lent only to bodies keeping nothing of what they are lent
+# (freshParam). Asked once a body
+fn (lw mut Lowerer&) freshResult(body I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len(): return false
+    key := -1 - body
+    known := try lw.preserved.Get(key) catch {
+        lw.preserved.Put(key, false)
+        ok := lw.allFresh(lw.Bodies[body])
+        lw.preserved.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (lw mut Lowerer&) allFresh(b typed.Body&) Bool {
+    if b.Root is null or not lw.T().IsRef(lw.T().Result(b.Ty)): return false
+    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    for x in u.Rets {
+        if not lw.freshRet(b, u, x): return false
+    }
+    return true
+}
+
+fn (lw mut Lowerer&) T() mut types.Table&lw { return lw.P.T }
+
+fn (lw mut Lowerer&) freshRet(b typed.Body&, u typed.LocalUses&, x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Promote(_, _, pr): lw.freshMade(pr.X)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and lw.freshRet(b, u, args[0])
+        case typed.Expr.Away(_, _, y): lw.freshRet(b, u, y)
+        case typed.Expr.Call(_, _, c): c.Target == typed.Callee.Body and not typed.ScopedCall(c) and lw.freshResult(lw.calleeOf(c))
+        case typed.Expr.Read(_, _, p, _): match p {
+            case typed.Lvalue.Local(_, _, id): lw.freshLocal(b, u, I64(id))
+            case _: false
+        }
+        case _: false
+    }
+}
+
+fn (lw mut Lowerer&) calleeOf(c typed.Call&) I64 {
+    return match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+}
+
+# a value made where it is: storage of its own no one else names
+fn (lw mut Lowerer&) freshMade(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, m): m.Kind != typed.MakeKind.Tuple
+        case typed.Expr.Collect(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Lit(_, _, _): true
+        # (a value result: copied where it is a view and kept - a promotion keeps it)
+        case typed.Expr.Call(_, ty, c): c.Target == typed.Callee.Body and not typed.ScopedCall(c) and not lw.T().IsRef(ty)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and lw.freshMade(args[0])
+        case typed.Expr.Away(_, _, y): lw.freshMade(y)
+        case _: false
+    }
+}
+
+# a reference local of b holding storage made for it, kept nowhere but where it is returned
+fn (lw mut Lowerer&) freshLocal(b typed.Body&, u typed.LocalUses&, i I64) Bool {
+    l := b.Locals[i]
+    if l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Capture or u.Esc[i] or u.Whole[i]: return false
+    x := u.Init[i]
+    if x is null or not lw.freshRet(b, u, x): return false
+    for k in range u.LendAt.Len() {
+        if u.LendAt[k] == i and not lw.freshParam(u.LendBody[k], u.LendParam[k]): return false
+    }
+    for j in range u.AliasOf.Len() {
+        if u.AliasOf[j] == i: return false
+    }
+    return true
+}
+
+# a body keeping nothing of what its parameter k names: no reference to it kept, handed back or put anywhere
+fn (lw mut Lowerer&) freshParam(body I64, k I64) Bool {
+    if body < 0 or body >= lw.Bodies.Len() or k >= 64: return false
+    key := -(I64(1) << 40) - (body * 64 + k)
+    known := try lw.preserved.Get(key) catch {
+        lw.preserved.Put(key, false)
+        ok := lw.keepsNothing(lw.Bodies[body], k)
+        lw.preserved.Put(key, ok)
+        return ok
+    }
+    return known
+}
+
+fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
+    if b.Root is null or k >= b.Params.Len(): return false
+    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    p := I64(b.Params[k])
+    if u.Esc[p] or u.Ret[p]: return false
+    for j in range u.AliasOf.Len() {
+        if u.AliasOf[j] == p: return false
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p and not lw.freshParam(u.LendBody[j], u.LendParam[j]): return false
+    }
+    return true
+}
+
+fn (lw mut Lowerer&) keepsParts(b typed.Body&, k I64) Bool {
+    if b.Root is null or k >= b.Params.Len(): return false
+    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    p := I64(b.Params[k])
+    if u.WrOther[p] or u.Whole[p] or u.Esc[p] or u.Ret[p]: return false
+    for j in range u.StoreAt.Len() {
+        if u.StoreAt[j] == p: return false
+    }
+    # (lent on whole to a body keeping them as they are too: a helper's walk calling its Next)
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == p and not lw.preserves(u.LendBody[j], u.LendParam[j]): return false
+    }
+    return true
+}
+
+# the value a reference local is given storage for (Promote), else null
+fn promoted(x typed.Expr&) typed.Expr?&x {
+    return match x {
+        case typed.Expr.Promote(_, _, pr): pr.X
+        case typed.Expr.Away(_, _, y): promoted(y)
+        case _: null
+    }
+}
+
+# the call a value is, through what passes it on as it is: a try (a walk's Next, whose Exhausted leaves the loop), a
+# conversion, a statement-less sequence
+fn viewCallIn(x typed.Expr&) typed.Call?&x {
+    return match x {
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Try(_, _, tr): viewCallIn(tr.X!) if tr.X is not null else null
+        case typed.Expr.Away(_, _, y): viewCallIn(y)
+        case typed.Expr.Seq(_, _, q): viewCallIn(q.X!) if q.X is not null and q.Stmts.Len() == 0 else null
+        case typed.Expr.Prim(_, _, op, _, args): viewCallIn(args[0]) if op == typed.PrimOp.Convert and args.Len() == 1 else null
+        case _: null
+    }
+}
+
 # ---- values made ----
 
 fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
@@ -2887,6 +3351,8 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             v := ln.val(x)
             if ln.dead { return mir.Operand.None }
             if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.built(m.Site), sp) }
+            # (round 3b: a view kept in place of this copy, where nothing could tell the two apart)
+            if ln.noCopy.Has(I64(m.Site)) { return v }
             return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
         }
     }
