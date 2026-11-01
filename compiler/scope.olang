@@ -8208,6 +8208,9 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         w := s.paramOfTerm(s.fitSlot)
         if w >= 0 { s.noteMadeNamed(rec, x, w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
     }
+    # (round 2d: a value that is a bare parameter's own - by pointer, or its copy on entry - kept where it does not live:
+    # the parameter named, which param_migrate makes "&")
+    if rec >= 0 and kind != FitOwn: s.noteBareArg(rec, x)
     # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a) - a slice
     # of a known length widened to a run-time one too (T7c)
     match unWidened(s.unAway(x)) {
