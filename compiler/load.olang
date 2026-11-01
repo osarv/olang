@@ -96,24 +96,7 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Fetch
     Names
     Diags
-    # the rework's round 2: the bare parameters names found written in their bodies, by (file, the parameter's start) -
-    # each given a copy of its own on entry (D9, 2.10)
-    BareWritten Map<pair.Pair<I64, I64>, Bool>
-    # ... and the reference levels a body's written types are found to hold read-only (2.8's inferred levels), by
-    # (module, the start of the written "T&") - the checker records one where a read-only value is stored into a level
-    # of a local's type and checks the program again; such a "&" then reads read-only there
-    RoLevels Map<pair.Pair<I64, I64>, Bool>
-    # ... and an instance's parameter whose reach its result holds as given (by "instance:parameter"): a call giving it a
-    # read-only argument gets the result read-only at every level below its top (check's followResult)
-    FollowResults Map<String&, Bool>
-    # ... and the nullable parameters ("p T?&") found written through, passed where they may be written or kept, by
-    # (module, the start of the parameter's written type): read-only otherwise (docs/rework.md 11.3 point 6)
-    NullWritable Map<pair.Pair<I64, I64>, Bool>
-    # bulk review 5: the functions whose reference result some caller writes through, lends where it may be written or
-    # keeps (by function): D9g's note there names the bare parameter the result is reached through - shared writably,
-    # "&" - rather than the value result, which would make the caller's writes go to a copy
-    ResultWritten Map<I64, Bool>
-    # round 2d (D9h): the parameters names found assigned whole in their bodies - a reference repointed, a by-value one
+    # D9h: the parameters names found assigned whole in their bodies - a reference repointed, a by-value one
     # given another value - by (file, the parameter's start): what such a body returns is no view of its argument
     ParamWritten Map<pair.Pair<I64, I64>, Bool>
     # ... and the instances whose array value result is a view of what they are given, handed back as it is: by
