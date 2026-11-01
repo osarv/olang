@@ -4969,7 +4969,7 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
         # only existing storage of one of this function's blocks that closes first, given as the argument: anything else -
         # a temporary built for the call included - the store's own fit judges
         if not t.Runs() or s.order(t, slot) != FailsBlock or s.isFresh(c.Args[ai]) or s.madeLocal(c.Args[ai], 0) < 0 { continue }
-        if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()) }
+        if s.report { s.noteBareArg(s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()), c.Args[ai]) }
         return true
     }
     return false
@@ -7660,6 +7660,8 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             # the argument made where the instance goes - a parameter's scope (B11)
             w := s.paramOfTerm(lo)
             if ai >= 0 and w >= 0 { s.noteMadeNamed(rec, c.Args[ai], w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
+            # (round 2e: a bare parameter's own storage kept in existing storage - noted, what the migration makes "&")
+            if ai >= 0 { s.noteBareArg(rec, c.Args[ai]) }
             continue
         }
         # O27: what the callee keeps of its argument is a view of storage of this function's, or the argument is one
@@ -8999,7 +9001,10 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     # a bare parameter passed by pointer is never lifted: its own storage kept longer than the frame is its argument's,
     # which its callers copy where it may change (round 2e)
     if s.bareParam(l) {
-        if t != Term.None and not isBlockTerm(t) { s.keepOwn(l) }
+        # (kept only in what the function hands back - its result scope; stored into existing storage, a "&"
+        # parameter's or the program's, it stays refused, D9e: QCC's check (2), naming "p T&")
+        rv := s.resultVarOf(s.B!.Ty)
+        if rv >= 0 and t == Term.Var(rv) { s.keepOwn(l) }
         return
     }
     # a part of what a local builds - a field, an element - kept longer is no reason to build all of it longer: its field
