@@ -1,0 +1,104 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/flags.olang: the text a parser keeps - flags' names,
+# help, values and defaults, the positional arguments - held by value (QCE), so what declares and parses takes text
+# bare and keeps a copy of its own.
+
+# the help text of a parameter read by Read<T>: "@flags.Help("how many to keep") Keep I64"
+type Help struct(Text String) { Text }
+
+type flag struct(name String, short Char, kind Kind, help String) {
+    name
+    short
+    kind
+    help
+    isSet Bool = false
+    b Bool = false
+    i I64 = 0
+    f F64 = 0.0
+    t String = ""
+    shown String = ""                     # the default, as Help writes it
+}
+
+# the declared flags and, after Parse, the positional arguments. A handle: a copy names the same parser
+type Flags struct(program String, about String = "") {
+    s state& = state(program, about)
+}
+
+type state struct(program String, about String) {
+    program
+    about
+    all Vec<flag&> = Vec<flag&>()
+    args Vec<String> = Vec<String>()
+    message String = ""
+}
+
+fn (p Flags&) add(name String, short Char, kind Kind, help String) flag&p {
+    s := p.s
+    r flag&s = flag(name, short, kind, help)
+    s.all.Push(r)
+    return r
+}
+
+# a flag that is off unless given: "--name", "-x"
+fn (p Flags&) Bool(name String, short Char, help String) BoolFlag {
+    return BoolFlag(p.add(name, short, Kind.Bool, help))
+}
+
+fn (p Flags&) Int(name String, short Char, value I64, help String) IntFlag {
+    r := p.add(name, short, Kind.Int, help)
+    r.i = value
+    r.shown = $value
+    return IntFlag(r)
+}
+
+fn (p Flags&) Float(name String, short Char, value F64, help String) FloatFlag {
+    r := p.add(name, short, Kind.Float, help)
+    r.f = value
+    r.shown = $value
+    return FloatFlag(r)
+}
+
+fn (p Flags&) Text(name String, short Char, value String, help String) TextFlag {
+    r := p.add(name, short, Kind.Text, help)
+    r.t = value
+    r.shown = value
+    return TextFlag(r)
+}
+
+# the positional arguments, in order, after Parse
+fn (p Flags) Args() Vec<String> { return p.s.args }
+
+# a parameter's flag, declared
+fn (p Flags&) declare<Q>(q Q) {
+    help := (q.Attr<Help>()!).Text if q.HasAttr<Help>() else ""
+    short := (q.Attr<Short>()!).Letter if q.HasAttr<Short>() else Char(0)
+    name := dashed(q.Name)
+    match Q.Type {
+        case Bool {
+            f := p.add(name, short, Kind.Bool, help)
+            if q.HasDefault { f.b = q.Default }
+        }
+        case String, String& {
+            f := p.add(name, short, Kind.Text, help)
+            if q.HasDefault {
+                f.t = $q.Default
+                f.shown = f.t
+            }
+        }
+        case _ {
+            if Q.Type.Kind == TypeKind.Integer {
+                f := p.add(name, short, Kind.Int, help)
+                if q.HasDefault {
+                    f.i = I64(q.Default)
+                    f.shown = $q.Default
+                }
+            } else {
+                assert Q.Type.Kind == TypeKind.Float, "a flag is a Bool, an integer, a float or text"
+                f := p.add(name, short, Kind.Float, help)
+                if q.HasDefault {
+                    f.f = F64(q.Default)
+                    f.shown = $q.Default
+                }
+            }
+        }
+    }
+}

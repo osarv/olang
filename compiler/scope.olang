@@ -925,7 +925,7 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
             match s.P.T.DeclKindOf(s.P.T.DeclOf(t)) {
                 case types.DeclKind.Struct {
                     for f in s.P.T.Items(s.P.T.Fields(t)) {
-                        if s.holds(f) { return true }
+                        if s.holdsPart(f) { return true }
                     }
                     return false
                 }
@@ -934,10 +934,10 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
                 case _ { return false }
             }
         }
-        case types.Kind.Array { return s.holds(s.P.T.Elem(t)) }
+        case types.Kind.Array { return s.holdsPart(s.P.T.Elem(t)) }
         case types.Kind.Tuple, types.Kind.Record {
             for f in s.P.T.Items(s.P.T.Parts(t)) {
-                if s.holds(f) { return true }
+                if s.holdsPart(f) { return true }
             }
             return false
         }
@@ -945,6 +945,11 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
         case _ { return false }
     }
 }
+
+# whether a part holds a reference or is an array of a run-time length held by value (the rework's round 3, QCE): a
+# store into one builds where its container's references are, as a reference stored there must outlive them - so
+# something is stored through what reaches it (O25g), and its scope must be exact
+fn (s mut Scoper&) holdsPart(t types.TypeId) Bool { return s.holds(t) or s.P.T.OwnedPart(t) }
 
 # the parts a value of type t holds in place: a struct's fields, an enum's payloads' fields, an array's elements, a
 # tuple's or record's parts

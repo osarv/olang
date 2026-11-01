@@ -144,3 +144,40 @@ test "an entry copy owns its parts" {
     p := person($"amy", 9)
     assert shout(p) == "Xmy" and p.name == "amy"
 }
+
+# a part stored through a "&" parameter is built where its container is - so a caller must say exactly where that is,
+# even through a local found by a lookup (the store needs the scope exact, as a reference field's does: O25g)
+type opt struct(name String) {
+    name
+    t String = ""
+}
+
+type opts struct() {
+    all Vec<opt&> = Vec<opt&>()
+}
+
+fn (s opts&) byName(name String) opt&s ? NotFound {
+    for f in s.all {
+        if f.name == name: return f
+    }
+    error NotFound
+}
+
+fn (s opts) setValue(f opt&, value String) {
+    f.t = $value
+}
+
+fn (s opts&) parse(arg String) {
+    f opt?&s = null
+    f = try s.byName(arg[:3]) catch NotFound { return }
+    fl := f
+    s.setValue(fl, arg[4:])
+}
+
+test "a part stored through a parameter outlives the call" {
+    s := opts()
+    s.all.Push(opt($"out"))
+    s.parse($"out=x.txt")
+    assert churn() > 0
+    assert s.all[0].t == "x.txt"
+}

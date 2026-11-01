@@ -438,10 +438,16 @@ fn HandPhase(src String&, hand String&) String {
     hs := declsOf(hl)
     at I64 = 0
     for d in ds {
-        # (every hand declaration of the key in its place - a method of two instances, "Array<String&>.Join" beside
-        # "Array<String>.Join", is two of one key - the file's first of that key giving way to them)
-        if handFor(hs, d.Key) < 0 or taken.Has(d.Key): continue
+        # (every hand declaration of the key in its place - a method of two instances, "Vec<String&>.Join" beside
+        # "Vec<String>.Join", is two of one key - the file's first of that key giving way to them, and the rest of the
+        # file's of that key dropped, so the phase run again changes nothing)
+        if handFor(hs, d.Key) < 0: continue
         for k in range at, d.Start { out.Push(lines[k]) }
+        if taken.Has(d.Key) {
+            at = d.End
+            for at < lines.Len() and lines[at] == "" and out.Len() > 0 and out[out.Len() - 1] == "" { at++ }
+            continue
+        }
         for i, h in hs {
             if h.Key != d.Key: continue
             if i > 0 and hs[i - 1].Key == d.Key: out.Push("")
@@ -543,6 +549,10 @@ test HandPhase "puts each hand declaration in for the one of its key, comments a
     hand := "# b\nfn (t String) Split(sep String) Array<String> {\n    return y\n}\n\nfn g() I64 { return 2 }\n"
     out := HandPhase(src, hand)
     assert out == "# b\nfn (t String) Split(sep String) Array<String> {\n    return y\n}\n\nfn f() I64 { return 1 }\n\nfn g() I64 { return 2 }\n"
+    two := "fn (v Vec<String>) Join() I64 { return 1 }\n\nfn (v Vec<String&>) Join() I64 { return 2 }\n"
+    once := HandPhase("fn (v Vec<String&>) Join() I64 { return 0 }\n\nfn h() I64 { return 3 }\n", two)
+    assert once == "fn (v Vec<String>) Join() I64 { return 1 }\n\nfn (v Vec<String&>) Join() I64 { return 2 }\n\nfn h() I64 { return 3 }\n"
+    assert HandPhase(once, two) == once and HandPhase(out, hand) == out
     assert declKey("fn (it mut LineIter&) Next() String&it ? Exhausted {") == "fn LineIter.Next"
     assert declKey("type LineIter struct(of String&) {") == "type LineIter" and declKey("    x := 1") == ""
     assert declKey("test Map.Update \"counts\" {") == "test Map.Update \"counts\""
