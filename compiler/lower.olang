@@ -974,8 +974,29 @@ fn (ln mut lowering&) copiesValue(x typed.Expr&) Bool {
         case typed.Expr.Call(_, _, c): typed.ScopedCall(c)
         case typed.Expr.Away(_, _, y): ln.copiesValue(y)
         case typed.Expr.Seq(_, _, q): q.X is not null and ln.copiesValue(q.X!)
+        # a choice copies where any value it may give is existing storage (as retCopies)
+        case typed.Expr.Cond(_, _, c): c.A is not null and ln.copiesValue(c.A!) or ln.copiesValue(c.B)
+        case typed.Expr.Match(_, _, m): ln.matchCopies(m)
+        case typed.Expr.Try(_, _, t): ln.tryCopies(t)
         case _: false
     }
+}
+
+fn (ln mut lowering&) matchCopies(m typed.Match&) Bool {
+    for a in m.Arms {
+        if a.Value is not null and ln.copiesValue(a.Value!): return true
+    }
+    return m.NoMatch is not null and m.NoMatch!.Value is not null and ln.copiesValue(m.NoMatch!.Value!)
+}
+
+fn (ln mut lowering&) tryCopies(t typed.Try&) Bool {
+    if t.X is not null and ln.copiesValue(t.X!): return true
+    for c in t.Clauses {
+        for df in c.Defaults {
+            if ln.copiesValue(df): return true
+        }
+    }
+    return false
 }
 
 # x with the conversions around it taken off (T29a: each names its argument's storage)
