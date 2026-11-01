@@ -132,14 +132,14 @@ fn (s mut state&) say(what String&) {
     s.message = $s.program ": " $what " (see --help)"
 }
 
-fn (s mut state&) byName(name String&) mut flag&s ? Error.Unknown {
+fn (s state&) byName(name String&) mut flag&s ? Error.Unknown {
     for f in s.all {
         if f.name == name: return f
     }
     error Error.Unknown
 }
 
-fn (s mut state&) byShort(c Char) mut flag&s ? Error.Unknown {
+fn (s state&) byShort(c Char) mut flag&s ? Error.Unknown {
     for f in s.all {
         if f.short != 0 and f.short == c: return f
     }
