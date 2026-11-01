@@ -10573,7 +10573,7 @@ fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
         case typed.Expr.Borrow(_, _, p): c.refParamOf(p)
         case typed.Expr.Slice(_, _, sl): c.refParamOf(sl.Base)
         case typed.Expr.Promote(_, _, pr): c.refParamOfX(pr.X)
-        case _: c.refParamOf(readPlace(x))
+        case _: c.refParamOf(readPlace(unwrapped(x)))   # ("x!" read where x is, E35)
     }
 }
 
@@ -15926,6 +15926,8 @@ fn (c mut Checker&) caseFit(t types.TypeId, tag I64, i I64, want types.TypeId, e
     if source.NewParams and c.isRef(want) { c.fieldOn = c.caseFieldKey(t, tag, i) }
     x := c.fit(e, want, sp)
     c.fieldOn = wasField
+    # (a reference a "&" parameter reaches kept in the value - a use of it, D9d's "kept")
+    if source.NewParams and c.isRef(want) { c.refUseX(x) }
     return x
 }
 
