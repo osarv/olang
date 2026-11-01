@@ -27574,3 +27574,35 @@ note naming the caller's bare parameter, while D9d said the callee's `&` was nev
 caller's parameter `&` and the callee's bare in the same round, and every caller of the caller in the next. Round 2c
 already judged a read-only copy lent so once the callee's use was settled (`lendLater`); a read-only reference reached
 any other way now is too, so only the callee's D9d is said.
+
+**F7, a task's bare argument.** After the review the coordinator found one more (`repro/spawn_bare.olang`): `spawn r =
+work(s)` with `work(p Pt)` bare, then `grow(s)` in the same join block, read 100 where by value reads 1 - a bare
+argument passed by pointer to a task sees its spawner's later write, a data race the by-pointer passing made
+observable. docs/rework.md 2.10 had stated the rule ("copied at the spawn unless the join block and every task in it
+write no storage of its type") but nothing built it. Now the scope pass asks, for each bare parameter passed by pointer
+of a spawned call, whether anything in the join block may write storage of its type (`typed.WriteWalk`, one walk over
+every statement, expression and place kind, as BreaksOut is) and marks those copied for the call; lowering makes the
+copy on the spawning thread in the join's scope, so it lasts until the join (P2) and each task of a loop holds its
+own. The whole join block is the window, not only what follows the spawn: in a loop the statements before it run again
+while the task does. The copy is not made where nothing writes the type (the spawn_bare variant with only `t = 5`
+beside it copies nothing - `-memory` lists each copy and counts F3's and F7's apart). Lowering with no plan copies every
+one: the evaluator runs tasks in sequence at the join, after what the block writes.
+
+Checking that 2.10's other promise was built found two bugs in generators: a bare struct parameter of a generator did
+not compile (the walk's local was declared the reference and given the captured value - a clang type error), and a bare
+array parameter was captured as the caller's reference, so a walk read what the caller wrote after the call. Both are
+captured as values now, copied where the generator lives. And F3's `TypeReaches` had answered "cannot reach" for every
+enum, past its depth bound and for a type variable; it answers "may" where unsure now and follows payloads, while a
+function written at the call that holds no writable reference no longer counts as writing anything.
+
+**A hole of this round's own, closed.** Widening `lendLater` to the dereference branches (the migration's divergence,
+above) let through a read-only reference lent to a `&` parameter whose callee wrote through the parameter itself: the
+settle asked only whether the callee used it deeply (`refDeep`), which is right for a read-only copy - its own top is
+its own - and wrong for a reference to the caller's storage. Such a lend is now marked direct and refused where the
+callee uses the parameter as a `&` at all. Making it at the fit too (a binding read-only by what it was matched out of)
+showed why most of compiler/'s remaining T25c rows had no note naming a bare parameter, so `param_migrate` left them:
+the binding's origin runs through the match's held subject to the call that made it (`s.unAway(a)`, a nullable
+parameter followed). The error is now made where the lend is, with notes found through that chain, and held until the
+settle chooses or drops it. And F7's copy at the spawn turned a migrated std/cancel test into an endless loop: its
+`spin(t Token&)` watches `t.flag.AtomicLoad()` while the spawner cancels, D9d had made `t` bare (never written), and a
+bare parameter is a copy - so an atomic read through a `&` parameter now counts as a use.

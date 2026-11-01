@@ -2082,14 +2082,19 @@ read-only, and so is a value an instance hands back holding references of a type
 an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
 may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
 mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot
-change (D9e's list). An `any` made from a bare parameter boxes a copy of it. `x := p` of a bare parameter holding no
+change (D9e's list). A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
+block may write storage of its type - its statements, its other tasks, a call through a function value or an `any`, a
+call handing such a value or a `&` argument reaching the type - and the copy lasts until the join; a generator's bare
+parameters are copied where the generator lives, its walk running after the call. An `any` made from a bare parameter
+boxes a copy of it. `x := p` of a bare parameter holding no
 reference - a plain struct or enum - declares a value of its own, a copy (as by value), and so does one holding
 references that nothing assigns whole afterwards; an array, or one assigned whole later, a read-only view of it. A
 trait method that may write its receiver is written `&Name()`.
 
 **D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
 passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error
-naming the bare form `p T`. A for-in walking it only reads it; a value holding references copied out of what it reaches
+naming the bare form `p T`. An atomic read of what it reaches uses it (it is there for another thread's write, which
+only a shared reference sees). A for-in walking it only reads it; a value holding references copied out of what it reaches
 is kept where it is stored into a field, an element, a payload or a global, or given a by-value parameter whose body
 writes through it or keeps it. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
 reference, an extern, an export fn or a generic's parameter (its instances differ by program).

@@ -1839,7 +1839,8 @@ fixes (15.3) and the MIR verifier accepting what it never met on the default pat
 
 The read-only review of rounds 1-2e (`/home/user/review/bulk5`, at a041393) found six things; all are fixed, each
 with its reproducer as a test (`tests/params/fail/{elemwrites, constwrite, entrycopyelem, handlewrites, globalview,
-globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byvalue}.olang`).
+globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byvalue, spawnbare}.olang`), and a
+seventh (F7), found after it, is fixed too.
 
 - **F1, unsound (fixed): read-only is a property of the level reached.** Round 2's read-only-ness was found for a
   bare parameter's fields only (`roRoot`'s locals and `roCopies`). Now, under the switches, a reference is read-only
@@ -1875,6 +1876,26 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byv
   here" naming the bare parameter (it was E12, which named no parameter, so param_migrate left it); D9g at an `any`
   result is T25c naming the parameter (no value form to suggest); D9f says "writes 'p' or what it reaches". Left: T25c's
   "what a bare parameter reaches" for a lambda's capture of a local.
+- **F7, a data race made observable (fixed; reported after the review, `repro/spawn_bare.olang`): a task's bare
+  argument is copied at the spawn** where something may write it before the join - 2.10's rule, stated but not built:
+  `spawn r = work(s)` then `grow(s)` read 100 where by value reads 1. The scope pass's `taskCopies` asks, for each bare
+  parameter passed by pointer of a spawned call, whether the join block may write storage of its type (`typed.
+  WriteWalk`: its statements and the tasks it spawns - an assignment whose place, or a place it is part of, has a type
+  reaching it, a call handing a `&` argument reaching it, a call through a function value, an extern or an `any`, or
+  handing one; `lambdaWritesNothing` lets a function written there with no writable capture through), and marks those
+  `plan.ArgTemp`; lowering makes the copy on the spawning thread in the join's scope (`taskArgs`, `taskAt`), so it
+  lasts until the join (P2) and a loop's tasks each hold their own. With no plan (while compiling, where tasks run in
+  sequence at the join) every one is copied. `-memory` lists each (`FILE:LINE:COL: copied for the task`, and F3's
+  `copied for the call`) with their counts. A lambda run as a task captures a bare value as its value (round 2d), and
+  **a generator's bare parameters are now captured as their values too** - a struct one failed to compile (its walk's
+  local was declared the reference while given the value) and an array one held the caller's array, reading its later
+  writes; now each is copied where the generator lives (2.10). `tests/params/spawnbare.olang` (both variants: the
+  copying one, and one where nothing in the join writes a `Pt`, which `-memory` shows copies nothing).
+- **F3, hardened**: `TypeReaches` answers "may reach" where unsure - past its depth bound, a type variable, an
+  anonymous enum, a trait, a type not laid out yet - and follows an enum's payloads and a declared type's base (it
+  had answered no for every enum). And a function written at the call - a named one, or a lambda capturing no writable
+  reference - no longer counts as writing anything (`lambdaWritesNothing`): what it can write of the caller's is what
+  the call hands it, or a global by name, which the caller copies anyway.
 - **F5, over-rejection (fixed):** a function with a bare by-pointer parameter is a value of a function type passing
   that parameter by value (`fn(x T) T` with T the value type, `Vec<fn(p pt) I64>`): the checker takes the function type
   with each such reference read as its referent (`byValueType`), and lowering gives the value a wrapper passing each
@@ -1911,6 +1932,17 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byv
   writes through it; otherwise D9d makes the callee's parameter bare. It had been refused at the lend with a note
   naming the caller's bare parameter, so `param_migrate` made the caller's `&` and D9d the callee's bare in the same
   round - the oscillation that made the first run of this round's migration diverge (round 9: 1,429 edits).
+- **A reference reached read-only lent to a `&` parameter is judged once settled too, by any use** (`roLendRec.
+  Direct`): the read-only reference itself - read out of a bare parameter's reach, a binding of a match on what a
+  following call hands back - is no copy, so a write through the callee's parameter itself writes the caller's storage;
+  such a lend is refused where the callee uses the parameter as a `&` at all (`refUsed`, not only `refDeep`). This
+  closes a hole the first widening of `lendLater` here had opened (a direct write through the parameter was let
+  through). The error and its notes are made at the lend, where what it is read out of is known, and held until the
+  settle chooses or drops them (`Diags.Hold`); the notes now follow a binding and a held subject back through the call
+  that made them (`noteTempUnder`), so `param_migrate` can make the bare parameter `&` (`tests/params/fail/directlend`).
+- **An atomic read through a `&` parameter's reach is a D9d use**: it is there to see another thread's write, which
+  only a shared reference can (std/cancel's `spin(t Token&)` watching `t.flag.AtomicLoad()` - made bare, F7's copy at the
+  spawn would never see the Cancel and the test spun forever).
 - **A write through what a `&` parameter reaches by way of a call's result** (`fr := c.frames[fi]; fr.errUsed[j] =
   true`) is a D9d use (`callRefParam`, `refCalls`), and **a reference result met with `default null`** is used as a
   reference (`resultUse` at the try - `cond.Scope.find`'s callers).
@@ -1931,6 +1963,9 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byv
    what a program computes); the value result stays where nothing writes through it (the handover, D9h).
 6. **F5 by a wrapper**, not by binding T to the reference form: a type variable's parameter stays by value (round
    2b's `namesVar`), and the wrapper costs a call only where such a function is made a value.
+7. **F7's window is the whole join block** (mine): its statements before the spawn too, since in a loop they run again
+   while the task does - a write analysis by position was not worth it; and a task's copy is made in the join's scope,
+   never the innermost (a loop turn's would be freed while the task reads it).
 
 ### 15.4 New section-8 relaxations, for the next bulk review
 
@@ -1942,6 +1977,14 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byv
 - E28 deferred at a constructor's parameter (`condCtorArgs`), refused only where the constructor writes through it.
 - `plainBareCopy` for types holding references (a value copy where there was a read-only reference local).
 - `callOrigins`/`ResultWritten` only choose a note's form - no acceptance changes.
+- T17c: a case's payload made as a temporary lent read-only (a `Promote` to a read-only parameter, its operand the
+  `Make` itself) need agree on no one scope, and its items fit it with nothing stored through (`roTemp`).
+- `lambdaWritesNothing` in F3's `AliasCopies` and F7's `WriteWalk`: a named function, or a lambda whose captures
+  hold no writable reference, given to a call (or called through its value) writes nothing of the caller's but what
+  the call hands it and a global by name - no copy for it. A task's bare argument is not copied where `WriteWalk`
+  finds nothing in the join block writing its type.
+- `lendLater` in `mustWrite`'s dereference branches: a read-only reference lent to a `&` parameter accepted at the
+  lend, refused once settled where the callee writes through it (round 2c's rule for read-only copies, widened).
 
 ### 15.5 Today's path
 

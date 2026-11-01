@@ -444,8 +444,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   global's reach; a copy on entry keeps its levels below its top read-only), a bare parameter kept wherever the result
   outlives its argument's storage and can name storage of its type (Push, Put, a local, a choice, a captured slice), an
   argument the same call may write another way copied for the call (2.10: a `&` argument reaching its type, a mutable
-  global, a function value or `any` beside it), an `any` of a bare parameter a copy, the evaluator copying every bare
-  parameter on entry (mine, the user absent: "where unsure, kept, so the caller copies", the coordinator's direction);
+  global, a function value or `any` beside it), a task's bare argument copied at the spawn where its join block may
+  write its type (F7) and a generator's bare parameters captured as values, an `any` of a bare parameter a copy, the
+  evaluator copying every bare parameter on entry (mine, the user absent: "where unsure, kept, so the caller copies", the coordinator's direction);
   D9g's note naming the parameter `&` where a caller writes through the result (a value result had made std/flags'
   callers write a copy); G30's decided `if` that leaves no longer checks what follows it in that instance (an E16 at
   `ts[0]` after `if ts.Len() == 0 { return }`, the default path too). A function with a bare parameter is a value of a

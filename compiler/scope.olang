@@ -265,6 +265,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
     joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
+    joinCode Vec<typed.Block&>             # their code, as joins (bulk review 5, F7: what may write a task's argument)
     taskJoin Term = Term.None              # the join block of the task call val judges next: its temporaries are built there
     taskTemp Bool = false                  # judging a temporary a task is handed: what it holds must last until taskAt's join
     taskAt source.Span = source.Span(0, 0) # ... the argument it is
@@ -4356,8 +4357,10 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
         case typed.Stmt.Defer(_, b) { s.block(b) }
         case typed.Stmt.Join(_, jn) {
             s.joins.Push(jn.Code.Id)
+            s.joinCode.Push(jn.Code)
             s.block(jn.Code)
             try s.joins.Pop() catch { }
+            try s.joinCode.Pop() catch { }
             for c in jn.Clauses { s.block(c.Code) }
         }
         case typed.Stmt.Spawn(sp, sw) { s.spawn(sp, sw) }
@@ -5527,7 +5530,7 @@ fn (s mut Scoper&) keepOwn(l I64) {
 # the arguments a call copies (round 2e): each for a bare parameter its callee keeps past the call (KeptOwn) that may
 # change while what keeps it lives - a bit each in the plan's ArgCopy, by site (lowering copies it where the call's
 # result builds). A tail call copies nothing (become: no scope of this function is left to hold a copy)
-fn (s mut Scoper&) argCopies(c typed.Call&) {
+fn (s mut Scoper&) argCopies(c typed.Call&, spawned Bool) {
     if not source.NewParams or c.Site < typed.SiteId(0) or I64(c.Site) >= s.plan.ArgCopy.Len() or c.Tail { return }
     cb := s.bodyOf(c.Target)
     if cb < 0 or cb >= s.sums.Len() { return }
@@ -5547,7 +5550,9 @@ fn (s mut Scoper&) argCopies(c typed.Call&) {
     if inst < 0 { return }
     gm := Array<Bool>(c.Args.Len(), false)
     for i in range c.Args.Len() { gm[i] = s.mutGlobalArg(c.Args[i]) }
-    alias := typed.AliasCopies(s.P.T, s.Bodies[cb], c.Args, s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst)))), gm)
+    decl := s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))
+    alias := typed.AliasCopies(s.P.T, s.Bodies[cb], c.Args, decl, gm)
+    if spawned { alias |= s.taskCopies(c, cb, decl) }
     t I64 = 0
     for i in range c.Args.Len().Min(62) {
         if (alias & (I64(1) << i)) == 0 or (m & (I64(1) << i)) != 0: continue
@@ -5556,6 +5561,22 @@ fn (s mut Scoper&) argCopies(c typed.Call&) {
         if s.Trace { s.TraceLog.Push($"copied argument " $i " for the call | " $s.traceAt(c.Args[i].Span().Start)) }
     }
     s.plan.ArgTemp[I64(c.Site)] = t
+}
+
+# a task's bare arguments passed by pointer that something may write before its join (bulk review 5, F7; 2.10): the task
+# runs beside its spawner, so one is copied at the spawn, on the spawning thread, unless nothing in the join block - its
+# statements, its other tasks, a call through a function value or an any - may write storage of its type
+fn (s mut Scoper&) taskCopies(c typed.Call&, cb I64, decl Array<types.TypeId>&) I64 {
+    if s.joinCode.Len() == 0 { return 0 }
+    b := s.Bodies[cb]
+    m I64 = 0
+    w := typed.WriteWalk(s.P.T, s.Bodies, types.UnknownT)
+    for i in range c.Args.Len().Min(b.Params.Len()).Min(62) {
+        if not typed.BarePointer(s.P.T, b, I64(b.Params[i]), decl): continue
+        w.Own = s.P.T.Referent(b.Locals[I64(b.Params[i])].Ty)
+        if w.Block(s.joinCode[s.joinCode.Len() - 1]) { m |= I64(1) << i }
+    }
+    return m
 }
 
 # whether an argument is a mutable global's storage, or a part of it (2.10's other route: the callee may write it by name)
@@ -7061,7 +7082,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         for a in c.Args { s.val(a, Term.None) }
         return plain() if not s.holds(ty) else fresh(dest if dest.Runs() else s.here())
     }
-    s.argCopies(c)
+    s.argCopies(c, spawned)
     vars := s.P.T.ScopeVarsOf(fty)
     n := c.Args.Len()
     ps := s.P.T.Items(s.P.T.Params(fty))

@@ -1,0 +1,142 @@
+# The scoping and parameters rework (bulk review 5, F7; docs/rework.md 2.10): a bare argument of a spawned call is
+# copied on the spawning thread, at the spawn, unless nothing between the spawn and the join may write storage of its
+# type - the join block's statements, its other tasks, a call through a function value or an any - so the task reads
+# its own value, as by value, never the spawner's later write. Run by `make verify-params` under the switches.
+import "std/time"
+
+type Pt struct(X I64, Y I64) { X, Y }
+
+fn grow(p Pt&) { p.X = 100 }
+
+fn work(p Pt) I64 {
+    time.Sleep(time.Millis(30))
+    return p.X
+}
+
+fn sum(p Pt) I64 { return p.X + p.Y }
+
+fn first(xs Array<I64>) I64 {
+    time.Sleep(time.Millis(30))
+    return xs[0]
+}
+
+fn setFirst(xs Array<I64>&) { xs[0] = 9 }
+
+test "a task's bare argument is its own value, whatever the join block writes after the spawn" {
+    s := Pt(1, 2)
+    r := 0
+    join {
+        spawn r = work(s)
+        grow(s)
+    }
+    assert r == 1
+    assert s.X == 100
+}
+
+test "a direct write to the argument in the join block" {
+    s := Pt(1, 2)
+    r := 0
+    join {
+        spawn r = work(s)
+        s.X = 50
+    }
+    assert r == 1
+}
+
+test "another task of the join writing it" {
+    s := Pt(1, 2)
+    r := 0
+    join {
+        spawn r = work(s)
+        spawn grow(s)
+    }
+    assert r == 1
+    assert s.X == 100
+}
+
+test "a bare array argument, written by the join block" {
+    xs := Array<I64>(4, 3)
+    r := 0
+    join {
+        spawn r = first(xs)
+        setFirst(xs)
+    }
+    assert r == 3
+    assert xs[0] == 9
+}
+
+test "tasks spawned in a loop, each with its own value" {
+    s := Pt(0, 0)
+    rs := Array<I64>(4, 0)
+    join {
+        for i in range 4 {
+            s.X = i
+            spawn rs[i] = work(s)
+        }
+    }
+    assert rs[0] == 0 and rs[1] == 1 and rs[2] == 2 and rs[3] == 3
+}
+
+test "a call through a function value in the join block may write it" {
+    s := Pt(1, 2)
+    r := 0
+    ps Pt& = s
+    f := fn() { ps.X = 7 }
+    join {
+        spawn r = work(s)
+        f()
+    }
+    assert r == 1
+}
+
+test "nothing in the join block writes a Pt: no copy is needed" {
+    s := Pt(1, 2)
+    r := 0
+    t := 0
+    join {
+        spawn r = sum(s)
+        t = 5
+    }
+    assert r == 3 and t == 5
+}
+
+fn readLater(p Pt) Iterator<I64> {
+    time.Sleep(time.Millis(1))
+    yield p.X
+}
+
+test "a generator's bare argument is its own value at each Next" {
+    s := Pt(1, 2)
+    g := readLater(s)
+    grow(s)
+    got := 0
+    for x in g { got = x }
+    assert got == 1
+}
+
+fn firsts(xs Array<I64>) Iterator<I64> {
+    yield xs[0]
+    yield xs[1]
+}
+
+test "a generator's bare array argument is copied where the generator lives" {
+    xs := Array<I64>(2, 4)
+    g := firsts(xs)
+    setFirst(xs)
+    got := 0
+    for x in g { got += x }
+    assert got == 8
+}
+
+test "a spawned lambda's capture of a value" {
+    s := Pt(1, 2)
+    join {
+        spawn fn() {
+            time.Sleep(time.Millis(30))
+            r2 := s.X
+            assert r2 == 1
+        }()
+        grow(s)
+    }
+    assert s.X == 100
+}

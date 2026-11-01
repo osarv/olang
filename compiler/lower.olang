@@ -80,6 +80,9 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ViewReads I64 = 0
     ViewCopies I64 = 0
     ArgCopies I64 = 0            # round 2e: arguments copied for a bare parameter a callee keeps (scope.argCopies)
+    TempCopies I64 = 0           # bulk review 5, F3: for a bare parameter the same call may write another way
+    TaskCopies I64 = 0           # bulk review 5, F7: for a task's bare parameter something may write before its join
+    CopyLog Vec<String&>         # each of those two, by place, for -memory
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
 }
@@ -309,6 +312,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     joinS Vec<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
     planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
+    taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7): copies in taskAt
+    taskAt mir.ScopeRef = mir.ScopeRef.Program
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
     adoptAt mir.ScopeRef = mir.ScopeRef.Program
     plan typed.Plan = typed.Plan(0, 0, 0)
@@ -1456,6 +1461,8 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
+            # (a bare argument copied for the task is made where the join is, so it lasts until the join: P2)
+            ln.taskArgs, ln.taskAt = true, mir.ScopeRef.Scope(j) if ln.planned else mir.ScopeRef.Program
             args := ln.args(c, callee, ty)
             if ln.dead { return }
             match callee {
@@ -2237,9 +2244,12 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         case _: false
     }
     ops := Array<mir.Operand>(c.Args.Len())
+    task := ln.taskArgs
+    ln.taskArgs = false
+    tempAt := ln.taskAt if task else ln.innermost()
     # (round 2d, D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
-    # before the call returns)
-    reads := not t.HoldsRefs(t.Result(ty))
+    # before the call returns - not a task's, which is read beside its spawner)
+    reads := not t.HoldsRefs(t.Result(ty)) and not task
     for i in range c.Args.Len() {
         a := c.Args[i]
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
@@ -2247,7 +2257,11 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         if i < ps.Len() and ln.copiesArg(c, i) { v = ln.ownCopy(v, ps[i], ln.copyScope(c, ty), a.Span()) }
         # (bulk review 5, 2.10: one the same call may write another way - a copy for the call alone, in this block)
-        if i < ps.Len() and not ln.copiesArg(c, i) and ln.tempArg(c, i) { v = ln.ownCopy(v, ps[i], ln.innermost(), a.Span()) }
+        # (bulk review 5, F7: or a task's that something may write before its join - made where the join is)
+        if i < ps.Len() and not ln.copiesArg(c, i) and ln.tempArg(c, i, task) {
+            v = ln.ownCopy(v, ps[i], tempAt, a.Span())
+            ln.countTemp(task, a.Span())
+        }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
         if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
@@ -2259,12 +2273,20 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     return ln.F.Args(ops)
 }
 
+# a copy for the call alone, or for a task, counted and listed for -memory (of what this build lowered)
+fn (ln mut lowering&) countTemp(task Bool, sp source.Span) {
+    ln.L.ArgCopies--
+    if task { ln.L.TaskCopies++ } else { ln.L.TempCopies++ }
+    what := "copied for the task" if task else "copied for the call"
+    ln.L.CopyLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $what)
+}
+
 # ---- arguments copied for what a callee keeps (the rework's round 2e) ----
 
 # whether a call copies its argument i for the call alone (bulk review 5, 2.10): one for a bare parameter passed by
 # pointer that the same call may write another way - the scope pass's plan (ArgTemp) where the body has one, else
 # (while compiling) every one typed.AliasCopies names, a copy as by value either way
-fn (ln mut lowering&) tempArg(c typed.Call&, i I64) Bool {
+fn (ln mut lowering&) tempArg(c typed.Call&, i I64, task Bool) Bool {
     if not source.NewParams or i >= 62: return false
     if ln.planned {
         if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgTemp.Len(): return false
@@ -2281,9 +2303,13 @@ fn (ln mut lowering&) tempArg(c typed.Call&, i I64) Bool {
     }
     if inst < 0: return false
     P := ln.L.P
+    decl := P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
+    b := ln.L.Bodies[cb]
+    # (a task's, while compiling: every one - tasks run in sequence at the join there, after what the block writes)
+    if task and i < b.Params.Len() and typed.BarePointer(ln.T, b, I64(b.Params[i]), decl): return true
     gm := Array<Bool>(c.Args.Len(), false)
     for k in range c.Args.Len() { gm[k] = ln.mutGlobalArg(c.Args[k]) }
-    return (typed.AliasCopies(ln.T, ln.L.Bodies[cb], c.Args, P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst)))), gm) & (I64(1) << i)) != 0
+    return (typed.AliasCopies(ln.T, b, c.Args, decl, gm) & (I64(1) << i)) != 0
 }
 
 # whether an argument is a mutable global's storage, or a part of it

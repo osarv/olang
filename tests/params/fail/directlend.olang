@@ -1,0 +1,44 @@
+# The scoping and parameters rework (round 2f): a reference reached read-only - a binding of a match on what a call
+# hands back following a bare parameter - lent to a "&" parameter is judged once the callee's use is settled: refused
+# where the callee writes through the parameter itself (a write deep in it is not needed), naming the bare parameter.
+# check: fail 'a' is a bare parameter
+type P struct(x I64) { x }
+
+type E enum {
+    R(p P&)
+    W(e E&)
+    N
+}
+
+type S struct() {
+    n I64 = 0
+}
+
+fn (s S&) use(p P&) I64 {
+    s.n++
+    p.x = 1
+    return 0
+}
+
+fn (s S) unAway(x E?&) E& {
+    if x is null { return x! }
+    match x {
+        case E.W(y) { return s.unAway(y) }
+        case _ { return x }
+    }
+}
+
+fn (s S&) arg(a E) I64 {
+    match s.unAway(a) {
+        case E.R(p) { return s.use(p) }
+        case _ { }
+    }
+    return 0
+}
+
+fn main() {
+    e := E.R(P(3))
+    s := S()
+    n := s.arg(e)
+    assert n == 0
+}
