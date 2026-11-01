@@ -1,7 +1,6 @@
-# check: fail error[T7a, T7d]: an array inside an array or a struct is held by reference - write Nums&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-# also: write String&, or make it of a known length
-# T7a: a declared array type (String, "type Nums Array<I64>") held by value in a field is an array like any other - its
-# storage would be shared, not copied, with the instance (review port1 r04, r06)
+# check: run
+# QCE (T7a relaxed): a declared array type (String, "type Nums Array<I64>") held by value in a field is the instance's
+# own, copied with it (it was T7a's error - review port1 r04, r06)
 import "std/io"
 type Nums Array<I64>
 type Rec struct(n I64) {

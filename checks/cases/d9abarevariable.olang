@@ -1,10 +1,14 @@
-# check: fail error[D9a]: array parameter 'taps' is passed by reference - write Array<I16>&
-# D9a: a constructor's array parameter is passed by reference
+# check: run
+# D9a lifted for a constructor (QCE): its parameter holding an array of a run-time length by value is what its field
+# keeps - the field's own copy (it was D9a's error, "write Array<I16>&")
 import "std/io"
 type Fir struct(taps Array<I16>) {
     taps
 }
 fn main() ? {
-    f := Fir(I16[1, 2, 3])
+    t := I16[1, 2, 3]
+    f := Fir(t)
+    t[0] = 9
+    assert f.taps[0] == 1
     try io.Println($f.taps.Len())
 }

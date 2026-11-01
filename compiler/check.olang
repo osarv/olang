@@ -245,8 +245,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     factReads Vec<factRead>
     factPresets Map<String&, Bool>
     Attempts I64 = 0
-    copiesGrew Bool = false # D9h: a body's views grew - the program checked again with them (growViews)
-    viewHeld Map<I64, I64>  # D9h: the locals of the body just checked holding views of its arguments (settleViews)
+    viewsGrew Bool = false  # D9h: a body's views grew - settleAllViews goes round again (growViews)
+    viewHeld Map<I64, I64>  # D9h: the locals of the body being settled holding views of its arguments (settleViews)
+    viewBodies Vec<pair.Pair<I64, I64>>   # D9h: the checked bodies that may hand back views, with their files
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
     # T25c: the locals that are read-only copies, by (body, local), each with the name of what it copies (0 for none);
     # a for-in's hidden borrow of a value, by (body, local): whether that value is reached read-only
@@ -564,7 +565,6 @@ fn (c mut Checker&) CheckProgram() {
     for {
         c.Attempts++
         mark := c.P.L.Diags.Count()
-        c.copiesGrew = false
         c.attempt()
         c.settleUnset()
         c.settleHeldWalks()
@@ -578,11 +578,11 @@ fn (c mut Checker&) CheckProgram() {
         }
         # G42: a fact read as other than the bodies found it means checking again, reading what they found
         moved := c.settleFacts()
-        if c.copiesGrew { grew = true }
         if (not grew and not moved) or c.Attempts >= 20 {
             if moved { c.factsUndecided() }
             c.settleFixed()
             c.orderGlobals()
+            c.settleAllViews()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -611,6 +611,7 @@ fn (c mut Checker&) CheckMain() {
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = Vec<mut typed.Body&>()
+    c.viewBodies = Vec<pair.Pair<I64, I64>>()
     c.testKeys = StringBuilder()   # B7a's targets are said once an attempt (another attempt had found every one twice)
     c.fx = null
     c.Gaps = Vec<Gap>()
@@ -3119,7 +3120,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     }
     root := c.rootStmts(body)
     c.cur().Root = root
-    c.settleViews()
+    c.viewBody()
     if dropped and fd.Bodied {
     } else if nr {
         if not c.fr().Gapped and not leavesBlock(root) { c.err(c.nameSpan(fd), msgs.NoreturnFallsOff()) }
@@ -3358,7 +3359,7 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                 pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
-                c.settleViews()
+                c.viewBody()
                 c.fieldTypes(t)
                 for _ in range pushed { c.P.L.Diags.PopContext() }
                 if s.DtorSp.End > 0 {
@@ -19250,7 +19251,6 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         x := c.exprTo(values[0], rt)
         c.nullDecl = wasNull
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, rt, x)) }
-        c.recordViews(x, false)
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } # T25c: the caller holds it writably
         c.emit(typed.Stmt.Return(sp, x))
         return
@@ -19276,51 +19276,46 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
                                                                    typed.Check.None))))
 }
 
-# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+# ---- value results handed over as views (D9h) ----
 
-# a value x the body returns (a become's call, tail): where the body's result is an array value and x is a view of what
-# its arguments reach (typed.ViewWalk), the parameters it views recorded for the instance (load.ViewResults) - so a
-# caller copies the result only where it keeps it, and lowering hands it back uncopied - and the program checked again
-# where they grew. A become of a function handing back views of anything but its parameters' arguments is a view of
-# something this function cannot say: ViewOther, its result copied at every call
-fn (c mut Checker&) recordViews(x typed.Expr&, tail Bool) {
-    i := c.viewable()
-    if i < 0: return
-    w := c.viewWalk()
-    m := w.Roots(x)
-    if tail and m <= 0 {
-        m = 0
-        match x {
-            case typed.Expr.Call(_, _, cl) { if w.CallViews(cl) > 0: m = typed.ViewOther }
-            case _ { }
-        }
+# once the program has checked: what each body's returns hand back as views of its parameters' arguments - directly
+# (typed.ViewWalk.Roots) or through locals holding them (Settle), a constructor's through its fields - recorded for the
+# instance (load.ViewResults) or the constructed type (CtorViews), so a caller copies the result only where it keeps it
+# and lowering hands it back uncopied. A fixed point over the bodies, each reading its callees' facts as found so far:
+# an optimization's facts, so nothing of the program is checked again for them
+fn (c mut Checker&) settleAllViews() {
+    for {
+        c.viewsGrew = false
+        for vb in c.viewBodies { c.settleViews(c.Bodies[vb.First], vb.Second) }
+        if not c.viewsGrew: return
     }
-    if m <= 0: return
-    old := try c.P.L.ViewResults.Get(i) catch default I64(0)
-    if (old | m) == old: return
-    c.P.L.ViewResults.Put(i, old | m)
-    c.copiesGrew = true
 }
 
-# the instance whose result values the body may hand back as views (recordViews): a function's or method's whose one
-# result is an array value of a run-time length, under the rework's round 2 - none for a lambda, a generator, an export
-# fn (C's to call), or any other body
-fn (c mut Checker&) viewable() I64 {
-    i := match c.cur().Of {
+# a checked body whose views settleAllViews settles, with its file
+fn (c mut Checker&) viewBody() {
+    b := c.cur()
+    if b.Root is null or (c.viewable(b) < 0 and c.ctorViewKey(b) < 0): return
+    c.viewBodies.Push(pair.Pair(c.fr().Body, c.fr().File))
+}
+
+# the instance whose result values body b may hand back as views: a function's or method's whose one result holds
+# storage of its own by value (an array of a run-time length, a struct of text, an iterator holding its array) - none
+# for a lambda, a generator, an export fn (C's to call), or any other body
+fn (c mut Checker&) viewable(b typed.Body&) I64 {
+    i := match b.Of {
         case typed.BodyOf.Fn(inst): inst
         case _: -1
     }
     if i < 0: return -1
     f := c.P.InstanceFn(i)
     if c.P.IsGenerator(f) or c.P.FnDecl(f).Export: return -1
-    # (round 3b: any value holding storage of its own by value - a struct of text, an iterator holding its array)
-    r := c.P.T.Result(c.cur().Ty)
+    r := c.P.T.Result(b.Ty)
     if c.isRef(r) or not typed.HoldsOwned(c.P.T, r): return -1
     return i
 }
 
 # the key a constructor's views are recorded under (load.CtorViews): its type's, for one with no constructor variables
-# of its own (G10d) - -1 for any other body, and off the rework's round 2
+# of its own (G10d) - -1 for any other body
 fn (c Checker&) ctorViewKey(b typed.Body&) I64 {
     return match b.Of {
         case typed.BodyOf.Ctor(t, twin): I64(t) if twin == types.ListId(0) else -1
@@ -19328,45 +19323,38 @@ fn (c Checker&) ctorViewKey(b typed.Body&) I64 {
     }
 }
 
-# round 3b: once a body is checked, what its returns hand back through locals holding views of its parameters'
-# arguments (typed.ViewWalk.Settle) - a constructor's, through its fields - recorded as recordViews records a return
-fn (c mut Checker&) settleViews() {
-    b := c.cur()
-    if b.Root is null: return
+# body b's views, as settleAllViews asks: its returns' (a become of a function handing back views of anything but its
+# parameters' arguments is a view of something this function cannot say: ViewOther, its result copied at every call)
+fn (c mut Checker&) settleViews(b typed.Body&, file I64) {
     key := c.ctorViewKey(b)
-    if c.viewable() < 0 and key < 0: return
+    inst := c.viewable(b)
     u := typed.Uses(c.P.T, b, fn(id typed.BodyId) types.TypeId { return c.Bodies[I64(id)].Ty })
     c.viewHeld.Clear()
-    w := typed.ViewWalk(c.P.T, b, c.viewElig(b, c.fr().File), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
+    w := typed.ViewWalk(c.P.T, b, c.viewElig(b, file), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
                         fn(id typed.LocalId) I64 { return try c.viewHeld.Get(I64(id)) catch default I64(-1) })
     w.Settle(u, c.viewHeld)
-    if c.viewHeld.Len() == 0: return
     if key >= 0 {
         m I64 = 0
         for f in b.Fields { m |= try c.viewHeld.Get(I64(f)) catch default I64(0) }
         c.growViews(c.P.L.CtorViews, key, m)
         return
     }
-    for x in u.Rets {
-        m := w.Roots(x)
-        if m > 0: c.growViews(c.P.L.ViewResults, c.viewable(), m)
-    }
+    for x in u.Rets { c.growViews(c.P.L.ViewResults, inst, retViews(w, x)) }
 }
 
-# the bits m added to what views records for key, the program checked again where they grew
+fn retViews(w typed.ViewWalk&, x typed.Expr&) I64 {
+    m := w.Roots(x)
+    if m > 0 or x != typed.Expr.Call or not x.c.Tail: return m
+    return typed.ViewOther if w.CallViews(x.c) > 0 else 0
+}
+
+# the bits m added to what views records for key - another round of settleAllViews where they grew
 fn (c mut Checker&) growViews(views mut Map<I64, I64>&, key I64, m I64) {
     if m <= 0: return
     old := try views.Get(key) catch default I64(0)
     if (old | m) == old: return
     views.Put(key, old | m)
-    c.copiesGrew = true
-}
-
-# the walk over the body being checked: its parameters never assigned whole (names' load.ParamWritten and
-# BareWritten), the callees' facts as recorded so far
-fn (c mut Checker&) viewWalk() typed.ViewWalk {
-    return typed.ViewWalk(c.P.T, c.cur(), c.viewElig(c.cur(), c.fr().File), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
-                          typed.NoLocalViews)
+    c.viewsGrew = true
 }
 
 # a body's parameters whose arguments a value it returns may view: those its body never assigns whole, a bit each
@@ -19573,9 +19561,7 @@ fn (c mut Checker&) becomeStmt(sp source.Span, x ast.Expr&) {
     c.tails.Push(tailAsk(fr.Body, callee, sp, fr.Mi))
     match v {
         case typed.Expr.Call(csp, ty, cl) {
-            tc typed.Expr&c = typed.Expr.Call(csp, ty, typed.Call(cl.Target, cl.Args, cl.Scoped, cl.Site, cl.Zero, true))
-            c.recordViews(tc, true)
-            c.emit(typed.Stmt.Return(sp, tc))
+            c.emit(typed.Stmt.Return(sp, typed.Expr.Call(csp, ty, typed.Call(cl.Target, cl.Args, cl.Scoped, cl.Site, cl.Zero, true))))
         }
         case _ { }
     }

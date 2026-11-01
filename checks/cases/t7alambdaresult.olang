@@ -1,10 +1,11 @@
-# check: fail error[T7a]: this result binds U to String, which the call holds in an array
+# check: run
 # never: standard library
-# never: has no method 'Join'
-# T7a: a lambda's written result binding a type variable the generic holds in an array is said at the lambda's result,
-# where the fix is ("String&"), and the call is not instantiated - one error, none inside the prelude (study 4's r19)
+# QCE (T7a relaxed): a lambda's result binding a type variable the generic holds in an array is held by value - a
+# Vec<String> of its own texts (it was T7a's error at the lambda's result, study 4's r19)
 import "std/io"
 fn main() ? {
     nums := I64[1, 2, 3]
-    try io.Println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
+    ws := nums.Map(fn(n I64) String { return "#" $n })
+    assert ws.Len() == 3 and ws[2] == "#3"
+    try io.Println($ws[0] " " $ws[1])
 }
