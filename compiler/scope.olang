@@ -7266,6 +7266,9 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             # an index held for At and SetAt is one (E31b), as its held local
             s.noteMakeWhere(rec, s.nameSpan(sp), c, ai, li, lo)
         }
+        # (round 2d: one that must outlive the other, a bare parameter - the function's own value, kept by the callee:
+        # named, which param_migrate makes "&")
+        if ai >= 0: s.noteBareArg(rec, c.Args[ai])
     }
 }
 
@@ -8980,11 +8983,23 @@ fn (s mut Scoper&) splitErr(a typed.Expr&) {
 # ... and an error resting on an argument that is such a parameter (O17, O26 at a call): the note naming it
 fn (s mut Scoper&) noteBareArg(rec I64, a typed.Expr&) {
     if not source.NewParams: return
-    p := s.placeRead(s.unAway(a))
+    p := s.placeRead(unPassed(s.unAway(a)))
+    # (what a by-pointer parameter names, borrowed: the parameter)
+    for _ in range 4 {
+        match p {
+            case typed.Lvalue.Deref(_, _, r) { p = s.placeRead(unPassed(s.unAway(r))) }
+            case _ { break }
+        }
+    }
     if p is null: return
-    if p != typed.Lvalue.Local or s.isRef(p.ty): return
+    if p != typed.Lvalue.Local: return
+    # (a bare struct, array or enum holding references is passed by pointer: a read-only reference, never null, which
+    # no written "&" is under the switch - round 2d)
+    if s.isRef(p.ty) and ((s.P.T.PermOf(p.ty) & types.Writable) != 0 or s.P.T.IsNullable(p.ty)): return
     l := s.B!.Locals[I64(p.id)]
-    if l.Kind != typed.LocalKind.Param: return
+    # (or its copy on entry, made where the body writes it: a local of its name, declared at it)
+    entry := l.Kind == typed.LocalKind.Var and s.P.L.BareWritten.Has(pair.Pair(s.B!.File, I64(l.Sp.Start)))
+    if l.Kind != typed.LocalKind.Param and not entry: return
     s.note(rec, s.B!.File, l.Sp, msgs.NoteBareParam(s.P.L.Names.Text(l.Name)))
 }
 
