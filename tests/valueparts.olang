@@ -1,8 +1,7 @@
-# The scoping and parameters rework, round 3 (docs/rework.md section 16, QCE): an array of a run-time length held by
-# value inside another value - a struct's field, an array's element, an enum's payload, a type argument - is that
-# value's own, its elements stored where the value is. A store copies what it is given in, a copy of the whole copies
-# them too, and nothing another name holds changes it. Run by `make verify-params` under OLANG_PARAMS=new
-# OLANG_SCOPES=infer, as fields.olang is.
+# QCE (T7a, docs/rework.md sections 16 and 18): an array of a run-time length held by value inside another value - a
+# struct's field, an array's element, an enum's payload, a type argument - is that value's own, its elements stored
+# where the value is. A store copies what it is given in, a copy of the whole copies them too, a by-value parameter is
+# its callee's own copy, and nothing another name holds changes it.
 
 type person struct(name String, age I64) {
     name, age
@@ -19,12 +18,12 @@ type team struct(title String) {
     tags Array<String> = String["a", "bc"]
 }
 
-# a holder of what a bare parameter is: its own copy, not the caller's storage kept (D9e has nothing to refuse)
+# a holder of what it is given: its own copy, not the caller's storage kept
 type holder struct(s String) {
     s
 }
 
-fn mk(t String) holder { return holder(t) }
+fn mk(t String&) holder { return holder(t) }
 
 # a part stored from a block's own text outlives the block, and a later write to that text is not seen
 fn stored() person {
@@ -134,13 +133,13 @@ test "a comprehension's elements are its own" {
     assert ns[2].v == 2 and ws[0] == "Xb"
 }
 
-# a bare parameter whose body writes it is its own copy on entry, its parts too
+# a by-value parameter is its callee's own copy, its parts too
 fn shout(p person) String {
     p.name[0] = 'X'
     return p.name
 }
 
-test "an entry copy owns its parts" {
+test "a by-value parameter owns its parts" {
     p := person($"amy", 9)
     assert shout(p) == "Xmy" and p.name == "amy"
 }
@@ -153,22 +152,22 @@ type opt struct(name String) {
 }
 
 type opts struct() {
-    all Vec<opt&> = Vec<opt&>()
+    all Vec<mut opt&> = Vec<mut opt&>()
 }
 
-fn (s opts&) byName(name String) opt&s ? NotFound {
+fn (s opts&) byName(name String&) mut opt&s ? NotFound {
     for f in s.all {
         if f.name == name: return f
     }
     error NotFound
 }
 
-fn (s opts) setValue(f opt&, value String) {
+fn (s opts&) setValue(f mut opt&, value String&) {
     f.t = $value
 }
 
-fn (s opts&) parse(arg String) {
-    f opt?&s = null
+fn (s opts&) parse(arg String&) {
+    f mut opt?&s = null
     f = try s.byName(arg[:3]) catch NotFound { return }
     fl := f
     s.setValue(fl, arg[4:])
@@ -180,4 +179,14 @@ test "a part stored through a parameter outlives the call" {
     s.parse($"out=x.txt")
     assert churn() > 0
     assert s.all[0].t == "x.txt"
+}
+
+test "a clone of an array is its own, its elements' parts too" {
+    a := I64[1, 2, 3]
+    b := a.Clone()
+    b[0] = 9
+    ws := String["ab", "c"]
+    vs := ws.Clone()
+    vs[0][0] = 'X'
+    assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"
 }

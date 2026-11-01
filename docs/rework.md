@@ -1,6 +1,9 @@
 # The rework: scopes inferred, `&` means may write, values guarantee their own copy
 
-Status: the design, written 2026-10-31 for review before any code. Nothing here is built. It joins three decisions
+Status (2026-11-01): the parameters' half - "`&` on a parameter means it may write" (QCC) - was reversed by the user
+(QCK) and removed in round 3d (section 18); QCE and D9h are kept, on the default path. Sections 10-17 describe what was
+built and measured behind `OLANG_PARAMS=new` before that; round 4 (scopes inferred the default) is still to come.
+The design below was written 2026-10-31 for review before any code. It joins three decisions
 into one rework of section 8 and of how parameters are passed, since all three change the same rules, the same
 signatures and the same pass:
 
@@ -2414,3 +2417,141 @@ root (`compiler/olang.olang`) then checks with **64 errors** (round 2f's 53, 15.
 
 So the self-build under the switches is still not reached, and neither are its peak memory, wall time or the bench
 under a self-built compiler. The default path's self-build is the fixed point `make verify` checks.
+
+## 18. Round 3d: the parameters' half reverted (QCK), QCE and D9h kept
+
+The user, 2026-11-01, asked whether the rule "a `&` on a parameter may write, a bare parameter is the callee's own
+value" was sound now that it had been tried, and decided (QCK: "Yes, pause it and go back to mut"): parameters go back
+to `mut` on references - `p mut T&` may write the caller's instance, `p T&` is a read-only shared view, `p T` a value,
+a copy by meaning (passing it by pointer stays an unobservable optimization only, where one is ever made). `mut` stays
+on references at every level (T25b/T25c, the default path all along).
+
+### 18.1 Why
+
+Sections 10-17 built the rule behind `OLANG_PARAMS=new`. It was sound only as far as the compiler proved two things
+for every bare argument it passed by pointer - (A) the callee does not write it, (B) nothing else changes it while the
+call runs - and copied wherever a proof was missing: a C pointer not `const`, a callback, an `any`, a spawn, an
+argument the same call could write another way (2.10). Bulk review 5 found real holes there (writes through bare
+parameters into constant data, the aliasing hole), all fixed, but most of rounds 2b-3b - per-level inferred permission
+(`load.RoLevels`), read-only fields by inference (FRO), results following their arguments, D9g, the hidden entry,
+aliasing and caller copies, the readers rewritten to give values, and the 64 errors compiler/ still had under the
+switches - existed to recover what a read-only `T&` parameter gives for free: a shared view with no copy and no proof.
+
+### 18.2 Removed
+
+Everything that existed only for the switch: `source.NewParams` and every branch on it; "every written `&` may write";
+a bare struct or array parameter passed by pointer as a read-only reference (`generic.BareRef`) with its copy on entry
+(`check.bareByPointer`, names' `BareWritten`); D9d (a `&` never written), D9e (a kept bare parameter), D9f (the
+forgotten `&`), D9g (a `T&` result handing back a bare parameter's reach) and their messages; per-level permission
+(`levelSites`, `load.RoLevels`, `NarrowResult`), nullable parameters read-only by inference (`NullWritable`,
+`WidenParam`), results following their arguments (`FollowResults`), read-only fields by inference (FRO: `fieldRo`,
+`joinFields`), the D9d use tracking (`refUse`, `refDeep` ...), the caller's and the task's copies of 2.10 (the plan's
+`ArgCopy`/`ArgTemp`, `typed.AliasCopies`, `WriteWalk`, `KeptOwn`), the by-value wrapper for function values
+(`mir.FnKey.ByValue`), round 2c's O17 lend by storage and round 2f's T17c relaxation for read-only temporaries, X22's
+copies of a C function's pointer arguments, the atomic-read rule for bare parameters, round 2b's G29-by-the-body
+(`LengthDecided`); `tools/param_migrate.olang` and its hand forms (`tools/params/`), `tests/params/` and `make
+verify-params`. About 5,400 lines of compiler/ (check.olang 26,353 -> 22,985 lines). Bench's IR on the default
+path is what it was (18.5).
+
+How (for whoever repeats it): `source.NewParams` read as false and every branch on it folded away, functions left
+trivial inlined and dead ones removed (cycles included), then every function that differed from round 1's (2431678)
+and was touched by no commit kept below replaced by round 1's - so what is left of the switch is nothing, and what
+stays was read function by function.
+
+### 18.3 Kept, and where it now lives
+
+All on the default path - each changes the meaning of no program that compiled before (the types it acts on were
+T7a's or D9a's errors), so nothing was put behind `OLANG_SCOPES=infer`:
+
+- **QCE (T7a relaxed).** An array of a run-time length held by value in a field, an element, a payload or a type
+  argument (`Vec<String>`, `Map<String, V>`) is its container's own: a store copies in (`check.storeCopy`, `partCopy`,
+  `ownCopy` - `typed.MakeKind.Copy`, a site the scope pass places), a copy of the whole copies it, deep through values
+  and shallow at references (lowering's Copy helper, `mir.HelperKind.Copy`); `Map<String, V>` owns its keys through
+  `MapEntry`'s constructor (a copy at a new key's `Put`, none on an update or a lookup - `Get(key K)` reads the key
+  where it is, D9b). The scope pass's part stores, a constructor's value-array field in the instance scope, a
+  comprehension's owning elements built where its array is, and e3b0d7d's O25g (a part owning storage is stored
+  through) came with it. A type over an array of arrays (`type Rows extends Array<Array<I64>>`), an array of text
+  (`String["a", "bc"]`, `Array<String>(n, "ab")`) and a lambda's run-time array result held in an array are no longer
+  errors; a fill or a literal whose elements have one known length still lays them out fixed (T7c, T7d).
+- **New with the revert (QCE's parameter half, under QCK's meaning).** A constructor's parameter may hold an array of
+  a run-time length by value (`type person struct(name String, age I64)` - D9a lifted for constructors: the field keeps
+  its own copy); a value owning parts given a by-value parameter or receiver is the callee's own copy (`check.valueArg`,
+  a Copy at the call) - under the switch the callee's copy on entry did that. Plain run-time arrays by value elsewhere
+  stay D9a's error and D9c's cap stays: QCE's "a run-time array may be passed by value" needs the by-pointer
+  optimization made unobservable, which is what was reverted (a question for the user, 18.7).
+- **D9h, as an optimization.** A value result viewing what a function is given is handed back uncopied
+  (`typed.ViewWalk.Settle`, `load.ViewResults`/`CtorViews`), its callers copying where they keep it, and a local or a
+  temporary holds views in place of its copy where its whole body proves nothing could tell (`viewLocals`,
+  `viewTemps`). Two of its assumptions held only under the switch and were made safe: a reference parameter is no
+  longer taken to keep nothing (`typed.LocalUses.bareParam` false - a `T&` parameter may store what it is given), and
+  a parameter's referent is no longer stable storage (`heldReferent`: another `mut` name may change it). A function
+  value of a function handing back views calls its copying wrapper (`CodeOf`; round 1's `fnVal` had named the body).
+- **Bug fixes that hold on the default path**: a conditional, a match or a try of arrays into a value local copies
+  (ccfbee5); G30's decided `if` that leaves stops checking that instance (f60a75a); the evaluator reads a struct
+  converted to itself as the same record (03d233d); B11b's effects through payload bindings and choices (9b53535,
+  1903fe5); B7a's test keys reset between attempts; `:=` of a read-only `?&` keeps its null; and **T25d** - text written
+  in the program given a `mut` reference of its base type (`take("abc")` with `fn take(a mut Array<Char>&)`) was handed
+  over as the constant itself on the default path too, and is refused now (`ConstToMutRef`, naming `$"abc"` - checks
+  case t25dconstmut). `Array.Clone()` stays in the prelude (the message names it for arrays).
+
+### 18.4 Tests
+
+`tests/valueparts.olang` (round 3's owned.olang in today's spelling, with a by-value parameter and a clone), and
+`tests/handover.olang`, `tests/inplace.olang` (D9h, the three tests of inplace that relied on the readers' value forms
+left out); checks cases `qcevaluearg` (run) and `t25dconstmut` (fail). The other `tests/params` files tested the
+switch's own rules and went with it.
+
+### 18.5 Measured
+
+Bench's IR on the default path against master: identical but std/prelude/text's integer `PadStart`/`PadEnd`, which
+copy the view `String.PadStart` now hands back, and one copy fewer in knucleotide's main; in vec's program also one
+cold function (its `mut` function-value global turns the quiet reading off, 18.8). Callgrind (baseline x86-64, reduced
+sizes): every row within 14 instructions of master's. `OLANG_SCOPES=infer`: 52 of 52 std and corpus files, as before.
+
+### 18.6 Left
+
+Round 4 (scopes inferred the default, markers removed from the grammar, the migration, the seed) and handles as values
+are not begun. `OLANG_SCOPES=infer` passes what it passed.
+
+### 18.7 Decided here (mine, the user absent - provisional)
+
+1. QCE and D9h on the default path, not behind `OLANG_SCOPES=infer`: neither changes what a program that compiled
+   before computes, and both were built and tested against value semantics that QCK keeps.
+2. A value owning parts given a by-value parameter is copied at the call - the meaning of `p T` under QCK - rather
+   than copied by the callee where it writes it (D9b's way): one rule, no analysis; a callee that only reads such a
+   value takes it `&`. D9h may later elide the copy where nothing could tell.
+3. D9a stays for plain run-time arrays by value (but a constructor's parameter), and D9c's cap stays.
+4. E12's "an array of references read as values" (`refsAsValues`) went: it served only the readers' value forms -
+   so `Vec<String>` has no `Join` yet (`Vec<String&>` has), left for the std pass with handles as values.
+5. D9h's facts are settled once the program has checked (`check.settleAllViews`, a fixed point over the bodies), not by
+   checking the program again: they are an optimization's, and checking again lost every signature error said in the
+   first attempt (18.8).
+6. Every signature is signed before the checker's first attempt (R1a's re-attempts then lose nothing signing said).
+7. D9h's quiet statements: a call's arguments reach no function value or `any`, and the program has no global through
+   which storage could be written (a `mut` global of anything but a number, a Bool or a payload-free enum, or a global
+   reaching a writable reference, a function value or an `any`) - a program-wide fact rather than effect summaries per
+   call, kept cheap; a lost optimization where such a global exists, never a wrong answer.
+8. `-memory` always prints D9h's line (its counts), the switch's copy counts gone with it.
+
+### 18.8 Found and fixed
+
+- **D9h checked the program again for every view that grew, and that lost diagnostics.** A function's signature is
+  signed once, when first asked for, and its errors (R23, R23a, R1, T19, O4a, T2c ...) said then; an attempt the
+  checker repeats forgets what the attempt said (`Diags.Forget`) but signs nothing again, so the errors were gone and
+  the program compiled. Ungated, nearly every program grew a view in the prelude and so checked twice - fifteen of
+  checks' must-fail cases built. Under the switches the same bug was there (verify-params ran no such case); on the
+  default path before it, R1a's re-attempt (an inferred error set read before it was final) has the same shape but
+  needs a program with both a growing set and such an error - not met by any case. D9h now settles after the last
+  attempt, and the second check of every program is gone with it.
+- **A function value of a function handing back views** called the body directly where round 1's `fnVal` came back
+  (the round-2d copying wrapper is chosen by `CodeOf`) - its result, a view, was kept uncopied: `apply(inner, t)` then
+  a write to `t` changed it. handover.olang's test.
+- **T25d on the default path** (18.3).
+- **D9h's quiet statements read a write** a call given only read-only arguments made through a closure an argument
+  holds, or through storage a global reaches (`$inner(t) $fired(s)` showed `s.f`'s write to `t`) - on the default path;
+  closed as 18.7 item 7 says. `tests/handoverglobal.olang`, handover's closure test.
+- **Rows laid out in place widened as pairs**: `Grid(a)`, `Box(a)` with run-time rows wanted segfaulted
+  (`t7aoverrows`); lowering's widening makes each row in turn where the layouts differ.
+- **Eager signing lost T2c's `String?&`**: String's body was not made yet, so it was no array; `refType` makes the
+  bodies of what a type is declared over first. With signatures no longer lost, tests/shared.olang's `scBump` (R23a)
+  became a count.

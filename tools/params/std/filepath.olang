@@ -1,9 +1,0 @@
-# param_migrate's hand forms (round 3, docs/rework.md 16) for std/filepath.olang.
-
-# everything but the path's last element, cleaned (Clean): "a/b" for "a/b/c", and for "a/b/c/" too, whose last element
-# is the empty one after its slash; "." for a path with no slash in it, "/" for one in the root
-fn Dir(path String) String {
-    i I64 = path.Len() - 1
-    for i >= 0 and path[i] != '/' { i-- }
-    return Clean(path[:i + 1])
-}

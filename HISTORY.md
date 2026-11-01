@@ -27783,3 +27783,95 @@ point after nine driven rounds (1137 edits down to none); the migrated root then
 a reader now giving values (Split's `Array<String>`) meets a parameter still taking `Array<String&>&` - a direction the
 tool does not rewrite yet - and a few placement rows (docs/rework.md 17.8). The self-build under the switches is still
 not reached.
+
+## The rework, round 3d: the parameters' half reverted (QCK); QCE and D9h kept, on the default path (2026-11-01)
+
+**The decision.** After rounds 2a-3b the user asked whether the rule was sound now that it had been tried - "`&` on a
+parameter means it may write, a bare parameter is the callee's own value, passed by pointer as the compiler chooses"
+(QCC, 2026-10-31) - and whether to go back to `mut` on parameters. The answer given: sound only as far as the compiler
+proves, for every bare argument it passes by pointer, that (A) the callee writes it not and (B) nothing else changes it
+while the call runs - with a hidden copy wherever a proof is missing (C pointers not `const`, callbacks, `any`, spawns,
+an argument the same call may write another way); bulk review 5 had found real holes exactly there (writes through
+bare parameters into constant data, the 2.10 aliasing hole), all fixed, and most of rounds 2b-3b - per-level inferred
+permission, read-only fields by inference, results following their arguments, D9g, D9h's handover, the readers
+rewritten to give values, the 64 errors compiler/ still had under the switches - existed to recover what a read-only
+`T&` gave for free. The user (QCK): "Yes, pause it and go back to mut". So `p mut T&` may write the caller's, `p T&` is
+a read-only shared view, `p T` a value - a copy by meaning; `mut` stays on references at every level (T25b/T25c, the
+default path all along).
+
+**What was removed.** `source.NewParams` and everything only reached through it: every written `&` writable; bare
+struct and array parameters passed by pointer as read-only references (`generic.BareRef`) with copies on entry where a
+body writes them; D9d, D9e, D9f, D9g and their messages; per-level permission (`load.RoLevels`, `NarrowResult`,
+`levelSites`), nullable parameters read-only by inference (`NullWritable`, `WidenParam`), results following their
+arguments (`FollowResults`), reference fields read-only by inference (FRO), D9d's use tracking, 2.10's caller and task
+copies (the plan's `ArgCopy`/`ArgTemp`, `typed.AliasCopies`, `WriteWalk`, the summary's `KeptOwn`), the by-value
+wrapper for function values (`mir.FnKey.ByValue`), round 2c's O17 lend by storage and 2f's T17c relaxation, X22's
+copies for C pointers, the atomic-read rule for bare parameters, G29-by-the-body (`LengthDecided`); and outside the
+compiler `tools/param_migrate.olang`, its hand forms (`tools/params/`), `tests/params/` and `make verify-params`.
+compiler/ lost about 5,400 lines (check.olang 26,353 to 22,985). The method, in case it is wanted again: the switch
+read as false and every branch on it folded by throwaway scripts, trivial functions inlined and dead ones removed
+(cycles included, by reachability), then every function that still differed from round 1's (2431678) and that no
+commit to be kept touched replaced by round 1's - and what was kept read function by function against round 1. That
+last step had one trap, met twice: a kept commit's code reached through a function round 1 wrote differently - the
+case payload's copy (QCE) sat in a helper round 2c had introduced, and D9h's copying wrapper for function values was
+chosen in a `fnVal` round 1 did not have; both put back, and every kept function checked to still be called.
+
+**What was kept, and where.** All on the default path: neither changes what a program that compiled before computes,
+so nothing went behind `OLANG_SCOPES=infer`.
+- QCE: arrays of a run-time length held by value in fields, elements, payloads and type arguments, the container's
+  own (stores copy in, a copy of the whole copies them, deep through values, shallow at references -
+  `typed.MakeKind.Copy`, lowering's Copy helper); `Map<String, V>` owning its keys through `MapEntry`'s constructor;
+  the scope pass's part stores and O25g for parts (e3b0d7d). Under the switch a bare parameter was what made a
+  `struct(name String)` constructor and a value given by value work; on the default path two small rules stand in: a
+  constructor's parameter may hold a run-time array by value (D9a lifted there - its field keeps a copy), and a value
+  owning parts given a by-value parameter or receiver is copied at the call (`check.valueArg`). D9a and D9c stay for
+  other parameters: lifting them needs by-pointer passing made unobservable, which is what was reverted.
+- D9h as an optimization, its two switch-only assumptions made safe: a reference parameter is no longer taken to keep
+  nothing, and a parameter's referent is no longer stable storage.
+- The bug fixes that held on both paths (ccfbee5, f60a75a, 03d233d, 9b53535/1903fe5, B7a's keys, `:=` of a read-only
+  `?&` keeping its null), and T25d's fix - which applied on the default path too: `take("abc")` with `fn take(a mut
+  Array<Char>&)` handed the constant itself over (and ran); it is refused now, naming `$"abc"`.
+
+**Found and fixed.**
+- *D9h checked the whole program again for every view that grew* (`copiesGrew`), and nearly every program grew one in
+  the prelude: the check ran twice, and the second attempt had forgotten what the first said while a signature, signed
+  once, said nothing again - fifteen of checks' must-fail cases (R23, R23a, R1, T19, O4a, T2c, D9a ...) compiled. D9h's
+  facts are now settled once the program has checked (`settleAllViews`, a fixed point over the bodies): they are an
+  optimization's, nothing of the checking rests on them.
+- *The same loss on master, through R1a.* A program whose inferred error sets grow through a cycle is checked again,
+  and an R23 error in it was gone the same way (checks case `r23reattempt`, which compiled before): every signature is
+  now signed before the first attempt, so what signing says is said once and kept. It had hidden one in the corpus:
+  tests/shared.olang's `scBump(c mut Array<I32>&) Bool` (R23a, a flag beside what it writes) - now a count. Signing
+  that early met one rule that read a type's body: `String?&` is T2c's error because String is an array, and its body
+  was not made yet - `refType` asks for the bodies of what a type is declared over first.
+- *D9h's quiet statements trusted a call given only read-only arguments to write nothing.* A view read where it stands
+  in a statement (a join's pieces render after all its operands are evaluated, E11b) was read after such a call - which
+  may still write what the view names: through a closure an argument holds that captured a `mut` reference
+  (`$inner(t) $fired(s)`, `s.f` writing `t` - the view showed the write), or through a global - a `mut` one, or an
+  immutable one holding a `mut` reference (`Held.a[1] = 'Y'`). Round 2's reading had called this 2.10's provisional
+  hole; on the default path it was a wrong answer. A quiet call's arguments now reach no function value or `any`
+  (`types.ReachesCode`), and a program some global of which can be written so - a `mut` global of anything but a number,
+  a Bool or a payload-free enum, or any global reaching a writable reference, a function value or an `any`
+  (`check.mutStorage`, `types.ReachesWrite`, read by lowering through `load.MutStorage`) - reads no view in place in a
+  quiet statement. Only the build's chosen branches count (std/os's test-only `mut` global would have turned it off
+  everywhere). Bench: one cold text-padding function in vec's program, which has a `mut` function-value global.
+- *Rows laid out in place given where rows of a run-time length are wanted* - `Grid(a)` with `type Grid extends
+  Array<Array<I64>>` and `a := Array<Array<I64>>(2, Array<I64>(2, 5))`, or `Box(a)` for a field `rows
+  Array<Array<I64>>` - copied the rows' bytes as if they were (length, pointer) pairs and segfaulted (`t7aoverrows`,
+  converted from T7a's error to a run case, had failed since). QCE made that target type possible; lowering's widening
+  now makes each row in turn where the elements are laid out apart (`laidApart`), and a conversion names its argument's
+  storage only where every level is laid out alike (`check.laidAlike`). The evaluator agreed already.
+
+**Tests.** `tests/valueparts.olang` (round 3's owned.olang in today's spelling, with a by-value parameter and a clone),
+`tests/handover.olang` and `tests/inplace.olang` (D9h; three of inplace's tests rested on the readers' value forms and
+went); checks cases `qcevaluearg`, `t25dconstmut`, `r23reattempt`; checks' T7a and D9a cases QCE now accepts became run
+and build cases of what they now do (`t7aelem`, `t7anested`, `t7aoverrows`, `t7alambdaresult`, `t7adeclaredelem`,
+`t7adeclaredfield`, `d9apayloadstring`, `d9abarevariable`); `tests/handoverglobal.olang` and handover's closure test for
+the quiet statements. docs/rework.md section 18 has the detail.
+
+**Measured.** Bench's IR on the default path against master d8c8daf: identical but std/prelude/text's integer
+`PadStart`/`PadEnd` (they copy the view `String.PadStart` now hands back - the copy D9h moves to the caller), and in
+knucleotide's main one copy fewer. Callgrind, baseline x86-64, reduced sizes: every row within 14 instructions of
+master's (nbody 40,267,580 -> 40,267,594, knucleotide 66,722,130 -> 66,722,116, text, regex, sha256, matmul, mandelbrot,
+binarytrees and the sum/vec rows identical or within that). `OLANG_SCOPES=infer`: std, the corpus's D9h and QCE files
+52 of 52, as before.

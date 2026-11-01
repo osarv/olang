@@ -1,8 +1,0 @@
-# param_migrate's hand forms (round 3, docs/rework.md 16) for std/prelude/tests/text.olang.
-
-# the lines of text kept in a Vec - each a text of the Vec's own (QCE)
-fn linesOf(t String) Vec<String> {
-    out := Vec<String>()
-    for line in t.Lines() { out.Push(line) }
-    return out
-}

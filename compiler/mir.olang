@@ -52,12 +52,9 @@ Empty Range = Range(0, 0)
 type FnKey enum {
     Body(id typed.BodyId)
     Adapter(call typed.BodyId)
-    # the rework's round 2d (D9h): a function handing back views of what it is given, as a function value or a slot of an
+    # D9h: a function handing back views of what it is given, as a function value or a slot of an
     # "any"'s table: called, its result copied into its result scope - what a caller that cannot know it would not copy
     Copied(body typed.BodyId)
-    # bulk review 5 (F5): a function taking a bare parameter by pointer, as a value of a function type passing that
-    # parameter by value (a generic's "fn(x T) T" with T bound to the value type): the value's address passed on
-    ByValue(body typed.BodyId, ty types.TypeId)
     Helper(kind HelperKind, t types.TypeId)
     Init(module I64)
     # $ of an "any"'s instance (T33), a table's rendering slot: as a Render helper, fn(x Stored&, depth) with its builder -
@@ -73,7 +70,7 @@ type HelperKind enum {
     Equal      # "==" part by part (E10): fn(a T&, b T&) Bool, pure data, calling nothing
     Hash       # the supplied Hash (E10b): fn(x T&) I64, pure data, calling nothing
     Zero       # the type's zero value (D13c): fn() T - its constructor called on its parameters' defaults or zeros
-    # the rework's round 3 (QCE): a value's own copy, fn(x T&) T with its result scope its one scope - its parts that are
+    # QCE: a value's own copy, fn(x T&) T with its result scope its one scope - its parts that are
     # arrays of a run-time length copied there, deep through values, shallow at references (typed.MakeKind.Copy)
     Copy
 }
@@ -1084,17 +1081,6 @@ fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
     if t.Same(ra, rb) { return true }
     if t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array {
         return t.Length(ra) == t.Length(rb) and v.sameRepr(t.Elem(ra), t.Elem(rb))
-    }
-    # (the rework's round 2: two instances of one generic type whose arguments differ only in which reference levels
-    # may be written - a value made read-only below its top by what it follows - are laid out alike)
-    if t.KindOf(ra) == types.Kind.Named and t.KindOf(rb) == types.Kind.Named and t.DeclOf(ra) == t.DeclOf(rb) {
-        xa, xb := t.Items(t.Args(ra)), t.Items(t.Args(rb))
-        if xa.Len() != xb.Len() or xa.Len() == 0: return false
-        for k in range xa.Len() {
-            if v.sameRepr(xa[k], xb[k]): continue
-            if not (t.IsRef(xa[k]) and t.IsRef(xb[k]) and v.sameRepr(t.Referent(xa[k]), t.Referent(xb[k]))): return false
-        }
-        return true
     }
     return false
 }
@@ -2190,7 +2176,6 @@ fn (w mut dumper&) key(k FnKey) String {
         case FnKey.Body(b): "B" $b
         case FnKey.Adapter(b): "adapter B" $b
         case FnKey.Copied(b): "copied B" $b
-        case FnKey.ByValue(b, ty): "by value B" $b " " $w.T.Canon(ty)
         case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
         case FnKey.Init(m): "init " $m
         case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")

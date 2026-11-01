@@ -621,16 +621,24 @@ The element type may carry a bare reference marker (`Array<Point&>`, an array of
 to the array's own scope (§8 O5); a marker naming a variable on the element is a compile-time error, since an element
 never has a scope of its own.
 
-**T7a.** An array held **inside another value** — a struct field, an array's element, an enum's payload — is held by
-reference, `Array<T>&`, unless its storage is laid out in that value with a length every such value shares (T7d): an
-inline field whose declaration gives its length, or the elements of an array made with a fill or a literal of one
-known length. Copying the containing value then copies the array with it. Any other array held by value inside a
-value is a compile-time error naming `Array<T>&`: its storage would live apart from the value naming it, so copying the
-value would share that storage while appearing to copy it. An enum's payload never lays one out (its parameters have
-no declaration to give a length), nor does a type declared over an array of arrays (T29: `type Grid extends
-Array<Array<I64>>` is the error, `Array<Array<I64>&>` its rows) - a value of it is made elsewhere. There is no multi-dimensional array: an array of arrays is `Array<Array<T>&>`, each
-element an array of its own length; `Array<Array<F32>>(4, Array<F32>(4))` is four rows of four laid out in place; and
-a rectangular block whose size is known only at run time is one array indexed `r * width + c`.
+**T7a.** An array held **inside another value** — a struct field, an array's element, an enum's payload, a type
+argument — is held either by reference, `Array<T>&` (it names an array that lives elsewhere, which another name may
+share and change), or **by value**, as **its container's own**. By value, its storage is laid out in the value where a
+length every such value shares is given (T7d): an inline field whose declaration gives its length, or the elements of
+an array made with a fill or a literal of one known length. Otherwise it is an array of a run-time length held by
+value - a field `name String`, an element of `Array<String>` or `String["a", "bc"]`, a payload `A(s String)`, a type
+argument (`Vec<String>`, `Map<String, V>`), the rows of `type Grid extends Array<Array<I64>>` - whose elements are
+storage of the container's, living where the container's references do (§8), which nothing another name holds
+changes. A store into such a part - an assignment, a constructor's field, a case's payload, an element of a literal, a
+fill (each element its own copy of it) or a comprehension's element - copies what it is given in where that is
+existing storage (a place read, a slice, constant data, a choice of such), and takes new storage as it is; a copy of a
+value holding such parts - a local declared or assigned from existing storage, an argument for a by-value parameter
+(D9) - copies them too, deep through values and shallow at references (a reference it holds names what it named); a
+read of one by value copies it out (T7b). So `Map<String, V>` keeps its own key text, copied in where `Put` adds a key
+(an update or a lookup copies nothing), and `Map<String&, V>` shares the caller's, which the `&` says. There is no
+multi-dimensional array: an array of arrays is `Array<Array<T>>` or `Array<Array<T>&>`, each element an array of its
+own length; `Array<Array<F32>>(4, Array<F32>(4))` is four rows of four laid out in place; and a rectangular block
+whose size is known only at run time is one array indexed `r * width + c`.
 
 **T7b (arrays are held by reference).** An array is held **by value only where its storage is created** - a
 declaration of a value array (a local, a global, an inline field or element, T7d), a function's result, which is built
@@ -697,11 +705,11 @@ place - exactly where every value it can hold has one known length:
 - a **field**: when its declaration gives it a known length the same for every instance - an initializer that reads no
   constructor parameter (`pos := Array<F32>(3)`, `m Array<F32> = Array<F32>(16)`, `lock := Array<I64>(MutexWords)`),
   in a generic type one each instantiation computes. A value array field given none - no initializer, one reading a
-  parameter, a pun of a by-value array parameter - is T7a's error;
+  parameter, a pun of a by-value array parameter - holds an array of a run-time length, the instance's own (T7a);
 - the **elements** of an array of arrays held by value (`Array<Array<T>>`): their length is given where the outer
   array is made - by the fill (`Array<Array<F32>>(4, Array<F32>(4))`) or by a literal whose items all have one known
-  length - whatever the outer array's own length is. One made with no fill, or with items of different lengths, is
-  T7a's error.
+  length - whatever the outer array's own length is. One made with no fill, or with items of different lengths, holds
+  elements of run-time lengths, each its own (T7a).
 
 Fixed storage is laid out in place, wherever it is: a local's own storage, a global's data, the struct holding it, the
 array holding it as an element, a function's result - so copying it copies the elements, `==` compares them (E10), and
@@ -716,24 +724,6 @@ compile-time error saying to copy it explicitly through a slice of that length, 
 checked once where it is evaluated (E16b; `v.SliceOf(0, 16)` fails instead, E16c). No store is ever checked for its length
 implicitly. An element length is part of its storage's layout, so a local whose stored values' element lengths
 disagree is a compile-time error, not a length kept at run time.
-
-**T7a under the rework's round 3 (provisional - `OLANG_PARAMS=new` only).** An array of a run-time length may be held
-by value inside another value - a struct's field (`name String`), an array's element (`Array<String>`, `String["a",
-"bc"]` of any lengths), an enum's payload, a type argument (`Vec<String>`, `Map<String, V>`) - and is then that value's
-own: its elements are storage of the container's, living where the container's references do (§8), and nothing
-another name holds changes them. A store into such a part - an assignment, a constructor's field, a case's payload, an
-element of a literal, a fill (each element its own copy of it) or a comprehension - copies what it is given in where
-that is existing storage (a place read, a slice, constant data, a choice of such), and takes new storage as it is; a
-copy of a value holding such parts - a local declared or assigned from existing storage, a bare parameter's copy on
-entry (D9) - copies them too, deep through values and shallow at references (a reference it holds names what it named);
-a read of one by value copies it out (T7b). So `Map<String, V>` keeps its own key text, copied in where `Put` adds a
-key (an update or a lookup copies nothing), and `Map<String&, V>` shares the caller's, which the `&` says. Fixed
-storage (T7d) is unchanged where a declaration gives a known length. Elsewhere T7a's error stands.
-
-**E12 under the rework's round 3 (provisional).** An array of references to arrays fits where an array of those arrays'
-values is wanted (`String&["a"]` where `Array<String>` is): given a bare parameter (D9), which only reads it, it is lent
-as it is (a reference to an array and an array value are one pair); anywhere else - a local, a field, a default - each
-element's referent is copied in (T7a above). The other way round is no fit: references wanted are not values given.
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.6 E19). `n` is any integer expression; a negative `n`
@@ -1119,14 +1109,6 @@ outlive its result scope - and to be exactly it where something can be stored th
 through a value of it is held to that as a direct call is held to its callee's obligations (O10c). A lambda written for
 such a type may require that much and no more: `l.Iter().Fold(l[0], fn(best, w) { return w if w.Len() > best.Len() else
 best })` keeps the longest element.
-**T22a under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** A function type whose result is a reference
-or a value holding references says what QCC's `&` says: its result may hand back what its `&` parameters reach (or new
-storage), so a call through a value of it holds each `&` argument to outlive the call's result scope, as a direct call
-is held to its callee's obligations. A function whose only obligations are those - each `&` parameter's scope outliving
-its result scope, not exactly - is a value of such a type: `fn first(a Array<I64>&) Array<I64>&` fits `fn(a
-Array<I64>&) Array<I64>&`. One relating a bare parameter (a value it keeps, D9e) or two parameters to each other is not.
-A value adapted to a function type through its `Call` (E31) is a function value of that `Call`: one whose `Call` carries
-an obligation - keeps an argument beyond the call - is not adapted, as such a function is not used as a value.
 
 ### 2.8 Scopes
 
@@ -1272,40 +1254,6 @@ nothing of this applies.
 
 This is permission in the type checker only: it changes no value and no run time, and the evaluator (K1) is
 unaffected by it.
-
-**T25c under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** With every written `&` writable (D9's
-round-2 entry), the permission of a reference level that no declaration fixes is **inferred**, never written:
-
-- *A body's written levels.* A reference level written inside a function's body - in a local's declared type below its
-  top, in a constructor's or a case's type arguments, in an array literal's or a comprehension's element type, the fill
-  or arguments of a constructor made there included - is read-only where a read-only value is stored into it, and
-  writable otherwise: `out := Vec<String&>()` then `out.Push(t[0:2])` from a bare `t` makes `out` a `Vec` of read-only
-  views. A write through such a level is then refused as a write through any read-only reference (T25b). The top of a
-  local's own written reference type takes its value's permission (inferred, as before). Where a level could be made
-  read-only, no bare parameter is copied on entry for that store (D9's round-2 entry): the level is read-only instead.
-- *A function's result.* A result is read-only at a level where the body hands back a value read-only there - at every
-  level where it hands back a view of what a bare parameter reaches - and every caller holds it so. A result written
-  `mut` (source not yet migrated, read during the migration) keeps its top writable.
-- *Seen at fewer writable levels.* A **fresh** value (an array or a case made there, a comprehension, a constructor's
-  call) fits a type that is the same but read-only at levels where it is writable; so does a reference whose top is
-  read-only (nothing is stored through it); and an argument for a bare parameter - read-only at every level - fits the
-  parameter whatever their levels say. A fixed array widens to a run-time length first (T7c).
-- *Results following their arguments.* In an instance, a value read through a bare parameter (read-only at every level,
-  as the argument a call gives it, T25c's generic rule) may be stored into a local the body made; the instance's result
-  then follows that parameter: a call giving it a read-only argument gets the result read-only at every level below its
-  top. So a container's `Clone`, `ToArray` and walks copy a bare receiver's elements out as writable as the caller's.
-  Such a function is no function value (T21): a call through one cannot see its argument's permission, and the error
-  at the conversion, like `olang explain`'s `# not a value`, says so.
-- *Traits.* A trait method written `&Name()` - one that may write its receiver - is met by a method whose receiver is
-  bare as well as by one taking `&`; a bare parameter passed by pointer meets a trait's parameter of the same type at
-  any permission (it is read-only at every level).
-
-- *Nullable parameters.* A declared function's parameter written `p T?&` is read-only unless its body writes through
-  it, passes it where it may be written or keeps it, which makes it writable (read-only is said by a value, and a value
-  has no null); a caller passing a read-only reference to a writable one is refused as any.
-
-A C import's declarations keep C's `const`: a reference written there without `mut` is read-only (X17). Like the rest of
-T25c this changes no value and no run time.
 
 **T25d (static literals).** Nothing is written through a read-only reference, so a literal known while
 compiling - text, or an array of constants - that reaches one (a read-only parameter, local, field or element, or a
@@ -2035,7 +1983,9 @@ callee's own copy of the argument as it was at the call (D9), and it takes its *
 function is compiled once for each length its calls give it (G29), and in each it is fixed storage (T7d) whose
 `Len()` is a constant (T7c). So the argument's length must be **known** while compiling (T7c); one known only at run
 time is a compile-time error saying to take the parameter by reference (`a Array<F32>&`) or to copy the length wanted
-explicitly, with a slice of it (`r[0:3]`, checked once, E16b). The same holds for every array level held by value
+explicitly, with a slice of it (`r[0:3]`, checked once, E16b) - but a **constructor's** parameter holding an array of a
+run-time length by value (`type Person struct(name String, age I64)`), which is what its field keeps: the field's own
+copy (T7a), the parameter itself read where the caller's argument is. The same holds for every array level held by value
 beneath the parameter - the elements of an `Array<Array<F64>>&` parameter, rows laid out in place, take their length
 from the argument too, though the reference level above them takes none. A reference level makes no instance: inside
 the function an array reached through a reference has a length known only at run time. No by-value parameter holds
@@ -2078,7 +2028,8 @@ over the bound, and that instance's body is not checked: a length growing by val
 17) stops there, long before G17's chain would.
 
 **D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
-without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
+without the caller seeing it (a value holding arrays of a run-time length by value, T7a, is copied with them at the
+call), and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
 reference parameter names - the **caller's own instance** - may be written only when its type is a writable
 reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
 parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
@@ -2087,99 +2038,21 @@ may not be a read-only copy (T25c). Whether a call writes to the caller's value 
 signature alone: `&` says whose instance it is, `mut` says whether it may be written, and the two are independent. A parameter's reference marker may
 name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then live in one scope; see §8.
 
-**D9 under the rework's round 2 (provisional - `OLANG_PARAMS=new` only).** With the switch, `&` on a parameter or
-receiver says it may write the caller's instance, and every written `&` is writable (`mut` before a reference is read
-as nothing); a bare parameter never affects the caller. One whose type is a struct or an array (text included) is
-passed by pointer to the caller's storage - a read-only reference written bare: it, and everything reached through
-it, is read-only in the body; a body that writes its own storage, or lends it where it may be written, works on a
-copy of its own made on entry, whose levels below its top are read-only as the parameter's are. Read-only is a
-property of the level reached: a reference read out of what is reached read-only - through a dereference, an index,
-a walk's element, what a call hands back following a read-only argument, an immutable global and what it reaches - is
-read-only, and so is a value an instance hands back holding references of a type a read-only argument holds (a
-`Clone`, a `Values` walk). Numbers, enums, a struct of numbers fitting one register (eight bytes), function values and
-a type variable's binding are passed by value, and
-an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
-may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
-mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot
-change: constant data, a value made for the call, a bare parameter of the caller, an immutable global, a value local
-nothing assigns, writes or lends writably once it is made, a read-only view never assigned made from one of these. A
-lambda written at the call is read, not taken for unseen code: it may write the caller's storage only through what it
-captures writably. Each copy is listed by `-memory` (B18); a C function's pointers are X22's. An atomic read is there to see another thread's write, so one of a bare parameter's own storage - a by-value one's,
-or what its pointer points to, but no reference it holds - is a compile-time error naming `p T&`: its own value, which no
-other thread writes; and so is a bare parameter given whole to a `&` parameter that is read atomically (directly, or by
-one it is given to in turn), at the call: the body's own copy never sees the write. A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
-block may write storage of its type - its statements, its other tasks, a call through a function value or an `any`, a
-call handing such a value or a `&` argument reaching the type - and the copy lasts until the join; a generator's bare
-parameters are copied where the generator lives, its walk running after the call. An `any` made from a bare parameter
-boxes a copy of it. `x := p` of a bare parameter holding no
-reference - a plain struct or enum - declares a value of its own, a copy (as by value), and so does one holding
-references that nothing assigns whole afterwards; an array, or one assigned whole later, a read-only view of it. A
-trait method that may write its receiver is written `&Name()`.
-
-**D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
-passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error
-naming the bare form `p T`. An atomic read of what it reaches uses it (it is there for another thread's write, which
-only a shared reference sees). A for-in walking it only reads it; a value holding references copied out of what it reaches
-is kept where it is stored into a field, an element, a payload or a global, or given a by-value parameter whose body
-writes through it or keeps it. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
-reference, an extern, an export fn or a generic's parameter (its instances differ by program).
-
-**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so the body may not keep
-its own storage past the call - the parameter itself or a view of it, in a value it builds and hands back (a
-constructor's field, a case's payload, an element): that is a compile-time error at the parameter, naming the two
-ways out - a copy of its own written in the body, a value assigned from it (`c T = p`, E12's reference into value),
-which it then keeps; or the parameter taken as `p T&`, sharing the caller's storage, which the `&` says. Nothing
-copies it unseen. A view of what the parameter reaches through its references is no keeping of its own storage (a
-struct's copy holds the same references). Stored into existing storage - a `&` parameter's, a global's - a bare
-parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy. Where the route is not followed - a
-local made from it, a conditional, a slice, a capture, a call storing its argument (`v.Push(t)`) - the parameter is
-taken as kept wherever the result outlives what its argument's storage is and the result's type can name storage of
-its type (a reference to it, a view of its array, a function value, an `any`).
-Section 8 lends an argument for a bare parameter whose own storage the callee does not keep where the argument's
-references live (O17 asks nothing more of a value whose references live elsewhere than its storage), and a temporary
-lent to one - read-only, stored through by nothing - needs its references only to outlive it (O25h).
-
-**D9f (the forgotten `&`; provisional).** A write to a bare parameter's own storage - it or a part assigned - that
-nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a
-type with no reference form.
-
-**D9g (a reference result says shared; provisional, as D9 above).** A result written as a reference (`T&`, not
-`T?&`) hands the caller something it shares and may write: storage reached through a `&` parameter, a global or a
-shared field, or new storage. Handing back through it a value read-only at its top - what a bare parameter reaches,
-constant data, an immutable global - is a compile-time error naming the value result `T` (or `p T&` for the parameter
-it is reached through - the form the diagnostic's note names where some caller writes through the result, lends it
-where it may be written or keeps it, since a value result would leave such a caller writing a copy; and for an `any`
-result, which has no value form). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
-handed to the caller without a copy where the caller only reads it, and copied where it is kept or written (D9h).
-Excepted: a view read through a field read-only by inference (round 2c's per-type fields), whose result is read-only
-for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).
-
-**D9h (a value result handed over; provisional, as D9 above).** A value result is the caller's own: it may write it
-and what it holds. Where a function's value result holding storage of its own by value - an array (text included), a
-struct or an enum holding such arrays as parts, a constructor's instance - is, or holds in its parts, views of what its
-arguments reach, the views are handed back with no copy and the caller copies them where it keeps them - unless it
-reads the result where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing
-the statement does can change what it views, or holds it in a local that nothing could tell from a copy: a local never
-written but in a scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never
-escaping, never handed back, whose views are of storage nothing changes while it lives and that outlives it - constant
-data, a bare parameter's own storage, an immutable global's, a local's own storage nothing writes, lends or keeps, or
-another such local's. The same holds for the copies a function makes itself where nothing could tell: a value local
-made from existing storage, a walk's element, a temporary lent whole to such a body, and the part stores and fields of
-a value the function hands back made of its parameters' views. A function value, an `any`'s table and an operator's
-adapter copy at the call, since their caller cannot know. A
-plain function's value result holding references that hands back what its bare parameters reach - a copy of a bare
-enum or struct, a value a call following such a parameter hands back - **follows** those parameters: at a call given a
-read-only argument for one of them the result is read-only below its top (a read-only copy, T25c), else it is as
-writable as the caller's own arguments; so such a function is no function value (T21's "not a value": its result's
-permission is the call's). Unobservable in what a program computes; it decides only which programs are accepted.
-
-**G29 under the rework's round 2b (provisional).** A bare array parameter is passed by pointer, one instance for every
-length - but where its body decides something on its length: `p.Len()` in an `if`'s, an `assert`'s or a `match`'s
-condition, after a conditional's or a guard's `if`, in a `comptime` or as the length of an array the body makes. Such a
-parameter is held by value, one instance per length (G29, G30: what is decided on the length is decided while
-compiling per instance), unless the function's result may hold references (then it may hand back views of the
-parameter, which must be the caller's storage). The test reads the body's text: a length first held in a local decides
-at run time - only what is decided while compiling changes, never a meaning.
+**D9h (a value result handed over).** A value result is the caller's own: it may write it and what it holds. Where a
+function's value result holding storage of its own by value - an array (text included), a struct or an enum holding
+such arrays as parts (T7a), a constructor's instance - is, or holds in its parts, views of what its arguments reach,
+the views may be handed back with no copy and the caller copies them where it keeps them - unless it reads the result
+where it stands (an argument for a read-only parameter, a text piece, a discarded value) and nothing the statement does
+can change what it views - no call in it given a writable reference or a value reaching a function value or an `any`,
+in a program no global of which can be written so (a `mut` global of anything but a number, a `Bool` or an enum of no
+payload, or a global reaching a writable reference, a function value or an `any`) - or holds it in a local that nothing could tell from a copy: a local never written but in a
+scalar field, lent writably only to bodies that keep its parts as they are (a walk's `Next`), never escaping, never
+handed back, whose views are of storage nothing changes while it lives and that outlives it - constant data, an
+immutable global's, a local's own storage nothing writes, lends or keeps, or another such local's. The same holds for
+the copies a function makes itself where nothing could tell: a value local made from existing storage, a walk's
+element, a temporary lent whole to such a body, and the part stores and fields of a value the function hands back made
+of its parameters' views. A function value, an `any`'s table and an operator's adapter copy at the call, since their
+caller cannot know. Unobservable in what a program computes: the compile-time evaluator copies every time and agrees.
 
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
@@ -3817,8 +3690,9 @@ tag. A primitive scalar type may never carry one (T24). An element type `any R&`
 values, `any Shape&[c, s]`, each item made an `any` as T32a says - the form `$` renders such an array in (E11a).
 
 An element type may itself be an **array**: an `Array<T>` as a reference (T7a) - `Array<I32>&[r0, r1]` has two
-elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value, whose items
-must then have one known length (T7d): `Array<F32>[F32[1, 2], F32[3, 4]]` is two rows of two in place.
+elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value: items of
+one known length are laid out in place (T7d), `Array<F32>[F32[1, 2], F32[3, 4]]` two rows of two; items of different
+lengths are each the array's own copy (T7a), `String["a", "bc"]`.
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` — a plain expression, or a nested
 bracketed group with no restated type, for a multi-dimensional literal.
 
@@ -3829,7 +3703,7 @@ variable (G9), a parameter (an instance of its length, G29) - and storage it is 
 
 **E21.** A literal's items are never themselves bracket groups: there are no nested literals, since there
 is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<I32>&[r0, r1]`, or of
-arrays held in place, each item a literal of its own and all of one length (`Array<F32>[F32[1, 2], F32[3, 4]]`).
+arrays held by value, each item an array of its own (`Array<F32>[F32[1, 2], F32[3, 4]]`).
 
 ### 5.7 Enum values
 
@@ -5001,7 +4875,6 @@ a literal, a `$` rendering, a name or a `(` - text, under S17's rules for a mess
 word (a `,`, a closing bracket, `if`, `else`, an operator, the line's end) ends it without one. A statement beginning
 with `unreachable` is S16d's statement. The compile-time evaluator reaches it as the run time does: a baked global's
 initializer or a decided assert reaching it is K1's abort class, an error where the value is required.
-
 
 ### 6.7 `assert`
 
@@ -6935,8 +6808,8 @@ it a known length the same for every instance (T7d): `m := Array<F32>(16)`, `m A
 `lock := Array<I64>(MutexWords)` - its length anything T7c knows that reads no constructor parameter (a constant, a
 call the evaluator can run, a literal), and in a generic type one each instantiation computes. A value array field
 given no such length - none at all, one reading a parameter (`Array<F32>(n)`), a pun of a by-value array parameter,
-whose length is each call's - is T7a's error: hold it by reference, `m Array<F32>& = Array<F32>(n)`, or give it its
-length. What is stored into one later must have that length (T7d); a value whose length is known only at run time is
+whose length is each call's - holds an array of a run-time length, the instance's own, copied in where it is given
+existing storage (T7a); `m Array<F32>& = Array<F32>(n)` shares one instead. What is stored into one later must have that length (T7d); a value whose length is known only at run time is
 copied in through a slice of it, `m = v[0:16]`, checked once (E16b).
 
 **C2b.** A `return` statement is a compile-time error anywhere in a `ctor-body`. A constructor
@@ -7712,7 +7585,8 @@ library's collections, whose storage goes with what holds them. SCOPE is the sco
 starts from: a parameter's referent's, named by its type (`the Server's scope`), or a local's function's (`main's
 scope`). Places that free at once are counted, not listed; rows for one cause are written once. A collection whose
 values have destructors keeps what it lets go of (condition 4), and is counted as freeing at once where a `Destroy()`
-takes its values out (C9b).
+takes its values out (C9b). Then a line for D9h: how many returns hand a view back, and how many calls read one where it
+stands or copy it.
 
 **B19 (fuzzing).** `test -fuzz NAME FILE` fuzzes one test of one file: the test NAME names - as a word of B3a's
 names a test, by its target, its target's type or text of its description; naming none, or several, is an error at
@@ -8186,20 +8060,6 @@ wrong prototype is (X1a). An olang function is never variadic.
   `struct timespec *` given as two `I64`s); that the buffer holds what C reads there is the program's word (X1a).
 
 What C does with the pointer is X3's: it is the storage's own address, for the call.
-
-Under the rework's round 2 (`OLANG_PARAMS=new` only, provisional as D9 is), a pointer parameter C writes - one not
-`const`, `T *` read as `p T&` - given what may be written - a local or a part reached from one, a `&` parameter's
-storage, new storage - borrows it writably (E12c): no copy. Given what may not be lent writably it is given a copy,
-since old C interfaces leave `const` out of what they only read: a bare parameter whole is the body's own copy, made on
-entry as where an olang function's `&` parameter is given it (D9); constant data, an immutable global and a read-only
-view - a view of a bare parameter, of what a read-only level reaches - are copied for the call, in the block of the
-call (where an olang function's `&` parameter is given one, T25c's error). A `const` pointer is trusted: what it is given
-is passed as it is, never copied, unless an export fn of the program may write storage of its type (C may call back
-into one while it runs, handing it what it holds): then an argument that may change during the call - a mutable
-global's storage, a read-only view not made from what cannot change - is copied for the call, as an olang call's
-argument is that the same call may write another way (D9). `-memory` lists each copy (B18). A `?&` given a pointer not
-`const` keeps T25c's rule, and an extern type's reference has no permission that says anything (X10), in a function
-type too: an export fn taking `CStr?&` fits a C function pointer's.
 
 ## 12. Generics
 

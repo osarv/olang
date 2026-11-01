@@ -257,8 +257,6 @@ type Diag enum {
     TypeMatchValueCase
     ArrayTooManyArgs
     NamedScopeOnElement
-    ArrayNestedByValue
-    LambdaResultHeld
     ConstraintNotTrait
     TypeArgNamedScope
     InvalidReferenceTarget
@@ -319,6 +317,7 @@ type Diag enum {
     CImportFailed
     CNoForm
     CPointerReadOnly
+    ConstToMutRef
     CPointerTemporary
     MutOnValueType
     MutOnValueParam
@@ -380,16 +379,6 @@ type Diag enum {
     LiteralExprRange
     LiteralNeedsCtor
     ReadOnlyToWritable
-    ReadOnlyHere
-    BareDeadWrite
-    RefNeverUsed
-    ConstToRefParam
-    NoteBareParam
-    BareKept
-    AtomicBare
-    AtomicBareLent
-    RefResultReadOnly
-    NoteRefResult
     ReadOnlyToBuiltResult
     ReadOnlyToBuiltResultNo
     ReadOnlyCopyDecl
@@ -402,7 +391,6 @@ type Diag enum {
     ReadOnlyCopyWrite
     ReadOnlyCopyRef
     ReadOnlyFuncValue
-    FollowingFuncValue
     NoteGroupFunctionType
     NoteReadOnlyCopy
     NoteReadOnlyCopyOf
@@ -1582,12 +1570,6 @@ fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "G8, T7", "Ar
 # ERR_NAMED_SCOPE_ON_ELEMENT
 fn NamedScopeOnElement() Msg { return Msg(Diag.NamedScopeOnElement, "T24", "a nested reference lives in its container's scope - write a bare '&' here") }
 
-# ERR_ARRAY_NESTED_BY_VALUE
-fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7d", "an array inside an array or a struct is held by reference - write " $ty "&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place") }
-
-# ERR_LAMBDA_RESULT_HELD
-fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.LambdaResultHeld, "T7a", "this result binds " $text " to " $ty1 ", which the call holds in an array, where an array is held by reference - write the result as " $ty2 "&") }
-
 # ERR_CONSTRAINT_NOT_TRAIT
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
 
@@ -1760,6 +1742,9 @@ fn CImportFailed(spec String&, why String&) Msg { return Msg(Diag.CImportFailed,
 
 # ERR_C_NO_FORM
 fn CNoForm(name String&, why String&) Msg { return Msg(Diag.CNoForm, "X19", "the C import has no olang form of '" $name "': " $why) }
+
+# ERR_CONST_TO_MUT_REF
+fn ConstToMutRef(fix String&) Msg { return Msg(Diag.ConstToMutRef, "T25d", "this hands data written in the program where it may be written - pass a copy of its own: " $fix) }
 
 # ERR_C_POINTER_READ_ONLY
 fn CPointerReadOnly(ty String&) Msg { return Msg(Diag.CPointerReadOnly, "X22", "C may write through this pointer, and " $ty " is read-only - pass a writable one ('mut')") }
@@ -1948,32 +1933,6 @@ fn LiteralNeedsCtor(ty1 String&, ty2 String&) Msg { return Msg(Diag.LiteralNeeds
 # ERR_READ_ONLY_TO_WRITABLE
 fn ReadOnlyToWritable() Msg { return Msg(Diag.ReadOnlyToWritable, "T25c", "a read-only reference cannot become writable - pass a writable one, or drop the 'mut'") }
 
-# ERR_READ_ONLY_HERE
-fn ReadOnlyHere() Msg { return Msg(Diag.ReadOnlyHere, "T25c", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and is wanted where it may be written: give a copy of its own ('$x', 'x.Clone()'), or take the parameter as 'p T&'") }
-
-# ERR_BARE_DEAD_WRITE
-fn BareDeadWrite(name String&, ty String&, number Bool) Msg { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "' or what it reaches, and nothing reads it after - " $("return the new value instead" if number else $("take it as '" $name " " $ty "&' to change the caller's"))) }
-
-# ERR_REF_NEVER_USED
-fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D9d", "'" $name "' is never written, handed where it may be written, or kept - take it as '" $name " " $ty "'") }
-
-# ERR_CONST_TO_REF_PARAM
-fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefParam, "T25d", "this hands data written in the program to '" $name "', which may write it - pass a copy of its own: " $fix) }
-
-# NOTE_BARE_PARAM
-fn AtomicBare(name String&) Msg { return Msg(Diag.AtomicBare, "D9", "an atomic read of '" $name "', a bare parameter, reads this function's own value, which no other thread writes - take it as '" $name " T&' to see the caller's") }
-
-fn AtomicBareLent(name String&) Msg { return Msg(Diag.AtomicBareLent, "D9", "'" $name "' is this function's own value, given here to a parameter read atomically to see another thread's write, which its copy never sees - take it as '" $name " T&' to share the caller's") }
-
-fn BareKept(name String&, ty String&) Msg { return Msg(Diag.BareKept, "D9e", "'" $name "' is a bare parameter - this function's own value - and what it hands back keeps its storage: keep a copy of its own ('c " $ty " = " $name "'), or take it as '" $name " " $ty "&' to share the caller's") }
-fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
-
-# ERR_REF_RESULT_READ_ONLY
-fn RefResultReadOnly(value String&) Msg { return Msg(Diag.RefResultReadOnly, "D9g", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and a result written '&' is shared with the caller writably: give the value '" $value "' (handed over without a copy where the caller only reads it), or take the parameter it is reached through as 'p T&'") }
-
-# NOTE_REF_RESULT
-fn NoteRefResult() Msg { return Msg(Diag.NoteRefResult, "", "the result is written as a reference here - a value result says it is read-only") }
-
 # ERR_READ_ONLY_TO_BUILT_RESULT
 fn ReadOnlyToBuiltResult(text String&) Msg { return Msg(Diag.ReadOnlyToBuiltResult, "T25c, O14", "a built result is new storage and writable, and this reference is read-only - borrow it: '" $text "'") }
 
@@ -2008,8 +1967,6 @@ fn ReadOnlyCopyWrite() Msg { return Msg(Diag.ReadOnlyCopyWrite, "T25c", "this wr
 fn ReadOnlyCopyRef() Msg { return Msg(Diag.ReadOnlyCopyRef, "T25c", "a reference a read-only copy holds is read-only - it cannot be passed or kept where it may be written through") }
 
 # ERR_READ_ONLY_FUNC_VALUE
-fn FollowingFuncValue(text String&) Msg { return Msg(Diag.FollowingFuncValue, "T25c, T21", $text " gives back what it is given as read-only as the argument is - its result follows it - which a call through a function value cannot see, so it cannot be a function value: pass a lambda calling it") }
-
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
 
 # NOTE_GROUP_FUNCTION_TYPE
@@ -2220,7 +2177,7 @@ fn IncdecNotNumber(tok String&, ty String&) Msg { return Msg(Diag.IncdecNotNumbe
 fn CaptureReadOnly() Msg { return Msg(Diag.CaptureReadOnly, "D16c", "a lambda's captures are read-only - capture a reference to change what is outside it") }
 
 # ERR_READ_ONLY_REF_WRITE
-fn ReadOnlyRefWrite(newParams Bool = false) Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - what a bare parameter reaches, constant data or an immutable global" if newParams else "this writes through a read-only reference - one with no 'mut' in its type") }
+fn ReadOnlyRefWrite() Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - one with no 'mut' in its type") }
 
 # ERR_WRITE_INTO_CALL_VALUE
 fn WriteIntoCallValue() Msg { return Msg(Diag.WriteIntoCallValue, "E31", "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") }

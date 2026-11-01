@@ -392,112 +392,32 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (E12c), a temporary is built in the target's scope. No primitive references (the user's call: assignment to a
   reference repoints, and a number has no field to write through). Write-through assignment was rejected: `x = y` must
   imply `x == y`.
-- **`&` on a parameter means it may write (QCC, the user's decision 2026-10-31; not built yet - held with the scoping
-  rework).** A parameter or receiver `p T&` may write the caller's instance; a bare `p T` can never affect the caller
-  (it may write its own copy), passed by value or pointer as the compiler chooses, unobservably (a pointer only where
-  nothing the call reaches writes storage of that type). No `mut` on parameters, receivers or references; a view taken
-  from a bare parameter or constant data is read-only inside the body and never leaves it as a reference: every `&`
-  a signature shows is writable and shared, and read-only is always said by a value (the user, 2026-10-31) - a result
-  `T&` hands back only storage reached through a `&` parameter, a global or a shared field, else it is an error
-  naming the value result, which the compiler hands over by pointer where nothing changes the source. `&` stays on fields, elements, type
-  arguments, `?&` and a result handing back an existing instance. Globals stay immutable unless written `mut` (the
-  user, 2026-10-31: "Keep mut and make globals immutable by default") - the one place `mut` is written. Enforced
-  (the user's "Yes do them"): a `&` parameter the body never writes, passes to a `&` parameter or stores shared is an
-  error naming `p T`; a bare parameter stored shared is an error naming `p T&` or `.Clone()`; a write to a bare
-  parameter nothing reads afterwards is an error naming `p T&` (the forgotten `&`). A stored reference cannot be
-  declared read-only (accepted; revisit if code wants it). **Begun behind `OLANG_PARAMS=new`** (2026-10-31, `wt-rework`,
-  docs/rework.md section 10): a bare struct or array is passed as a read-only reference written bare (a copy on entry
-  where its body writes it), D9d-D9f, `&Name()` in traits, `tools/param_migrate.olang`; **round 2b** (docs/rework.md
-  section 11): a body's written reference levels inferred (read-only where a read-only value is stored into one,
-  `load.RoLevels`), results narrowed or following their arguments, G29 instances only where a body decides on a
-  length, a `?&` parameter read-only unless its body needs it writable, a body's level made read-only before any copy
-  on entry (provisional, mine, the user absent) - bench's instruction counts unchanged; **round 2c** (docs/rework.md
-  section 12): a reference field no code writes through read-only by inference, per struct type (mine, the user absent:
-  not per instance - a function value carries no binding), decided by checking again (a refusal resting on one marks it
-  written), lends as deep as the callee uses them, a function value's bare parameter keeping nothing - std 40 of 40 test
-  files under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`, with `tests/params/`), a split value (a
-  bare enum's copy) lent by its storage where the callee puts nothing into what it reaches (docs/scope-model.md 3.3,
-  mine), a nullable parameter written through what it reaches made writable and one only handed back followed (its
-  result read-only where its argument is); fixed on the way: a permission conversion and `x!` had hidden a bare
-  parameter's view (a writable instance over the caller's text, a choice writing the caller's node), the evaluator read
-  an aggregate converted to itself as a zero; compiler/'s migrated root down to 326 distinct errors, most of them
-  readers handing back a view of a `&` parameter given bare data - the by-pointer value results' job; **round 2d**
-  (docs/rework.md section 13): a result written `T&` handing back a bare parameter's reach, constant data or an
-  immutable global is an error naming the value result (D9g, `param_migrate` rewrites it); a value array result that
-  is a view of an argument is handed back uncopied, its caller copying it only where it keeps it (D9h; function values,
-  `any` slots and adapters through copying wrappers, the evaluator copying every return); a plain function's value
-  result holding references handed back from bare parameters' reach follows them, read-only where the argument is
-  (mine, the user absent; such a function is no function value); enum payload fields read-only by inference as a
-  struct's are; an enum holding references by pointer, judged once its parts are laid out - bench unchanged on the
-  default path, std 40 of 40 under the switches, compiler/'s migrated root 326 -> 86 errors; found and fixed: a
-  followed result given to another came out writable, a lambda captured a bare struct by its pointer; **round 2e**
-  (docs/rework.md section 14): a bare parameter's own storage kept in what its function hands back (a constructor's
-  field, a payload, an item, a kept lambda's capture) is the callee's copy, made by a caller whose argument may change
-  (constant data, a value made for the call, a bare parameter of its own, an immutable global, a local nothing writes
-  are passed as they are - bench copies nothing), the evaluator copying where a value is built (mine, the user absent:
-  the copy, not a refusal - QCE's "declared by value"); stored into existing storage it is refused naming `p T&`;
-  `:=` of a plain bare parameter a value copy; open point 5 (a function type's `&` result may hand back what its `&`
-  parameters reach); D9d's three misses (a walk is no use, a handle copied out and stored or kept is), split values and
-  read-only temporaries lent to bare parameters (O17, O25h, section-8 relaxations) - compiler/'s migrated root 86 -> 66
-  errors, std 40 of 40; **round 2f** (docs/rework.md section 15): bulk review 5's fixes - read-only is the level
-  reached (an element, a walk's element, what an instance hands back following a read-only argument, an immutable
-  global's reach; a copy on entry keeps its levels below its top read-only), a bare parameter kept wherever the result
-  outlives its argument's storage and can name storage of its type (Push, Put, a local, a choice, a captured slice), an
-  argument the same call may write another way copied for the call (2.10: a `&` argument reaching its type, a mutable
-  global, a function value or `any` beside it), a task's bare argument copied at the spawn where its join block may
-  write its type (F7) and a generator's bare parameters captured as values, an `any` of a bare parameter a copy, the
-  evaluator copying every bare parameter on entry (mine, the user absent: "where unsure, kept, so the caller copies", the coordinator's direction);
-  D9g's note naming the parameter `&` where a caller writes through the result (a value result had made std/flags'
-  callers write a copy); G30's decided `if` that leaves no longer checks what follows it in that instance (an E16 at
-  `ts[0]` after `if ts.Len() == 0 { return }`, the default path too). A function with a bare parameter is a value of a
-  function type passing it by value through a wrapper (F5). **A kept bare parameter is refused (D9e, the user's
-  decision 2026-11-01: "copying by assigning to a value variable from a reference variable should be fine. No copy
-  needed. In fact, copy should go as a method")**: where a body keeps a bare parameter's own storage in what it hands
-  back, the error at the parameter names the written copy (`c T = p`) or `p T&` - round 2e's hidden caller copy is gone;
-  `.Clone()` waits on the handles decision (round 3). **The hidden copies left (the user, 2026-11-01)**: a bare value
-  passed by pointer is copied exactly where one of two guarantees cannot be proved, each copy listed by `-memory` -
-  (A) the callee does not write it: an olang body is checked, so never; C's `const T*` is trusted (X1a: breaking it
-  unchecked); a non-const `T*` (`p T&`) given an owned value (a local, a field reached from one) borrows it writably,
-  given what may not be lent writably (a bare parameter - the body's own copy on entry, as for an olang `&` -, constant
-  data, an immutable global, a read-only view) is copied for the call, since old C APIs leave `const` out; (B) nothing
-  else changes it during the call: seen code (bodies, a lambda written at the call) is read, unseen code (a function
-  value, an `any`, a spawn's join block - F7) copies, a C call copies only where some export fn may write that storage
-  type (C may call back), another thread outside a join is the program's race (X22, D9; built 2026-11-01 but copying
-  only the parts that may change, round 3). Mine: an export fn's `CStr?&` fits a C function pointer's whatever their
-  permissions (X10 - it was a type mismatch under the switch); a read-only view local never assigned made from what
-  cannot change is itself stable; an atomic read of a bare parameter's own value, or a bare one given to a `&` read
-  atomically, is an error naming `p T&` (its own value never changes - std/cancel's migrated token hung). Left before the flip: compiler/'s migrated root
-  115 -> 53 errors, none the tool can fix - readers of read-only trees taking `&`, read-only copies kept, section 8
-  over a bare reach's temporaries (docs/rework.md 15.6) - then the self-build under the switches, the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
-  The entry below is today's rule until it lands.
-- **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
-  must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
-  its own key text (a copy at Put of a new key, none on an update or a lookup); `Map<String&, V>` shares the caller's,
-  which the `&` says. So a value array may be a field, an element or a type argument by value (T7a/T7d relaxed: its
-  storage lives with its container, a store copies into it), a run-time-length array may be passed by value (D9a/QP3's
-  error goes) and the 128-byte cap on by-value parameters goes (D9c): a bare parameter is passed by pointer as the
-  compiler chooses, copied only where the callee keeps or writes it. The entries below are today's rules until it
-  lands. **Begun behind `OLANG_PARAMS=new`** (round 3, 2026-11-01, docs/rework.md section 16): run-time value arrays
-  held by value in fields, elements, payloads and type arguments, the container's own (stores copy in, a copy of the
-  whole copies them, deep through values and shallow at references - `typed.MakeKind.Copy`, lowering's Copy helper; a
-  part counts for `HoldsRefs` so a copy missed aliases and never frees early, mine); `Map<String, V>` owns its keys by
-  construction; an array of references reads as an array of values where only read (a bare parameter), copied where
-  held (mine); D9a/D9c were already gone under the switch. The readers that give values (`Split` an `Array<String>`,
-  `Lines`, `filepath.Dir`, `os.ReadDir`, `ArrayIter` holding its array, flags' parser holding its text) are
-  param_migrate's hand forms (`tools/params/`, folded into std at the flip) - copying where views would do; a part
-  owning storage is stored through (O25g), so its container's scope is passed exactly. verify-params' 40 files pass.
-  **Round 3b** (docs/rework.md section 17): the two-guarantee rule (the coordinator's) - no copy where nothing writes a
-  value and nothing changes what it views while it lives: a body hands back a local holding its parameters' views
-  with their copies left out (D9h for every value holding storage, a constructor's fields too; its callers copy where
-  they keep it), and a local or a temporary holds views in place of its copy where its whole body proves it written by
-  nothing but a scalar field or a body keeping its parts (a walk's Next), escaping nowhere and viewing stable storage
-  (mine, the user absent: decided structurally per body, anything unproved copies) - `for w in t.Split(" ")`, `for l
-  in t.Lines()`, `a.Iter().Fold(...)` copy nothing (bench's text -21% instructions, an Iter Fold -76%); json takes its
-  text bare, list's Last reads through its fields, a copy sharing no reference asks no writable argument, FRO joins
-  fields one store makes name one storage, no `mut` rendered; verify-params runs every std test file (48), all pass.
-  Found and fixed: text written in the program given a `&` parameter of `Array<Char>&` was handed over as the constant
-  itself (T25d now). Left: 2.10's partial copies, handles as values, compiler/'s readers (its migrated root 64
-  errors, 17.8).
+- **`&` on a parameter means it may write (QCC, the user's decision 2026-10-31) - REVERSED by the user 2026-11-01
+  (QCK: "Yes, pause it and go back to mut") before it landed.** Built behind `OLANG_PARAMS=new` (rounds 2a-3b,
+  docs/rework.md sections 10-17), it held only as far as the compiler proved, for every bare argument it passed by
+  pointer, that the callee writes it not and nothing else changes it during the call - a large proof machinery with
+  hidden copies wherever a proof was missing, and most of rounds 2b-3b rebuilt what a read-only `T&` gives for free.
+  Removed in round 3d (docs/rework.md section 18): the switch, "every `&` may write", bare parameters by pointer,
+  D9d-D9g, per-level and per-field inferred permission, the entry, aliasing and caller copies, `param_migrate`. Today's
+  rule stands: `p mut T&` may write the caller's, `p T&` is a read-only shared view, `p T` a value (a copy by meaning);
+  globals immutable unless `mut`.
+- **A guarantee is declared by holding a value (QCE, the user's decision 2026-10-31; built 2026-11-01, on the default
+  path since round 3d).** What must not change from outside is declared by value and gets its own copy where it is
+  kept: an array of a run-time length may be a field, an element, a payload or a type argument by value (T7a relaxed:
+  `type person struct(name String, age I64)`, `Vec<String>`, `Array<String>(n, "ab")`, `String["a", "bc"]`) - the
+  container's own, a store copying into it (`typed.MakeKind.Copy`, lowering's Copy helper: deep through values, shallow
+  at references); `Map<String, V>` holds its own key text (a copy at Put of a new key, none on an update or a lookup),
+  `Map<String&, V>` shares the caller's, which the `&` says. A constructor's parameter may hold a run-time array by value
+  (its field's copy), and a value owning parts given a by-value parameter or receiver is copied at the call (mine, QCK's
+  meaning of `p T`). Not taken (mine, the user absent): D9a's run-time-length error and D9c's 128-byte cap stay for
+  other parameters - lifting them needs the by-pointer passing QCK reverted. **D9h** (mine): a value result viewing what
+  a function is given is handed back uncopied, its callers copying where they keep it, and a local holds views in place
+  of its copy where its body proves nothing could tell (`typed.ViewWalk`, lowering's `viewLocals`) - an optimization, no
+  meaning; on the default path a reference parameter is taken to keep what it is given and its referent to be changeable
+  by another `mut` name, and a view is read where it stands only where no call in its statement could write it (no
+  closure or `any` reached through an argument, no global through which storage may be written - `check.mutStorage`).
+  Rows laid out in place given where run-time rows are wanted are widened each in turn (they were read as pairs). **T25d** (found by round 3b, on the default path too): text written in the program given a
+  `mut` reference of the type it is declared over was handed over as the constant itself - refused, naming `$"abc"`.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at
@@ -525,14 +445,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   inferred, never written. A local is fixed when its value's length is known and nothing assigns it as a whole later (a
   pre-scan of the body); an inline field when its declaration gives it a length (`m := Array<F32>(16)`); an immutable
   global from its initializer; an array of arrays held by value takes its elements' length from its fill or literal. A
-  value array elsewhere inside a value is `&` (T7a), a payload's included (in place only through a struct). Arrays may
+  run-time value array elsewhere inside a value is the value's own (T7a, QCE below). Arrays may
   be **passed by value** (D9a): a function is compiled once per argument length (an instance, G29), in which `a.Len()`
   is a constant and an `if`, conditional or `match` on it is decided per instance (G30); a run-time-length argument is
-  an error naming `&` or a slice. A by-value aggregate parameter holds at most 128 bytes (D9c), a bare type variable
+  an error naming `&` or a slice (but a constructor's, which its field keeps a copy of - QCE). A by-value aggregate parameter holds at most 128 bytes (D9c), a bare type variable
   aside. A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
   v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
   arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
-  lengths (D8f), constructors by value (`tools/arrays_migrate.olang` migrates
+  lengths (D8f), constructors taking a fixed array by value (`tools/arrays_migrate.olang` migrates
   code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
@@ -1024,7 +944,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   named function fits a superset list, re-encoded. The default error, bare `error`, R15-R19 and generalization are
   gone (the user: "error should always require an actual error"). `main` writes `?` when it can fail (R1d). Stage 0 checks
   the program again whenever a set read before it was final grows - a recursive call, a cycle - keeping both
-  attempts' memory; a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
+  attempts' memory, every signature signed before the first (an attempt done again had lost what signing said); a set written on one function of the cycle avoids it (compiler/generic.olang's canon parser).
   **Words in a set (R1c, 2026-10-17, the coordinator's decision):** `? ListError.EMPTY` names one word, so a function
   promises exactly what it raises and `catch ListError.EMPTY` is complete (R14 judges word by word); inferred sets carry
   words (a callee's, less what clauses take); a set's words are part of a function type. std names them (`Pop`/`First`/

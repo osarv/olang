@@ -145,9 +145,6 @@ type summary struct() {
     Keeps Vec<Bool>  # by parameter: whether the body may keep something in what it names (O17)
     Stores Vec<Bool> # ... store something into it, or hand a writable reference into it out - not only keep its reference
     Puts Vec<Bool>   # ... store something into it itself, or by a callee that does - not only hand a reference out (O17b)
-    # the rework's round 2e, by parameter: a bare one passed by pointer whose own storage the body keeps past the call -
-    # a caller copies an argument for it that may change while what keeps it lives (plan.ArgCopy)
-    KeptOwn Vec<Bool>
     # a lambda's, by local: the same of each reference it captured, for a lambda that never leaves where it is made,
     # judged by its body (O17, D16c)
     CapKeeps Vec<Bool>
@@ -261,11 +258,9 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lastGenArg Term = Term.None           # ... the last such call's, for the walk's local it initializes
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
-    roTemp Bool = false                    # round 2f: the value val judges next is a temporary lent read-only (T17c)
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
     joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
-    joinCode Vec<typed.Block&>             # their code, as joins (bulk review 5, F7: what may write a task's argument)
     taskJoin Term = Term.None              # the join block of the task call val judges next: its temporaries are built there
     taskTemp Bool = false                  # judging a temporary a task is handed: what it holds must last until taskAt's join
     taskAt source.Span = source.Span(0, 0) # ... the argument it is
@@ -300,7 +295,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     moveTo Term = Term.None
     landOK Bool = false
     landing Bool = false
-    # the rework's round 3 (QCE): where the comprehensions being judged are built, innermost last - an element owning
+    # QCE: where the comprehensions being judged are built, innermost last - an element owning
     # storage (an array of a run-time length, a value with such parts) is built where its array is
     collectAt Vec<Term>
     # decide's answer for a local declared from a part of a call's built result ("x := mk(b).p"), read by the first
@@ -333,13 +328,6 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     liftGather Bool = false
     liftGrew Bool = false
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
-    # the rework's round 2e: by (body, bare parameter passed by pointer) whose own storage a use needs longer than the
-    # frame - its argument's then, and every caller copies an argument that may change (KeptOwn, plan.ArgCopy)
-    ownKept Map<pair.Pair<I64, I64>, Bool>
-    ownT Vec<Term>                          # by local: a bare parameter's own storage's term, None for any other local
-    ctorOwn Map<pair.Pair<I64, I64>, I64>   # ctorKeepsOwn's answers, by (constructor body, parameter): 1 no, 2 yes
-    exportWrite Map<I64, I64>                # exportWrites' answers, by type: 1 no export fn may write it, 2 one may
-    walk walked = walked()                  # the body being judged's locals assigned, written and borrowed (stable)
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
@@ -397,7 +385,6 @@ fn (s mut Scoper&) judgeAll(report Bool) {
     s.useMemo.Clear()
     s.useWhy.Clear()
     s.lifts.Clear()
-    s.ownKept.Clear()
     s.siteLifts.Clear()
     s.liftStor.Clear()
     s.wLocals.Clear()
@@ -479,7 +466,7 @@ fn (s mut Scoper&) instContexts(inst I64) I64 {
 fn (s mut Scoper&) fnValues() {
     for u in s.fnUses {
         rels := s.sums[u.F].Rels
-        if rels.Len() == 0 or u.Kind != FnCall and s.valueCovered(u.F, rels) { continue }
+        if rels.Len() == 0 { continue }
         at := diag.Where.Span(u.File, I64(u.Sp.Start), I64(u.Sp.End))
         if u.Kind == FnCall {
             t := u.Of
@@ -532,49 +519,6 @@ fn (s mut Scoper&) fnValues() {
             s.P.L.Diags.Error(at, msgs.LambdaValueObligations(kept) if kept != "" else msgs.LambdaValueRelates())
         }
     }
-}
-
-# open point 5 (the rework's round 2e): what a function type says of its calls under the switches - a result holding
-# references may hand back what its "&" parameters reach (QCC: every "&" in a signature is shared), so each of their
-# arguments outlives the call's result scope; a function whose only obligations are these is a value of the type
-# (valueCovered). Without the switches none: a borrowed result is written ("T&p", T22)
-fn (s mut Scoper&) valueRels(fty types.TypeId, vars Array<I64>&, rv I64, sp source.Span) Vec<rel> {
-    rs Vec<rel>
-    if not source.NewParams or rv < 0 { return rs }
-    ps := s.P.T.Items(s.P.T.Params(fty))
-    for v in range vars.Len() {
-        i := vars[v]
-        if i < 0 or i >= ps.Len() or not s.sharedParam(ps[i]) { continue }
-        rs.Push(rel(Term.Var(v), Term.Var(rv), false, sp, 0))
-    }
-    return rs
-}
-
-# whether a parameter's type is a "&" one under the switches: a writable reference
-fn (s Scoper&) sharedParam(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Ref and (s.P.T.PermOf(t) & types.Writable) != 0 }
-
-# whether body b's obligations are only what a function type says of a call through a value (valueRels): each a "&"
-# parameter's scope outliving its result scope, not exactly - so it is a value of its type (explain's "not a value")
-fn (s Scoper&) ValueCovered(b I64) Bool { return b >= 0 and b < s.sums.Len() and s.valueCovered(b, s.sums[b].Rels) }
-
-fn (s Scoper&) valueCovered(b I64, rels Vec<rel>&) Bool {
-    if not source.NewParams { return false }
-    body := s.Bodies[b]
-    for r in rels {
-        if r.Exact { return false }
-        hi := match r.Hi {
-            case Term.Var(k): k
-            case _: -1
-        }
-        lo := match r.Lo {
-            case Term.Var(k): k
-            case _: -1
-        }
-        if hi < 0 or lo < 0 or hi >= body.Vars.Len() or lo >= body.Vars.Len() or body.Vars[lo] != typed.ScopeVar.Result { return false }
-        bv := body.Vars[hi]
-        if bv != typed.ScopeVar.Param or not s.sharedParam(body.Locals[I64(bv.local)].Ty) { return false }
-    }
-    return true
 }
 
 # T32a: a method an "any" calls through its table may require nothing of its arguments' scopes its trait's signature
@@ -766,13 +710,6 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         sm.BuildAt.Push(s.buildAt[k])
     }
     s.computeKeeps(body)
-    # (round 2e: its bare parameters whose own storage it keeps past the call - a caller copies one that may change)
-    sm.KeptOwn.Clear()
-    for l in body.Params { sm.KeptOwn.Push(s.ownKept.Has(pair.Pair<I64, I64>(b, I64(l)))) }
-    s.keptByResult(body, sm)
-    # (D9e, the user's decision: a bare parameter's own storage kept past the call is refused - the copy is written, a
-    # value assigned from it, or the parameter shared, "&" - never made by its callers)
-    if report and source.NewParams { s.refuseKept(body, sm) }
     # what the body may build into each of its scope variables, directly or through a call (decision 48): a lambda's
     # prologue need ask for its thread's part only of a captured scope it may build into
     for k in range s.buildsVar.Len() {
@@ -946,7 +883,7 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
     }
 }
 
-# whether a part holds a reference or is an array of a run-time length held by value (the rework's round 3, QCE): a
+# whether a part holds a reference or is an array of a run-time length held by value (QCE): a
 # store into one builds where its container's references are, as a reference stored there must outlive them - so
 # something is stored through what reaches it (O25g), and its scope must be exact
 fn (s mut Scoper&) holdsPart(t types.TypeId) Bool { return s.holds(t) or s.P.T.OwnedPart(t) }
@@ -1019,30 +956,6 @@ type walked struct() {
     Written Vec<I64>             # the locals whose own storage a store writes, reached through no reference
     FieldTypes Vec<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
     FieldIdx Vec<I64>            # value, written through a reference
-    # the reference locals read whole - not only as the reference a place goes through - or whose referent's own storage
-    # a borrow or a slice names (round 2e: what a constructor keeps of its argument itself, ctorKeepsOwn)
-    Whole Vec<I64>
-    # ... those read whole as a call's argument, the call and the argument's index beside each, and as an operand of an
-    # operation that only reads it (round 2e: stableArg)
-    Reads Vec<I64>
-    ArgReads Vec<I64>
-    ArgCalls Vec<typed.Call&>
-    ArgIdx Vec<I64>
-    # the locals a slice given straight as a call's argument names the own storage of, the call and the argument's index
-    # beside each (F3's cost: a slice for a parameter that cannot write it writes nothing - unwritten)
-    SliceArgs Vec<I64>
-    SliceCalls Vec<typed.Call&>
-    SliceIdx Vec<I64>
-    # the locals declared from a reference local read whole, and that local, beside each (a match's held subject:
-    # keptByResult's guess leaves out a parameter read whole only so)
-    LetLocals Vec<I64>
-    LetFrom Vec<I64>
-    # the locals read whole as a choice's alternative or a lambda's capture (keptByResult's routes)
-    Escapes Vec<I64>
-    # the locals a store writes through - what they refer to - and those a borrow names through, each borrow's type
-    Through Vec<I64>
-    ThroughB Vec<I64>
-    ThroughBTy Vec<types.TypeId>
 }
 
 fn walkBody(s mut Scoper&, b I64) walked {
@@ -1068,17 +981,10 @@ fn collectBlock(bl typed.Block?&, out mut walked&) {
 fn collectStmt(st typed.Stmt?&, out mut walked&) {
     if st is null { return }
     match st {
-        case typed.Stmt.Let(_, l, x) {
-            if x == typed.Expr.Read and wholeLocal(x.p) >= 0 {
-                out.LetLocals.Push(I64(l))
-                out.LetFrom.Push(wholeLocal(x.p))
-            }
-            collectExpr(x, out)
-        }
+        case typed.Stmt.Let(_, _, x) { collectExpr(x, out) }
         case typed.Stmt.Assign(_, p, x) {
             if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
             if not flThroughRef(p) and flRoot(p) >= 0 { out.Written.Push(flRoot(p)) }
-            if flThroughRef(p) and flRoot(p) >= 0 { out.Through.Push(flRoot(p)) }
             collectField(p, out)
             collectPlace(p, out)
             collectExpr(x, out)
@@ -1139,8 +1045,7 @@ fn collectField(p typed.Lvalue&, out mut walked&) {
 fn collectPlace(p typed.Lvalue?&, out mut walked&) {
     if p is null { return }
     match p {
-        # (a reference local a place goes through is not read whole, Whole)
-        case typed.Lvalue.Deref(_, _, r) { if derefLocal(r) < 0: collectExpr(r, out) }
+        case typed.Lvalue.Deref(_, _, r) { collectExpr(r, out) }
         case typed.Lvalue.Field(_, _, b, _) { collectPlace(b, out) }
         case typed.Lvalue.Elem(_, _, e) {
             collectPlace(e.Base, out)
@@ -1152,38 +1057,15 @@ fn collectPlace(p typed.Lvalue?&, out mut walked&) {
     }
 }
 
-# a slice of a local's own storage given straight as call c's argument k: recorded with the call (SliceArgs), its parts
-# collected as a slice's are - failing where it is none
-fn collectSliceArg(c typed.Call&, k I64, a typed.Expr?&, out mut walked&) ? notSliceArg {
-    if not source.NewParams or a is null or a != typed.Expr.Slice: error notSliceArg
-    sl := a.s
-    if flThroughRef(sl.Base) or flRoot(sl.Base) < 0: error notSliceArg
-    out.SliceArgs.Push(flRoot(sl.Base))
-    out.SliceCalls.Push(c)
-    out.SliceIdx.Push(k)
-    wholeView(sl.Base, out)
-    collectPlace(sl.Base, out)
-    collectExpr(sl.Lo, out)
-    collectExpr(sl.Hi, out)
-}
-
 fn collectExpr(x typed.Expr?&, out mut walked&) {
     if x is null { return }
     match x {
-        case typed.Expr.Read(_, _, p, _) {
-            if p == typed.Lvalue.Local: out.Whole.Push(I64(p.id))
-            collectPlace(p, out)
-        }
+        case typed.Expr.Read(_, _, p, _) { collectPlace(p, out) }
         case typed.Expr.Borrow(_, ty, p) {
             if not flThroughRef(p) and flRoot(p) >= 0 {
                 out.Borrowed.Push(flRoot(p))
                 out.BorrowedTy.Push(ty)
             }
-            if flThroughRef(p) and flRoot(p) >= 0 {
-                out.ThroughB.Push(flRoot(p))
-                out.ThroughBTy.Push(ty)
-            }
-            wholeView(p, out)
             collectPlace(p, out)
         }
         case typed.Expr.Take(_, _, p) { collectPlace(p, out) }
@@ -1194,15 +1076,7 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
                 case typed.Callee.Value(v) { collectExpr(v, out) }
                 case _ { }
             }
-            for k, a in c.Args {
-                l := argLocal(unPassed(a))
-                if l >= 0 {
-                    out.ArgReads.Push(l)
-                    out.ArgCalls.Push(c)
-                    out.ArgIdx.Push(k)
-                }
-                try collectSliceArg(c, k, unPassed(a), out) catch { collectExpr(a, out) }
-            }
+            for a in c.Args { collectExpr(a, out) }
         }
         case typed.Expr.Make(_, _, m) {
             for a in m.Items { collectExpr(a, out) }
@@ -1212,26 +1086,20 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
             collectExpr(c.Reserve, out)
             collectBlock(c.Loop, out)
         }
-        case typed.Expr.Prim(_, _, op, _, args) {
-            for a in args {
-                if primReads(op) and derefLocal(unPassed(a)) >= 0: out.Reads.Push(derefLocal(unPassed(a)))
-                collectExpr(a, out)
-            }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args { collectExpr(a, out) }
         }
         case typed.Expr.Slice(_, _, sl) {
             if not flThroughRef(sl.Base) and flRoot(sl.Base) >= 0 {
                 out.Borrowed.Push(flRoot(sl.Base))
                 out.BorrowedTy.Push(types.TypeId(0))   # a slice has its base's permission (E16a), a parameter's writable
             }
-            wholeView(sl.Base, out)
             collectPlace(sl.Base, out)
             collectExpr(sl.Lo, out)
             collectExpr(sl.Hi, out)
         }
         case typed.Expr.Cond(_, _, c) {
             collectExpr(c.C, out)
-            if c.A is not null and escLocal(c.A!, 0) >= 0 { out.Escapes.Push(escLocal(c.A!, 0)) }
-            if escLocal(c.B, 0) >= 0 { out.Escapes.Push(escLocal(c.B, 0)) }
             collectExpr(c.A, out)
             collectExpr(c.B, out)
         }
@@ -1256,10 +1124,7 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
                 case typed.FnVal.Named(id) { out.Callees.Push(I64(id)) }
                 case typed.FnVal.Lambda(id, caps, _) {
                     out.Callees.Push(I64(id))
-                    for c in caps {
-                        if escLocal(c.Outer, 0) >= 0 { out.Escapes.Push(escLocal(c.Outer, 0)) }
-                        collectExpr(c.Outer, out)
-                    }
+                    for c in caps { collectExpr(c.Outer, out) }
                 }
                 case typed.FnVal.Adapter(id, r, _) {
                     out.Callees.Push(I64(id))
@@ -1278,72 +1143,6 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
         case typed.Expr.Away(_, _, y) { collectExpr(y, out) }
         case _ { }
     }
-}
-
-# whether an operation only reads its operands - no conversion naming one's storage, no atomic, no destruction (round 2e)
-fn primReads(op typed.PrimOp) Bool {
-    return match op {
-        case typed.PrimOp.Convert, typed.PrimOp.AnyMake, typed.PrimOp.AnyInstance, typed.PrimOp.Destroy, typed.PrimOp.Retire: false
-        case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap: false
-        case typed.PrimOp.AtomicCompareSwap: false
-        case _: true
-    }
-}
-
-# the reference local a place's own storage is reached from directly - its referent, a field, an element or a payload
-# of it, no other reference between - into Whole (round 2e)
-fn wholeView(p typed.Lvalue&, out mut walked&) {
-    match p {
-        case typed.Lvalue.Deref(_, _, r) { if derefLocal(r) >= 0: out.Whole.Push(derefLocal(r)) }
-        case typed.Lvalue.Field(_, _, b, _) { wholeView(b, out) }
-        case typed.Lvalue.Elem(_, _, e) { wholeView(e.Base, out) }
-        case typed.Lvalue.Payload(_, _, pl) { wholeView(pl.Base, out) }
-        case _ { }
-    }
-}
-
-# the reference local an argument reads whole, or slices what it refers to (round 2e's argument reads), -1 for none
-fn argLocal(a typed.Expr&) I64 {
-    match a {
-        case typed.Expr.Slice(_, _, sl) {
-            b := sl.Base
-            if b == typed.Lvalue.Deref: return derefLocal(b.ref)
-        }
-        case _ { }
-    }
-    return derefLocal(a)
-}
-
-# the local a reference read whole is, -1 for any other expression
-# the reference local a value is read or viewed whole out of - through conversions, a promotion, a dereference read
-# whole or borrowed - -1 for none (keptByResult's escaping routes)
-fn escLocal(x typed.Expr&, depth I64) I64 {
-    if depth > 8: return -1
-    u := unPassed(x)
-    return match u {
-        case typed.Expr.Promote(_, _, pr): escLocal(pr.X, depth + 1)
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): match p {
-            case typed.Lvalue.Local(_, _, id): I64(id)
-            case typed.Lvalue.Deref(_, _, r): escLocal(r, depth + 1)
-            case _: -1
-        }
-        case typed.Expr.Slice(_, _, sl): match sl.Base {
-            case typed.Lvalue.Deref(_, _, r): escLocal(r, depth + 1)
-            case typed.Lvalue.Local(_, _, id): I64(id)
-            case _: -1
-        }
-        case _: -1
-    }
-}
-
-fn derefLocal(r typed.Expr&) I64 {
-    match r {
-        case typed.Expr.Read(_, _, p, _) {
-            if p == typed.Lvalue.Local: return I64(p.id)
-        }
-        case _ { }
-    }
-    return -1
 }
 
 fn collectArm(a typed.Arm?&, out mut walked&) {
@@ -1414,13 +1213,11 @@ fn (s mut Scoper&) visit(v I64) {
 
 fn (s mut Scoper&) run() {
     b := s.B
-    s.ownT.Clear()
     for k in range b!.Locals.Len() {
         s.terms.Push(Term.None)
         s.stors.Push(Term.Block(typed.BlockId(0)))
         s.origin.Push(-1 if b!.Locals[k].Kind == typed.LocalKind.Var or b!.Locals[k].Kind == typed.LocalKind.Hidden else -2)
         s.viewOf.Push(-1)
-        s.ownT.Push(Term.None)
     }
     for k in range b!.Vars.Len() {
         match b!.Vars[k] {
@@ -1436,15 +1233,6 @@ fn (s mut Scoper&) run() {
                 if b!.Params.Len() > 0 { s.terms[I64(b!.Params[0])] = Term.Var(k) }
             }
         }
-    }
-    # the rework's round 2e: a bare parameter passed by pointer is the callee's own value - its own storage the frame's
-    # until a use needs it longer (then its argument's: KeptOwn), what it reaches where its argument's references are
-    s.walk = walked()
-    if source.NewParams and b!.Root is not null { collectBlock(b!.Root, s.walk) }
-    for l in b!.Params {
-        if not s.bareParam(I64(l)) { continue }
-        kept := s.ownKept.Has(pair.Pair<I64, I64>(s.Id, I64(l)))
-        s.ownT[I64(l)] = s.terms[I64(l)] if kept else Term.Block(typed.BlockId(0))
     }
     # a parameter sharing another's scope variable (O4a) lives where that one does
     for i in range b!.Params.Len() {
@@ -3523,54 +3311,7 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
             return s.sums[cb].Keeps[k]
         }
         case typed.Callee.Extern(_), typed.Callee.Helper(_, _) { return false }
-        case typed.Callee.Value(_) { return not s.valueKeepsNothing(c, k) }
         case _ { return true }
-    }
-}
-
-# the rework's round 2c: whether a call through a function value keeps nothing of its argument k - a bare parameter
-# (a read-only reference, 2.10) of a function type whose result holds no reference: what the function is keeps no view
-# of it past the call but in its result (no function type relates its parameters' scopes, T22a, and a capture outlives
-# no parameter), and writes nothing through it
-fn (s mut Scoper&) valueKeepsNothing(c typed.Call&, k I64) Bool {
-    if not source.NewParams: return false
-    fty := s.calleeType(c)
-    if fty == types.UnknownT or s.P.T.KindOf(fty) != types.Kind.Func: return false
-    ps := s.P.T.Items(s.P.T.Params(fty))
-    if k >= ps.Len() or s.P.T.KindOf(ps[k]) != types.Kind.Ref or (s.P.T.PermOf(ps[k]) & types.Writable) != 0: return false
-    return not s.P.T.HoldsRefs(s.P.T.Result(fty))
-}
-
-# under the rework's switches, whether a split argument k may be lent by its own storage: its callee puts nothing into
-# what it reaches (docs/scope-model.md 3.3 - "not reg" makes that binding sound), so what the callee keeps of it - a
-# result borrowed from it - is held to the copy's scope, the shorter one, and judged there as any result is
-fn (s mut Scoper&) lentByStorage(c typed.Call&, k I64) Bool {
-    if not source.NewParams or s.calleeStoresArg(c, k) or s.calleePutsArg(c, k): return false
-    t := c.Target
-    if t != typed.Callee.Body: return false
-    return not s.putsUnder(I64(t.id), k)
-}
-
-# whether body cb's obligations need something to outlive what its parameter k reaches - what it stores there through
-# the parameter's references, "reg" (docs/scope-model.md 3.3); a term the summary cannot place counts
-fn (s mut Scoper&) putsUnder(cb I64, k I64) Bool {
-    sm := s.sums[cb]
-    if not sm.Done and not sm.Judging: return true
-    v := s.paramVar(cb, k)
-    for r in sm.Rels {
-        if r.Hi == r.Lo: continue
-        if reaches(r.Lo, v, k) or (r.Exact and reaches(r.Hi, v, k)): return true
-    }
-    return false
-}
-
-# whether a term may be parameter k's scope variable v, or one derived from its argument, or one the term cannot tell
-fn reaches(t Term, v I64, k I64) Bool {
-    return match t {
-        case Term.Var(i): i == v
-        case Term.Derived(p, _): p == k
-        case Term.Set(_), Term.Untraced: true
-        case _: false
     }
 }
 
@@ -3630,24 +3371,6 @@ fn regionLocal(r typed.Expr&) I64 {
 
 # ---- writes through x[i] (E31b) ----
 
-# whether a call's parameter i is written as a bare type variable (an instance's binding), under the rework's round 2
-fn (s mut Scoper&) tvParam(c typed.Call&, i I64) Bool {
-    if not source.NewParams: return false
-    match c.Target {
-        case typed.Callee.Body(id) {
-            match s.Bodies[I64(id)].Of {
-                case typed.BodyOf.Fn(inst) {
-                    ds := s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))
-                    return i < ds.Len() and s.P.T.KindOf(ds[i]) == types.Kind.Var
-                }
-                case _ { }
-            }
-        }
-        case _ { }
-    }
-    return false
-}
-
 # a call's argument i, for a writable reference parameter: a copy of an element no one holds - x[i] read through At, a
 # field or an element of it, a "try ... catch default" value, a conditional or a match choosing places - is written
 # where the write is lost, an error; but a handle element lent as its reference to a callee using it only through it
@@ -3689,9 +3412,6 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
     handle := s.isHandle(et)
     if spawned and handle and how == 1 { at = s.nameSpan(callSp) }
     if how == 0 { return }
-    # (a choice given a bare type variable's parameter - an instance's reference binding, held as given under the
-    # rework's round 2, as the checker's argFollows: nothing written through it is known here - round 2d)
-    if how == 2 and s.tvParam(c, i) { return }
     if not spawned {
         match c.Target {
             case typed.Callee.Body(id) {
@@ -4427,17 +4147,15 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
         case typed.Stmt.Defer(_, b) { s.block(b) }
         case typed.Stmt.Join(_, jn) {
             s.joins.Push(jn.Code.Id)
-            s.joinCode.Push(jn.Code)
             s.block(jn.Code)
             try s.joins.Pop() catch { }
-            try s.joinCode.Pop() catch { }
             for c in jn.Clauses { s.block(c.Code) }
         }
         case typed.Stmt.Spawn(sp, sw) { s.spawn(sp, sw) }
         case typed.Stmt.Yield(_, x) {
             n := s.collectAt.Len()
-            if source.NewParams and n > 0 and s.P.T.OwnedPart(x.Type()) or source.NewParams and n > 0 and s.P.T.OwnsParts(x.Type()) {
-                # (the rework's round 3: an element owning storage is built where its comprehension's array is)
+            if n > 0 and (s.P.T.OwnedPart(x.Type()) or s.P.T.OwnsParts(x.Type())) {
+                # (QCE: an element owning storage is built where its comprehension's array is)
                 d := s.collectAt[n - 1]
                 v := s.val(x, d)
                 if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, FitElem) }
@@ -4466,7 +4184,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         moved = s.joinTerm(moved, lift) if moved != Term.None else lift
     }
     s.stors[I64(l)] = s.blockTerm(loc.In)
-    # (the rework's round 3, QCE: so does a field holding a run-time array by value - its elements the instance's own,
+    # (QCE: so does a field holding a run-time array by value - its elements the instance's own,
     # copied in where given existing storage, built there where given new storage)
     if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and loc.In == typed.BlockId(0) and (s.borrowed(I64(l)) or s.P.T.OwnedPart(t)) {
         # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
@@ -4987,8 +4705,8 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     t := p.Type()
     s.targets.Push(p)
     s.placeOperands(p)
-    if source.NewParams and partOf(p) and s.P.T.OwnedPart(t) {
-        # the rework's round 3 (QCE): a part holding an array of a run-time length by value - its elements its
+    if partOf(p) and s.P.T.OwnedPart(t) {
+        # QCE: a part holding an array of a run-time length by value - its elements its
         # container's own storage, where the container's references are (types.OwnedPart): what is stored is built
         # there, a copy of existing storage (check's storeCopy) or new storage the store takes
         sl := s.slotOf(p)
@@ -5076,7 +4794,7 @@ fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
         # only existing storage of one of this function's blocks that closes first, given as the argument: anything else -
         # a temporary built for the call included - the store's own fit judges
         if not t.Runs() or s.order(t, slot) != FailsBlock or s.isFresh(c.Args[ai]) or s.madeLocal(c.Args[ai], 0) < 0 { continue }
-        if s.report { s.noteBareArg(s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()), c.Args[ai]) }
+        if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()) }
         return true
     }
     return false
@@ -5442,459 +5160,6 @@ fn (s mut Scoper&) isParam(l I64) Bool {
     return false
 }
 
-# ---- bare parameters passed by pointer (the rework's round 2e, docs/rework.md 2.10, 14) ----
-#
-# A bare parameter is the callee's own value (D9); one passed by pointer is a read-only reference to the caller's
-# storage, which stands for the copy while nothing can tell them apart. So its own storage is judged as a value's own,
-# the frame's - what it reaches through its references as its argument's - until a use needs it longer than the call
-# (a value built from it returned, D9e): then as its argument's, and the body's summary says it keeps it (KeptOwn) - a
-# caller copies an argument for it that may change while what keeps it lives (plan.ArgCopy), which makes the copy the
-# callee's own as by value; constant data, a value made for the call, a bare parameter of the caller and a local nothing
-# writes after it is made cannot change, and are passed as they are
-
-# D9e: each bare parameter whose own storage the body keeps in what it hands back (KeptOwn) refused, at its declaration,
-# naming the written copy and the shared form; noted as a bare parameter, so param_migrate takes it "&"
-fn (s mut Scoper&) refuseKept(body typed.Body&, sm summary&) {
-    for k in range body.Params.Len().Min(sm.KeptOwn.Len()) {
-        if not sm.KeptOwn[k]: continue
-        l := body.Locals[I64(body.Params[k])]
-        ty := s.Spell(s.P.T.Referent(l.Ty)) if s.Spell is not null else "T"
-        rec := s.err(l.Sp, msgs.BareKept(s.P.L.Names.Text(l.Name), ty))
-        s.note(rec, body.File, l.Sp, msgs.NoteBareParam(s.P.L.Names.Text(l.Name)))
-    }
-}
-
-# bulk review 5 (D9e): a bare parameter passed by pointer whose own storage the result may hold by a route the frame
-# term does not follow - a local made from it, a conditional, a slice, a capture, a call storing its argument (a Vec's
-# Push) - is kept too, where it is unsure: the result outlives what the argument's storage is (a relation of the
-# body's), and the result's type can name storage of the parameter's type (a reference to it, a view of its array, a
-# function value, an "any"). Then every caller copies an argument that may change, as by value
-fn (s mut Scoper&) keptByResult(body typed.Body&, sm mut summary&) {
-    if not source.NewParams or s.P.T.KindOf(body.Ty) != types.Kind.Func: return
-    rv := s.resultVarOf(body.Ty)
-    if rv < 0: return
-    vars := s.P.T.ScopeVarsOf(body.Ty)
-    rt := s.P.T.Result(body.Ty)
-    # (round 2f: an instance whose declaration's result is a type variable - a Vec's At giving a T - builds no value of
-    # it: what it gives is what it was given, an element, never the parameter's own storage, whatever T is bound to)
-    if s.declResultVar(body): return
-    for k in range body.Params.Len() {
-        if sm.KeptOwn[k] or not s.bareParam(I64(body.Params[k])): continue
-        # (round 2f, D9e refused: only a parameter whose own storage the body names somewhere - read whole, viewed -
-        # other than as a match's held subject, whose payloads it reads, is guessed kept)
-        if not s.ownNamed(body, I64(body.Params[k])): continue
-        if not s.relHolds(sm.Rels, vars, k, rv): continue
-        own := s.P.T.Referent(body.Locals[I64(body.Params[k])].Ty)
-        if not s.mayName(rt, own, 0): continue
-        sm.KeptOwn[k] = true
-    }
-}
-
-# whether the body names bare parameter l's own storage - reads it whole or views it (walked.Whole) - other than to
-# declare a match's held subject from it
-fn (s mut Scoper&) ownNamed(body typed.Body&, l I64) Bool {
-    # (a call's argument - "v.Push(t)" -, a choice's alternative, a capture, a view through it)
-    if s.walk.ArgReads.Has(l) or s.walk.Escapes.Has(l) or s.walk.ThroughB.Has(l): return true
-    # (a local made from it - "s := t" - but a match's held subject)
-    for k in range s.walk.LetFrom.Len() {
-        if s.walk.LetFrom[k] != l: continue
-        hl := s.walk.LetLocals[k]
-        if hl < 0 or hl >= body.Locals.Len() or body.Locals[hl].Kind != typed.LocalKind.Held: return true
-    }
-    return false
-}
-
-# whether a function instance's declared result is a type variable (its declaration's, before substitution)
-fn (s mut Scoper&) declResultVar(body typed.Body&) Bool {
-    inst := match body.Of {
-        case typed.BodyOf.Fn(i): i
-        case _: -1
-    }
-    if inst < 0: return false
-    return s.P.T.KindOf(s.P.T.Result(s.P.Sig(s.P.InstanceFn(inst)))) == types.Kind.Var
-}
-
-# whether the relations say what parameter k's scope variable names outlives the result's scope variable rv
-fn (s mut Scoper&) relHolds(rels Vec<rel>&, vars Array<I64>&, k I64, rv I64) Bool {
-    for r in rels {
-        if r.Lo != Term.Var(rv): continue
-        match r.Hi {
-            case Term.Var(v) { if v < vars.Len() and vars[v] == k: return true }
-            case _ { }
-        }
-    }
-    return false
-}
-
-# whether a value of type t may hold a reference into storage of type own: a reference whose referent is own (or own's
-# array, a view of its elements), a function value or an "any" (what they hold unknown), through type arguments,
-# elements, tuples and a struct's fields
-fn (s mut Scoper&) mayName(t types.TypeId, own types.TypeId, depth I64) Bool {
-    tb := s.P.T
-    if depth > 6: return false
-    return match tb.KindOf(t) {
-        case types.Kind.Ref: s.sameOwn(tb.Referent(t), own) or s.mayName(tb.Referent(t), own, depth + 1)
-        case types.Kind.Func, types.Kind.Any: true
-        case types.Kind.Array: s.mayName(tb.Elem(t), own, depth + 1)
-        case types.Kind.Tuple: s.anyNames(tb.Items(tb.Parts(t)), own, depth)
-        case types.Kind.Named: s.anyNames(tb.Items(tb.Args(t)), own, depth) or s.fieldsName(t, own, depth)
-        case _: false
-    }
-}
-
-fn (s mut Scoper&) anyNames(ts Array<types.TypeId>&, own types.TypeId, depth I64) Bool {
-    for x in ts {
-        if s.mayName(x, own, depth + 1): return true
-    }
-    return false
-}
-
-fn (s mut Scoper&) fieldsName(t types.TypeId, own types.TypeId, depth I64) Bool {
-    if not s.P.T.HasBody(t) or s.P.T.DeclKindOf(s.P.T.DeclOf(t)) != types.DeclKind.Struct: return false
-    return s.anyNames(s.P.T.Items(s.P.T.Fields(t)), own, depth)
-}
-
-# whether a referent is the storage own is, or a view of its array (String, a declared type over an array: its
-# elements' array)
-fn (s mut Scoper&) sameOwn(r types.TypeId, own types.TypeId) Bool {
-    tb := s.P.T
-    if tb.SameButPerm(r, own) or tb.Same(tb.Repr(r), tb.Repr(own)): return true
-    return tb.KindOf(tb.Repr(r)) == types.Kind.Array and tb.KindOf(tb.Repr(own)) == types.Kind.Array and tb.SameButPerm(tb.Elem(tb.Repr(r)), tb.Elem(tb.Repr(own)))
-}
-
-# whether local l is a bare parameter passed by pointer: a parameter of a function or method whose type is a read-only
-# reference that is never null - which no written "&" is under the switch - and no variadic one's array (D8g)
-fn (s mut Scoper&) bareParam(l I64) Bool {
-    if not source.NewParams or l < 0 or l >= s.B!.Locals.Len() { return false }
-    inst := match s.B!.Of {
-        case typed.BodyOf.Fn(i): i
-        case _: -1
-    }
-    if inst < 0 { return false }
-    return typed.BarePointer(s.P.T, s.B!, l, s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst)))))
-}
-
-# the bare parameter passed by pointer a reference value reads whole - through conversions - -1 for none
-fn (s mut Scoper&) bareRead(r typed.Expr?&) I64 {
-    if r is null { return -1 }
-    match r {
-        case typed.Expr.Read(_, _, p, _) {
-            match p {
-                case typed.Lvalue.Local(_, _, id) { return I64(id) if s.bareParam(I64(id)) else -1 }
-                case _ { return -1 }
-            }
-        }
-        case typed.Expr.Away(_, _, y) { return s.bareRead(y) }
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() == 1 { return s.bareRead(args[0]) }
-        }
-        case _ { }
-    }
-    return -1
-}
-
-# where a bare parameter's own storage is judged to be (bareParam): the frame's, or its argument's once kept
-fn (s mut Scoper&) ownTerm(l I64) Term {
-    t := s.ownT[l] if l < s.ownT.Len() else Term.None
-    return t if t != Term.None else s.whereLives(typed.LocalId(I32(l)))
-}
-
-# the bare parameter whose own storage argument i of call c is, where the callee keeps what it is given there - a
-# constructor's or a case's parameter holding references, or a bare parameter a body keeps (KeptOwn) - else -1
-fn (s mut Scoper&) ownGiven(c typed.Call&, i I64, a typed.Expr&) I64 {
-    if not source.NewParams { return -1 }
-    b := s.ownOf(a)
-    if b < 0 { return -1 }
-    cb := s.bodyOf(c.Target)
-    if cb < 0 or cb >= s.sums.Len() { return -1 }
-    match s.Bodies[cb].Of {
-        case typed.BodyOf.Case(_, _) {
-            ps := s.P.T.Items(s.P.T.Params(s.calleeType(c)))
-            return b if i < ps.Len() and s.holds(ps[i]) else -1
-        }
-        case typed.BodyOf.Ctor(_, _) {
-            ps := s.P.T.Items(s.P.T.Params(s.calleeType(c)))
-            return b if i < ps.Len() and s.holds(ps[i]) and s.ctorKeepsOwn(cb, i) else -1
-        }
-        case _ { }
-    }
-    ks := s.sums[cb].KeptOwn
-    return b if i < ks.Len() and ks[i] else -1
-}
-
-# the rework's round 2e: whether parameter i of the body a call reaches is a bare one passed by pointer whose own
-# storage that body never keeps (KeptOwn): what it keeps of the argument is only what the argument reaches - its scope
-# variable's - so a value whose references live elsewhere than its storage is lent where they are, never refused as
-# split (O17: "unwidened(unpassed(x))"); one keeping its own storage still is, its copy being this block's
-fn (s mut Scoper&) bareLent(c typed.Call&, i I64) Bool {
-    if not source.NewParams { return false }
-    cb := s.bodyOf(c.Target)
-    if cb < 0 or cb >= s.sums.Len() or not s.sums[cb].Done { return false }
-    inst := match s.Bodies[cb].Of {
-        case typed.BodyOf.Fn(k): k
-        case _: -1
-    }
-    ps := s.Bodies[cb].Params
-    if inst < 0 or i >= ps.Len() { return false }
-    if not typed.BarePointer(s.P.T, s.Bodies[cb], I64(ps[i]), s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))) { return false }
-    ks := s.sums[cb].KeptOwn
-    return i < ks.Len() and not ks[i]
-}
-
-# whether constructor body cb may keep its parameter k itself - read whole, or its referent's own storage viewed -
-# rather than only what it reaches through it ("m = of.s": a Map walk keeps the map's state, not its handle)
-fn (s mut Scoper&) ctorKeepsOwn(cb I64, k I64) Bool {
-    key := pair.Pair<I64, I64>(cb, k)
-    m := try s.ctorOwn.Get(key) catch default 0
-    if m != 0 { return m == 2 }
-    w := walkBody(s, cb)
-    ps := s.Bodies[cb].Params
-    r := k >= ps.Len() or flHas(w.Whole, I64(ps[k]))
-    s.ctorOwn.Put(key, 2 if r else 1)
-    return r
-}
-
-# the bare parameter whose own storage a value is - read whole, through conversions, or a view of it (viewBare) - -1
-fn (s mut Scoper&) ownOf(x typed.Expr&) I64 {
-    u := unPassed(s.unAway(x))
-    b := s.bareRead(u)
-    return b if b >= 0 else s.viewBare(u)
-}
-
-# a use needing bare parameter l's own storage longer than the frame (a lift proposed for it): it is judged as its
-# argument's from the next round on, and kept (KeptOwn)
-fn (s mut Scoper&) keepOwn(l I64) {
-    key := pair.Pair<I64, I64>(s.Id, l)
-    if s.ownKept.Has(key) { return }
-    s.ownKept.Put(key, true)
-    s.liftGrew = true
-    if s.Trace { s.TraceLog.Push($"kept " $s.P.L.Names.Text(s.B!.Locals[l].Name) " (a bare parameter's own storage: its callers copy) | " $s.traceAt(s.B!.Locals[l].Sp.Start)) }
-}
-
-# the arguments a call copies (round 2e): each for a bare parameter its callee keeps past the call (KeptOwn) that may
-# change while what keeps it lives - a bit each in the plan's ArgCopy, by site (lowering copies it where the call's
-# result builds). A tail call copies nothing (become: no scope of this function is left to hold a copy)
-fn (s mut Scoper&) argCopies(c typed.Call&, spawned Bool) {
-    if not source.NewParams or c.Site < typed.SiteId(0) or I64(c.Site) >= s.plan.ArgCopy.Len() or c.Tail { return }
-    cb := s.bodyOf(c.Target)
-    if cb < 0 or cb >= s.sums.Len() { return }
-    # (D9e: a kept bare parameter is refused in its callee, refuseKept - no caller copies for it)
-    m I64 = 0
-    s.plan.ArgCopy[I64(c.Site)] = m
-    # (bulk review 5, 2.10: one the same call may write another way, for the call alone - unless it cannot change)
-    inst := match s.Bodies[cb].Of {
-        case typed.BodyOf.Fn(i): i
-        case _: -1
-    }
-    if inst < 0 { return }
-    gm := Array<Bool>(c.Args.Len(), false)
-    for i in range c.Args.Len() { gm[i] = s.mutGlobalArg(c.Args[i]) }
-    decl := s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))
-    alias := typed.AliasCopies(s.P.T, s.Bodies[cb], c.Args, decl, gm)
-    if spawned { alias |= s.taskCopies(c, cb, decl) }
-    t I64 = 0
-    for i in range c.Args.Len().Min(62) {
-        if (alias & (I64(1) << i)) == 0 or (m & (I64(1) << i)) != 0: continue
-        if not gm[i] and s.stableArg(c.Args[i]): continue
-        t |= I64(1) << i
-        if s.Trace { s.TraceLog.Push($"copied argument " $i " for the call | " $s.traceAt(c.Args[i].Span().Start)) }
-    }
-    s.plan.ArgTemp[I64(c.Site)] = t
-}
-
-# the rework's round 2 (X22, docs/rework.md 2.10): the arguments a C function is given copies of, made for the call
-# alone. (A) One its pointer not "const" takes that may not be lent writably - the checker leaves it read-only: a bare
-# parameter, constant data, an immutable global, a read-only view - since old C interfaces leave "const" out of what
-# they only read. (B) One passed by pointer that an export fn of the program may write - C may call back into one,
-# handing it what it was given - read-only here and able to change (not stableArg), or a mutable global's. A pointer C
-# writes given what may be written is lent as it is; C's "const" is trusted (X1a: breaking it is unchecked)
-fn (s mut Scoper&) externCopies(c typed.Call&) {
-    if not source.NewParams or c.Site < typed.SiteId(0) or I64(c.Site) >= s.plan.ArgTemp.Len() { return }
-    f := match c.Target {
-        case typed.Callee.Extern(k): k
-        case _: -1
-    }
-    if f < 0 { return }
-    T := s.P.T
-    ps := T.Items(T.Params(s.P.Sig(f)))
-    t I64 = 0
-    for i in range c.Args.Len().Min(ps.Len()).Min(62) {
-        a := c.Args[i]
-        at := a.Type()
-        if not T.IsRef(at) or T.IsNullable(at) or T.ForeignRef(at): continue
-        ro := (T.PermOf(at) & types.Writable) == 0
-        written := T.IsRef(ps[i]) and (T.PermOf(ps[i]) & types.Writable) != 0
-        copied := ro if written else s.exportWrites(T.Referent(at)) and (s.mutGlobalArg(a) or ro and not s.stableArg(a))
-        if not copied: continue
-        t |= I64(1) << i
-        if s.Trace { s.TraceLog.Push($"copied argument " $i " for a C function | " $s.traceAt(a.Span().Start)) }
-    }
-    s.plan.ArgTemp[I64(c.Site)] = t
-}
-
-# whether some export fn of the program may write storage of type own (WriteWalk over its body): C may call one while a
-# C function runs, handing it what that function was given
-fn (s mut Scoper&) exportWrites(own types.TypeId) Bool {
-    m := try s.exportWrite.Get(I64(own)) catch default 0
-    if m != 0: return m == 2
-    w := typed.WriteWalk(s.P.T, s.Bodies, own)
-    r := false
-    for b in s.Bodies {
-        inst := match b.Of {
-            case typed.BodyOf.Fn(k): k
-            case _: -1
-        }
-        if inst < 0 or not s.P.FnDecl(s.P.InstanceFn(inst)).Export: continue
-        if b.Root is null or w.Block(b.Root): r = true
-        if r: break
-    }
-    s.exportWrite.Put(I64(own), 2 if r else 1)
-    return r
-}
-
-# a task's bare arguments passed by pointer that something may write before its join (bulk review 5, F7; 2.10): the task
-# runs beside its spawner, so one is copied at the spawn, on the spawning thread, unless nothing in the join block - its
-# statements, its other tasks, a call through a function value or an any - may write storage of its type
-fn (s mut Scoper&) taskCopies(c typed.Call&, cb I64, decl Array<types.TypeId>&) I64 {
-    if s.joinCode.Len() == 0 { return 0 }
-    b := s.Bodies[cb]
-    m I64 = 0
-    w := typed.WriteWalk(s.P.T, s.Bodies, types.UnknownT)
-    for i in range c.Args.Len().Min(b.Params.Len()).Min(62) {
-        if not typed.BarePointer(s.P.T, b, I64(b.Params[i]), decl): continue
-        w.Own = s.P.T.Referent(b.Locals[I64(b.Params[i])].Ty)
-        if w.Block(s.joinCode[s.joinCode.Len() - 1]) { m |= I64(1) << i }
-    }
-    return m
-}
-
-# whether an argument is a mutable global's storage, or a part of it (2.10's other route: the callee may write it by name)
-fn (s mut Scoper&) mutGlobalArg(a typed.Expr&) Bool {
-    p := match a {
-        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
-        case typed.Expr.Slice(_, _, sl): sl.Base
-        case typed.Expr.Prim(_, _, op, _, args): readPlaceOf(args[0]) if typed.PassesRefs(op) and args.Len() > 0 else null
-        case _: null
-    }
-    for _ in range 16 {
-        if p is null: return false
-        match p {
-            case typed.Lvalue.Global(_, _, mi, n) {
-                v := s.P.GlobalDecl(mi, n)
-                return v is not null and generic.WrittenMut(v.Ty)
-            }
-            case typed.Lvalue.Field(_, _, b, _) { p = b }
-            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
-            case typed.Lvalue.Payload(_, _, pl) { p = pl.Base }
-            case _ { return false }
-        }
-    }
-    return false
-}
-
-fn readPlaceOf(x typed.Expr&) typed.Lvalue?&x {
-    return match x {
-        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
-        case _: null
-    }
-}
-
-# whether an argument cannot change while what a callee keeps of it lives (plan.ArgCopy): constant data, a value made
-# for the call, a bare parameter of this function (its own callers copy for it, KeptOwn), an immutable global, or a
-# local nothing assigns, writes or lends writably once it is made - its parts too
-fn (s mut Scoper&) stableArg(a typed.Expr?&) Bool {
-    if a is null { return true }
-    if s.isFresh(a) { return true }
-    match a {
-        case typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) { return true }
-        case typed.Expr.Away(_, _, y) { return s.stableArg(y) }
-        case typed.Expr.Prim(_, _, op, _, args) {
-            if typed.PassesRefs(op) and args.Len() > 0 { return s.stableArg(args[0]) }
-            return false
-        }
-        case typed.Expr.Promote(_, _, pr) { return s.stableArg(pr.X) }
-        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return s.stablePlace(p) }
-        case typed.Expr.Slice(_, _, sl) { return s.stablePlace(sl.Base) }
-        case _ { return false }
-    }
-}
-
-fn (s mut Scoper&) stablePlace(p typed.Lvalue&) Bool {
-    match p {
-        case typed.Lvalue.Local(_, _, id) { return s.bareParam(I64(id)) or s.unwritten(I64(id)) or s.refStable(I64(id)) or s.roViewStable(I64(id)) }
-        case typed.Lvalue.Global(_, ty, mi, n) {
-            v := s.P.GlobalDecl(mi, n)
-            return v is not null and not s.isRef(ty) and not generic.WrittenMut(v.Ty)
-        }
-        case typed.Lvalue.Field(_, _, b, _) { return s.stablePlace(b) }
-        case typed.Lvalue.Elem(_, _, e) { return s.stablePlace(e.Base) }
-        case typed.Lvalue.Payload(_, _, pl) { return s.stablePlace(pl.Base) }
-        case typed.Lvalue.Deref(_, _, r) { return s.bareRead(r) >= 0 or derefLocal(r) >= 0 and s.refStable(derefLocal(r)) }
-        case _ { return false }
-    }
-}
-
-# whether a reference local of the body being judged names new storage nothing else names and nothing changes: made
-# from a new value, never repointed, nothing stored or borrowed writably through it, read whole only as an argument for
-# a parameter that cannot write what it is given (a read-only reference, or a value) - so no second name exists
-fn (s mut Scoper&) refStable(l I64) Bool {
-    loc := s.B!.Locals[l]
-    if loc.Kind != typed.LocalKind.Var or not s.isRef(loc.Ty) or flHas(s.walk.Assigned, l) or flHas(s.walk.Through, l) { return false }
-    init := try s.inits.Get(l) catch { return false }
-    if not s.isFresh(init) { return false }
-    for k in range s.walk.ThroughB.Len() {
-        if s.walk.ThroughB[k] == l and (s.P.T.PermOf(s.P.T.Repr(s.walk.ThroughBTy[k])) & types.Writable) != 0 { return false }
-    }
-    whole := 0
-    for w in s.walk.Whole { if w == l: whole++ }
-    args := 0
-    for w in s.walk.Reads { if w == l: args++ }
-    for k in range s.walk.ArgReads.Len() {
-        if s.walk.ArgReads[k] != l { continue }
-        args++
-        ps := s.P.T.Items(s.P.T.Params(s.calleeType(s.walk.ArgCalls[k])))
-        i := s.walk.ArgIdx[k]
-        if i >= ps.Len() or (s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0) { return false }
-    }
-    return whole == args
-}
-
-# whether a read-only reference local is never assigned and made from what cannot change - a view of a bare parameter
-# of the caller ("tail := data[sent:]"): what it names cannot change either
-fn (s mut Scoper&) roViewStable(l I64) Bool {
-    loc := s.B!.Locals[l]
-    if loc.Kind != typed.LocalKind.Var or not s.isRef(loc.Ty) or (s.P.T.PermOf(loc.Ty) & types.Writable) != 0 or flHas(s.walk.Assigned, l): return false
-    init := try s.inits.Get(l) catch { return false }
-    return s.stableArg(init)
-}
-
-# whether a value local of the body being judged is never assigned, written or borrowed writably after it is made
-fn (s mut Scoper&) unwritten(l I64) Bool {
-    loc := s.B!.Locals[l]
-    if loc.Kind != typed.LocalKind.Var or s.isRef(loc.Ty) { return false }
-    if flHas(s.walk.Assigned, l) or flHas(s.walk.Written, l) { return false }
-    for k in range s.walk.Borrowed.Len() {
-        if s.walk.Borrowed[k] != l { continue }
-        bt := s.walk.BorrowedTy[k]
-        if bt == types.TypeId(0) or (s.P.T.PermOf(s.P.T.Repr(bt)) & types.Writable) != 0 { return false }
-    }
-    for k in range s.walk.SliceArgs.Len() {
-        if s.walk.SliceArgs[k] == l and not s.readOnlyParam(s.walk.SliceCalls[k], s.walk.SliceIdx[k]) { return false }
-    }
-    return true
-}
-
-# whether call c's parameter k cannot write what it is given: a read-only reference, a bare one passed by pointer
-fn (s mut Scoper&) readOnlyParam(c typed.Call&, k I64) Bool {
-    cb := match c.Target {
-        case typed.Callee.Body(id): I64(id)
-        case _: -1
-    }
-    if cb < 0 or cb >= s.Bodies.Len() or s.P.T.KindOf(s.Bodies[cb].Ty) != types.Kind.Func { return false }
-    ps := s.P.T.Items(s.P.T.Params(s.Bodies[cb].Ty))
-    return k < ps.Len() and s.P.T.IsRef(ps[k]) and (s.P.T.PermOf(ps[k]) & types.Writable) == 0
-}
-
 # a place's own subexpressions judged as operands: a reference it goes through, an index
 fn (s mut Scoper&) placeOperands(p typed.Lvalue&) {
     match p {
@@ -6039,9 +5304,6 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     # a read-only reference to existing storage returned as a built result, which is new and writable (T25c, O14)
     # ... unless the result keeps its written permission, as a borrowed one did (the inference's KeptPerm)
     kept := s.P.T.KindOf(s.B!.Ty) == types.Kind.Func and s.P.T.ResultFrom(s.B!.Ty, k) == types.KeptPerm
-    # (the rework's round 2: a result the checker made read-only - one handing back what a bare parameter reaches through
-    # a "T?&", which D9g leaves following its argument - is no writable built result; round 2d, KeptPerm off)
-    kept = kept or source.NewParams and s.readOnlyResult(k)
     if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and not kept and s.readOnlyAsBuilt(x) { return }
     if v.K != ValKind.Existing { return }
     exact := s.storeThrough(t)
@@ -6101,18 +5363,6 @@ fn (s mut Scoper&) builtFromParam(x typed.Expr&, t Term) Bool {
     }
     if param { return s.readOnlyAsBuilt(x) }
     return false
-}
-
-# whether the body's result k is a read-only reference, as the checker narrowed it
-fn (s mut Scoper&) readOnlyResult(k I64) Bool {
-    if s.P.T.KindOf(s.B!.Ty) != types.Kind.Func: return false
-    r := s.P.T.Result(s.B!.Ty)
-    if s.P.T.KindOf(r) == types.Kind.Tuple {
-        ps := s.P.T.Items(s.P.T.Parts(r))
-        if k >= ps.Len(): return false
-        r = ps[k]
-    }
-    return s.isRef(r) and (s.P.T.PermOf(r) & types.Writable) == 0
 }
 
 # T25c, O14: a read-only reference returned as a built result: borrow it from the parameter it is read through - true
@@ -6558,7 +5808,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.placeOperands(p)
             return existing(s.storOf(p))
         }
-        case typed.Expr.Promote(_, pty, pr) {
+        case typed.Expr.Promote(_, _, pr) {
             box := s.anyBox
             s.anyBox = false
             # the inference: a temporary a local is declared as, whose value is too short-lived for where it is built,
@@ -6567,11 +5817,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.promoteLocal = -1
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
-            # (round 2f: a temporary lent read-only - what it holds stored through by nothing - a case's payload of it
-            # need agree on no one scope, only outlive it, T17c)
-            s.roTemp = source.NewParams and s.isRef(pty) and (s.P.T.PermOf(pty) & types.Writable) == 0 and pr.X == typed.Expr.Make
             pv := s.val(pr.X, d)
-            s.roTemp = false
             s.anyItems = false
             # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
             # temporary, and lives where the storage does - but an "any"'s box is a copy of it (T32a)
@@ -6585,10 +5831,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             # elements do (O25c)
             if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
                 s.fitTarget = owner
-                # (round 2e: a temporary lent read-only - a bare parameter's, passed by pointer - is stored through by
-                # nothing, so its references need only outlive it: "unwidened(unpassed(x))")
-                through := s.storeThrough(pr.X.Type()) and not (source.NewParams and s.isRef(pty) and (s.P.T.PermOf(pty) & types.Writable) == 0)
-                s.fit(pv.T, d, through, pr.X, FitAnyCopy if box else FitValue)
+                s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
                 s.fitTarget = -1
             }
             return fresh(d)
@@ -6598,19 +5841,17 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, ty, d) }
             kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
             s.anyItems = false
-            ro := s.roTemp
-            s.roTemp = false
             if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
             s.val(m.Length, Term.None)
             # an item built in d too (O6), existing storage judged as a slot of it (O25c, T17c) - a payload's once
             # its items agree on one scope (T17c)
             vs := Array<Val>(m.Items.Len())
-            for k in range m.Items.Len() { vs[k] = s.ownItem(m.Items[k], s.val(m.Items[k], d)) }
-            agreed := m.Kind != typed.MakeKind.Case or not s.report or ro or s.payloadAgree(m.Items, vs)
+            for k in range m.Items.Len() { vs[k] = s.val(m.Items[k], d) }
+            agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
             for k in range m.Items.Len() {
                 # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
                 copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
-                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()) and not ro, m.Items[k], kind) }
+                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind) }
             }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
@@ -6698,7 +5939,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     }
 }
 
-# the rework's round 3 (QCE): a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
+# QCE: a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
 # arrays of a run-time length copied there; what it still shares with what it copies, the references that value holds
 # (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
 fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
@@ -6759,16 +6000,8 @@ fn (s mut Scoper&) itemKind(k typed.MakeKind) I64 {
 }
 
 fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
-    v := s.ownItem(x, s.val(x, d))
+    v := s.val(x, d)
     if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, kind) }
-}
-
-# an item's value where a bare parameter's own storage is made part of a value (round 2e): judged as the frame's until
-# a use needs it longer
-fn (s mut Scoper&) ownItem(x typed.Expr&, v Val) Val {
-    if not source.NewParams or v.K != ValKind.Existing or not s.holds(x.Type()) { return v }
-    ob := s.ownOf(x)
-    return existing(s.ownTerm(ob)) if ob >= 0 else v
 }
 
 # what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
@@ -6936,26 +6169,6 @@ fn (s mut Scoper&) sliceTerm(base typed.Lvalue&) Term {
     if s.P.T.KindOf(bt) == types.Kind.Ref { return s.storOf(base) }
     if s.P.T.KindOf(bt) == types.Kind.Array and s.P.T.Length(bt) == types.TypeId(0) { return s.partsTerm(base) }
     return s.storOf(base)
-}
-
-# the bare parameter passed by pointer whose own storage a view is - a slice of it or of a part, a borrow of a part
-# reached through no other reference - -1 for none (round 2e)
-fn (s mut Scoper&) viewBare(x typed.Expr&) I64 {
-    return match unWidened(x) {
-        case typed.Expr.Slice(_, _, sl): s.bareOwnPlace(sl.Base)
-        case typed.Expr.Borrow(_, _, p): s.bareOwnPlace(p)
-        case _: -1
-    }
-}
-
-fn (s mut Scoper&) bareOwnPlace(p typed.Lvalue&) I64 {
-    return match p {
-        case typed.Lvalue.Deref(_, _, r): s.bareRead(r)
-        case typed.Lvalue.Field(_, _, b, _): s.bareOwnPlace(b)
-        case typed.Lvalue.Elem(_, _, e): s.bareOwnPlace(e.Base)
-        case typed.Lvalue.Payload(_, _, pl): s.bareOwnPlace(pl.Base)
-        case _: -1
-    }
 }
 
 
@@ -7131,8 +6344,7 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             scopes Vec<typed.Scope>
             lb := I64(id)
             for c in caps {
-                # (a bare parameter's own storage captured: judged as the frame's until kept, round 2e)
-                v := s.ownItem(c.Outer, s.val(c.Outer, Term.None))
+                v := s.val(c.Outer, Term.None)
                 if not s.holds(c.Outer.Type()) { continue }
                 t := s.valTerm(v, s.here())
                 scopes.Push(s.scopeOf(t))
@@ -7307,10 +6519,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     if fty == types.UnknownT {
         for a in c.Args { s.val(a, Term.None) }
-        s.externCopies(c)
         return plain() if not s.holds(ty) else fresh(dest if dest.Runs() else s.here())
     }
-    s.argCopies(c, spawned)
     vars := s.P.T.ScopeVarsOf(fty)
     n := c.Args.Len()
     ps := s.P.T.Items(s.P.T.Params(fty))
@@ -7353,7 +6563,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.build(pr.Site, s.here())
             landed[i] = true
             if v.K == ValKind.Fresh { v = existing(v.T) }
-            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
+            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
                 if s.atCall(pr.X) and not s.calleeStoresArg(c, i) {
                     # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
                     # callee's obligations then judge (O10c), as stage 0 binds it
@@ -7365,7 +6575,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     if s.atCall(pr.X) {
                         s.err(s.elemAt(pr.X), msgs.WriteThroughAtBuilds())
                     } else {
-                        s.splitErr(a)
+                        s.err(s.argAt(a), msgs.BorrowSplitScopes())
                     }
                 }
             }
@@ -7385,9 +6595,9 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v = s.val(pr.X, Term.None)
             s.build(pr.Site, s.here())
             landed[i] = true
-            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
+            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
                 s.wantPromotion(pr.X)
-                if s.report { s.splitErr(a) }
+                if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
             }
             if v.K == ValKind.Fresh { v = existing(v.T) }
         } else if s.isFresh(a) and s.argLands(a) {
@@ -7417,11 +6627,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v = s.val(a, Term.None)
             if pk >= 0 { s.partDest.Remove(pk) }
             s.onFrame = false
-            # (round 2e: a bare parameter's own storage given to a parameter its callee keeps is judged as the frame's -
-            # the callee's own value - until a use needs it longer: kept, its callers copying)
-            ob := s.ownGiven(c, i, a)
-            if ob >= 0 { v = existing(s.ownTerm(ob)) }
-            rf := Term.None if ob >= 0 else s.splitRefs(a)
+            rf := s.splitRefs(a)
             cr := s.choiceRefs(a)
             if cr != Term.None {
                 # a choice of places is a copy of this block's (E28)
@@ -7435,11 +6641,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # (a recorded limit: the callee's obligations cannot tell its storage from what it holds)
                 handle := rf.Runs() and s.handleLent(c, i, a)
                 loop := cr == Term.None and s.lentLoopCopy(a)
-                if s.calleeKeepsArg(c, i) and not handle and not ctorCallee and s.lentByStorage(c, i) {
-                    # the rework's round 2c: lent by its storage, to a callee putting nothing into what it reaches
-                    # (docs/scope-model.md 3.3, "not reg"): what it keeps of it lives here, where the copy does - never
-                    # to a constructor, whose instance holds what it is given where C2d judges it
-                } else if s.calleeKeepsArg(c, i) and not handle and not s.bareLent(c, i) {
+                if s.calleeKeepsArg(c, i) and not handle {
                     s.wantPromotion(a)
                     if s.report {
                         # a part of x[i]'s copy, said at its member as E31b's (stage 0: "E31, O17")
@@ -7447,7 +6649,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                         if ap is not null {
                             s.err(s.lastName(ap.Span()), msgs.WriteThroughAtBuilds())
                         } else {
-                            s.splitErr(a)
+                            s.err(s.argAt(a), msgs.BorrowSplitScopes())
                         }
                     }
                 } else if cr != Term.None or handle or not loop {
@@ -7646,7 +6848,6 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
     }
     if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
-    if callee < 0 and c.Target == typed.Callee.Value { s.dischargeRels(sp, s.valueRels(fty, vars, rv, sp), -1, beta, c, agreed) }
     s.resAt = beta[rv] if rv >= 0 else here
     # a result a scope argument put where it says (E25) is existing storage there - an array of numbers or text too, whose
     # storage lives there whatever it holds - judged where it is stored, passed, returned or made an any as the same value
@@ -7952,12 +7153,7 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
 fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    s.dischargeRels(sp, s.sums[callee].Rels, callee, beta, c, agreed)
-}
-
-# ... rels judged so - a body's (callee), or what a function type says of a call through a value (-1, valueRels)
-fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
-    for r in rels {
+    for r in s.sums[callee].Rels {
         hi := s.through(r.Hi, beta, c, true)
         lo := s.through(r.Lo, beta, c, false)
         if hi == Term.None or lo == Term.None { continue }
@@ -8015,10 +7211,7 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         }
         if s.inRet and r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
             # a result returned holding this function's own storage, through the call that put it there (O26)
-            rec := s.err(s.nameSpan(sp), msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage())
-            # (round 2d: the by-value parameter whose own storage it is, noted - what the migration makes "&")
-            ai := s.argOfVar(c, r.Hi)
-            if ai >= 0 { s.noteBareArg(rec, c.Args[ai]) }
+            s.err(s.nameSpan(sp), msgs.YieldOwnStorage() if s.B!.Gen else msgs.ReturnOwnStorage())
             continue
         }
         if r.Why != 0 {
@@ -8033,8 +7226,6 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             # the argument made where the instance goes - a parameter's scope (B11)
             w := s.paramOfTerm(lo)
             if ai >= 0 and w >= 0 { s.noteMadeNamed(rec, c.Args[ai], w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
-            # (round 2e: a bare parameter's own storage kept in existing storage - noted, what the migration makes "&")
-            if ai >= 0 { s.noteBareArg(rec, c.Args[ai]) }
             continue
         }
         # O27: what the callee keeps of its argument is a view of storage of this function's, or the argument is one
@@ -8052,10 +7243,8 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
         # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
         if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
         rec := s.err(s.nameSpan(sp), m)
-        if callee >= 0 {
-            cb := s.Bodies[callee]
-            s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
-        }
+        cb := s.Bodies[callee]
+        s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
         # the argument too short a loop's copy of an element (B11, r06)
         ai := s.argOfVar(c, r.Hi)
         li := s.argOfVar(c, r.Lo)
@@ -8065,9 +7254,6 @@ fn (s mut Scoper&) dischargeRels(sp source.Span, rels Vec<rel>&, callee I64, bet
             # an index held for At and SetAt is one (E31b), as its held local
             s.noteMakeWhere(rec, s.nameSpan(sp), c, ai, li, lo)
         }
-        # (round 2d: one that must outlive the other, a bare parameter - the function's own value, kept by the callee:
-        # named, which param_migrate makes "&")
-        if ai >= 0: s.noteBareArg(rec, c.Args[ai])
     }
 }
 
@@ -8100,11 +7286,7 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
         t := beta[v]
         if not t.Runs() { continue }
         n := try s.agreeStep(bt, bx, t, ex) catch {
-            rec := s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
-            # (round 2f: a bare parameter given whole is its own storage, the frame's - one taken "&" is its caller's)
-            for a in c.Args {
-                if s.bareRead(a) >= 0: s.noteBareArg(rec, a)
-            }
+            s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
             return false
         }
         bt, bx = n.T, n.Exact
@@ -8990,9 +8172,6 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         w := s.paramOfTerm(s.fitSlot)
         if w >= 0 { s.noteMadeNamed(rec, x, w, s.P.L.Names.Text(s.B!.Locals[w].Name), 0) }
     }
-    # (round 2d: a value that is a bare parameter's own - by pointer, or its copy on entry - kept where it does not live:
-    # the parameter named, which param_migrate makes "&")
-    if rec >= 0 and kind != FitOwn: s.noteBareArg(rec, x)
     # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a) - a slice
     # of a known length widened to a run-time one too (T7c)
     match unWidened(s.unAway(x)) {
@@ -9236,26 +8415,10 @@ fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
                 return
             }
         }
-        # a lambda kept longer: a bare parameter's own storage it captured, kept (round 2e)
-        case typed.Expr.Fn(_, _, f) {
-            if f == typed.FnVal.Lambda {
-                for c in f.captures {
-                    ob := s.ownOf(c.Outer)
-                    if ob >= 0: s.liftLocal(ob, t, false)
-                }
-            }
-        }
         case _ { }
     }
     r := s.claimRoot(x)
     if r < 0 {
-        # a view of a bare parameter's own storage - a slice, a borrow of a part - kept longer: its own storage kept
-        # (round 2e)
-        vb := s.viewBare(u)
-        if vb >= 0 {
-            s.liftLocal(vb, t, false)
-            return
-        }
         s.proposeCall(u, t)
         return
     }
@@ -9375,15 +8538,6 @@ fn (s mut Scoper&) liftLocal(l I64, t Term, stor Bool) {
     # a generator's locals live across its yields, and each Next call's result scope is that call's: nothing is lifted
     # into it (D18b, as O26a moves nothing there)
     if s.genResult(t) { return }
-    # a bare parameter passed by pointer is never lifted: its own storage kept longer than the frame is its argument's,
-    # which its callers copy where it may change (round 2e)
-    if s.bareParam(l) {
-        # (kept only in what the function hands back - its result scope; stored into existing storage, a "&"
-        # parameter's or the program's, it stays refused, D9e: QCC's check (2), naming "p T&")
-        rv := s.resultVarOf(s.B!.Ty)
-        if rv >= 0 and t == Term.Var(rv) { s.keepOwn(l) }
-        return
-    }
     # a part of what a local builds - a field, an element - kept longer is no reason to build all of it longer: its field
     # gets a binding of its own (2.6), or the read is O20's error (no storage extended past the block that made it)
     if s.partFlow and s.buildsOwn(l) {
@@ -9803,48 +8957,6 @@ fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
 
 fn (s mut Scoper&) err(sp source.Span, m msgs.Msg) I64 {
     return s.P.L.Diags.Error(diag.Where.Span(s.B!.File, I64(sp.Start), I64(sp.End)), m)
-}
-
-# O17 at an argument: said at it - and where it is a by-value parameter of this function (a bare one under the rework's
-# round 2, by value where it is no struct: an enum), a note there, which names what to make a reference (round 2c)
-fn (s mut Scoper&) splitErr(a typed.Expr&) {
-    s.noteBareArg(s.err(s.argAt(a), msgs.BorrowSplitScopes()), a)
-}
-
-# ... and an error resting on an argument that is such a parameter (O17, O26 at a call): the note naming it
-fn (s mut Scoper&) noteBareArg(rec I64, a typed.Expr&) {
-    if not source.NewParams: return
-    p := s.placeRead(unPassed(s.unAway(a)))
-    # (what a by-pointer parameter names, borrowed: the parameter; round 2f: an element, a field or a payload of a bare
-    # parameter's own storage - a by-value array's element - its parameter too)
-    for _ in range 8 {
-        match p {
-            case typed.Lvalue.Deref(_, _, r) { p = s.placeRead(unPassed(s.unAway(r))) }
-            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
-            case typed.Lvalue.Field(_, _, b, _) { p = b }
-            case typed.Lvalue.Payload(_, _, pl) { p = pl.Base }
-            case _ { break }
-        }
-    }
-    if p is null: return
-    if p != typed.Lvalue.Local: return
-    # (a bare struct, array or enum holding references is passed by pointer: a read-only reference, never null, which
-    # no written "&" is under the switch - round 2d)
-    if s.isRef(p.ty) and ((s.P.T.PermOf(p.ty) & types.Writable) != 0 or s.P.T.IsNullable(p.ty)): return
-    l := s.B!.Locals[I64(p.id)]
-    # (or its copy on entry, made where the body writes it: a local of its name, declared at it)
-    entry := l.Kind == typed.LocalKind.Var and s.P.L.BareWritten.Has(pair.Pair(s.B!.File, I64(l.Sp.Start)))
-    if l.Kind != typed.LocalKind.Param and not entry: return
-    s.note(rec, s.B!.File, l.Sp, msgs.NoteBareParam(s.P.L.Names.Text(l.Name)))
-}
-
-# the place a read or a borrow of one names, else null
-fn (s mut Scoper&) placeRead(x typed.Expr&) typed.Lvalue?&x {
-    return match x {
-        case typed.Expr.Read(_, _, p, _): p
-        case typed.Expr.Borrow(_, _, p): p
-        case _: null
-    }
 }
 
 fn (s mut Scoper&) note(rec I64, file I64, sp source.Span, m msgs.Msg) {

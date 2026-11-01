@@ -1,34 +1,33 @@
-# The scoping and parameters rework (docs/rework.md section 13): value results that are views of what a function is
-# given, handed over without a copy where the caller only reads them and copied where it keeps them (D9h). Run by
-# `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer, as fields.olang is.
+# D9h (docs/rework.md sections 13 and 18): value results that are views of what a function is given, handed over
+# without a copy where the caller only reads them and copied where it keeps them.
 
-type entry struct(name String&, next entry?&) {
+type entry struct(name mut String&, next entry?&) {
     name
     next
 }
 
-# a value result that is a view of what a bare parameter reaches
+# a value result that is a view of what a parameter reaches
 fn nameOf(e entry) String { return e.name }
 
-fn inner(t String) String { return t[1:t.Len() - 1] }
+fn inner(t String&) String { return t[1:t.Len() - 1] }
 
 # a view of a view, handed back as it is
-fn twice(t String) String { return inner(inner(t)) }
+fn twice(t String&) String { return inner(inner(t)) }
 
 # one of two views, or new text
-fn pick(a String, b String, k I64) String {
+fn pick(a String&, b String&, k I64) String {
     if k == 0: return a
     if k == 1: return b[1:]
     return $a $b
 }
 
-fn count(t String) I64 { return t.Len() }
+fn count(t String&) I64 { return t.Len() }
 
 type named trait {
     Label() String
 }
 
-type tag struct(text String&) {
+type tag struct(text mut String&) {
     text
 }
 
@@ -36,7 +35,7 @@ type tag struct(text String&) {
 fn (g tag) Label() String { return g.text[1:] }
 
 # a function a value calls: its copying wrapper copies what it hands back
-fn apply(f fn(t String) String, t String) String { return f(t) }
+fn apply(f fn(t String&) String, t String&) String { return f(t) }
 
 test inner "hands a view over where the caller only reads it, and copies it where the caller keeps it" {
     s := $"[abcd]"
@@ -82,18 +81,18 @@ type cutter struct(n I64) {
     n
 }
 
-fn (k cutter) Call(t String) String { return t[k.n:] }
+fn (k cutter) Call(t String&) String { return t[k.n:] }
 
-fn cutWith(f fn(t String) String, t String) String { return f(t) }
+fn cutWith(f fn(t String&) String, t String&) String { return f(t) }
 
 # a guaranteed tail call of a function handing back a view of its own argument: handed back as it is too
-fn skipSpaces(t String, i I64) String {
+fn skipSpaces(t String&, i I64) String {
     if i < t.Len() and t[i] == ' ': become skipSpaces(t, i + 1)
     return t[i:]
 }
 
 # ... and one viewing new text, which no caller can know: copied at every call (ViewOther)
-fn spacedOut(t String, i I64) String { become skipSpaces($" " $t, i) }
+fn spacedOut(t String&, i I64) String { become skipSpaces($" " $t, i) }
 
 test cutWith "copies the view an adapter's Call hands back" {
     t := $"abcdef"
@@ -117,3 +116,25 @@ Twice String = twice("((ok))")
 assert Twice == "ok"
 assert pick("ab", "cd", 1) == "d"
 assert skipSpaces("  hi", 0) == "hi" and spacedOut("ab", 0) == "ab"
+
+# a call given only read-only arguments may still write through a closure one of them holds (a "mut" reference it
+# captured): a view read after such a call in its statement is the copy it would be
+type sink struct(f fn()) {
+    f
+}
+
+fn fired(s sink&) String {
+    s.f()
+    return "!"
+}
+
+# a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before fired runs
+fn joinedFired(t String&, s sink&) String { return $inner(t) $fired(s) }
+
+test joinedFired "copies a view where a closure an argument holds may write what it views before it is read" {
+    text := $"[abcd]"
+    r mut String& = text
+    s := sink(fn() { r[1] = 'X' })
+    assert joinedFired(text, s) == "abcd!"
+    assert text == "[Xbcd]"
+}

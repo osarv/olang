@@ -1,5 +1,10 @@
-# check: fail error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I32>&, or make it of a known length
-# an array held inside a struct shares its storage when the struct is copied, so one whose length is not its type's
-# must be written as a reference - a fixed-length one (T7c) holds its elements in the value instead
+# check: run
+# QCE (T7a relaxed): an array of a run-time length held inside a struct by value is the struct's own - a copy of the
+# struct copies it (it was T7a's error, "held by reference"); a fixed-length one (T7c) is laid out in the value
 type W struct(n I32) { a Array<I32> = Array<I32>(n) }
-test "never runs" { w W = W(3) }
+fn main() {
+    w W = W(3)
+    v := w
+    v.a[0] = 7
+    assert w.a[0] == 0 and v.a[0] == 7
+}

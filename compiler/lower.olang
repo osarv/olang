@@ -74,16 +74,12 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     failCode Vec<I64>              # and its code under that type alone
     charT types.TypeId = types.TypeId(-1)
     textT types.TypeId = types.TypeId(-1)
-    # round 2d (D9h), counted for -memory: returns handing back a view as it is, calls whose view is read where it stands,
+    # D9h, counted for -memory: returns handing back a view as it is, calls whose view is read where it stands,
     # and calls copying a view into where their result goes
     ViewReturns I64 = 0
     ViewReads I64 = 0
     ViewCopies I64 = 0
-    ArgCopies I64 = 0            # round 2e: arguments copied for a bare parameter a callee keeps (scope.argCopies)
-    TempCopies I64 = 0           # bulk review 5, F3: for a bare parameter the same call may write another way
-    TaskCopies I64 = 0           # bulk review 5, F7: for a task's bare parameter something may write before its join
-    CCopies I64 = 0              # the rework's round 2, X22: for a C function (a pointer not "const", an export fn)
-    # round 3b: copies left out - a body's handing back a local holding views of its arguments (ElidedReturns), a
+    # copies left out - a body's handing back a local holding views of its arguments (ElidedReturns), a
     # local's holding views of storage nothing changes while it lives (ViewLocals)
     ElidedReturns I64 = 0
     ViewLocals I64 = 0
@@ -189,7 +185,6 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
         case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
         case mir.FnKey.Copied(body) { return lw.copiedFn(body) }
-        case mir.FnKey.ByValue(body, ty) { return lw.byValueFn(body, ty) }
         case mir.FnKey.Init(m) { return lw.initFn(m) }
         case mir.FnKey.AnyRender(ti, top) { return lw.anyRender(ti, top) }
     }
@@ -330,11 +325,11 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # 0 the value, 1 the handle's state (free.IsHandle)
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
-    # round 2d (D9h): the call sites whose array value result is read where it stands - its consumer only reads it before
+    # D9h: the call sites whose array value result is read where it stands - its consumer only reads it before
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
     # handing back views copies its result at every other site
     reads Map<I64, Bool>
-    # round 3b (docs/rework.md 17): the locals this body hands back holding views of its arguments, with the parameters
+    # the locals this body hands back holding views of its arguments, with the parameters
     # each views (typed.ViewWalk.Settle, as check recorded them); the copies left out for them and for the locals holding
     # views in place of their copies (viewLocals) - a MakeKind.Copy by its site, a value array local's T7b copy at its
     # declaration - and the view calls such a local reads where they stand
@@ -403,7 +398,6 @@ fn (ln mut lowering&) run() {
     frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root!.Id, b.Sp)
     ln.emit(mir.Stmt.Open(b.Sp, frame))
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
-    ln.bareEntryCopies()
     ln.settleViews()
     for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
@@ -420,31 +414,6 @@ fn (ln mut lowering&) run() {
         ln.end(mir.Term.Return(b.Sp, mir.Operand.None))
     } else {
         ln.end(mir.Term.Exit(b.Sp, mir.ExitKind.Unreachable, mir.Operand.None))
-    }
-}
-
-# bulk review 5 (2.10): lowered with no plan - while compiling, for the evaluator - a bare parameter passed by pointer is
-# copied on entry, as by value, so what the evaluator computes never depends on which of the caller's storage the
-# pointer names (a view of it kept by Push, a local or a capture, a write through another argument): the run time
-# passes by pointer only where nothing can tell (the plan's ArgCopy and ArgTemp), so the two agree. Copied into the
-# program's scope - compile-time storage, reclaimed with the compilation
-fn (ln mut lowering&) bareEntryCopies() {
-    if ln.planned or not source.NewParams: return
-    inst := match ln.B.Of {
-        case typed.BodyOf.Fn(i): i
-        case _: -1
-    }
-    if inst < 0: return
-    P := ln.L.P
-    decl := P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
-    for p in ln.B.Params {
-        l := I64(p)
-        if not typed.BarePointer(ln.T, ln.B, l, decl): continue
-        ty := ln.B.Locals[l].Ty
-        sp := ln.B.Locals[l].Sp
-        cp := ln.ownCopy(mir.Operand.Copy(mir.L(mir.LocalId(I32(l)))), ty, mir.ScopeRef.Program, sp)
-        ln.L.ArgCopies--    # (no argument the run time copies)
-        ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(cp)))
     }
 }
 
@@ -899,9 +868,9 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             ln.targets.Push(p)
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
-            # (the rework's round 3, QCE: a part holding an array by value takes the copy check made, or the new storage
+            # (QCE: a part holding an array by value takes the copy check made, or the new storage
             # it is given, as it is - never written over in place, since the part may be room a Vec has not filled)
-            if ln.valueArray(target.Type()) and not ln.dead and not (source.NewParams and partLvalue(target)) {
+            if ln.valueArray(target.Type()) and not ln.dead and not partLvalue(target) {
                 copies := ln.copiesArray(value, target.Type())
                 ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
             } else {
@@ -1052,7 +1021,7 @@ fn derefOf(x typed.Expr&) typed.Expr?&x {
 
 # an array value's elements copied into storage of its own (T7b), made in scope at
 fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
-    # (the rework's round 3: elements owning storage of their own - arrays of a run-time length - copied too)
+    # (QCE: elements owning storage of their own - arrays of a run-time length - copied too)
     if ln.T.OwnsParts(ty) { return ln.ownCopyOf(v, ty, at, sp) }
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
@@ -1217,7 +1186,7 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
         case _ { }
     }
     res := ln.T.Result(ln.B.Ty)
-    # (round 2d, D9h: a view of what this body's arguments reach - its calls handing back views read as they are - is
+    # (D9h: a view of what this body's arguments reach - its calls handing back views read as they are - is
     # handed back as it is; its callers copy it where they keep it)
     view := ln.retView(value)
     # a fixed array widened is made in the result scope, the result as it is (T7b, T7c)
@@ -1513,8 +1482,6 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
-            # (a bare argument copied for the task is made where the join is, so it lasts until the join: P2)
-            ln.taskArgs, ln.taskAt = true, mir.ScopeRef.Scope(j) if ln.planned else mir.ScopeRef.Program
             args := ln.args(c, callee, ty)
             if ln.dead { return }
             match callee {
@@ -1971,12 +1938,43 @@ fn (ln mut lowering&) fits(x typed.Expr?&, to types.TypeId) Bool {
 # conversions grew it every turn
 fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
     src := ln.local(v, from, sp)
-    n := mir.Operand.Const(mir.I64T, ln.fixedLen(ln.arrayOf(from)))
+    k := ln.fixedLen(ln.arrayOf(from))
+    n := mir.Operand.Const(mir.I64T, k)
     buf := ln.temp(to, sp)
+    fe := ln.T.Elem(ln.T.Repr(from))
+    te := ln.T.Elem(ln.T.Repr(to))
+    if ln.laidApart(fe, te) {
+        # QCE: rows laid out in place made rows of a run-time length - each widened in turn, made where the array is
+        ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
+        for i in range k {
+            e := ln.into(fe, mir.Rvalue.Use(mir.Operand.Copy(ln.F.Place(mir.Base.Local(src), mir.Proj[mir.Proj.At(i)]))), sp)
+            w := ln.widen(e, fe, te, sp, at)
+            ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.At(i)]), mir.Rvalue.Use(w)))
+        }
+        return mir.Operand.Copy(mir.L(buf))
+    }
     # no fill: every element is copied in at once
     ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
     return mir.Operand.Copy(mir.L(buf))
+}
+
+# whether arrays of element types a and b lay their elements out apart: a's elements arrays laid out in place, b's of a
+# run-time length (QCE: Array<Array<I64>> made with a fill, wanted as rows each its own) - a widening element by element
+fn (ln mut lowering&) laidApart(a types.TypeId, b types.TypeId) Bool {
+    t := ln.T
+    ra := t.Repr(a)
+    rb := t.Repr(b)
+    return t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array and t.Length(ra) != types.TypeId(0) and
+           t.Length(rb) == types.TypeId(0)
+}
+
+# whether a conversion of a value of type from to array type to lays its elements out apart (laidApart): a copy, never
+# the pair naming from's storage
+fn (ln mut lowering&) convertsApart(from types.TypeId, to types.TypeId) Bool {
+    a := ln.arrayOf(from)
+    b := ln.arrayOf(to)
+    return a != types.UnknownT and b != types.UnknownT and ln.laidApart(ln.T.Elem(a), ln.T.Elem(b))
 }
 
 # the innermost scope open here that storage can be made in: a block's, a loop turn's, a join's or the frame's; the
@@ -2042,7 +2040,7 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
             }
         }
     }
-    if rel.Len() == 0 { ln.readHere(x) }     # (round 2d: a value nothing keeps)
+    if rel.Len() == 0 { ln.readHere(x) }     # (a value nothing keeps)
     v := ln.val(x)
     if rel.Len() == 0 or ln.dead { return }
     l := ln.local(v, x.Type(), sp)
@@ -2298,29 +2296,14 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     ops := Array<mir.Operand>(c.Args.Len())
     task := ln.taskArgs
     ln.taskArgs = false
-    tempAt := ln.taskAt if task else ln.innermost()
-    # (round 2d, D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
+    # (D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
     # before the call returns - not a task's, which is read beside its spawner)
     reads := not t.HoldsRefs(t.Result(ty)) and not task
     for i in range c.Args.Len() {
         a := c.Args[i]
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
         v := ln.val(a)
-        # (the rework's round 2, X22: a C function's argument copied for the call, as its own type holds it - before
-        # it is made the pointer C takes)
-        cc := ln.externCopy(c, i, ps)
-        if cc {
-            v = ln.ownCopy(v, a.Type(), tempAt, a.Span())
-            ln.countC(a.Span())
-        }
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
-        if i < ps.Len() and ln.copiesArg(c, i) { v = ln.ownCopy(v, ps[i], ln.copyScope(c, ty), a.Span()) }
-        # (bulk review 5, 2.10: one the same call may write another way - a copy for the call alone, in this block)
-        # (bulk review 5, F7: or a task's that something may write before its join - made where the join is)
-        if i < ps.Len() and not cc and not ln.copiesArg(c, i) and ln.tempArg(c, i, task) {
-            v = ln.ownCopy(v, ps[i], tempAt, a.Span())
-            ln.countTemp(task, a.Span())
-        }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
         if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
@@ -2330,175 +2313,6 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ops[i] = v
     }
     return ln.F.Args(ops)
-}
-
-# a copy for the call alone, or for a task, counted and listed for -memory (of what this build lowered)
-fn (ln mut lowering&) countTemp(task Bool, sp source.Span) {
-    ln.L.ArgCopies--
-    if task { ln.L.TaskCopies++ } else { ln.L.TempCopies++ }
-    what := "copied for the task" if task else "copied for the call"
-    ln.L.CopyLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $what)
-}
-
-# a copy for a C function, counted and listed for -memory
-fn (ln mut lowering&) countC(sp source.Span) {
-    ln.L.ArgCopies--
-    ln.L.CCopies++
-    ln.L.CopyLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": copied for a C function")
-}
-
-# whether a C function's argument i is given a copy made for the call (scope.externCopies): the scope pass's plan where
-# the body has one, else (while compiling) one its pointer not "const" takes that may not be lent writably
-fn (ln mut lowering&) externCopy(c typed.Call&, i I64, ps Array<types.TypeId>&) Bool {
-    if not source.NewParams or i >= 62 or i >= ps.Len() or c.Target != typed.Callee.Extern: return false
-    if ln.planned {
-        if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgTemp.Len(): return false
-        return (ln.plan.ArgTemp[I64(c.Site)] & (I64(1) << i)) != 0
-    }
-    t := ln.T
-    at := c.Args[i].Type()
-    if not t.IsRef(at) or t.IsNullable(at) or t.ForeignRef(at) or (t.PermOf(at) & types.Writable) != 0: return false
-    return t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0
-}
-
-# ---- arguments copied for what a callee keeps (the rework's round 2e) ----
-
-# whether a call copies its argument i for the call alone (bulk review 5, 2.10): one for a bare parameter passed by
-# pointer that the same call may write another way - the scope pass's plan (ArgTemp) where the body has one, else
-# (while compiling) every one typed.AliasCopies names, a copy as by value either way
-fn (ln mut lowering&) tempArg(c typed.Call&, i I64, task Bool) Bool {
-    if not source.NewParams or i >= 62 or c.Target == typed.Callee.Extern: return false
-    if ln.planned {
-        if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgTemp.Len(): return false
-        return (ln.plan.ArgTemp[I64(c.Site)] & (I64(1) << i)) != 0
-    }
-    cb := match c.Target {
-        case typed.Callee.Body(id): I64(id)
-        case _: -1
-    }
-    if cb < 0 or cb >= ln.L.Bodies.Len(): return false
-    inst := match ln.L.Bodies[cb].Of {
-        case typed.BodyOf.Fn(k): k
-        case _: -1
-    }
-    if inst < 0: return false
-    P := ln.L.P
-    decl := P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
-    b := ln.L.Bodies[cb]
-    # (a task's, while compiling: every one - tasks run in sequence at the join there, after what the block writes)
-    if task and i < b.Params.Len() and typed.BarePointer(ln.T, b, I64(b.Params[i]), decl): return true
-    gm := Array<Bool>(c.Args.Len(), false)
-    for k in range c.Args.Len() { gm[k] = ln.mutGlobalArg(c.Args[k]) }
-    return (typed.AliasCopies(ln.T, b, c.Args, decl, gm) & (I64(1) << i)) != 0
-}
-
-# whether an argument is a mutable global's storage, or a part of it
-fn (ln mut lowering&) mutGlobalArg(a typed.Expr&) Bool {
-    p := match a {
-        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
-        case typed.Expr.Slice(_, _, sl): sl.Base
-        case _: null
-    }
-    for _ in range 16 {
-        if p is null: return false
-        match p {
-            case typed.Lvalue.Global(_, _, mi, n) {
-                v := ln.L.P.GlobalDecl(mi, n)
-                return v is not null and generic.WrittenMut(v.Ty)
-            }
-            case typed.Lvalue.Field(_, _, b, _) { p = b }
-            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
-            case typed.Lvalue.Payload(_, _, py) { p = py.Base }
-            case _ { return false }
-        }
-    }
-    return false
-}
-
-# whether a call copies its argument i: one for a bare parameter its callee keeps past the call that may change while
-# what keeps it lives - the scope pass's plan (scope.argCopies) where the body has one; while compiling (no plan) every
-# argument a constructor or a case keeps that is a bare parameter's own storage, the copy made where the value is built
-# - a copy as by value either way (2.10)
-fn (ln mut lowering&) copiesArg(c typed.Call&, i I64) Bool {
-    if not source.NewParams: return false
-    if ln.planned {
-        if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgCopy.Len(): return false
-        return (ln.plan.ArgCopy[I64(c.Site)] & (I64(1) << i)) != 0
-    }
-    cb := match c.Target {
-        case typed.Callee.Body(id): I64(id)
-        case _: -1
-    }
-    if cb < 0 or cb >= ln.L.Bodies.Len(): return false
-    made := match ln.L.Bodies[cb].Of {
-        case typed.BodyOf.Ctor(_, _), typed.BodyOf.Case(_, _): true
-        case _: false
-    }
-    return made and ln.bareOwn(c.Args[i]) >= 0
-}
-
-# the bare parameter passed by pointer of this body whose own storage x is - read whole, a slice of it, a borrow of a
-# part of it - -1 for none (lowering's own reading of scope.bareParam, for the stand-in placement)
-fn (ln mut lowering&) bareOwn(x typed.Expr&) I64 {
-    return match x {
-        case typed.Expr.Read(_, _, p, _): ln.bareLocalAt(p)
-        case typed.Expr.Borrow(_, _, p): ln.bareOwnAt(p)
-        case typed.Expr.Slice(_, _, sl): ln.bareOwnAt(sl.Base)
-        case typed.Expr.Away(_, _, y): ln.bareOwn(y)
-        case typed.Expr.Promote(_, _, pr): ln.bareOwn(pr.X)
-        case typed.Expr.Prim(_, _, op, _, args): ln.bareOwn(args[0]) if typed.PassesRefs(op) and args.Len() > 0 else -1
-        case _: -1
-    }
-}
-
-fn (ln mut lowering&) bareOwnAt(p typed.Lvalue&) I64 {
-    return match p {
-        case typed.Lvalue.Deref(_, _, r): ln.bareOwn(r)
-        case typed.Lvalue.Field(_, _, b, _): ln.bareOwnAt(b)
-        case typed.Lvalue.Elem(_, _, e): ln.bareOwnAt(e.Base)
-        case typed.Lvalue.Payload(_, _, py): ln.bareOwnAt(py.Base)
-        case _: -1
-    }
-}
-
-fn (ln mut lowering&) bareLocalAt(p typed.Lvalue&) I64 {
-    if p != typed.Lvalue.Local: return -1
-    inst := match ln.B.Of {
-        case typed.BodyOf.Fn(i): i
-        case _: -1
-    }
-    if inst < 0: return -1
-    P := ln.L.P
-    return I64(p.id) if typed.BarePointer(ln.T, ln.B, I64(p.id), P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))) else -1
-}
-
-# argument v of reference type pt copied into storage of its own, made where call c's result builds (else where the
-# scope pass binds its parameter's variable): an array's elements, a struct's or an enum's value - the reference to the
-# copy passed instead (round 2e)
-fn (ln mut lowering&) ownCopy(v mir.Operand, pt types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
-    t := ln.T
-    if not t.IsRef(pt): return v
-    ln.L.ArgCopies++
-    rt := t.Referent(pt)
-    r := ln.local(v, pt, sp)
-    val := ln.into(rt, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(r)), mir.Proj.Deref)))), sp)
-    if ln.valueArray(rt) {
-        cp := ln.arrayCopy(val, rt, sp, at)
-        l := ln.local(cp, rt, sp)
-        return ln.into(pt, mir.Rvalue.Ref(mir.L(l), pt), sp)
-    }
-    return ln.into(pt, mir.Rvalue.New(at, val, pt), sp)
-}
-
-# where an argument's copy is made: the scope call c passes for its callee's result scope - where what its result
-# holds is built - else the program's
-fn (ln mut lowering&) copyScope(c typed.Call&, fty types.TypeId) mir.ScopeRef {
-    if not ln.planned or c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.Built.Len(): return mir.ScopeRef.Program
-    vs := ln.T.ScopeVarsOf(fty)
-    for j in range vs.Len() {
-        if vs[j] == types.ResultVar: return ln.scopeRef(ln.plan.Passed(c.Site, j))
-    }
-    return mir.ScopeRef.Program
 }
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
@@ -2538,7 +2352,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         return mir.Operand.None
     }
     if dest == mir.NoLocal { return mir.Operand.None }
-    # round 2d (D9h): a function handing back a view of what it is given - copied into where its result goes, as the
+    # D9h: a function handing back a view of what it is given - copied into where its result goes, as the
     # function would have, unless the value is only read here before anything can change what it views
     if ln.viewCall(c, ty) {
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
@@ -2552,15 +2366,15 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     return mir.Operand.Copy(mir.L(dest))
 }
 
-# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+# ---- value results handed over uncopied (D9h) ----
 
-# the parameters a body's result may be a view of (check's load.ViewResults), where the body is lowered with a plan
-# under the rework's round 2 - none otherwise: while compiling, and for any other body, a returned view is copied (T7b)
+# the parameters a body's result may be a view of (check's load.ViewResults), where the body is lowered with a plan -
+# none otherwise: while compiling, and for any other body, a returned view is copied (T7b)
 fn (lw Lowerer&) ViewsOf(id typed.BodyId) I64 {
-    if not source.NewParams or I64(id) < 0 or I64(id) >= lw.Plans.Len() or I64(id) >= lw.Bodies.Len(): return 0
+    if I64(id) < 0 or I64(id) >= lw.Plans.Len() or I64(id) >= lw.Bodies.Len(): return 0
     return match lw.Bodies[I64(id)].Of {
         case typed.BodyOf.Fn(inst): try lw.P.L.ViewResults.Get(inst) catch default I64(0)
-        # (round 3b: a constructor whose fields hold views of what it is given - check.ctorViewKey's)
+        # (a constructor whose fields hold views of what it is given - check.ctorViewKey's)
         case typed.BodyOf.Ctor(t, twin): (try lw.P.L.CtorViews.Get(I64(t)) catch default I64(0)) if twin == types.ListId(0) else 0
         case _: 0
     }
@@ -2572,7 +2386,7 @@ fn (ln mut lowering&) viewWalk() typed.ViewWalk {
     b := ln.B
     for k in range b.Params.Len().Min(typed.ViewBits) {
         key := pair.Pair(b.File, I64(b.Local(b.Params[k]).Sp.Start))
-        if not ln.L.P.L.ParamWritten.Has(key) and not ln.L.P.L.BareWritten.Has(key): m |= I64(1) << k
+        if not ln.L.P.L.ParamWritten.Has(key): m |= I64(1) << k
     }
     lw := ln.L
     return typed.ViewWalk(ln.T, b, m, fn(id typed.BodyId) I64 { return lw.ViewsOf(id) }
@@ -2624,7 +2438,7 @@ fn (ln mut lowering&) viewCall(c typed.Call&, ty types.TypeId) Bool {
     return id >= typed.BodyId(0) and ln.L.ViewsOf(id) > 0 and ln.viewValue(ty)
 }
 
-# whether a value of type ty may be handed back as a view (D9h; round 3b: any value holding storage of its own)
+# whether a value of type ty may be handed back as a view (D9h; any value holding storage of its own)
 fn (ln mut lowering&) viewValue(ty types.TypeId) Bool { return not ln.T.IsRef(ty) and typed.HoldsOwned(ln.T, ty) }
 
 # x, where it stands, is only read before its statement ends: the call of a function handing back views it is (through
@@ -2641,8 +2455,8 @@ fn (ln mut lowering&) readHere(x typed.Expr&) {
 }
 
 # whether every argument a call may hand back a view of is storage nothing in this function can change before the view
-# is read: what a bare parameter of this function reaches (read-only here - and, as 2.10 has it, written by nothing the
-# call it is in reaches), constant data, or a value made for the call (no other name holds it)
+# is read: what a place of this function reaches where the statement is quiet, constant data, or a value made for the
+# call (no other name holds it)
 fn (ln mut lowering&) stableViews(c typed.Call&) Bool {
     id := match c.Target {
         case typed.Callee.Body(i): i
@@ -2698,10 +2512,11 @@ fn (ln mut lowering&) localRooted(p typed.Lvalue&) Bool {
 # evaluates gives a writable reference, calls through a function value or an "any", or runs statements of its own (a
 # block of a match, a clause, a comprehension, a lambda made) - so between a call handing back a view of what a place of
 # this function reaches and the view's last read in the statement nothing writes it (nothing but what reaches the same
-# storage from a mutable global through a call given read-only arguments - 2.10's provisional hole, stated)
+# storage from a global through a call given read-only arguments, which a program none of whose globals can be written
+# so has none of - check.mutStorage)
 fn (ln mut lowering&) quiet() Bool {
     n := ln.stmtSafe.Len()
-    if n == 0: return false
+    if n == 0 or ln.L.P.L.MutStorage: return false
     if ln.stmtSafe[n - 1] < 0: ln.stmtSafe[n - 1] = 1 if ln.quietStmt(ln.stmts[n - 1]) else 0
     return ln.stmtSafe[n - 1] == 1
 }
@@ -2772,6 +2587,7 @@ fn (ln mut lowering&) quietPlace(p typed.Lvalue&) Bool {
 }
 
 # a call writing nothing it is not given writably: a body's, an extern's or a helper's, every argument read-only or a value
+# reaching no code that could write anything (types.ReachesCode: a closure holding a "mut" reference, an "any")
 fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     t := ln.T
     ty := match c.Target {
@@ -2784,16 +2600,15 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     ps := t.Items(t.Params(ty)) if ty != types.UnknownT else Array<types.TypeId>(0)
     for k in range c.Args.Len() {
         if k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0: return false
-        if not ln.quietX(c.Args[k]): return false
+        if t.ReachesCode(c.Args[k].Type()) or not ln.quietX(c.Args[k]): return false
     }
     return true
 }
 
-# a place holding the reference: a bare parameter's (a read-only reference parameter of this body), a part of one, or
-# what one reaches
+# a place holding the reference: a part of what a stable reference reaches. A parameter is none - what a read-only
+# reference parameter names may change under a "mut" name for it while the call runs
 fn (ln mut lowering&) stableHolder(p typed.Lvalue&) Bool {
     return match p {
-        case typed.Lvalue.Local(_, ty, id): ln.B.Local(id).Kind == typed.LocalKind.Param and ln.T.IsRef(ty) and (ln.T.PermOf(ty) & types.Writable) == 0
         case typed.Lvalue.Field(_, _, base, _): ln.stableHolder(base)
         case typed.Lvalue.Elem(_, _, e): ln.stableHolder(e.Base)
         case typed.Lvalue.Payload(_, _, py): ln.stableHolder(py.Base)
@@ -2883,16 +2698,15 @@ fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span, site typed.SiteId = 
     return mir.Operand.Copy(mir.L(dest))
 }
 
-# ---- views kept in place of copies (the rework's round 3b, docs/rework.md 17) ----
+# ---- views kept in place of copies (D9h, docs/rework.md 17) ----
 
 # the copies this body leaves out, where the two could not be told apart: where it hands back a local holding views of
 # its arguments, as check recorded (typed.ViewWalk.Settle - its callers copying where they keep the result), and where a
-# local holds views of storage nothing changes while it lives (viewLocals). Only lowered with the scope pass's plan under
-# the rework's round 2: while compiling, every copy is made, so what the evaluator computes is the copies' and agrees
+# local holds views of storage nothing changes while it lives (viewLocals). Only where the body is lowered with the scope
+# pass's plan: while compiling, every copy is made, so what the evaluator computes is the copies' and agrees
 fn (ln mut lowering&) settleViews() {
-    if not ln.planned or not source.NewParams: return
-    lw := ln.L
-    u := typed.Uses(ln.T, ln.B, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    if not ln.planned: return
+    u := typed.Uses(ln.T, ln.B)
     views := ln.L.ViewsOf(ln.B.Id)
     if views > 0 { ln.resultViews(u, views) }
     ln.viewLocals(u)
@@ -3038,9 +2852,9 @@ fn (ln mut lowering&) heldViews(u typed.LocalUses&, c typed.Call&) Bool {
 }
 
 # whether the storage a value names - the storage itself, a view of it, what a reference names - is changed by nothing
-# while a local of this body holding it lives, and outlives it: constant data, what a bare parameter reaches (its caller
-# copies it where anything could change it during the call), an immutable global's, a local's own storage nothing
-# writes, one holding views of such storage (viewLocals), or a parameter held by value nothing writes
+# while a local of this body holding it lives, and outlives it: constant data, an immutable global's, a local's own
+# storage nothing writes, one holding views of such storage (viewLocals), or a parameter held by value nothing writes
+# (its own copy - never what a reference parameter names, which may change under a "mut" name for it during the call)
 fn (ln mut lowering&) heldSrc(u typed.LocalUses&, x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Data(_, _, _, _): true
@@ -3075,8 +2889,13 @@ fn (ln mut lowering&) heldPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
     }
 }
 
+fn runArray(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
+}
+
 # what a reference read out of a place names: a reference local's referent - and a value array local's own storage,
-# read as the reference its pair is (an argument given a bare parameter)
+# read as the reference its pair is
 fn (ln mut lowering&) heldRefPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
     return match p {
         case typed.Lvalue.Local(_, _, id): ln.heldReferent(u, I64(id)) if ln.T.IsRef(ln.B.Locals[I64(id)].Ty) else ln.heldLocal(u, I64(id))
@@ -3084,16 +2903,13 @@ fn (ln mut lowering&) heldRefPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
     }
 }
 
-# what reference local i names: a bare parameter's argument (passed by pointer, its body never assigning it), or a
-# reference local holding views of stable storage (viewLocals)
+# what reference local i names: a reference local holding views of stable storage (viewLocals), or one given storage
+# made for it by the call declaring it
 fn (ln mut lowering&) heldReferent(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     # (its own storage only: what a reference it holds names may change under any other name for it)
     if ln.T.SharesRefs(ln.T.Referent(l.Ty)): return false
-    if l.Kind == typed.LocalKind.Param {
-        decl := ln.declParams()
-        return typed.BarePointer(ln.T, ln.B, i, decl) and ln.paramElig(i)
-    }
+    if l.Kind == typed.LocalKind.Param: return false
     if ln.vl.Has(i): return true
     # (one given storage made for it by the call declaring it - a built result no one else holds: its own, as a value
     # local's is)
@@ -3116,7 +2932,8 @@ fn (ln mut lowering&) freshCall(x typed.Expr&) Bool {
 fn (ln mut lowering&) heldLocal(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     if ln.T.SharesRefs(l.Ty): return false
-    if l.Kind == typed.LocalKind.Param: return not ln.T.IsRef(l.Ty) and ln.paramElig(i)
+    # (a parameter by value is the callee's own, but a run-time array one - D9b's, the caller's array read in place)
+    if l.Kind == typed.LocalKind.Param: return not ln.T.IsRef(l.Ty) and ln.paramElig(i) and not runArray(ln.T, l.Ty)
     if not ln.heldUnchanged(u, i): return false
     a := u.AliasOf[i]
     if a >= 0 and not ln.vl.Has(i): return ln.heldLocal(u, a)
@@ -3149,18 +2966,7 @@ fn (ln mut lowering&) encloses(a typed.BlockId, b typed.BlockId) Bool {
 # whether this body's parameter local i is one its body never assigns whole (names' ParamWritten and BareWritten)
 fn (ln mut lowering&) paramElig(i I64) Bool {
     key := pair.Pair(ln.B.File, I64(ln.B.Locals[i].Sp.Start))
-    return not ln.L.P.L.ParamWritten.Has(key) and not ln.L.P.L.BareWritten.Has(key)
-}
-
-# the parameter types this body's function declares (a type variable's binding stays by value), none for any other body
-fn (ln mut lowering&) declParams() Array<types.TypeId> {
-    inst := match ln.B.Of {
-        case typed.BodyOf.Fn(k): k
-        case _: -1
-    }
-    if inst < 0: return Array<types.TypeId>(0)
-    P := ln.L.P
-    return P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
+    return not ln.L.P.L.ParamWritten.Has(key)
 }
 
 fn (ln mut lowering&) immutableGlobal(mi I64, n source.NameId) Bool {
@@ -3168,7 +2974,7 @@ fn (ln mut lowering&) immutableGlobal(mi I64, n source.NameId) Bool {
     return v is not null and not generic.WrittenMut(v.Ty)
 }
 
-# a body keeping its parameter k's referent's parts as they are (round 3b): it writes nothing through it but scalar
+# a body keeping its parameter k's referent's parts as they are: it writes nothing through it but scalar
 # fields, assigns it nowhere, lends it to nothing, keeps it nowhere, hands it back nowhere - a walk's Next writing its
 # position. Asked once a body and parameter
 fn (lw mut Lowerer&) preserves(body I64, k I64) Bool {
@@ -3183,7 +2989,7 @@ fn (lw mut Lowerer&) preserves(body I64, k I64) Bool {
     return known
 }
 
-# whether a body's reference result is storage made for it that nothing else holds (round 3b): every value it returns
+# whether a body's reference result is storage made for it that nothing else holds: every value it returns
 # a value given storage there (Promote of one made: an array, a case, a comprehension, a text, another such call's), or
 # a reference local holding one, kept nowhere but its return - lent only to bodies keeping nothing of what they are lent
 # (freshParam). Asked once a body
@@ -3201,7 +3007,7 @@ fn (lw mut Lowerer&) freshResult(body I64) Bool {
 
 fn (lw mut Lowerer&) allFresh(b typed.Body&) Bool {
     if b.Root is null or not lw.T().IsRef(lw.T().Result(b.Ty)): return false
-    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    u := typed.Uses(lw.P.T, b)
     for x in u.Rets {
         if not lw.freshRet(b, u, x): return false
     }
@@ -3274,7 +3080,7 @@ fn (lw mut Lowerer&) freshParam(body I64, k I64) Bool {
 
 fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
-    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    u := typed.Uses(lw.P.T, b)
     p := I64(b.Params[k])
     if u.Esc[p] or u.Ret[p]: return false
     for j in range u.AliasOf.Len() {
@@ -3288,7 +3094,7 @@ fn (lw mut Lowerer&) keepsNothing(b typed.Body&, k I64) Bool {
 
 fn (lw mut Lowerer&) keepsParts(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
-    u := typed.Uses(lw.P.T, b, fn(id typed.BodyId) types.TypeId { return lw.Bodies[I64(id)].Ty })
+    u := typed.Uses(lw.P.T, b)
     p := I64(b.Params[k])
     if u.WrOther[p] or u.Whole[p] or u.Esc[p] or u.Ret[p]: return false
     for j in range u.StoreAt.Len() {
@@ -3331,12 +3137,6 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         case typed.MakeKind.Tuple, typed.MakeKind.Case {
             ops := ln.vals(m.Items)
             if ln.dead { return mir.Operand.None }
-            # (while compiling, no plan: a bare parameter's own storage made part of a value is copied there, round 2e)
-            if source.NewParams and not ln.planned {
-                for i, x in m.Items {
-                    if ln.bareOwn(x) >= 0: ops[i] = ln.ownCopy(ops[i], x.Type(), mir.ScopeRef.Program, x.Span())
-                }
-            }
             if m.Site >= typed.SiteId(0) and t.IsRef(ty) {
                 inner := t.Referent(ty)
                 v := ln.into(inner, mir.Rvalue.Aggregate(inner, m.Tag, ln.F.Args(ops)), sp)
@@ -3351,7 +3151,7 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             v := ln.val(x)
             if ln.dead { return mir.Operand.None }
             if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.built(m.Site), sp) }
-            # (round 3b: a view kept in place of this copy, where nothing could tell the two apart)
+            # (a view kept in place of this copy, where nothing could tell the two apart)
             if ln.noCopy.Has(I64(m.Site)) { return v }
             return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
         }
@@ -3446,7 +3246,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt
         }
     }
     if ln.dead { return mir.Operand.None }
-    # (the rework's round 3, QCE: a fill owning storage - text, an array, a value with such parts - is each element's
+    # (QCE: a fill owning storage - text, an array, a value with such parts - is each element's
     # own copy of it, made where the array is)
     owned := m.Items.Len() > 0 and ln.ownsStorage(el) and fv != mir.Operand.None and fv != mir.Operand.Const
     fixed := ln.fixedLen(at)
@@ -3646,7 +3446,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
     # declaration's or a body that writes it)
     r typed.Expr?&args = null
-    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) and not ln.convertsApart(args[0].Type(), ty) { r = derefOf(args[0]) }
     if r is not null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
         v := ln.val(r)
         if ln.dead { return mir.Operand.None }
@@ -3672,12 +3472,6 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     # T20: an error value made one of a set holding it - its code renumbered (R6)
     if op == typed.PrimOp.Convert and args.Len() == 1 and t.KindOf(ty) == types.Kind.ErrVal and t.KindOf(args[0].Type()) == types.Kind.ErrVal {
         return ln.into(ty, mir.Rvalue.Recode(ops[0], t.ErrValItems(args[0].Type()), t.ErrValItems(ty)), sp)
-    }
-    # the rework's round 2 (docs/rework.md 2.8): a value seen with fewer of its reference levels writable is the same
-    # value - a fresh one, or one a read-only reference names
-    if op == typed.PrimOp.Convert and args.Len() == 1 and not t.Same(args[0].Type(), ty) and t.SameButPerm(args[0].Type(), ty) and
-       t.KindOf(ty) != types.Kind.Ref and ln.arrayOf(ty) == types.UnknownT {
-        return ln.into(ty, mir.Rvalue.Use(ops[0]), sp)
     }
     if ln.widening(op, args, ty) { return ln.widen(ops[0], args[0].Type(), ty, sp, ln.innermost()) }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
@@ -3803,7 +3597,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeAs(body, ty), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }
@@ -3821,10 +3615,6 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
         ops[i] = ln.val(caps[i].Outer)
         ct := caps[i].Outer.Type()
         if gen and not ln.dead and ln.valueArray(ct) { ops[i] = ln.arrayCopy(ops[i], ct, sp, s) }
-        # (while compiling, no plan: a bare parameter's own storage captured is copied, round 2e)
-        if source.NewParams and not ln.planned and not ln.dead and ln.bareOwn(caps[i].Outer) >= 0 {
-            ops[i] = ln.ownCopy(ops[i], ct, mir.ScopeRef.Program, sp)
-        }
     }
     if ln.dead { return mir.Operand.None }
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
@@ -4085,7 +3875,7 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
     }
 }
 
-# ---- owned copies (the rework's round 3, QCE: T7a relaxed) ----
+# ---- owned copies (QCE: T7a relaxed) ----
 
 # whether a copy of a value of the type is more than its bytes: an array of a run-time length (its elements are its
 # storage), or a value holding one as a part (types.OwnsParts)
@@ -4617,7 +4407,7 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
     ln.epilogue(mir.Operand.None if dest == mir.NoLocal else ln.viewCopied(call, mir.Operand.Copy(mir.L(dest)), res, sp))
 }
 
-# round 2d (D9h): what a call of body made in a function lowering makes for a caller that cannot know what it returns
+# D9h: what a call of body made in a function lowering makes for a caller that cannot know what it returns
 # (a function value's, an "any"'s slot) - copied into the function's result scope where the body hands back views
 fn (ln mut lowering&) viewCopied(body typed.BodyId, v mir.Operand, res types.TypeId, sp source.Span) mir.Operand {
     if ln.L.ViewsOf(body) <= 0 or not ln.valueArray(res): return v
@@ -4632,73 +4422,6 @@ fn (ln mut lowering&) viewCopied(body typed.BodyId, v mir.Operand, res types.Typ
 # views of what it is given (mir.FnKey.Copied)
 fn (lw mut Lowerer&) CodeOf(body typed.BodyId) mir.FnKey {
     return mir.FnKey.Copied(body) if lw.ViewsOf(body) > 0 else mir.FnKey.Body(body)
-}
-
-# the code a function value of type ty made of body calls: CodeOf's, or a by-value wrapper where ty passes by value
-# what the body takes bare by pointer (bulk review 5, F5)
-fn (lw mut Lowerer&) CodeAs(body typed.BodyId, ty types.TypeId) mir.FnKey {
-    if source.NewParams and not lw.P.T.Same(ty, lw.Bodies[I64(body)].Ty) and lw.P.T.KindOf(ty) == types.Kind.Func: return mir.FnKey.ByValue(body, ty)
-    return lw.CodeOf(body)
-}
-
-# a by-value wrapper (mir.FnKey.ByValue): ty's parameters, each the body takes by pointer passed as its address, the
-# rest passed on; the body's scopes the wrapper's own or its frame's; its result (copied where the body hands back views)
-fn (lw mut Lowerer&) byValueFn(body typed.BodyId, ty types.TypeId) mir.Fn {
-    b := standIn(ty)
-    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.ByValue(body, ty), ty))
-    ln.byValueBody(body, ty)
-    lw.Gapped = ln.gapped
-    return ln.F
-}
-
-fn (ln mut lowering&) byValueBody(body typed.BodyId, ty types.TypeId) {
-    t := ln.T
-    sp := ln.B.Sp
-    bty := ln.L.Bodies[I64(body)].Ty
-    for p in t.Items(t.Params(ty)) { ln.F.AddParam(source.NameId(0), sp, p) }
-    vs := t.ScopeVarsOf(ty)
-    for v in vs { ln.F.Vars.Push(mir.VarKind.Result if v < 0 else mir.VarKind.Param(v)) }
-    ln.F.NewBlock()
-    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), sp)
-    ln.emit(mir.Stmt.Open(sp, frame))
-    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
-    bps := t.Items(t.Params(bty))
-    args := Array<mir.Operand>(ln.F.Params.Len())
-    for i in range ln.F.Params.Len() {
-        p := ln.F.Params[i]
-        args[i] = mir.Operand.Copy(mir.L(p))
-        if i < bps.Len() and t.IsRef(bps[i]) and not t.IsRef(t.Items(t.Params(ty))[i]) {
-            args[i] = ln.into(bps[i], mir.Rvalue.Ref(mir.L(p), bps[i]), sp)
-        }
-    }
-    bvs := t.ScopeVarsOf(bty)
-    passed := Array<mir.ScopeRef>(bvs.Len())
-    for k in range bvs.Len() {
-        passed[k] = mir.ScopeRef.Scope(frame)
-        for j in range vs.Len() {
-            if vs[j] == bvs[k]: passed[k] = mir.ScopeRef.Var(j)
-        }
-    }
-    res := t.Result(ty)
-    ok := ln.F.NewBlock()
-    dest := mir.NoLocal
-    if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(res, sp) }
-    code := mir.NoLocal
-    eb := mir.NoBlock
-    if t.Items(t.Errors(bty)).Len() > 0 {
-        code = ln.temp(mir.I32T, sp)
-        eb = ln.F.NewBlock()
-    }
-    k := ln.F.AddCall(mir.Call(mir.Callee.Fn(ln.L.CodeOf(body), bty), ln.F.Args(args), ln.F.ScopeRefs(passed)
-                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
-    ln.end(mir.Term.Call(sp, k))
-    if eb != mir.NoBlock {
-        ln.start(eb)
-        ln.leave(0)
-        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
-    }
-    ln.start(ok)
-    ln.epilogue(mir.Operand.Copy(mir.L(dest)) if dest != mir.NoLocal else mir.Operand.None)
 }
 
 # a function handing back views, called as a function value or through an "any" (mir.FnKey.Copied): its parameters
@@ -5025,8 +4748,7 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         return out.ToString()
     }
     if k == types.Kind.Ref {
-        # (under the rework's round 2 every written "&" is writable: no "mut" is written, so none is rendered)
-        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 and not source.NewParams else ""
+        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
         return $m $ln.spell(t.Referent(ty), true, item) $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
     }
     if k == types.Kind.Any { return "any " $ln.spell(t.AnyTrait(ty), true, item) }

@@ -153,7 +153,7 @@ type Effects struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     curCalls Vec<I64>
     curLinks Vec<link>
     paramAt Map<I64, I64>
-    derived Map<I64, I64>         # by local: the parameters (Writes bits) what it holds is read out of (round 2c)
+    derived Map<I64, I64>         # by local: the parameters (Writes bits) what it holds is read out of (B11b)
     bounded Map<I64, Bool>
     curMod I64 = -1
 }

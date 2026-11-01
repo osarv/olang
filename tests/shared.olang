@@ -7474,20 +7474,21 @@ test "S9b: a range's index form, and its type follows its bounds" {
 }
 
 # E7: "and" and "or" short-circuit - the right side runs only when the left has not decided the result, so
-# a null test guards the read after it. "xor" cannot: its result always depends on both sides.
-fn scBump(c mut Array<I32>&) Bool {
+# a null test guards the read after it. "xor" cannot: its result always depends on both sides. (scBump gives the count,
+# no flag beside what it writes - R23a)
+fn scBump(c mut Array<I32>&) I32 {
     c[0]++
-    return true
+    return c[0]
 }
 
 test "E7: and/or skip their right side once the left decides" {
     calls := Array<I32>(1, 0)
     f Bool = calls[0] == 1
-    assert not (f and scBump(calls))
+    assert not (f and scBump(calls) > 0)
     assert calls[0] == 0
-    assert (not f) or scBump(calls)
+    assert (not f) or scBump(calls) > 0
     assert calls[0] == 0
-    assert (not f) and scBump(calls)
+    assert (not f) and scBump(calls) > 0
     assert calls[0] == 1
     p Point?& = null
     assert p is null or p.x == 0

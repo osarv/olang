@@ -1,0 +1,26 @@
+# check: run
+# QCE: a struct holding an array of a run-time length by value, given a by-value parameter, is the callee's own copy -
+# its part too: a write to it in the callee reaches nothing of the caller's (D9, the argument copied)
+import "std/io"
+
+type person struct(name String, age I64) {
+    name, age
+}
+
+fn shout(p person) String {
+    p.name[0] = 'X'
+    return p.name
+}
+
+fn (p person) Upper() String {
+    p.name[0] = 'A'
+    return p.name
+}
+
+fn main() {
+    p := person($"amy", 9)
+    s := shout(p)
+    u := p.Upper()
+    assert s == "Xmy" and u == "Amy" and p.name == "amy"
+    io.Println($p.name " " $s " " $u)!
+}

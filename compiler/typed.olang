@@ -314,7 +314,7 @@ type MakeKind enum {
     Array      # an array literal, Items its elements (E19)
     Fill       # Array<T>(n, fill) (D14, T8): Length the length, Items the one fill (or none: the zero value, D13c); its
                # type an Array<T, n> where n is a compile-time constant (QP1), else a run-time Array<T>
-    # the rework's round 3 (QCE): Items[0], existing storage, given storage of its own where the site says - a value
+    # QCE: Items[0], existing storage, given storage of its own where the site says - a value
     # array's elements copied, and a value's parts that are arrays of a run-time length (types.OwnsParts), deep through
     # values and shallow at references: what a slot owning what it holds is given (a part stored into, a whole value
     # copied into a local)
@@ -401,19 +401,16 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
     }
 }
 
-# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+# ---- value results handed over uncopied (D9h) ----
 
 # what an array value a body returns is a view of, handed back as it is (ViewRoots): the body B, the parameters whose
 # arguments it may view (Elig: a bit each, by position in Params - those its body never assigns whole), and a callee's
 # own bits (Views: a function that hands back views of what it is given, as check recorded them, load.ViewResults)
-# - and (round 3b) the locals it hands back holding views of its parameters' arguments in their parts (Held: the
+# - and the locals it hands back holding views of its parameters' arguments in their parts (Held: the
 # parameters a local views, -1 for none - Settle), a constructor's fields its instance is made of
 type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64, Held fn(id LocalId) I64) {
     T, B, Elig, Views, Held
 }
-
-# no local holding views (Held's answer where none is known)
-fn NoLocalViews(id LocalId) I64 { return -1 }
 
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
@@ -534,7 +531,7 @@ fn (w ViewWalk&) arrayValue(x Expr&) Bool {
     return w.T.KindOf(t) == types.Kind.Array and w.T.Length(t) == types.TypeId(0)
 }
 
-# the parameters a local's own storage views (round 3b): one the body hands back holding views of them (Locals), a
+# the parameters a local's own storage views: one the body hands back holding views of them (Locals), a
 # parameter held by value holding storage of its own - the argument's, unless the body writes it (then its copy, not in
 # Elig); -1 for any other local's own storage
 fn (w ViewWalk&) localRoots(id LocalId) I64 {
@@ -546,7 +543,7 @@ fn (w ViewWalk&) localRoots(id LocalId) I64 {
 }
 
 # the locals the body hands back - a constructor's fields, of which its instance is made - holding views of its
-# parameters' arguments in their parts, each with the parameters it views (round 3b, D9h for every value): a local of
+# parameters' arguments in their parts, each with the parameters it views (D9h for every value): a local of
 # the body's own holding storage by value, never written but by stores into its parts (a scalar field's aside), never
 # lent writably, escaping nowhere but its return, whose value and part stores are views of the parameters - their copies
 # left out where the body hands it back (ElidedCopy) - or values of their own: put in out, which the walk's Held reads
@@ -632,7 +629,7 @@ fn arenaArray(t types.Table&, ty types.TypeId) Bool {
     }
 }
 
-# ---- views held in place of copies (the rework's round 3b: D9h for every value - docs/rework.md 17) ----
+# ---- views held in place of copies (D9h for every value, docs/rework.md 17) ----
 
 # whether a value of type ty holds storage of its own in an arena by value - an array of a run-time length, or a part of
 # one in a field, an element, a payload, through any value held by value (types.OwnedPart, OwnsParts); never through a
@@ -693,10 +690,9 @@ type Ctx enum {
 # is assigned whole after its declaration (Whole), escapes (Esc), is handed back (Ret), and the values stored into its
 # parts with no reference crossed (StoreAt/StoreX); its Let's value (Init); the writable lends of it whole as an argument
 # of a body's call (LendAt/LendBody/LendParam); the local whose storage a reference, held or bound local names (AliasOf)
-type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
+type LocalUses struct(T types.Table&, B Body&) {
     T
     B
-    Sig        # a body's function type: whether a call's argument is given a bare parameter (bareArg)
     WrOther Vec<Bool>
     WrScalar Vec<Bool>
     Whole Vec<Bool>
@@ -720,9 +716,9 @@ type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
     at BlockId = BlockId(0) # the block being walked
 }
 
-# the uses of b's locals, sig giving another body's function type
-fn Uses(t types.Table&, b Body&, sig fn(id BodyId) types.TypeId) LocalUses {
-    u := LocalUses(t, b, sig)
+# the uses of b's locals
+fn Uses(t types.Table&, b Body&) LocalUses {
+    u := LocalUses(t, b)
     for _ in range b.Locals.Len() {
         u.WrOther.Push(false)
         u.WrScalar.Push(false)
@@ -1080,8 +1076,7 @@ fn (u mut LocalUses&) clauses(cs Array<Clause&>&, ctx Ctx) {
     }
 }
 
-# a call's arguments: each one where an argument stands - a reference given anything but a bare parameter (which keeps
-# nothing of it, D9e) escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
+# a call's arguments: each one where an argument stands - a reference escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
 # callee may keep its parts as they are), any other writable lend a write
 fn (u mut LocalUses&) call(c Call&) {
     body := -1
@@ -1092,7 +1087,6 @@ fn (u mut LocalUses&) call(c Call&) {
         case Callee.Helper(_, _) { helper = true }
         case _ { }
     }
-    ps := u.T.Items(u.T.Params(u.Sig(BodyId(I32(body))))) if body >= 0 else Array<types.TypeId>(0)
     for i in range c.Args.Len() {
         a := c.Args[i]
         lent := u.lendOf(a)
@@ -1110,7 +1104,7 @@ fn (u mut LocalUses&) call(c Call&) {
             u.TempParam.Push(i)
             u.TempIn.Push(u.at)
         }
-        kept := u.T.IsRef(a.Type()) and not helper and not (i < ps.Len() and u.bareParam(ps[i]))
+        kept := u.T.IsRef(a.Type()) and not helper
         u.expr(a, Ctx.Esc if kept else Ctx.Arg)
     }
 }
@@ -1125,12 +1119,6 @@ fn (u LocalUses&) tempLent(a Expr&) Expr?&a {
         case Expr.Promote(_, ty, pr): pr.X if (u.T.PermOf(ty) & types.Writable) != 0 else null
         case _: null
     }
-}
-
-# whether a parameter of type pt is bare (D9e: its own storage kept nowhere past the call) - a read-only reference that
-# is never null and gathers no arguments
-fn (u LocalUses&) bareParam(pt types.TypeId) Bool {
-    return u.T.IsRef(pt) and (u.T.PermOf(pt) & types.Writable) == 0 and not u.T.IsNullable(pt) and not u.T.IsSpread(pt)
 }
 
 # the local a writable borrow of it whole (or of what a reference local of it names) lends, else -1
@@ -1522,71 +1510,6 @@ fn (b Body&) ResultMark(t types.Table&, k I64) Mark {
     return Mark.Bare
 }
 
-# the rework's round 2e: whether local l of body b is a bare parameter passed by pointer (2.10) - a parameter of a
-# function or method whose type is a read-only reference that is never null, which no written "&" is under the switch -
-# but a variadic one's array (D8g) or a type variable's binding, held as given (decl: the generic's written parameters)
-fn BarePointer(t types.Table&, b Body&, l I64, decl Array<types.TypeId>&) Bool {
-    if l < 0 or l >= b.Locals.Len() or b.Of != BodyOf.Fn or t.KindOf(b.Ty) != types.Kind.Func { return false }
-    loc := b.Locals[l]
-    if loc.Kind != LocalKind.Param or not t.IsRef(loc.Ty) { return false }
-    if (t.PermOf(loc.Ty) & types.Writable) != 0 or t.IsNullable(loc.Ty) { return false }
-    ps := t.Items(t.Params(b.Ty))
-    for k in range b.Params.Len() {
-        if I64(b.Params[k]) != l { continue }
-        return k < ps.Len() and not t.IsSpread(ps[k]) and (k >= decl.Len() or t.KindOf(decl[k]) != types.Kind.Var)
-    }
-    return false
-}
-
-# bulk review 5 (2.10): the arguments of a call of body b, a bit each, given b's bare parameters passed by pointer that
-# the same call may write another way while it runs - another argument given a "&" parameter whose type can reach
-# storage of the bare one's (f(p, p) with "b pt&"), a function value or an "any" given beside it (what it writes
-# unknown), or the argument a mutable global's storage (globalMut: what the callee may write, by name, while it reads
-# it). Such an argument is copied for the call, as by value, rather than passed as the caller's storage
-fn AliasCopies(t types.Table&, b Body&, args Array<Expr&>&, decl Array<types.TypeId>&, globalMut Array<Bool>&) I64 {
-    if t.KindOf(b.Ty) != types.Kind.Func: return 0
-    ps := t.Items(t.Params(b.Ty))
-    unknown := false
-    for k in range args.Len().Min(ps.Len()) {
-        rk := t.Referent(ps[k]) if t.IsRef(ps[k]) else ps[k]
-        if t.KindOf(rk) != types.Kind.Func and t.KindOf(rk) != types.Kind.Any and t.KindOf(ps[k]) != types.Kind.Func: continue
-        # (a lambda written at the call capturing no writable reference writes nothing of the caller's but by a global's
-        # name - globalMut's case)
-        if not lambdaWritesNothing(t, args[k]): unknown = true
-    }
-    m I64 = 0
-    for i in range args.Len().Min(ps.Len()).Min(b.Params.Len()).Min(62) {
-        if not BarePointer(t, b, I64(b.Params[i]), decl): continue
-        own := t.Referent(ps[i])
-        hit := unknown or i < globalMut.Len() and globalMut[i]
-        for j in range args.Len().Min(ps.Len()) {
-            if hit: break
-            if j == i or not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) == 0: continue
-            if TypeReaches(t, ps[j], own, 0): hit = true
-        }
-        if hit: m |= I64(1) << i
-    }
-    return m
-}
-
-# whether an argument is a function written there - a named one, or a lambda whose captures hold no writable reference -
-# so that what it can write of the caller's is what the call hands it and a global by name (globalMut's case)
-fn lambdaWritesNothing(t types.Table&, a Expr&) Bool {
-    if a != Expr.Fn: return false
-    return match a.f {
-        case FnVal.Named(_): true
-        case FnVal.Lambda(_, caps, _): not capsHoldWritable(t, caps)
-        case _: false
-    }
-}
-
-fn capsHoldWritable(t types.Table&, caps Array<Capture&>&) Bool {
-    for c in caps {
-        if holdsWritableRef(t, c.Outer.Type(), 0): return true
-    }
-    return false
-}
-
 fn holdsWritableRef(t types.Table&, ty types.TypeId, depth I64) Bool {
     if depth > 6: return true
     return match t.KindOf(ty) {
@@ -1611,41 +1534,6 @@ fn namedHoldsWritable(t types.Table&, ty types.TypeId, depth I64) Bool {
 fn listHoldsWritable(t types.Table&, xs Array<types.TypeId>&, depth I64) Bool {
     for x in xs {
         if holdsWritableRef(t, x, depth + 1): return true
-    }
-    return false
-}
-
-# whether a value of type ty may reach storage of type own - be it, refer to it, view its array - through references,
-# type arguments, elements, tuples and a struct's fields; a function value or an "any" may reach anything
-fn TypeReaches(t types.Table&, ty types.TypeId, own types.TypeId, depth I64) Bool {
-    if depth > 6: return true
-    if t.SameButPerm(ty, own) or t.Same(t.Repr(ty), t.Repr(own)): return true
-    match t.KindOf(ty) {
-        case types.Kind.Ref { return TypeReaches(t, t.Referent(ty), own, depth + 1) }
-        case types.Kind.Func, types.Kind.Any, types.Kind.Var, types.Kind.AnonEnum { return true }
-        case types.Kind.Record { return listReaches(t, t.Items(types.ListId(I32(t.A(ty)))), own, depth) }
-        case types.Kind.Array {
-            ro := t.Repr(own)
-            if t.KindOf(ro) == types.Kind.Array and t.SameButPerm(t.Elem(ty), t.Elem(ro)): return true
-            return TypeReaches(t, t.Elem(ty), own, depth + 1)
-        }
-        case types.Kind.Tuple { return listReaches(t, t.Items(t.Parts(ty)), own, depth) }
-        case types.Kind.Named {
-            if listReaches(t, t.Items(t.Args(ty)), own, depth): return true
-            k := t.DeclKindOf(t.DeclOf(ty))
-            if k == types.DeclKind.Error or k == types.DeclKind.Foreign: return false
-            # (a trait, or a type not laid out yet, may reach anything; an enum by its payloads, bulk review 5)
-            if k == types.DeclKind.Trait or not t.HasBody(ty): return true
-            if k == types.DeclKind.Over: return TypeReaches(t, t.Base(ty), own, depth + 1)
-            return listReaches(t, t.Items(t.Fields(ty)), own, depth) or listReaches(t, t.Items(t.Cases(ty)), own, depth)
-        }
-        case _ { return false }
-    }
-}
-
-fn listReaches(t types.Table&, xs Array<types.TypeId>&, own types.TypeId, depth I64) Bool {
-    for x in xs {
-        if TypeReaches(t, x, own, depth + 1): return true
     }
     return false
 }
@@ -1690,13 +1578,6 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # by local: a value array the function returns, living in the result scope (O26a), that nothing else can name - so it
     # is returned as it is; every other returned array is copied at its return, so the result is the caller's own (T7b)
     RetSole mut Array<Bool>& = Array<Bool>(Locals)
-    # the rework's round 2e, by site: the arguments a call copies, a bit each - one for a bare parameter its callee keeps
-    # past the call that may change while what keeps it lives (scope.argCopies): lowering copies it where the call's
-    # result builds, so what the callee keeps is its own copy, as by value
-    ArgCopy mut Array<I64>& = Array<I64>(Sites)
-    # bulk review 5 (2.10), by site: the arguments for a callee's bare parameters passed by pointer that the same call may
-    # write another way (AliasCopies) and that may change (scope.argCopies) - copied where the call is, for the call alone
-    ArgTemp mut Array<I64>& = Array<I64>(Sites)
     # O8d, the early-free analysis's (compiler/free.olang): by site, a region made where the site's value is - 1 a region
     # of its own, a kid of RegionParent (or of RegionRoot's value's region, when that is one), 2 the region RegionRoot's
     # value is in, else RegionParent. The site's own Built, and its parts', then say Region(site)
@@ -1917,201 +1798,6 @@ fn armBreaks(a Arm&, loop BlockId) Bool {
         for bd in alt.Binds {
             if exprBreaks(bd.From, loop) { return true }
         }
-    }
-    return false
-}
-
-# ---- whether a block may write storage of a type (bulk review 5, F7: a task's bare argument) ----
-
-# whether running block b may write storage of type own - its statements, the tasks it spawns, and every call in it:
-# an assignment whose place, or a place it is part of, has a type reaching own; a call handing a writable reference that
-# reaches own; a call through a function value or an any, or handing one, but a function written there that writes
-# nothing of the caller's (lambdaWritesNothing). Where unsure, it may (docs/rework.md 2.10): what a callee reaches by a
-# global's name is the global's storage, which the caller copies whatever this says (mutGlobalArg)
-type WriteWalk struct(T types.Table&, Bodies Vec<mut Body&>&, Own types.TypeId) { T, Bodies, Own }
-
-fn (w WriteWalk&) Block(b Block?&) Bool {
-    if b is null: return false
-    for st in b.Stmts {
-        if w.stmt(st): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) stmt(st Stmt&) Bool {
-    return match st {
-        case Stmt.Jump(_, _, _), Stmt.Raise(_, _, _): false
-        case Stmt.Let(_, _, x), Stmt.Eval(_, x), Stmt.Yield(_, x), Stmt.Return(_, x), Stmt.Suspend(_, x): w.expr(x)
-        case Stmt.Assign(_, p, x): w.placeHits(p) or w.place(p) or w.expr(x)
-        case Stmt.If(_, i): w.expr(i.Test) or w.Block(i.Then) or w.Block(i.Else)
-        case Stmt.Loop(_, body, post): w.Block(body) or w.Block(post)
-        case Stmt.Reraise(_, x, _): w.expr(x)
-        case Stmt.Exit(_, _, msg): w.expr(msg)
-        case Stmt.Assert(_, c, msg): w.expr(c) or w.expr(msg)
-        case Stmt.Block(_, inner), Stmt.Defer(_, inner): w.Block(inner)
-        case Stmt.Join(_, j): w.Block(j.Code) or w.clauses(j.Clauses)
-        case Stmt.Spawn(_, sp): w.targets(sp.Targets) or w.expr(sp.Task)
-    }
-}
-
-fn (w WriteWalk&) targets(ps Array<Lvalue?&>&) Bool {
-    for p in ps {
-        if p is not null and (w.placeHits(p) or w.place(p)): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) exprs(xs Array<Expr&>&) Bool {
-    for x in xs {
-        if w.expr(x): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) expr(x Expr?&) Bool {
-    if x is null: return false
-    return match x {
-        case Expr.Lit(_, _, _), Expr.Data(_, _, _, _): false
-        case Expr.Read(_, _, p, _): w.place(p)
-        case Expr.Borrow(_, _, p): w.place(p)
-        case Expr.Take(_, _, p): w.placeHits(p) or w.place(p)
-        case Expr.Promote(_, _, pr): w.expr(pr.X)
-        case Expr.Call(_, _, k): w.call(k)
-        case Expr.Make(_, _, m): w.exprs(m.Items) or w.expr(m.Length)
-        case Expr.Collect(_, _, c): w.expr(c.Reserve) or w.Block(c.Loop)
-        case Expr.Prim(_, _, _, _, args): w.primArgs(args)
-        case Expr.Slice(_, _, sl): w.place(sl.Base) or w.expr(sl.Lo) or w.expr(sl.Hi)
-        case Expr.Cond(_, _, k): w.expr(k.C) or w.expr(k.A) or w.expr(k.B)
-        case Expr.Seq(_, _, q): w.stmts(q.Stmts) or w.expr(q.X)
-        case Expr.Match(_, _, m): w.stmts(m.Held) or w.arms(m.Arms) or m.NoMatch is not null and w.arm(m.NoMatch!)
-        case Expr.Try(_, _, t): w.expr(t.X) or w.clauses(t.Clauses)
-        case Expr.Fn(_, _, f): w.fnCaps(f)
-        case Expr.Text(_, _, t): w.pieces(t.Pieces)
-        case Expr.Away(_, _, y): w.expr(y)
-    }
-}
-
-fn (w WriteWalk&) stmts(ss Array<Stmt&>&) Bool {
-    for st in ss {
-        if w.stmt(st): return true
-    }
-    return false
-}
-
-# a primitive given a place (an atomic's, a lane store's) may write it
-fn (w WriteWalk&) primArgs(args Array<Expr&>&) Bool {
-    for a in args {
-        hit := match a {
-            case Expr.Borrow(_, _, p): w.placeHits(p)
-            case _: false
-        }
-        if hit or w.expr(a): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) call(k Call&) Bool {
-    if w.exprs(k.Args): return true
-    ps := try w.params(k) catch { return true }
-    for i in range k.Args.Len().Min(ps.Len()) {
-        rk := w.T.Referent(ps[i]) if w.T.IsRef(ps[i]) else ps[i]
-        fnLike := w.T.KindOf(rk) == types.Kind.Func or w.T.KindOf(rk) == types.Kind.Any
-        if fnLike and not lambdaWritesNothing(w.T, k.Args[i]): return true
-        if fnLike or not w.T.IsRef(ps[i]) or (w.T.PermOf(ps[i]) & types.Writable) == 0: continue
-        if TypeReaches(w.T, ps[i], w.Own, 0): return true
-    }
-    return false
-}
-
-# the parameters a call hands its arguments to - a helper's read off its arguments; a call through a function value
-# written there that writes nothing of the caller's hands it only what it is given, read off its type. An extern, a
-# dispatch through an any or any other function value may write anything
-fn (w WriteWalk&) params(k Call&) Array<types.TypeId> ? unknownCallee {
-    match k.Target {
-        case Callee.Body(id) {
-            if I64(id) < w.Bodies.Len() and w.T.KindOf(w.Bodies[I64(id)].Ty) == types.Kind.Func: return w.T.Items(w.T.Params(w.Bodies[I64(id)].Ty))
-        }
-        case Callee.Helper(_, _) { return w.argTypes(k.Args) }
-        case Callee.Value(x) {
-            if not w.expr(x) and lambdaWritesNothing(w.T, x) and w.T.KindOf(x.Type()) == types.Kind.Func: return w.T.Items(w.T.Params(x.Type()))
-        }
-        case Callee.Extern(_), Callee.Dispatch(_, _, _) { }
-    }
-    error unknownCallee
-}
-
-fn (w WriteWalk&) argTypes(args Array<Expr&>&) Array<types.TypeId> { return types.TypeId[a.Type() for a in args] }
-
-fn (w WriteWalk&) fnCaps(f FnVal&) Bool {
-    return match f {
-        case FnVal.Named(_): false
-        case FnVal.Lambda(_, caps, _): w.caps(caps)
-        case FnVal.Adapter(_, r, _): w.expr(r)
-    }
-}
-
-fn (w WriteWalk&) caps(caps Array<Capture&>&) Bool {
-    for k in caps {
-        if w.expr(k.Outer): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) pieces(ps Array<Piece&>&) Bool {
-    for p in ps {
-        if p == Piece.Render and w.expr(p.x): return true
-    }
-    return false
-}
-
-# the expressions a place holds - an index, a reference read through
-fn (w WriteWalk&) place(p Lvalue&) Bool {
-    return match p {
-        case Lvalue.Local(_, _, _), Lvalue.Global(_, _, _, _), Lvalue.Target(_, _): false
-        case Lvalue.Deref(_, _, r): w.expr(r)
-        case Lvalue.Field(_, _, base, _): w.place(base)
-        case Lvalue.Elem(_, _, e): w.place(e.Base) or w.expr(e.Index)
-        case Lvalue.Payload(_, _, pl): w.place(pl.Base)
-        case Lvalue.Temp(_, _, v, _): w.expr(v)
-    }
-}
-
-# whether writing place p writes storage of type own: its own type reaches own, or one of the places it is part of has
-fn (w WriteWalk&) placeHits(p Lvalue&) Bool {
-    if TypeReaches(w.T, p.Type(), w.Own, 0): return true
-    return match p {
-        case Lvalue.Field(_, _, base, _): w.placeHits(base)
-        case Lvalue.Elem(_, _, e): w.placeHits(e.Base)
-        case Lvalue.Payload(_, _, pl): w.placeHits(pl.Base)
-        case _: false
-    }
-}
-
-fn (w WriteWalk&) clauses(cs Array<Clause&>&) Bool {
-    for k in cs {
-        if w.Block(k.Code) or w.exprs(k.Defaults): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) arms(arms Array<Arm&>&) Bool {
-    for a in arms {
-        if w.arm(a): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) arm(a Arm&) Bool {
-    if w.expr(a.Guard) or w.Block(a.Code) or w.expr(a.Value): return true
-    for alt in a.Alts {
-        if w.expr(alt.Test) or w.binds(alt.Binds): return true
-    }
-    return false
-}
-
-fn (w WriteWalk&) binds(bs Array<Bind&>&) Bool {
-    for bd in bs {
-        if w.expr(bd.From): return true
     }
     return false
 }

@@ -2121,8 +2121,8 @@ fn (m mut Machine&) assign(fi I64, p mir.Lvalue, rv mir.Rvalue) {
                 m.put(fi, dst, ty, m.arg(fi, args, 0))
                 return
             }
-            # a struct or an enum seen as itself - a value copied out of a reference for a bare parameter (the rework's
-            # round 2): the same record (it had been read as a scalar, a zero)
+            # a struct or an enum converted to its own type - a value copied out of a reference: the same record (it had
+            # been read as a scalar, a zero)
             if op == typed.PrimOp.Convert and (m.shape(ty) == vAgg or m.shape(ty) == vEnum) {
                 m.put(fi, dst, ty, m.arg(fi, args, 0))
                 return

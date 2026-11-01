@@ -525,11 +525,6 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Free = fr
     build.Phase("scope")
     if cfg.Memory and d.Errors() == 0 { try io.Print(fr.Report()) catch io.Error { } }
-    # the rework's round 2 (2.10): bare parameters passed by pointer whose bodies write them, given a copy on entry
-    if cfg.Memory and d.Errors() == 0 and source.NewParams {
-        for line in c.EntryCopied { try io.Println(line) catch io.Error { } }
-        try io.Println($c.EntryCopied.Len() " bare parameters copied on entry") catch io.Error { }
-    }
     if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.Reported }
     e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
@@ -553,11 +548,10 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.FuzzCorpus = $e.FuzzCorpus
     }
     for w in e.TestWords { prog.TestWords.Push($w) }
-    # the rework's round 2d (D9h): array value results handed over as views (of what this build lowered)
-    if cfg.Memory and source.NewParams {
+    # D9h: value results handed over as views (of what this build lowered)
+    if cfg.Memory {
         for line in lw.CopyLog { try io.Println(line) catch io.Error { } }
-        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgCopies " arguments copied for a bare parameter a callee keeps") catch io.Error { }
-        try io.Println($lw.TempCopies " arguments copied for a call that may write them another way, " $lw.TaskCopies " for a task something may write before its join, " $lw.CCopies " for a C function") catch io.Error { }
+        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one") catch io.Error { }
     }
     for v in lw.ViewLog { try io.PrintErr($v "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
@@ -688,7 +682,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" infer" if source.InferScopes else "") $(" params" if source.NewParams else "") "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests $(" prof" if cfg.Profile else "") $(" fuzz" if cfg.Fuzz != "" else "") $(" infer" if source.InferScopes else "") "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 

@@ -1710,27 +1710,11 @@ d8gtwo.olang:3:19: error[D8g]: a variadic parameter is the last one but defaulte
     3 | fn tag(xs ...I64, ys ...I64) I64 { return xs.Len() + ys.Len() }
       |                   ^~~~~~~~~
 compilation failed with 1 error
-=== d9abarevariable.olang
-d9abarevariable.olang:4:17: error[D9a]: array parameter 'taps' is passed by reference - write Array<I16>&
-    4 | type Fir struct(taps Array<I16>) {
-      |                 ^~~~
-compilation failed with 1 error
 === d9alambdawritten.olang
 d9alambdawritten.olang:7:31: error[D9a]: array parameter 'x' is passed by reference - write Array<I32>&
     7 |     try io.Println($a.Some(fn(x Array<I32>) Bool { return x[0] == 5 }))
       |                               ^
 compilation failed with 1 error
-=== d9apayloadstring.olang
-d9apayloadstring.olang:7:7: error[D9a]: array parameter 's' is passed by reference - write String&
-    7 |     A(s String)
-      |       ^
-d9apayloadstring.olang:8:7: error[D9a]: array parameter 'c' is passed by reference - write Array<Char>&
-    8 |     B(c Array<Char>)
-      |       ^
-d9apayloadstring.olang:9:7: error[D9a]: array parameter 'f' is passed by reference - write Array<I64>&
-    9 |     F(f Array<I64>)
-      |       ^
-compilation failed with 3 errors
 === d9cgrowing.olang
 d9cgrowing.olang:5:9: error[D9c]: parameter 'a' holds 136 bytes by value - a by-value parameter holds at most 128: take it as 'Array<I64>&'
     5 | fn grow(a Array<I64>) I64 {
@@ -4957,6 +4941,11 @@ r23functype.olang:3:28: error[R23]: a Bool among several results is a flag besid
     3 | fn apply(f (fn(x I64) I64, Bool), x I64) I64 {
       |                            ^~~~
 compilation failed with 1 error
+=== r23reattempt.olang
+r23reattempt.olang:11:20: error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+   11 | fn bad(k I64) I64, Bool { return k, true }
+      |                    ^~~~
+compilation failed with 1 error
 === r3areraiseundeclared.olang
 r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare - add it after '?', or test the error first
     7 |     try f() catch e { error e }
@@ -6972,6 +6961,11 @@ t25cforinwrites.olang:19:5: error[T25c]: a read-only reference cannot become wri
    19 |     for x in hs[0].ring { t += x }
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== t25dconstmut.olang
+t25dconstmut.olang:13:22: error[T25d]: this hands data written in the program where it may be written - pass a copy of its own: '$"abc"'
+   13 |     io.Println($take("abc"))!
+      |                      ^~~~~
+compilation failed with 1 error
 === t27anonenum.olang
 t27anonenum.olang:13:10: error[E12]: expected enum { A B }, found enum { X Y Z }
    13 |   n := f(y)
@@ -7464,50 +7458,6 @@ compilation failed with 1 error
 t6f32range.olang:4:13: error[T6]: '1e39' does not fit F32
     4 |     f F32 = 1e39
       |             ^~~~
-compilation failed with 1 error
-=== t7adeclaredelem.olang
-t7adeclaredelem.olang:6:27: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    6 | type Box<T> struct(v T) { v }
-      |                           ^
-t7adeclaredelem.olang:9:14: note: instantiated here, with T = String
-    9 |     b := Box<String>("start")
-      |              ^~~~~~
-t7adeclaredelem.olang:9:14: note: instantiated here, with T = String
-    9 |     b := Box<String>("start")
-      |              ^~~~~~
-t7adeclaredelem.olang:8:16: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    8 |     a := Array<String>(3, "init")
-      |                ^~~~~~
-compilation failed with 2 errors
-=== t7adeclaredfield.olang
-t7adeclaredfield.olang:8:5: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    8 |     t := $n "-text"
-      |     ^
-t7adeclaredfield.olang:9:5: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Nums&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    9 |     a Nums = Nums(Array<I64>(n, 7))
-      |     ^
-compilation failed with 2 errors
-=== t7aelem.olang
-t7aelem.olang:4:27: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I32>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    4 | type M struct() { m Array<Array<I32>>& = null }
-      |                           ^~~~~~~~~~
-t7aelem.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
-=== t7alambdaresult.olang
-t7alambdaresult.olang:9:39: error[T7a]: this result binds U to String, which the call holds in an array, where an array is held by reference - write the result as String&
-    9 |     try io.Println(nums.Map(fn(n I64) String { return "#" $n }).Join(";"))
-      |                                       ^~~~~~
-compilation failed with 1 error
-=== t7anested.olang
-t7anested.olang:4:24: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I32>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    4 | type W struct(n I32) { a Array<I32> = Array<I32>(n) }
-      |                        ^
-t7anested.olang: error[B4]: no main function - a program starts at 'fn main() { }'
-compilation failed with 2 errors
-=== t7aoverrows.olang
-t7aoverrows.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
-    5 | type Grid extends Array<Array<I64>>
-      |                   ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t7cnegative.olang
 t7cnegative.olang:4:21: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1

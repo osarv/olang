@@ -1,8 +1,7 @@
-# The scoping and parameters rework, round 3b (docs/rework.md section 17): a value holding views in place of the copy
-# it would be - Split's pieces, a walk's elements, an iterator holding its array, a reader's result - where nothing
-# could tell the two apart: what it views changes by nothing while it lives. Each test writes what a value was made from
-# where it may, after it was made, and reads the value back after an arena churn: it must read as its own copy.
-# Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+# D9h (docs/rework.md sections 17 and 18): a value holding views in place of the copy it would be - a value result
+# viewing what a function is given, a walk's elements, a built result read where it stands - where nothing could tell
+# the two apart: what it views changes by nothing while it lives. Each test writes what a value was made from where it
+# may, after it was made, and reads the value back after an arena churn: it must read as its own copy.
 
 fn churn(n I64) I64 {
     xs := Array<I64>(n, 7)
@@ -16,19 +15,19 @@ fn settle() I64 {
 }
 
 # the words of a text, counted by their lengths: the pieces and each walk's element read where they stand
-fn letters(t String) I64 {
+fn letters(t String&) I64 {
     n I64 = 0
     for w in t.Split(" ") { n += w.Len() }
     return n
 }
 
-fn lineLengths(t String) I64 {
+fn lineLengths(t String&) I64 {
     n I64 = 0
     for l in t.Lines() { n += l.Len() * 10 }
     return n
 }
 
-fn total(a Array<I64>) I64 {
+fn total(a Array<I64>&) I64 {
     s I64 = 0
     it := a.Iter()
     for x in it { s += x }
@@ -36,7 +35,7 @@ fn total(a Array<I64>) I64 {
 }
 
 # a piece kept past the text it was cut from changing: its own copy
-fn firstWord(t String) String {
+fn firstWord(t String&) String {
     ps := t.Split(" ")
     return ps[0]
 }
@@ -50,35 +49,6 @@ test firstWord "a piece handed back is a copy the caller keeps" {
     w := firstWord(t)
     t[0] = 'O'
     assert settle() > 0 and w == "one" and t == "One two"
-}
-
-test "pieces of a text changed after they were cut are their own" {
-    t := $"ab cd"
-    ps := t.Split(" ")
-    t[0] = 'X'
-    t[3] = 'Y'
-    assert settle() > 0 and ps[0] == "ab" and ps[1] == "cd"
-}
-
-test lineLengths "lines walked while the text changes are the text as it was" {
-    t := $"ab\ncd\nef"
-    seen := Vec<String>()
-    for l in t.Lines() {
-        seen.Push(l)
-        t[7] = 'Z'
-    }
-    assert settle() > 0 and seen[0] == "ab" and seen[2] == "ef" and t == "ab\ncd\neZ"
-}
-
-test total "an iterator over an array changed while it walks walks the array as it was" {
-    a := I64[1, 2, 3]
-    it := a.Iter()
-    s I64 = 0
-    for x in it {
-        s += x
-        a[2] = 100
-    }
-    assert settle() > 0 and s == 6 and a[2] == 100
 }
 
 test letters "elements of an array of text written in the walk are the elements as they were" {

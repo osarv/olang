@@ -360,30 +360,6 @@ verify-infer: $(OLANG)
 	cmp build/olang.infer build/olang.infer2
 	@echo "verify-infer: the suite and the self-build pass under OLANG_SCOPES=infer"
 
-# the rework's round 2 (docs/rework.md sections 10-11): std copied into build/params, migrated there by
-# tools/param_migrate.olang (its text, driven and finish phases under the switches, and round 3's hand forms from
-# tools/params - docs/rework.md 16), then every test file of std, the
-# prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer, and tests/params (written in
-# the rework's spelling). Not part of verify until the flip (round 4): std is 40 of its 40 test files there (round 2c)
-PARAMS_DIR = build/params
-PARAMS_TESTS = $(shell grep -lE '^\s*test [A-Za-z."]' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang) $(wildcard tests/params/*.olang)
-PARAMS_RUNS = $(addprefix params@,$(PARAMS_TESTS))
-PARAMS_FAILS = $(wildcard tests/params/fail/*.olang)
-PARAMS_ENV = OLANG=$(CURDIR)/$(OLANG) OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
-verify-params: $(OLANG)
-	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests $(PARAMS_DIR)/checks $(PARAMS_DIR)/build && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params && cp -r checks/fixtures $(PARAMS_DIR)/checks/fixtures
-	$(OLANG) build -output $(PARAMS_DIR)/param_migrate tools/param_migrate.olang
-	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) --hand $(CURDIR)/tools/params -j $(PARALLEL) std checks/fixtures/http
-	@rm -f build/failed.txt
-	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
-	@for f in $(PARAMS_FAILS); do want=$$(sed -n 's/^# check: fail //p' $$f | head -1); \
-		out=$$(cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) compile -output check.o $(CURDIR)/$$f 2>&1); \
-		echo "$$out" | grep -qF "$$want" || { echo "verify-params: $$f did not fail with: $$want"; echo "$$out" | head -5; exit 1; }; \
-	done
-	@echo "verify-params: std's tests pass on its migrated copy under the switches, and tests/params/fail's cases fail"
-$(PARAMS_RUNS): params@%: FORCE
-	@cd $(PARAMS_DIR) && $(PARAMS_ENV) $(CURDIR)/$(OLANG) test $* || echo "$*" >> $(CURDIR)/build/failed.txt
-
 # the edit-test loop: the same suite as verify on what is already built - build/olang rebuilt by itself when a source
 # of it is newer (one build, the objects and build/rec it left reused), bootstrapped only when there is none. What it
 # leaves out is what only verify checks: a clean build/, the bootstrap from the seed, and the compiler rebuilding itself
