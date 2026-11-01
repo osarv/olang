@@ -430,10 +430,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (mine, the user absent; such a function is no function value); enum payload fields read-only by inference as a
   struct's are; an enum holding references by pointer, judged once its parts are laid out - bench unchanged on the
   default path, std 40 of 40 under the switches, compiler/'s migrated root 326 -> 86 errors; found and fixed: a
-  followed result given to another came out writable, a lambda captured a bare struct by its pointer. Left before the
-  flip: compiler/'s migration finished and self-built; a constructor keeping a bare parameter's own storage in a field
-  read-only by inference shares the caller's (aliasing, memory-safe - the scope pass is to judge it as the frame's);
-  open point 5, 2.10's caller-side copy, the scope phase's field loop.
+  followed result given to another came out writable, a lambda captured a bare struct by its pointer; **round 2e**
+  (docs/rework.md section 14): a bare parameter's own storage kept in what its function hands back (a constructor's
+  field, a payload, an item, a kept lambda's capture) is the callee's copy, made by a caller whose argument may change
+  (constant data, a value made for the call, a bare parameter of its own, an immutable global, a local nothing writes
+  are passed as they are - bench copies nothing), the evaluator copying where a value is built (mine, the user absent:
+  the copy, not a refusal - QCE's "declared by value"); stored into existing storage it is refused naming `p T&`;
+  `:=` of a plain bare parameter a value copy; open point 5 (a function type's `&` result may hand back what its `&`
+  parameters reach); D9d's three misses (a walk is no use, a handle copied out and stored or kept is), split values and
+  read-only temporaries lent to bare parameters (O17, O25h, section-8 relaxations) - compiler/'s migrated root 86 -> 66
+  errors, std 40 of 40. Left before the flip: compiler/'s last 66 (nullable parameters widened, fields' inner levels,
+  docs/rework.md 14.6) and its self-build, 2.10's caller-side copy, the field loop; round 3 (value arrays in values,
+  `Map<String, V>` keys) not begun.
   The entry below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds

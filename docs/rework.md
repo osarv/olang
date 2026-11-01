@@ -1687,3 +1687,145 @@ outputs identical. Every new rule is behind `source.NewParams`.
 4. **2.10's caller-side copy** of only the parts a call may write; not started.
 5. **The scope phase's field loop** judged incrementally; not started.
 6. Then round 4's flip (switches removed, `mut` out of the grammar, the seed) - not this round's.
+
+## 14. Round 2e: a bare parameter kept is the callee's copy; compiler/ under the switches
+
+Built on `wt-rework` behind the same switches; without them the compiler checks and builds as before (14.4).
+
+### 14.1 What was built
+
+- **A bare parameter's own storage kept past the call is the callee's copy (D9e revised).** Round 2c's fields read-only
+  by inference (and 2d's payloads) let a value built from a bare parameter's own storage - `fn mk(t String) holder {
+  return holder(t) }`, `maybe.Some(t)`, `holder(t[1:])`, a bare struct kept whole - share the caller's storage, the
+  parameter being passed by pointer: memory-safe (the scope pass tied the value to the argument), but the caller's later
+  write showed through, against 2.10. The scope pass now judges such a parameter's **own** storage where a value keeps
+  it - an argument for a constructor parameter the constructor keeps itself (not only what it reaches: a Map walk keeps
+  the map's state, `of.s`, never the handle - `ctorKeepsOwn`, read off the constructor's fields), a case's payload, a
+  value's item, an argument for a parameter of a callee that keeps its own (`KeptOwn`) - as the frame's, the callee's own
+  value (`ownT`, `ownGiven`, `ownItem`), and what it reaches through its references as its argument's, as before. A use
+  needing it longer proposes a lift as for a value local; for such a parameter the lift marks it kept (`keepOwn`) and it
+  is judged as its argument's from the next round, so the judgment converges to round 2d's - and the body's summary says
+  which parameters it keeps (`summary.KeptOwn`).
+- **The caller copies, only where the argument may change** (`scope.argCopies`, `typed.Plan.ArgCopy`, `lower.copiesArg`,
+  `ownCopy`): a call of a body keeping parameter i copies argument i where the call's result builds (an array's
+  elements, a struct's or an enum's value; the reference to the copy passed), unless it cannot change while what keeps
+  it lives (`stableArg`): constant data, a value made for the call, a bare parameter of the caller (its own callers copy
+  for it, by the same summary - so a bare parameter handed down through layers is copied once, at the outermost caller
+  that can change it: regex's `Find` -> `FindFrom` -> `Match(t, ...)` copies nothing for a text nobody writes), an
+  immutable global, a value local nothing assigns, writes or lends writably (`unwritten`), or a reference local naming new
+  storage nothing writes through, never repointed, read only as an argument for a parameter that cannot write it
+  (`refStable`: `t := b.ToString(); for w in t.Split(" ")`). A tail call (`become`) copies nothing (14.2, 3).
+- **The evaluator agrees by construction**: lowering without a plan (while compiling) copies every argument a
+  constructor or a case keeps, and every value's item, that is a bare parameter's own storage - a copy as by value at
+  the point it is kept - so a baked global reads what the run time does (`tests/params/kept.olang`'s `Baked`: `"abc bc
+  abc"`, `"xbc bc xbc"` before).
+- `-memory` counts the arguments copied; `OLANG_INFERDUMP=1` lists each kept parameter and copied argument.
+- **A kept lambda's capture** of a bare parameter's own storage is judged the same way (`later(t)` giving `fn() String
+  { return $t }`): the capture an item of the closure, a lift proposed through it, copied by the evaluator.
+- **Open point 5** (T22a under the switches): a function type's reference result may hand back what its `&` parameters
+  reach - a function only so obliged (`fn first(a Array<I64>&) Array<I64>&`) is a value again, and a call through a
+  value holds each `&` argument to outlive the result's scope (`valueRels`, `valueCovered`; `olang explain`'s "not a
+  value" reason agrees). A function whose own storage obligation is a bare parameter kept (KeptOwn) stays no value
+  (`tests/params/fail/keptvalue.olang`): a call through a value could not copy.
+- **`:=` of a bare parameter holding no reference declares a value copy** (`check.plainBareCopy`): `asp := sp` of a
+  bare `Span` had made a reference local tied to the caller's storage, so `asp = other` then tied two parameters'
+  storage together (compiler/'s O26 and O10c over match-bound spans). A plain struct or enum copies a few words; an
+  array, or a value holding references, stays a reference local as round 2a has it.
+- **D9d's precision** (the migration's oscillating parameters): binding a for-in's hidden collection to a `&`
+  parameter is no use of it (`walkBound`; uses through the hidden local still count, `refFrom`), so a parameter only
+  walked is asked to be bare and a caller's `Vec` of read-only views fits it; a value holding references copied out of
+  what a `&` parameter reaches and stored - a field, an element, a payload, a global (`f.Plans = plans` of a `Vec`
+  handle) - is a use (`refKeptCopy`), and so is one given a by-value parameter its callee writes through or keeps once
+  that need is settled (`m.fns.Push(f)`, `refKeptArgs`). Each had been "never written" until param_migrate made the
+  parameter bare, then refused the bare one - the tool flipping it every round.
+- **Split values lent to bare parameters** (O17, O25h; section-8 relaxations): a value whose references live
+  elsewhere than its own storage - `unpassed(s.unAway(x))`, a call's result read out of a bare parameter - given a
+  bare parameter whose body keeps none of its own storage (`bareLent`: not KeptOwn) is lent where its references are,
+  never refused as split: the callee keeps only what it reaches (its scope variable), its own storage being the
+  callee's (14.1's split). And a temporary lent read-only - a bare parameter's promotion - is stored through by
+  nothing, so its references need only outlive it, not equal its scope (`Promote`'s fit, `through`). One whose callee
+  keeps its own storage is still refused (its copy would be this block's).
+
+### 14.2 Decisions (mine, the user absent)
+
+1. **The copy, not the refusal**, where a new value keeps a bare parameter's own storage: a bare parameter is declared
+   by value (QCE's reading), so its callee has its own copy; passing by pointer skips the copy only where nothing can
+   tell. Storing one into existing storage (a `&` parameter's, a global's) stays refused - QCC's check (2) proper.
+2. **The caller copies, not the callee**, and only an argument that may change while what keeps it lives - a
+   parameter handed down through layers is copied once, by the outermost caller that can change it (regex copies
+   nothing for a text no one writes).
+3. **A tail call copies nothing** (`become`): its arguments are given to a body replacing the frame, which keeps what
+   it keeps by the same summary; S21's rules already refuse a closing scope's storage. Recorded as a limit: a
+   `become` into a body keeping a bare parameter of a changing argument shares it.
+4. **`:=` of a plain bare parameter is a value copy** (14.1) - value semantics, as the declaration says.
+5. **Open point 5 taken** (T22a): a function type's `&` result reaches what its `&` parameters reach.
+
+### 14.3 Found and fixed
+
+- The aliasing hole itself (2.10's premise broken by fields read-only by inference): fixed, 14.1.
+- D9d's three misses (14.1, last item) - each made `param_migrate` oscillate.
+- `asp := sp` of a bare plain struct tying two parameters' storage (14.1).
+- O17 and O25h carried from by-value parameters to bare ones passed by pointer (14.1).
+- **Round 2e's own hole**: a bare parameter's own storage stored into existing storage (`w.f.recs.Push(rec(k, x))`,
+  a record in what a `&` receiver reaches) was marked kept like one handed back, so its callers' copy was built in the
+  call's result scope - which a call with no result has none of, and which outlives nothing it was stored into. Kept
+  now only where the lift asked for is the function's result scope; stored into existing storage it is refused, as
+  D9e says, with a note naming the bare parameter (C2d, O26 at a call) - what param_migrate makes `&`
+  (`tests/params/fail/keptexisting.olang`).
+- The read-only copy given a by-value parameter that writes or keeps it (T25c's `ReadOnlyCopyArg`) noted no bare
+  parameter, so param_migrate left `p.fns.Push(fnRow(mi, f, isExtern))` refused; it notes the one it is built from.
+
+### 14.4 Today's path
+
+Without the switches nothing changes: the new state is consulted only under `source.NewParams`/`InferScopes`, `make
+quick` passes (only the token and tree goldens of the edited compiler sources stale), and bench's IR is the same.
+
+### 14.5 Measured
+
+- **bench under the switches** (13 programs, callgrind, `-target x86-64`, the bench migrated by `param_migrate`): 0
+  arguments copied for a kept bare parameter in every program, instructions within ±20 of the compiler before (the
+  failed-check texts' path lengths), outputs identical.
+- **std**: `make verify-params` passes - its 40 test files on the migrated copy, `tests/params` (11 run files) and
+  `tests/params/fail` (12 cases); std's migration ends with 9 errors in modules no test builds (29 before this round's
+  D9d fixes).
+- **compiler/'s migration** (`param_migrate -j 3` over a copy of compiler/, then the root compiled): 22 min wall, 2.72
+  GB peak; 1,395 edits; the root's errors 86 (round 2d) -> 96 (the first build of this round, the kept-parameter
+  judgment) -> 76 (`:=` of a plain bare parameter a copy) -> 66 (D9d's precision, split values, the keep-only-in-the-
+  result fix); the tool converges now but for 3 parameters (below).
+
+### 14.6 What is left, in order
+
+1. **compiler/ to zero errors under the switches** - 66 left, by cause:
+   - *nullable parameters widened, so a read-only argument is refused* (T25c "read-only here", ~12: `scope.peekTerm(a
+     typed.Expr?&)`, `callOf`/`unAway` chains, `generic.fold`, `parse.AddFile`): a `?&` parameter starts read-only and is
+     widened where its body uses it (11.3's sixth point); once widened, every caller giving a read-only reference is
+     refused, and nothing asks the caller's parameter to be `&` (no bare-parameter note at a nullable argument). Wants
+     the note, or the widening judged per caller.
+   - *a field's or a constructor parameter's inner level not inferred* (E12 `Array<mut String&>&` against
+     `Array<String&>&`, T25c `Push` of a read-only text into `whats Vec<String&>`, ~6): round 2c infers a reference
+     field's own level read-only, not the levels of its type arguments; 2.8's per-field form (11.3's seventh point).
+   - *values copied out of read-only data handed back as writable* (T25c "a copy of a read-only X cannot be returned",
+     4: `eval.fnOfFrame`, `lower`, `generic`): the copy's references are read-only, the result's writable - the result
+     should follow (round 2d's followBare covers plain functions' bare parameters, not a receiver's field read).
+   - *section 8 under bare parameters* (O17 6, T17c 6, O10c 5, O25e 4, O25h 3, O10d, O11/O12, O17a, O27): mostly a
+     temporary or a match binding of a bare parameter's reach given a callee whose summary changed under the switches;
+     the O10c group in free.olang is `sp`/`x` kept in records (`store(...)`) - x should be `&` (the store keeps it), the
+     note now says so, and one more driven run should take it.
+   - *E28 3, E31b/E31 2, D16c 2, S12b 1, E16 1*: a conditional's copy written (the callee's parameter writable at a level
+     it never writes), `md.Items[i] = attached(...)`, a lambda capturing a bare parameter written, a match whose values
+     meet at different levels, and E16 at `ts[0]` of an instance with no type arguments (a G29 instance the switch
+     makes - a real bug to look at).
+   - *D9d by hand, 3* (`scope.handsBackExisting`, `scope.keptCall`, `generic.SynthGlobal`): `x` handed to a `?&`
+     parameter whose result follows it - no use, so D9d asks for bare; bare, a callee after it refuses the read-only
+     result. The same cause as the first item.
+2. **The self-build under the switches** (stage 2 == stage 3, the suite through it, memory and time against the
+   default build, the copies the handover avoids on the compiler) - waits for 1.
+3. **2.10's caller-side copy of only the parts a call may write**, and **the scope pass's field loop judged
+   incrementally** (round 1's 1.26 -> 6.43 s on the compiler) - not started.
+4. **Round 3 (QCE)** - largely *not* covered by rounds 2a-2e. Covered: run-time-length arrays passed by value (D9a's
+   error off) and D9c's cap gone - for parameters, under the switch (round 2a). Left: value arrays held by value in
+   structures (T7a/T7d relaxed: layout of value-array parts, deep copies in lowering, emit and the evaluator, the scope
+   pass's and free.olang's parts, definit's empty array, cabi), `Map<String, V>` owning its key text (a copy at `Put` of
+   a new key), and std's text-keyed maps moved to it (json, flags ...).
+5. **Round 4, the flip** - the switches removed, `mut` out of the grammar but on globals, the markers' spellings gone,
+   the seed regenerated: not done (round 4's, after 1-4).
