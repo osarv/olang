@@ -2144,3 +2144,16 @@ one's, or what its pointer points to, never a reference it holds) is an error na
 given whole to a `&` parameter read atomically - directly, or by one it is handed to in turn (`refAtomic`, propagated
 over `refDeps` at the settle) - is one at the call (`atomicLends`). Both carry the bare-parameter note, so param_migrate
 takes `&`. tests/params/fail/{atomicbare, atomiclent}.olang.
+
+### 15.10 Measured at the end of round 2f
+
+On a fresh migration of std (param_migrate with the round's compiler, 232 edits, 32 rows left by hand), under
+`OLANG_PARAMS=new OLANG_SCOPES=infer`: std's test files 33 of 40 pass (std/cancel and std/chan again, 15.9); every one of
+tests/params' 22 run files and 26 must-fail cases pass. The 7 failing - filepath, flags, fuzz, prop and the prelude's
+iterator, map and text tests - all stop at T25c where read-only or constant text is given to a function that hands
+back views of its argument and so takes `&` since D9e's refusal (`Split`, `Lines`, `filepath.Dir`, a test's
+`linesOf`): 15.6's first item, the language choice still open. Bench (15 programs migrated and built with `-memory`):
+no errors, no copy for a C function, no task copy; one call-may-write copy (std/io's) in each, 3 in sha256, 4 in
+spectral, 16 in regex, and regex's `Replace`/`ReplaceFunc` copy their text on entry - they hand a bare `t` to
+`FindAll`, which takes `&` for the same reason. The default path: `make verify` passed (but for goldens recaptured
+after, f1dbb75).
