@@ -145,10 +145,10 @@
 | -- diagnostics
 | error E11b 9:20
 === checks/cases/g12explicitlength.olang
-| FN 3:1-3:42
-| RETURN 3:29-3:40
+| FN 4:1-4:42
+| RETURN 4:29-4:40
 | -- diagnostics
-| error  6:1
+| error L9 7:5
 === checks/cases/g12spaced.olang
 | -- diagnostics
 | error G12 6:23
