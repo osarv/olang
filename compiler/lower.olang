@@ -2883,8 +2883,10 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         case typed.MakeKind.Array { return ln.arrayLit(m, ty, sp) }
         case typed.MakeKind.Fill { return ln.fill(m, ty, sp) }
         case typed.MakeKind.Copy {
-            v := ln.val(m.Items[0])
+            x := m.Items[0]
+            v := ln.val(x)
             if ln.dead { return mir.Operand.None }
+            if not t.Same(x.Type(), ty) { return ln.derefCopy(v, x.Type(), ty, ln.built(m.Site), sp) }
             return ln.ownCopyOf(v, ty, ln.built(m.Site), sp)
         }
     }
@@ -3675,6 +3677,24 @@ fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.S
         ln.gap(sp, "a Copy helper for a type with no parts")
     }
     return mir.Operand.Copy(mir.L(d))
+}
+
+# v, an array of references to arrays (of type from, or a reference to one), as an array of those arrays' values of
+# type ty made in scope at: each element's referent copied there (check's refsAsValues, E12 at the element)
+fn (ln mut lowering&) derefCopy(v mir.Operand, from types.TypeId, ty types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    t := ln.T
+    src := ln.local(v, from, sp)
+    sp0 := pl(mir.Base.Local(src))
+    if t.IsRef(t.Repr(from)) { sp0 = ln.with(sp0, mir.Proj.Deref) }
+    el := t.Elem(ln.arrayOf(ty))
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(sp0))], sp)
+    buf := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.None)))
+    ln.eachIndex(n, sp, fn(i mir.LocalId) {
+        e := ln.copyAt(ln.with(ln.with(sp0, mir.Proj.Index(i)), mir.Proj.Deref), el, at, sp)
+        ln.emit(mir.Stmt.Assign(sp, ln.mk(ln.with(pl(mir.Base.Local(buf)), mir.Proj.Index(i))), mir.Rvalue.Use(e)))
+    })
+    return mir.Operand.Copy(mir.L(buf))
 }
 
 # a part of a copy being made, of type ty, its own copy where it owns storage - over the bytes it shares with the original

@@ -6590,7 +6590,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         }
         case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
         case typed.Expr.Make(_, ty, m) {
-            if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, d) }
+            if m.Kind == typed.MakeKind.Copy { return s.ownCopy(m, ty, d) }
             kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
             s.anyItems = false
             ro := s.roTemp
@@ -6696,11 +6696,12 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
 # the rework's round 3 (QCE): a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
 # arrays of a run-time length copied there; what it still shares with what it copies, the references that value holds
 # (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
-fn (s mut Scoper&) ownCopy(m typed.Make&, d Term) Val {
+fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {
     if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
     x := m.Items[0]
     v := s.val(x, Term.None)
-    if v.K == ValKind.Existing and s.P.T.SharesRefs(x.Type()) { s.fit(v.T, d, s.storeThrough(x.Type()), x, FitValue) }
+    # (the copy's type, not what it copies: an array of references to text copied into an array of text shares nothing)
+    if v.K == ValKind.Existing and s.P.T.SharesRefs(ty) { s.fit(v.T, d, s.storeThrough(ty), x, FitValue) }
     return fresh(d)
 }
 

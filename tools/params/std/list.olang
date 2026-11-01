@@ -1,0 +1,45 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/list.olang.
+
+# the texts one after another with sep between each two, as an array of texts joins (Array<String>.Join) - a List of
+# texts held by value, as Split's pieces are
+fn (l List<String>) Join(sep String) String {
+    n I64 = 0
+    for p in l { n += p.Len() }
+    if l.Len() > 1 { n += sep.Len() * (l.Len() - 1) }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i, p in l {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in p {
+            out[w] = c
+            w++
+        }
+    }
+    return out
+}
+
+fn (l List<String&>) Join(sep String) String {
+    n I64 = 0
+    for p in l { n += p.Len() }
+    if l.Len() > 1 { n += sep.Len() * (l.Len() - 1) }
+    out := String(Array<Char>(n))
+    w I64 = 0
+    for i, p in l {
+        if i > 0 {
+            for c in sep {
+                out[w] = c
+                w++
+            }
+        }
+        for c in p {
+            out[w] = c
+            w++
+        }
+    }
+    return out
+}

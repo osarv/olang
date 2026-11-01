@@ -1,0 +1,6 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/prelude/vec.olang.
+
+# the texts joined with sep between each two, as an array of them is (Join)
+fn (v Vec<String>) Join(sep String) String { return v.s.data[:v.s.n].Join(sep) }
+
+fn (v Vec<String&>) Join(sep String) String { return v.s.data[:v.s.n].Join(sep) }

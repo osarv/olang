@@ -1,0 +1,11 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/os.olang.
+
+# the names in the directory "path", in byte order, without "." and ".." - each a text of the array's own
+fn ReadDir(path String) Array<String> ? Error {
+    p := $path "\0"
+    all := try copyOut(fn(buf Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) })
+    if all.Len() == 0 { return Array<String>(0) }
+    names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
+    names.Sort(fn(a, b) { return a.Compare(b) < 0 })
+    return names
+}

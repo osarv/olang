@@ -788,7 +788,7 @@ if TestBuild {
     }
 
     test "a List of references: the words of a line, as slices of it" {
-        line String& = "to be or not"
+        line := $"to be or not"   # its own text: wordsOf shares it, "&" (QCC)
         ws := wordsOf(line)
         assert ws.Len() == 4
         n := 0
@@ -890,7 +890,7 @@ if TestBuild {
         assert kv[17].v == 34
         kv[17] = listKV(0, 99) # an element is replaced whole: "l[i]" is a copy, as "for x in l" gives
         assert kv[17].v == 99 and kv[17].k == 0
-        line String& = "to be or not"
+        line := $"to be or not"   # its own text: wordsOf shares it, "&" (QCC)
         ws := wordsOf(line)
         assert ws[1] == "be" and ws[3] == "not"
         mine mut List<String&>& = List<String&>()

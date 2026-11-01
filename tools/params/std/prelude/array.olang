@@ -1,0 +1,15 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/prelude/array.olang.
+
+# a position in an array - what lets generic code written over Iterator<T> take an array too ("total(a.Iter())"),
+# as it takes a Vec or a Map. "for x in a" does not go through it: an array is walked directly. It holds the array as
+# its own (QCE), so nothing done to the array after Iter() changes the walk
+type ArrayIter<T> struct(of Array<T>) {
+    arr Array<T> = of
+    i I64 = 0
+}
+
+# the elements it has still to give, as a view of the array
+fn (it ArrayIter<T>) Rest() Array<T> { return it.arr[it.i:] }
+
+# a fresh position at the array's start - each call its own, so loops never disturb each other
+fn (a Array<T>) Iter() ArrayIter<T> { return ArrayIter<T>(a) }

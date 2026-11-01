@@ -1,0 +1,11 @@
+# param_migrate's hand forms (round 3, docs/rework.md 16) for std/prelude/tests/iterator.olang.
+
+test "FlatMap walks the iterator each value gives" {
+    a := I64[1, 2, 3]
+    assert a.Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a[:x].Iter() }).ToVec().ToArray() == I64[1, 1, 2, 1, 2, 3]
+    words := String&["a b", "", "c"]
+    n := 0
+    for _ in words.Iter().FlatMap(fn(t String) ArrayIter<String> { return t.Split(" ").Iter() }) { n++ }
+    assert n == 4
+    assert I64[].Iter().FlatMap(fn(x I64) ArrayIter<I64> { return a.Iter() }).ToVec().Len() == 0
+}

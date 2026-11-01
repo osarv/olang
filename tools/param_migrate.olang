@@ -18,7 +18,10 @@
 # Running it again changes nothing. Files are rewritten in place; --check writes nothing and the status says whether
 # anything would change.
 #
-#     $OLANG build tools/param_migrate.olang && build/tools_param_migrate [--check] [--text] FILE|DIR...
+# hand   (round 3) declarations written by hand in the rework's form, from a tree beside it (--hand DIR, DIR/PATH for
+#        the file at PATH), each replacing the one of its name - after the text phase, before the driven one.
+#
+#     $OLANG build tools/param_migrate.olang && build/tools_param_migrate [--check] [--text] [--hand DIR] FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -416,6 +419,135 @@ test TextPhase "drops mut, makes read-only parameters bare" {
     assert inOldForm("if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n") == "if TargetOs == \"linux\" {\n    G mut I64 = 1\n}\n"
 }
 
+# ---- the hand phase (round 3, docs/rework.md 16) ----
+
+# what no rule can say, written by hand in the rework's form: a reader handing back views of what it is given takes it
+# bare and returns a value - its parts arrays of a run-time length held by value (QCE) - which is a change of its body,
+# not of its signature. A file of hand declarations beside the tree (--hand DIR: DIR/PATH for the file at PATH) gives
+# each one whole, its comment lines with it; it replaces the declaration of its key in the file, or is added at the
+# file's end. Applied after the text phase, so the driven phase follows from it as from the rest
+type declAt struct(Key String&, Start I64, End I64) { Key, Start, End }
+
+# a file's text with the hand file's declarations put in
+fn HandPhase(src String&, hand String&) String {
+    lines := src.Split("\n")
+    hl := hand.Split("\n")
+    ds := declsOf(lines)
+    out := Vec<String&>()
+    taken := Map<String&, Bool>()
+    hs := declsOf(hl)
+    at I64 = 0
+    for d in ds {
+        # (every hand declaration of the key in its place - a method of two instances, "Array<String&>.Join" beside
+        # "Array<String>.Join", is two of one key - the file's first of that key giving way to them)
+        if handFor(hs, d.Key) < 0 or taken.Has(d.Key): continue
+        for k in range at, d.Start { out.Push(lines[k]) }
+        for i, h in hs {
+            if h.Key != d.Key: continue
+            if i > 0 and hs[i - 1].Key == d.Key: out.Push("")
+            for k in range h.Start, h.End { out.Push(hl[k]) }
+        }
+        at = d.End
+        taken.Put(d.Key, true)
+    }
+    for k in range at, lines.Len() { out.Push(lines[k]) }
+    for h in hs {
+        if taken.Has(h.Key): continue
+        if out.Len() > 0 and out[out.Len() - 1] == "": out.Pop()!
+        out.Push("")
+        for k in range h.Start, h.End { out.Push(hl[k]) }
+        out.Push("")
+    }
+    return out.Join("\n")
+}
+
+fn handFor(hs Vec<declAt>&, key String&) I64 {
+    for i, h in hs {
+        if h.Key == key: return i
+    }
+    return -1
+}
+
+# the top-level declarations of a file's lines, each from the comment lines directly above it
+fn declsOf(lines Array<String&>&) Vec<declAt> {
+    out := Vec<declAt>()
+    i I64 = 0
+    for i < lines.Len() {
+        k := declKey(srcmask.StripStart(lines[i]))
+        if k == "" {
+            i++
+            continue
+        }
+        s := i
+        for s > 0 and srcmask.StripStart(lines[s - 1]).StartsWith("#") { s-- }
+        e := declEnd(lines, i)
+        out.Push(declAt(k, s, e))
+        i = e
+    }
+    return out
+}
+
+# a line's leading spaces: a declaration in a top-level "if" (a test of a module's own) is indented by it
+fn indentOf(l String&) String {
+    n I64 = 0
+    for n < l.Len() and l[n] == ' ' { n++ }
+    return $l[:n]
+}
+
+# the key of a declaration a line begins: "fn Name", a method's "fn Type.Name" by its receiver's type, "type Name" - ""
+# for a line beginning none
+fn declKey(l String&) String {
+    x := l[7:] if l.StartsWith("export ") else l
+    if x.StartsWith("type "): return "type " $leadName(x[5:])
+    # a test, by what is written before its body: its target and description
+    if x.StartsWith("test ") and x.EndsWith("{"): return $srcmask.StripEnd(x[:x.Len() - 1])
+    if not x.StartsWith("fn "): return ""
+    x = x[3:]
+    if not x.StartsWith("("): return "fn " $leadName(x)
+    r := x[1:]
+    sp := try r.Find(" ") catch { return "" }
+    r = r[sp + 1:]
+    if r.StartsWith("mut "): r = r[4:]
+    close := try x.Find(") ") catch { return "" }
+    return "fn " $leadName(r) "." $leadName(x[close + 2:])
+}
+
+fn leadName(x String&) String {
+    n I64 = 0
+    for n < x.Len() and srcmask.IsWord(x[n]) { n++ }
+    return $x[:n]
+}
+
+# where the declaration beginning at line i ends: past its line where that opens no body and continues no signature,
+# else past the line closing its body ("}" alone)
+fn declEnd(lines Array<String&>&, i I64) I64 {
+    l := lines[i]
+    m := srcmask.Mask(l, true)
+    depth I64 = 0
+    for k in range l.Len() {
+        if m[k] != 'c': continue
+        if l[k] == '{': depth++
+        if l[k] == '}': depth--
+    }
+    t := srcmask.StripEnd(l)
+    if depth <= 0 and not t.EndsWith(",") and not t.EndsWith("("): return i + 1
+    end := $indentOf(l) "}"
+    for j in range i + 1, lines.Len() {
+        if lines[j] == end: return j + 1
+    }
+    return lines.Len()
+}
+
+test HandPhase "puts each hand declaration in for the one of its key, comments and all, and adds the rest" {
+    src := "# a\nfn (t String&) Split(sep String&) Array<String&>&t {\n    return x\n}\n\nfn f() I64 { return 1 }\n"
+    hand := "# b\nfn (t String) Split(sep String) Array<String> {\n    return y\n}\n\nfn g() I64 { return 2 }\n"
+    out := HandPhase(src, hand)
+    assert out == "# b\nfn (t String) Split(sep String) Array<String> {\n    return y\n}\n\nfn f() I64 { return 1 }\n\nfn g() I64 { return 2 }\n"
+    assert declKey("fn (it mut LineIter&) Next() String&it ? Exhausted {") == "fn LineIter.Next"
+    assert declKey("type LineIter struct(of String&) {") == "type LineIter" and declKey("    x := 1") == ""
+    assert declKey("test Map.Update \"counts\" {") == "test Map.Update \"counts\""
+}
+
 # ---- the driven phase ----
 
 # what the compiler's diagnostics ask for: a parameter made "&" again (a bare one written through, kept or handed
@@ -684,6 +816,7 @@ fn main() ? {
     text := false
     olang := srcmask.Compiler()
     jobs I64 = 3
+    hand := ""
     paths := Vec<String&>()
     i I64 = 1
     for i < args.Len() {
@@ -703,6 +836,11 @@ fn main() ? {
         }
         if a == "--olang" and i < args.Len() {
             olang = $args[i]
+            i++
+            continue
+        }
+        if a == "--hand" and i < args.Len() {
+            hand = $args[i]
             i++
             continue
         }
@@ -726,6 +864,8 @@ fn main() ? {
     for f in files {
         src := try srcmask.ReadText(f)
         out := TextPhase(src, keep = not (check or text), old = old)
+        hp := srcmask.PathJoin(hand, f)
+        if hand != "" and os.Exists(hp): out = HandPhase(out, try srcmask.ReadText(hp))
         if out == src: continue
         changed++
         if not check: try os.WriteFile(f, out)

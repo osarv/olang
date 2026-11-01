@@ -7776,6 +7776,13 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
     have := typeOf(x)
     hr := c.isRef(have)
     wr := c.isRef(want)
+    if c.argBare {
+        y := c.refsAsValues(x, want, sp)
+        if y is not null { return y }
+    } else if not wr {
+        y := c.refsCopied(x, want)
+        if y is not null { return y }
+    }
     if c.retInst >= 0 {
         # (a nullable parameter read-only by inference handed back: the result follows it instead, round 2c)
         if c.P.T.SameButPerm(have, want) and c.P.T.WiderPerm(want, have) and c.followNull(x) { return c.convert(sp, x, want) }
@@ -22299,6 +22306,38 @@ fn tryExisting(tr typed.Try&) Bool {
         }
     }
     return false
+}
+
+# the rework's round 3 (QCE, E12): an array of references to arrays given a bare parameter wanting an array of those
+# arrays' values - "String&[...]" where "parts Array<String>" is wanted: only read through it, each element's referent
+# is the value read, so the array is lent as it is (a reference to an array and an array value are one pair); null where
+# x is not that
+fn (c mut Checker&) refsAsValues(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr?&c {
+    have := typeOf(x)
+    hd, wd := c.arrayOf(c.deref(have)), c.arrayOf(c.deref(want))
+    if hd == types.UnknownT or wd == types.UnknownT or c.writable(want) { return null }
+    eh, ew := c.P.T.Elem(hd), c.P.T.Elem(wd)
+    if not c.isRef(eh) or c.isRef(ew) or c.P.T.IsNullable(eh) or not c.P.T.OwnedPart(ew) { return null }
+    if not c.P.T.SameButPerm(c.P.T.Referent(eh), ew) { return null }
+    vt := c.P.T.Array(ew, c.P.T.Length(hd))
+    if c.isRef(have) { return c.fit(c.convert(sp, x, c.P.T.Ref(vt, c.P.T.PermOf(have) & ~types.Writable)), want, sp) }
+    return c.fit(c.convert(sp, x, vt), want, sp)
+}
+
+# ... and where an array of those values is wanted otherwise - a local, a field, a catch's default: each element's
+# referent copied (MakeKind.Copy of x as want), as a reference into a value copies out (E12)
+fn (c mut Checker&) refsCopied(x typed.Expr&c, want types.TypeId) typed.Expr?&c {
+    have := typeOf(x)
+    hd, wd := c.arrayOf(c.deref(have)), c.arrayOf(want)
+    if hd == types.UnknownT or wd == types.UnknownT or c.isRef(want) { return null }
+    eh, ew := c.P.T.Elem(hd), c.P.T.Elem(wd)
+    if not c.isRef(eh) or c.isRef(ew) or c.P.T.IsNullable(eh) or not c.P.T.OwnedPart(ew) { return null }
+    if not c.P.T.SameButPerm(c.P.T.Referent(eh), ew) or c.P.T.Length(wd) != types.TypeId(0) { return null }
+    sp := x.Span()
+    from := c.exprs.Len()
+    c.exprs.Push(x)
+    return typed.Expr.Make(sp, want, typed.Make(typed.MakeKind.Copy, 0, gather(c.exprs, from), null, c.site(typed.SiteKind.Make, sp)
+                                                typed.Check.None))
 }
 
 # whether x is a value made where it is - an array, a case, a comprehension, a constructor's or a case's call - which no
