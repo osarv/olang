@@ -10893,6 +10893,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
         if not tv and not c.namedHolds(r) { return }
         if c.roRef(e) or tv and (c.P.T.PermOf(typeOf(e)) & types.Writable) == 0 {
             bp := c.roRoot(readPlace(e))
+            if bp < 0 { bp = c.bareArgLocal(e) }
             fs Vec<pair.Pair<I64, I64>>
             if not c.bareRooted(c.rootLocal(readPlace(e))) { c.roFieldsOf(e, fs, 0) }
             if source.NewParams and bp >= 0 and c.bareNamed(bp) {
@@ -21441,6 +21442,25 @@ fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bo
     k := c.bareParamAt(r) if bare else c.paramPos(r)
     if k < 0: error Elsewhere
     if not ks.Has(k): ks.Push(k)
+}
+
+# the bare parameter an argument is, through conversions and a temporary - its local, -1 for none (a note naming it, so
+# param_migrate can make it "&")
+fn (c mut Checker&) bareArgLocal(x typed.Expr&) I64 {
+    y := unwrapped(x)
+    for _ in range 8 {
+        match y {
+            case typed.Expr.Prim(_, _, _, _, args) {
+                if args.Len() == 0: return -1
+                y = unwrapped(args[0])
+            }
+            case typed.Expr.Promote(_, _, pr) { y = unwrapped(pr.X) }
+            case _ { break }
+        }
+    }
+    r := c.rootLocal(c.placeOfX(y))
+    if not source.NewParams or r < 0 or not c.bareLocals.Has(c.roKey(r)) or not c.bareNamed(r): return -1
+    return r
 }
 
 # whether a reference is one held in a place - read out of a field, an element, a reference local made by reading one -
