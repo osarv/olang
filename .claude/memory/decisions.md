@@ -2370,3 +2370,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and a static table per (type, trait) - identity, `$`'s renderings, the slot functions, never the instance's size;
   nothing through an `any` copies or lays out its instance. The reference-only types, always written `&`: `any W&`,
   function types (`fn&`, QCI 3), types with a destructor (C11) and extern types (`extern type Db`, X10).
+- Copies CONFIRMED 2026-11-01 (the user: "Good, keep it that way"): a written value place copies from a reference of a
+  type held both ways (E12; the one way to copy a value type once `Clone()` leaves them, List keeping its own); `:=`
+  copies nothing (it takes the right side's type); a reference-only type (any, function types, destructor types,
+  extern types) has no value form - the bare type is the error, naming its `&`.
