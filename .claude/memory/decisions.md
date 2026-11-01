@@ -2230,3 +2230,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   and share on `:=`; (b) keep Clone() for handles only; (c) handles stop being handles (a Vec value owns its buffer,
   a copy copies; sharing written `Vec<T>&`). Recommended (c) eventually - it is QCE's rule for every type - but it
   changes Vec/Map's meaning everywhere (std, compiler); (b) until then. Spawns (2) asked again with it.
+- Handles, the user 2026-11-01 ("arrays own memory and so an array copy is a copy of the array memory. A vec owns an
+  array as a value so a copy of a vec is a copy of the array and thus the memory too"): read as choosing option (c)
+  of the handles question. Answered: true of arrays (a value array owns its elements; QCE extends it into structs),
+  not of today's Vec (a handle, SPEC T8: a copy is a second name). PROPOSED with it: (c) for every handle type - Vec,
+  Map, list.List, set.Set, deque.Deque, StringBuilder - a value owns its storage, a copy into a value place copies it
+  (elided where neither side is written or kept afterwards, QCE's rule), sharing is written `&`, `.Clone()` removed;
+  in-place change of a collection inside a collection goes through a `&` result on a `&` receiver (`m.At(k)` giving
+  `V&`, D9g allows it) or `Update` - `v := try m.Get(k); v.Push(x)` no longer changes the map (mine); a migration tool
+  marks every old handle copy whose sharing is observed (either side written after) as `&` before the flip (mine).
+  Built with QCE in round 3. ASKED: confirm (c), and that it covers every handle type, not only Vec. Rec yes.
