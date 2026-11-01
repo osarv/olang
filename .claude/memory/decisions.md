@@ -2281,3 +2281,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   unseen code (function values, `any`, a spawn's join block) copies; a C call copies only if some export fn may write
   that storage type (C may call back); another thread outside a join is the program's own race (-race), no copy.
   Answers the read-only-to-non-const question: copy.
+- C `T*` clarified 2026-11-01 (the user: "* should translate to 'as a reference' so the value should be borrowed"):
+  `T*` is `p T&`; an owned value (a local, a field through one) is borrowed writably, no copy; only a source that cannot
+  be borrowed writably (a bare parameter, constant data, an immutable global, a read-only view) is copied for C (an
+  error for an olang `&` parameter).
