@@ -2131,3 +2131,16 @@ error - kept so, C and olang alike, until the user says otherwise.
 tests/params/cpointers.olang (with cptr/cptr.c) runs the cases: a bare parameter (C's write seen by the body, not the
 caller), a view and an immutable global (copied for the call), an owned array (lent), a `const` pointer (read in place),
 and a mutable global under an export fn that writes it (copied).
+
+### 15.9 An atomic read of a bare parameter (mine, the user absent)
+
+A fresh migration of std hung std/cancel's and std/chan's tests under the switches: param_migrate's text phase makes a
+`p T&` written without `mut` bare (read-only, so a value), and nothing brought `Token.Why`'s `&` back - its atomic
+read had kept it `&` only while it was written `&` (D9d's atomic use) - so `Cancelled`, then `spin`, became bare, F7
+copied the token at the spawn (the join block's `t.Cancel()` writes Token storage), and the task watched a copy that
+never fired. By QCC the migrated program is wrong as written - a bare parameter is the function's own value, which
+no other thread writes - so the compiler says so (D9): an atomic read of a bare parameter's own storage (a by-value
+one's, or what its pointer points to, never a reference it holds) is an error naming `p T&`, and a bare parameter
+given whole to a `&` parameter read atomically - directly, or by one it is handed to in turn (`refAtomic`, propagated
+over `refDeps` at the settle) - is one at the call (`atomicLends`). Both carry the bare-parameter note, so param_migrate
+takes `&`. tests/params/fail/{atomicbare, atomiclent}.olang.

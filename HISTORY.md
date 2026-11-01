@@ -27657,3 +27657,13 @@ lowering's `copiesValue` looked through none of them, so a later write to the ch
 built and in the evaluator alike (both run the same MIR). tests/params/keptroutes.olang's written copy through a choice
 found it; it now copies wherever any value the choice may give is existing storage, as a returned choice already did
 (`retCopies`). tests/textslot.olang holds it beside a baked global.
+
+**An atomic read of a bare parameter (mine, the user absent).** A fresh migration of std under the switches hung
+std/cancel's and std/chan's tests. param_migrate's text phase had made `Token.Why`'s `t Token&` - written without `mut`,
+so read-only - bare, as it does every such parameter, and only D9d's atomic use had kept it `&` before; with it bare,
+`Cancelled` and the test's `spin` became bare too, F7 copied the token at the spawn because the join block's `Cancel`
+writes Token storage, and the task spun on a copy that never fired. The migrated program was wrong by QCC's own rule -
+a bare parameter is the function's own value, which no other thread writes - so the compiler now says so (D9): an atomic
+read of a bare parameter's own storage is an error naming `p T&`, and so is a bare parameter given whole to a `&`
+parameter read atomically, directly or through those it hands it to (a settle over the D9d dependencies). Both carry
+the bare-parameter note, so the tool takes `&` again.

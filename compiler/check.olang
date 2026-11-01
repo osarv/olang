@@ -299,6 +299,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     refDeep Map<pair.Pair<I64, I64>, Bool>
     deepDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     roLends Vec<roLendRec>
+    # (D9 under the round 2: the "&" parameters read atomically, directly or through those they are handed to, and the
+    # bare parameters' own values - their copies - handed to a "&" parameter, judged once that is known)
+    refAtomic Map<pair.Pair<I64, I64>, Bool>
+    atomicLends Vec<roLendRec>
     roArgs Vec<roArg>
     refKeptArgs Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # D9d: (body, "&" parameter) given (callee, by-value k)
     refCalls Map<pair.Pair<I64, I64>, typed.Expr&>   # D9d (round 2f): a reference local made from a call's result, the call
@@ -759,6 +763,8 @@ fn (c mut Checker&) reset() {
     c.refFrom = Map<pair.Pair<I64, I64>, I64>()
     c.deepDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roLends = Vec<roLendRec>()
+    c.refAtomic = Map<pair.Pair<I64, I64>, Bool>()
+    c.atomicLends = Vec<roLendRec>()
     c.roArgs = Vec<roArg>()
     c.refKeptArgs = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roFns = Vec<roFn>()
@@ -10855,6 +10861,52 @@ fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
     return first
 }
 
+# D9 under the round 2: an atomic read is there to see another thread's write - so a "&" parameter whose reach one
+# reads is used as one (shared, which only a reference is, D9d), and a bare parameter's own storage read so is an error
+# naming "p T&": this function's own value, which no other thread writes (a copy of it would never change)
+fn (c mut Checker&) atomicRead(p typed.Lvalue&, sp source.Span) {
+    c.refUse(p)
+    k := c.refParamOf(p)
+    if k >= 0 { c.refAtomic.Put(pair.Pair(c.fr().Body, k), true) }
+    b := c.ownBare(p)
+    if b < 0: return
+    l := c.cur().Local(typed.LocalId(I32(b)))
+    rec := c.err(sp, msgs.AtomicBare(c.text(l.Name)))
+    c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteBareParam(c.text(l.Name)))
+}
+
+# the bare parameter (or its copy on entry) whose own storage place p is - through fields, elements and payloads, and
+# the one dereference of the pointer it is passed by; -1 where p is reached through any other reference
+fn (c mut Checker&) ownBare(p typed.Lvalue&) I64 {
+    q := p
+    for _ in range 32 {
+        match q {
+            case typed.Lvalue.Field(_, _, b, _) { q = b }
+            case typed.Lvalue.Elem(_, _, e) { q = e.Base }
+            case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
+            case typed.Lvalue.Deref(_, _, r) {
+                return match unwrapped(r) {
+                    case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): c.bareSelf(I64(id))
+                    case _: -1
+                }
+            }
+            case typed.Lvalue.Local(_, _, id) { return c.bareSelf(I64(id)) }
+            case _ { return -1 }
+        }
+    }
+    return -1
+}
+
+# whether local id is a bare parameter - passed by pointer, or by value (a number, a struct of one register) - or the
+# copy of one made on entry (declared where it is): the function's own value; the local, else -1
+fn (c mut Checker&) bareSelf(id I64) I64 {
+    if c.bareLocals.Has(c.roKey(id)): return id
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if l.Kind == typed.LocalKind.Param and l.Name != source.NameId(0) and not c.isRef(l.Ty): return id
+    if l.Kind == typed.LocalKind.Var and l.Name != source.NameId(0) and c.P.L.BareWritten.Has(pair.Pair(c.fr().File, I64(l.Sp.Start))): return id
+    return -1
+}
+
 # a place reached through a "&" parameter used where a writable one is wanted: the parameter used as one
 fn (c mut Checker&) refUse(p typed.Lvalue?&) {
     k := c.refParamOf(p)
@@ -10999,6 +11051,9 @@ fn (c mut Checker&) refArg(body I64, k I64, e typed.Expr&) {
     if source.NewParams and k < ps0.Len() and c.isRef(ps0[k]) and c.writable(ps0[k]) and not c.builds(body): c.resultUse(e)
     j := c.refParamOfX(e)
     owner := pair.Pair(c.fr().Body, j)
+    # (a bare parameter's own value - its copy - handed to a "&" parameter: refused at the settle where that one is read
+    # atomically, for another thread's write, which the copy never sees)
+    if source.NewParams and k < ps0.Len() and c.isRef(ps0[k]) and c.writable(ps0[k]) { c.atomicLend(body, k, e) }
     # (round 2f: a lambda's capture of a "&" parameter of a body around, handed on - that parameter's use)
     if j < 0 and source.NewParams: owner = c.outerParam(readPlace(unwrapped(e)))
     if owner.Second < 0 { return }
@@ -11251,6 +11306,26 @@ test bareSpelled "drops a reference's last &, its scope marker and an old mut" {
 # form - but where it cannot be bare: one that may be null ("?&"), an "any", an extern type's or a destructor's
 # (reference-only, X10, C11), a function value, a type variable's, an extern's or an export fn's (C's to write), a
 # variadic list
+# D9 under the round 2: a "&" parameter handed on to one read atomically is read so too; a bare parameter's own value
+# handed to such a parameter is an error at the call, naming "p T&" (param_migrate makes it so: the note)
+fn (c mut Checker&) atomicSettle() {
+    if not source.NewParams: return
+    for _ in range c.refDeps.Len() + 1 {
+        moved := false
+        for d in c.refDeps {
+            if not c.refAtomic.Has(d.Second) or c.refAtomic.Has(d.First): continue
+            c.refAtomic.Put(d.First, true)
+            moved = true
+        }
+        if not moved { break }
+    }
+    for l in c.atomicLends {
+        if not c.refAtomic.Has(pair.Pair(l.Callee, l.Param)): continue
+        rec := c.P.L.Diags.Error(l.At, msgs.AtomicBareLent(l.BareName))
+        c.P.L.Diags.Note(rec, l.Bare, msgs.NoteBareParam(l.BareName))
+    }
+}
+
 fn (c mut Checker&) refSettle() {
     for d in c.refKeptArgs {
         if not c.roNeeds.Has(d.Second) { continue }
@@ -11268,6 +11343,7 @@ fn (c mut Checker&) refSettle() {
         if not moved { break }
     }
     for e in c.refUsed { c.widenUsed(e.Key) }
+    c.atomicSettle()
     c.refDeepClose()
     for l in c.roCtorArgs {
         if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) or c.fieldsWritAll(l.Fields) { continue }
@@ -11373,6 +11449,23 @@ fn (c mut Checker&) roNeedOf(p typed.Lvalue?&, body I64, k I64) {
     if j >= 0: c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
     j = c.paramOf(p)
     if j >= 0: c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+}
+
+fn (c mut Checker&) atomicLend(body I64, k I64, e typed.Expr&) {
+    u := unwrapped(e)
+    p := match u {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
+        case _: null
+    }
+    if p is null: return
+    b := -1
+    match p {
+        case typed.Lvalue.Local(_, _, id) { b = c.bareSelf(I64(id)) }
+        case _ { }
+    }
+    if b < 0: return
+    l := c.cur().Local(typed.LocalId(I32(b)))
+    c.atomicLends.Push(roLendRec(c.fr().Body, c.at(e.Span()), body, k, "", c.at(l.Sp), $c.text(l.Name)))
 }
 
 # an argument for a by-value parameter of a body: a read-only copy is judged once the body's need is known; a
@@ -15284,7 +15377,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         if op != typed.PrimOp.AtomicLoad and source.NewParams { c.refPlaceWritten(p) }
         # (D9d: an atomic read is there to see another thread's write, so a "&" parameter whose reach one reads is used
         # as one - shared, which only a reference is; a bare parameter's own copy would never change)
-        if op == typed.PrimOp.AtomicLoad and source.NewParams { c.refUse(p) }
+        if op == typed.PrimOp.AtomicLoad and source.NewParams { c.atomicRead(p, c.operandAt(x)) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.noteRo(c.err(c.operandAt(x), msgs.AtomicNotWritable()), p)
             return c.unknown(sp)

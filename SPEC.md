@@ -2086,7 +2086,10 @@ mutable global's storage, a function value or an `any` given beside it - is copi
 change: constant data, a value made for the call, a bare parameter of the caller, an immutable global, a value local
 nothing assigns, writes or lends writably once it is made, a read-only view never assigned made from one of these. A
 lambda written at the call is read, not taken for unseen code: it may write the caller's storage only through what it
-captures writably. Each copy is listed by `-memory` (B18); a C function's pointers are X22's. A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
+captures writably. Each copy is listed by `-memory` (B18); a C function's pointers are X22's. An atomic read is there to see another thread's write, so one of a bare parameter's own storage - a by-value one's,
+or what its pointer points to, but no reference it holds - is a compile-time error naming `p T&`: its own value, which no
+other thread writes; and so is a bare parameter given whole to a `&` parameter that is read atomically (directly, or by
+one it is given to in turn), at the call: the body's own copy never sees the write. A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
 block may write storage of its type - its statements, its other tasks, a call through a function value or an `any`, a
 call handing such a value or a `&` argument reaching the type - and the copy lasts until the join; a generator's bare
 parameters are copied where the generator lives, its walk running after the call. An `any` made from a bare parameter

@@ -465,7 +465,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   type (C may call back), another thread outside a join is the program's race (X22, D9; built 2026-11-01 but copying
   only the parts that may change, round 3). Mine: an export fn's `CStr?&` fits a C function pointer's whatever their
   permissions (X10 - it was a type mismatch under the switch); a read-only view local never assigned made from what
-  cannot change is itself stable. Left before the flip: compiler/'s migrated root
+  cannot change is itself stable; an atomic read of a bare parameter's own value, or a bare one given to a `&` read
+  atomically, is an error naming `p T&` (its own value never changes - std/cancel's migrated token hung). Left before the flip: compiler/'s migrated root
   115 -> 53 errors, none the tool can fix - readers of read-only trees taking `&`, read-only copies kept, section 8
   over a bare reach's temporaries (docs/rework.md 15.6) - then the self-build under the switches, the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
   The entry below is today's rule until it lands.

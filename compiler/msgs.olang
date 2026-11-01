@@ -386,6 +386,8 @@ type Diag enum {
     ConstToRefParam
     NoteBareParam
     BareKept
+    AtomicBare
+    AtomicBareLent
     RefResultReadOnly
     NoteRefResult
     ReadOnlyToBuiltResult
@@ -1959,6 +1961,10 @@ fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D
 fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefParam, "T25d", "this hands data written in the program to '" $name "', which may write it - pass a copy of its own: " $fix) }
 
 # NOTE_BARE_PARAM
+fn AtomicBare(name String&) Msg { return Msg(Diag.AtomicBare, "D9", "an atomic read of '" $name "', a bare parameter, reads this function's own value, which no other thread writes - take it as '" $name " T&' to see the caller's") }
+
+fn AtomicBareLent(name String&) Msg { return Msg(Diag.AtomicBareLent, "D9", "'" $name "' is this function's own value, given here to a parameter read atomically to see another thread's write, which its copy never sees - take it as '" $name " T&' to share the caller's") }
+
 fn BareKept(name String&, ty String&) Msg { return Msg(Diag.BareKept, "D9e", "'" $name "' is a bare parameter - this function's own value - and what it hands back keeps its storage: keep a copy of its own ('c " $ty " = " $name "'), or take it as '" $name " " $ty "&' to share the caller's") }
 fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
 
