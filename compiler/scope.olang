@@ -6694,7 +6694,8 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             scopes Vec<typed.Scope>
             lb := I64(id)
             for c in caps {
-                v := s.val(c.Outer, Term.None)
+                # (a bare parameter's own storage captured: judged as the frame's until kept, round 2e)
+                v := s.ownItem(c.Outer, s.val(c.Outer, Term.None))
                 if not s.holds(c.Outer.Type()) { continue }
                 t := s.valTerm(v, s.here())
                 scopes.Push(s.scopeOf(t))
@@ -8781,6 +8782,15 @@ fn (s mut Scoper&) propose(x typed.Expr&, t Term) {
             if s.wholeRoot(pr.X) < 0 {
                 s.proposeCall(pr.X, t)
                 return
+            }
+        }
+        # a lambda kept longer: a bare parameter's own storage it captured, kept (round 2e)
+        case typed.Expr.Fn(_, _, f) {
+            if f == typed.FnVal.Lambda {
+                for c in f.captures {
+                    ob := s.ownOf(c.Outer)
+                    if ob >= 0: s.liftLocal(ob, t, false)
+                }
             }
         }
         case _ { }
