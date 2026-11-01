@@ -13,3 +13,14 @@ fn (it ArrayIter<T>) Rest() Array<T> { return it.arr[it.i:] }
 
 # a fresh position at the array's start - each call its own, so loops never disturb each other
 fn (a Array<T>) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
+
+# a position in an array walked from its last element to its first - what an array's Reversed gives, holding the
+# array as its own (QCE): nothing done to the array after Reversed() changes the walk
+type ReversedIter<T> struct(of Array<T>) {
+    arr Array<T> = of
+    i I64 = of.Len()
+}
+
+# the elements from the last to the first: "for x in a.Reversed() { ... }" - a walk, building nothing, as fast as the
+# counted loop down the positions (a String's too: "for c in t.Reversed()" walks its bytes backward)
+fn (a Array<T>) Reversed() ReversedIter<T> { return ReversedIter<T>(a) }

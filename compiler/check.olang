@@ -336,6 +336,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # (or what they reach handed where it may be written); an attempt's read-only ones are the first less the second
     fieldWant Map<pair.Pair<I64, I64>, Bool>
     fieldWrit Map<pair.Pair<I64, I64>, Bool>
+    fieldJoin Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # round 3b: fields one store makes name one storage
     fieldRo Map<pair.Pair<I64, I64>, Bool>
     fieldOn pair.Pair<I64, I64> = pair.Pair(-1, -1)   # the reference field a store being checked lands in
     # the read-only copies whose read-only-ness rests on such fields, by (body, local): the fields
@@ -10724,7 +10725,10 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
     if not c.roValue(x) or c.followsArg(x) {
         # (an instance's value handed back follows its argument - roResult: no writable one asked, the round 2's rule)
         follows := kind == RoReturned and source.NewParams and c.instanceBody(c.fr().Body)
-        if x is not null and not c.isRef(typeOf(x)) and not follows { c.roNeed(readPlace(x)) }
+        # (round 3b: a value sharing no reference - "t T.Target = v" of an array of numbers - is a copy that writes
+        # nothing of its source wherever it is stored)
+        plain := source.NewParams and x is not null and not c.P.T.SharesRefs(typeOf(x))
+        if x is not null and not c.isRef(typeOf(x)) and not follows and not plain { c.roNeed(readPlace(x)) }
         if kind == RoReturned { c.roResult(x) } else { c.roDeepNeed(x) }
         if kind == RoStored or kind == RoGlobal { c.refKeptCopy(x) }
         return false
@@ -11647,13 +11651,47 @@ fn (c mut Checker&) strReceivers() {
 # read through it is read-only, and a write through it, or a refusal resting on it, marks it written - the program is
 # checked again with it writable. Both sets only grow, so the attempts end.
 
-# the fields read-only this attempt: those asked, less those written
+# the fields read-only this attempt: those asked, less those written - written through one of fields one store makes
+# name one storage (joinFields), each is
 fn (c mut Checker&) roFieldsNow() Map<pair.Pair<I64, I64>, Bool> {
+    c.closeJoins()
     out Map<pair.Pair<I64, I64>, Bool>
     for e in c.fieldWant {
         if not c.fieldWrit.Has(e.Key): out.Put(e.Key, true)
     }
     return out
+}
+
+fn (c mut Checker&) closeJoins() {
+    for _ in range c.fieldJoin.Len() + 1 {
+        grew := false
+        for j in c.fieldJoin {
+            a, b := c.fieldWrit.Has(j.First), c.fieldWrit.Has(j.Second)
+            if a == b: continue
+            c.fieldWrit.Put(j.First, true)
+            c.fieldWrit.Put(j.Second, true)
+            grew = true
+        }
+        if not grew: return
+    }
+}
+
+# round 3b: a reference field given what another field of its struct may name - a list's tail given its first chunk,
+# or a chunk a call reads out of either - names one storage with every field of its type in that struct: written
+# through one, they are all written (FRO's fields are judged apart, so first was read-only though tail writes it)
+fn (c mut Checker&) joinFields(p typed.Lvalue&, x typed.Expr&) {
+    if not source.NewParams or c.freshValue(x): return
+    match p {
+        case typed.Lvalue.Field(_, ty, base, idx) {
+            k := c.fieldKey(base, idx)
+            if k.First < 0 or k.Second >= CaseFieldBase: return
+            fs := c.P.T.Items(c.P.T.Fields(types.TypeId(I32(k.First))))
+            for j in range fs.Len() {
+                if j != idx and c.P.T.SameButPerm(fs[j], ty): c.fieldJoin.Push(pair.Pair(k, pair.Pair(k.First, j)))
+            }
+        }
+        case _ { }
+    }
 }
 
 # whether what this attempt found would read another set of fields read-only
@@ -19458,6 +19496,7 @@ fn (c mut Checker&) storeInto(sp source.Span, p typed.Lvalue&c, value ast.Expr&,
     if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Lvalue.Deref(sp, t, x)) }
     # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
     if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
+    c.joinFields(p, x)
     c.emit(typed.Stmt.Assign(sp, p, c.storeCopy(p, x)))
 }
 

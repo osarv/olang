@@ -4360,7 +4360,7 @@ fn (p mut Program&) reflName(b mut StringBuilder&, t types.TypeId) {
         }
         case types.Kind.Ref {
             pm := p.T.PermOf(t)
-            if (pm & types.Writable) != 0 { b.Push("mut ") }
+            if (pm & types.Writable) != 0 and not source.NewParams { b.Push("mut ") }   # (no "mut" written under round 2)
             p.reflName(b, p.T.Referent(t))
             b.Push("?&" if (pm & types.Nullable) != 0 else "&")
         }

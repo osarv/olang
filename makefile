@@ -366,14 +366,14 @@ verify-infer: $(OLANG)
 # prelude and the prelude's tests run on that copy under OLANG_PARAMS=new OLANG_SCOPES=infer, and tests/params (written in
 # the rework's spelling). Not part of verify until the flip (round 4): std is 40 of its 40 test files there (round 2c)
 PARAMS_DIR = build/params
-PARAMS_TESTS = $(shell grep -l '^test ' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang) $(wildcard tests/params/*.olang)
+PARAMS_TESTS = $(shell grep -lE '^\s*test [A-Za-z."]' std/*.olang std/prelude/*.olang std/prelude/tests/*.olang) $(wildcard tests/params/*.olang)
 PARAMS_RUNS = $(addprefix params@,$(PARAMS_TESTS))
 PARAMS_FAILS = $(wildcard tests/params/fail/*.olang)
-PARAMS_ENV = OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
+PARAMS_ENV = OLANG=$(CURDIR)/$(OLANG) OLANG_STD=$(CURDIR)/$(PARAMS_DIR)/std OLANG_PARAMS=new OLANG_SCOPES=infer
 verify-params: $(OLANG)
-	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params
+	rm -rf $(PARAMS_DIR) && mkdir -p $(PARAMS_DIR)/tests $(PARAMS_DIR)/checks $(PARAMS_DIR)/build && cp -r std $(PARAMS_DIR)/std && cp -r tests/params $(PARAMS_DIR)/tests/params && cp -r checks/fixtures $(PARAMS_DIR)/checks/fixtures
 	$(OLANG) build -output $(PARAMS_DIR)/param_migrate tools/param_migrate.olang
-	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) --hand $(CURDIR)/tools/params -j $(PARALLEL) std
+	cd $(PARAMS_DIR) && $(PARAMS_ENV) ./param_migrate --olang $(CURDIR)/$(OLANG) --hand $(CURDIR)/tools/params -j $(PARALLEL) std checks/fixtures/http
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(PARAMS_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
 	@for f in $(PARAMS_FAILS); do want=$$(sed -n 's/^# check: fail //p' $$f | head -1); \

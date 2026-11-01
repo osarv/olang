@@ -913,7 +913,7 @@ if TestBuild {
         a := l.ToArray()
         assert a.Len() == 111 and a[0] == -1 and a[110] == 109
         t mut List<Char>& = List<Char>()
-        t.PushAll("abc") # text is an Array<Char>, so it goes in as one
+        t.PushAll($"abc") # text is an Array<Char>, so it goes in as one
         t.Push('d')
         assert String(t.ToArray()) == "abcd"
     }

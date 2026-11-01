@@ -5025,7 +5025,8 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
         return out.ToString()
     }
     if k == types.Kind.Ref {
-        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
+        # (under the rework's round 2 every written "&" is writable: no "mut" is written, so none is rendered)
+        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 and not source.NewParams else ""
         return $m $ln.spell(t.Referent(ty), true, item) $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
     }
     if k == types.Kind.Any { return "any " $ln.spell(t.AnyTrait(ty), true, item) }
