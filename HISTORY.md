@@ -27913,7 +27913,7 @@ E31b's error, its message now naming `x.RefMut(i)`.
 **Copies nothing could tell (D9h, lowering).** An element read where it stands (`v[i].xs.Len()`: `readPlace`, a
 temporary's part read in place); a local holding a view where every statement of its block is quiet (`quietLife`: no
 call given a writable reference, through a function value or an `any`, stores only into scalar locals) - which a for-in's
-element over a reference parameter's Vec now meets; a read-only reference a callee keeps nothing of no escape
+element over a reference parameter's Vec now meets; the program's mutable globals judged by their types - a quiet statement may not reach one whose type holds the view's object or that writes what covers it (`load.MutGlobals`, filled by `check.mutStorage`), where any non-scalar mutable global had turned quietLife off for the whole program, so one such global anywhere in a program, std's included, made every such walk copy its elements; a read-only reference a callee keeps nothing of no escape
 (`typed.LocalUses.RefAt/EscHard`, `Lowerer.keepsNoRef`); a by-value argument the callee only reads (`argView`); a
 rendered operand's copy where nothing in its statement could change it (`pieceView`). Measured on a Vec of 1,000 structs
 each holding a 1,000-element Vec, read 200 times: 1.7 s / 2.4 GB -> 0.00 s / 14 MB, by index and by for-in alike.
