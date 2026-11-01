@@ -2355,3 +2355,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   keep round 1 (scopes inferred), round 3's QCE (value arrays inside values, `Map<String, V>`), D9h's handover as an
   optimization, handles as values, QCI 3/4; drop OLANG_PARAMS=new (QCC's "& may write", D9d-D9g, param_migrate,
   FRO). Round 3c (compiler/ to zero under the switches) would be mostly discarded - offered to pause it. In effect: QCC.
+- QCK DECIDED 2026-11-01 (the user: "Yes, pause it and go back to mut"): QCC's parameter half is REVERSED before it
+  landed - `p mut T&` may write the caller's, `p T&` is a read-only shared view, `p T` a value (a copy by meaning,
+  passed by pointer only as an unobservable optimization); `mut` stays on references at every level (T25b/T25c, today's
+  default path); a getter may hand back a read-only `T&`. Dropped: OLANG_PARAMS=new, "every `&` may write", D9d-D9g and
+  the forgotten-`&` checks, param_migrate and its hand forms, read-only-field inference, verify-params. Kept (moved off
+  the params switch): round 1's inferred scopes (OLANG_SCOPES=infer, flipped in round 4), QCE (value arrays held by
+  value inside values, `Map<String, V>` owning its keys, a store copies in), D9h's handover as an optimization, handles
+  as values (Vec, Map, Set, Deque, Heap, StringBuilder; List a handle with Clone), QCI 3/4 (`fn&`/`fn?&`, nullable
+  arrays), the C rule (`T*` is `mut T&`, `const T*` is `T&`). Moot with it: QCJ's `any W` value form (`any W&` read-only,
+  `mut any W&` writable stay as today; no silent box copy stays), D9e's refusal of a kept bare parameter (a bare
+  parameter is the callee's own copy again). Round 3c paused (WIP on wt-rework).

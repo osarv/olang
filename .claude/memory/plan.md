@@ -709,3 +709,9 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (`fn&(...)`, `fn?&(...)`, declared `type Handler fn(...)` used as `Handler&`/`Handler?&`, bare an error), never-null
   function values with no zero value (D13d), nullable arrays `Array<T>?&` (null distinct from empty); migration tools
   in `olang fix`; the compiler's absent-vs-empty flags back to `?&`.
+- 2026-11-01 CET: the user reversed QCC's parameter rule (QCK, back to `mut` on references); round 3c paused. Next:
+  round 3d on wt-rework - the params switch and its machinery removed, QCE / D9h / bulk review 5's default-path fixes
+  kept and moved off the switch (QCE behind OLANG_SCOPES=infer or the default where it changes no program), records
+  (CLAUDE.md's QCC entry marked reversed, SPEC, HISTORY, docs/rework.md); then handles as values; then round 4 (the
+  flip: scopes inferred the default, markers removed from the grammar - `mut` stays - migration, seed, goldens); then
+  QCI 3/4; then the compiler/ refactor, bulk review, final verify.
