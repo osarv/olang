@@ -5311,6 +5311,9 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     # a read-only reference to existing storage returned as a built result, which is new and writable (T25c, O14)
     # ... unless the result keeps its written permission, as a borrowed one did (the inference's KeptPerm)
     kept := s.P.T.KindOf(s.B!.Ty) == types.Kind.Func and s.P.T.ResultFrom(s.B!.Ty, k) == types.KeptPerm
+    # (the rework's round 2: a result the checker made read-only - one handing back what a bare parameter reaches through
+    # a "T?&", which D9g leaves following its argument - is no writable built result; round 2d, KeptPerm off)
+    kept = kept or source.NewParams and s.readOnlyResult(k)
     if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and not kept and s.readOnlyAsBuilt(x) { return }
     if v.K != ValKind.Existing { return }
     exact := s.storeThrough(t)
@@ -5370,6 +5373,18 @@ fn (s mut Scoper&) builtFromParam(x typed.Expr&, t Term) Bool {
     }
     if param { return s.readOnlyAsBuilt(x) }
     return false
+}
+
+# whether the body's result k is a read-only reference, as the checker narrowed it
+fn (s mut Scoper&) readOnlyResult(k I64) Bool {
+    if s.P.T.KindOf(s.B!.Ty) != types.Kind.Func: return false
+    r := s.P.T.Result(s.B!.Ty)
+    if s.P.T.KindOf(r) == types.Kind.Tuple {
+        ps := s.P.T.Items(s.P.T.Parts(r))
+        if k >= ps.Len(): return false
+        r = ps[k]
+    }
+    return s.isRef(r) and (s.P.T.PermOf(r) & types.Writable) == 0
 }
 
 # T25c, O14: a read-only reference returned as a built result: borrow it from the parameter it is read through - true
