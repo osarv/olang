@@ -10259,6 +10259,9 @@ fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece&c {
     if p is not null and c.P.T.KindOf(xt) == types.Kind.Array and c.P.T.Length(xt) != types.TypeId(0) {
         return typed.Piece.Render(typed.Expr.Borrow(x.Span(), c.P.T.Ref(xt, types.ReadOnly), p))
     }
+    # QCE: a value owning storage (a Vec, a Map, a struct holding text) read out of a place is the operand's own copy -
+    # a later operand changing the place changes nothing it renders (lowering leaves the copy out where nothing could)
+    if p is not null and c.P.T.OwnsParts(xt) { return typed.Piece.Render(c.ownCopy(x)) }
     return typed.Piece.Render(x)
 }
 
@@ -16807,9 +16810,25 @@ fn (c mut Checker&) replaceTemp(p typed.Lvalue&c, t I64) typed.Lvalue&c {
             return typed.Lvalue.Elem(sp, ty, typed.Elem(c.replaceTemp(e.Base, t), e.Index, e.Checked))
         }
         case typed.Lvalue.Payload(sp, ty, pl) { return typed.Lvalue.Payload(sp, ty, typed.Payload(c.replaceTemp(pl.Base, t), pl.Tag, pl.Checked)) }
-        case typed.Lvalue.Temp(sp, ty, _, _) { return typed.Lvalue.Local(sp, ty, typed.LocalId(I32(t))) }
+        case typed.Lvalue.Temp(sp, ty, _, _) {
+            # (a level taken in place, E31b: the element its reference names)
+            if c.isRef(c.localType(t)) { return typed.Lvalue.Deref(sp, ty, c.readLocal(sp, t)) }
+            return typed.Lvalue.Local(sp, ty, typed.LocalId(I32(t)))
+        }
         case _ { return p }
     }
+}
+
+# E31b: the method a store through x[i] takes the element in place with - a collection's RefMut over At's indices,
+# giving a writable reference and failing with nothing - -1 for none (the element read by At and written back by SetAt)
+fn (c mut Checker&) inPlace(of types.TypeId, n I64, el types.TypeId) I64 {
+    if not c.referable(el): return -1
+    m := c.roleMethod(of, "RefMut", n)
+    if m < 0: return -1
+    sig := c.P.Sig(m)
+    r := c.P.T.Result(sig)
+    if not c.isRef(r) or (c.P.T.PermOf(r) & types.Writable) == 0 or c.P.T.Items(c.P.T.Errors(sig)).Len() > 0: return -1
+    return m
 }
 
 # a store into x[i]... through At (E31b): x's place and the indices held, the value evaluated, then the element read
@@ -16824,6 +16843,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
     # the levels, the store's own first: x[i][j].f has two, the element of x[i] read and written back last (E31b's
     # nested collections, one level at a time)
     recs Vec<I64>
+    elTys Vec<types.TypeId>
     calls mut Vec<Array<typed.Expr&>&>&c = Vec<Array<typed.Expr&>&>()
     at := p
     for ri >= 0 {
@@ -16833,6 +16853,8 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
             return true
         }
         recs.Push(ri)
+        tv := c.tempValue(at)
+        elTys.Push(typeOf(tv) if tv is not null else types.UnknownT)
         calls.Push(args)
         at = c.atRecs[ri].Base
         ri = c.valueTemp(at)
@@ -16931,6 +16953,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
     }
     # each element read by At into a local, the outermost first, the next read out of it
     temps Array<I64> = Array<I64>(nl, -1)
+    inplace := Array<Bool>(nl, false)
     bases mut Vec<typed.Lvalue?&>&c = Vec<typed.Lvalue?&>()
     for _ in range nl { bases.Push(null) }
     for kk in range nl {
@@ -16941,7 +16964,10 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
         hs := held[l]
         reads mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len(), c.hole(sp))
         for i in range hs.Len() { reads[i] = c.readLocal(sp, hs[i]) }
-        am := c.roleMethod(c.atRecs[recs[l]].Of, "At", hs.Len())
+        # (in place where the collection gives its element so - its RefMut, a Vec's: no copy, nothing written back)
+        rm := c.inPlace(c.atRecs[recs[l]].Of, hs.Len(), elTys[l])
+        inplace[l] = rm >= 0
+        am := rm if rm >= 0 else c.roleMethod(c.atRecs[recs[l]].Of, "At", hs.Len())
         el := c.invoke(sp, sp, am, c.read(sp, base), Array<ast.Expr&>(0), reads)
         t := c.hidden(sp, typeOf(el))
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(t)), el))
@@ -16967,6 +16993,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Lvalue&c, va
         c.emit(typed.Stmt.Assign(sp, p2, v!))
     }
     for l in range nl {
+        if inplace[l]: continue
         hs := held[l]
         sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len() + 1, c.hole(sp))
         for i in range hs.Len() { sargs[i] = c.readLocal(sp, hs[i]) }

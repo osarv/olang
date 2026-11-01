@@ -409,8 +409,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   at references); `Map<String, V>` holds its own key text (a copy at Put of a new key, none on an update or a lookup),
   `Map<String&, V>` shares the caller's, which the `&` says. A constructor's parameter may hold a run-time array by value
   (its field's copy), and a value owning parts given a by-value parameter or receiver is copied at the call (mine, QCK's
-  meaning of `p T`). Not taken (mine, the user absent): D9a's run-time-length error and D9c's 128-byte cap stay for
-  other parameters - lifting them needs the by-pointer passing QCK reverted. **D9h** (mine): a value result viewing what
+  meaning of `p T`). D9a's run-time-length error and D9c's 128-byte cap went with handles as values (below): a by-value
+  array of any length and a value of any size is copied at the call where something could tell (D9h). **D9h** (mine): a value result viewing what
   a function is given is handed back uncopied, its callers copying where they keep it, and a local holds views in place
   of its copy where its body proves nothing could tell (`typed.ViewWalk`, lowering's `viewLocals`) - an optimization, no
   meaning; on the default path a reference parameter is taken to keep what it is given and its referent to be changeable
@@ -447,9 +447,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   global from its initializer; an array of arrays held by value takes its elements' length from its fill or literal. A
   run-time value array elsewhere inside a value is the value's own (T7a, QCE below). Arrays may
   be **passed by value** (D9a): a function is compiled once per argument length (an instance, G29), in which `a.Len()`
-  is a constant and an `if`, conditional or `match` on it is decided per instance (G30); a run-time-length argument is
-  an error naming `&` or a slice (but a constructor's, which its field keeps a copy of - QCE). A by-value aggregate parameter holds at most 128 bytes (D9c), a bare type variable
-  aside. A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
+  is a constant and an `if`, conditional or `match` on it is decided per instance (G30) - only where the body decides
+  something on the length (2026-11-01, `generic.LengthDecided`: `a.Len()` in an if/assert/match condition, a comptime,
+  an array's length; else one instance taking any length); a run-time-length argument is copied at the call where
+  something could tell (D9h). No size cap (D9c removed 2026-11-01). A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
   v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
   arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
   lengths (D8f), constructors taking a fixed array by value (`tools/arrays_migrate.olang` migrates
@@ -763,8 +764,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Instances per array length (G29-G31; constant parameters G20-G28 removed 2026-10-24, QP2, the user's call: "This
   still doesn't give more information than inferring a known size at compile time").** A by-value array parameter
   (at any level under a reference too) binds its length per call; each instance checks, decides asserts on lengths
-  (S18c, with G16b's note naming the lengths); D9c's cap, reported once by the first instance over it (whose body is
-  then not checked), stops a growing length long before G17's bound. A length `Array<T>(n)` gives is folded exactly as
+  (S18c, with G16b's note naming the lengths) - made only where the body decides something on the length (D9a); G17
+  bounds a growing length. A length `Array<T>(n)` gives is folded exactly as
   the program computes (in its operands' types, wrapping), else evaluated, else run-time - never an error.
 - **Generics composition (G8a, G15).** A type variable may be a type argument (`Vec<T>`); a still-generic receiver
   matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
@@ -1313,7 +1314,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
 - **The prelude's collections are Vec, Map and StringBuilder; List is `std/list` (M19d, QZ2, the user's decision
   2026-10-17, built 2026-10-26).** The prelude holds the built-in types' methods, the protocol traits and errors, `Vec<T>`
-  (below), `Map<K, V>` (a handle; `Get` fails on a miss, `Take` is `Get` and `Remove` in one, `Update`, ordered walks by
+  (below), `Map<K, V>` (a value, as Vec; `Get` fails on a miss, `Take` is `Get` and `Remove` in one, `Update`, ordered walks by
   insertion of slot) and `StringBuilder` (now over a `Vec<Char>`); `String` and `Array` are built in. Every other
   container is std: `list.List<T>` (`import "std/list"` - chunked, never moves, a handle; `list.Of(a)`, `list.From(it)`,
   `list.Error`, `list.Iter`; `RunFrom` walks), `pair.Pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"),
@@ -1332,9 +1333,35 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   QF: a Map whose Vec values are replaced and removed stays flat (checks' earlyfree `mapvec`, under 8 MB for a million
   replacements) where each Vec is made by a call handed to `Put`; one first named by a local in the Map's scope (`v mut
   Vec<I64>&m = ...`) is kept until that scope closes (131 MB) - a recorded limit of early freeing.
-- **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
-  QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,
-  `Clone()` a Vec of its own; it is a type argument, field, global, capture or task argument like any value. Growth
+- **Vec, Map, Set, Deque, Heap and StringBuilder are values (QCE, the user's "Handles DECIDED 2026-11-01"; built
+  2026-11-01, wt-values, details mine).** Each holds its storage by value: a copy (`b := a` of a place, a field, an
+  element, a by-value argument, a capture, a task's argument) is a collection of its own, shallow at every `&`; sharing
+  is written `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Clone()` is gone from them (std/list's `List` stays a handle
+  and keeps it). In place: `v.Ref(i)` `T&v` and `v.RefMut(i)` `mut T&v` (unchecked as `v[i]`), `try m.Ref(k)` /
+  `try m.RefMut(k)` (`MapError.Missing`); a number in a Map through `Update`. A store through `x[i]` on a collection
+  declaring `RefMut` is made in place, its value evaluated first (E31b, `check.inPlace` - a Vec of Vecs' `v[i].n += 1`
+  had copied the element twice); a mutating call through `x[i]` stays E31b's error naming `x.RefMut(i)`. A join's
+  operand owning storage is its own copy (E11b: a later operand clearing it showed a half-emptied snapshot). Decided (mine): Ref/RefMut, mirroring
+  View/ViewMut, rather than `m.At(k)` giving `mut V&` (At stays the value read); Map rebuilt over slot arrays (entries,
+  a next-chain, buckets made at the first Put) keeping insertion-of-slot walks; a moved-out owning part is left empty
+  (`vacate`) and `grown` clears the room of an owning element type; sorts move by `vacate` with `errdefer` putting a
+  failing comparison's element back; Deque's growth copies its ring; `Vec<String>.Join`/`Array<String>.Join` beside the
+  `&` forms (one `joinTexts<T>`). Copies nothing could tell from the value are not made (D9h, lowering): an element
+  read where it stands (`v[i].xs.Len()`, `readPlace`), a local or for-in element holding a view where every statement
+  of its block is quiet (`quietLife`) and what it is lent to keeps nothing (`typed.LocalUses.RefAt`,
+  `Lowerer.keepsNoRef`), a by-value argument the callee only reads (`argView`) - a 1000-Vec walk of 1000-element Vecs
+  1.7 s / 2.4 GB -> 0.00 s / 14 MB. D9a and D9c lifted for every parameter (G29 only where a length decides
+  something). `tools/handles_migrate.olang` (driven by `OLANG_HANDLES=1`'s report rows, M19's missing-Clone rows and
+  E31b's element rows) migrated std, compiler/, tests, checks, bench, tools and fuzz; it is not idempotent (a
+  reference made of a copy reads back as a reference), so it is not in `olang fix`'s table. Found on the way: lowering
+  and the evaluator's `Exec`/`Lowerer` held the checker's body list by value (bodies checked after it was made were
+  out of range - a crash), `mir.Fn`/`level` values copied per access (regex's test build 13.9 GB -> 330 MB); a Ref
+  into a Vec goes stale as a view does, and M19g does not see it (a recorded limit). Early freeing: a grown buffer stored
+  back is no escape (free.olang's Collect yields - every Push/Put had escaped its receiver: frames.olang 311 -> 1.9 MB);
+  **recorded limit**: a value owning storage held in place (a Map field by value, a Vec as a Map's value) is no place of
+  early freeing - held by reference it is (the earlyfree fixtures hold them so).
+- **`Vec<T>` is the default growable array (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
+  QAB, approved in advance; a value since 2026-11-01, above).** Its record (buffer and count) is made where it is constructed; it is a type argument, field, global, capture or task argument like any value. Growth
   doubles (8 first), the new buffer made by the prelude-only `a.grown(n)` - the elements moved in, the room past them
   never filled, so no zero value is needed and a doubling writes each byte once (2026-10-26; it was filled with the
   element being stored first) - and retires the old buffer, which stays where the Vec lives until that scope closes - so a view taken before a growth reads the old
@@ -1365,7 +1392,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Format`/`Parse` (fixed offsets only - no zone database). `std/net`: blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`
   with `Read` failing `Closed` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
   5952 text), destructors closing descriptors; names resolved by `Lookup`/`Resolve` over getaddrinfo (X10/X11) - X6's
-  `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), handles all.
+  `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), values as Vec is.
   Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy` (empty: `Exhausted`); the second
   survey's walks (2026-10-26, below) `TakeWhile SkipWhile StepBy FlatMap Partition Reversed`, an array's `Windows`. `std/utf8`
   (`Rune extends U32`, strict `Decode`, `Runes` walking bad bytes as U+FFFD as Go does), `std/base64`, `std/hex`,

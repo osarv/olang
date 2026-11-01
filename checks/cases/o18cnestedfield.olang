@@ -1,7 +1,8 @@
 # check: run
 # flags: -debug -sanitize
-# O18c/O17b (the second review of the view lend, F3): "h := ll[0][0].S; h.Push(x)" - the outer At's receiver is a
-# handle the inner call gave, lent as its reference, so the field read out of it is where the list's elements are
+# O18c/O17b (the second review of the view lend, F3), QCE: "h := ll.RefMut(0).RefMut(0); h.S.Push(x)" - the outer
+# RefMut's receiver is what the inner one gave, a reference to where the list's elements are, so the field read out of
+# it is there too (a Vec was a handle until 2026-11-01, and "h := ll[0][0].S" its copy - a Vec of its own now)
 import "std/io"
 type Blk struct() {
     S Vec<I64>
@@ -14,8 +15,8 @@ fn churn() ? io.Error {
     }
 }
 fn add(ll mut Vec<Vec<Blk>>&, x I64) {
-    h := ll[0][0].S
-    h.Push(x)
+    h := ll.RefMut(0).RefMut(0)
+    h.S.Push(x)
 }
 fn main() ? {
     ll := Vec<Vec<Blk>>()

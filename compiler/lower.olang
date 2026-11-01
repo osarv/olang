@@ -51,7 +51,7 @@ type Gap struct(File I64, Sp source.Span, What String&) {
 }
 
 # the lowering of a program's bodies: P the checked program, Bodies check's table of typed bodies
-type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
+type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&) {
     P
     Bodies
     Plans Vec<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
@@ -2326,6 +2326,18 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     return ln.F.Args(ops)
 }
 
+# a rendered operand's own copy (check's, of a value owning storage) left out where nothing in its statement could
+# change what it copies before its piece renders (stableRef)
+fn (ln mut lowering&) pieceView(x typed.Expr&) {
+    match x {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind != typed.MakeKind.Copy or m.Items.Len() != 1 or m.Site < typed.SiteId(0): return
+            if ln.stableRef(m.Items[0]): ln.noCopy.Put(I64(m.Site), true)
+        }
+        case _ { }
+    }
+}
+
 # a by-value argument's own copy (check's valueArg, a MakeKind.Copy) left out where nothing could tell: the callee keeps
 # its parameter's parts as they are (written by nothing, kept nowhere, handed back by no return - Lowerer.preserves)
 # and what the argument copies is changed by nothing while the call runs (stableRef) - so the callee reads the
@@ -3792,6 +3804,7 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
         match tx.Pieces[i] {
             case typed.Piece.Render(x) {
                 ln.readHere(x)
+                ln.pieceView(x)
                 vals[i], tys[i] = ln.piece(x, sp)
             }
             case _ { }

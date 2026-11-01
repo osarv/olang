@@ -1586,12 +1586,12 @@ fn vecalias(r mut report&) ? Failed {
     try oneError(r, dir, "f3", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
 }
 
-# M19d, B2f, K1 (round 1 of docs/memory.md): a Vec is a handle - copies second names, growth retiring the old buffer - and
-# a program using it gives one output built, built -debug, built -sanitize and interpreted. A view kept across a growth
-# made through a second name stored in a structure reads the old elements when built plainly, is reported by the scope
-# sanitizer (its old buffer made unreadable) -sanitize and -debug -sanitize alike, and stops the evaluator under
-# interpret with both places
-test "a Vec is a handle, built, sanitized and interpreted alike, and a stale view is caught" { assert passed("vechandle") }
+# M19d, B2f, K1 (round 1 of docs/memory.md; a value since 2026-11-01, QCE): a Vec - copies its own, sharing written
+# "&", growth retiring the old buffer - gives one output built, built -debug, built -sanitize and interpreted. A view
+# kept across a growth made through a reference and the structure holding what it names reads the old elements when
+# built plainly, is reported by the scope sanitizer (its old buffer made unreadable) -sanitize and -debug -sanitize
+# alike, and stops the evaluator under interpret with both places
+test "a Vec, built, sanitized and interpreted alike, and a stale view is caught" { assert passed("vechandle") }
 
 fn vechandle(r mut report&) ? Failed {
     dir := fresh("vechandle")

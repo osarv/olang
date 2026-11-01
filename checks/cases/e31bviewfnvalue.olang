@@ -12,5 +12,5 @@ fn f(v mut V&, h fn(x mut V&)) { h(v) }
 
 fn main() ? {
     s := Vs(Array<I64>(4))
-    f(s.RefMut(0), fn(x mut V&) { })
+    f(s[0], fn(x mut V&) { })
 }

@@ -3,38 +3,40 @@
 # E31b/O17b (study 6, r01): a call on a handle element in a loop - a List in a List, a List field of a struct element,
 # the List a Map gives - and a store into an element of one, builds where the handle's state lives, not in the loop
 # body's arena; read back after a churn
+# (std/list's List, a handle; a Vec is a value since 2026-11-01, its elements changed in place with RefMut)
+import "std/list"
 type Box struct(v I64) {
     v
-    items mut Vec<I64>& = Vec<I64>()
+    items mut list.List<I64>& = list.List<I64>()
 }
 
 fn main() ? {
-    users := Vec<Vec<I64>>()
-    boxes := Vec<Box>()
-    m := Map<I64, Vec<I64>>()
+    users := list.List<list.List<I64>>()
+    boxes := list.List<Box>()
+    m := Map<I64, list.List<I64>>()
     for i in range 5 {
-        users.Push(Vec<I64>())
+        users.Push(list.List<I64>())
         boxes.Push(Box(i))
-        m.Put(i, Vec<I64>())
+        m.Put(i, list.List<I64>())
     }
     for i in range 5 {
         for j in range 20 {
-            users.RefMut(i).Push(i * 10 + j)
+            users[i].Push(i * 10 + j)
             boxes[i].items.Push(i * 100 + j)
             (try m.Get(i)).Push(i * 1000 + j)
         }
     }
-    names := Vec<Vec<String&>>()
+    names := list.List<list.List<String&>>()
     for i in range 5 {
-        names.Push(Vec<String&>())
-        names.RefMut(i).Push("init")
+        names.Push(list.List<String&>())
+        names[i].Push("init")
     }
     kept := "kept-text-of-moderate-length"
     for i in range 5 {
         names[i][0] = kept
         users[i][0] += 1
     }
-    churn := Vec<String&>()
+    churn := list.List<String&>()
     for i in range 1000 { churn.Push("x" $i) }
     assert names[4][0] == kept and users[3][0] == 31
     assert users[3].Len() == 20 and users[3][19] == 49 and boxes[3].items[19] == 319 and (try m.Get(3))[19] == 3019

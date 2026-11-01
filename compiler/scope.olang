@@ -6661,9 +6661,9 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # (QCE: a value owning storage and sharing no reference - a by-value parameter's own copy - holds nothing
                 # a callee could keep but its parts, which the callee builds where they are: lent there)
                 owns := s.ownsUnshared(s.P.T.Referent(a.Type()) if s.isRef(a.Type()) else a.Type())
-                # (... and one a callee keeps only a reference to - its result borrowing it, nothing stored into it, as a
+                # (... and one owning storage a callee keeps only a reference to - its result borrowing it, nothing stored into it, as a
                 # walk of a Map value is made - is lent as the storage it is, so what keeps it lives no longer)
-                viewed := s.calleeKeepsArg(c, i) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i)
+                viewed := s.P.T.OwnsParts(s.P.T.Referent(a.Type()) if s.isRef(a.Type()) else a.Type()) and s.calleeKeepsArg(c, i) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i)
                 if s.calleeKeepsArg(c, i) and not handle and not owns and not viewed {
                     s.wantPromotion(a)
                     if s.report {

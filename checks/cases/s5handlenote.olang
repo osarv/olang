@@ -4,7 +4,7 @@
 fn main() ? {
     names := Vec<Vec<String&>>()
     names.Push(Vec<String&>())
-    names.RefMut(0).Push("x")
+    names[0].Push("x")
     for k in range 3 {
         t := $k "-loop-text-of-moderate-length"
         names[0][0] = t

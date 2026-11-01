@@ -27875,3 +27875,83 @@ knucleotide's main one copy fewer. Callgrind, baseline x86-64, reduced sizes: ev
 master's (nbody 40,267,580 -> 40,267,594, knucleotide 66,722,130 -> 66,722,116, text, regex, sha256, matmul, mandelbrot,
 binarytrees and the sum/vec rows identical or within that). `OLANG_SCOPES=infer`: std, the corpus's D9h and QCE files
 52 of 52, as before.
+
+## Handles as values: Vec, Map, Set, Deque, Heap and StringBuilder hold their storage by value (2026-11-01)
+
+The user's "Handles DECIDED 2026-11-01" (decisions.md) left it to me whether the growable collections hold their arrays
+by reference (handles, as they had since round 1 of docs/memory.md) or by value. By value: one copy rule with Array and
+QCE (a copy is a collection of its own, shallow at every `&`), no handle special case in section 8 (bulk review 5's
+handle aliasing, F2/F3, cannot be written any more), tasks given their own, `Map<String, V>` the same rule. std/list's
+List stays a handle (its value is one reference) and keeps `Clone()`; the six lose theirs. Built on wt-values.
+
+**std.** Vec is `data Array<T>` (no initializer, so of a run-time length - with `= Array<T>(0)` it was laid out fixed),
+`n`, `want`; growth `old Array<T>&v = v.data; v.data = old[:v.n].grown(r); old.retire()`. Map is rebuilt over slot
+arrays - `ents Array<MapEntry<K, V>>`, a next-chain `next Array<I64>` (a removed slot's link `-3 - f`), `buckets` made at
+the first Put - walking in insertion-of-slot order, its iterators holding `Map<K, V>&of` and an index; `MapIter.Next`
+builds its entry from the slot's parts (a copy of a whole entry holding a `mut` reference, read through the walk's
+read-only map, would be read-only, QC), and Map's `Str` reads the slots where they are for the same reason. In place:
+`v.Ref(i)` / `v.RefMut(i)` (`T&v`, `mut T&v`, unchecked as `v[i]` is) and `try m.Ref(k)` / `try m.RefMut(k)`
+(`MapError.Missing`) - mine, mirroring View/ViewMut, rather than the brief's `m.At(k)` giving `mut V&` (At stays the
+value read every type's `x[i]` calls). Set over a Map, Deque over a ring it copies whole as it grows, Heap over a Vec,
+StringBuilder over a `Vec<Char>`. A moved-out owning element is left empty (`vacate`), `grown` clears the room of an
+owning element type, sorts move with `vacate` and an `errdefer` putting a failing comparison's element back.
+`Vec<String>.Join` and `Array<String>.Join` beside the `&` forms (one `joinTexts<T>`).
+
+**The language (SPEC T8, D9a, D9c, G29, E11b, E31b, O17b).** D9a's run-time-length error and D9c's 128-byte cap went
+for every parameter (the user's QCE of 2026-10-31; QCK had held them): a by-value argument is a copy by meaning, made
+at the call and left out where nothing could tell. G29's per-length instances stay only where a body decides something
+on the length (`generic.LengthDecided`: `a.Len()` in an if/assert/match condition, a comptime, an array's length) - and,
+found by tests/shared.olang's G29 test, wherever rows held by value lie under the level a call passes (rows laid out in
+place where an instance wants rows of a run-time length are no copy a call can make of what a reference names:
+`generic.nestedRows`). A join's operand holding storage of its own is its own copy (E11b): shrinks.olang's `$m ...
+$clr(m)` rendered `{"": []}` - the snapshot shared the arrays Clear had emptied. A store through `x[i]` on a collection
+declaring `RefMut` (a Vec's) is made in place (E31b, `check.inPlace`): the value evaluated first, then the element taken
+by RefMut and stored into - no read and write-back, which for a `Vec<blk>` of Vecs had copied the whole element twice
+per `v[i].n += 1` (100,000 of them: OOM at 13.9 GB against 1.07 s / 110 MB). A mutating call through `x[i]` stays
+E31b's error, its message now naming `x.RefMut(i)`.
+
+**Copies nothing could tell (D9h, lowering).** An element read where it stands (`v[i].xs.Len()`: `readPlace`, a
+temporary's part read in place); a local holding a view where every statement of its block is quiet (`quietLife`: no
+call given a writable reference, through a function value or an `any`, stores only into scalar locals) - which a for-in's
+element over a reference parameter's Vec now meets; a read-only reference a callee keeps nothing of no escape
+(`typed.LocalUses.RefAt/EscHard`, `Lowerer.keepsNoRef`); a by-value argument the callee only reads (`argView`); a
+rendered operand's copy where nothing in its statement could change it (`pieceView`). Measured on a Vec of 1,000 structs
+each holding a 1,000-element Vec, read 200 times: 1.7 s / 2.4 GB -> 0.00 s / 14 MB, by index and by for-in alike.
+
+**The migration.** `tools/handles_migrate.olang`, driven by the compiler's `OLANG_HANDLES=1` report (check.handleReport:
+a copy of a place later observed shared, an element or map value written through a copy, a by-value parameter written),
+M19's missing-`Clone` rows and E31b's element rows, in rounds: a sharing copy becomes a `&` local or parameter, a
+`Clone()` a value copy, an element changed through a copy `RefMut`. It is not idempotent - a reference it made reads
+back as a sharing to keep, and it rewrote must-fail cases and hand-written value tests - so it is not in `olang fix`'s
+table (tools/README.md's not-run list). What it did wrong, found by the suite and fixed by hand: five former `Clone()`
+snapshots turned into references (views.olang's `forget`/`unname` - every holding and name forgotten, M19g said
+nothing; profile.olang's sorts of the caller's lists); two locals made read-only references though passed to a `mut`
+parameter; checks/cases edited against their headers. And what it could not see: the evaluator's `Exec` and lowering's
+`Lowerer` held the checker's body list by value (`Vec<mut typed.Body&>`): a copy at construction, so bodies checked
+after it were out of range - the compiler crashed building tests/runner.olang; both hold `Vec<mut typed.Body&>&` now.
+`eval.fnOfFrame` and `lowering.top()` returned `mir.Fn` and `level` values - a deep copy per access (regex's test build
+13.9 GB, killed); both return references. M19g's views pass knew a Vec by its record type `vecState` and took any
+struct copy for a second name; it knows `Vec` itself and takes reference locals only.
+
+**Section 8 (for the bulk review).** O17's lend exemptions for a value owning storage: `owns` (a value sharing no
+reference is lent as its own storage) and `viewed` (one a callee keeps only a reference to, storing nothing into it -
+a walk of a by-value Map) - the latter first applied to every value, which let o17bbitand, o17bkeepsother,
+o17bnonhandle and o17templambdacond (a copy whose callee keeps its storage: use-after-free) compile; restricted to values
+owning storage. `ownCall`, `splitHeld`, `scopedValue` as round 3d's notes say. Early freeing: a collection's grown
+buffer stored back into it is no escape of what its elements refer into (free.olang: a Collect's yields carry their
+origins to where the array is stored, so the yield itself is no store or escape) - before, every Push and Put escaped
+its receiver, harmless while receivers were handles, and frames.olang (an interpreter's frames in a Vec, each holding a
+Map) grew to 311 MB; 1.9 MB again. **Recorded limit:** a value owning storage held in place - a Map field by value, a Vec
+held by value as a Map's value - is no place of early freeing: what a replaced one owned is kept until its container's
+scope closes (server.olang 145 MB, mapvec.olang 66 MB); held by reference (`hdrs mut Map<String&, String&>&`,
+`Map<I64, Vec<I64>&>`) it is one (2.2 MB each), and the earlyfree fixtures hold them so. A Map whose values are references
+walked by `for e in m` makes its value place no sole holder (the walk's entries copy the references out); mapvec reads
+its values back by key.
+
+**Checks.** Cases about a Vec or Map as a handle became std/list cases (List is the handle: s5nestedhandle,
+s5nestedhandlemap, s5spawnhandle, s6handleloop, s6nestedhandlerun, rv3roclone, e31bhandlereplaced); cases refusing what
+is now a copy of its own became run cases showing the copy (t25ccopydecl/lend/return, rv3globalcopy, rv3roget,
+g12explicitlength, derivedhelpercountvec); cases whose refusal moved to another rule name it (rv3roat E31b, s5clonepush,
+s5destructnoscope and vec27cloneshort O25h, c2dmixedscopes C2d, d9alambdawritten D16a, d9cgrowing G17); the stale-view
+cases (retire01assert, retire02global, vechandle's stale) take the Vec by reference, as a value parameter is the callee's
+own copy and never stale; e31bvecinplace is new (RefMut in place, a store through `v[i]` with a growing value).

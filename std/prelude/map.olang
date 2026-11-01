@@ -212,13 +212,16 @@ fn (m Map<K, V>&) Str() String {
     b := StringBuilder()
     b.Push("Map<" $typeWritten(Array<K>(0)) ", " $typeWritten(Array<V>(0)) ">{")
     n I64 = 0
-    for e in m {
+    # (the slots read where they are: an entry made of a value holding "mut" references, read through this read-only
+    # receiver, would be a read-only copy, QC)
+    for i in range m.n {
+        if not m.live(i): continue
         if n > 0 { b.Push(", ") }
         n++
-        k := $alone(e.Key)                                     # "(" the key ", 0)"
+        k := $alone(m.ents[i].Key)                             # "(" the key ", 0)"
         b.Push(k[1:k.Len() - 4])
         b.Push(": ")
-        v := $alone(e.Value)
+        v := $alone(m.ents[i].Value)
         b.Push(v[1:v.Len() - 4])
     }
     b.PushChar('}')

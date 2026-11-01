@@ -8,5 +8,5 @@ fn main() ? {
     l := Vec<Vec<I64>>()
     l.Push(Vec<I64>())
     h := H(fn(c mut Vec<I64>&) { c.Push(1) })
-    h.fv(l.RefMut(0))
+    h.fv(l[0])
 }

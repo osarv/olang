@@ -1,6 +1,6 @@
-# check: fail error[O10c]
-# vec2: a clone's elements refer where the original's do - kept past the block they were made in, it would read them
-# after that block's scope closes
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# vec2, O25h: a copy's elements refer where the original's do (a Vec a value since 2026-11-01; it was a Clone) - kept
+# past the block they were made in, it would read them after that block's scope closes
 import "std/io"
 fn main() ? {
     keep := Vec<String&>()

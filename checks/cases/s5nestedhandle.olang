@@ -1,13 +1,14 @@
 # check: fail the callee needs one argument's scope to outlive another's
 # E31b/O17b (the follow-up review of study 5's fixes, G1): a call on a handle element read out of another handle element
 # - "users[0][0].Push(t)" - holds and lends every level, so what Push keeps lives where the inner list's state does,
-# which a loop's text does not
+# which a loop's text does not (std/list's List, a handle; a Vec is a value since 2026-11-01)
+import "std/list"
 fn main() ? {
-    users := Vec<Vec<Vec<String&>>>()
-    users.Push(Vec<Vec<String&>>())
-    users.RefMut(0).Push(Vec<String&>())
+    users := list.List<list.List<list.List<String&>>>()
+    users.Push(list.List<list.List<String&>>())
+    users[0].Push(list.List<String&>())
     for k in range 3 {
         t := $k "-loop-text"
-        users.RefMut(0).RefMut(0).Push(t)
+        users[0][0].Push(t)
     }
 }

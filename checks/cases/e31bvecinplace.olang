@@ -1,0 +1,29 @@
+# check: run
+# E31b, QCE: a Vec element of a Vec taken in place with RefMut, replaced through another path, then pushed through - the
+# reference names the slot, so the push lands in the element that replaced it; and a store through v[i] is made in
+# place, its value evaluated first (a value growing the Vec stores into the element where it is now)
+fn work(c mut Vec<I64>&, l mut Vec<Vec<I64>>&) {
+    l[0] = Vec<I64>()
+    c.Push(5)
+}
+type cell struct() {
+    xs Vec<I64> = Vec<I64>()
+    n I64 = 0
+}
+fn grow(v mut Vec<cell>&) I64 {
+    for _ in range 20 { v.Push(cell()) }
+    return 7
+}
+fn main() ? {
+    l := Vec<Vec<I64>>()
+    first := Vec<I64>()
+    first.Push(1)
+    l.Push(first)
+    work(l.RefMut(0), l)
+    assert l[0].Len() == 1 and l[0][0] == 5 and first.Len() == 1
+    v := Vec<cell>()
+    v.Push(cell())
+    v[0].n = grow(v)
+    v[3].xs = I64[1, 2].ToVec()
+    assert v[0].n == 7 and v.Len() == 21 and v[3].xs.Len() == 2
+}

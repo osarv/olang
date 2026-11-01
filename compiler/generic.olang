@@ -2605,6 +2605,12 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
     # ... but only where the body decides something on that length (LengthDecided): any other array by value is one of a
     # run-time length, its function one instance whatever the lengths given (D9a)
     decided := p.lengthsDecided(row)
+    # (and wherever rows held by value lie under the level a call passes: rows laid out in place where the instance
+    # wants rows of a run-time length are no copy a call can make of what a reference names, G29)
+    if row.F.Recv is not null and p.nestedRows(p.Resolve(c, row.F.Recv!.Ty)): decided[0] = true
+    for j, prm in row.F.S.Params {
+        if prm.Ty is not null and p.nestedRows(p.Resolve(c, prm.Ty)): decided[j + 1] = true
+    }
     # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
     if not p.FnIsExtern(f) and row.F.Recv is not null and decided[0] { p.lengthLevels(p.Resolve(c, row.F.Recv!.Ty), true, row.F.Recv!.Name, 0, ns, levels) }
     for j, prm in row.F.S.Params {
@@ -2713,7 +2719,7 @@ fn mentionsName(t ast.TypeRef?&, n source.NameId) Bool {
 # length ("a.Len()") or its elements' ("a[0].Len()"), pushed to ns
 # G29, G30: by parameter, the receiver first (false where there is none), whether the body decides something on the
 # length of an array it is given by value (LengthDecided) - an extern's and a bodiless function's never
-fn (p mut Program&) lengthsDecided(row fnRow&) Array<Bool>& {
+fn (p mut Program&) lengthsDecided(row fnRow&) Array<Bool> {
     out := Array<Bool>(row.F.S.Params.Len() + 1, false)
     if row.F.Body.Len() == 0 or row.Extern: return out
     text := p.L.Mods[row.Mi].Src!.Text
@@ -2763,6 +2769,15 @@ fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, 
             p.lengthLevels(p.T.Elem(t), true, n, depth + 1, ns, out)
         }
         case _ { }
+    }
+}
+
+# whether t holds an array by value beneath another level - under a reference, or as an array's elements
+fn (p mut Program&) nestedRows(t types.TypeId) Bool {
+    return match p.T.KindOf(t) {
+        case types.Kind.Ref: p.levelCount(p.T.Referent(t), false) > 0
+        case types.Kind.Array: p.levelCount(p.T.Elem(t), true) > 0
+        case _: false
     }
 }
 

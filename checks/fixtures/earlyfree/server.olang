@@ -1,13 +1,15 @@
 import "std/io"
 
 # 2.7 (docs/memory.md): a server's connections, each allocating per request - every old request and header map
-# freed at once (O8d), so 64 connections hold what they hold now and nothing else
+# freed at once (O8d), so 64 connections hold what they hold now and nothing else. The header map is held by reference:
+# a Map held by value in place (a value since 2026-11-01) is no place of early freeing - what a replaced one owned is
+# kept until the server's scope closes, a recorded limit
 N I64 = 200000
 
 type Conn struct() {
     fd I64 = -1
     req String& = ""                     # the request being handled
-    hdrs Map<String&, String&>           # its header lines, by name
+    hdrs mut Map<String&, String&>& = Map<String&, String&>()   # its header lines, by name
 }
 
 type Server struct(n I64) {

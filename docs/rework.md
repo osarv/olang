@@ -2555,3 +2555,24 @@ are not begun. `OLANG_SCOPES=infer` passes what it passed.
 - **Eager signing lost T2c's `String?&`**: String's body was not made yet, so it was no array; `refType` makes the
   bodies of what a type is declared over first. With signatures no longer lost, tests/shared.olang's `scBump` (R23a)
   became a count.
+
+## 19. Handles as values (wt-values)
+
+The user's "Handles DECIDED 2026-11-01": Vec, Map, Set, Deque, Heap and StringBuilder hold their storage by value; std/list's
+List stays the one handle. Built in four commits on `wt-values` (64db10e std, ae87b14 the report and the tool, cf5ab29
+compiler/ migrated with D9a/D9c lifted, then the views, the checks and the fixes after the suite); HISTORY.md "Handles as
+values" has the whole story. In short:
+
+- **Values.** A copy of one of the six is a collection of its own, shallow at every `&`; `Clone()` gone from them;
+  `Ref(i)`/`RefMut(i)` (a Map's `try m.Ref(k)`/`try m.RefMut(k)`) give an element in place; a store through `v[i]` is made
+  in place through `RefMut` (E31b); a join's operand owning storage is its own copy (E11b).
+- **D9a, D9c lifted** for every parameter; G29's instances only where a body decides on a length, or where rows held by
+  value lie under the level a call passes.
+- **Copies left out where nothing could tell** (D9h in lowering): a temporary's part read in place, a for-in element over a
+  quiet body, read-only references given a callee keeping nothing of them, a by-value argument only read, a rendered
+  operand nothing changes before it renders.
+- **Open:** a value owning storage held in place (a Map field, a Vec as a Map's value) is no place of early freeing -
+  what a replaced one owned stays until the container's scope closes; held by reference it is freed. A Map of references
+  walked with `for e in m` makes its value place no sole holder. A Ref into a Vec goes stale as a view does, unseen by
+  M19g. Mutating calls through `x[i]` are still E31b's error (write `x.RefMut(i).M()`): taking them in place would let an
+  argument evaluated after the receiver grow the Vec under it.

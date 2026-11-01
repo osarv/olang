@@ -1,13 +1,11 @@
-# check: fail error[T25c]: this copies a read-only Vec<I64>, and a written type declares a writable one
-# also: make one of its own with 'G.Clone()'
-# T25c: a written type declares a writable value, so a copy of a read-only place cannot initialize one - ':=' gives a read-only copy
+# check: run
+# T25c, QCE: a written type declares a writable value - a copy of an immutable global's Vec initializes one, a Vec of its
+# own since 2026-11-01 (a handle's copy was read-only, and refused here)
 import "std/io"
-type Box struct(P mut Array<I64>&) {
-    P
-}
-GB Box = Box(Array<I64>(3))
-G Vec<I64> = Vec<I64>()
+G Vec<I64> = I64[1].ToVec()
 fn main() ? {
     y Vec<I64> = G
+    y.Push(2)
+    assert y.Len() == 2 and G.Len() == 1
     try io.Println($y.Len())
 }

@@ -9,9 +9,9 @@
 #
 # The analysis, in short:
 # - A PLACE is where a Vec is, as the walked body names it: a root - a local, a parameter or a global - and the field
-#   names below it ("l.toks"). Every Vec operation reaches the buffer through the Vec's record (the prelude's
-#   vecState), so a growth and a view are both at the record's place, read off the prelude's own bodies like any
-#   other's: an assignment to a record's "data" grows the record, and a slice of it is a view of it. Nothing about Vec
+#   names below it ("l.toks"). Every Vec operation reaches the buffer through the Vec itself, which holds it by value
+#   (its own record), so a growth and a view are both at the Vec's place, read off the prelude's own bodies like any
+#   other's: an assignment to a Vec's "data" grows it, and a slice of it is a view of it. Nothing about Vec
 #   is special-cased by its methods' names. A place through an element or a call's result is not known, and meets no
 #   other place.
 # - Each body's SUMMARY says what a call of it may do: the places below its parameters and the globals it may grow, the
@@ -48,7 +48,7 @@ type Root enum {
 }
 
 # where a Vec is: a root and a path of field names below it (an interned text, ".toks.s"); Show is how much of the path
-# a message shows - up to the Vec, never into its record; Any a place somewhere below this one, not known which
+# a message shows; Any a place somewhere below this one, not known which
 type place struct(R Root, Path I64, Show I64, Any Bool) {
     R
     Path
@@ -115,7 +115,7 @@ fn (s mut state&) set(o state&) {
 
 # what local id holds forgotten, and its being a second name
 fn (s mut state&) forget(id I64) {
-    hs Vec<holding>&s = s.Holds
+    hs := s.Holds
     s.Holds.Clear()
     for h in hs {
         if h.L != id { s.Holds.Push(h) }
@@ -124,12 +124,12 @@ fn (s mut state&) forget(id I64) {
 }
 
 fn (s mut state&) unname(id I64) {
-    ns Vec<naming>&s = s.Names
+    ns := s.Names
     s.Names.Clear()
     for n in ns {
         if n.L != id { s.Names.Push(n) }
     }
-    ls Vec<I64>&s = s.Named
+    ls := s.Named
     s.Named.Clear()
     for l in ls {
         if l != id { s.Named.Push(l) }
@@ -485,12 +485,12 @@ fn (v mut Viewer&) structish(t types.TypeId) Bool {
 
 fn (v mut Viewer&) arrayish(t types.TypeId) Bool { return v.P.T.KindOf(v.deref(t)) == types.Kind.Array }
 
-# a Vec's record, the prelude's vecState, or a reference to one
+# a Vec (it holds its buffer by value - its own record, QCE), or a reference to one
 fn (v mut Viewer&) isRecord(t types.TypeId) Bool {
     d := v.deref(t)
     if v.P.T.KindOf(d) != types.Kind.Named { return false }
     decl := v.P.T.DeclOf(d)
-    return v.text(v.P.T.DeclName(decl)) == "vecState" and v.P.T.Modules[v.P.T.DeclModule(decl)] == "std/prelude/vec"
+    return v.text(v.P.T.DeclName(decl)) == "Vec" and v.P.T.Modules[v.P.T.DeclModule(decl)] == "std/prelude/vec"
 }
 
 # ---- places ----
@@ -536,7 +536,7 @@ fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&)
         }
         case typed.Lvalue.Global(_, _, m, n) { placeAdd(out, place(Root.Global(m, n), 0, 0, false)) }
         case typed.Lvalue.Deref(_, _, r) { v.exprPlaces(r, st, out) }
-        case typed.Lvalue.Field(_, ty, b, i) {
+        case typed.Lvalue.Field(_, _, b, i) {
             base Vec<place>
             v.placePlaces(b, st, base)
             seg := "." $v.fieldName(b.Type(), i)
@@ -546,9 +546,7 @@ fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&)
                     continue
                 }
                 path := v.str($v.strs[q.Path] $seg)
-                # a Vec's field is its record: a message shows the Vec, never its insides
-                show := q.Show if v.isRecord(ty) else v.strs[path].Len()
-                placeAdd(out, place(q.R, path, show, false))
+                placeAdd(out, place(q.R, path, v.strs[path].Len(), false))
             }
         }
         case _ { }
@@ -1019,7 +1017,8 @@ fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs Vec<view>&, whole Bool, st 
             }
         }
         st.forget(id)
-        if x is not null and v.structish(x.Type()) {
+        # (a reference local only: a Vec's value - a struct holding it by value - copied is a Vec of its own, QCE)
+        if x is not null and v.structish(x.Type()) and v.P.T.IsRef(v.B!.Locals[id].Ty) {
             ps Vec<place>
             v.exprPlaces(x, st, ps)
             self := false
@@ -1666,7 +1665,7 @@ if TestBuild {
             "    d := v.View()\n"
             "    v.Push(2)\n"
             "    assert first(d) == 1\n"
-            "    w := v\n"
+            "    w mut Vec<I64>&v = v\n"
             "    e := v.View()\n"
             "    w.Push(3)\n"
             "    assert e[0] == 1\n"

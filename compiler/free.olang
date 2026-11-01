@@ -6,10 +6,12 @@
 # (std/runtime/runtime.ll's __olang_region_*).
 #
 # A place is decided per declaration: a reference field of a struct type, a struct field holding a handle (a struct of
-# one reference, as Map, List and Vec are), or the elements of an array type of references - a collection's elements
+# one reference, as std/list's List is), or the elements of an array type of references - a collection's elements
 # are its chunks' or buckets' (2.1, 2.6). It is sole when every value stored into it was made for it (built where the
 # store is, null, constant data, or moved out of the same place), no reference read from it is stored anywhere else,
 # none is in use across a let-go of it, no task can reach it, and what it holds has no destructor (O8d's conditions).
+# A value owning storage held in place - a Vec or a Map field by value (QCE) - is no place: what a replaced one owned is
+# kept until its container's scope closes (a recorded limit; held by reference, "m mut Map<K, V>&", it is one).
 # The same proof decides each x.Destroy() (C9b): the local x is a place of its own (a destroy target), sole when every
 # value it is given was made for it - built at a site of a block of its body, or moved out of a collection's place
 # whose values have destructors (a dtor place: never freed by a let-go, O15, but its values built in regions when a
@@ -1166,7 +1168,10 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if w.yieldOrig.Len() > 0 { addAllTo(w.yieldOrig[w.yieldOrig.Len() - 1], o) }
             if w.yieldTo.Len() > 0 {
                 e := w.yieldTo[w.yieldTo.Len() - 1]
-                if e >= 0 { w.store(e, x, o, sp, "") } else { w.escape(o, sp, "", false) }
+                # (stored into the array being collected, a new one: no escape of what it refers into there - the
+                # collected array carries those origins (yieldOrig), judged where it is stored, as a Vec's grown buffer
+                # stored back into the Vec is)
+                if e >= 0 { w.store(e, x, o, sp, "", true) }
             }
         }
         case _ { }

@@ -1,6 +1,7 @@
 # check: run
 # flags: -debug -sanitize
-# E31b/O18c (F2): a handle in a value field of the element's value field, "f.Blocks[b].inner.S.Push(x)"
+# E31b/O18c (F2): a Vec in a value field of the element's value field, pushed in place - "f.Blocks.RefMut(b).inner.S.Push(x)"
+# (a handle until 2026-11-01, pushed through "f.Blocks[b]"; a Vec is a value now, QCE)
 import "std/io"
 type Blk struct() {
     S Vec<I64>
@@ -24,7 +25,7 @@ type F struct(K I64) {
     K
     Blocks Vec<Blk2>
 }
-fn add(f mut F&, b I64, x I64) { f.Blocks[b].inner.S.Push(x) }
+fn add(f mut F&, b I64, x I64) { f.Blocks.RefMut(b).inner.S.Push(x) }
 fn main() ? {
     f := F(1)
     f.Blocks.Push(Blk2())

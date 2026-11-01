@@ -1,8 +1,13 @@
-# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
-# T25c: Map.Get on a read-only map gives a read-only copy of a value holding writable references
-fn f(m Map<I64, Vec<I64>>&) {
-    g := try m.RefMut(1) catch { return }
+# check: run
+# T25c, QCE: Map.Get on a read-only map gives a copy of a Vec value - a Vec of its own since 2026-11-01 (a handle's copy
+# was read-only: pushing to it would have changed the map), so pushing to it changes nothing the map holds
+fn f(m Map<I64, Vec<I64>>&) I64 {
+    g := try m.Get(1) catch { return -1 }
     g.Push(1)
+    return g.Len() * 10 + (try m.Get(1) catch { return -2 }).Len()
 }
 fn main() ? {
+    m := Map<I64, Vec<I64>>()
+    m.Put(1, I64[5].ToVec())
+    assert f(m) == 21
 }

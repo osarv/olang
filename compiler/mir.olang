@@ -2473,12 +2473,12 @@ test "control flow: a loop's scope every turn, a call's error edge, an error rai
     assert got == want, got
     # the loop's turn left with its scope open: two paths reach the head with different scopes
     g := loopFn(t)
-    g.Blocks[3].Stmts.Clear()
+    g.Blocks.RefMut(3).Stmts.Clear()
     g.Add(BlockId(3), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Const(t.Prim("I64"), 2))))
     expect(t, g, "enters bb1 with scopes [S0 S1], where another path has [S0]")
     # the result read on the error edge, where the call stored nothing
     h := loopFn(t)
-    h.Blocks[5].Stmts.Clear()
+    h.Blocks.RefMut(5).Stmts.Clear()
     h.Add(BlockId(5), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Copy(L(LocalId(3))))))
     expect(t, h, "L3 read before it is initialized on every path")
 }
@@ -2554,7 +2554,7 @@ test "a malformed function: every malformation is caught" {
     expect(t, f8, "bb0[1]: L2 read before it is initialized on every path")
     # scopes: left open at a return, closed out of order, opened outside their parent, reopened
     f9 := addFn(t)
-    f9.Blocks[0].Stmts.Truncate(2)
+    f9.Blocks.RefMut(0).Stmts.Truncate(2)
     expect(t, f9, "bb0[term]: leaves the function with [S0] open")
     f10 := addFn(t)
     s1 := f10.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
@@ -2578,8 +2578,8 @@ test "a malformed function: every malformation is caught" {
     s14 := f14.AddScope(ScopeKind.Inert, ScopeId(0), typed.BlockId(-1), Sp0)
     r14 := f14.AddTemp(ri, Sp0)
     f14.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s14)
-    try f14.Blocks[0].Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
-    try f14.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, s14))
+    try f14.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
+    try f14.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, s14))
     expect(t, f14, "bb0[2]: built in S1, which is inert")
     f15 := addFn(t)
     f15.Blocks[0].Stmts[2] = Stmt.Give(Sp0, ScopeId(0))
@@ -2587,7 +2587,7 @@ test "a malformed function: every malformation is caught" {
     # an arena local stored into before its storage is made
     f16 := addFn(t)
     a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
-    try f16.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
+    try f16.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
     # an own slot given a borrow
     m := t.AddModule("t")
@@ -2596,7 +2596,7 @@ test "a malformed function: every malformation is caught" {
     f17 := addFn(t)
     ow := f17.AddTemp(t.Ref(q, types.Owning | types.Writable), Sp0)
     brw := f17.AddTemp(t.Ref(q, types.Writable), Sp0)
-    try f17.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw)))))
+    try f17.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw)))))
     expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
     # a check written as an operation; a switch with a value twice
     f18 := addFn(t)
@@ -2610,7 +2610,7 @@ test "a malformed function: every malformation is caught" {
     g := t.Func(t.List1(i32), i32, t.List1(types.DefaultErrT))
     f20 := addFn(t)
     b20 := f20.NewBlock()
-    f20.Blocks[0].Stmts.Truncate(2)
+    f20.Blocks.RefMut(0).Stmts.Truncate(2)
     k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty
                             L(LocalId(2)), true, b20, NoLocal, NoBlock))
     f20.End(b0, Term.Call(Sp0, k20))
@@ -2624,7 +2624,7 @@ test "a malformed function: every malformation is caught" {
     h := t.Func(t.List1(i32), i32, types.ListId(0))
     f24 := addFn(t)
     b24, e24 := f24.NewBlock(), f24.NewBlock()
-    f24.Blocks[0].Stmts.Truncate(2)
+    f24.Blocks.RefMut(0).Stmts.Truncate(2)
     c24 := f24.AddTemp(I32T, Sp0)
     k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1)
                                                                                        Operand.Const(i32, 2)])
@@ -2643,15 +2643,15 @@ test "a malformed function: every malformation is caught" {
     f21 := addFn(t)
     j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
     k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
-    try f21.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j21))
-    try f21.Blocks[0].Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
-    try f21.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, j21))
+    try f21.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Open(Sp0, j21))
+    try f21.Blocks.RefMut(0).Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
+    try f21.Blocks.RefMut(0).Stmts.Insert(3, Stmt.Close(Sp0, j21))
     expect(t, f21, "bb0[3]: join S1 closed with tasks not waited for")
     f22 := addFn(t)
     j22 := f22.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0, t.List1(types.DefaultErrT))
     b22 := f22.NewBlock()
-    f22.Blocks[0].Stmts.Truncate(2)
-    try f22.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j22))
+    f22.Blocks.RefMut(0).Stmts.Truncate(2)
+    try f22.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Open(Sp0, j22))
     f22.End(b0, Term.Wait(Sp0, j22, b22, NoLocal, NoBlock))
     f22.Add(b22, Stmt.Close(Sp0, j22))
     f22.Add(b22, Stmt.Close(Sp0, ScopeId(0)))
@@ -2659,7 +2659,7 @@ test "a malformed function: every malformation is caught" {
     assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
     f23 := addFn(t)
     k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Lvalue[], TaskClause[])
-    try f23.Blocks[0].Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
+    try f23.Blocks.RefMut(0).Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
     expect(t, f23, "a spawn into S0, which is no join")
 }
 

@@ -1531,18 +1531,14 @@ fn (g mut Gen&) mapT() I32 {
 # an index type: an integer that flows into I64
 fn (g mut Gen&) idxT() I32 { return I32(g.r(7)) }
 
-# a new name for list or map l's own collection, or a copy of it with storage of its own
+# a copy of list or map l with storage of its own - a Vec and a Map are values (QCE, 2026-11-01: a copy is no second
+# name, and their Clone() is gone)
 fn (g mut Gen&) sameOrClone(l I64, ind String&) String& {
     t := g.vt[l]
     x := g.use(l)
     k := g.reserve()
     g.declare(k, t, -1, true)
-    # a second name only in l's own block: one in a block inside it is refused every call (O17 - fuzz/repro/listalias)
-    if g.vblk[l] == g.curBlock and not g.vref[l] and g.chance(50) {
-        g.vgrp[k] = g.vgrp[l]
-        return $ind "x" $k " " $g.tn(t) " = " $x "\n"
-    }
-    return $ind "x" $k " " $g.tn(t) " = " $x ".Clone()\n"
+    return $ind "x" $k " " $g.tn(t) " = " $x "\n"
 }
 
 # a statement making a List, or changing one no loop is walking, or walking one run by run

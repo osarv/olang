@@ -75,8 +75,8 @@ This specification covers the full language, including the static scope checker 
 general borrow checker or a standard library — neither exists in the language. A rule marked *(not yet implemented)*
 says what the compiler does instead.
 
-The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), arrays by value and
-the 128-byte limit (D9a-D9c), inline array fields (C2e) and instances per length (§12.7 G29-G31) - are implemented
+The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), arrays by value (D9a,
+D9b), inline array fields (C2e) and instances per length (§12.7 G29-G31) - are implemented
 but for these, each marked where it is stated: a result's inferred length (D8f; a declared function's array result
 has a length known only at run time); a constructor taking an array by value (G29; a constructor's
 array parameter is taken by reference, D9a); and three sources of a known length (T7c) - a reference local, a mutable
@@ -647,7 +647,7 @@ an array is held through a reference - a reference parameter or receiver, a fiel
 `Array<T>&` (T7a), a lambda's capture (D16c) - and handing a value array to one of those **borrows** it rather than
 copying it (E12c). So an array is copied only where a new one is declared with a value written into it
 (`b Array<T> = a`), which is a copy because `b` is new storage, and where it is passed to a by-value parameter (D9a),
-which holds at most 128 bytes (D9c); and a destructured result (S4b) is not copied at all - each declared local takes
+a copy left out where nothing could tell (D9h); and a destructured result (S4b) is not copied at all - each declared local takes
 the array the call built for it. A function returning an array value that already lives somewhere - a local of its own, a parameter's
 array - builds its result from it: the elements are copied into the result scope (§8 O13) before the function's own
 scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
@@ -728,9 +728,10 @@ disagree is a compile-time error, not a length kept at run time.
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
 each element `v` (§5.4 E13a), or by an array literal (§5.6 E19). `n` is any integer expression; a negative `n`
 aborts the program (D14b), and a negative `n` evaluable at compile time is a compile-time error. The fill is **one
-value copied into every element**: an element type whose value holds a reference - a `List` or `Map` (a handle to its
-storage, §11), a struct holding a `&` field - gives every element the same reference, so `Array<Map<K, V>>(n, Map<K,
-V>())` is `n` names for one map; elements meant to be separate are built one by one. Whether the array's length is known while
+value copied into every element**: an element type whose value holds a reference - a `List` (a handle to its
+storage, §11), a struct holding a `&` field - gives every element the same reference, so `Array<list.List<T>>(n,
+list.List<T>())` is `n` names for one list; a value holding its storage by value - a `Vec`, a `Map`, a struct of
+text - is copied into each element, so `Array<Vec<T>>(n, Vec<T>())` is `n` separate `Vec`s. Whether the array's length is known while
 compiling is T7c's: `Array<T>(3)` is fixed storage (T7d), `Array<T>(n)` with `n` a parameter is not.
 
 **T10.** Every array has a length, queryable at run time via `....Len()` (§5.8); where it is known while
@@ -1979,17 +1980,18 @@ naming `x.Narrow<T>()`; elsewhere it is unchecked, wrapping or undefined as E26 
 
 **D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
 array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the
-callee's own copy of the argument as it was at the call (D9), and it takes its **length** from the argument: the
-function is compiled once for each length its calls give it (G29), and in each it is fixed storage (T7d) whose
-`Len()` is a constant (T7c). So the argument's length must be **known** while compiling (T7c); one known only at run
-time is a compile-time error saying to take the parameter by reference (`a Array<F32>&`) or to copy the length wanted
-explicitly, with a slice of it (`r[0:3]`, checked once, E16b) - but a **constructor's** parameter holding an array of a
-run-time length by value (`type Person struct(name String, age I64)`), which is what its field keeps: the field's own
-copy (T7a), the parameter itself read where the caller's argument is. The same holds for every array level held by value
-beneath the parameter - the elements of an `Array<Array<F64>>&` parameter, rows laid out in place, take their length
-from the argument too, though the reference level above them takes none. A reference level makes no instance: inside
-the function an array reached through a reference has a length known only at run time. No by-value parameter holds
-more than D9c's 128 bytes, so passing one copies at most that much.
+callee's own copy of the argument as it was at the call (D9), whatever its length: one known only at run time is
+copied at the call - a copy left out wherever nothing could tell it from the argument (D9h: the callee writes the
+parameter nowhere, keeps it nowhere and hands it back nowhere, and nothing changes the argument while the call runs).
+Where the body **decides something on the length** - `a.Len()` in the condition of an `if`, an `assert` or a `match`,
+after a conditional's or a guard's `if`, in a `comptime`, or giving an array its length (`Array<T>(a.Len())`, a
+comprehension over `range a.Len()`) - the function is compiled once for each length its calls give it (G29), and in
+each it is fixed storage (T7d) whose `Len()` is a constant (T7c), so that decision is made while compiling (G30); a call
+giving a length known only at run time has an instance of its own, in which the decision is made at run time. The same
+holds for every array level held by value beneath the parameter - the elements of an `Array<Array<F64>>&` parameter,
+rows laid out in place, take their length from the argument too, though the reference level above them takes none. A
+reference level makes no instance: inside the function an array reached through a reference has a length known only at
+run time.
 
 This applies to the array itself, not its elements: `Array<Handle&>` is an array of references passed by value, and
 `Array<Handle&>&` a reference to it. It does not apply to an `extern-param` (§11 X3), which marshals to a raw pointer
@@ -2011,21 +2013,8 @@ reads the caller's array itself - storage that outlives the call, so it may be b
 holds (passed to a `T&` parameter, compared by `Eq`) - and sees a write another reference to that array makes during
 the call. The compile-time evaluator (K1) gives both the same meaning.
 
-**D9c (by-value parameters are small).** A by-value parameter whose **written** type is an **aggregate** - a struct,
-an enum, an array (D9a), an application of a generic struct or enum (`p Pair<A, B>`) - holds at most **128 bytes** as
-laid out, padding included (the size a C compiler gives the same layout). One larger is a compile-time error naming its
-size and saying to take it by reference (`p Big&`). This covers every by-value parameter so written: a function's, a
-method's receiver (M19), a constructor's (C1), a lambda's (D16), a function type's (T21, since a value of it is passed
-the same copy), a generic function's and a generic type's method's - checked for each instantiation (G16) and each
-instance (G29) its size depends on, reported at the parameter with a note at the call that asked for it (G16b). A
-parameter written as a **bare type variable** (`x T`) is not covered, whatever it is bound to: the program never wrote
-a copy of an aggregate there, and a container's own methods (`List<Big>.Push(x T)`, `Sort`'s `less fn(a T, b T)`)
-take what they hold that way - such a parameter is passed as any large value is, through memory. An `extern-param` (X3) passes a
-pointer and is not covered, nor is anything that is not a parameter - a result is built where the caller puts it
-(T7b), and a capture (D16c) is the closure's. So a by-value pass is always as cheap as the reader expects - a 4x4
-`F64` transform passes by value, a 784-element vector does not. A parameter is reported once, by the first instance
-over the bound, and that instance's body is not checked: a length growing by value (`f` at 16 elements calling `f` at
-17) stops there, long before G17's chain would.
+**D9c.** *(Removed: a by-value parameter's size is not bounded. What a by-value pass costs is a copy the call makes
+where something could tell it from the argument (D9, D9h) - a parameter written `p T&` shares it instead.)*
 
 **D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
 without the caller seeing it (a value holding arrays of a run-time length by value, T7a, is copied with them at the
@@ -2685,17 +2674,25 @@ goes on, and any other change to the map during a walk leaves which entries the 
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
 put - so a map whose keys come and go stays the size of what it holds. `Keys()` and `Values()` hand out iterators over
 one part of each entry, in `Iter()`'s order and under its rule for changes made during a walk; `Clear()` removes every
-key, keeping the slots and buckets for the keys put next. A `Map` is a **handle**, as a `Vec` is: a copy of a `Map`
-value is a second name for the same map, and `Clone()` is a new one with the same keys and values (walked in the same
-order) and storage of its own, built where its result lands. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
+key, keeping the slots and buckets for the keys put next. A `Map` holds its storage **by value**, as a `Vec` does (QCE): a
+copy of a `Map` value (`b := a` of a place, a field, an element, a by-value argument, a capture, a task's argument) is a
+map of its own with the same keys and values, walked in the same order, and two names for one map are written with `&`
+(`m mut Map<K, V>&`). `Ref(k)` and `RefMut(k)` give the value for `k` in place - `V&m` and `mut V&m`, failing with
+`MapError.Missing` - so a collection held in a map is changed where it is (`(try m.RefMut(k)).Push(x)`), a value that is
+no reference's referent (a number) through `Update`. `$` renders a `Map` (E11c) as its entries in `Iter()`'s
 order, each `key: value` with the key and the value rendered as inside any other value, in braces after its type:
 `Map<String&, I64>{"a": 1, "b": 2}`, `Map<I64, Bool>{}`.
 
 The prelude declares `type Vec<T>`, the **growable array**. Its elements lie next to each other in one buffer, so
-indexing it and walking it cost what an array's do, past one load of the buffer the `Vec` names. A `Vec` is a
-**handle**, as a `Map` is: a copy of a `Vec` value (`b := a`, a field, an element, a by-value argument, a
-capture, a task's argument) is a second name for the same `Vec`, and `Clone()` is a new one with the same elements and
-a buffer of its own, built where its result lands; `Array<Vec<T>>(n, Vec<T>())` is `n` names for one `Vec` (T8). It is
+indexing it and walking it cost what an array's do, past one load of the buffer the `Vec` names. A `Vec` holds its
+buffer **by value**, as a `Map` does (QCE): a copy of a `Vec` value (`b := a` of a place, a field, an element, a by-value
+argument, a capture, a task's argument) is a `Vec` of its own with the same elements, copied as values (shallow at a
+`&`); two names for one `Vec` are written with `&` (`v mut Vec<T>&`, a `Vec<T>&` field); `Array<Vec<T>>(n, Vec<T>())` is
+`n` separate `Vec`s (T8). `Ref(i)` gives element `i` in place, `T&v`, and `RefMut(i)` writably, `mut T&v` - unchecked as
+`v[i]` is - so an element holding storage of its own is read and changed where it is: `v.RefMut(i).xs.Push(x)`. Like a
+view (below), such a reference is good until the `Vec` grows or shrinks. A copy no program can tell from the value it
+copies is not made (D9h): an element read where it stands (`v[i].xs.Len()`), a `for x in v` whose body changes nothing
+`v` reaches, an argument a callee only reads. It is
 an ordinary value - a type argument (`List<Vec<T>>`, `Map<K, Vec<V>>`, `Vec<Vec<T>>`), a field, a global - and its
 element type needs no zero value: a new buffer is filled with the element being stored. `Vec<T>(cap = 0)` is empty, with
 room for `cap` elements before its buffer is replaced, made by its first `Push`; `Push(x)` adds at the end, and when the
@@ -2703,8 +2700,8 @@ buffer is full first replaces it by one twice as large (8 at first), every eleme
 room for `n` more the same way; `Len()` and `Cap()` count. It has the operations of `std/list`'s `List` by the same
 names and on the same terms but `RunFrom`, failing with `VecError`'s words (`Empty`, `NotFound`, `OutOfRange`) - `v[i]` and `v[i] = x` (E31,
 unchecked), `Get` (checked), `First`, `Last`, `Pop`, `Insert`, `TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`,
-`Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts), `ToArray`
-and `Clone`; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
+`Clear`, `Truncate`, `Reverse`, `Sort`, `IndexOf`, `Remove`, `Has`, `PushAll`, `Join` (of a `Vec` of texts, `Vec<String&>`
+or `Vec<String>`) and `ToArray` - a `List`'s `Clone` is a `Vec`'s copy; an array's `ToVec()` is a new `Vec` of its elements (`Array<I32>(n, v).ToVec()` for `n` copies of one
 value), and an iterator's `ToVec()` one of every value it gives; `Pop`, `Clear` and `Truncate` keep the buffer. `for x in v` walks it by `At` and `Len` (S9d), reading the
 `Vec` each step, so a walk that pushes sees what it pushed; `v.Iter()` is an `Indexable`'s (M19e). `View()` is the one
 way to have its elements as an array - `Array<T>&v`, `ViewMut()` writably - a window on the buffer as it is now, good
@@ -2762,8 +2759,8 @@ replaced buffer on purpose while copying it, are not held to it.
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one
 new `String` in the caller's scope, independent of the builder afterwards. A value goes in as its rendering,
-`b.Push($n)`. It holds its text in a `Vec`, so a copy of a `StringBuilder` value names the same text, as a copy of a
-`Vec` names the same `Vec`. `$` renders a `StringBuilder` (E11c) as the text it holds.
+`b.Push($n)`. It holds its text in a `Vec`, so a copy of a `StringBuilder` value is a builder of its own holding the
+same text, as a copy of a `Vec` is a `Vec` of its own. `$` renders a `StringBuilder` (E11c) as the text it holds.
 
 Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, counted from the start without overlapping
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
@@ -3387,11 +3384,12 @@ String literals that are adjacent are one literal: `"ab" "cd"` is exactly `"abcd
 else happens, so a join of literals alone is a literal and costs nothing at run time. Any other join is a
 text **value** (T29c) and a temporary, exactly as `$` is (E11a). Its pieces' operands are evaluated left to right,
 each to its value as any expression's is - a number, a `Bool`, a `Char`, a struct, an enum or a function value as it is
+then, a value holding storage of its own (a `Vec`, a `Map`, a struct holding text, QCE) as its own copy of what it is
 then, a reference as the instance it names, an array as the array it names (T7b) - and only then are the pieces
 rendered, left to right, each once; one allocation of the total is made in the scope the result flows into, so the cost
 is linear in the result however many pieces there are. So a later operand changing what an earlier piece holds shows
 in that piece only through what a reference or an array names: in `$g $bump()`, a `bump` writing `g`'s elements
-shows in `g`'s piece if `g` is an array, and does not if `g` is a struct value. A `:=` declaration takes its type from a
+shows in `g`'s piece if `g` is an array, and does not if `g` is a struct or a `Vec` value. A `:=` declaration takes its type from a
 join or a `$` rendering (D15), since both are text by construction.
 
 **E11c (`Str`).** A type takes over its rendering by declaring the method `Str`, or `str` to keep it to its own module
@@ -3462,10 +3460,9 @@ that length (`s.m = v[0:16]`). The same holds for a by-value array parameter, wh
 
 Any other pairing does not fit, and is a compile-time error.
 
-**E12b.** An ordinary call copies an array only into a **by-value** parameter (D9a), which holds at most 128 bytes
-(D9c): an array argument passed to a `&` parameter is either already reference-shaped, or an lvalue that is borrowed,
-or a temporary with no storage to borrow. A callee that wants its own copy of a longer array declares a local and
-assigns to it, where the copy is written down.
+**E12b.** An ordinary call copies an array only into a **by-value** parameter (D9a; where nothing could tell, D9h,
+no copy is made): an array argument passed to a `&` parameter is either already reference-shaped, or an lvalue that is
+borrowed, or a temporary with no storage to borrow.
 
 **E12a.** In a **call argument** position, an *lvalue* argument crossing into a reference-shaped
 (`&`-marked, T24) parameter is **borrowed** (E12c): the parameter names the very instance the caller
@@ -3960,8 +3957,12 @@ first the place is held - `x` as a place and each index evaluated once, left to 
 compound assignment's operand, held); only then is the element read through `At` into a hidden local as `t := x[i]`
 would read it, the store made into that local, and the local written back through `SetAt` (`x[i] = t`). A collection
 read out of another (`l[i][j].f = v`, `rows[0][1] = v`) is read and written back the same way one level out, after the
-inner write-back. A write through a reference read out of `x[i]` is not a write into the element and is unchanged (it
-goes where the reference points). Under `try` (R21) they are the plain `At` and `SetAt`, covered where those can fail
+inner write-back. Where the collection also declares `RefMut` over `At`'s indices, giving a writable reference to the
+element (`fn (v mut Vec<T>&) RefMut(i I64) mut T&v`) and failing with nothing, a level whose element can be a
+reference's referent (T24) is taken **in place** instead: after the value is evaluated, `x.RefMut(i)` gives the element
+where the collection holds it, the store is made into it, and nothing is written back - so a Vec of values holding
+storage of their own (`v[i].n += 1`, `v[i].xs = ys`) copies no element. A write through a reference read out of `x[i]`
+is not a write into the element and is unchanged (it goes where the reference points). Under `try` (R21) they are the plain `At` and `SetAt`, covered where those can fail
 (E31). A type declaring `At` and no `SetAt` has nothing to write the copy back with, and such a store is a
 compile-time error naming `SetAt`. The element is read and written after the value is computed (S4), so a value that
 shrinks the collection leaves the held index out of range when the access runs - the program's out-of-range index
@@ -4004,7 +4005,7 @@ captured, compared or handed to a function value, an extern or a lambda; a calle
 too. A callee whose body has errors is no view either, and its own error is what is said. What such a callee builds
 into what the copy holds is judged as for any copy (O17, below).
 
-**A handle element** (O17b: a `List`, a `Map`, a `StringBuilder`, any value whose only state is a reference) is shared
+**A handle element** (O17b: a `List`, any value whose only state is a reference) is shared
 by every copy of it, so for a callee that uses it only through that reference (O17b's reading of the callee's checked
 body) a call on `x[i]`, on a field of it, an element of one read out of another, or on any call's value result giving
 one - `users[i].Push(v)`, `boxes[i].items.Push(v)`, `(try m.Get(k)).Push(v)` - is made on a copy held in a hidden
@@ -6533,7 +6534,8 @@ lives where the value's references do.
 
 **O17b.** *A handle is lent as its reference.* A **handle** is a value whose only state is one reference: a struct with
 exactly one field, which is a reference whose referent lives with the instance (a bare field, C2d) or another handle held
-by value - `List`, `Map` and `StringBuilder` are handles (T8), and so is any such struct a program declares. A copy of one
+by value - `std/list`'s `List` is one (T8), and so is any such struct a program declares; a `Vec`, a `Map`, a
+`StringBuilder` and std's `Set`, `Deque` and `Heap` hold their storage by value and are none. A copy of one
 (O25h), a by-value parameter of one (O4b), or one read out of a collection holds its reference where its own storage is
 not, and is lent to a call **as that reference**: where the callee uses its parameter only **through** it - reads the
 reference out of the parameter (`l.s`, the field never assigned), or hands the parameter on, as a receiver or an argument,
@@ -8419,8 +8421,7 @@ ever-growing set of further instantiations is a compile-time error, reported onc
 reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
 element, an instance its arguments, a function its parameters and result) is taken to be one, and so is an
 instantiation reached through a chain of more than 1,000 instantiations or instances (G29) each of which required the
-next - which is how a length that keeps changing would show (`f` at 3 calling `f` at 4, G30), though D9c's bound on a
-by-value array stops such a chain first.
+next - which is how a length that keeps changing would show (`f` at 3 calling `f` at 4, G30).
 
 **G16b (where an instantiation was asked for).** A compile-time error found while checking an instantiation - in its
 body, its fields, a constraint (G19) or an assert (S18c) - is reported where it is written, followed by a note
@@ -8436,16 +8437,15 @@ A length is never a parameter of a declaration (§12). A function compiled for a
 by value, and only there: one copy of the function is compiled for each length its calls give it, as a generic is
 compiled for each set of type arguments.
 
-**G29 (instances).** A function, method or constructor *(a constructor: not yet implemented - its array parameter is
-taken by reference, D9a)* one of whose parameters holds an array **by value** at some
-level (D9a) - the parameter itself (`a Array<F32>`), or the elements of an array under a reference (`m
-Array<Array<F64>>&`) - is compiled once for each distinct set of **lengths** its calls give those levels, an
-**instance**; a generic one once for each instantiation and set of lengths. Each call gives the lengths its arguments
-have, which must be known while compiling (T7c, D9a). In an instance every such level is fixed storage of its length,
+**G29 (instances).** A function or method *(a constructor: not yet implemented)* one of whose parameters holds an
+array **by value** at some level (D9a) - the parameter itself (`a Array<F32>`), or the elements of an array under a
+reference (`m Array<Array<F64>>&`) - and whose body decides something on that level's length (D9a) is compiled once for
+each distinct set of **lengths** its calls give those levels, an **instance**; a generic one once for each
+instantiation and set of lengths. Each call gives the lengths its arguments have where they are known while compiling
+(T7c), and a length known only at run time otherwise (one instance for those). In an instance every such level is fixed storage of its length,
 so its `Len()` is a constant (T7c) and loops over it have a known count. Every rule of this specification applies to
 each instance as to a generic's instantiation (G16): each is checked against its lengths, errors found in one carry
-G16b's notes, a chain of instances each asking for the next is bounded by G17, D9c's 128 bytes are checked per
-instance, and an instance is named by its function and its lengths, told apart as G16a tells instantiations apart and
+G16b's notes, a chain of instances each asking for the next is bounded by G17, and an instance is named by its function and its lengths, told apart as G16a tells instantiations apart and
 defined only by the program's root object (§10 B3d), since a module's own object cannot know what lengths its callers
 give it. A function holding a by-value array level has no copy but its instances, so it is made a function value
 (T21) only where the function type gives the level a length (D9a) - that instance. A reference level makes no instance:

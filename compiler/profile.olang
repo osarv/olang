@@ -571,7 +571,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         b.Push("  no samples: the program used less CPU time than one period\n")
         return b.ToString()
     }
-    fns mut Vec<I64>&t = t.Fns
+    fns := t.Fns
     fns.Sort(fn(x I64, y I64) Bool {
         sx := try t.Self.Get(x) catch default 0
         sy := try t.Self.Get(y) catch default 0
@@ -590,7 +590,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
         b.Push($"  " $pct(sw, total).PadStart(6) " " $pct(tw, total).PadStart(6) "  " $pl.Names[f] "\n")
         shown++
     }
-    lines mut Vec<I64>&t = t.LineKeys
+    lines := t.LineKeys
     lines.Sort(fn(x I64, y I64) Bool {
         wx := try t.Lines.Get(x) catch default 0
         wy := try t.Lines.Get(y) catch default 0

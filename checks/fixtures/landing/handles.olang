@@ -46,7 +46,7 @@ fn aliases() String& ? {
         l2 mut Vec<String&>&l = l
         l2.Push($i)
         addTo(l2, "a" $i)
-        m2 Map<I64, I64>&m = m
+        m2 mut Map<I64, I64>&m = m
         putIn(m2, i)
         churn()
     }

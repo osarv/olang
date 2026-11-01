@@ -14,5 +14,5 @@ fn main() ? {
     bags := Vec<Bag>()
     bags.Push(Bag())
     bags[0].Add(5)
-    bags.RefMut(0).Reset()
+    bags[0].Reset()
 }

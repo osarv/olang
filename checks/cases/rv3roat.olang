@@ -1,8 +1,8 @@
-# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
-# T25c: At on a read-only List of Lists gives a read-only copy of the inner List, as a loop over it does - pushing to it
-# would change what the read-only place holds
+# check: fail error[E31b]: x[i] gives a copy of the element, which this call would write
+# E31b, T25c: At on a read-only Vec of Vecs gives a copy of the inner Vec - a Vec of its own since 2026-11-01 (a handle's
+# copy was read-only, T25c) - which pushing to would write and lose; RefMut, in place, needs a writable one
 fn look(ls Vec<Vec<I32>>&) {
-    ls.RefMut(0).Push(9)
+    ls[0].Push(9)
 }
 fn main() ? {
 }

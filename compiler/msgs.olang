@@ -251,8 +251,6 @@ type Diag enum {
     TryParens
     NarrowNeedsType
     TypeVarAsValue
-    ArrayByValueRunTime
-    ParamTooLarge
     ArrayLengthRange
     TypeMatchValueCase
     ArrayTooManyArgs
@@ -288,7 +286,6 @@ type Diag enum {
     FieldHasParamName
     TraitMethodGeneric
     CtorFieldNoValue
-    ArrayParamByValue
     DefaultNotTrailing
     ScopeDecl
     TypeVarNamesType
@@ -1543,10 +1540,8 @@ fn TypeVarAsValue(text String&) Msg { return Msg(Diag.TypeVarAsValue, "G8b", $te
 # ERR_CONST_VAR_NOT_IN_TYPE
 
 # ERR_ARRAY_BY_VALUE_RUN_TIME
-fn ArrayByValueRunTime(param String&, ty String&) Msg { return Msg(Diag.ArrayByValueRunTime, "D9a", $param " takes its array by value, so its length must be known while compiling - this " $ty "'s is known only at run time: take it as '" $ty "&', or pass a slice of a known length ('x[0:4]')") }
 
 # ERR_PARAM_TOO_LARGE
-fn ParamTooLarge(param String&, n I64, ty String&) Msg { return Msg(Diag.ParamTooLarge, "D9c", "parameter " $param " holds " $n " bytes by value - a by-value parameter holds at most 128: take it as '" $ty "&'") }
 
 # ERR_ARRAY_LENGTH_RANGE
 fn ArrayLengthRange(n I64) Msg { return Msg(Diag.ArrayLengthRange, "T7c", "an array's length is from 0 to the largest whose bytes fit an I64, found " $n) }
@@ -1660,7 +1655,6 @@ fn TraitMethodGeneric(tok String&) Msg { return Msg(Diag.TraitMethodGeneric, "T3
 fn CtorFieldNoValue(tok String&) Msg { return Msg(Diag.CtorFieldNoValue, "C4", "field " $tok " names no parameter of the constructor - give it a value, with '=' or ':='") }
 
 # ERR_ARRAY_PARAM_BY_VALUE
-fn ArrayParamByValue(tok String&, ty String&) Msg { return Msg(Diag.ArrayParamByValue, "D9a", "array parameter " $tok " is passed by reference - write " $ty "&") }
 
 # ERR_DEFAULT_NOT_TRAILING
 fn DefaultNotTrailing(tok String&) Msg { return Msg(Diag.DefaultNotTrailing, "D8a", $tok " has no default, but a parameter before it does - defaulted parameters come last") }
@@ -2466,7 +2460,7 @@ fn WriteThroughAtBuilds() Msg { return Msg(Diag.WriteThroughAtBuilds, "E31, O17"
 fn CondLentWritable() Msg { return Msg(Diag.CondLentWritable, "E28", "a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference") }
 
 # ERR_WRITE_THROUGH_AT_CALL
-fn WriteThroughAtCall() Msg { return Msg(Diag.WriteThroughAtCall, "E31b", "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") }
+fn WriteThroughAtCall() Msg { return Msg(Diag.WriteThroughAtCall, "E31b", "x[i] gives a copy of the element, which this call would write while it can reach the collection another way - call it on the element in place, 'x.RefMut(i)', where the collection has one (a Vec), else write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference") }
 
 # ERR_WRITE_THROUGH_AT_OPERATOR
 fn WriteThroughAtOperator(ty String&, method String&) Msg { return Msg(Diag.WriteThroughAtOperator, "E31b", "x[i] gives a copy of the element, and this store would run " $ty "'s " $method " between reading it and writing it back - write 't := x[i]', the store into 't', then 'x[i] = t'") }

@@ -15,6 +15,6 @@ fn f(r mut R&) { r.l.Push($r.n) }
 
 fn main() ? {
     s := Rs(Vec<String&>())
-    for k in range 3 { f(s.RefMut(k)) }
+    for k in range 3 { f(s[k]) }
     try io.Println($s.l)
 }

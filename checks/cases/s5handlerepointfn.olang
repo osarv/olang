@@ -10,6 +10,6 @@ type Bag struct() {
 fn main() ? {
     bags := Vec<Bag>()
     bags.Push(Bag())
-    resetFn(bags.RefMut(0))
+    resetFn(bags[0])
 }
 fn resetFn(b mut Bag&) { b.s = State() }

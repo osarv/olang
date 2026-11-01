@@ -2,21 +2,23 @@
 # flags: -sanitize
 # E31b/O17b (G1): calls on a handle element of a handle element, and on an element of the List a Map gives, build
 # where the innermost list's state lives - read back after a churn under the scope sanitizer
-fn pushFn(l mut Vec<String&>&, s String&) { l.Push(s) }
+# (std/list's List, a handle; a Vec is a value since 2026-11-01, its elements changed in place with RefMut)
+import "std/list"
+fn pushFn(l mut list.List<String&>&, s String&) { l.Push(s) }
 
 fn main() ? {
-    users := Vec<Vec<Vec<String&>>>()
-    users.Push(Vec<Vec<String&>>())
-    users.RefMut(0).Push(Vec<String&>())
-    mm := Map<I64, Vec<Vec<String&>>>()
-    mm.Put(0, Vec<Vec<String&>>())
-    (try mm.Get(0)).Push(Vec<String&>())
+    users := list.List<list.List<list.List<String&>>>()
+    users.Push(list.List<list.List<String&>>())
+    users[0].Push(list.List<String&>())
+    mm := Map<I64, list.List<list.List<String&>>>()
+    mm.Put(0, list.List<list.List<String&>>())
+    (try mm.Get(0)).Push(list.List<String&>())
     for k in range 20 {
-        users.RefMut(0).RefMut(0).Push($k "-rendered-where-the-list-lives")
-        pushFn(users.RefMut(0).RefMut(0), "lit")
-        (try mm.Get(0)).RefMut(0).Push($k "-map-text")
+        users[0][0].Push($k "-rendered-where-the-list-lives")
+        pushFn(users[0][0], "lit")
+        (try mm.Get(0))[0].Push($k "-map-text")
     }
-    churn := Vec<String&>()
+    churn := list.List<String&>()
     for i in range 1000 { churn.Push("x" $i) }
     assert users[0][0].Len() == 40 and users[0][0][38] == "19-rendered-where-the-list-lives"
     assert (try mm.Get(0))[0][19] == "19-map-text"

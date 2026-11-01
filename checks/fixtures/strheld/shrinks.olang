@@ -1,4 +1,5 @@
-# E11b/E11c: later operands clearing and popping a List and clearing a Map before the earlier pieces render
+# E11b/E11c: later operands clearing and popping a Vec and clearing a Map before the earlier pieces render - each
+# earlier operand its own copy (a Vec and a Map are values since 2026-11-01; they were handles, rendered as changed)
 import "std/io"
 fn shrink(l mut Vec<String&>&) I64 {
     l.Clear()

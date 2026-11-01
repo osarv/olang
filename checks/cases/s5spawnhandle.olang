@@ -1,10 +1,12 @@
 # check: fail a task is not handed x[i]: the element is copied here, and the copy would not last until the join
 # E31b/P2: a call on a handle element runs on a copy of the handle held in the spawner's block - which closes, or is
 # made again by the next turn of a loop, before the join; a function taking the collection does "x[i].Push(v)" itself
+# (std/list's List, a handle; a Vec element is a value since 2026-11-01, taken in place with RefMut)
+import "std/list"
 fn main() ? {
-    users := Vec<Vec<I64>>()
-    for _ in range 4 { users.Push(Vec<I64>()) }
+    users := list.List<list.List<I64>>()
+    for _ in range 4 { users.Push(list.List<I64>()) }
     join {
-        for i in range 4 { spawn users.RefMut(i).Push(i) }
+        for i in range 4 { spawn users[i].Push(i) }
     }
 }

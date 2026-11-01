@@ -1,12 +1,9 @@
-# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
-# also: note: 'x' copies 'G', reached read-only, so it is read-only - 'x := G.Clone()' would be one of its own
-# T25c: 'x := G' copies an immutable global, so the copy cannot be lent to a 'mut' receiver - Push would change G's list
-type Box struct(P mut Array<I64>&) {
-    P
-}
-GB Box = Box(Array<I64>(3))
-G Vec<I64> = Vec<I64>()
+# check: run
+# T25c, QCE: 'x := G' copies an immutable global's Vec - a Vec of its own since 2026-11-01, so a 'mut' receiver may write
+# it and G stays as it was (a handle's copy was read-only: Push would have changed G's list)
+G Vec<I64> = I64[1].ToVec()
 fn main() ? {
     x := G
     x.Push(1)
+    assert x.Len() == 2 and G.Len() == 1
 }

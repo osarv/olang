@@ -1,14 +1,16 @@
 # check: fail the callee needs one argument's scope to outlive another's
 # E31b/O17b (G1): the same through the List a Map gives - "(try mm.Get(0))[0].Push(t)" - and through a plain function
-fn pushFn(l mut Vec<String&>&, s String&) { l.Push(s) }
+# (std/list's List, a handle; a Vec is a value since 2026-11-01)
+import "std/list"
+fn pushFn(l mut list.List<String&>&, s String&) { l.Push(s) }
 
 fn main() ? {
-    mm := Map<I64, Vec<Vec<String&>>>()
-    mm.Put(0, Vec<Vec<String&>>())
-    (try mm.Get(0)).Push(Vec<String&>())
+    mm := Map<I64, list.List<list.List<String&>>>()
+    mm.Put(0, list.List<list.List<String&>>())
+    (try mm.Get(0)).Push(list.List<String&>())
     for k in range 3 {
         t := $k "-loop-text"
-        (try mm.Get(0)).RefMut(0).Push(t)
-        pushFn((try mm.Get(0)).RefMut(0), t)
+        (try mm.Get(0))[0].Push(t)
+        pushFn((try mm.Get(0))[0], t)
     }
 }

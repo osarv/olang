@@ -782,7 +782,7 @@ fn stopWhy(s eval.Stop) String {
 
 # ---- the machine ----
 
-type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, When eval.Mode) {
+type Exec struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>&, When eval.Mode) {
     P
     Bodies
     When

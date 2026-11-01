@@ -13996,7 +13996,7 @@ fn c3GlobalReads() I64 {
     t I64 = C3Words.Len() + C3Counts.Len()
     for w in C3Words { t += w.Len() }
     for e in C3Counts { t += e.Value }
-    if "bc" in C3Counts { t += 100 }
+    t += 100 if "bc" in C3Counts else 0
     return t + (try C3Counts.Get("a") catch default 0) + C3Words[1].Len()
 }
 C3GlobalBaked I64 = c3GlobalReads()
@@ -15336,7 +15336,7 @@ fn o17bAliases() String& ? {
         l2 mut Vec<String&>&l = l
         l2.Push($i)
         o17bAddTo(l2, "a" $i)
-        m2 Map<I64, I64>&m = m
+        m2 mut Map<I64, I64>&m = m
         o17bPutIn(m2, i)
         sbChurn()
     }
@@ -15369,7 +15369,7 @@ test "O17b: a handle is lent as its reference" {
     sbChurn()
     t := ""
     for k in range 3 {
-        l := try g.Get(k) catch { unreachable }
+        l := try g.Ref(k) catch { unreachable }
         for x in l { t = $t $x }
     }
     assert t == "v0v3v6v1v4v7v2v5v8"
@@ -15405,7 +15405,7 @@ test "O20: a value copied out of a reference holds what its referent holds" {
     for e in m.rules {
         for d in e.Value.deps { total += d.Len() }
     }
-    r := try m.rules.Get("t7 a7 b7") catch { unreachable }
+    r := try m.rules.Ref("t7 a7 b7") catch { unreachable }
     assert total == 250 and m.rules.Len() == 40 and r.deps.Len() == 3 and r.deps[1] == "a7"
 }
 
@@ -15467,7 +15467,7 @@ fn qcSumBoxes(bs Array<qcBox>&) I64 {
     return t
 }
 fn qcGrown(l Vec<I64>&, n I64) I64 {
-    c := l.Clone()
+    c Vec<I64> = l
     for _ in range n { c.Push(10) }
     return qcTotal(c)
 }
@@ -15490,7 +15490,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
     v mut Vec<I64>&w = w
     v.Push(7 + k)
     assert w.Len() == 1 and w[0] == 7
-    c := QcList.Clone()
+    c := QcList
     c.Push(4 + k)
     assert c.Len() == 4 and QcList.Len() == 3
     bs := qcBox[qcBox(I64[1, 2]), qcBox(I64[3])]
@@ -16203,7 +16203,7 @@ fn s5Kept(n I64) I64 {
         rows.Push(s5One(t))
         rec mut Vec<String&>&rows = Vec<String&>()
         rec.Push($k "-in-rec")
-        rows.Push(rec.Clone())
+        rows.Push(rec)
         sbChurn()
     }
     sbChurn()
@@ -16285,7 +16285,7 @@ fn s5Writes(k I64) I64 {
     rows[0][2] = c
     ll := Vec<Vec<s5Acc>>()
     ll.Push(Vec<s5Acc>())
-    ll[0].Push(s5Acc())
+    ll.RefMut(0).Push(s5Acc())
     w := ll[0][0]
     w.Add()
     ll[0][0] = w
@@ -16465,9 +16465,9 @@ fn s5Handles(n I64) I64 ? {
     }
     for i in range n {
         for j in range 20 {
-            users[i].Push(i * 10 + j)
+            users.RefMut(i).Push(i * 10 + j)
             boxes[i].items.Push(i * 100 + j)
-            (try m.Get(i)).Push(i * 1000 + j)
+            (try m.RefMut(i)).Push(i * 1000 + j)
             sbChurn()
         }
     }
@@ -16528,16 +16528,16 @@ fn s5PushNested(l mut Vec<String&>&, s String&) { l.Push(s) }
 fn s5NestedHandles(n I64) I64 ? {
     users := Vec<Vec<Vec<String&>>>()
     users.Push(Vec<Vec<String&>>())
-    users[0].Push(Vec<String&>())
+    users.RefMut(0).Push(Vec<String&>())
     mm := Map<I64, Vec<Vec<String&>>>()
     mm.Put(0, Vec<Vec<String&>>())
-    (try mm.Get(0)).Push(Vec<String&>())
+    (try mm.RefMut(0)).Push(Vec<String&>())
     kept := "kept-text-of-moderate-length"
     for _ in range n {
-        users[0][0].Push(kept)
-        s5PushNested(users[0][0], kept)
-        (try mm.Get(0))[0].Push(kept)
-        users[0][0][0] = kept
+        users.RefMut(0).RefMut(0).Push(kept)
+        s5PushNested(users.RefMut(0).RefMut(0), kept)
+        (try mm.RefMut(0)).RefMut(0).Push(kept)
+        users.RefMut(0).RefMut(0)[0] = kept
         sbChurn()
     }
     sbChurn()

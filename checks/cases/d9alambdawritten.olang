@@ -1,6 +1,7 @@
-# check: fail error[D9a]: array parameter 'x' is passed by reference
-# D9a: a lambda parameter written with an array type by value is the error, as any parameter's - one whose type the
-# expected function type gives is not (see the corpus)
+# check: fail error[D16a]: this lambda's signature disagrees with fn(x Array<I32>) Bool ? E
+# D16a: a lambda parameter written with an array type by value of a run-time length where the expected function type
+# gives the rows laid out in place (a length known while compiling) disagrees with it - leave the type out, as the
+# corpus does (D9a takes any length by value since 2026-11-01, so the written type is no error of its own)
 import "std/io"
 fn main() ? {
     a := Array<Array<I32>>(3, Array<I32>(2))

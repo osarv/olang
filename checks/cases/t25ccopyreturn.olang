@@ -1,12 +1,10 @@
-# check: fail error[T25c]: a copy of a read-only Vec<I64> cannot be returned as a writable value
-# also: made with 'G.Clone()', or a read-only reference
-# T25c: a by-value result is writable to its caller, so a copy of a read-only place cannot be returned as one
-type Box struct(P mut Array<I64>&) {
-    P
-}
-GB Box = Box(Array<I64>(3))
-G Vec<I64> = Vec<I64>()
+# check: run
+# T25c, QCE: a by-value result is writable to its caller - a copy of an immutable global's Vec returned is one of its
+# own since 2026-11-01 (a handle's copy was refused: pushing to it would have changed G)
+G Vec<I64> = I64[1].ToVec()
 fn get() Vec<I64> { return G }
 fn main() ? {
-    get().Push(1)
+    v := get()
+    v.Push(1)
+    assert v.Len() == 2 and G.Len() == 1 and get().Len() == 1
 }

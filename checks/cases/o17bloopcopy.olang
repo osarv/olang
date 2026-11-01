@@ -1,7 +1,8 @@
 # check: run
-# O17b: a for-in's copy of a handle (a Map) lent to a callee that stores what it reads into a longer-lived map - the copy
-# is lent as its reference, so the obligation is judged where the element's state lives, not the loop's block (the
-# recorded limit checks/cases/o10cloopcopy.olang states for any other value); read back after the arena has been churned
+# O17b, QCE: an element of an array of Maps lent in place to a callee that stores what it reads into a longer-lived map -
+# the obligation is judged where the element lives, not the loop's block; read back after the arena has been churned.
+# (A Map was a handle until 2026-11-01, and a for-in's copy of one was lent as its reference; a Map's copy is a value
+# now, so "for p in parts" meets the recorded limit checks/cases/o10cloopcopy.olang states for any other value)
 import "std/io"
 fn countWords(words Array<String&>&) Map<String&, I64> {
     m := Map<String&, I64>()
@@ -25,7 +26,7 @@ fn total(words Array<String&>&) I64 {
     parts[0] = countWords(words)
     parts[1] = countWords(words)
     sum := Map<String&, I64>()
-    for p in parts { merge(sum, p) }
+    for i in range parts.Len() { merge(sum, parts[i]) }
     assert churn() > 0
     assert (try sum.Get("x") catch default 0) == 2 and (try sum.Get("y") catch default 0) == 1
     return sum.Len()
