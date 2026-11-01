@@ -2265,3 +2265,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   calls into C copy a bare argument passed to a non-const pointer, none for a header's `const T*` (C's promise, stated
   unchecked as X1a); (3) callbacks and `any`: a bare argument held across a call whose code is unseen is copied (only
   the parts that may change, listed by -memory); a lambda written at the call is read. QCI 3 under discussion.
+- QCI 3 laid out 2026-11-01: (a) `(fn(x I64) I64)?&` - muddies QCC's `&` (may write) and needs parentheses; (b) never
+  null, absence a do-nothing default (`onClick fn(e Event) = fn(e): return`, its zero value), "is it set?" by an enum
+  or a nullable struct - rec; (c) `fn?(e Event)` - no `&`, a second nullable spelling, near error sets. ASKED.
