@@ -2149,7 +2149,7 @@ takes `&`. tests/params/fail/{atomicbare, atomiclent}.olang.
 
 On a fresh migration of std (param_migrate with the round's compiler, 232 edits, 32 rows left by hand), under
 `OLANG_PARAMS=new OLANG_SCOPES=infer`: std's test files 33 of 40 pass (std/cancel and std/chan again, 15.9); every one of
-tests/params' 22 run files and 26 must-fail cases pass. The 7 failing - filepath, flags, fuzz, prop and the prelude's
+tests/params' 20 run files and 26 must-fail cases pass. The 7 failing - filepath, flags, fuzz, prop and the prelude's
 iterator, map and text tests - all stop at T25c where read-only or constant text is given to a function that hands
 back views of its argument and so takes `&` since D9e's refusal (`Split`, `Lines`, `filepath.Dir`, a test's
 `linesOf`): 15.6's first item, the language choice still open. Bench (15 programs migrated and built with `-memory`):
