@@ -2320,3 +2320,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   null` narrowing locals and parameters, `f!`, a `fn(...)` flows into `fn?(...)`, nothing called through one before
   narrowing); a plain `fn(...)` field or local has no zero value, so it is assigned before any read (D13d) or given a
   do-nothing default. Combines (b) and (c). ASKED to confirm. In effect: function values nullable (T21).
+- QCI 3, the user 2026-11-01: "fns are always referenced so maybe do fn?&() And as a type `type MyFuncType fn()` ...
+  written `f MyFunc?&` normally?" PROPOSED (rec): `?&` is the one nullable marker, functions included - `fn?&(e Event)`,
+  and with a declared function type `h Handler?&`; a plain `fn(e Event)` / `Handler` never null (no zero value: D13d
+  or a default); `fn&` alone is no form (QCC: a written `&` says "may write", and nothing writes through a function
+  value), while `?&` already promises no writing (a nullable parameter is read-only unless its body writes, SPEC D9) -
+  so `?&` means "a reference that may be absent" everywhere. The marker sits on `fn`, never after the signature
+  (`fn() Node?&` is a function giving a nullable Node). New with it: declared function types `type Handler fn(e Event)`
+  (none today; T29 covers numbers, arrays, structs) - nominal as T29, a function or lambda fitting one directly (mine:
+  nothing to convert). ASKED to confirm. In effect: function values nullable (T21).
