@@ -2343,3 +2343,15 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the `&`; declarations and lambdas carry no `&`; declared function types `type Handler fn(e Event)` added; QCC's
   "may write" and D9d's check do not apply to them. Queued after the rework with QCI 4 (nullable arrays), migrated by a
   tool in `olang fix`.
+- QCK ASKED 2026-11-01 (the user: "Is the mutable by ref and not by value rule sound now that you have tried it out a
+  bit? We could go back to using mut for parameters?"). Answered from rounds 2a-3b: sound only as far as the compiler
+  proves two guarantees for every bare argument it passes by pointer, else a hidden copy (C non-const pointers,
+  callbacks, `any`, spawns); bulk review 5 found real holes there (writes through bare parameters into constant data,
+  the 2.10 aliasing hole), all fixed, and most of rounds 2b-3b's machinery (per-level inferred permission, field
+  inference, D9h's handover, readers rewritten to give values, the 64 compiler/ errors left) exists to recover what a
+  read-only `T&` gave for free. PROPOSED (rec): go back to `mut` on references - `p mut T&` may write the caller's,
+  `p T&` a read-only shared view (no copy, no proof), `p T` a value (a copy by meaning; passing it by pointer stays an
+  optimization where unobservable, so a missed proof costs speed, never soundness) - which is today's default path;
+  keep round 1 (scopes inferred), round 3's QCE (value arrays inside values, `Map<String, V>`), D9h's handover as an
+  optimization, handles as values, QCI 3/4; drop OLANG_PARAMS=new (QCC's "& may write", D9d-D9g, param_migrate,
+  FRO). Round 3c (compiler/ to zero under the switches) would be mostly discarded - offered to pause it. In effect: QCC.
