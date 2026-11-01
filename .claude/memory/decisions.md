@@ -2374,3 +2374,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   type held both ways (E12; the one way to copy a value type once `Clone()` leaves them, List keeping its own); `:=`
   copies nothing (it takes the right side's type); a reference-only type (any, function types, destructor types,
   extern types) has no value form - the bare type is the error, naming its `&`.
+- My calls REVIEWED 2026-11-01 (the user: "All good. Especially important that you keep scope analysis compile-time
+  only as with 3)"): all twelve stand. Standing rule: scope analysis is compile-time only - no run-time scope word per
+  instance or field, ever; a shape inference cannot place is a compile error naming the fix. Correction to QCI 3 (the
+  user: "a type declarations never declared reference markers"): `type Handler fn(e Event)` declares the type with no
+  `&`; only a place holding one writes it - `h Handler&`, `h Handler?&`, `onClick fn&(e Event)` (a field, local or
+  parameter). As every type declaration: `type Node struct ...` is held as `Node&`.
