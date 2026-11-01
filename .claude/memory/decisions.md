@@ -2193,3 +2193,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   Recommended: keep (1) and (2); make function values never null (a function-typed field or local with no value is
   definitely initialised, D13d; absence by `?&`-style marking or an enum if ever needed), and drop (4) (`null` for an
   array is a second spelling of empty). In effect: today's rules.
+- QCI 4 ANSWERED 2026-11-01 (the user: "No, an array reference that isn't pointing at a valid array should be null"):
+  REVERSES my "an array is never null" (T2c's array rule). `Array<T>?&` / `String?&` are allowed and mean "may be
+  absent", null distinct from empty, narrowed as every `?&` (S8e), `x!` on null, `x is null` a real test. Details
+  (mine): a never-null `Array<T>&` and a value array keep the empty array as their zero (a valid array, so D13c loses
+  nothing); `null` where a never-null array is wanted becomes an error (it no longer names the empty array); the
+  compiler's absent-vs-empty flags (`Catch.Braced`, `Func.Bodied`) may go back to `?&` in the refactor. QCI 3
+  (function values never null) still ASKED. Queued after the rework lands (the checker's files), with migration by
+  `olang fix` (null_migrate) for `null` written as an empty array.
