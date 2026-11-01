@@ -1,0 +1,24 @@
+# check: fail error[T25c]: a read-only copy cannot be passed where it may be written
+# a result following a bare parameter is read-only where the argument is: written through, refused
+type cell struct(v I64) {
+    v
+}
+type shape enum {
+    Leaf(c cell&)
+    Wrap(s shape&)
+}
+fn innermost(s shape) shape {
+    match s {
+        case shape.Wrap(t) { return innermost(t) }
+        case _ { }
+    }
+    return s
+}
+fn bump(s shape&) {
+    match s {
+        case shape.Leaf(c) { c.v++ }
+        case _ { }
+    }
+}
+fn sneaky(s shape) { bump(innermost(innermost(s))) }
+fn main() { sneaky(shape.Leaf(cell(1))) }

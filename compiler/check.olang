@@ -7389,7 +7389,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     if c.levelRo(want) { return x }
                     if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return x }
                     if c.fieldsWrite(x) { return x }
-                    c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
+                    c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(unwrapped(x)))
                     return x
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
@@ -7626,6 +7626,9 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
             c.roRefResult(sp, rr)
             return x
         }
+        # (round 2d: a value read-only below its top only by what bare parameters reach - one a call following them hands
+        # back: the result follows them, rather than made read-only for every caller)
+        if not hr and c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.followBare(x) { return c.convert(sp, x, want) }
         if c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.Attempts < 19 and c.P.NarrowResult(c.retInst, v) {
             c.copiesGrew = true
             return x
@@ -10090,7 +10093,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
                 return true
             }
             if c.fieldsWrite(x) { return false }
-            c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(x))
+            c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(unwrapped(x)))
             return false
         }
         c.err(sp, msgs.ReadOnlyToWritable())
@@ -10373,6 +10376,8 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
         c.roFieldsOf(x, fs, 0)
         if c.fieldsWritAll(fs.ToArray()) { return false }
     }
+    # (round 2d: a plain function's copy of what its bare parameters reach handed back: the result follows them)
+    if kind == RoReturned and source.NewParams and c.followBare(x!) { return false }
     t := typeOf(x)
     if c.askTypeFields(t) { return false }
     fix := c.roFix(c.roName(x!), t)
@@ -11494,6 +11499,8 @@ fn (c mut Checker&) roCallCopy(cl typed.Call&) Bool {
         if c.isRef(typeOf(a)) and c.roFollows(id, k) and c.roRef(a) { return true }
         # the rework's round 2: a bare parameter's argument, a value as read-only as the place it is read from
         if source.NewParams and not c.isRef(typeOf(a)) and c.roFollows(id, k) and c.roValue(a) { return true }
+        # (round 2d: a plain function's value result following a read-only argument - followBare - is as read-only)
+        if source.NewParams and c.followsAt(id, k) and c.roBelow(a) { return true }
     }
     return false
 }
@@ -21161,7 +21168,8 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         if rr is not null and c.ownParamBorrow(x) { c.roRefResult(values[0].Span(), rr) }
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } # T25c: the caller holds it writably
         # (a value holding writable references handed back from what a "&" parameter reaches: kept - D9d)
-        if source.NewParams and not c.isRef(rt) and c.holdsWritable(rt) {
+        # (round 2d: one a bare parameter would hand back followed - the result following it, followBare - is no use)
+        if source.NewParams and not c.isRef(rt) and c.holdsWritable(rt) and not c.handsBackParams(x) {
             c.refUseX(x)
             c.retInst = c.narrowable()
             c.handing = true
@@ -21319,6 +21327,146 @@ fn (c mut Checker&) followNull(x typed.Expr&) Bool {
     return true
 }
 
+# round 2d: a plain function's value result handed back from what its bare parameters reach - a copy of a bare enum or
+# struct holding references, a value one of its calls hands back following such an argument: the result follows them
+# (load.FollowResults) - read-only at a call giving a read-only argument (followedResult), as writable as the caller's
+# own otherwise - rather than the result made read-only for every caller, or refused (QCC: read-only is said by a value;
+# a value of the caller's own data is the caller's to write). Not where a field read-only by inference lies between
+# (its data may be read-only whatever the argument is): those fields written, checked again. Whether it was so
+fn (c mut Checker&) followBare(x typed.Expr&) Bool {
+    i := c.narrowable()
+    if i < 0 or c.instanceBody(c.fr().Body): return false
+    ks Vec<I64>
+    try c.paramsOf(x, ks, 0, true) catch { return false }
+    if ks.Len() == 0: return false
+    if c.fieldRo.Len() > 0 and c.roFieldX(x, 0) {
+        c.fieldsThroughX(x, true, 0)
+        return true
+    }
+    for k in ks {
+        key := $i ":" $k
+        if c.P.L.FollowResults.Has(key): continue
+        c.P.L.FollowResults.Put($key, true)
+        c.copiesGrew = true
+    }
+    return true
+}
+
+# whether a plain function's returned value is only what its parameters reach - read through them, chosen among such,
+# or handed back by calls following them - so that, its parameters bare, its result would follow them (followBare)
+fn (c mut Checker&) handsBackParams(x typed.Expr&) Bool {
+    if c.narrowable() < 0 or c.instanceBody(c.fr().Body): return false
+    ks Vec<I64>
+    try c.paramsOf(x, ks, 0, false) catch { return false }
+    return ks.Len() > 0
+}
+
+# the bare parameters a value's read-only-ness rests on, into ks - Elsewhere where it may rest on anything else (constant
+# data, a global, a read-only copy made otherwise); with bare false, any parameter it is reached through
+fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bool) ? Elsewhere {
+    if depth > 16: error Elsewhere
+    u := unwrapped(x)
+    match u {
+        case typed.Expr.Call(_, _, cl) {
+            id := c.bodyOfCallee(cl.Target)
+            # (the callee's own result writable below its top: read-only only by the arguments it follows)
+            if id < 0 or not c.holdsWritable(c.P.T.Result(c.Bodies[id].Ty)): error Elsewhere
+            n := ks.Len()
+            for k, a in cl.Args {
+                if not c.followsAt(id, k) or bare and not c.roBelow(a): continue
+                try c.paramsOf(a, ks, depth + 1, bare)
+            }
+            if ks.Len() == n: error Elsewhere
+            return
+        }
+        case typed.Expr.Cond(_, _, k) {
+            if k.A is not null and (not bare or c.roBelow(k.A!)): try c.paramsOf(k.A!, ks, depth + 1, bare)
+            if not bare or c.roBelow(k.B): try c.paramsOf(k.B, ks, depth + 1, bare)
+            return
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if not typed.PassesRefs(op) or args.Len() == 0: error Elsewhere
+            try c.paramsOf(args[0], ks, depth + 1, bare)
+            return
+        }
+        case _ { }
+    }
+    r := c.rootLocal(c.placeOfX(u))
+    k := c.bareParamAt(r) if bare else c.paramPos(r)
+    if k < 0: error Elsewhere
+    if not ks.Has(k): ks.Push(k)
+}
+
+# the index of the bare parameter local id is, is its copy on entry, or names through what it was made from; -1 for none
+fn (c mut Checker&) bareParamAt(id I64) I64 {
+    for _ in range 16 {
+        if id < 0: return -1
+        key := c.roKey(id)
+        if c.bareLocals.Has(key) or c.cur().Local(typed.LocalId(I32(id))).Kind == typed.LocalKind.Var and c.bareNamed(id) {
+            ps := c.cur().Params
+            for k in range ps.Len() {
+                if I64(ps[k]) == id: return k
+            }
+            n := c.cur().Local(typed.LocalId(I32(id))).Name
+            for k in range ps.Len() {
+                if n != source.NameId(0) and (try c.roCopies.Get(c.roKey(I64(ps[k]))) catch default source.NameId(0)) == n: return k
+            }
+            return -1
+        }
+        o := try c.roFrom.Get(key) catch { return -1 }
+        id = c.rootLocal(o.P)
+    }
+    return -1
+}
+
+# the index of the parameter local id is, -1 for none
+fn (c mut Checker&) paramPos(id I64) I64 {
+    if id < 0: return -1
+    ps := c.cur().Params
+    for k in range ps.Len() {
+        if I64(ps[k]) == id: return k
+    }
+    return c.bareParamAt(id)
+}
+
+# whether a value is read-only below its top: a read-only copy, or a value of read-only levels made one of writable ones
+# (a call's result following a read-only argument, given where a writable type is written)
+fn (c mut Checker&) roBelow(x typed.Expr&) Bool {
+    # (a value lent where a bare parameter's reference is wanted - a temporary - is as read-only as the value)
+    if c.isRef(typeOf(x)) {
+        if c.roRef(x): return true
+        return match x {
+            case typed.Expr.Promote(_, _, pr): c.roBelow(pr.X)
+            case _: false
+        }
+    }
+    if c.roValue(x): return true
+    match x {
+        case typed.Expr.Prim(_, ty, op, _, args) {
+            if not typed.PassesRefs(op) or args.Len() == 0: return false
+            a := args[0]
+            if c.holdsWritable(ty) and not c.isRef(typeOf(a)) and not c.holdsWritable(typeOf(a)) and c.P.T.HoldsRefs(typeOf(a)): return true
+            return c.roBelow(a)
+        }
+        case _ { return not c.holdsWritable(typeOf(x)) and c.P.T.HoldsRefs(typeOf(x)) and c.followedRo(x) }
+    }
+}
+
+# whether a call's result was made read-only by followedResult
+fn (c mut Checker&) followedRo(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Call(_, _, cl) {
+            id := c.bodyOfCallee(cl.Target)
+            if id < 0: return false
+            for k, a in cl.Args {
+                if c.followsAt(id, k) and c.roBelow(a): return true
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
 # the by-value parameter of a body that needs a writable argument (T25c's roNeeds), named; "" for none - what keeps a
 # function from being a value (ReadOnlyFuncValue), said by explain's "# not a value" (round 2c)
 fn (c mut Checker&) WritableNeed(body I64) String {
@@ -21385,7 +21533,7 @@ fn (c mut Checker&) followedResult(target typed.Callee&, args Array<typed.Expr&>
     if i < 0: return r
     for k, a in args {
         if not c.P.L.FollowResults.Has($i ":" $k): continue
-        ro := c.roRef(a) if c.isRef(typeOf(a)) else c.roValue(a)
+        ro := c.roBelow(a)
         if not ro: continue
         # (a reference handed back from what a "&" parameter reaches: read-only itself, round 2c)
         ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))

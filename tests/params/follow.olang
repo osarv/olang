@@ -1,0 +1,63 @@
+# The scoping and parameters rework (docs/rework.md section 13): a plain function's value result handed back from what
+# its bare parameters reach follows them - as writable as the caller's argument, read-only where it is read-only - so a
+# bare parameter is enough where a "&" one was needed to hand what it reaches back. Run by `make verify-params` under
+# OLANG_PARAMS=new OLANG_SCOPES=infer, as handover.olang is.
+
+type cell struct(v I64) {
+    v
+}
+
+type shape enum {
+    Leaf(c cell&)
+    Wrap(s shape&)
+}
+
+# a copy of a bare enum handed back, and one a call following it hands back
+fn innermost(s shape) shape {
+    match s {
+        case shape.Wrap(t) { return innermost(t) }
+        case _ { }
+    }
+    return s
+}
+
+# one of two, each followed
+fn pick(a shape, b shape, k I64) shape { return a if k == 0 else b }
+
+fn bump(s shape&) {
+    match s {
+        case shape.Leaf(c) { c.v++ }
+        case _ { }
+    }
+}
+
+fn value(s shape) I64 {
+    return match innermost(s) {
+        case shape.Leaf(c): c.v
+        case _: 0
+    }
+}
+
+type holder struct(s shape) {
+    s
+}
+
+# a struct's field read through a bare one, handed back
+fn held(h holder) shape { return h.s }
+
+test innermost "hands back what a bare parameter reaches, as writable as the caller's own" {
+    s := shape.Wrap(shape.Wrap(shape.Leaf(cell(4))))
+    bump(innermost(s))
+    assert value(s) == 5
+    bump(innermost(pick(s, s, 1)))
+    bump(pick(innermost(s), innermost(s), 0))
+    assert value(s) == 7
+    h := holder(s)
+    bump(innermost(held(h)))
+    assert value(h.s) == 8 and value(s) == 8
+}
+
+# the evaluator agrees: a baked global and a decided assert read through the followed results
+Seven I64 = value(shape.Wrap(shape.Leaf(cell(7))))
+assert Seven == 7
+assert value(pick(shape.Leaf(cell(1)), shape.Leaf(cell(2)), 1)) == 2
