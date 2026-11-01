@@ -379,6 +379,7 @@ fn (ln mut lowering&) run() {
     frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root!.Id, b.Sp)
     ln.emit(mir.Stmt.Open(b.Sp, frame))
     ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
+    ln.bareEntryCopies()
     for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
     # falling off the end
@@ -394,6 +395,31 @@ fn (ln mut lowering&) run() {
         ln.end(mir.Term.Return(b.Sp, mir.Operand.None))
     } else {
         ln.end(mir.Term.Exit(b.Sp, mir.ExitKind.Unreachable, mir.Operand.None))
+    }
+}
+
+# bulk review 5 (2.10): lowered with no plan - while compiling, for the evaluator - a bare parameter passed by pointer is
+# copied on entry, as by value, so what the evaluator computes never depends on which of the caller's storage the
+# pointer names (a view of it kept by Push, a local or a capture, a write through another argument): the run time
+# passes by pointer only where nothing can tell (the plan's ArgCopy and ArgTemp), so the two agree. Copied into the
+# program's scope - compile-time storage, reclaimed with the compilation
+fn (ln mut lowering&) bareEntryCopies() {
+    if ln.planned or not source.NewParams: return
+    inst := match ln.B.Of {
+        case typed.BodyOf.Fn(i): i
+        case _: -1
+    }
+    if inst < 0: return
+    P := ln.L.P
+    decl := P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))
+    for p in ln.B.Params {
+        l := I64(p)
+        if not typed.BarePointer(ln.T, ln.B, l, decl): continue
+        ty := ln.B.Locals[l].Ty
+        sp := ln.B.Locals[l].Sp
+        cp := ln.ownCopy(mir.Operand.Copy(mir.L(mir.LocalId(I32(l)))), ty, mir.ScopeRef.Program, sp)
+        ln.L.ArgCopies--    # (no argument the run time copies)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(cp)))
     }
 }
 
@@ -2219,6 +2245,8 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         if i < ps.Len() and ln.copiesArg(c, i) { v = ln.ownCopy(v, ps[i], ln.copyScope(c, ty), a.Span()) }
+        # (bulk review 5, 2.10: one the same call may write another way - a copy for the call alone, in this block)
+        if i < ps.Len() and not ln.copiesArg(c, i) and ln.tempArg(c, i) { v = ln.ownCopy(v, ps[i], ln.innermost(), a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
         if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
@@ -2231,6 +2259,54 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
 }
 
 # ---- arguments copied for what a callee keeps (the rework's round 2e) ----
+
+# whether a call copies its argument i for the call alone (bulk review 5, 2.10): one for a bare parameter passed by
+# pointer that the same call may write another way - the scope pass's plan (ArgTemp) where the body has one, else
+# (while compiling) every one typed.AliasCopies names, a copy as by value either way
+fn (ln mut lowering&) tempArg(c typed.Call&, i I64) Bool {
+    if not source.NewParams or i >= 62: return false
+    if ln.planned {
+        if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgTemp.Len(): return false
+        return (ln.plan.ArgTemp[I64(c.Site)] & (I64(1) << i)) != 0
+    }
+    cb := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+    if cb < 0 or cb >= ln.L.Bodies.Len(): return false
+    inst := match ln.L.Bodies[cb].Of {
+        case typed.BodyOf.Fn(k): k
+        case _: -1
+    }
+    if inst < 0: return false
+    P := ln.L.P
+    gm := Array<Bool>(c.Args.Len(), false)
+    for k in range c.Args.Len() { gm[k] = ln.mutGlobalArg(c.Args[k]) }
+    return (typed.AliasCopies(ln.T, ln.L.Bodies[cb], c.Args, P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst)))), gm) & (I64(1) << i)) != 0
+}
+
+# whether an argument is a mutable global's storage, or a part of it
+fn (ln mut lowering&) mutGlobalArg(a typed.Expr&) Bool {
+    p := match a {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
+        case typed.Expr.Slice(_, _, sl): sl.Base
+        case _: null
+    }
+    for _ in range 16 {
+        if p is null: return false
+        match p {
+            case typed.Lvalue.Global(_, _, mi, n) {
+                v := ln.L.P.GlobalDecl(mi, n)
+                return v is not null and generic.WrittenMut(v.Ty)
+            }
+            case typed.Lvalue.Field(_, _, b, _) { p = b }
+            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
+            case typed.Lvalue.Payload(_, _, py) { p = py.Base }
+            case _ { return false }
+        }
+    }
+    return false
+}
 
 # whether a call copies its argument i: one for a bare parameter its callee keeps past the call that may change while
 # what keeps it lives - the scope pass's plan (scope.argCopies) where the body has one; while compiling (no plan) every

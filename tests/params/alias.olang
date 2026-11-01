@@ -1,0 +1,59 @@
+# The scoping and parameters rework (bulk review 5, F3; docs/rework.md 2.10): a bare argument the same call may write
+# another way - through a "&" argument reaching its type, or as a mutable global's storage the callee writes by name -
+# is copied for the call, so the bare parameter reads its own value, as by value. Run by `make verify-params` under the
+# switches.
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+fn f(a pt, b pt&) I64 {
+    b.x = 5
+    return a.x
+}
+
+fn g(t String, u String&) Char {
+    u[0] = 'x'
+    return t[0]
+}
+
+G mut pt = pt(1, 2)
+
+fn bump() { G.x = 7 }
+
+fn h(a pt) I64 {
+    before := a.x
+    bump()
+    return before * 10 + a.x
+}
+
+fn viaValue(a pt, k fn()) I64 {
+    before := a.x
+    k()
+    return before * 10 + a.x
+}
+
+test f "a bare argument written through a & argument of the same call is its own copy" {
+    p := pt(1, 2)
+    assert f(p, p) == 1 and p.x == 5
+    t := $"abc"
+    assert g(t, t) == 'a' and t[0] == 'x'
+}
+
+test h "a mutable global given bare, written by the callee by name, is its own copy" {
+    G = pt(1, 2)
+    assert h(G) == 11
+    G = pt(1, 2)
+    assert viaValue(G, bump) == 11
+}
+
+fn both() I64 {
+    p := pt(1, 2)
+    t := $"abc"
+    return f(p, p) * 1000 + I64(g(t, t))
+}
+
+# the evaluator agrees
+Baked I64 = both()
+assert Baked == 1097

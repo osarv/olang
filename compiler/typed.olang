@@ -906,6 +906,64 @@ fn BarePointer(t types.Table&, b Body&, l I64, decl Array<types.TypeId>&) Bool {
     return false
 }
 
+# bulk review 5 (2.10): the arguments of a call of body b, a bit each, given b's bare parameters passed by pointer that
+# the same call may write another way while it runs - another argument given a "&" parameter whose type can reach
+# storage of the bare one's (f(p, p) with "b pt&"), a function value or an "any" given beside it (what it writes
+# unknown), or the argument a mutable global's storage (globalMut: what the callee may write, by name, while it reads
+# it). Such an argument is copied for the call, as by value, rather than passed as the caller's storage
+fn AliasCopies(t types.Table&, b Body&, args Array<Expr&>&, decl Array<types.TypeId>&, globalMut Array<Bool>&) I64 {
+    if t.KindOf(b.Ty) != types.Kind.Func: return 0
+    ps := t.Items(t.Params(b.Ty))
+    unknown := false
+    for k in range args.Len().Min(ps.Len()) {
+        rk := t.Referent(ps[k]) if t.IsRef(ps[k]) else ps[k]
+        if t.KindOf(rk) == types.Kind.Func or t.KindOf(rk) == types.Kind.Any or t.KindOf(ps[k]) == types.Kind.Func: unknown = true
+    }
+    m I64 = 0
+    for i in range args.Len().Min(ps.Len()).Min(b.Params.Len()).Min(62) {
+        if not BarePointer(t, b, I64(b.Params[i]), decl): continue
+        own := t.Referent(ps[i])
+        hit := unknown or i < globalMut.Len() and globalMut[i]
+        for j in range args.Len().Min(ps.Len()) {
+            if hit: break
+            if j == i or not t.IsRef(ps[j]) or (t.PermOf(ps[j]) & types.Writable) == 0: continue
+            if TypeReaches(t, ps[j], own, 0): hit = true
+        }
+        if hit: m |= I64(1) << i
+    }
+    return m
+}
+
+# whether a value of type ty may reach storage of type own - be it, refer to it, view its array - through references,
+# type arguments, elements, tuples and a struct's fields; a function value or an "any" may reach anything
+fn TypeReaches(t types.Table&, ty types.TypeId, own types.TypeId, depth I64) Bool {
+    if depth > 6: return false
+    if t.SameButPerm(ty, own) or t.Same(t.Repr(ty), t.Repr(own)): return true
+    match t.KindOf(ty) {
+        case types.Kind.Ref { return TypeReaches(t, t.Referent(ty), own, depth + 1) }
+        case types.Kind.Func, types.Kind.Any { return true }
+        case types.Kind.Array {
+            ro := t.Repr(own)
+            if t.KindOf(ro) == types.Kind.Array and t.SameButPerm(t.Elem(ty), t.Elem(ro)): return true
+            return TypeReaches(t, t.Elem(ty), own, depth + 1)
+        }
+        case types.Kind.Tuple { return listReaches(t, t.Items(t.Parts(ty)), own, depth) }
+        case types.Kind.Named {
+            if listReaches(t, t.Items(t.Args(ty)), own, depth): return true
+            if not t.HasBody(ty) or t.DeclKindOf(t.DeclOf(ty)) != types.DeclKind.Struct: return false
+            return listReaches(t, t.Items(t.Fields(ty)), own, depth)
+        }
+        case _ { return false }
+    }
+}
+
+fn listReaches(t types.Table&, xs Array<types.TypeId>&, own types.TypeId, depth I64) Bool {
+    for x in xs {
+        if TypeReaches(t, x, own, depth + 1): return true
+    }
+    return false
+}
+
 # whether block a is block d or encloses it
 fn (b Body&) Encloses(a BlockId, d BlockId) Bool {
     x := d
@@ -950,6 +1008,9 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # past the call that may change while what keeps it lives (scope.argCopies): lowering copies it where the call's
     # result builds, so what the callee keeps is its own copy, as by value
     ArgCopy mut Array<I64>& = Array<I64>(Sites)
+    # bulk review 5 (2.10), by site: the arguments for a callee's bare parameters passed by pointer that the same call may
+    # write another way (AliasCopies) and that may change (scope.argCopies) - copied where the call is, for the call alone
+    ArgTemp mut Array<I64>& = Array<I64>(Sites)
     # O8d, the early-free analysis's (compiler/free.olang): by site, a region made where the site's value is - 1 a region
     # of its own, a kid of RegionParent (or of RegionRoot's value's region, when that is one), 2 the region RegionRoot's
     # value is in, else RegionParent. The site's own Built, and its parts', then say Region(site)
