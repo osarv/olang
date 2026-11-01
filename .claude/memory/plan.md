@@ -715,3 +715,6 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   (CLAUDE.md's QCC entry marked reversed, SPEC, HISTORY, docs/rework.md); then handles as values; then round 4 (the
   flip: scopes inferred the default, markers removed from the grammar - `mut` stays - migration, seed, goldens); then
   QCI 3/4; then the compiler/ refactor, bulk review, final verify.
+- 2026-11-01 CET (weekly 0.46 at 16:38 CET, reset Sat 2026-11-07 05:00 CET, stop 0.92): order kept so the rework lands
+  first (3d revert, handles as values, round 4, QCI 3/4), the compiler/ refactor last - on Sonnet (the user), its
+  validation (bulk review, soundness) on Opus at high.
