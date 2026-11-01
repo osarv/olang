@@ -501,7 +501,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
     c.Calls = f.Calls.ToArray()
     c.Cases = f.Cases.ToArray()
     n I64 = 0
-    for b in f.Blocks { n += b.Stmts.Len() }
+    for blockIx in range f.Blocks.Len() { n += f.Blocks[blockIx].Stmts.Len() }
     nb := f.Blocks.Len()
     c.Stmts = Array<mir.Stmt>(n)
     c.Global = Array<Bool>(n)
@@ -689,7 +689,8 @@ fn (m mut Machine&) rtArrayValue(ty types.TypeId) Bool {
 
 # whether f's body writes into local l's elements, or makes a writable reference to them (D9b) - as emit judges it
 fn (m mut Machine&) writesInto(f mir.Fn&, l mir.LocalId) Bool {
-    for bb in f.Blocks {
+    for blockIx in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(blockIx)
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.Assign(_, p, rv) {
@@ -5468,7 +5469,8 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     for work.Len() > 0 {
         fi := try work.Pop() catch { break }
         f := m.fns.Ref(fi)
-        for bb in f.Blocks {
+        for blockIx in range f.Blocks.Len() {
+            bb := f.Blocks.Ref(blockIx)
             for s in bb.Stmts {
                 match s {
                     case mir.Stmt.Assign(sp, p, rv) {

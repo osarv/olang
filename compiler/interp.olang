@@ -920,7 +920,8 @@ fn (x mut Exec&) Need(k mir.FnKey) {
 fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     for c in f.Calls { x.callee(c.Target, work) }
     for t in f.Tasks { x.callee(t.Target, work) }
-    for bb in f.Blocks {
+    for blockIx in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(blockIx)
         for s in bb.Stmts {
             match s {
                 case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }

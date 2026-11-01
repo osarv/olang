@@ -2010,7 +2010,8 @@ fn (fe mut fnEm&) trace(sp source.Span) {
     }
     if not fe.sited {
         fe.sited = true
-        for b in fe.F.Blocks {
+        for blockIx in range fe.F.Blocks.Len() {
+            b := fe.F.Blocks.Ref(blockIx)
             match b.T {
                 case mir.Term.Call(csp, _) { fe.sites.Put(csp.Start, 1) }
                 case mir.Term.Wait(wsp, _, _, _, _) { fe.sites.Put(wsp.Start, 2) }
@@ -3020,7 +3021,8 @@ fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool
 # reference made to it
 fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
     f := fe.F
-    for bb in f.Blocks {
+    for blockIx in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(blockIx)
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.Assign(_, p, rv) {
@@ -3565,7 +3567,8 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
 # text is measured, then written straight into storage of its length where it lands: no builder, no room in the
 # frame (a recursion through a join holds nothing but its operands, as stage 0's measured writes), no copy
 fn (fe mut fnEm&) findDirect() {
-    for bb in fe.F.Blocks {
+    for k in range fe.F.Blocks.Len() {
+        bb := fe.F.Blocks.Ref(k)
         n := bb.Stmts.Len()
         for i in range n {
             sc := I64(-1)
@@ -3601,8 +3604,8 @@ fn (fe mut fnEm&) findIdle() {
     # D18: the scopes a generator holds open at a yield are not used by being held - one nothing else uses has no
     # header to close when the walk is dropped
     held := Array<Bool>(f.Refs.Len())
-    for bb in f.Blocks {
-        match bb.T {
+    for k in range f.Blocks.Len() {
+        match f.Blocks[k].T {
             case mir.Term.Suspend(_, _, _, h) {
                 for i in range h.N { held[I64(h.At) + i] = true }
             }
@@ -3612,7 +3615,8 @@ fn (fe mut fnEm&) findIdle() {
     for i in range f.Refs.Len() {
         if not held[i] { u.use(f.Refs[i]) }
     }
-    for bb in f.Blocks {
+    for k in range f.Blocks.Len() {
+        bb := f.Blocks.Ref(k)
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) {
@@ -5771,7 +5775,8 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
         }
         case _ { }
     }
-    for bb in fe.F.Blocks {
+    for blockIx in range fe.F.Blocks.Len() {
+        bb := fe.F.Blocks.Ref(blockIx)
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.Assign(_, pl, rv) {

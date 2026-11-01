@@ -338,6 +338,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     rvl Map<I64, I64>
     vl Map<I64, Bool>
     noCopy Map<I64, Bool>
+    qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
     noLetCopy Map<I64, Bool>
     vlSites Map<I64, Bool>
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
@@ -2651,8 +2652,12 @@ fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
     if ty == types.TypeId(-1): return false
     ps := t.Items(t.Params(ty)) if ty != types.UnknownT else Array<types.TypeId>(0)
     for k in range c.Args.Len() {
-        if k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0: return false
-        if t.ReachesCode(c.Args[k].Type()) or not ln.quietX(c.Args[k]): return false
+        a := c.Args[k].Type()
+        writable := k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0
+        # (quietLife: a callee given what reaches none of the view's storage writably leaves it as it is)
+        if writable and (ln.qCover.Len() == 0 or ln.writesCover(a, 0)): return false
+        if not writable and ln.qCover.Len() > 0 and not t.IsRef(a) and ln.writesCover(a, 0): return false
+        if t.ReachesCode(a) or not ln.quietX(c.Args[k]): return false
     }
     return true
 }
@@ -2851,7 +2856,7 @@ fn (ln mut lowering&) viewCand(u typed.LocalUses&, i I64) Bool {
 
 # why local i holds no views (OLANG_VIEWDUMP)
 fn (ln mut lowering&) whyNot(u typed.LocalUses&, i I64) String {
-    return $(" escapes" if ln.escapes(u, i) else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
+    return $(" escapes" $ln.escWhy(u, i) if ln.escapes(u, i) else "") $(" returned" if u.Ret[i] else "") $(" written" if u.WrOther[i] else "") $(" assigned" if u.Whole[i] else "") $(" lent" if not ln.lendsKeep(u, i) else "")
 }
 
 # whether every writable lend of local i whole goes to a body keeping its parts as they are (a walk's Next, which
@@ -2960,25 +2965,71 @@ fn (ln mut lowering&) heldRefPlace(u typed.LocalUses&, p typed.Lvalue&) Bool {
 fn (ln mut lowering&) heldReferent(u typed.LocalUses&, i I64) Bool {
     l := ln.B.Locals[i]
     # (its own storage only: what a reference it holds names may change under any other name for it)
-    if ln.T.SharesRefs(ln.T.Referent(l.Ty)): return false
-    if l.Kind == typed.LocalKind.Param: return false
-    if ln.vl.Has(i): return true
-    # (one given storage made for it by the call declaring it - a built result no one else holds: its own, as a value
-    # local's is)
-    x := u.Init[i]
-    if x is not null and ln.freshCall(x) and ln.heldUnchanged(u, i): return true
+    if not ln.T.SharesRefs(ln.T.Referent(l.Ty)) and l.Kind != typed.LocalKind.Param {
+        if ln.vl.Has(i): return true
+        # (one given storage made for it by the call declaring it - a built result no one else holds: its own, as a
+        # value local's is)
+        x := u.Init[i]
+        if x is not null and ln.freshCall(x) and ln.heldUnchanged(u, i): return true
+    }
     # (what any reference names - a parameter's, which may change under a "mut" name for it - is changed by nothing
     # while every statement of the block the view lives in writes nothing it could reach: quietLife)
-    return not u.Whole[i] and not u.WrOther[i] and ln.quietLife()
+    return not u.Whole[i] and not u.WrOther[i] and ln.quietLife(ln.T.Referent(l.Ty))
 }
 
 # whether the block a local holding views is declared in (vlIn) writes nothing storage outside it could be: each of its
 # statements, nested ones too, quiet (no call giving a writable reference, through a function value or an "any"), its
 # stores a scalar local's - in a program none of whose globals can be written through (check.mutStorage)
-fn (ln mut lowering&) quietLife() Bool {
+fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
     if ln.L.P.L.MutStorage or ln.B.Root is null: return false
     b := findBlock(ln.B.Root!, ln.vlIn)
-    return b is not null and ln.quietBlock(b)
+    if b is null: return false
+    # (what can write the view's storage: a write of storage of one of the types its by-value parts are, or reaching one
+    # through writable references - no type of olang is another's storage, so any other write leaves it as it is)
+    ln.qCover.Clear()
+    ln.coverAdd(of, 0)
+    ok := ln.quietBlock(b)
+    ln.qCover.Clear()
+    return ok
+}
+
+# the types whose storage a value of type t is: itself and its by-value parts, all the way down (never behind a
+# reference: what a view and a copy of it reach there is the same)
+fn (ln mut lowering&) coverAdd(t types.TypeId, depth I64) {
+    tt := ln.T
+    if depth > 16 or ln.qCover.Has(I64(t)): return
+    ln.qCover.Put(I64(t), true)
+    r := tt.Repr(t)
+    ln.qCover.Put(I64(r), true)
+    match tt.KindOf(r) {
+        case types.Kind.Array { ln.coverAdd(tt.Elem(r), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { for x in tt.Items(tt.Parts(r)) { if x != types.TypeId(0): ln.coverAdd(x, depth + 1) } }
+        case _ { }
+    }
+}
+
+# whether a write of a value of type t's storage, or through the writable references it holds, may reach storage the
+# view covers (qCover); anything reaching code - a function value, an "any", a type variable - may reach anything
+fn (ln mut lowering&) writesCover(t types.TypeId, depth I64) Bool {
+    tt := ln.T
+    if depth > 16: return true
+    if ln.qCover.Has(I64(t)) or ln.qCover.Has(I64(tt.Repr(t))): return true
+    r := tt.Repr(t)
+    return match tt.KindOf(r) {
+        case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
+        case types.Kind.Ref: (tt.PermOf(r) & types.Writable) != 0 and ln.writesCover(tt.Referent(r), depth + 1)
+        case types.Kind.Array: ln.writesCover(tt.Elem(r), depth + 1)
+        case types.Kind.Tuple, types.Kind.Record: ln.someWrites(tt.Items(tt.Parts(r)), depth)
+        case types.Kind.AnonEnum: ln.someWrites(tt.Items(tt.ShapeCases(r)), depth)
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) someWrites(xs Array<types.TypeId>&, depth I64) Bool {
+    for x in xs {
+        if x != types.TypeId(0) and ln.writesCover(x, depth + 1): return true
+    }
+    return false
 }
 
 # the block of a body named id, null for none
@@ -3001,6 +3052,13 @@ fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?&a {
     return findBlock(e, id)
 }
 
+# a store into p, quiet for quietLife: a scalar local's, or one of storage the view does not cover (writing it whole)
+fn (ln mut lowering&) quietStore(p typed.Lvalue&) Bool {
+    t := ln.T
+    if p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT): return true
+    return ln.qCover.Len() > 0 and not ln.qCover.Has(I64(p.Type())) and not ln.qCover.Has(I64(t.Repr(p.Type())))
+}
+
 fn (ln mut lowering&) quietBlock(b typed.Block&) Bool {
     for s in b.Stmts {
         if not ln.quietNested(s): return false
@@ -3009,10 +3067,9 @@ fn (ln mut lowering&) quietBlock(b typed.Block&) Bool {
 }
 
 fn (ln mut lowering&) quietNested(s typed.Stmt&) Bool {
-    t := ln.T
     return match s {
         case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x): ln.quietX(x)
-        case typed.Stmt.Assign(_, p, x): p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT) and ln.quietX(x)
+        case typed.Stmt.Assign(_, p, x): ln.quietStore(p) and ln.quietPlace(p) and ln.quietX(x)
         case typed.Stmt.If(_, f): ln.quietX(f.Test) and ln.quietBlock(f.Then) and (f.Else is null or ln.quietBlock(f.Else!))
         case typed.Stmt.Block(_, k): ln.quietBlock(k)
         case typed.Stmt.Loop(_, k, post): ln.quietBlock(k) and (post is null or ln.quietBlock(post))
@@ -3058,6 +3115,16 @@ fn (ln mut lowering&) heldUnchanged(u typed.LocalUses&, i I64) Bool {
     return true
 }
 
+# (OLANG_VIEWDUMP: what made local i escape - EscHard, or the bodies it was given to that may keep it)
+fn (ln mut lowering&) escWhy(u typed.LocalUses&, i I64) String {
+    b := StringBuilder()
+    if u.EscHard[i]: b.Push(" (stored, captured or handed on)")
+    for k in range u.RefAt.Len() {
+        if u.RefAt[k] == i and not ln.L.keepsNoRef(u.RefBody[k], u.RefParam[k]) { b.Push($" (given to body " $u.RefBody[k] " parameter " $u.RefParam[k] ")") }
+    }
+    return b.ToString()
+}
+
 # whether local i's storage escapes: stored, captured, handed to a task, or given as a read-only reference to a body
 # that may keep it (typed.LocalUses.RefAt)
 fn (ln mut lowering&) escapes(u typed.LocalUses&, i I64) Bool {
@@ -3087,7 +3154,10 @@ fn (lw mut Lowerer&) noRefKept(b typed.Body&, k I64) Bool {
     if b.Root is null or k >= b.Params.Len(): return false
     u := typed.Uses(lw.P.T, b)
     p := I64(b.Params[k])
-    if u.EscHard[p] or u.Ret[p] or u.WrOther[p] or u.Whole[p]: return false
+    # (handed back in a value result - a view the D9h handover gives where the parameter is read, which its caller copies
+    # where it keeps it - is no keeping; in a reference result it is)
+    if u.EscHard[p] or u.WrOther[p] or u.Whole[p]: return false
+    if u.Ret[p] and lw.T().IsRef(lw.T().Result(b.Ty)): return false
     for j in range u.AliasOf.Len() {
         if u.AliasOf[j] == p: return false
     }
