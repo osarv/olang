@@ -672,3 +672,12 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   scope.readOnlyResult, following value results, enum payload fields read-only, E28/E31b skipped for type-variable
   reference parameters, enums by pointer, 2c's O17 storage lend. Next: round 2e - the aliasing hole, compiler/ to zero
   and the self-build under the switches, open point 5, 2.10, the field loop.
+- 2026-11-01 CET: rework round 2e merged (86d00f6, fast-forward; verified, goldens recaptured after): the aliasing
+  hole closed (a bare parameter's own storage kept by a value is copied by the caller, only where the argument may
+  change - KeptOwn, plan.ArgCopy; the evaluator agrees), open point 5 taken, `:=` of a plain bare value a copy, D9d
+  precise (the migration's oscillations), split values lent to bare parameters that keep nothing. compiler/ 86 -> 66
+  errors (one E16 at `ts[0]` in a zero-argument instance looks like a real bug); bench under the switches 0 copies.
+  Round 3 (QCE) largely NOT covered: value arrays held by value in structures, Map<String, V> owning keys, std's maps.
+  FOR THE BULK REVIEW (add): D9e's caller copy and stableArg/refStable exemptions, ownT/keepOwn, open point 5's
+  valueCovered/valueRels, bareLent, the Promote fit for read-only temporaries. Running: round 2f (compiler/ to zero,
+  self-build) and bulk review 5 (read-only, rounds 1-2e's relaxations) side by side.
