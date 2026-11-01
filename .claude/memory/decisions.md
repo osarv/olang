@@ -2268,3 +2268,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - QCI 3 laid out 2026-11-01: (a) `(fn(x I64) I64)?&` - muddies QCC's `&` (may write) and needs parentheses; (b) never
   null, absence a do-nothing default (`onClick fn(e Event) = fn(e): return`, its zero value), "is it set?" by an enum
   or a nullable struct - rec; (c) `fn?(e Event)` - no `&`, a second nullable spelling, near error sets. ASKED.
+- C pointers, the user 2026-11-01 ("if it is declared as PTR in C we never copy right?"): yes - C's `T*` is olang's
+  `p T&` (shared, may write: no copy), `const T*` a bare parameter (no copy), `T` by value C's own copy. ASKED for the
+  one case left (read-only data - a bare parameter, constant data - passed to a non-const `T*`, common with old C APIs
+  that omit const): (1) an error naming the written copy, as for an olang `&` parameter - lean; (2) a hidden copy.
