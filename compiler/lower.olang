@@ -3562,7 +3562,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }

@@ -3245,13 +3245,15 @@ fn (c mut Checker&) noreturnSpan(sp source.Span) source.Span {
 # a parameter as written (D9, D9a, D9c): no "mut" before a value; an array by value only a declared function's, of a
 # plain array (G29: an instance per length), and not over D9c's 128 bytes - a bare type variable aside, which any type
 # may bind (QP4)
-fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId, fnParam Bool = false) Bool {
+fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId, fnParam Bool = false, ctor Bool = false) Bool {
     c.mutParam(prm.Ty!, t)
     if prm.Ty is not null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and fnParam and c.P.T.KindOf(t) == types.Kind.Array {
         return c.capParam(prm, t)
     }
     big := false
     if c.P.T.KindOf(t) != types.Kind.Array { big = c.capParam(prm, t) }
+    # QCE: a constructor's parameter holding an array of a run-time length by value is what its field keeps, a copy
+    if ctor and c.runArrayValue(t): return big
     if prm.Ty is not null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and c.P.T.KindOf(c.under(t)) == types.Kind.Array {
         nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
         c.err(nsp, msgs.ArrayParamByValue(c.tok(prm.Name), c.src(prm.Ty!.Span()))) # as written: a variable bare (G8b)
@@ -3347,7 +3349,7 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                     for i in range s.Params.Len() {
                         if i < ps.Len() {
                             c.param(s.Params[i].Name, s.Params[i].Sp, ps[i], i, s.Params[i].Ty)
-                            c.paramWritten(s.Params[i], ps[i])
+                            c.paramWritten(s.Params[i], ps[i], ctor = true)
                         }
                     }
                 }
@@ -6701,7 +6703,8 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             # T25d: going where it may be written, it is judged as text at its own type is - handed over as the
             # constant itself, a write through it would land in the program's constant data
             if wk != types.Kind.Ref or not c.writable(want): return y
-            return c.fit(y, want, sp)
+            c.err(sp, msgs.ConstToMutRef("'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Clone()'"))
+            return y
         }
         u := c.under(w)
         if c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) != types.TypeId(0) and c.sameRepr(c.P.T.Elem(c.under(r)), c.P.T.Elem(u)) {
@@ -10957,7 +10960,8 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                     if c.P.T.KindOf(ft) == types.Kind.Array and c.P.T.Length(ft) != types.TypeId(0) and c.P.T.Same(c.P.T.Elem(ft), c.P.T.Elem(c.under(el))) {
                         return c.arrayMake(sp, ft, args, want, fx)
                     }
-                    if ft != types.UnknownT { c.err(c.leadWord(targs[0].Span()), msgs.ArrayNestedByValue(c.ty(el))) }
+                    # QCE: else run-time elements, each its own copy of the fill
+                    if ft != types.UnknownT { return c.arrayMake(sp, el, args, want, c.fit(fx, el, args[1].Span())) }
                     c.exprTo(args[0], c.i64())
                     return c.unknown(sp)
                 }
@@ -11636,7 +11640,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     if recv is not null {
         rx := c.fit(recv, ps[0] if ps.Len() > 0 else types.UnknownT, recv.Span())
         c.roArgFor(c.bodyOfCallee(target), 0, rx, recv.Span(), c.calleeName(f))
-        c.exprs.Push(rx)
+        c.exprs.Push(c.valueArg(rx, ps[0] if ps.Len() > 0 else types.UnknownT))
         k = 1
     }
     n := pre.Len() if pre.Len() > 0 else 0
@@ -11709,7 +11713,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             e = c.unknown(asp)
         }
         c.roArgFor(c.bodyOfCallee(target), k, e, asp, c.calleeName(f))
-        c.exprs.Push(e!)
+        c.exprs.Push(c.valueArg(e!, ps[k] if k < ps.Len() else types.UnknownT))
         k++
     }
     for k < ps.Len() {
@@ -13967,7 +13971,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         x := c.fit(pre[i], ps[i], c.argSpan(args[i])) if i < pre.Len() and pre[i] != c.hole else c.exprTo(args[i], ps[i])
         c.nullDecl = wasNull
         if not c.isRef(ps[i]) { c.roStore(x, args[i].Span(), RoStored) }   # T25c: a payload is writable storage
-        c.exprs.Push(x)
+        c.exprs.Push(c.partCopy(x))   # QCE: a payload owning storage is its own copy
     }
     items := gather(c.exprs, from)
     return typed.Expr.Make(sp, t, typed.Make(typed.MakeKind.Case, tag, items, null, typed.SiteId(-1), typed.Check.None))
@@ -19397,6 +19401,14 @@ fn (c mut Checker&) storeCopy(p typed.Lvalue&, x typed.Expr&c) typed.Expr&c {
     if c.isRef(t) { return x }
     if c.P.T.OwnsParts(t) or (c.P.T.OwnedPart(t) and partPlace(p)) { return c.ownCopy(x) }
     return x
+}
+
+# x given to a by-value parameter (D9, QCE): the callee's own value - a copy of what owns storage by value (a struct or
+# an enum holding arrays of a run-time length), so nothing the callee writes of it reaches the caller's. A plain array
+# is D9b's (copied by the callee where its body writes it)
+fn (c mut Checker&) valueArg(x typed.Expr&c, want types.TypeId) typed.Expr&c {
+    if want == types.UnknownT or c.isRef(want) or not c.P.T.OwnsParts(want) { return x }
+    return c.ownCopy(x)
 }
 
 # x given to a part of a value being made - an element, a payload's field - as its own copy where it owns storage

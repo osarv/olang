@@ -319,6 +319,7 @@ type Diag enum {
     CImportFailed
     CNoForm
     CPointerReadOnly
+    ConstToMutRef
     CPointerTemporary
     MutOnValueType
     MutOnValueParam
@@ -1749,6 +1750,9 @@ fn CImportFailed(spec String&, why String&) Msg { return Msg(Diag.CImportFailed,
 
 # ERR_C_NO_FORM
 fn CNoForm(name String&, why String&) Msg { return Msg(Diag.CNoForm, "X19", "the C import has no olang form of '" $name "': " $why) }
+
+# ERR_CONST_TO_MUT_REF
+fn ConstToMutRef(fix String&) Msg { return Msg(Diag.ConstToMutRef, "T25d", "this hands data written in the program where it may be written - pass a copy of its own: " $fix) }
 
 # ERR_C_POINTER_READ_ONLY
 fn CPointerReadOnly(ty String&) Msg { return Msg(Diag.CPointerReadOnly, "X22", "C may write through this pointer, and " $ty " is read-only - pass a writable one ('mut')") }
