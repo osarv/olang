@@ -1906,6 +1906,14 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byv
 - **The MIR verifier** takes two instances of one generic type whose arguments differ only in which reference levels
   may be written as one representation (`mir.sameRepr`) - a value result made read-only below its top by what it
   follows.
+- **A read-only reference lent to a `&` parameter is judged once the callee's use is settled** (`lendLater` in
+  `mustWrite`'s dereference branches, round 2c's mechanism for read-only copies): refused only where the callee
+  writes through it; otherwise D9d makes the callee's parameter bare. It had been refused at the lend with a note
+  naming the caller's bare parameter, so `param_migrate` made the caller's `&` and D9d the callee's bare in the same
+  round - the oscillation that made the first run of this round's migration diverge (round 9: 1,429 edits).
+- **A write through what a `&` parameter reaches by way of a call's result** (`fr := c.frames[fi]; fr.errUsed[j] =
+  true`) is a D9d use (`callRefParam`, `refCalls`), and **a reference result met with `default null`** is used as a
+  reference (`resultUse` at the try - `cond.Scope.find`'s callers).
 
 ### 15.3 Decisions (mine, the user absent)
 

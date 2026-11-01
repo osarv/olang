@@ -27566,3 +27566,11 @@ read became read-only, and its callers' writes (`fl.b = true`) went to a copy: i
 place the migration changed what a program computes. D9g's note now names the parameter, not the value result, where
 any caller writes through the result; flags takes `mut state&` in the old form. And param_migrate stopped one step
 early: the finish phase drops a result's kept `mut`, which can leave D9g to say, so it drives again after it.
+
+**The migration's divergence.** The first run of compiler/'s migration with this round's checker settled for eight
+rounds, then made 1,429 edits in its ninth and never came back. The cause was two refusals of one lend: a read-only
+reference lent to a `&` parameter (`countTrue(sm.Builds)`, `countTrue(xs Vec<Bool>&)`) was refused at the lend, with a
+note naming the caller's bare parameter, while D9d said the callee's `&` was never used - so `param_migrate` made the
+caller's parameter `&` and the callee's bare in the same round, and every caller of the caller in the next. Round 2c
+already judged a read-only copy lent so once the callee's use was settled (`lendLater`); a read-only reference reached
+any other way now is too, so only the callee's D9d is said.

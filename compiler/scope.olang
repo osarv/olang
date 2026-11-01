@@ -261,6 +261,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     lastGenArg Term = Term.None           # ... the last such call's, for the walk's local it initializes
     onFrame Bool = false                   # the lambda val judges next is made for a call that keeps nothing of it (D16c)
     anyBox Bool = false                    # the promotion val judges next is an "any"'s box (T32a): a copy
+    roTemp Bool = false                    # round 2f: the value val judges next is a temporary lent read-only (T17c)
     anyItems Bool = false                  # the make val judges next is what an "any"'s box holds (T32a)
     inSpawn Bool = false                   # the call val judges next is a task's (P2: every scope it binds is built into)
     joins Vec<typed.BlockId>              # the join blocks entered, innermost last (P1a)
@@ -6333,7 +6334,11 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.promoteLocal = -1
             s.buildSite(pr.Site, d, pr.X.Span())
             s.anyItems = box and anyArrayBox(pr.X)
+            # (round 2f: a temporary lent read-only - what it holds stored through by nothing - a case's payload of it
+            # need agree on no one scope, only outlive it, T17c)
+            s.roTemp = source.NewParams and s.isRef(pty) and (s.P.T.PermOf(pty) & types.Writable) == 0 and pr.X == typed.Expr.Make
             pv := s.val(pr.X, d)
+            s.roTemp = false
             s.anyItems = false
             # a conversion of an array's storage to a type declared over it names that storage (T29a, E12c): it is no
             # temporary, and lives where the storage does - but an "any"'s box is a copy of it (T32a)
@@ -6359,17 +6364,19 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
         case typed.Expr.Make(_, ty, m) {
             kind := FitAnyCopy if s.anyItems else s.itemKind(m.Kind)
             s.anyItems = false
+            ro := s.roTemp
+            s.roTemp = false
             if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
             s.val(m.Length, Term.None)
             # an item built in d too (O6), existing storage judged as a slot of it (O25c, T17c) - a payload's once
             # its items agree on one scope (T17c)
             vs := Array<Val>(m.Items.Len())
             for k in range m.Items.Len() { vs[k] = s.ownItem(m.Items[k], s.val(m.Items[k], d)) }
-            agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
+            agreed := m.Kind != typed.MakeKind.Case or not s.report or ro or s.payloadAgree(m.Items, vs)
             for k in range m.Items.Len() {
                 # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
                 copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
-                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind) }
+                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()) and not ro, m.Items[k], kind) }
             }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)

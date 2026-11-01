@@ -1,0 +1,27 @@
+# The scoping and parameters rework (round 2f, T17c): a case's payload built as a temporary lent read-only - to a
+# parameter that takes it read-only - holds references into two scopes: what it holds is stored through by nothing, so
+# each need only outlive the temporary. Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type tref enum {
+    named(path Array<I64>&, args Array<tref&>&)
+    none
+}
+fn depth(t tref?&) I64 {
+    if t is null: return 0
+    return match t {
+        case tref.named(p, a): p.Len() + a.Len()
+        case _: 0
+    }
+}
+fn resolveIt(x tref) I64 {
+    match x {
+        case tref.named(_, targs) {
+            path := I64[1, 2]
+            return depth(tref.named(path, targs))
+        }
+        case _ { return 0 }
+    }
+}
+test resolveIt "a payload of a fresh array and a bare parameter's reach, lent read-only" {
+    assert resolveIt(tref.named(I64[5], tref&[tref.none])) == 3
+}
