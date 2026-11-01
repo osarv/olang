@@ -661,3 +661,14 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   zero-read of a self-conversion (default path), the effects line missing payload writes (default path). Next: round
   2d - the by-pointer value-result handover then QCC's T& error, the migration's last oscillation, compiler/ to zero
   and the self-build under the switches, open point 5, 2.10, the field loop's speed.
+- 2026-11-01 CET: rework round 2d merged (0f2fdfb, fast-forward; verified on 13a18c7, goldens after): D9g (a T& result
+  handing back a bare parameter's reach is an error naming the value result), D9h (an array value result viewing an
+  argument handed back uncopied where read in place; copying wrappers for function values/any/adapters), value
+  results following their bare parameters, enum payload fields read-only by inference, enums holding references by
+  pointer; std 40/40 under the switches, bench unchanged on the default path. compiler/ migrated 323 -> 86 errors (7
+  parameters still oscillating) - no self-build under the switches yet. KNOWN HOLE (from 2c): a constructor/case keeping
+  a bare parameter's own storage in a read-only-inferred field shares the caller's storage (by-pointer observable,
+  memory-safe) - fix in the scope pass (judge it as the frame's). FOR THE BULK REVIEW: handed-over views read in place,
+  scope.readOnlyResult, following value results, enum payload fields read-only, E28/E31b skipped for type-variable
+  reference parameters, enums by pointer, 2c's O17 storage lend. Next: round 2e - the aliasing hole, compiler/ to zero
+  and the self-build under the switches, open point 5, 2.10, the field loop.
