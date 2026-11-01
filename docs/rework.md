@@ -1837,9 +1837,9 @@ fixes (15.3) and the MIR verifier accepting what it never met on the default pat
 
 ### 15.1 Bulk review 5, fixed
 
-The read-only review of rounds 1-2e (`/home/user/review/bulk5`, at a041393) found six things; five are fixed, each
+The read-only review of rounds 1-2e (`/home/user/review/bulk5`, at a041393) found six things; all are fixed, each
 with its reproducer as a test (`tests/params/fail/{elemwrites, constwrite, entrycopyelem, handlewrites, globalview,
-globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity}.olang`).
+globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity, byvalue}.olang`).
 
 - **F1, unsound (fixed): read-only is a property of the level reached.** Round 2's read-only-ness was found for a
   bare parameter's fields only (`roRoot`'s locals and `roCopies`). Now, under the switches, a reference is read-only
@@ -1875,9 +1875,10 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity}.ola
   here" naming the bare parameter (it was E12, which named no parameter, so param_migrate left it); D9g at an `any`
   result is T25c naming the parameter (no value form to suggest); D9f says "writes 'p' or what it reaches". Left: T25c's
   "what a bare parameter reaches" for a lambda's capture of a local.
-- **F5, over-rejection (left):** a function with a bare by-pointer parameter does not fit `fn(x T) T` with T bound to
-  the value type. It needs a by-value wrapper (a `FnKey` of its own, lowered as the Call adapter is, emitted and given
-  the evaluator's tables) - recorded for the next round; the default path refuses its own form too.
+- **F5, over-rejection (fixed):** a function with a bare by-pointer parameter is a value of a function type passing
+  that parameter by value (`fn(x T) T` with T the value type, `Vec<fn(p pt) I64>`): the checker takes the function type
+  with each such reference read as its referent (`byValueType`), and lowering gives the value a wrapper passing each
+  such argument's address (`mir.FnKey.ByValue`, `lower.byValueFn`; emitted shared, run by the evaluator as any key).
 
 ### 15.2 Built for compiler/'s migration
 
@@ -1920,7 +1921,8 @@ globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity}.ola
    program's scope.
 5. **D9g takes `&` where a caller writes through the result**, never the value result (a migration must not change
    what a program computes); the value result stays where nothing writes through it (the handover, D9h).
-6. **F5 waits** for a by-value wrapper, with the flip.
+6. **F5 by a wrapper**, not by binding T to the reference form: a type variable's parameter stays by value (round
+   2b's `namesVar`), and the wrapper costs a call only where such a function is made a value.
 
 ### 15.4 New section-8 relaxations, for the next bulk review
 

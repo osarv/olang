@@ -27555,8 +27555,8 @@ bare parameter borrowing the caller's instance, which `==` (identity) could tell
 "where unsure, count it as kept, so the caller copies" (the coordinator's direction): a parameter is kept wherever the
 result outlives its argument's storage and can name storage of its type; an argument the call may write another way is
 copied for the call; an any boxes a copy; and the evaluator, lowering with no plan, copies every bare parameter on
-entry, as 2.10 always said it would. A function with a bare parameter given where `fn(x T) T` is wanted is still
-refused (F5) - it needs a by-value wrapper, left for the flip.
+entry, as 2.10 always said it would. A function with a bare parameter given where `fn(x T) T` is wanted was refused
+(F5): it is a value of that type now, through a wrapper that passes the value's address.
 
 **Found on the way.** G30's decided `if` checked what followed it in the instance where it leaves: `t := ts[0]` after
 `if ts.Len() == 0 { return }` was an E16 in the length-0 instance (round 2e's "E16 at ts[0]", on the default path too
