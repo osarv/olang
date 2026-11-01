@@ -2078,7 +2078,8 @@ copy of its own made on entry, whose levels below its top are read-only as the p
 property of the level reached: a reference read out of what is reached read-only - through a dereference, an index,
 a walk's element, what a call hands back following a read-only argument, an immutable global and what it reaches - is
 read-only, and so is a value an instance hands back holding references of a type a read-only argument holds (a
-`Clone`, a `Values` walk). Numbers, enums, function values and a type variable's binding are passed by value, and
+`Clone`, a `Values` walk). Numbers, enums, a struct of numbers fitting one register (eight bytes), function values and
+a type variable's binding are passed by value, and
 an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
 may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
 mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot

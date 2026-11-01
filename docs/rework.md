@@ -1940,6 +1940,15 @@ seventh (F7), found after it, is fixed too.
   through). The error and its notes are made at the lend, where what it is read out of is known, and held until the
   settle chooses or drops them (`Diags.Hold`); the notes now follow a binding and a held subject back through the call
   that made them (`noteTempUnder`), so `param_migrate` can make the bare parameter `&` (`tests/params/fail/directlend`).
+- **A struct of numbers fitting one register is passed by value** (`generic.plainBytes`, at most eight bytes - a
+  `source.Span`, two `I32`s): a pointer to it gains nothing and a copy aliases nothing, so none of the by-pointer
+  machinery (entry copies, F3's and F7's copies, kept-own obligations) applies to it. free.olang's five O10c rows were
+  a bare `sp source.Span` bound out of a statement and kept by the callee - an obligation of a pointer to an 8-byte
+  value. (mine, the user absent: "passed by value or pointer as the compiler chooses")
+- **A slice of a local given straight to a parameter that cannot write it leaves the local unwritten** (the scope
+  pass's `SliceArgs`, `readOnlyParam`): any slice had made its base local unstable for every call in the body, so
+  `out.Push(text)` beside an `out.Push(text[:whole])` copied `text` for each call (F3's copy - std's float rendering
+  did so at every `$x` of a float).
 - **An atomic read through a `&` parameter's reach is a D9d use**: it is there to see another thread's write, which
   only a shared reference can (std/cancel's `spin(t Token&)` watching `t.flag.AtomicLoad()` - made bare, F7's copy at the
   spawn would never see the Cancel and the test spun forever).
@@ -1979,6 +1988,8 @@ seventh (F7), found after it, is fixed too.
 - `callOrigins`/`ResultWritten` only choose a note's form - no acceptance changes.
 - T17c: a case's payload made as a temporary lent read-only (a `Promote` to a read-only parameter, its operand the
   `Make` itself) need agree on no one scope, and its items fit it with nothing stored through (`roTemp`).
+- `SliceArgs`: a slice of a local handed straight to a read-only parameter (by the callee's declared type) no longer
+  makes the local "written" for stableArg/unwritten - fewer F3 copies.
 - `lambdaWritesNothing` in F3's `AliasCopies` and F7's `WriteWalk`: a named function, or a lambda whose captures
   hold no writable reference, given to a call (or called through its value) writes nothing of the caller's but what
   the call hands it and a global by name - no copy for it. A task's bare argument is not copied where `WriteWalk`

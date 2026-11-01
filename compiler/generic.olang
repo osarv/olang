@@ -827,12 +827,35 @@ fn (p mut Program&) layOut(t types.TypeId, depth I64) {
     }
 }
 
+# the bytes a value of t takes where it is numbers only - Bool, Char, numbers, types declared over one, structs of those -
+# else a number past any register (9999)
+fn (p mut Program&) plainBytes(t types.TypeId, depth I64) I64 {
+    if depth > 4: return 9999
+    if t == types.BoolT: return 1
+    if p.T.KindOf(t) == types.Kind.Int: return types.IntBytes(p.T.A(t))
+    if p.T.IsNumber(t): return match I64(t) {
+        case 3, 7: 1
+        case 4, 8, 11, 12: 2
+        case 5, 9, 13: 4
+        case _: 8
+    }
+    if p.T.KindOf(t) != types.Kind.Named or not p.Body(t): return 9999
+    k := p.T.DeclKindOf(p.T.DeclOf(t))
+    if k == types.DeclKind.Over: return p.plainBytes(p.T.Base(t), depth + 1)
+    if k != types.DeclKind.Struct: return 9999
+    n I64 = 0
+    for f in p.T.Items(p.T.Fields(t)) { n += p.plainBytes(f, depth + 1) }
+    return n
+}
+
 fn (p mut Program&) byPointer(t types.TypeId) Bool {
     match p.T.KindOf(t) {
         case types.Kind.Array { return true }
         case types.Kind.Named {
             k := p.T.DeclKindOf(p.T.DeclOf(t))
-            if k == types.DeclKind.Struct: return not p.cabi
+            # (round 2f: a struct of numbers fitting one register - a span, a pair of I32s - by value, as an ABI passes
+            # it: a pointer to it gains nothing, and nothing can alias a copy)
+            if k == types.DeclKind.Struct: return not p.cabi and p.plainBytes(t, 0) > 8
             # (round 2d: an enum holding references too - by value its copy's references would live where the copy does
             # not, so handing back what it holds, or keeping it in a value made, would keep the frame's copy; plain ones
             # stay in registers)

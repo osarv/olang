@@ -1016,6 +1016,11 @@ type walked struct() {
     ArgReads Vec<I64>
     ArgCalls Vec<typed.Call&>
     ArgIdx Vec<I64>
+    # the locals a slice given straight as a call's argument names the own storage of, the call and the argument's index
+    # beside each (F3's cost: a slice for a parameter that cannot write it writes nothing - unwritten)
+    SliceArgs Vec<I64>
+    SliceCalls Vec<typed.Call&>
+    SliceIdx Vec<I64>
     # the locals a store writes through - what they refer to - and those a borrow names through, each borrow's type
     Through Vec<I64>
     ThroughB Vec<I64>
@@ -1123,6 +1128,21 @@ fn collectPlace(p typed.Lvalue?&, out mut walked&) {
     }
 }
 
+# a slice of a local's own storage given straight as call c's argument k: recorded with the call (SliceArgs), its parts
+# collected as a slice's are - failing where it is none
+fn collectSliceArg(c typed.Call&, k I64, a typed.Expr?&, out mut walked&) ? notSliceArg {
+    if not source.NewParams or a is null or a != typed.Expr.Slice: error notSliceArg
+    sl := a.s
+    if flThroughRef(sl.Base) or flRoot(sl.Base) < 0: error notSliceArg
+    out.SliceArgs.Push(flRoot(sl.Base))
+    out.SliceCalls.Push(c)
+    out.SliceIdx.Push(k)
+    wholeView(sl.Base, out)
+    collectPlace(sl.Base, out)
+    collectExpr(sl.Lo, out)
+    collectExpr(sl.Hi, out)
+}
+
 fn collectExpr(x typed.Expr?&, out mut walked&) {
     if x is null { return }
     match x {
@@ -1157,7 +1177,7 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
                     out.ArgCalls.Push(c)
                     out.ArgIdx.Push(k)
                 }
-                collectExpr(a, out)
+                try collectSliceArg(c, k, unPassed(a), out) catch { collectExpr(a, out) }
             }
         }
         case typed.Expr.Make(_, _, m) {
@@ -5680,7 +5700,21 @@ fn (s mut Scoper&) unwritten(l I64) Bool {
         bt := s.walk.BorrowedTy[k]
         if bt == types.TypeId(0) or (s.P.T.PermOf(s.P.T.Repr(bt)) & types.Writable) != 0 { return false }
     }
+    for k in range s.walk.SliceArgs.Len() {
+        if s.walk.SliceArgs[k] == l and not s.readOnlyParam(s.walk.SliceCalls[k], s.walk.SliceIdx[k]) { return false }
+    }
     return true
+}
+
+# whether call c's parameter k cannot write what it is given: a read-only reference, a bare one passed by pointer
+fn (s mut Scoper&) readOnlyParam(c typed.Call&, k I64) Bool {
+    cb := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+    if cb < 0 or cb >= s.Bodies.Len() or s.P.T.KindOf(s.Bodies[cb].Ty) != types.Kind.Func { return false }
+    ps := s.P.T.Items(s.P.T.Params(s.Bodies[cb].Ty))
+    return k < ps.Len() and s.P.T.IsRef(ps[k]) and (s.P.T.PermOf(ps[k]) & types.Writable) == 0
 }
 
 # a place's own subexpressions judged as operands: a reference it goes through, an index
