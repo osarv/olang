@@ -3,8 +3,8 @@
 # largest of a stream. "heap.Heap<I64>(fn(a, b) { return a < b })" gives the smallest first; reverse the comparison for
 # the largest. Imported with `import "std/heap"`; the type is heap.Heap<T>.
 #
-# Equal elements come out in no order to rely on. A Heap is a HANDLE, as a Vec is (it holds one): a copy of a Heap value
-# is a second name for the same heap.
+# Equal elements come out in no order to rely on. A Heap is a VALUE, as the Vec it holds is: a copy of a Heap is a heap
+# of its own, and sharing one is written "&" ("h mut heap.Heap<T>&").
 
 # what a Heap's operations fail with: a Peek or Pop of an empty heap
 type Error error {
@@ -12,25 +12,20 @@ type Error error {
 }
 
 type Heap<T> struct(less fn(a T, b T) Bool) {
-    s mut state<T>& = state<T>(less)
-}
-
-type state<T> struct(less fn(a T, b T) Bool) {
     less
     items Vec<T> = Vec<T>()
 }
 
-fn (h Heap<T>&) Len() I64 { return h.s.items.Len() }
+fn (h Heap<T>&) Len() I64 { return h.items.Len() }
 
 # x added
 fn (h mut Heap<T>&) Push(x T) {
-    s := h.s
-    v := s.items
+    v mut Vec<T>&h = h.items
     v.Push(x)
     i := v.Len() - 1
     for i > 0 {
         up := (i - 1) / 2
-        if not s.less(x, v[up]) { break }
+        if not h.less(x, v[up]) { break }
         v[i] = v[up]
         i = up
     }
@@ -39,14 +34,13 @@ fn (h mut Heap<T>&) Push(x T) {
 
 # the top element - the least by the order - left in the heap
 fn (h Heap<T>&) Peek() T ? Error.Empty {
-    if h.s.items.Len() == 0 { error Error.Empty }
-    return h.s.items[0]
+    if h.items.Len() == 0 { error Error.Empty }
+    return h.items[0]
 }
 
 # the top element, taken off
 fn (h mut Heap<T>&) Pop() T ? Error.Empty {
-    s := h.s
-    v := s.items
+    v mut Vec<T>&h = h.items
     if v.Len() == 0 { error Error.Empty }
     top := v[0]
     last := try v.Pop() catch VecError { unreachable }
@@ -56,8 +50,8 @@ fn (h mut Heap<T>&) Pop() T ? Error.Empty {
     for {
         c := 2 * i + 1
         if c >= n { break }
-        if c + 1 < n and s.less(v[c + 1], v[c]): c++
-        if not s.less(v[c], last) { break }
+        if c + 1 < n and h.less(v[c + 1], v[c]): c++
+        if not h.less(v[c], last) { break }
         v[i] = v[c]
         i = c
     }
@@ -66,7 +60,7 @@ fn (h mut Heap<T>&) Pop() T ? Error.Empty {
 }
 
 # removes every element
-fn (h mut Heap<T>&) Clear() { h.s.items.Clear() }
+fn (h mut Heap<T>&) Clear() { h.items.Clear() }
 
 # every element taken off in order, least first, into an array of its own - the heap left empty
 fn (h mut Heap<T>&) Drain() mut Array<T>& {

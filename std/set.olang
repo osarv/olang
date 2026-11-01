@@ -2,8 +2,9 @@
 # unused), so an element is any type a Map key may be - one with "Hash() I64" agreeing with "==": the integers, String,
 # a struct, enum or array of such parts (E10b). Imported with `import "std/set"`; the type is set.Set<T>.
 #
-# A Set is a HANDLE, as the Map under it is: a copy of a Set value is a second name for the same set, and Clone() is
-# the copy with storage of its own. Union, Intersect and Difference build a new Set where the result lands.
+# A Set is a VALUE, as the Map under it is: a copy of a Set ("t := s", a field, an argument) is a set of its own holding
+# the same elements, and sharing one is written "&" ("s mut set.Set<T>&"). Union, Intersect and Difference build a new
+# Set where the result lands.
 
 type Set<T Hashable<T>> struct() {
     m Map<T, Bool> = Map<T, Bool>()
@@ -42,16 +43,9 @@ fn (s mut Set<T>&) Clear() { s.m.Clear() }
 # the elements, one at a time, in no order to rely on: "for x in s" walks them
 fn (s Set<T>&) Iter() MapKeyIter<T, Bool> { return s.m.Keys() }
 
-# a Set with storage of its own holding the same elements
-fn (s Set<T>&) Clone() Set<T> {
-    c := Set<T>()
-    for x in s.m.Keys() { c.m.Put(x, true) }
-    return c
-}
-
 # the elements in s or in o
 fn (s Set<T>&) Union(o Set<T>&) Set<T> {
-    c := s.Clone()
+    c Set<T> = s                                           # a copy, the elements of o added
     for x in o.m.Keys() { c.m.Put(x, true) }
     return c
 }
@@ -138,10 +132,10 @@ test "Set algebra" {
     assert a.Difference(b) == Of(I64[1, 2])
     assert Of(I64[3]).IsSubset(b) and not a.IsSubset(b)
     assert a.Hash() == Of(I64[4, 3, 2, 1]).Hash()
-    c := a.Clone()
+    c := a                                                 # a copy: a set of its own
     c.Add(9)
-    assert 9 not in a and a.Len() == 4
-    d := a
+    assert 9 not in a and a.Len() == 4 and 9 in c
+    d mut Set<I64>&a = a                                   # a second name for a
     d.Add(10)
     assert 10 in a
 }

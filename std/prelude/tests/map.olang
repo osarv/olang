@@ -335,41 +335,56 @@ test "Keys, Values and Clear, evaluated while compiling as at run time" {
     assert mapParts() == mapPartsBaked
 }
 
-# a Map is a handle, as a Vec is: a copy of a Map value is another name for the same map - a key removed through one is
-# gone from the other, and its count with it - and Clone() is the copy with storage of its own, walked in the same order
+# a Map is a value, as a Vec is: a copy of a Map is a map of its own - a key removed from one is still in the other, and
+# the copy is walked in the order the map is - and sharing one is written "&"
 fn mapCopies() I64 {
     m := Map<String&, I64>()
     for k in String&["a", "b", "c", "d", "e", "f", "g"] { m.Put(k, 1) }
     n := m
     assert n.Remove("a")
+    assert m.Len() == 7 and m.Has("a") and n.Len() == 6 and not n.Has("a")
+    r mut Map<String&, I64>&m = m                # a second name for m, written as one
+    assert r.Remove("a")
     assert m.Len() == 6 and not m.Has("a") and m.Keys().ToVec().Len() == 6
-    c := m.Clone()
-    c.Put("z", 26)
-    m.Put("b", 2)
-    assert c.Len() == 7 and m.Len() == 6 and (try c.Get("b") catch default -1) == 1 and (try m.Get("b") catch default -1) == 2
-    order := m.Keys().ToVec()                    # the clone walks in the order the map does
+    c := m
+    order := m.Keys().ToVec()                    # the copy walks in the order the map does
     same I64 = 0
     for i, k in c.Keys().ToVec() {
         if i < order.Len() and k == order[i] { same++ }
     }
-    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())   # one map, two names (T8)
+    c.Put("z", 26)
+    m.Put("b", 2)
+    assert c.Len() == 7 and m.Len() == 6 and (try c.Get("b") catch default -1) == 1 and (try m.Get("b") catch default -1) == 2
+    parts := Array<Map<String&, I64>>(2, Map<String&, I64>())   # two maps, the fill copied into each (T8)
     parts[0].Put("x", 1)
-    assert parts[1].Len() == 1 and "x" in parts[1]
+    assert parts[1].Len() == 0 and "x" in parts[0]
     return same * 100 + c.Len() * 10 + m.Len()
 }
 mapCopiesBaked := mapCopies()
 
-test "a copy of a Map value names the same map, and Clone makes another" {
+test "a copy of a Map is a map of its own" {
     assert mapCopiesBaked == 6 * 100 + 70 + 6
     assert mapCopies() == mapCopiesBaked
 }
 
-test "a Map's Clone outlives the map it copies" {
+test "a value changed where a Map holds it" {
+    g := Map<String&, Vec<I64>>()
+    g.Put("a", Vec<I64>())
+    for i in range 20 { (try g.Ref("a")).Push(i) }
+    v := try g.Get("a")
+    v.Push(99)                                  # a copy: the map's is not changed
+    t I64 = 0
+    for i in range 300 { t += Array<I64>(64, I64(i))[0] }
+    assert t > 0 and (try g.Get("a")).Len() == 20 and v.Len() == 21 and (try g.Ref("a"))[19] == 19
+    assert (try g.Ref("b") catch MapError default Vec<I64>()).Len() == 0
+}
+
+test "a copy of a Map outlives the map it copies" {
     kept := Map<I64, I64>()
     if kept.Len() == 0 {
         src := Map<I64, I64>()
         for i in range 100 { src.Put(i, i * 3) }
-        kept = src.Clone()
+        kept = src
         src.Put(1000, 1)
         assert src.Remove(5)
     }

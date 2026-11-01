@@ -3,21 +3,24 @@
 # elements into a new buffer when it grows, and is an array in every other respect: "v[i]" is an element of one array,
 # "for x in v" a counted walk over it, View() lends the elements as an array.
 #
-# A Vec is a HANDLE, as Map is: everything it holds - the buffer and the count - is one record, made where the
-# Vec is constructed (C2d), and a Vec value is one reference to it. So a copy of a Vec value ("b := a", a field, an
-# element, a by-value argument) is a second name for the same Vec, and a Push through either is seen through both;
-# Clone() is the copy with storage of its own. "Array<Vec<T>>(n, Vec<T>())" is n names for one Vec (T8).
+# A Vec is a VALUE, as an array is: it holds its buffer by value (QCE), so a copy of a Vec ("w := v", a field, an
+# element, a by-value argument, a task's argument) is a Vec of its own holding the same elements - deep through values,
+# shallow at references, as any value's copy is - and a Push to one is never seen through the other. Sharing one Vec is
+# written with "&": "v mut Vec<I64>&" names another's Vec and may change it, "v Vec<I64>&" reads it. An element is
+# changed in place through Ref(i) ("vv.Ref(i).Push(x)" for a Vec of Vecs), as a Map's value is through Map.Ref.
 #
-# Growth replaces the buffer: a new one, twice the size (8 at first), the elements copied into it, the record pointed at
-# it, and the old one retired - nothing in a Vec uses it again. The old buffer stays where the Vec lives until that scope
-# closes, so a view of it taken before the growth ("d := v.View()") reads the elements as they were then, never freed
-# memory. That is a correctness hazard rather than a memory one, and it is written where it can happen: View() is the
-# one way to have a Vec's elements as an array. The compile-time evaluator stops on a use of such a view, and under
-# -sanitize the old buffer is made unreadable, so a run reports one (B2f). The buffers growth leaves add up to less than
-# the last one (8 + 16 + ... + N/2 < N).
+# Growth replaces the buffer: a new one, twice the size (8 at first), the elements moved into it, and the old one
+# retired - nothing in a Vec uses it again. The old buffer stays where the Vec lives until that scope closes, so a view of
+# it taken before the growth ("d := v.View()") reads the elements as they were then, never freed memory. That is a
+# correctness hazard rather than a memory one, and it is written where it can happen: View() is the one way to have a
+# Vec's elements as an array. The compile-time evaluator stops on a use of such a view, and under -sanitize the old
+# buffer is made unreadable, so a run reports one (B2f). The buffers growth leaves add up to less than the last one (8 +
+# 16 + ... + N/2 < N).
 #
-# "Vec<T>(cap)" starts with room for cap elements (none by default), made by its first Push. The elements are its first
-# Len(); the rest is room.
+# "Vec<T>(cap)" starts with room for cap elements (none by default), made by its first Push. The elements are the
+# buffer's first Len(); the rest is room - never read as elements, and where an element owns storage (a String, a Vec)
+# left empty (grown clears it, vacate empties what it moves out), so a copy of the whole buffer copies nothing that is
+# no longer an element.
 
 # what a Vec's operations fail with: a First, Last or Pop of an empty Vec (Empty), an IndexOf finding nothing
 # (NotFound), and a position outside it given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OutOfRange)
@@ -28,12 +31,7 @@ type VecError error {
 }
 
 type Vec<T> struct(cap I64 = 0) {
-    s mut vecState<T>& = vecState<T>(cap)                    # the Vec itself; every copy of this value names the same one
-}
-
-# what a Vec holds - private, reached only through a Vec
-type vecState<T> struct(cap I64) {
-    data mut Array<T>& = Array<T>(0)                         # the buffer; its first n elements are the Vec's
+    data Array<T>                                            # the buffer (of a run-time length, T7d); its first n elements are the Vec's
     n I64 = 0
     want I64 = cap                                           # the room asked for (Vec<T>(cap), Reserve) while there is no buffer
 }
@@ -41,90 +39,91 @@ type vecState<T> struct(cap I64) {
 # a buffer of room for at least need elements, the elements moved into it when the one there is smaller: twice the size
 # of the last (8 at first), or need, or what was asked for, whichever is most. The new buffer is grown from the old
 # (M19d): its first elements moved out of it, the rest never filled - no slot past the count is read before a Push or
-# an Insert writes it, so a T with no zero value - a Vec, a Map - is as ordinary an element as any other (D13c), and a
-# doubling writes each byte once. The old buffer is retired: nothing here uses it again
-fn (s mut vecState<T>&) room(need I64) {
-    if need <= s.data.Len() { return }
-    r I64 = 8 if s.data.Len() < 4 else s.data.Len() * 2
+# an Insert writes it, so a T with no zero value - a Map, a struct whose constructor has an effect - is as ordinary an
+# element as any other (D13c), and a doubling writes each byte once. The old buffer is retired: nothing here uses it
+# again
+fn (v mut Vec<T>&) room(need I64) {
+    if need <= v.data.Len() { return }
+    r I64 = 8 if v.data.Len() < 4 else v.data.Len() * 2
     if r < need { r = need }
-    if r < s.want { r = s.want }
-    old := s.data
-    s.data = old[:s.n].grown(r)
+    if r < v.want { r = v.want }
+    old Array<T>&v = v.data                                  # the buffer being replaced, viewed (not copied)
+    v.data = old[:v.n].grown(r)
     old.retire()
 }
 
 # x after the last element - into the room left, or into a buffer twice the size, the elements moved into it
 fn (v mut Vec<T>&) Push(x T) {
-    s := v.s
-    if s.n == s.data.Len() { s.room(s.n + 1) }
-    s.data[s.n] = x
-    s.n++
+    if v.n == v.data.Len() { v.room(v.n + 1) }
+    v.data[v.n] = x
+    v.n++
 }
 
 # every element of a, in order - with one grow at most
 fn (v mut Vec<T>&) PushAll(a Array<T>&) {
     if a.Len() == 0 { return }
-    s := v.s
-    if s.n + a.Len() > s.data.Len() {
-        r I64 = s.data.Len() * 2
-        if r < s.n + a.Len() { r = s.n + a.Len() }
-        s.room(r)
+    if v.n + a.Len() > v.data.Len() {
+        r I64 = v.data.Len() * 2
+        if r < v.n + a.Len() { r = v.n + a.Len() }
+        v.room(r)
     }
-    for i in range a.Len() { s.data[s.n + i] = a[i] }
-    s.n += a.Len()
+    for i in range a.Len() { v.data[v.n + i] = a[i] }
+    v.n += a.Len()
 }
 
-fn (v Vec<T>&) Len() I64 { return v.s.n }
+fn (v Vec<T>&) Len() I64 { return v.n }
 
 # how many elements fit before the buffer is replaced
-fn (v Vec<T>&) Cap() I64 { return v.s.data.Len() if v.s.data.Len() > v.s.want else v.s.want }
+fn (v Vec<T>&) Cap() I64 { return v.data.Len() if v.data.Len() > v.want else v.want }
 
 # room for n more elements, the buffer replaced at most once - by one at least twice the size when it is (so a Push
 # after a Reserve costs as one after doubling would). With no element to fill a new buffer with, an empty Vec only
 # remembers the room, and its first Push makes it
 fn (v mut Vec<T>&) Reserve(n I64) {
-    s := v.s
-    if s.n + n <= v.Cap() { return }
+    if v.n + n <= v.Cap() { return }
     r I64 = v.Cap() * 2
-    if r < s.n + n { r = s.n + n }
-    if s.n == 0 {
-        s.want = r
+    if r < v.n + n { r = v.n + n }
+    if v.n == 0 {
+        v.want = r
         return
     }
-    s.room(r)
+    v.room(r)
 }
 
 # the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "try v.Get(i)" checks it
-fn (v Vec<T>&) At(i I64) T { return v.s.data[i] }
+fn (v Vec<T>&) At(i I64) T { return v.data[i] }
 
 # the element at position i, failing with OUT_OF_RANGE where i is no position - "v[i]" checked, as an array's Get is
 # (E16d)
 fn (v Vec<T>&) Get(i I64) T ? VecError.OutOfRange {
-    if i < 0 or i >= v.s.n { error VecError.OutOfRange }
-    return v.s.data[i]
+    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    return v.data[i]
 }
 
+# the element at position i where the Vec holds it, to change in place - "vv.Ref(i).Push(x)" for a Vec of Vecs, where
+# "vv[i]" gives a copy. Unchecked, as At is; good until the Vec grows, as a view is (View)
+fn (v mut Vec<T>&) Ref(i I64) mut T&v { return v.data[i] }
+
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is
-fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
+fn (v mut Vec<T>&) SetAt(i I64, x T) { v.data[i] = x }
 
 # the first element - failing with Empty when there is none, as Map.Get fails on a missing key
 fn (v Vec<T>&) First() T ? VecError.Empty {
-    if v.s.n == 0 { error VecError.Empty }
-    return v.s.data[0]
+    if v.n == 0 { error VecError.Empty }
+    return v.data[0]
 }
 
 # the last element - failing with Empty when there is none
 fn (v Vec<T>&) Last() T ? VecError.Empty {
-    if v.s.n == 0 { error VecError.Empty }
-    return v.s.data[v.s.n - 1]
+    if v.n == 0 { error VecError.Empty }
+    return v.data[v.n - 1]
 }
 
 # removes the last element and gives it - failing with Empty when there is none. Moves nothing, and keeps the buffer
 fn (v mut Vec<T>&) Pop() T ? VecError.Empty {
-    s := v.s
-    if s.n == 0 { error VecError.Empty }
-    s.n--
-    return s.data[s.n].vacate()
+    if v.n == 0 { error VecError.Empty }
+    v.n--
+    return v.data[v.n].vacate()
 }
 
 # removes every element, keeping the buffer for the Pushes that follow
@@ -133,19 +132,18 @@ fn (v mut Vec<T>&) Clear() { v.Truncate(0) }
 # keeps the first k elements and removes the rest - nothing changes when there are k or fewer, and none is kept for a k of
 # 0 or less
 fn (v mut Vec<T>&) Truncate(k I64) {
-    s := v.s
-    if k >= s.n { return }
+    if k >= v.n { return }
     n I64 = k if k > 0 else 0
-    for i in range n, s.n { s.data[i].vacate() }
-    s.n = n
+    for i in range n, v.n { v.data[i].vacate() }
+    v.n = n
 }
 
 # the elements, lent as an array - a window on the buffer as it is now, good until the Vec grows (a Push, a PushAll, an
 # Insert, a Reserve may replace the buffer, and the view goes on showing the old one)
-fn (v Vec<T>&) View() Array<T>&v { return v.s.data[:v.s.n] }
+fn (v Vec<T>&) View() Array<T>&v { return v.data[:v.n] }
 
 # ...writable
-fn (v mut Vec<T>&) ViewMut() mut Array<T>&v { return v.s.data[:v.s.n] }
+fn (v mut Vec<T>&) ViewMut() mut Array<T>&v { return v.data[:v.n] }
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
@@ -155,11 +153,10 @@ fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OutOfRange { try v.TakeAt(i) }
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OutOfRange,
 # checked once per call
 fn (v mut Vec<T>&) TakeAt(i I64) T ? VecError.OutOfRange {
-    s := v.s
-    if i < 0 or i >= s.n { error VecError.OutOfRange }
-    x := s.data[i].vacate()
-    for k in range i, s.n - 1 { s.data[k] = s.data[k + 1].vacate() }
-    s.n--
+    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    x := v.data[i].vacate()
+    for k in range i, v.n - 1 { v.data[k] = v.data[k + 1].vacate() }
+    v.n--
     return x
 }
 
@@ -169,39 +166,37 @@ fn (v mut Vec<T>&) SwapRemove(i I64) ? VecError.OutOfRange { try v.SwapTake(i) }
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
 # order is not kept. i must be a position, checked once per call: one that is not fails with OutOfRange
 fn (v mut Vec<T>&) SwapTake(i I64) T ? VecError.OutOfRange {
-    s := v.s
-    if i < 0 or i >= s.n { error VecError.OutOfRange }
-    x := s.data[i].vacate()
-    s.n--
-    if i < s.n { s.data[i] = s.data[s.n].vacate() }         # the last element moved into the gap
+    if i < 0 or i >= v.n { error VecError.OutOfRange }
+    x := v.data[i].vacate()
+    v.n--
+    if i < v.n { v.data[i] = v.data[v.n].vacate() }         # the last element moved into the gap
     return x
 }
 
 # puts x at position i, the elements from i on each moving up one place - so Insert(Len(), x) is Push(x). i must be from
 # 0 to Len(), checked once per call: one that is not fails with OutOfRange
 fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OutOfRange {
-    s := v.s
-    if i < 0 or i > s.n { error VecError.OutOfRange }
-    if s.n == s.data.Len() { s.room(s.n + 1) }
-    k I64 = s.n
+    if i < 0 or i > v.n { error VecError.OutOfRange }
+    if v.n == v.data.Len() { v.room(v.n + 1) }
+    k I64 = v.n
     for k > i {
-        s.data[k] = s.data[k - 1].vacate()
+        v.data[k] = v.data[k - 1].vacate()
         k--
     }
-    s.data[i] = x
-    s.n++
+    v.data[i] = x
+    v.n++
 }
 
 # the elements in the opposite order, in place
-fn (v mut Vec<T>&) Reverse() { v.s.data[:v.s.n].Reverse() }
+fn (v mut Vec<T>&) Reverse() { v.data[:v.n].Reverse() }
 
 # sorts the elements in place so that less(v[i], v[i - 1]) holds nowhere - stable, as an array's Sort is, and done by it
-fn (v mut Vec<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E { try v.s.data[:v.s.n].Sort(less) }
+fn (v mut Vec<T>&) Sort<? E>(less fn(x T, y T) Bool ? E) ? E { try v.data[:v.n].Sort(less) }
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none
 fn (v Vec<T>&) IndexOf(x T) I64 ? VecError.NotFound {
-    for i in range v.s.n {
-        if v.s.data[i] == x { return i }
+    for i in range v.n {
+        if v.data[i] == x { return i }
     }
     error VecError.NotFound
 }
@@ -216,35 +211,28 @@ fn (v mut Vec<T>&) Remove(x T) Bool {
 
 # whether x is one of the elements, compared with "==" - what "x in v" asks (E29)
 fn (v Vec<T>&) Has(x T) Bool {
-    for i in range v.s.n {
-        if v.s.data[i] == x { return true }
+    for i in range v.n {
+        if v.data[i] == x { return true }
     }
     return false
 }
 
 # the texts one after another with sep between each two, as an array of texts joins (Array<String&>.Join)
-fn (v Vec<String&>&) Join(sep String&) String { return v.s.data[:v.s.n].Join(sep) }
-
-# a new Vec holding the same elements in the same order, with a buffer of its own
-fn (v Vec<T>&) Clone() Vec<T> {
-    c := Vec<T>()
-    c.PushAll(v.s.data[:v.s.n])
-    return c
-}
+fn (v Vec<String&>&) Join(sep String&) String { return v.data[:v.n].Join(sep) }
 
 # the elements copied into one array in the CALLER's scope - independent of the Vec, which may grow
 fn (v Vec<T>&) ToArray() mut Array<T>& {
-    if v.s.n == 0 { return Array<T>(0) }
-    out mut Array<T>&return = Array<T>(v.s.n, v.s.data[0])
-    for i in range v.s.n { out[i] = v.s.data[i] }
+    if v.n == 0 { return Array<T>(0) }
+    out mut Array<T>&return = Array<T>(v.n, v.data[0])
+    for i in range v.n { out[i] = v.data[i] }
     return out
 }
 
 # whether two Vecs hold equal elements in the same order - "==" (E10a), as two arrays compare
-fn (v Vec<T>&) Eq(o Vec<T>&) Bool { return v.s.data[:v.s.n] == o.s.data[:o.s.n] }
+fn (v Vec<T>&) Eq(o Vec<T>&) Bool { return v.data[:v.n] == o.data[:o.n] }
 
 # the elements' hash, as an array of them hashes - so equal Vecs hash alike (E10b)
-fn (v Vec<T>&) Hash() I64 { return v.s.data[:v.s.n].HashElements() }
+fn (v Vec<T>&) Hash() I64 { return v.data[:v.n].HashElements() }
 
 # how "$" renders a Vec (E11c): as an array of its elements renders, with the Vec named in front - "Vec<I64>[1, 2, 3]",
 # "Vec<String&>["a"]", "Vec<Char>['x', '\n']": an array of Char renders as text, so a Vec of them writes each element as a
@@ -254,15 +242,15 @@ fn (v Vec<T>&) Str() String {
         case Char {
             b := StringBuilder()
             b.Push("Vec<Char>[")
-            for i in range v.s.n {
+            for i in range v.n {
                 if i > 0 { b.Push(", ") }
-                b.Push(vecCharLiteral(v.s.data[i]))
+                b.Push(vecCharLiteral(v.data[i]))
             }
             b.PushChar(']')
             return b.ToString()
         }
         case _ {
-            r := $v.s.data[:v.s.n]
+            r := $v.data[:v.n]
             o := try r.FindByte('[') catch { unreachable }
             return "Vec<" $r[:o] ">" $r[o:]
         }

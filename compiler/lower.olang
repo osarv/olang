@@ -83,6 +83,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     # local's holding views of storage nothing changes while it lives (ViewLocals)
     ElidedReturns I64 = 0
     ViewLocals I64 = 0
+    ArgViews I64 = 0             # ... a by-value argument's copy, where the callee only reads its parameter (argView)
     # ... per body: whether it keeps its parameter's referent's parts as they are (preserves: body * 64 + k), its reference
     # result storage made for it (freshResult: -1 - body), nothing of what its parameter names (freshParam: below -2^40)
     preserved Map<I64, Bool>
@@ -2010,7 +2011,9 @@ fn (ln mut lowering&) read(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir
 fn (ln mut lowering&) take(p typed.Lvalue&, ty types.TypeId, sp source.Span) mir.Operand {
     # O8d: where what the place holds is a sole place's, it is moved out, the place left empty - so the next let-go of
     # it releases nothing twice
-    if ln.releases(p).Len() > 0 {
+    # QCE: a value owning storage moved out leaves its place's bytes zero (an empty array where the parts were), so a
+    # copy of the whole that holds the place - a Vec's buffer past its count - copies nothing it no longer holds
+    if ln.releases(p).Len() > 0 or ln.ownsStorage(ty) {
         q := ln.place(p)
         if ln.dead { return mir.Operand.None }
         return ln.into(ty, mir.Rvalue.Take(ln.mk(q)), sp)
@@ -2299,9 +2302,14 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
     # (D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
     # before the call returns - not a task's, which is read beside its spawner)
     reads := not t.HoldsRefs(t.Result(ty)) and not task
+    body := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: I64(-1)
+    }
     for i in range c.Args.Len() {
         a := c.Args[i]
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
+        if not task: ln.argView(a, body, i)
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
@@ -2313,6 +2321,23 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ops[i] = v
     }
     return ln.F.Args(ops)
+}
+
+# a by-value argument's own copy (check's valueArg, a MakeKind.Copy) left out where nothing could tell: the callee keeps
+# its parameter's parts as they are (written by nothing, kept nowhere, handed back by no return - Lowerer.preserves)
+# and what the argument copies is changed by nothing while the call runs (stableRef) - so the callee reads the
+# caller's storage, as a read-only "&" would have (D9a, D9h)
+fn (ln mut lowering&) argView(a typed.Expr&, body I64, i I64) {
+    if body < 0: return
+    match a {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind != typed.MakeKind.Copy or m.Items.Len() != 1 or m.Site < typed.SiteId(0): return
+            if not ln.L.preserves(body, i) or not ln.stableRef(m.Items[0]): return
+            ln.noCopy.Put(I64(m.Site), true)
+            ln.L.ArgViews++
+        }
+        case _ { }
+    }
 }
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
@@ -3312,8 +3337,11 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
         # (where a reference it is promoted to goes, when promote adopts it)
         s0 := ln.madeAt(c.Site)
         out0 := ln.temp(ty, sp)
-        # no fill: every element is yielded before anything reads it, and a loop left early leaves the array unread
-        ln.emit(mir.Stmt.Assign(sp, mir.L(out0), mir.Rvalue.NewArray(s0, ty, cap, mir.Operand.None)))
+        # no fill: every element is yielded before anything reads it, and a loop left early leaves the array unread -
+        # but where an element owns storage (QCE) the array is cleared, so that a copy of the whole (a grown buffer's
+        # room past a Vec's count, M19d) copies empty parts rather than whatever the bytes held
+        fill0 := mir.Operand.Const(el, 0) if ln.ownsStorage(el) else mir.Operand.None
+        ln.emit(mir.Stmt.Assign(sp, mir.L(out0), mir.Rvalue.NewArray(s0, ty, cap, fill0)))
         n0 := ln.temp(mir.I64T, sp)
         ln.emit(mir.Stmt.Assign(sp, mir.L(n0), mir.Rvalue.Use(ln.constI64(0))))
         ln.collects.Push(collectCtx(out0, n0, el, ty, s0, true, t.IsRef(t.Repr(ty))))

@@ -532,8 +532,7 @@ fn (it mut I&) GroupBy<I Iterator<T ? E>, T, K Hashable<K> ? E>(key fn(x T) K ? 
     for x in try it {
         k := try key(x)
         if not out.Has(k): out.Put(k, Vec<T>())
-        g := try out.Get(k) catch MapError { continue }
-        g.Push(x)
+        (try out.Ref(k) catch MapError { continue }).Push(x)
     }
     return out
 }
