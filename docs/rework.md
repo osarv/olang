@@ -2238,8 +2238,7 @@ programs, every object). The prelude and the rest of std are unchanged but list'
 - std under the switches (a fresh migration with the hand forms, 207 edits, 13 rows left by hand): 36 of its 40 test
   files pass (30 at the round's start - the readers' class gone: filepath, fuzz, prop, the prelude's iterator, map and
   text tests, and os); left flags and json (text held in their structures by reference, kept from what bare parameters
-  reach), http (json's) and list (one pre-existing refusal, `f.next = k` through `List.First()`'s result, which Vec's
-  `First` does not have). tests/params: 21 run files and 26 must-fail cases pass.
+  reach), http (json's) and list (one pre-existing refusal, `f.next = k` through `List.First()`'s result: 16.6, 3). tests/params: 21 run files and 26 must-fail cases pass.
 
 ### 16.6 Left, in order
 
@@ -2251,7 +2250,11 @@ programs, every object). The prelude and the rest of std are unchanged but list'
    parts that may change (an iterator's position, not its array).
 2. **flags and json** under the switches: their structures' text held by value (flags' names and help, json's decoded
    strings), their API taking bare text; then http.
-3. **list's `First`** result read-only through a bare receiver (Vec's is not): round 2's instance-follows rule.
+3. **list's `First`**: it reads its first chunk through `first`, a field read-only by inference (round 2c's FRO -
+   no code writes through it), though its elements are written through `tail`, which names the same chunk; so the
+   reference `First` hands back is read-only for every caller (13.2's first exception). FRO does not see two fields
+   naming one storage; a hand form reading through the chunk the writes use, or FRO joining fields one store makes
+   equal, would do.
 4. **Handles as values** (the brief's third item): Vec, Map, Set, Deque, Heap, StringBuilder owning their storage by
    value - their records' buffers become parts held by value (this round's mechanism), `w := v` a Copy, sharing
    written `Vec<T>&`, nested change through `&` accessors (`m.At(k).Push(x)`), `Clone()` removed from value types, and a

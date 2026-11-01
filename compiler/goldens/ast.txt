@@ -1851,7 +1851,7 @@ aeee3bb29f3f1dfd b74c8070ae532e54 checks/fixtures/vecalias/p3.olang
 964e31a8bba79921 cfa0d0daabf2c53c compiler/bindgen.olang
 cd6ce9c4496ddb31 7035884d2ec57055 compiler/build.olang
 d31e1ac25d3903b0 aafdaa4ada8b4216 compiler/cabi.olang
-c104d8308c6660b7 4648cb732eed6461 compiler/check.olang
+5a24224776fb814d d68a5aebbac2038f compiler/check.olang
 a167e14f1874795b 8fa6fe368850baaf compiler/cond.olang
 18fe289a60e0ce53 9a2c2eacf5e1c306 compiler/definit.olang
 95395ef569786b41 4b09eeebf28c1acd compiler/diag.olang
@@ -1867,10 +1867,10 @@ e2fd04379a77a2f7 e746e7b988fe1e7c compiler/fmt.olang
 ec6cbae8f0358e81 89027b8e56a70959 compiler/generic.olang
 eb2b134102042d79 4b3830707af6ce26 compiler/interp.olang
 c174e4b28f8ed541 554366460123ca73 compiler/load.olang
-88245c9deebf2678 5f9c141cd099e48e compiler/lower.olang
+f8e4e10e1a51e97b 83a5031defbbe860 compiler/lower.olang
 84472718f9c617d7 6ba6daa1acc429df compiler/lsp.olang
 2aec2931356c6a7f b6a810a6c8f5554a compiler/mcp.olang
-80ae3274314edd2e 58d07a2e9c7a9dd1 compiler/mir.olang
+db83d0b0b46844bc d07cfb04fea894f3 compiler/mir.olang
 a6012ae8cedaeef7 bbddf359ecf7ac2c compiler/msgs.olang
 7a537b10b40e49be 069ef69eab250ebb compiler/names.olang
 e96d6c8f08ffed5c 14470cd118159e1c compiler/needs.olang
@@ -1879,7 +1879,7 @@ e96d6c8f08ffed5c 14470cd118159e1c compiler/needs.olang
 c2e198ec2ff42263 de36647d62895f16 compiler/profile.olang
 672b63f9a00d870a 9d2c759018457eed compiler/runtime.olang
 818e0599fdebdac0 97aaffe89d89e6e9 compiler/scan.olang
-b5de7f2142ab0523 817de9446afeab75 compiler/scope.olang
+94c441f8f2ca4a85 07785c78e73a38b2 compiler/scope.olang
 c48e236ce54a6fe5 9004f90ca230aae0 compiler/session.olang
 182c39e9ac5daf15 d08ca205a93509b6 compiler/source.olang
 4a5f439a56f65569 25ca6a5bbdda1a5f compiler/target.olang
@@ -1923,8 +1923,8 @@ eb95a6d20044db9d cb6d3ba1a4ffd053 compiler/tools/rungold.olang
 aaf9b5b98ee1c059 7d27d6bd617a7ae3 compiler/tools/seed.olang
 035463adc6e23aef 23b05a06ae7cd291 compiler/tools/tokdiff.olang
 0262e370466f7963 1891fd0a893edb69 compiler/tools/toolkit.olang
-dd1990d22018cf65 564f07e625c751a5 compiler/typed.olang
-43baaa00c7aac018 b1b592473b5570b4 compiler/types.olang
+842cb5057c1d8774 09a842be07ad233b compiler/typed.olang
+5bf8e6842e9310b6 1c85a03fb959deb7 compiler/types.olang
 e82320c0b5498c1c 157da6439157f576 compiler/unparse.olang
 cb8856e0596c55d7 12ef4c8161360b71 compiler/views.olang
 d9573d2a91b69e64 e5244a0c623971dd fuzz/fuzz.olang
@@ -1965,7 +1965,7 @@ a8a47a5d5942a8d4 372b55ec62376fe4 std/fuzz.olang
 7989889c61471466 9456d876ff155ae3 std/http.olang
 207110f4512bc366 53d0700a468b7f0a std/io.olang
 6de6740eeeb89a22 8a3370358ed68873 std/json.olang
-bd6a3e1537df570f 4ee981ecd2a7e10d std/list.olang
+122455826667a033 6f680777aa4421f9 std/list.olang
 fe924123f731d45f 802ad1f3514cd04f std/net.olang
 f54351195bc8b856 48e1e0a421a2bece std/order.olang
 7616ce40c3468fa6 256a890f450f07db std/os.olang
@@ -2070,6 +2070,7 @@ db02910f90603c28 48484d6a47e510e9 tests/params/follow.olang
 a0134f5b139de235 e924c02202f857d8 tests/params/kept.olang
 5bf30a8b8bfb504b dddfd7d05019de42 tests/params/keptroutes.olang
 4cbb48d0f1ad92d5 99a5193c1d15978a tests/params/lend.olang
+432378bead0d179c 8fd058ff24bba808 tests/params/owned.olang
 6d8d3159ba823537 0e3a79a752af8d4b tests/params/payloads.olang
 bade8fe9ba0c1b9c cd1d55340d7db70d tests/params/payloadtemp.olang
 ccc990df6edfff4a f70a792209e22782 tests/params/round2f.olang
@@ -2112,7 +2113,15 @@ c1adfeabbc145837 a280cfcbe5cd2415 tools/list_vec.olang
 0e07e3c17b688b36 84698d550dbf5732 tools/match_migrate.olang
 eeba207dae34c594 e9d350c827e41a28 tools/math_methods.olang
 efa23254a50f7511 908c01cdb0dc3430 tools/null_migrate.olang
-454aef824948df7b 658335a230af4b35 tools/param_migrate.olang
+4c670845e6ec7c37 8547b0b73e621db9 tools/param_migrate.olang
+459feb04e288f6b0 138879f685e7b864 tools/params/std/filepath.olang
+d29d1a89d4380506 e9e8c282296116ed tools/params/std/list.olang
+00cfae808c8f57b1 ce34123db50e4f68 tools/params/std/os.olang
+1b904dea505d1830 4e712ee55d9030a5 tools/params/std/prelude/array.olang
+0b956a37a25716a3 91a4a77e58331cae tools/params/std/prelude/tests/iterator.olang
+f4f7022d6f75fbbc 660edbe49f93012e tools/params/std/prelude/tests/text.olang
+e20952daf5bc384f 1a11a5dc78516e50 tools/params/std/prelude/text.olang
+a01333bf32c32423 935ffc05f8803be1 tools/params/std/prelude/vec.olang
 eeeb77ff55ecc5de 381e23dcd7ae98f9 tools/perm_mut.olang
 c4449e3b81f2ffe6 5389d3c501f03be9 tools/precedence_migrate.olang
 2206081aab033773 b70315bea74daa8e tools/question_migrate.olang
