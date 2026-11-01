@@ -1917,7 +1917,7 @@ b6baeed2eb4f5e5a 09fb2e012fdde7eb compiler/tools/evaldiff.olang
 c0240610d10d5009 184d58d4458bda23 compiler/tools/evaldump.olang
 4901c99cdb0ed05d 8dd1698c71799e18 compiler/tools/fmt.olang
 e97beb1b3de43f92 f4fac43d5fe57dc0 compiler/tools/layoutdiff.olang
-242a71d6a46abcf5 d6bf198cb24c5000 compiler/tools/layoutgold.olang
+1c0039e0e2d87e19 d8b0617eb114963f compiler/tools/layoutgold.olang
 fce724ebe7f6ae13 7c14335c6fd8e9a3 compiler/tools/lowerdump.olang
 8f78ca94fbebba7a ad7dc55c4bdac36d compiler/tools/modgraph.olang
 3fad379b47311c92 8450aab006ff12b6 compiler/tools/namesdiff.olang
