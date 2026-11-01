@@ -27776,3 +27776,10 @@ callee's write would land in the program's constant data (the MIR verifier refus
 how list's and array's tests showed it once they were checked). Going where it may be written it is judged as text is
 at its own type now: T25d's refusal for a `&` parameter. std's own such calls went bare (`Windows`, `Reversed`) or
 give a copy (list's test).
+
+**compiler/ under the switches.** `param_migrate` with the hand forms over a fresh copy of compiler/ came to a fixed
+point after nine driven rounds (1137 edits down to none); the migrated root then checks with 64 errors (round 2f's
+53): 47 T25c at the tree readers handing back borrowed references into what they are given (as before), 6 E12 where
+a reader now giving values (Split's `Array<String>`) meets a parameter still taking `Array<String&>&` - a direction the
+tool does not rewrite yet - and a few placement rows (docs/rework.md 17.8). The self-build under the switches is still
+not reached.

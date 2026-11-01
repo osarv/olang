@@ -2389,3 +2389,28 @@ with a plan under the switch). bench's IR is identical to round 3's (`/tmp/rw3/i
 2. Handles as values (16.6, 4) - not begun.
 3. compiler/ to zero under the switches, the self-build, its measurements (16.6, 5) - see 17.8.
 4. Then round 4's flip.
+
+### 17.8 compiler/ under the switches, measured
+
+`param_migrate` with the hand forms over a fresh copy of compiler/ (the round's compiler of e938cb9, two jobs): the text
+phase changed 67 files, the driven rounds made 1137, 316, 142, 58, 27, 5, 3, 1, 0 edits (per-file counts, imports
+counted again: 31,302 -> 3,271 errors), the unpinned round 121 more before the job hit its time limit. The migrated
+root (`compiler/olang.olang`) then checks with **64 errors** (round 2f's 53, 15.6), in 16 s and 1.85 GB:
+
+1. **Readers handing back borrowed references into what they are given** (47 T25c, 28 of them in check.olang, 8 in
+   scope.olang): 15.6's item 1 unchanged - `s.unAway(x)`, `s.callOf(x)`, `s.peekTerm(v)`, `c.fr()`, `t.NamesOf(f)`,
+   `ctSource(fd.S.Contract!, ...)`, a bare receiver's collection read (`c.Bodies[...]`, `m.whats[w]`). They need the
+   tree readers giving values (with errors for absence), or a borrowed result following its argument's permission.
+2. **Readers now giving values meet parameters still taking references** (6 E12): `key(parts)` with `parts` from a
+   Split (now `Array<String>`) where `key` takes `Array<String&>&` - the fit `Array<R&>` -> `Array<R>` goes one way;
+   the tool does not yet rewrite such a parameter to the value form (`parts Array<String>`); and `pre = c.spread(...)`
+   assigning a reference to a value local.
+3. **Scope placement of values built of parts** (3 O25h, O25c, T17c, O27, 2 O17): a `typed.Block(...)` value given to a
+   body that keeps it, an `ast.VarDecl` whose element array can be stored through, `String(b[40 + words * 8:])` into
+   a field, bindgen's macro record keeping a view of a loop's text - round 1's no-extension rule, each wanting a copy
+   or a home written.
+4. **The tool's last rows** (2 D9e, 1 D9d): `patTail`'s and bindgen's `inner`'s bare parameters handed back, an `&`
+   receiver never written.
+
+So the self-build under the switches is still not reached, and neither are its peak memory, wall time or the bench
+under a self-built compiler. The default path's self-build is the fixed point `make verify` checks.

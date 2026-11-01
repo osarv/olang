@@ -496,7 +496,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   text bare, list's Last reads through its fields, a copy sharing no reference asks no writable argument, FRO joins
   fields one store makes name one storage, no `mut` rendered; verify-params runs every std test file (48), all pass.
   Found and fixed: text written in the program given a `&` parameter of `Array<Char>&` was handed over as the constant
-  itself (T25d now). Left: 2.10's partial copies, handles as values, compiler/'s readers.
+  itself (T25d now). Left: 2.10's partial copies, handles as values, compiler/'s readers (its migrated root 64
+  errors, 17.8).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at
