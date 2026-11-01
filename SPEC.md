@@ -2100,20 +2100,17 @@ is kept where it is stored into a field, an element, a payload or a global, or g
 writes through it or keeps it. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
 reference, an extern, an export fn or a generic's parameter (its instances differ by program).
 
-**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so what the body keeps of
+**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so the body may not keep
 its own storage past the call - the parameter itself or a view of it, in a value it builds and hands back (a
-constructor's field, a case's payload, an element) - is the callee's own copy: the caller's later writes to its
-argument never show through it. Passed by pointer, the copy is made by a caller whose argument may change while what
-keeps it lives, where the call's result is built; an argument that cannot change is passed as it is - constant data, a
-value made for the call, a bare parameter of the caller (its own callers copy for it), an immutable global, a value
-local nothing assigns, writes or lends writably once it is made, a reference local naming new storage that nothing
-writes through and that is read only as an argument for a parameter that cannot write it. A view of what the parameter
-reaches through its references is no copy (a struct's copy holds the same references). Stored into existing storage -
-a `&` parameter's, a global's - a bare parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy.
-Where the route is not followed - a local made from it, a conditional, a slice, a capture, a call storing its
-argument (`v.Push(t)`) - the parameter is taken as kept wherever the result outlives what its argument's storage is
-and the result's type can name storage of its type (a reference to it, a view of its array, a function value, an
-`any`): its callers copy as above.
+constructor's field, a case's payload, an element): that is a compile-time error at the parameter, naming the two
+ways out - a copy of its own written in the body, a value assigned from it (`c T = p`, E12's reference into value),
+which it then keeps; or the parameter taken as `p T&`, sharing the caller's storage, which the `&` says. Nothing
+copies it unseen. A view of what the parameter reaches through its references is no keeping of its own storage (a
+struct's copy holds the same references). Stored into existing storage - a `&` parameter's, a global's - a bare
+parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy. Where the route is not followed - a
+local made from it, a conditional, a slice, a capture, a call storing its argument (`v.Push(t)`) - the parameter is
+taken as kept wherever the result outlives what its argument's storage is and the result's type can name storage of
+its type (a reference to it, a view of its array, a function value, an `any`).
 Section 8 lends an argument for a bare parameter whose own storage the callee does not keep where the argument's
 references live (O17 asks nothing more of a value whose references live elsewhere than its storage), and a temporary
 lent to one - read-only, stored through by nothing - needs its references only to outlive it (O25h).

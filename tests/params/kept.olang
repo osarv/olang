@@ -1,8 +1,7 @@
-# The scoping and parameters rework (docs/rework.md section 14): a bare parameter is the callee's own value, so what a
-# body builds from it and keeps past the call - a constructed value returned - holds the callee's own copy, never the
-# caller's storage the parameter is passed by pointer to: a caller's later write does not show through, in a build and
-# while compiling alike. The copy is the caller's, made only where its argument may change (KeptOwn, plan.ArgCopy). Run
-# by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+# The scoping and parameters rework (docs/rework.md sections 14, 15): a bare parameter is the callee's own value, so a
+# body may not keep its storage past the call (D9e, tests/params/fail/keptbare*.olang) - it keeps a copy of its own,
+# written as a value assigned from the parameter ('c String = t'), and the caller's later write does not show through,
+# in a build and while compiling alike. Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
 
 type holder struct(s String&) {
     s
@@ -22,17 +21,26 @@ type maybe enum {
     Some(s String&)
 }
 
-# a bare parameter's own storage kept whole, a view of it kept, a struct kept whole, a case's payload
-fn mk(t String) holder { return holder(t) }
-fn mkView(t String) holder { return holder(t[1:]) }
-fn mkPt(p pt) ptHolder { return ptHolder(p) }
-fn some(t String) maybe { return maybe.Some(t) }
+# a copy of a bare parameter's own storage kept whole, a view of it kept, a struct kept whole, a case's payload
+fn mk(t String) holder {
+    c String = t
+    return holder(c)
+}
+fn mkView(t String) holder {
+    c String = t[1:]
+    return holder(c)
+}
+fn mkPt(p pt) ptHolder { return ptHolder(pt(p.name, p.n)) }
+fn some(t String) maybe {
+    c String = t
+    return maybe.Some(c)
+}
 
-# kept through a callee that keeps it: this function keeps it too, so its own callers copy
+# handed to a callee that keeps a copy of its own: this function keeps nothing of it
 fn twice(t String) holder { return mk(t) }
 
-# captured by a lambda that is kept
-fn later(t String) fn() String { return fn() String { return $t } }
+# (a kept lambda capturing a copy - 'c String = t', then 'fn() String { return $c }' - is refused under the switches by
+# O10d: a local a returned closure captures is not lifted to the result scope by the inference, a recorded limit)
 
 fn churn(n I64) I64 {
     xs := Array<I64>(n, 7)
@@ -44,15 +52,14 @@ fn afterWrite() String {
     h := mk(t)
     v := mkView(t)
     w := twice(t)
-    f := later(t)
     t[0] = 'x'
-    return $h.s " " $v.s " " $w.s " " $f()
+    return $h.s " " $v.s " " $w.s
 }
 
 # the evaluator's reading (K2: baked while compiling) - it must agree with the run time's
 Baked String = afterWrite()
 
-test holder "a value built from a bare parameter keeps the callee's own copy" {
+test holder "a value built from a copy of a bare parameter keeps the callee's own" {
     t := $"abc"
     h := mk(t)
     v := mkView(t)
@@ -63,7 +70,7 @@ test holder "a value built from a bare parameter keeps the callee's own copy" {
     assert s > 0 and h.s == "abc" and v.s == "bc" and w.s == "abc" and t == "xbc"
 }
 
-test ptHolder "a bare struct kept whole is the callee's copy" {
+test ptHolder "a copy of a bare struct kept whole is the callee's" {
     nm := $"abc"
     a := pt(nm, 3)
     h := mkPt(a)
@@ -73,16 +80,7 @@ test ptHolder "a bare struct kept whole is the callee's copy" {
     assert s > 0 and h.q.n == 3 and h.q.name == "abc"
 }
 
-test later "a kept lambda's capture of a bare parameter is the callee's copy" {
-    t := $"abc"
-    f := later(t)
-    t[1] = 'y'
-    s := 0
-    for i in range 1, 50 { s += churn(i * 8) }
-    assert s > 0 and f() == "abc"
-}
-
-test maybe "a case's payload is the callee's copy" {
+test maybe "a case's payload of a copy is the callee's" {
     t := $"abc"
     m := some(t)
     t[2] = 'z'
@@ -93,8 +91,8 @@ test maybe "a case's payload is the callee's copy" {
 }
 
 test holder "the evaluator agrees: baked while compiling, and an assert it decides" {
-    assert Baked == "abc bc abc abc"
-    assert afterWrite() == "abc bc abc abc"
+    assert Baked == "abc bc abc"
+    assert afterWrite() == "abc bc abc"
 }
 
 # an argument that cannot change is passed as it is: constant data, and a local nothing writes after it is made

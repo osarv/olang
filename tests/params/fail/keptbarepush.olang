@@ -1,0 +1,15 @@
+# check: fail error[D9e]: 't' is a bare parameter
+# The scoping and parameters rework (round 2f, D9e): a bare text pushed into a Vec the function returns - a route the
+# frame term does not follow, taken as kept (bulk review 5, F2) - is refused; a copy of its own is written instead.
+fn wrap(t String) Vec<String&> {
+    v := Vec<String&>()
+    v.Push(t)
+    return v
+}
+
+fn main() {
+    t := $"abc"
+    v := wrap(t)
+    t[0] = 'x'
+    assert v[0] == "abc"
+}

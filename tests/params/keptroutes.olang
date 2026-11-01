@@ -1,34 +1,35 @@
-# The scoping and parameters rework (bulk review 5, F2): a bare parameter's own storage kept past the call by a route
-# the frame term does not follow - a callee's type-variable parameter storing it (Push, Put), a local made from it, a
-# conditional, a slice captured by a kept lambda - is kept (KeptOwn), so the caller copies an argument that changes:
-# the caller's later write does not show through, as by value. Run by `make verify-params` under the switches.
+# The scoping and parameters rework (bulk review 5, F2; D9e refused since round 2f): a copy of a bare parameter kept
+# past the call by a route the frame term does not follow - a callee's type-variable parameter storing it (Push, Put), a
+# local, a conditional, a slice captured by a kept lambda - is the callee's own, written as a value assigned from the
+# parameter: the caller's later write does not show through, as by value (kept bare, each is refused:
+# tests/params/fail/keptbare*.olang). Run by `make verify-params` under the switches.
 
 type holder struct(s String&) {
     s
 }
 
 fn wrap(t String) Vec<String&> {
+    c String = t
     v := Vec<String&>()
-    v.Push(t)
+    v.Push(c)
     return v
 }
 
 fn wrapMap(t String) Map<String&, I64> {
+    c String = t
     m := Map<String&, I64>()
-    m.Put(t, 1)
+    m.Put(c, 1)
     return m
 }
 
 fn viaLocal(t String) holder {
-    s := t
+    s String = t
     return holder(s)
 }
 
-fn viaChoice(t String, u String, k I64) holder { return holder(t if k == 0 else u) }
-
-fn viaSlice(t String) fn() String {
-    s := t[1:]
-    return fn() String { return $s }
+fn viaChoice(t String, u String, k I64) holder {
+    c String = t if k == 0 else u
+    return holder(c)
 }
 
 test wrap "a text pushed into a returned Vec is the callee's copy" {
@@ -39,26 +40,24 @@ test wrap "a text pushed into a returned Vec is the callee's copy" {
     assert v[0] == "abc" and m.Has("abc") and not m.Has("xbc")
 }
 
-test viaLocal "a local, a conditional and a captured slice of a bare parameter are kept as copies" {
+test viaLocal "a local and a conditional of a bare parameter are kept as copies" {
     t := $"abc"
     b := viaLocal(t)
     c := viaChoice(t, t, 0)
-    f := viaSlice(t)
     t[0] = 'x'
     t[1] = 'y'
-    assert b.s == "abc" and c.s == "abc" and f() == "bc"
+    assert b.s == "abc" and c.s == "abc"
 }
 
 fn afterWrite() String {
     t := $"abc"
     v := wrap(t)
     b := viaLocal(t)
-    f := viaSlice(t)
     t[0] = 'x'
     t[1] = 'y'
-    return $v[0] " " $b.s " " $f()
+    return $v[0] " " $b.s
 }
 
 # the evaluator agrees
 Baked String = afterWrite()
-assert Baked == "abc abc bc"
+assert Baked == "abc abc"

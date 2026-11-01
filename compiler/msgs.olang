@@ -385,6 +385,7 @@ type Diag enum {
     RefNeverUsed
     ConstToRefParam
     NoteBareParam
+    BareKept
     RefResultReadOnly
     NoteRefResult
     ReadOnlyToBuiltResult
@@ -1958,6 +1959,7 @@ fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D
 fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefParam, "T25d", "this hands data written in the program to '" $name "', which may write it - pass a copy of its own: " $fix) }
 
 # NOTE_BARE_PARAM
+fn BareKept(name String&, ty String&) Msg { return Msg(Diag.BareKept, "D9e", "'" $name "' is a bare parameter - this function's own value - and what it hands back keeps its storage: keep a copy of its own ('c " $ty " = " $name "'), or take it as '" $name " " $ty "&' to share the caller's") }
 fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
 
 # ERR_REF_RESULT_READ_ONLY

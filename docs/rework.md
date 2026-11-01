@@ -1999,6 +1999,10 @@ seventh (F7), found after it, is fixed too.
 - `callOrigins`/`ResultWritten` only choose a note's form - no acceptance changes.
 - T17c: a case's payload made as a temporary lent read-only (a `Promote` to a read-only parameter, its operand the
   `Make` itself) need agree on no one scope, and its items fit it with nothing stored through (`roTemp`).
+- `keptByResult` narrowed (D9e now an error): no guess for an instance whose declared result is a type variable, nor
+  for a bare parameter whose own storage the body never names (`ownNamed`: a call's argument, a non-held local, a
+  choice, a capture, a view) - a missed keep would let the result share the caller's storage (no memory hazard; the
+  caller's later write would show through).
 - `SliceArgs`: a slice of a local handed straight to a read-only parameter (by the callee's declared type) no longer
   makes the local "written" for stableArg/unwritten - fewer F3 copies.
 - `lambdaWritesNothing` in F3's `AliasCopies` and F7's `WriteWalk`: a named function, or a lambda whose captures
