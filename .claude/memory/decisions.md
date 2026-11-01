@@ -2186,3 +2186,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   argument goes by pointer only where nothing the call reaches may write storage of its type (a call through a function
   value or `any` may), else the caller passes a copy; (4) an `any` made from a bare parameter boxes a copy (by-pointer
   never observable through identity); (5) a bare `String` parameter fits `fn(x T) T`. All handed to round 2f first.
+- QCI ASKED 2026-11-01 (the user: "Where do we actually need null?"). Measured: compiler/ 568 `?&` types and ~1,200
+  null tests, std 28 `?&`. Where null stands today: (1) `?&` references - stored absence (links, optional tree parts,
+  caches, cursors); (2) error values - `null` is "no error", their zero; (3) function values - nullable by default
+  (T21), a call through a null one traps, the one null no type marks; (4) `null` for an array names its empty one.
+  Recommended: keep (1) and (2); make function values never null (a function-typed field or local with no value is
+  definitely initialised, D13d; absence by `?&`-style marking or an enum if ever needed), and drop (4) (`null` for an
+  array is a second spelling of empty). In effect: today's rules.
