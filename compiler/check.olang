@@ -11049,19 +11049,67 @@ fn (c mut Checker&) fieldKeyOf(t types.TypeId, idx I64) pair.Pair<I64, I64> {
     return pair.Pair(I64(t), idx)
 }
 
+# round 2d: an enum case's payload field as a key - beside a struct's fields, numbered past them; (-1, -1) where it is
+# no reference field of a case of an enum this program declares
+CaseFieldBase I64 = 1 << 40
+
+fn (c mut Checker&) caseFieldKey(et types.TypeId, tag I64, idx I64) pair.Pair<I64, I64> {
+    if not source.NewParams or not c.isNamed(et) or c.declKind(et) != types.DeclKind.Enum or not c.P.Body(et): return pair.Pair(-1, -1)
+    recs := c.P.T.Items(c.P.T.Cases(et))
+    if tag < 0 or tag >= recs.Len() or idx < 0 or idx >= 65536: return pair.Pair(-1, -1)
+    ps := c.P.T.Items(c.P.T.Parts(recs[tag]))
+    if idx >= ps.Len() or not c.isRef(ps[idx]): return pair.Pair(-1, -1)
+    return pair.Pair(I64(et), CaseFieldBase + tag * 65536 + idx)
+}
+
+# the reference field a Field place reads, as a key: a struct's or a case's payload's
+fn (c mut Checker&) fieldKey(base typed.Lvalue&, idx I64) pair.Pair<I64, I64> {
+    return match base {
+        case typed.Lvalue.Payload(_, _, pl): c.caseFieldKey(c.deref(pl.Base.Type()), pl.Tag, idx)
+        case _: c.fieldKeyOf(base.Type(), idx)
+    }
+}
+
+# the type of the field a key names
+fn (c mut Checker&) keyFieldType(k pair.Pair<I64, I64>) types.TypeId {
+    t := types.TypeId(I32(k.First))
+    if k.Second < CaseFieldBase {
+        fs := c.P.T.Items(c.P.T.Fields(t))
+        return fs[k.Second] if k.Second < fs.Len() else types.UnknownT
+    }
+    j := k.Second - CaseFieldBase
+    recs := c.P.T.Items(c.P.T.Cases(t))
+    if j / 65536 >= recs.Len(): return types.UnknownT
+    ps := c.P.T.Items(c.P.T.Parts(recs[j / 65536]))
+    return ps[j % 65536] if j % 65536 < ps.Len() else types.UnknownT
+}
+
 # round 2c: a read-only copy of a struct stored where it can be written, its writable references all in its own fields:
 # those fields asked read-only (fieldWant) - an attempt they are, the copy holds nothing writable and the store is fine;
 # one written through anywhere keeps them writable and the store refused. Whether it is let through this attempt
 fn (c mut Checker&) askTypeFields(t types.TypeId) Bool {
-    if not source.NewParams or not c.isNamed(t) or c.declKind(t) != types.DeclKind.Struct or not c.P.Body(t): return false
-    fs := c.P.T.Items(c.P.T.Fields(t))
+    if not source.NewParams or not c.isNamed(t) or not c.P.Body(t): return false
     keys Vec<pair.Pair<I64, I64>>
-    for i, f in fs {
-        if c.isRef(f) and c.writable(f) {
-            keys.Push(pair.Pair(I64(t), I64(i)))
-            continue
+    if c.declKind(t) == types.DeclKind.Enum {
+        # (round 2d: an enum's, its cases' payload fields)
+        for tag, rec in c.P.T.Items(c.P.T.Cases(t)) {
+            for i, f in c.P.T.Items(c.P.T.Parts(rec)) {
+                if c.isRef(f) and c.writable(f) {
+                    keys.Push(c.caseFieldKey(t, tag, i))
+                    continue
+                }
+                if c.holdsWritableAt(f, 1): return false
+            }
         }
-        if c.holdsWritableAt(f, 1): return false     # (a writable reference deeper than its own fields: not asked)
+    } else {
+        if c.declKind(t) != types.DeclKind.Struct: return false
+        for i, f in c.P.T.Items(c.P.T.Fields(t)) {
+            if c.isRef(f) and c.writable(f) {
+                keys.Push(pair.Pair(I64(t), I64(i)))
+                continue
+            }
+            if c.holdsWritableAt(f, 1): return false     # (a writable reference deeper than its own fields: not asked)
+        }
     }
     if keys.Len() == 0: return false
     for k in keys {
@@ -11076,7 +11124,7 @@ fn (c mut Checker&) askTypeFields(t types.TypeId) Bool {
 # the reference field a place is - a store into it lands there - as a key
 fn (c mut Checker&) fieldTarget(p typed.Lvalue&) pair.Pair<I64, I64> {
     return match p {
-        case typed.Lvalue.Field(_, _, base, idx): c.fieldKeyOf(base.Type(), idx)
+        case typed.Lvalue.Field(_, _, base, idx): c.fieldKey(base, idx)
         case _: pair.Pair(-1, -1)
     }
 }
@@ -11086,8 +11134,8 @@ fn (c mut Checker&) fieldTarget(p typed.Lvalue&) pair.Pair<I64, I64> {
 fn (c mut Checker&) fieldStore(want types.TypeId) I64 {
     k := c.fieldOn
     if k.First < 0: return -1
-    fs := c.P.T.Items(c.P.T.Fields(types.TypeId(I32(k.First))))
-    if k.Second >= fs.Len() or not c.P.T.Same(c.P.T.Referent(fs[k.Second]), c.P.T.Referent(want)): return -1
+    ft := c.keyFieldType(k)
+    if ft == types.UnknownT or not c.P.T.Same(c.P.T.Referent(ft), c.P.T.Referent(want)): return -1
     if c.fieldRo.Has(k): return 1
     if c.fieldWrit.Has(k): return -1
     c.fieldWant.Put(k, true)
@@ -11098,7 +11146,7 @@ fn (c mut Checker&) fieldStore(want types.TypeId) I64 {
 fn (c mut Checker&) roFieldIn(p typed.Lvalue?&, depth I64) Bool {
     if p is null or depth > 32 or c.fieldRo.Len() == 0 or c.frames.Len() == 0: return false
     match p {
-        case typed.Lvalue.Field(_, _, base, idx) { return c.fieldRo.Has(c.fieldKeyOf(base.Type(), idx)) or c.roFieldIn(base, depth + 1) }
+        case typed.Lvalue.Field(_, _, base, idx) { return c.fieldRo.Has(c.fieldKey(base, idx)) or c.roFieldIn(base, depth + 1) }
         case typed.Lvalue.Elem(_, _, e) { return c.roFieldIn(e.Base, depth + 1) }
         case typed.Lvalue.Payload(_, _, pl) { return c.roFieldIn(pl.Base, depth + 1) }
         case typed.Lvalue.Deref(_, _, ref) { return c.roFieldX(ref, depth + 1) }
@@ -11131,7 +11179,7 @@ fn (c mut Checker&) fieldsThrough(p typed.Lvalue?&, onlyRo Bool, depth I64) Bool
     if p is null or depth > 32 or c.frames.Len() == 0 or not source.NewParams: return false
     match p {
         case typed.Lvalue.Field(_, _, base, idx) {
-            k := c.fieldKeyOf(base.Type(), idx)
+            k := c.fieldKey(base, idx)
             got := false
             if k.First >= 0 and (not onlyRo or c.fieldRo.Has(k)) {
                 c.fieldWrit.Put(k, true)
@@ -11268,7 +11316,7 @@ fn (c mut Checker&) roFieldsIn(p typed.Lvalue?&, out mut Vec<pair.Pair<I64, I64>
     if p is null or depth > 32: return
     match p {
         case typed.Lvalue.Field(_, _, base, idx) {
-            k := c.fieldKeyOf(base.Type(), idx)
+            k := c.fieldKey(base, idx)
             if c.fieldRo.Has(k) and not out.Has(k): out.Push(k)
             c.roFieldsIn(base, out, depth + 1)
         }
@@ -11297,6 +11345,11 @@ fn (c mut Checker&) roFieldsIn(p typed.Lvalue?&, out mut Vec<pair.Pair<I64, I64>
 # not known
 fn (c mut Checker&) ctorSinks(id I64, k I64, out mut Vec<pair.Pair<I64, I64>>&, depth I64) ? Elsewhere {
     if depth > 8 or id < 0: error Elsewhere
+    # (round 2d: an enum case's argument lands in its payload field k, as given)
+    if c.Bodies[id].Of == typed.BodyOf.Case {
+        try c.caseSinks(id, k, out)
+        return
+    }
     t := match c.Bodies[id].Of {
         case typed.BodyOf.Ctor(ct, tw): ct if tw == types.ListId(0) else types.UnknownT
         case _: types.UnknownT
@@ -11324,6 +11377,20 @@ fn (c mut Checker&) ctorSinks(id I64, k I64, out mut Vec<pair.Pair<I64, I64>>&, 
             }
             case _ { }
         }
+    }
+}
+
+fn (c mut Checker&) caseSinks(id I64, k I64, out mut Vec<pair.Pair<I64, I64>>&) ? Elsewhere {
+    match c.Bodies[id].Of {
+        case typed.BodyOf.Case(et, tag) {
+            ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
+            if k >= ps.Len(): error Elsewhere
+            if not c.P.T.HoldsRefs(ps[k]): return
+            key := c.caseFieldKey(et, tag, k)
+            if key.First < 0: error Elsewhere
+            if not out.Has(key): out.Push(key)
+        }
+        case _ { error Elsewhere }
     }
 }
 
@@ -15830,13 +15897,33 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         if cd is not null and cd.Payload.Len() > 0 and i < cd.Payload.Len() {
             c.nullDecl = c.markAt(c.P.DeclModule(c.P.T.DeclOf(t)), cd.Payload[i].Ty)
         }
-        x := c.fit(pre[i], ps[i], c.argSpan(args[i])) if i < pre.Len() and pre[i] != c.hole else c.exprTo(args[i], ps[i])
+        x := c.caseArg(t, tag, i, ps[i], args[i], pre[i] if i < pre.Len() and pre[i] != c.hole else null)
         c.nullDecl = wasNull
         if not c.isRef(ps[i]) { c.roStore(x, args[i].Span(), RoStored) }   # T25c: a payload is writable storage
         c.exprs.Push(x)
     }
     items := gather(c.exprs, from)
     return typed.Expr.Make(sp, t, typed.Make(typed.MakeKind.Case, tag, items, null, typed.SiteId(-1), typed.Check.None))
+}
+
+# a case's argument i, fitted to its payload's parameter want: a reference stored into the payload field it lands in, which
+# may be read-only by inference (round 2d - a struct's fields since round 2c, fieldStore) - only the fit itself, so no
+# store the argument's own expression makes is taken for that field's
+fn (c mut Checker&) caseArg(t types.TypeId, tag I64, i I64, want types.TypeId, a ast.Expr&, held typed.Expr?&c) typed.Expr&c {
+    if held is not null: return c.caseFit(t, tag, i, want, held, c.argSpan(a))
+    lc := c.litCtor(a, want)
+    if lc is not null: return lc
+    e := c.expr(a, want)
+    if want == types.UnknownT: return e
+    return c.caseFit(t, tag, i, want, e, c.argSpan(a))
+}
+
+fn (c mut Checker&) caseFit(t types.TypeId, tag I64, i I64, want types.TypeId, e typed.Expr&c, sp source.Span) typed.Expr&c {
+    wasField := c.fieldOn
+    if source.NewParams and c.isRef(want) { c.fieldOn = c.caseFieldKey(t, tag, i) }
+    x := c.fit(e, want, sp)
+    c.fieldOn = wasField
+    return x
 }
 
 # ---- raw values (T17e) ----
