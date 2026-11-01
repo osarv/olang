@@ -10434,8 +10434,24 @@ fn (c mut Checker&) roTrack(id I64, x typed.Expr?&) {
         case typed.Expr.Slice(_, _, sl) { c.roFrom.Put(c.roKey(id), roOrigin(sl.Base, true)) }
         # (round 2f: a reference a call gave - what it reaches is reached through the call's arguments, D9d)
         case typed.Expr.Call(_, _, _) { if source.NewParams: c.refCalls.Put(c.roKey(id), y) }
+        # (round 2f: a choice - what its read-only alternative reaches it may reach: "x := filled if ... else f()", a
+        # nullable parameter's widening found through it, wantWritable)
+        case typed.Expr.Cond(_, _, k) {
+            if not source.NewParams: return
+            if k.A is not null and c.roAlt(id, k.A!): return
+            c.roAlt(id, k.B)
+        }
         case _ { }
     }
+}
+
+# a local made from a choice's alternative read-only (round 2f): what it reaches, recorded as roTrack's places are -
+# whether it was one
+fn (c mut Checker&) roAlt(id I64, alt typed.Expr&) Bool {
+    q := readPlace(unwrapped(alt))
+    if q is null or not c.roRef(unwrapped(alt)): return false
+    c.roFrom.Put(c.roKey(id), roOrigin(q, false))
+    return true
 }
 
 # whether a value is a read-only copy: one whose type holds writable references, copied out of a place reached
@@ -22190,6 +22206,13 @@ fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bo
         return
     }
     r := c.rootLocal(c.placeOfX(u))
+    # (round 2f: a local made from a call's result - a match's held subject, what a binding of its payload is read
+    # out of: what that call follows)
+    if r >= 0 and c.refCalls.Has(c.roKey(r)) {
+        cx := try c.refCalls.Get(c.roKey(r)) catch { error Elsewhere }
+        try c.paramsOf(cx, ks, depth + 1, bare, lent)
+        return
+    }
     k := c.bareParamAt(r) if bare else c.paramPos(r)
     if k < 0: error Elsewhere
     if not ks.Has(k): ks.Push(k)
