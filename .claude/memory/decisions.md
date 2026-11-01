@@ -2201,3 +2201,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   compiler's absent-vs-empty flags (`Catch.Braced`, `Func.Bodied`) may go back to `?&` in the refactor. QCI 3
   (function values never null) still ASKED. Queued after the rework lands (the checker's files), with migration by
   `olang fix` (null_migrate) for `null` written as an empty array.
+- QCJ ASKED 2026-11-01 (the user: "any variables can never be by value or what?"): today an `any Trait&` is two words,
+  a pointer to the instance and a table - always a reference (types differ in size), `mut any` the writable form;
+  numbers/arrays are copied into a box, struct/enum variables borrowed. QCC removes `mut`, and the rework never said
+  what replaces `mut any` - found by the question. Proposed: `any W&` shares the instance and may write it (QCC's `&`);
+  `any W` (no `&`, an error today naming `any W&`) is the value form - read-only through it, its instance its own as a
+  bare parameter's is (boxed where it is made, uncopied where nothing may change the source, copied where it may);
+  copying an `any W` copies the handle, never the instance (nothing writes through it, so unobservable). Recommended
+  yes - read-only said by a value, everywhere. In effect: `any W&` / `mut any W&`.
