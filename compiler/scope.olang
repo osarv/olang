@@ -5405,6 +5405,25 @@ fn (s mut Scoper&) ownGiven(c typed.Call&, i I64, a typed.Expr&) I64 {
     return b if i < ks.Len() and ks[i] else -1
 }
 
+# the rework's round 2e: whether parameter i of the body a call reaches is a bare one passed by pointer whose own
+# storage that body never keeps (KeptOwn): what it keeps of the argument is only what the argument reaches - its scope
+# variable's - so a value whose references live elsewhere than its storage is lent where they are, never refused as
+# split (O17: "unwidened(unpassed(x))"); one keeping its own storage still is, its copy being this block's
+fn (s mut Scoper&) bareLent(c typed.Call&, i I64) Bool {
+    if not source.NewParams { return false }
+    cb := s.bodyOf(c.Target)
+    if cb < 0 or cb >= s.sums.Len() or not s.sums[cb].Done { return false }
+    inst := match s.Bodies[cb].Of {
+        case typed.BodyOf.Fn(k): k
+        case _: -1
+    }
+    ps := s.Bodies[cb].Params
+    if inst < 0 or i >= ps.Len() { return false }
+    if not typed.BarePointer(s.P.T, s.Bodies[cb], I64(ps[i]), s.P.T.Items(s.P.T.Params(s.P.Sig(s.P.InstanceFn(inst))))) { return false }
+    ks := s.sums[cb].KeptOwn
+    return i < ks.Len() and not ks[i]
+}
+
 # whether constructor body cb may keep its parameter k itself - read whole, or its referent's own storage viewed -
 # rather than only what it reaches through it ("m = of.s": a Map walk keeps the map's state, not its handle)
 fn (s mut Scoper&) ctorKeepsOwn(cb I64, k I64) Bool {
@@ -6188,7 +6207,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             s.placeOperands(p)
             return existing(s.storOf(p))
         }
-        case typed.Expr.Promote(_, _, pr) {
+        case typed.Expr.Promote(_, pty, pr) {
             box := s.anyBox
             s.anyBox = false
             # the inference: a temporary a local is declared as, whose value is too short-lived for where it is built,
@@ -6211,7 +6230,10 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             # elements do (O25c)
             if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
                 s.fitTarget = owner
-                s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
+                # (round 2e: a temporary lent read-only - a bare parameter's, passed by pointer - is stored through by
+                # nothing, so its references need only outlive it: "unwidened(unpassed(x))")
+                through := s.storeThrough(pr.X.Type()) and not (source.NewParams and s.isRef(pty) and (s.P.T.PermOf(pty) & types.Writable) == 0)
+                s.fit(pv.T, d, through, pr.X, FitAnyCopy if box else FitValue)
                 s.fitTarget = -1
             }
             return fresh(d)
@@ -6958,7 +6980,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.build(pr.Site, s.here())
             landed[i] = true
             if v.K == ValKind.Fresh { v = existing(v.T) }
-            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
+            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
                 if s.atCall(pr.X) and not s.calleeStoresArg(c, i) {
                     # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
                     # callee's obligations then judge (O10c), as stage 0 binds it
@@ -6990,7 +7012,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v = s.val(pr.X, Term.None)
             s.build(pr.Site, s.here())
             landed[i] = true
-            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
+            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
                 s.wantPromotion(pr.X)
                 if s.report { s.splitErr(a) }
             }
@@ -7044,7 +7066,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                     # the rework's round 2c: lent by its storage, to a callee putting nothing into what it reaches
                     # (docs/scope-model.md 3.3, "not reg"): what it keeps of it lives here, where the copy does - never
                     # to a constructor, whose instance holds what it is given where C2d judges it
-                } else if s.calleeKeepsArg(c, i) and not handle {
+                } else if s.calleeKeepsArg(c, i) and not handle and not s.bareLent(c, i) {
                     s.wantPromotion(a)
                     if s.report {
                         # a part of x[i]'s copy, said at its member as E31b's (stage 0: "E31, O17")

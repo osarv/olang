@@ -2082,7 +2082,9 @@ trait method that may write its receiver is written `&Name()`.
 
 **D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
 passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error
-naming the bare form `p T`. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
+naming the bare form `p T`. A for-in walking it only reads it; a value holding references copied out of what it reaches
+is kept where it is stored into a field, an element, a payload or a global, or given a by-value parameter whose body
+writes through it or keeps it. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
 reference, an extern, an export fn or a generic's parameter (its instances differ by program).
 
 **D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so what the body keeps of
@@ -2095,6 +2097,9 @@ local nothing assigns, writes or lends writably once it is made, a reference loc
 writes through and that is read only as an argument for a parameter that cannot write it. A view of what the parameter
 reaches through its references is no copy (a struct's copy holds the same references). Stored into existing storage -
 a `&` parameter's, a global's - a bare parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy.
+Section 8 lends an argument for a bare parameter whose own storage the callee does not keep where the argument's
+references live (O17 asks nothing more of a value whose references live elsewhere than its storage), and a temporary
+lent to one - read-only, stored through by nothing - needs its references only to outlive it (O25h).
 
 **D9f (the forgotten `&`; provisional).** A write to a bare parameter's own storage - it or a part assigned - that
 nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a

@@ -1,0 +1,59 @@
+# The scoping and parameters rework (docs/rework.md section 14): a value whose references live elsewhere than its own
+# storage - a call's result read out of a bare parameter - lent to a bare parameter passed by pointer. The callee keeps
+# none of the argument's own storage (KeptOwn), only what it reaches, so it is lent where its references are (no O17),
+# and a temporary lent read-only is stored through by nothing, so its references need only outlive it (no O25h).
+# Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type expr enum {
+    Lit(n I64)
+    Wrap(x expr&)
+    Seq(xs Array<expr&>&)
+}
+
+type walker struct(k I64) {
+    k
+}
+
+fn (w walker) away(x expr?&) expr& {
+    if x is null { return x! }
+    match x {
+        case expr.Wrap(y) { return w.away(y) }
+        case _ { return x }
+    }
+}
+
+fn unpassed(x expr) expr {
+    match x {
+        case expr.Seq(xs) { if xs.Len() > 0 { return unpassed(xs[0]) } }
+        case _ { }
+    }
+    return x
+}
+
+fn unwidened(x expr) expr {
+    match x {
+        case expr.Wrap(y) { return y }
+        case _ { }
+    }
+    return x
+}
+
+fn (w walker) root(x expr) I64 {
+    match unwidened(unpassed(w.away(x))) {
+        case expr.Lit(n) { return n + w.k }
+        case _ { return -1 }
+    }
+}
+
+fn shallow(x expr) I64 {
+    match unwidened(unpassed(x)) {
+        case expr.Lit(n) { return n }
+        case _ { return -1 }
+    }
+}
+
+test walker "a call's result read out of a bare parameter, lent to another bare parameter" {
+    e := expr.Wrap(expr.Seq(expr&[expr.Lit(4)]))
+    w := walker(1)
+    assert w.root(e) == 5 and shallow(e) == -1 and shallow(expr.Wrap(expr.Lit(3))) == 3
+}
