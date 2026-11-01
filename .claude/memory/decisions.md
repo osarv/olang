@@ -2380,3 +2380,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   user: "a type declarations never declared reference markers"): `type Handler fn(e Event)` declares the type with no
   `&`; only a place holding one writes it - `h Handler&`, `h Handler?&`, `onClick fn&(e Event)` (a field, local or
   parameter). As every type declaration: `type Node struct ...` is held as `Node&`.
+- Rework round 3d (d860e96, back to mut) - its two questions DECIDED by me 2026-11-01 (theirs to review): (1) D9a
+  (a run-time array by value an error) and D9c (the 128-byte cap) are lifted for every parameter, as the user's QCE
+  decision of 2026-10-31 said: a bare parameter is a value, so a by-value argument is a copy by meaning, made at the
+  call and elided where nothing could tell (D9h's facts) - the same copy rule as a value owning parts (3d's
+  `check.valueArg`); built with handles as values (one copy machinery); G29's per-length instances stay only where a
+  body decides on the length; (2) `Vec<String>.Join` comes with handles as values (Vec a value). The agent's eight
+  details (docs/rework.md 18.7) stand; 7 (D9h's quiet reading limited by a program-wide check for writable globals) for
+  the bulk review.

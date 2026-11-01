@@ -718,3 +718,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
 - 2026-11-01 CET (weekly 0.46 at 16:38 CET, reset Sat 2026-11-07 05:00 CET, stop 0.92): order kept so the rework lands
   first (3d revert, handles as values, round 4, QCI 3/4), the compiler/ refactor last - on Opus (the user took back
   Sonnet the same evening), its validation (bulk review, soundness) on Opus at high.
+- 2026-11-01 CET: rework round 3d merged (d860e96 + memory; full verify passed on its tip): OLANG_PARAMS=new and its
+  machinery removed (compiler/ -5,400 lines), QCE and D9h on the default path, bench within 14 instructions of master,
+  four default-path bugs fixed (R1a's re-attempt lost signature errors - r23reattempt; D9h's quiet reading through
+  closures and mut globals; fixed-row arrays widened as run-time rows segfaulted - t7aoverrows). Next: handles as
+  values (Vec, Map, Set, Deque, Heap, StringBuilder; List a handle), D9a/D9c lifted, Vec<String>.Join; then round 4.
