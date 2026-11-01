@@ -27347,3 +27347,72 @@ found one more hole of the same family, older than this round: a conditional or 
 reference and `a.next!` read out of a bare parameter took the writable type, because `roRef` did not look through the
 `Seq` that `x!` reads in - so writing through the choice wrote the caller's node. Fixed, with the match's values made to
 meet read-only (under the switches) where they are one reference type but for permission.
+
+## The rework, round 2d: value results handed over, a reference result says shared, behind the switches (2026-11-01)
+
+Round 2c left compiler/'s migrated root at 326 distinct errors, most of one shape: a reader handing back a view of a
+`&` parameter that callers give bare data - `fn unPassed(x typed.Expr&) typed.Expr&x`, kept `&` because handing `x` back
+writably used it. The user's rule of 2026-10-31 (QCC) settled what such a function should say: every `&` a signature
+shows is writable and shared, and read-only is said by a value. Round 2d built that, behind `OLANG_PARAMS=new
+OLANG_SCOPES=infer` as rounds 2a-2c (docs/rework.md section 13).
+
+**D9g.** A result written `T&` handing back what is read-only at its top - a bare parameter's reach, constant data, an
+immutable global, or a by-value parameter's own storage - is an error naming the value result `T`, with a note at the
+result that `param_migrate` reads to drop the `&`. Two exceptions keep round 2c's behaviour, for the user's review: a
+`T?&` result follows its argument (no value form says "none" without an error), and a view through a field read-only
+by inference narrows the result read-only for every caller.
+
+**D9h, the handover.** A value result that is a view of an argument would be copied at every return (T7b), which
+would make every reader that used to hand back a borrow allocate. So a function whose array result is a view of its
+arguments hands the view back as it is, and its callers copy it where they keep it - but read it where it stands when
+the read ends within the statement and nothing the statement does can change what it views. One walk (`typed.ViewWalk`)
+gives the facts to the checker (which records them per instance and checks again where they grow) and to lowering; a
+function value, an `any`'s slot and an operator's adapter go through a copying wrapper (`FnKey.Copied`), since their
+callers cannot know; the evaluator lowers without a plan and copies every return, so baked globals and decided asserts
+agree with the run time by construction. Measured on bench (the rows below): the default path unchanged within ±20
+instructions; nbody hands 6 returns back, reads 2 in place and copies 14 (std's internals), sum and vec 4/0/6, every
+other row none - the handover matters for the compiler's readers, not for bench's loops.
+
+**Following, for values that hold references.** A struct or enum value result is a few words, so the handover is not
+needed for it; what was needed is its permission. `fn innermost(s Shape) Shape` handing back a copy of `s`, or of a
+part of it, is a copy of the caller's value - its references are the caller's - so its result follows `s`: read-only at
+a call given read-only data, as writable as the caller's own otherwise (`check.followBare`, recorded in round 2c's
+`load.FollowResults`, read by `roCallCopy` and `followedResult`). An instance built from what bare parameters reach
+follows them too, but never a parameter's own storage - `fn mk(t String) holder { return holder(t) }` would hand back
+the function's own copy, so it stays refused (`tests/params/fail/holdsview.olang`). A `&` parameter only handed back
+so is no use (D9d names `p T`), and such a function is no function value. Two holes turned up in the probes and were
+fixed before anything relied on them: `followedResult` read a value argument as read-only only where it was a read-only
+copy as written, so `bump(innermost(innermost(s)))` with `s` bare compiled and wrote the caller's cell (the inner
+result is lent to the outer call by a conversion and a temporary - `roBelow` reads through both); and T25c at an `x!`
+read through a bare parameter, or at a value built from one, named no parameter, so the migration could not act on it
+(`noteRo` reads through `x!` and names a parameter read-only at its top, `noteRoX` the arguments a value was built
+from).
+
+**Also:** a bare enum holding references is passed by pointer as a struct is (its copy's references would otherwise
+live where the copy does not); a type variable binds a bare parameter's value type, not its pointer (`T.Name` had said
+`P&`, which broke std/json's `Str` when enums went by pointer); O26 at a call notes the bare parameter it rests on, and
+`param_migrate` follows the note instead of rewriting every bare argument of the call (which had made numbers `&`);
+`KeptPerm` is off under the switches, the scope pass's stand-in being that a result the checker narrowed read-only is
+no writable built result; std/list's run slices its chunk directly (listwalk under the switches 819,312 -> 512,307
+instructions, below the default path's 512,589).
+
+**Enum payloads, by type as structs.** Most of what was left was one shape: a case built from what a bare parameter
+reaches - `ast.TypeRef.Named(sp, path, targs)` from a bare `ast.Expr`'s payload - handed to a `&` parameter. Round 2c's
+per-type read-only fields covered structs; a case's payload fields are now keyed the same way (one key space, a case's
+past the struct fields' indices), asked read-only where a read-only reference is stored into one and made writable
+where anything writes through one. A case's argument is fitted with its payload field as the field being stored into -
+only the fit, so a store the argument's own expression makes is not taken for that field's (the struct constructor's
+version sets it for the whole initializer, a looser reading recorded for the bulk review).
+
+**A declared I32 not laid out yet.** The migrated scope pass's own `Term` came out a reference holder: `HoldsRefs`
+answers "may hold one" for a declared type whose body is not laid out, and a function's signature is made before every
+body is - so `Term`, whose `Block` case holds a `typed.BlockId`, went by pointer, and storing one was an obligation, a
+split value or a kept view: 81 errors on one migrated tree. The parts are laid out before the question is asked.
+
+**What the migration needed to be told.** `param_migrate` acts on a note naming a bare parameter; several refusals
+named none - an `x!` read through one, a value built from one's reach, one read-only only at its top, a callee keeping
+an argument through a conversion, an O10c whose outliving argument is one (by pointer, or its copy on entry). Each says
+it now. And one refusal was wrong under the switch: a conditional of constant text pushed onto a `Vec<String&>` was a
+choice of places lent writably (E28, E31b), because every written `&` is writable there - but an instance's type
+variable's reference parameter holds what it is given as given, as the checker had already said for every other
+argument (`argFollows`).

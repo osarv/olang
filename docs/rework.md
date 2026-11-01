@@ -1561,6 +1561,22 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
   temporary, `Promote`) came out writable - `roBelow` reads through the conversion and the temporary; and the T25c at a
   `x!` read through a bare parameter named no parameter (`noteRo` reads through `unwrapped`), so the migration could not
   make it `&`.
+- **An enum case's payload reference fields read-only by inference**, as a struct's fields are since round 2c
+  (`check.caseFieldKey`, `fieldKey`, `keyFieldType`; a case's argument fitted with its payload field as the field being
+  stored into, `caseArg`; `askTypeFields` and `ctorSinks` read cases too). A case built from what a bare parameter
+  reaches - `ast.TypeRef.Named(sp, path, targs)` from a bare `ast.Expr`'s parts - is then a writable value whose payload
+  is read-only, where it had been refused (T25c) unless the parameter was made `&`. One key space: a struct's field
+  index, or `1 << 40` past it for a case's (tag, field).
+- **T25c's notes name the bare parameter** in three more places the migration needed: a value built from one's reach
+  (`noteRoX`, through the arguments a constructor or a followed call is given), one read-only at its top only (`noteRo`
+  by `bareLocals` - a bare array whose element level is read-only too), and an argument a callee keeps
+  (`bareArgLocal`, through conversions and temporaries).
+- **An enum is passed by pointer only where it holds a reference once every type it holds is laid out**
+  (`generic.holdsLaidOut`). `HoldsRefs` takes a declared type whose body is not laid out yet for one that may hold a
+  reference; signatures are made before every body is laid out, so the scope pass's `Term` - whose `Block` case holds a
+  `typed.BlockId`, a declared `I32` - was passed by pointer as a reference holder, and every place a `Term` was stored
+  became an obligation (O10c), a split value lent (O17) or a kept view (O27): 81 of the migrated compiler's errors on
+  one tree, 221 -> 166.
 - **T25c: a result the checker narrowed read-only is no writable built result** (`scope.readOnlyResult`), the scope
   pass's stand-in for KeptPerm under the switches: a `T?&` result following its argument (13.2, 1), returned from
   existing storage, is judged as borrowed - what KeptPerm had said - rather than refused as a writable built result
@@ -1606,3 +1622,27 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
    (round 2b's NarrowResult) or refused: what a caller gets is as writable as what it gave, which is QCC's reading of a
    value result (the caller's own). The cost is that such a function is no function value; a written "read-only below
    the top" result type would make it one, which the language does not have (open point 3).
+
+### 13.3 Found and fixed on the way (all reachable only under the switches)
+
+- **A followed result given to another followed call came out writable**: `followedResult` read a value argument as
+  read-only only where it was a read-only copy as written, and the inner call's result reaches the outer one through a
+  conversion and a temporary - `bump(innermost(innermost(s)))` with `s` bare compiled and wrote the caller's cell
+  (`tests/params/fail/followbare.olang`). `roBelow` reads through both.
+- **A plain enum taken for a reference holder**: `HoldsRefs` answers "may hold one" for a declared type not laid out
+  yet, and signatures are made before bodies are; the scope pass's own `Term` (a `Block(b typed.BlockId)` case) went by
+  pointer, and storing one made an obligation (`holdsLaidOut`, 13.1).
+- **T25c and O10c named no parameter** where the migration needed one: an `x!` read through a bare parameter, a value
+  built from one's reach, one read-only at its top only, an argument a callee keeps through a conversion, an argument
+  that must outlive another (O10c), a by-pointer parameter or its copy on entry (`noteRoX`, `bareArgLocal`,
+  `scope.noteBareArg`).
+- **A conditional of constant text pushed onto a `Vec<String&>`** was E28 and E31b (a choice of places lent writably):
+  under the switch every written `&` is writable, so a `Vec<String&>`'s `Push(x T)` parameter looked writable, though
+  an instance's type variable's reference parameter holds what it is given as given (`argFollows`, round 2b). Both
+  passes skip it there now (`check`, `scope.tvParam`; `tests/params/choices.olang`).
+
+### 13.4 Today's path
+
+Unchanged but for std/list's `runIn` (a run sliced directly - listwalk 512,589 -> 509,867 instructions) and the case
+arguments' fit, restructured with the same steps (`caseArg`): bench's other rows within ±20 instructions of 3e0e39a,
+outputs identical. Every new rule is behind `source.NewParams`.
