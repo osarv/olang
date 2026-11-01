@@ -77,7 +77,43 @@ test apply "copies a view handed back through a function value and through an an
     assert l == "tag" and w.Label() == "Tag"
 }
 
+# a type whose Call is a function handing back a view, as a function value (E31): its adapter copies what it gives
+type cutter struct(n I64) {
+    n
+}
+
+fn (k cutter) Call(t String) String { return t[k.n:] }
+
+fn cutWith(f fn(t String) String, t String) String { return f(t) }
+
+# a guaranteed tail call of a function handing back a view of its own argument: handed back as it is too
+fn skipSpaces(t String, i I64) String {
+    if i < t.Len() and t[i] == ' ': become skipSpaces(t, i + 1)
+    return t[i:]
+}
+
+# ... and one viewing new text, which no caller can know: copied at every call (ViewOther)
+fn spacedOut(t String, i I64) String { become skipSpaces($" " $t, i) }
+
+test cutWith "copies the view an adapter's Call hands back" {
+    t := $"abcdef"
+    r := cutWith(cutter(2), t)
+    t[3] = 'D'
+    assert r == "cdef"
+}
+
+test skipSpaces "hands a tail call's view back, and copies one of new text" {
+    t := $"   ok"
+    k := skipSpaces(t, 0)
+    t[3] = 'O'
+    assert k == "ok" and skipSpaces(t, 0) == "Ok"
+    j := spacedOut(t[2:], 0)
+    t[4] = 'K'
+    assert j == "Ok" and spacedOut(t[2:], 0) == "OK"
+}
+
 # the evaluator copies every returned array value: a baked global and a decided assert agree with the run time
 Twice String = twice("((ok))")
 assert Twice == "ok"
 assert pick("ab", "cd", 1) == "d"
+assert skipSpaces("  hi", 0) == "hi" and spacedOut("ab", 0) == "ab"
