@@ -697,3 +697,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   errors). FOR THE BULK REVIEW: holdsPart/admitsAt asymmetry (16.2 item 8), the Array<R&> -> Array<R> fit, part stores.
   Next: round 3b - the value-result handover (views read in place), json/http by value and verify-params widened,
   list's First (FRO across two fields naming one chunk), handles as values, compiler/ to zero + self-build + numbers.
+- 2026-11-01 CET: rework round 3b merged (768c646, fast-forward; verify passed but three goldens, recaptured after;
+  verify-params 70/70 under the switches; default-path bench IR identical): D9h views kept in place of copies (Split,
+  Lines, Iter().Fold copy nothing - text -20.6%, sum -76% under the switches), json/http/list under the switches, T25d
+  constant text written through closed (a hole found). compiler/ under the switches: 64 root errors (47 T25c tree
+  readers, 6 E12 value readers into `Array<String&>&` parameters, 10 scope placement, 3 tool rows). Next, round 3c:
+  compiler/ to zero (tree readers as values or following their argument's permission, nested-call permission link,
+  built `T&` results to values, the tool's value-form rewrite), the self-build under the switches with its numbers;
+  then handles as values; then 2.10 partial copies; then round 4 (the flip).

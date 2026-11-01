@@ -2304,3 +2304,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   accepted only under the switches, until (1) lands, and must be gone before the flip (bench measured under the
   switches). The agent's eight details (docs/rework.md 16.2) stand; 8 (owned parts not counted in `admitsAt`) is for
   the bulk review.
+- Rework round 3b (768c646) - its four questions DECIDED by me 2026-11-01 (user absent; theirs to review): (1) every
+  built result returned as `T&` (new storage) becomes a value result, as `ToString` did - QCC's rule that read-only
+  and new storage are said by a value; the handover (D9h) keeps it free; param_migrate rewrites them; (2) the order:
+  compiler/ to zero errors under the switches first (it blocks the self-build and the flip), then handles as values,
+  then item 2.10's partial copies; (3) handles as values confirmed as docs/rework.md 16.6 item 4 has it - `Clone()`
+  leaves value types, List stays a handle with Clone; (4) a result's link to its argument's permission through a nested
+  call is fixed in the checker, not by hand forms (list's `Last` back to its plain form once it is). The agent's nine
+  details (docs/rework.md 17.3) stand; 2 (a constructor's kept instance copying its fresh parts again) is item 2.10's.
