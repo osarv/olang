@@ -7844,7 +7844,11 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
         t := beta[v]
         if not t.Runs() { continue }
         n := try s.agreeStep(bt, bx, t, ex) catch {
-            s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
+            rec := s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
+            # (round 2f: a bare parameter given whole is its own storage, the frame's - one taken "&" is its caller's)
+            for a in c.Args {
+                if s.bareRead(a) >= 0: s.noteBareArg(rec, a)
+            }
             return false
         }
         bt, bx = n.T, n.Exact

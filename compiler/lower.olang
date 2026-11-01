@@ -178,6 +178,7 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
         case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
         case mir.FnKey.Copied(body) { return lw.copiedFn(body) }
+        case mir.FnKey.ByValue(body, ty) { return lw.byValueFn(body, ty) }
         case mir.FnKey.Init(m) { return lw.initFn(m) }
         case mir.FnKey.AnyRender(ti, top) { return lw.anyRender(ti, top) }
     }
@@ -3229,7 +3230,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeAs(body, ty), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }
@@ -3969,6 +3970,73 @@ fn (ln mut lowering&) viewCopied(body typed.BodyId, v mir.Operand, res types.Typ
 # views of what it is given (mir.FnKey.Copied)
 fn (lw mut Lowerer&) CodeOf(body typed.BodyId) mir.FnKey {
     return mir.FnKey.Copied(body) if lw.ViewsOf(body) > 0 else mir.FnKey.Body(body)
+}
+
+# the code a function value of type ty made of body calls: CodeOf's, or a by-value wrapper where ty passes by value
+# what the body takes bare by pointer (bulk review 5, F5)
+fn (lw mut Lowerer&) CodeAs(body typed.BodyId, ty types.TypeId) mir.FnKey {
+    if source.NewParams and not lw.P.T.Same(ty, lw.Bodies[I64(body)].Ty) and lw.P.T.KindOf(ty) == types.Kind.Func: return mir.FnKey.ByValue(body, ty)
+    return lw.CodeOf(body)
+}
+
+# a by-value wrapper (mir.FnKey.ByValue): ty's parameters, each the body takes by pointer passed as its address, the
+# rest passed on; the body's scopes the wrapper's own or its frame's; its result (copied where the body hands back views)
+fn (lw mut Lowerer&) byValueFn(body typed.BodyId, ty types.TypeId) mir.Fn {
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.ByValue(body, ty), ty))
+    ln.byValueBody(body, ty)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+fn (ln mut lowering&) byValueBody(body typed.BodyId, ty types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    bty := ln.L.Bodies[I64(body)].Ty
+    for p in t.Items(t.Params(ty)) { ln.F.AddParam(source.NameId(0), sp, p) }
+    vs := t.ScopeVarsOf(ty)
+    for v in vs { ln.F.Vars.Push(mir.VarKind.Result if v < 0 else mir.VarKind.Param(v)) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+    bps := t.Items(t.Params(bty))
+    args := Array<mir.Operand>(ln.F.Params.Len())
+    for i in range ln.F.Params.Len() {
+        p := ln.F.Params[i]
+        args[i] = mir.Operand.Copy(mir.L(p))
+        if i < bps.Len() and t.IsRef(bps[i]) and not t.IsRef(t.Items(t.Params(ty))[i]) {
+            args[i] = ln.into(bps[i], mir.Rvalue.Ref(mir.L(p), bps[i]), sp)
+        }
+    }
+    bvs := t.ScopeVarsOf(bty)
+    passed := Array<mir.ScopeRef>(bvs.Len())
+    for k in range bvs.Len() {
+        passed[k] = mir.ScopeRef.Scope(frame)
+        for j in range vs.Len() {
+            if vs[j] == bvs[k]: passed[k] = mir.ScopeRef.Var(j)
+        }
+    }
+    res := t.Result(ty)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(res, sp) }
+    code := mir.NoLocal
+    eb := mir.NoBlock
+    if t.Items(t.Errors(bty)).Len() > 0 {
+        code = ln.temp(mir.I32T, sp)
+        eb = ln.F.NewBlock()
+    }
+    k := ln.F.AddCall(mir.Call(mir.Callee.Fn(ln.L.CodeOf(body), bty), ln.F.Args(args), ln.F.ScopeRefs(passed)
+                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
+    ln.end(mir.Term.Call(sp, k))
+    if eb != mir.NoBlock {
+        ln.start(eb)
+        ln.leave(0)
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+    }
+    ln.start(ok)
+    ln.epilogue(mir.Operand.Copy(mir.L(dest)) if dest != mir.NoLocal else mir.Operand.None)
 }
 
 # a function handing back views, called as a function value or through an "any" (mir.FnKey.Copied): its parameters

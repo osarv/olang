@@ -55,6 +55,9 @@ type FnKey enum {
     # the rework's round 2d (D9h): a function handing back views of what it is given, as a function value or a slot of an
     # "any"'s table: called, its result copied into its result scope - what a caller that cannot know it would not copy
     Copied(body typed.BodyId)
+    # bulk review 5 (F5): a function taking a bare parameter by pointer, as a value of a function type passing that
+    # parameter by value (a generic's "fn(x T) T" with T bound to the value type): the value's address passed on
+    ByValue(body typed.BodyId, ty types.TypeId)
     Helper(kind HelperKind, t types.TypeId)
     Init(module I64)
     # $ of an "any"'s instance (T33), a table's rendering slot: as a Render helper, fn(x Stored&, depth) with its builder -
@@ -2182,6 +2185,7 @@ fn (w mut dumper&) key(k FnKey) String {
         case FnKey.Body(b): "B" $b
         case FnKey.Adapter(b): "adapter B" $b
         case FnKey.Copied(b): "copied B" $b
+        case FnKey.ByValue(b, ty): "by value B" $b " " $w.T.Canon(ty)
         case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
         case FnKey.Init(m): "init " $m
         case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")

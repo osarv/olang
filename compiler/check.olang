@@ -7320,6 +7320,11 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     # a function value where one of looser permissions is wanted (T22): a read-only parameter for a writable one, a
     # writable result for a read-only one
     if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
+    # (bulk review 5, F5: a named function taking a bare parameter by pointer, where a function type passes it by value
+    # - a generic's "fn(x T) T" with T the value type: a value of that type, lowering's by-value wrapper calling it)
+    if source.NewParams and hk == types.Kind.Func and wk == types.Kind.Func and namedFn(x) and c.funcFits(c.byValueType(have, want), want, true) and x == typed.Expr.Fn {
+        return typed.Expr.Fn(sp, want, x.f)
+    }
     # an instance whose type declares Call, where a function value is wanted (E31): an adapter holding it
     if wk == types.Kind.Func and hk != types.Kind.Func and have != types.NullT {
         a := c.adapter(sp, x, want)
@@ -9409,6 +9414,25 @@ fn namedFn(x typed.Expr&) Bool {
         }
         case _: false
     }
+}
+
+# a function type h with each parameter it takes as a read-only reference never null where w takes that referent by value
+# read as w's - what a bare parameter passed by pointer is as a value (F5); h itself where none differs so
+fn (c mut Checker&) byValueType(h types.TypeId, w types.TypeId) types.TypeId {
+    hp := c.P.T.Items(c.P.T.Params(h))
+    wp := c.P.T.Items(c.P.T.Params(w))
+    if hp.Len() != wp.Len(): return h
+    out := Array<types.TypeId>(hp.Len())
+    changed := false
+    for i in range hp.Len() {
+        out[i] = hp[i]
+        if not c.isRef(hp[i]) or c.isRef(wp[i]) or c.writable(hp[i]) or c.P.T.IsNullable(hp[i]): continue
+        if not c.P.T.SameButPerm(c.deref(hp[i]), wp[i]): continue
+        out[i] = wp[i]
+        changed = true
+    }
+    if not changed: return h
+    return c.P.T.Func(c.P.T.List(out), c.P.T.Result(h), c.P.T.Errors(h), c.P.T.ScopesOf(h))
 }
 
 fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {

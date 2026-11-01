@@ -439,9 +439,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `:=` of a plain bare parameter a value copy; open point 5 (a function type's `&` result may hand back what its `&`
   parameters reach); D9d's three misses (a walk is no use, a handle copied out and stored or kept is), split values and
   read-only temporaries lent to bare parameters (O17, O25h, section-8 relaxations) - compiler/'s migrated root 86 -> 66
-  errors, std 40 of 40. Left before the flip: compiler/'s last 66 (nullable parameters widened, fields' inner levels,
-  docs/rework.md 14.6) and its self-build, 2.10's caller-side copy, the field loop; round 3 (value arrays in values,
-  `Map<String, V>` keys) not begun.
+  errors, std 40 of 40; **round 2f** (docs/rework.md section 15): bulk review 5's fixes - read-only is the level
+  reached (an element, a walk's element, what an instance hands back following a read-only argument, an immutable
+  global's reach; a copy on entry keeps its levels below its top read-only), a bare parameter kept wherever the result
+  outlives its argument's storage and can name storage of its type (Push, Put, a local, a choice, a captured slice), an
+  argument the same call may write another way copied for the call (2.10: a `&` argument reaching its type, a mutable
+  global, a function value or `any` beside it), an `any` of a bare parameter a copy, the evaluator copying every bare
+  parameter on entry (mine, the user absent: "where unsure, kept, so the caller copies", the coordinator's direction);
+  D9g's note naming the parameter `&` where a caller writes through the result (a value result had made std/flags'
+  callers write a copy); G30's decided `if` that leaves no longer checks what follows it in that instance (an E16 at
+  `ts[0]` after `if ts.Len() == 0 { return }`, the default path too). Left before the flip: F5 (a function with a bare
+  parameter as a `fn(x T) T` value needs a by-value wrapper), compiler/'s migration and self-build (docs/rework.md
+  15.6), the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
   The entry below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
