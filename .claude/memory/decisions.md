@@ -2272,3 +2272,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `p T&` (shared, may write: no copy), `const T*` a bare parameter (no copy), `T` by value C's own copy. ASKED for the
   one case left (read-only data - a bare parameter, constant data - passed to a non-const `T*`, common with old C APIs
   that omit const): (1) an error naming the written copy, as for an olang `&` parameter - lean; (2) a hidden copy.
+- Copies, one rule DECIDED 2026-11-01 (the user: "two problems in one ... we don't want a function to modify a value it
+  isn't allowed to by a PTR it got and we don't want the value behind to change accidentally while the function thinks
+  it can't change. For non-const ... we must copy"): a bare value is passed by pointer and copied exactly where one of
+  two guarantees cannot be proved, only the parts that may change, listed by -memory. (A) the callee does not write it:
+  an olang body is checked (never a copy); C's `const T*` trusted; a non-const `T*` given `&` shares (no copy), given
+  bare data copies. (B) nothing else changes it during the call: seen code (bodies, a lambda at the call) analysed;
+  unseen code (function values, `any`, a spawn's join block) copies; a C call copies only if some export fn may write
+  that storage type (C may call back); another thread outside a join is the program's own race (-race), no copy.
+  Answers the read-only-to-non-const question: copy.
