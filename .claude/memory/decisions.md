@@ -2295,3 +2295,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   options (a `&` result following its argument's permission would hide read-only behind `&`, against "every `&` a
   signature shows is writable"). Needs round 3's value arrays inside values (`Vec<String>` elements by value), so round
   3 runs before compiler/ is taken to zero.
+- Rework round 3 (first part, fc15caa) - its three questions DECIDED by me 2026-11-01 (user absent; theirs to review):
+  (1) the value-result handover comes next, before more callers move to copies: section 8 reads a local holding only
+  views of sources nothing changes as the source's own storage, so Split pieces, walk elements and readers' results are
+  read in place, and a copy is made only where one is kept or written (D9h generalized - the two-guarantee rule);
+  (2) the implicit fit `Array<R&>` into `Array<R>` stays - it is QCE's "a store copies into value storage", made where
+  someone wrote the store, lent as is to a bare parameter; (3) `Iter()`/`Lines()` copying their array or text is
+  accepted only under the switches, until (1) lands, and must be gone before the flip (bench measured under the
+  switches). The agent's eight details (docs/rework.md 16.2) stand; 8 (owned parts not counted in `admitsAt`) is for
+  the bulk review.

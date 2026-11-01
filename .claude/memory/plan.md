@@ -689,3 +689,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   element, readers and Split to values with absence as errors, QCE's value arrays inside values and Map<String, V>,
   handles as values (Vec, Map, Set, Deque, Heap, StringBuilder; List a handle), Clone() off value types, then compiler/
   to zero and the self-build under the switches.
+- 2026-11-01 CET: rework round 3 first part merged (fc15caa, fast-forward; default-path verify passed on c523984,
+  goldens recaptured, later commits switch-only, bench IR byte-identical): QCE's value arrays inside values under the
+  switches (typed.MakeKind.Copy, mir HelperKind.Copy; Map<String, V> owns its keys through MapEntry's constructor),
+  readers in value form through param_migrate's hand phase (Split, Lines, Dir, ReadDir, ArrayIter, Join), an O25g
+  use-after-free found by flags fixed (holdsPart). verify-params 40/40 (json, http, list sit outside its grep - 6/3/1
+  errors). FOR THE BULK REVIEW: holdsPart/admitsAt asymmetry (16.2 item 8), the Array<R&> -> Array<R> fit, part stores.
+  Next: round 3b - the value-result handover (views read in place), json/http by value and verify-params widened,
+  list's First (FRO across two fields naming one chunk), handles as values, compiler/ to zero + self-build + numbers.
