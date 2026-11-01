@@ -7353,7 +7353,14 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.build(pr.Site, s.here())
             landed[i] = true
             if v.K == ValKind.Fresh { v = existing(v.T) }
-            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
+            # (the rework's round 3c: a value result lent to a callee keeping it - "sub.Push(tail(r))" - is built where
+            # the callee keeps it, the scope its obligations hold it to outlive, as "x := tail(r); sub.Push(x)" lands it:
+            # a value kept longer is built directly where it is kept)
+            kt := s.keptAt(c, i, owner, beta) if source.InferScopes and not ctorCallee and not s.atCall(pr.X) else Term.None
+            if kt.Runs() {
+                s.build(pr.Site, kt)
+                v = existing(kt)
+            } else if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and not s.bareLent(c, i) {
                 if s.atCall(pr.X) and not s.calleeStoresArg(c, i) {
                     # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
                     # callee's obligations then judge (O10c), as stage 0 binds it
@@ -7928,6 +7935,14 @@ fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
 # None where none does. A callee of the component being judged gives what the rounds so far found: its obligations only
 # grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
 # point before anything is said (7.2)
+# where a callee keeping argument i holds it to live (keptAt, round 3c): the term its obligations hold that argument's
+# scope variable to outlive, bound by an argument before it - Term.None where the callee keeps nothing of it or none is
+# known here
+fn (s mut Scoper&) keptAt(c typed.Call&, i I64, owner Array<I64>&, beta Array<Term>&) Term {
+    if owner[i] < 0 or not s.calleeKeepsArg(c, i): return Term.None
+    return s.requiredBy(s.bodyOf(c.Target), owner[i], beta)
+}
+
 fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
     if callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging) { return Term.None }
     for r in s.sums[callee].Rels {

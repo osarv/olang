@@ -217,7 +217,8 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         return dir
     }
     f.say("olang: fetching " $key " into " $cache)
-    branch := "--branch=" $ref if at < repoAt.Len() else "--quiet"
+    # (text of its own on both paths: an element of a list of writable text)
+    branch := "--branch=" $ref if at < repoAt.Len() else $"--quiet"
     try os.RemoveAll(tmp) catch os.Error { }
     h := ""
     if git(String&["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }

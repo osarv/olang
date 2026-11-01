@@ -21,7 +21,11 @@
 # hand   (round 3) declarations written by hand in the rework's form, from a tree beside it (--hand DIR, DIR/PATH for
 #        the file at PATH), each replacing the one of its name - after the text phase, before the driven one.
 #
-#     $OLANG build tools/param_migrate.olang && build/tools_param_migrate [--check] [--text] [--hand DIR] FILE|DIR...
+# --root FILE (several allowed) has the driven rounds check only those programs, every file given reached from them,
+# rather than each file on its own.
+#
+#     $OLANG build tools/param_migrate.olang && build/tools_param_migrate [--check] [--text] [--hand DIR] [--root FILE]
+#         FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -611,6 +615,10 @@ fn (w mut walker&) typeEnd(i I64) I64 {
 # the parameters made "&" again, by file, line and name: never made bare after - a cycle of the two edits ends there
 Pinned mut Map<String&, Bool> = Map<String&, Bool>()
 Verbose mut Bool = false
+# --root FILE (round 3c): the driven rounds compile only these - a program whose root reaches every file given (the
+# compiler's own olang.olang), checked once a round rather than once per file - each stopped after the checker and the
+# scope pass (OLANG_TIMES=scope), so a round is one check of the program
+Roots mut Vec<String&> = Vec<String&>()
 
 fn pinKey(path String&, src String&, i I64, w mut walker&) String {
     line I64 = 1
@@ -691,6 +699,8 @@ fn (w mut walker&) valueResult(i I64) Bool {
     }
     last := j - 1
     if last < i: return false
+    # (round 3c: a "mut" the text phase kept at the result's top goes with its "&" - a value is no "mut" one)
+    if w.kind(i) == token.Tok.Mut and last > i: w.edits.Push(edit(I64(w.ts[i].Start), I64(w.ts[i + 1].Start), ""))
     named := w.kind(last) == token.Tok.Iden or w.kind(last) == token.Tok.Return
     if named and w.kind(last - 1) == token.Tok.Amp and w.ts[last - 1].End == w.ts[last].Start and last - 1 > i {
         w.edits.Push(edit(I64(w.ts[last - 1].Start), I64(w.ts[last].End), ""))
@@ -714,6 +724,7 @@ test valued "makes a reference result handing back a bare parameter's reach a va
     assert valued("fn (t String) Trim() String&t {\n}\n", "String&t") == "fn (t String) Trim() String {\n}\n"
     assert valued("fn f(a T) Array<String&>& ? E {\n}\n", "Array") == "fn f(a T) Array<String&> ? E {\n}\n"
     assert valued("fn f(a T) Node?& {\n}\n", "Node") == ""
+    assert valued("fn (v V<T>) ToArray() mut Array<T>& {\n}\n", "mut") == "fn (v V<T>) ToArray() Array<T> {\n}\n"
 }
 
 # the requests made of each file, applied: how many edits, the ones that found nothing listed for a person
@@ -796,12 +807,26 @@ fn freshPass(olang String&, files Array<String&>&, jobs I64, allowed Vec<String&
     return total
 }
 
+# what checking each root prints, one root to a work directory at a time
+fn rootOutputs(olang String&, work Array<String&>&) Array<String&> {
+    outs Vec<String&>
+    for r in Roots {
+        out := try srcmask.Capture(String&["env", "OLANG_TIMES=scope", olang, "compile", r], work[0], 3600000) catch os.Error {
+            srcmask.SayErr("could not run " $olang)
+            os.Exit(1)
+            unreachable
+        } catch default ""
+        outs.Push($out)
+    }
+    return outs.ToArray()
+}
+
 # the driven rounds, until one makes no edit: how many edits, what was left for a person in left
 fn rounds(olang String&, files Array<String&>&, work Array<String&>&, allowed Vec<String&>&, left mut Vec<String&>&
           label String&) I64 ? os.Error {
     total I64 = 0
     for round in range 1, 60 {
-        outputs := diagedit.CompileAll(olang, files, work, true)
+        outputs := rootOutputs(olang, work) if Roots.Len() > 0 else diagedit.CompileAll(olang, files, work, true)
         reqs Vec<diagedit.Request>
         errors I64 = 0
         for o in outputs {
@@ -846,6 +871,11 @@ fn main() ? {
         }
         if a == "--olang" and i < args.Len() {
             olang = $args[i]
+            i++
+            continue
+        }
+        if a == "--root" and i < args.Len() {
+            Roots.Push(diagedit.RealPathOf(args[i]))
             i++
             continue
         }

@@ -252,6 +252,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     entryCopies I64 = 0     # the rework's round 2: bare parameters given a copy on entry (2.10), counted for -memory
     EntryCopied Vec<String&> # ... each, "FILE:LINE:COL: copied on entry: NAME", once per parameter, for -memory
     copiedSaid Map<pair.Pair<I64, I64>, Bool>
+    madeSaid Map<I64, Bool>  # round 3c: the functions D9g's made-storage error was said of in this attempt (settleMade)
     copiesGrew Bool = false # ... a body found writing one passed by pointer: the program checked again, it copied
     viewHeld Map<I64, I64>  # round 3b: the locals of the body just checked holding views of its arguments (settleViews)
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
@@ -668,6 +669,7 @@ fn (c mut Checker&) CheckProgram() {
         c.entryCopies = 0
         c.EntryCopied = Vec<String&>()
         c.copiedSaid = Map<pair.Pair<I64, I64>, Bool>()
+        c.madeSaid = Map<I64, Bool>()
         c.fieldRo = c.roFieldsNow()
         c.attempt()
         if c.fieldsMoved() { c.copiesGrew = true }
@@ -3349,6 +3351,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     root := c.rootStmts(body)
     c.cur().Root = root
     c.settleViews()
+    if source.NewParams and not dropped: c.settleMade(f, fd)
     if dropped and fd.Bodied {
     } else if nr {
         if not c.fr().Gapped and not leavesBlock(root) { c.err(c.nameSpan(fd), msgs.NoreturnFallsOff()) }
@@ -3769,6 +3772,26 @@ fn (c mut Checker&) levelsAt(want types.TypeId) Array<levelSite> {
 # target that reads as want is recorded read-only (load.RoLevels), and the program checked again with it so - where a
 # fresh container holds read-only references, its level is read-only (2.8). Whether one was new
 fn (c mut Checker&) levelRo(want types.TypeId) Bool { return c.levelsRo(c.levelsAt(want)) }
+
+# the written levels of levelOn read-only below the top of h where w's are writable (permFit, round 3c), recorded so:
+# whether one was new
+fn (c mut Checker&) innerLevelsRo(h types.TypeId, w types.TypeId, depth I64) Bool {
+    if depth > 8 or c.P.T.Same(h, w): return false
+    if c.isRef(h) and c.isRef(w) {
+        got := depth > 0 and c.writable(w) and not c.writable(h) and c.levelRo(w)
+        return c.innerLevelsRo(c.P.T.Referent(h), c.P.T.Referent(w), depth + 1) or got
+    }
+    ha, wa := c.arrayOf(h), c.arrayOf(w)
+    if ha != types.UnknownT and wa != types.UnknownT: return c.innerLevelsRo(c.P.T.Elem(ha), c.P.T.Elem(wa), depth + 1)
+    if c.P.T.KindOf(h) != types.Kind.Named or c.P.T.KindOf(w) != types.Kind.Named: return false
+    hs, ws := c.P.T.Items(c.P.T.Args(h)), c.P.T.Items(c.P.T.Args(w))
+    if hs.Len() != ws.Len(): return false
+    got := false
+    for k in range hs.Len() {
+        if c.innerLevelsRo(hs[k], ws[k], depth + 1): got = true
+    }
+    return got
+}
 
 fn (c mut Checker&) levelsRo(ls Array<levelSite>&) Bool {
     got := false
@@ -7443,7 +7466,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     # a reference where a value is wanted: the value copied out (E12)
     if hk == types.Kind.Ref and wk != types.Kind.Ref {
         r := c.P.T.Referent(have)
-        if c.P.T.Same(r, want) or c.flowsInto(r, want) {
+        # (the rework's round 3c: one type but for which levels may be written - "row.ToArray()" of a Vec holding
+        # read-only references returned as a value: copied out, the value then fitted as permFit says)
+        if c.P.T.Same(r, want) or c.flowsInto(r, want) or source.NewParams and c.P.T.SameButPerm(r, want) {
             if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())))) }
             return c.fit(c.read(sp, typed.Lvalue.Deref(sp, r, x)), want, sp)
         }
@@ -7863,6 +7888,9 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
     }
     # a lambda's: its written result's levels made read-only (load.RoLevels), and the program checked again
     if c.retLambda and c.P.T.SameButPerm(have, want) and c.P.T.WiderPerm(want, have) and c.levelsRo(c.fr().resultSites) { return x }
+    # (round 3c: read-only at a level below the top, stored into a local whose written type gives that level - "sub.Push(
+    # tail(r))", "Vec<Array<cell&>>" - each such level recorded read-only (2.8) and the program checked again)
+    if c.levelOn.Len() > 0 and c.P.T.SameButPerm(c.deref(have), c.deref(want)) and c.P.T.WiderPerm(c.deref(want), c.deref(have)) and c.innerLevelsRo(c.deref(have), c.deref(want), 0) { return x }
     # a value made here, no other name holding it: what it is wanted as may be read-only where it is not - itself, or
     # what it is lent as
     if c.freshValue(x) {
@@ -22414,6 +22442,85 @@ fn (c mut Checker&) settleViews() {
     }
 }
 
+# the rework's round 3c (QCC, D9g): a function whose every return hands back storage its body makes - an array, a text, a
+# copy, a conversion of one, a call of another such function, a local holding only such, never assigned again or escaping
+# - gives its caller new storage (load.MadeResults, the program checked again where that grew). Where its result is
+# written as a reference to an array - text included, no type variable in it - that is a value result, said at the
+# result with D9g's note there, which param_migrate makes the value. Said once a function an attempt
+fn (c mut Checker&) settleMade(f I64, fd ast.Func&) {
+    if c.madeSaid.Has(f) or c.fr().Gapped or c.P.FnIsExtern(f) or fd.Export or fd.S.Results.Len() != 1: return
+    b := c.cur()
+    if b.Root is null or c.arrayOf(c.deref(c.P.T.Result(b.Ty))) == types.UnknownT: return
+    u := typed.Uses(c.P.T, b, fn(id typed.BodyId) types.TypeId { return c.Bodies[I64(id)].Ty })
+    if u.Rets.Len() == 0: return
+    for x in u.Rets {
+        if not c.madeHere(x, u, 0): return
+    }
+    c.madeSaid.Put(f, true)
+    if not c.P.L.MadeResults.Has(f) {
+        c.P.L.MadeResults.Put(f, true)
+        c.copiesGrew = true
+    }
+    rs := fd.S.Results[0]
+    inner := madeRefOf(rs)
+    # (not a generic's result naming a type variable - an instance may bind it to references, and a value holding
+    # references lent where it may be written is a split value, O17, where a reference to it is not: Vec's ToArray)
+    if inner is null or not c.P.T.Closed(c.P.T.Result(c.P.Sig(f))): return
+    mi := c.P.FnModule(f)
+    isp := inner.Span()
+    rsp := rs.Span()
+    t := c.P.L.Mods[mi].Src!.Text
+    w := diag.Where.Span(c.P.L.Mods[mi].File, I64(rsp.Start), I64(rsp.End))
+    rec := c.P.L.Diags.Error(w, msgs.RefResultMade(t[I64(isp.Start):I64(isp.End)]))
+    c.P.L.Diags.Note(rec, w, msgs.NoteRefResult())
+}
+
+# the type a result written as a never-null reference refers to - through a "mut" the migration keeps - else null
+fn madeRefOf(r ast.TypeRef&) ast.TypeRef?&r {
+    return match r {
+        case ast.TypeRef.Ref(_, inner, _, nullable): inner if not nullable else null
+        case ast.TypeRef.Perm(_, of, _, _): madeRefOf(of) if of is not null else null
+        case _: null
+    }
+}
+
+# whether a value returned is storage made here (settleMade)
+fn (c mut Checker&) madeHere(x typed.Expr&, u typed.LocalUses&, depth I64) Bool {
+    if depth > 8: return false
+    return match unwrapped(x) {
+        case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _), typed.Expr.Text(_, _, _): true
+        case typed.Expr.Promote(_, _, pr): c.madeHere(pr.X, u, depth + 1)
+        case typed.Expr.Call(_, ty, cl): c.madeCall(cl, ty)
+        case typed.Expr.Cond(_, _, k): k.A is not null and c.madeHere(k.A!, u, depth + 1) and c.madeHere(k.B, u, depth + 1)
+        case typed.Expr.Try(_, _, t): t.X is not null and c.madeHere(t.X!, u, depth + 1)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and c.madeHere(args[0], u, depth + 1)
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): c.madeLocal(p, u, depth)
+        case _: false
+    }
+}
+
+# a call's result made where it stands: a constructor's or a case's, or one of a function this rule found
+fn (c mut Checker&) madeCall(cl typed.Call&, ty types.TypeId) Bool {
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0: return false
+    if c.builds(id): return true
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): c.P.L.MadeResults.Has(c.P.InstanceFn(inst))
+        case _: false
+    }
+}
+
+# a local of this body holding only storage made here: given it at its declaration, never assigned whole or escaping
+fn (c mut Checker&) madeLocal(p typed.Lvalue&, u typed.LocalUses&, depth I64) Bool {
+    id := match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case _: -1
+    }
+    if id < 0 or id >= u.Init.Len() or not c.ownLocal(id) or u.Whole[id] or u.EscOther[id]: return false
+    init := u.Init[id]
+    return init is not null and c.madeHere(init, u, depth + 1)
+}
+
 # the bits m added to what views records for key, the program checked again where they grew
 fn (c mut Checker&) growViews(views mut Map<I64, I64>&, key I64, m I64) {
     if m <= 0: return
@@ -22526,14 +22633,21 @@ fn tryExisting(tr typed.Try&) Bool {
 }
 
 # the rework's round 3 (QCE, E12): an array of references to arrays given a bare parameter wanting an array of those
-# arrays' values - "String&[...]" where "parts Array<String>" is wanted: only read through it, each element's referent
-# is the value read, so the array is lent as it is (a reference to an array and an array value are one pair); null where
-# x is not that
+# arrays' values - "String&[...]" where "parts Array<String>" is wanted - or the other way round: only read through it,
+# each element's referent is the value read, so the array is lent as it is (a reference to an array and an array value
+# are one pair); null where x is not that
 fn (c mut Checker&) refsAsValues(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr?&c {
     have := typeOf(x)
     hd, wd := c.arrayOf(c.deref(have)), c.arrayOf(c.deref(want))
     if hd == types.UnknownT or wd == types.UnknownT or c.writable(want) { return null }
     eh, ew := c.P.T.Elem(hd), c.P.T.Elem(wd)
+    # (round 3c: and the other way round - an array of those values, "Split"'s pieces, where an array of references to
+    # them is wanted: each part read where it is, through a read-only reference, a pair either way)
+    if not c.isRef(eh) and c.isRef(ew) and not c.P.T.IsNullable(ew) and c.P.T.OwnedPart(eh) and c.P.T.SameButPerm(eh, c.P.T.Referent(ew)) {
+        rt := c.P.T.Array(c.P.T.Ref(eh, c.P.T.PermOf(ew) & ~types.Writable), c.P.T.Length(hd))
+        if c.isRef(have) { return c.fit(c.convert(sp, x, c.P.T.Ref(rt, c.P.T.PermOf(have) & ~types.Writable)), want, sp) }
+        return c.fit(c.convert(sp, x, rt), want, sp)
+    }
     if not c.isRef(eh) or c.isRef(ew) or c.P.T.IsNullable(eh) or not c.P.T.OwnedPart(ew) { return null }
     if not c.P.T.SameButPerm(c.P.T.Referent(eh), ew) { return null }
     vt := c.P.T.Array(ew, c.P.T.Length(hd))

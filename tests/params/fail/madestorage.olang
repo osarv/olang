@@ -1,0 +1,12 @@
+# check: fail error[D9g]: every value this hands back is storage it makes, and a result written '&' is shared with the caller
+# round 3c (QCC): a result written "T&" whose every return hands back storage the function makes - an array, a text,
+# a local holding only one - is new storage for its caller: a value result, handed over without a copy
+fn squares(n I64) Array<I64>& {
+    out := Array<I64>(n, 0)
+    for i in range n { out[i] = i * i }
+    return out
+}
+
+fn main() {
+    assert squares(3)[2] == 4
+}

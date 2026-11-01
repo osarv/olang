@@ -127,7 +127,8 @@ ImportLimit I64 = 70
 
 # OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, written to the standard
 # error as the phase ends - the front end's passes, clang's compiles, the link; set to "front", the build ends after
-# the front end, so the compiler's own speed is measured apart from clang's
+# the front end, so the compiler's own speed is measured apart from clang's; set to "scope", after the checker and the
+# scope pass - every diagnostic of the program said, nothing lowered (a migration tool's rounds, param_migrate --root)
 PhaseAt mut I64 = 0
 fn Phase(name String&) {
     v := try os.Env("OLANG_TIMES") catch os.Error { return }
@@ -135,6 +136,7 @@ fn Phase(name String&) {
     if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
     PhaseAt = now
     if v == "front" and name == "lower+emit" { os.Exit(0) }
+    if v == "scope" and name == "scope" { os.Exit(0) }
 }
 
 # the terminal's colour code around text, where colour is on

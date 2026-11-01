@@ -701,6 +701,7 @@ type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
     WrScalar Vec<Bool>
     Whole Vec<Bool>
     Esc Vec<Bool>
+    EscOther Vec<Bool>   # ... by anything but a borrow of it handed back (round 3c: a local the function's result is)
     Ret Vec<Bool>
     AliasOf Vec<I64>
     Init Vec<Expr?&>
@@ -718,6 +719,7 @@ type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
     TempIn Vec<BlockId>     # ... the block its statement is in
     spawning I64 = 0
     at BlockId = BlockId(0) # the block being walked
+    retBorrow Bool = false  # a borrow handed back is being walked (EscOther)
 }
 
 # the uses of b's locals, sig giving another body's function type
@@ -728,6 +730,7 @@ fn Uses(t types.Table&, b Body&, sig fn(id BodyId) types.TypeId) LocalUses {
         u.WrScalar.Push(false)
         u.Whole.Push(false)
         u.Esc.Push(false)
+        u.EscOther.Push(false)
         u.Ret.Push(false)
         u.AliasOf.Push(-1)
         u.Init.Push(null)
@@ -753,7 +756,10 @@ fn (u mut LocalUses&) closeAliases() {
 fn (u mut LocalUses&) aliasInto(i I64, a I64) {
     if u.WrOther[i] or u.Whole[i]: u.WrOther[a] = true
     if u.WrScalar[i]: u.WrScalar[a] = true
-    if u.Esc[i] or u.Ret[i]: u.Esc[a] = true
+    if u.Esc[i] or u.Ret[i] {
+        u.Esc[a] = true
+        u.EscOther[a] = true
+    }
     # (a lend of the alias whole lends its storage: the source's, to the same parameter)
     n := u.LendAt.Len()
     for k in range n {
@@ -979,19 +985,24 @@ fn (u mut LocalUses&) use(p Lvalue&, ctx Ctx, ref Bool) {
         return
     }
     if u.spawning > 0 {
-        u.Esc[root] = true
+        u.escape(root)
         return
     }
     match ctx {
         case Ctx.Op, Ctx.Arg { }
-        case Ctx.Store { if ref: u.Esc[root] = true }
+        case Ctx.Store { if ref: u.escape(root) }
         case Ctx.Ret { u.Ret[root] = true }
         case Ctx.Alias(of) {
-            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.Esc[root] = true
+            if u.AliasOf[I64(of)] >= 0 and u.AliasOf[I64(of)] != root: u.escape(root)
             u.AliasOf[I64(of)] = root
         }
-        case Ctx.Esc { u.Esc[root] = true }
+        case Ctx.Esc { u.escape(root) }
     }
+}
+
+fn (u mut LocalUses&) escape(root I64) {
+    u.Esc[root] = true
+    if not u.retBorrow: u.EscOther[root] = true
 }
 
 fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
@@ -1044,6 +1055,9 @@ fn (u mut LocalUses&) expr(x Expr?&, ctx Ctx) {
 # a reference to a place: one lent writably writes it, and escapes but as a call's argument; a read-only one is the
 # place's storage itself, which escapes stored or handed back (a reference result is no copy of it)
 fn (u mut LocalUses&) borrow(p Lvalue&, ty types.TypeId, ctx Ctx) {
+    was := u.retBorrow
+    u.retBorrow = ctx == Ctx.Ret
+    defer u.retBorrow = was
     if (u.T.PermOf(ty) & types.Writable) != 0 {
         u.write(p, true)
         if ctx != Ctx.Arg: u.use(p, Ctx.Esc, true)

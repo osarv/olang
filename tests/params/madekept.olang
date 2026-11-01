@@ -1,0 +1,52 @@
+# The scoping and parameters rework, round 3c (docs/rework.md section 18): a value result kept by the callee it is lent
+# to - "sub.Push(tail(r))", a Vec of references to arrays - is built where the callee keeps it, as a local declared from
+# the call would land; and an array of text values is lent where a bare parameter takes an array of references to text.
+# Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type cell struct(v I64) {
+    v
+}
+
+# a row without its first element: storage made here, handed back as a value (D9g's made-storage rule)
+fn tail(r Array<cell&>) Array<cell&> {
+    v := Vec<cell&>()
+    for i in range 1, r.Len() { v.Push(r[i]) }
+    out := Array<cell&>(v.Len(), r[0])
+    for i in range v.Len() { out[i] = v[i] }
+    return out
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+# rows and their tails, each tail made in its loop turn and kept in a Vec of references outliving it
+fn tails(rows Vec<Array<cell&>&>) I64 {
+    sub := Vec<Array<cell&>&>()
+    for r in rows {
+        if r.Len() > 1: sub.Push(tail(r))
+    }
+    s := 0
+    for i in range 1, 40 { s += churn(i * 8) }
+    total := 0
+    for t in sub {
+        for c in t { total += c.v }
+    }
+    return total + s - s
+}
+
+# an array of text read where a bare parameter takes references to text
+fn joined(parts Array<String&>) String { return $parts[0] "/" $parts[1] }
+
+test tails "a value result kept by the Vec it is pushed into lives where the Vec does" {
+    rows := Vec<Array<cell&>&>()
+    rows.Push(cell&[cell(1), cell(2), cell(3)])
+    rows.Push(cell&[cell(4), cell(5)])
+    assert tails(rows) == 10
+}
+
+test joined "Split's pieces given where references to text are taken" {
+    assert joined("a/b/c".Split("/")) == "a/b"
+    assert joined(String&["x", "y"]) == "x/y"
+}

@@ -389,6 +389,7 @@ type Diag enum {
     AtomicBare
     AtomicBareLent
     RefResultReadOnly
+    RefResultMade
     NoteRefResult
     ReadOnlyToBuiltResult
     ReadOnlyToBuiltResultNo
@@ -1970,6 +1971,9 @@ fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $nam
 
 # ERR_REF_RESULT_READ_ONLY
 fn RefResultReadOnly(value String&) Msg { return Msg(Diag.RefResultReadOnly, "D9g", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and a result written '&' is shared with the caller writably: give the value '" $value "' (handed over without a copy where the caller only reads it), or take the parameter it is reached through as 'p T&'") }
+
+# ERR_REF_RESULT_MADE
+fn RefResultMade(value String&) Msg { return Msg(Diag.RefResultMade, "D9g", "every value this hands back is storage it makes, and a result written '&' is shared with the caller: give the value '" $value "' (handed over without a copy)") }
 
 # NOTE_REF_RESULT
 fn NoteRefResult() Msg { return Msg(Diag.NoteRefResult, "", "the result is written as a reference here - a value result says it is read-only") }

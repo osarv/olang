@@ -106,6 +106,9 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # ... and an instance's parameter whose reach its result holds as given (by "instance:parameter"): a call giving it a
     # read-only argument gets the result read-only at every level below its top (check's followResult)
     FollowResults Map<String&, Bool>
+    # ... and the functions whose result written "T&" hands back only storage their bodies make (round 3c, D9g): a value
+    # result, said so - and a call of one is storage made where it stands, for its callers' own results
+    MadeResults Map<I64, Bool>
     # ... and the nullable parameters ("p T?&") found written through, passed where they may be written or kept, by
     # (module, the start of the parameter's written type): read-only otherwise (docs/rework.md 11.3 point 6)
     NullWritable Map<pair.Pair<I64, I64>, Bool>
