@@ -79,6 +79,7 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     ViewReturns I64 = 0
     ViewReads I64 = 0
     ViewCopies I64 = 0
+    ArgCopies I64 = 0            # round 2e: arguments copied for a bare parameter a callee keeps (scope.argCopies)
     ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
     ViewLog Vec<String&>
 }
@@ -2217,6 +2218,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
+        if i < ps.Len() and ln.copiesArg(c, i) { v = ln.ownCopy(v, ps[i], ln.copyScope(c, ty), a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
         held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
         if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
@@ -2226,6 +2228,94 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         ops[i] = v
     }
     return ln.F.Args(ops)
+}
+
+# ---- arguments copied for what a callee keeps (the rework's round 2e) ----
+
+# whether a call copies its argument i: one for a bare parameter its callee keeps past the call that may change while
+# what keeps it lives - the scope pass's plan (scope.argCopies) where the body has one; while compiling (no plan) every
+# argument a constructor or a case keeps that is a bare parameter's own storage, the copy made where the value is built
+# - a copy as by value either way (2.10)
+fn (ln mut lowering&) copiesArg(c typed.Call&, i I64) Bool {
+    if not source.NewParams: return false
+    if ln.planned {
+        if c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.ArgCopy.Len(): return false
+        return (ln.plan.ArgCopy[I64(c.Site)] & (I64(1) << i)) != 0
+    }
+    cb := match c.Target {
+        case typed.Callee.Body(id): I64(id)
+        case _: -1
+    }
+    if cb < 0 or cb >= ln.L.Bodies.Len(): return false
+    made := match ln.L.Bodies[cb].Of {
+        case typed.BodyOf.Ctor(_, _), typed.BodyOf.Case(_, _): true
+        case _: false
+    }
+    return made and ln.bareOwn(c.Args[i]) >= 0
+}
+
+# the bare parameter passed by pointer of this body whose own storage x is - read whole, a slice of it, a borrow of a
+# part of it - -1 for none (lowering's own reading of scope.bareParam, for the stand-in placement)
+fn (ln mut lowering&) bareOwn(x typed.Expr&) I64 {
+    return match x {
+        case typed.Expr.Read(_, _, p, _): ln.bareLocalAt(p)
+        case typed.Expr.Borrow(_, _, p): ln.bareOwnAt(p)
+        case typed.Expr.Slice(_, _, sl): ln.bareOwnAt(sl.Base)
+        case typed.Expr.Away(_, _, y): ln.bareOwn(y)
+        case typed.Expr.Promote(_, _, pr): ln.bareOwn(pr.X)
+        case typed.Expr.Prim(_, _, op, _, args): ln.bareOwn(args[0]) if typed.PassesRefs(op) and args.Len() > 0 else -1
+        case _: -1
+    }
+}
+
+fn (ln mut lowering&) bareOwnAt(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Deref(_, _, r): ln.bareOwn(r)
+        case typed.Lvalue.Field(_, _, b, _): ln.bareOwnAt(b)
+        case typed.Lvalue.Elem(_, _, e): ln.bareOwnAt(e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.bareOwnAt(py.Base)
+        case _: -1
+    }
+}
+
+fn (ln mut lowering&) bareLocalAt(p typed.Lvalue&) I64 {
+    if p != typed.Lvalue.Local: return -1
+    inst := match ln.B.Of {
+        case typed.BodyOf.Fn(i): i
+        case _: -1
+    }
+    if inst < 0: return -1
+    P := ln.L.P
+    return I64(p.id) if typed.BarePointer(ln.T, ln.B, I64(p.id), P.T.Items(P.T.Params(P.Sig(P.InstanceFn(inst))))) else -1
+}
+
+# argument v of reference type pt copied into storage of its own, made where call c's result builds (else where the
+# scope pass binds its parameter's variable): an array's elements, a struct's or an enum's value - the reference to the
+# copy passed instead (round 2e)
+fn (ln mut lowering&) ownCopy(v mir.Operand, pt types.TypeId, at mir.ScopeRef, sp source.Span) mir.Operand {
+    t := ln.T
+    if not t.IsRef(pt): return v
+    ln.L.ArgCopies++
+    rt := t.Referent(pt)
+    r := ln.local(v, pt, sp)
+    val := ln.into(rt, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(r)), mir.Proj.Deref)))), sp)
+    if ln.valueArray(rt) {
+        cp := ln.arrayCopy(val, rt, sp, at)
+        l := ln.local(cp, rt, sp)
+        return ln.into(pt, mir.Rvalue.Ref(mir.L(l), pt), sp)
+    }
+    return ln.into(pt, mir.Rvalue.New(at, val, pt), sp)
+}
+
+# where an argument's copy is made: the scope call c passes for its callee's result scope - where what its result
+# holds is built - else the program's
+fn (ln mut lowering&) copyScope(c typed.Call&, fty types.TypeId) mir.ScopeRef {
+    if not ln.planned or c.Site < typed.SiteId(0) or I64(c.Site) >= ln.plan.Built.Len(): return mir.ScopeRef.Program
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len() {
+        if vs[j] == types.ResultVar: return ln.scopeRef(ln.plan.Passed(c.Site, j))
+    }
+    return mir.ScopeRef.Program
 }
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
@@ -2612,6 +2702,12 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         case typed.MakeKind.Tuple, typed.MakeKind.Case {
             ops := ln.vals(m.Items)
             if ln.dead { return mir.Operand.None }
+            # (while compiling, no plan: a bare parameter's own storage made part of a value is copied there, round 2e)
+            if source.NewParams and not ln.planned {
+                for i, x in m.Items {
+                    if ln.bareOwn(x) >= 0: ops[i] = ln.ownCopy(ops[i], x.Type(), mir.ScopeRef.Program, x.Span())
+                }
+            }
             if m.Site >= typed.SiteId(0) and t.IsRef(ty) {
                 inner := t.Referent(ty)
                 v := ln.into(inner, mir.Rvalue.Aggregate(inner, m.Tag, ln.F.Args(ops)), sp)

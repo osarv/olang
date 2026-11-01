@@ -890,6 +890,22 @@ fn (b Body&) ResultMark(t types.Table&, k I64) Mark {
     return Mark.Bare
 }
 
+# the rework's round 2e: whether local l of body b is a bare parameter passed by pointer (2.10) - a parameter of a
+# function or method whose type is a read-only reference that is never null, which no written "&" is under the switch -
+# but a variadic one's array (D8g) or a type variable's binding, held as given (decl: the generic's written parameters)
+fn BarePointer(t types.Table&, b Body&, l I64, decl Array<types.TypeId>&) Bool {
+    if l < 0 or l >= b.Locals.Len() or b.Of != BodyOf.Fn or t.KindOf(b.Ty) != types.Kind.Func { return false }
+    loc := b.Locals[l]
+    if loc.Kind != LocalKind.Param or not t.IsRef(loc.Ty) { return false }
+    if (t.PermOf(loc.Ty) & types.Writable) != 0 or t.IsNullable(loc.Ty) { return false }
+    ps := t.Items(t.Params(b.Ty))
+    for k in range b.Params.Len() {
+        if I64(b.Params[k]) != l { continue }
+        return k < ps.Len() and not t.IsSpread(ps[k]) and (k >= decl.Len() or t.KindOf(decl[k]) != types.Kind.Var)
+    }
+    return false
+}
+
 # whether block a is block d or encloses it
 fn (b Body&) Encloses(a BlockId, d BlockId) Bool {
     x := d
@@ -930,6 +946,10 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # by local: a value array the function returns, living in the result scope (O26a), that nothing else can name - so it
     # is returned as it is; every other returned array is copied at its return, so the result is the caller's own (T7b)
     RetSole mut Array<Bool>& = Array<Bool>(Locals)
+    # the rework's round 2e, by site: the arguments a call copies, a bit each - one for a bare parameter its callee keeps
+    # past the call that may change while what keeps it lives (scope.argCopies): lowering copies it where the call's
+    # result builds, so what the callee keeps is its own copy, as by value
+    ArgCopy mut Array<I64>& = Array<I64>(Sites)
     # O8d, the early-free analysis's (compiler/free.olang): by site, a region made where the site's value is - 1 a region
     # of its own, a kid of RegionParent (or of RegionRoot's value's region, when that is one), 2 the region RegionRoot's
     # value is in, else RegionParent. The site's own Built, and its parts', then say Region(site)

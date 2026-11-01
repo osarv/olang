@@ -2077,8 +2077,16 @@ passes where it may be written, never keeps (stored, captured, handed out throug
 naming the bare form `p T`. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
 reference, an extern, an export fn or a generic's parameter (its instances differ by program).
 
-**D9e (a bare parameter kept; provisional).** A bare parameter, or a view of it, kept where it outlives the call is
-refused as section 8 refuses a view of storage that closes (O26, O17), naming `p T&` (share the caller's) or a copy.
+**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so what the body keeps of
+its own storage past the call - the parameter itself or a view of it, in a value it builds and hands back (a
+constructor's field, a case's payload, an element) - is the callee's own copy: the caller's later writes to its
+argument never show through it. Passed by pointer, the copy is made by a caller whose argument may change while what
+keeps it lives, where the call's result is built; an argument that cannot change is passed as it is - constant data, a
+value made for the call, a bare parameter of the caller (its own callers copy for it), an immutable global, a value
+local nothing assigns, writes or lends writably once it is made, a reference local naming new storage that nothing
+writes through and that is read only as an argument for a parameter that cannot write it. A view of what the parameter
+reaches through its references is no copy (a struct's copy holds the same references). Stored into existing storage -
+a `&` parameter's, a global's - a bare parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy.
 
 **D9f (the forgotten `&`; provisional).** A write to a bare parameter's own storage - it or a part assigned - that
 nothing reads afterwards is a compile-time error naming `p T&` (to change the caller's), or returning the value for a

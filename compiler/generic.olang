@@ -793,6 +793,15 @@ fn WrittenBare(tr ast.TypeRef&) Bool {
     }
 }
 
+# whether a global's written type says "mut" - a writable global (its binding, which only a global's "mut" decides)
+fn WrittenMut(tr ast.TypeRef?&) Bool {
+    if tr is null: return false
+    return match tr {
+        case ast.TypeRef.Perm(_, _, w, _): w
+        case _: false
+    }
+}
+
 # whether a value of t holds a reference, every declared type it holds by value laid out first: HoldsRefs takes one not
 # laid out yet for one that may (an enum of a case "Block(b BlockId)", BlockId a declared I32, was passed by pointer as
 # a reference holder when its parameter's signature was made before BlockId's body - round 2d, found by compiler/'s

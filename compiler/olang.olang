@@ -555,7 +555,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     for w in e.TestWords { prog.TestWords.Push($w) }
     # the rework's round 2d (D9h): array value results handed over as views (of what this build lowered)
     if cfg.Memory and source.NewParams {
-        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one") catch io.Error { }
+        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one, " $lw.ArgCopies " arguments copied for a bare parameter a callee keeps") catch io.Error { }
     }
     for v in lw.ViewLog { try io.PrintErr($v "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
