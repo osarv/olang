@@ -5762,6 +5762,8 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and (c.wantCopy(c.bareWhole(unwrapped(ref))) or c.wantWritable(unwrapped(ref))) {
                 return
+            } else if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and not store and not c.capturedValue(ref) and c.lendLater(sp, "from its parts", p) {
+                return     # (round 2f: lent to a "&" parameter - refused once settled only where the callee writes through it)
             } else if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
                 if c.capturedValue(ref) {
                     rec := c.err(sp, msgs.CaptureReadOnly())
@@ -5774,6 +5776,8 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
                 return     # (round 2c: written through a field read-only by inference - writable, checked again)
             } else if c.isRef(rt) and source.NewParams and c.roRoot(readPlace(unwrapped(ref))) < 0 and c.roRef(unwrapped(ref)) and c.wantWritable(unwrapped(ref)) {
                 return     # (a nullable parameter read-only by inference reached: made writable, checked again)
+            } else if c.isRef(rt) and not store and source.NewParams and c.roRoot(readPlace(unwrapped(ref))) < 0 and c.roRef(unwrapped(ref)) and c.lendLater(sp, "from its parts", p) {
+                return     # (round 2f: as above - lent, judged once the callee's use is settled)
             } else if c.isRef(rt) and (c.roRoot(readPlace(unwrapped(ref))) >= 0 or source.NewParams and c.roRef(unwrapped(ref))) {
                 # T25c: a read-only copy writes nothing through the writable references it shares (bulk review 5: nor
                 # anything reached through a read-only level - an element, a call's result, an immutable global)
