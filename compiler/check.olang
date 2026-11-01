@@ -3499,15 +3499,17 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
 }
 
 # the value type a ":=" initializer reading a bare parameter passed by pointer whole declares (round 2e): the
-# parameter's value type where it holds no reference - a plain struct or enum, copied as by value - else UnknownT (an
-# array's is a view of what is passed, a type holding references a read-only reference to it, as before)
-fn (c mut Checker&) plainBareCopy(x typed.Expr&) types.TypeId {
+# parameter's value type where it holds no reference - a plain struct or enum, copied as by value - and (round 2f) one
+# holding references where the local is never assigned whole after (kept: "r := e; r.Target = t; return r" writes the
+# copy's own fields, as by value; its references read-only as e's, and its value followed back to e); else UnknownT (an
+# array's is a view of what is passed, a type holding references assigned whole a read-only reference to it)
+fn (c mut Checker&) plainBareCopy(x typed.Expr&, kept Bool) types.TypeId {
     if not source.NewParams: return types.UnknownT
     u := unwrapped(x)
     if u != typed.Expr.Read or u.p != typed.Lvalue.Local: return types.UnknownT
     if c.bareWhole(u) < 0: return types.UnknownT
     v := c.P.T.Referent(u.ty)
-    if c.arrayOf(v) != types.UnknownT or c.P.T.HoldsRefs(v): return types.UnknownT
+    if c.arrayOf(v) != types.UnknownT or c.P.T.HoldsRefs(v) and not kept: return types.UnknownT
     return v
 }
 
@@ -10316,6 +10318,8 @@ fn (c mut Checker&) placeName(p typed.Lvalue&) source.NameId {
     return match p {
         case typed.Lvalue.Local(_, _, id): c.cur().Local(id).Name
         case typed.Lvalue.Global(_, _, _, n): n
+        # (round 2f: what a bare parameter passed by pointer names, read whole - "r := e" copies e)
+        case typed.Lvalue.Deref(_, _, r): c.roName(unwrapped(r)) if source.NewParams and c.bareWhole(unwrapped(r)) >= 0 else source.NameId(0)
         case _: source.NameId(0)
     }
 }
@@ -18512,7 +18516,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 # (the rework's round 2e: ":=" of a bare parameter passed by pointer holding no reference - a plain
                 # struct or enum - declares a value, its copy, as by value: a reference local would be a second name of
                 # the caller's storage, and assigning it another value would tie the two scopes together)
-                pv := c.plainBareCopy(x!)
+                pv := c.plainBareCopy(x!, keep)
                 if pv != types.UnknownT {
                     t = pv
                     x = c.fit(x!, t, v.Values[i].Span())
@@ -21787,6 +21791,13 @@ fn (c mut Checker&) bareParamAt(id I64) I64 {
                 if n != source.NameId(0) and (try c.roCopies.Get(c.roKey(I64(ps[k]))) catch default source.NameId(0)) == n: return k
             }
             return -1
+        }
+        # (round 2f: a value copy of one - "r := e" of a bare e, never assigned whole after - holds what it holds)
+        l := c.cur().Local(typed.LocalId(I32(id)))
+        from := try c.roCopies.Get(key) catch default source.NameId(0)
+        if l.Kind == typed.LocalKind.Var and from != source.NameId(0) and from != l.Name and not c.fr().stored.Has(l.Name) {
+            id = c.localNamed(from)
+            continue
         }
         o := try c.roFrom.Get(key) catch { return -1 }
         id = c.rootLocal(o.P)
