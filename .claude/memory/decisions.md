@@ -2329,3 +2329,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (`fn() Node?&` is a function giving a nullable Node). New with it: declared function types `type Handler fn(e Event)`
   (none today; T29 covers numbers, arrays, structs) - nominal as T29, a function or lambda fitting one directly (mine:
   nothing to convert). ASKED to confirm. In effect: function values nullable (T21).
+- QCI 3, the user 2026-11-01: "Only function declarations don't have &". Read as: a function type is written with its
+  reference marker everywhere - `f fn&(e Event)` never null, `f fn?&(e Event)` nullable, `type Handler fn(e Event)`
+  declares one and its uses are `Handler&` / `Handler?&`; only `fn name(...)` declarations (and lambdas, which are
+  definitions) have none. PROPOSED (rec yes): function types become reference-only, as destructor types already are
+  (C11: always written `T&`), a bare `fn(...)` or `Handler` as a type an error naming the `&`; QCC's "a `&` may write"
+  and its never-written-`&` check (D9d) do not apply to them - nothing writes through a function value, so no reader
+  can wonder whether a callee changes one; every function type in the repository gains its `&` by a tool in `olang
+  fix`. ASKED to confirm. In effect: function values nullable (T21), written bare.
