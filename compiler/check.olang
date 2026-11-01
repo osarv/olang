@@ -10967,6 +10967,13 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
     if c.roValue(e) {
         fs Vec<pair.Pair<I64, I64>>
         if not c.bareRooted(c.rootLocal(readPlace(e))) { c.roFieldsOf(e, fs, 0) }
+        # (round 2e: the bare parameter it is built from, named in a note - what param_migrate makes "&")
+        bp := c.bareOfCopy(e, 0) if source.NewParams else -1
+        if bp >= 0 {
+            bl := c.cur().Local(typed.LocalId(I32(bp)))
+            c.roArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(typeOf(e)), c.roFix(c.roName(e), typeOf(e)), Bare = c.at(bl.Sp), BareName = $c.text(bl.Name), Fields = fs.ToArray()))
+            return
+        }
         c.roArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(typeOf(e)), c.roFix(c.roName(e), typeOf(e)), Fields = fs.ToArray()))
         return
     }
@@ -11000,6 +11007,7 @@ fn (c mut Checker&) roSettle() {
         l := b.Local(b.Params[a.Param])
         rec := c.P.L.Diags.Error(a.At, msgs.ReadOnlyCopyArg(a.Callee, c.text(l.Name), a.Ty, a.Fix))
         c.P.L.Diags.Note(rec, diag.Where.Span(b.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteDeclaredHere(c.tok(l.Name)))
+        if a.BareName.Len() > 0 { c.P.L.Diags.Note(rec, a.Bare, msgs.NoteBareParam(a.BareName)) }
     }
     c.strReceivers()
     for a in c.roRefArgs {
@@ -11852,6 +11860,35 @@ fn (c mut Checker&) noteRoX(rec I64, x typed.Expr&, depth I64) {
         case typed.Expr.Slice(_, _, sl) { c.noteRo(rec, sl.Base) }
         case _ { }
     }
+}
+
+# the bare parameter of this body (or its entry copy) a read-only copy is made from - read out of it, or built by a
+# constructor or a call following its argument from what it reaches (noteRoX's walk) - -1 for none
+fn (c mut Checker&) bareOfCopy(x typed.Expr&, depth I64) I64 {
+    if depth > 8: return -1
+    p := readPlace(unwrapped(x))
+    if p is not null {
+        id := c.roRoot(p)
+        if id < 0: id = c.rootLocal(p)
+        return id if id >= 0 and c.bareNamed(id) and c.bareRooted(id) else -1
+    }
+    return match x {
+        case typed.Expr.Call(_, _, cl): c.bareOfArgs(cl, depth)
+        case typed.Expr.Prim(_, _, _, _, args): c.bareOfCopy(args[0], depth + 1) if args.Len() > 0 else -1
+        case typed.Expr.Promote(_, _, pr): c.bareOfCopy(pr.X, depth + 1)
+        case _: -1
+    }
+}
+
+fn (c mut Checker&) bareOfArgs(cl typed.Call&, depth I64) I64 {
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0: return -1
+    for k, a in cl.Args {
+        if not (c.builds(id) or c.followsAt(id, k)) or not c.roBelow(a): continue
+        b := c.bareOfCopy(a, depth + 1)
+        if b >= 0: return b
+    }
+    return -1
 }
 
 # where a call's result is said: an index through At at its "[" (stage 0's token for it), any other where it is written
