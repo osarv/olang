@@ -2251,3 +2251,12 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   their own; costs: O(n) `w := v` (visible, elided where neither side is written or kept), sharing written `&`,
   in-place change of a nested collection through a `&` accessor (`m.At(k).Push(x)`), a migration tool marking
   observed-sharing copies `&`. Their Clone() goes (a value assignment copies). Round 3, with QCE.
+- Copies, the user 2026-11-01 ("for C calls, always copy. callbacks, tell me about it. Any tell me about it. can't
+  function values have a null ref option too?"): C - always copy recorded; ASKED: skip the copy where the header's
+  parameter is `const T*` (C's own promise, stated unchecked like X1a) - rec yes (else every buffer to write() is
+  copied). Callbacks/any explained (code behind chosen at run time; a lambda written at the call is read precisely).
+  ASKED: (a) copy only where the code behind is unseen (rec), (b) refuse, (c) a "writes T" effect on function types.
+  Spawns explained again (judged by storage type over the visible join block, so refusal can be a false positive);
+  rec still refuse, copy the gentler option - ASKED. QCI 3 PROPOSED: function values never null by default, optional
+  written `(fn(x I64) I64)?&` (reference-like: two words, identity), narrowed as any `?&`, `f!`; the parentheses an
+  exception to L18c's "group nothing else" - ASKED.
