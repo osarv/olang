@@ -1,0 +1,52 @@
+# QCC: a bare parameter never affects the caller - writes through its reach, after a copy on entry, through a
+# local made from it, a match binding, a slice, a conversion, a lambda capture
+import "std/io"
+
+type node struct(v I64) {
+    v
+}
+
+type pr struct(n node&, k I64, t String&) {
+    n
+    k
+    t
+}
+
+type e enum {
+    One(n node&)
+    Two
+}
+
+type name String
+
+fn a(p pr) { p.k = 3
+    p.n.v = 99 }
+fn b(p pr) { q := p
+    q.n.v = 98 }
+fn c(x e) {
+    match x {
+        case e.One(n) { n.v = 97 }
+        case _ { }
+    }
+}
+fn d(t String) { s := t[0:2]
+    s[0] = 'q' }
+fn f(t String) { n := name(t)
+    n[0] = 'q' }
+fn g(t String) { h := fn() { t[0] = 'q' }
+    h() }
+fn h(p pr) { p.t[0] = 'q' }
+
+fn main() {
+    nd := node(1)
+    p := pr(nd, 1, $"abc")
+    a(p)
+    b(p)
+    c(e.One(nd))
+    t := $"abc"
+    d(t)
+    f(t)
+    g(t)
+    h(p)
+    io.Println($nd.v " " $t " " $p.t)!
+}

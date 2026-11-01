@@ -1,0 +1,30 @@
+# a generator's bare parameter (never copied on entry: its walk holds it) - is the caller's later write seen by the
+# walk, and does the walk outlive the caller's storage?
+import "std/io"
+
+fn chars(t String) Iterator<Char> {
+    for c in t { yield c }
+}
+
+fn mk() Generator<Char> {
+    t := $"abc"
+    return chars(t)
+}
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn main() {
+    t := $"abc"
+    g := chars(t)
+    t[0] = 'x'
+    out := StringBuilder()
+    for c in g { out.PushChar(c) }
+    h := mk()
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    for c in h { out.PushChar(c) }
+    io.Println($out.ToString() " " $s)!
+}

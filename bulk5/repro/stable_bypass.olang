@@ -1,0 +1,43 @@
+# D9e (round 2e): the caller copies an argument a callee keeps only where it may change (stableArg) - a value local
+# "nothing assigns, writes or lends writably" (unwritten) or a reference local naming new storage (refStable),
+# changed through another name afterwards
+import "std/io"
+
+type holder struct(s String&) {
+    s
+}
+
+fn mk(t String) holder { return holder(t) }
+
+fn poke(u String&) { u[0] = 'q' }
+
+fn main() {
+    # a writable reference local borrowing the value local
+    t1 := $"abc"
+    r String& = t1
+    h1 := mk(t1)
+    r[0] = 'x'
+    # a writable slice of it
+    t2 := $"abc"
+    s := t2[0:3]
+    h2 := mk(t2)
+    s[0] = 'x'
+    # a lambda holding it, writing it later through a & parameter
+    t3 := $"abc"
+    r3 String& = t3
+    f := fn() { poke(r3) }
+    h3 := mk(t3)
+    f()
+    # a reference local naming new storage, written through a second reference to it
+    t4 String& = $"abc"
+    r4 String& = t4
+    h4 := mk(t4)
+    r4[0] = 'x'
+    # through a Vec holding the text
+    t5 := $"abc"
+    v := Vec<String&>()
+    v.Push(t5)
+    h5 := mk(t5)
+    v[0][0] = 'x'
+    io.Println($h1.s " " $h2.s " " $h3.s " " $h4.s " " $h5.s)!
+}

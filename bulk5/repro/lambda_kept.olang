@@ -1,0 +1,43 @@
+# a kept lambda capturing a bare parameter's own storage, kept through routes other than its return:
+# a Vec of function values, a struct field, a slice captured
+import "std/io"
+
+type box struct(f fn() String) {
+    f
+}
+
+fn viaVec(t String) Vec<fn() String> {
+    v := Vec<fn() String>()
+    v.Push(fn() String { return $t })
+    return v
+}
+
+fn viaBox(t String) box { return box(fn() String { return $t }) }
+
+fn viaSlice(t String) fn() String {
+    s := t[1:]
+    return fn() String { return $s }
+}
+
+fn main() {
+    t := $"abc"
+    a := viaVec(t)
+    b := viaBox(t)
+    c := viaSlice(t)
+    t[1] = 'y'
+    io.Println($a[0]() " " $b.f() " " $c())!
+}
+
+fn afterWrite() String {
+    t := $"abc"
+    c := viaSlice(t)
+    t[1] = 'y'
+    return c()
+}
+
+# the evaluator's reading, baked while compiling (K2)
+Baked String = afterWrite()
+
+test "baked vs run time" {
+    assert Baked == afterWrite(), "baked " $Baked ", run time " $afterWrite()
+}

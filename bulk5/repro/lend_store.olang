@@ -1,0 +1,33 @@
+# round 2c/2e: a bare enum lent by its storage to a reader handing back a borrow of it; the borrow stored into what
+# a & parameter reaches - the caller passes a temporary built for the call
+import "std/io"
+
+type expr enum {
+    lit(v I64)
+    away(x expr&)
+}
+
+fn unAway(x expr?&) expr&x {
+    match x! {
+        case expr.away(y) { return unAway(y) }
+        case _ { return x! }
+    }
+}
+
+fn record(x expr, into Vec<expr&>&) { into.Push(unAway(x)) }
+
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+
+fn main() {
+    kept := Vec<expr&>()
+    for i in range 3 {
+        record(expr.lit(i), kept)
+        record(expr.away(expr.lit(10 + i)), kept)
+    }
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($kept " " $s)!
+}

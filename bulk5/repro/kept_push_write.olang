@@ -1,0 +1,28 @@
+# a bare parameter's own storage handed out through Vec<String&>.Push, then written through the Vec's element:
+# does the write reach the caller's caller (a bare parameter affecting the caller)?
+import "std/io"
+
+fn wrap(t String) Vec<String&> {
+    v := Vec<String&>()
+    v.Push(t)
+    return v
+}
+
+fn poke(t String) {
+    v := wrap(t)
+    v[0][0] = 'q'
+}
+
+fn poke2(t String) {
+    v := Vec<String&>()
+    v.Push(t)
+    v[0][0] = 'q'
+}
+
+fn main() {
+    t := $"abc"
+    poke(t)
+    u := $"abc"
+    poke2(u)
+    io.Println($t " " $u)!
+}

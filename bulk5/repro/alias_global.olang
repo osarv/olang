@@ -1,0 +1,30 @@
+# QCC 2.10: a bare parameter passed by pointer while the call writes the same storage through a mutable global
+import "std/io"
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+G mut pt = pt(1, 2)
+
+fn bump() { G.x = 7 }
+
+fn f(a pt) I64 {
+    before := a.x
+    bump()
+    return before * 10 + a.x
+}
+
+fn h(a pt, k fn()) I64 {
+    before := a.x
+    k()
+    return before * 10 + a.x
+}
+
+fn main() {
+    r := f(G)
+    G = pt(1, 2)
+    s := h(G, bump)
+    io.Println($r " " $s)!
+}
