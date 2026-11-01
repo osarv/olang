@@ -2260,3 +2260,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   rec still refuse, copy the gentler option - ASKED. QCI 3 PROPOSED: function values never null by default, optional
   written `(fn(x I64) I64)?&` (reference-like: two words, identity), narrowed as any `?&`, `f!`; the parentheses an
   exception to L18c's "group nothing else" - ASKED.
+- Copies DECIDED 2026-11-01 (the user: "1) copy 2) trust the const 3) a 4) let's talk about it more"): (1) a spawned
+  task's bare argument is copied at the spawn where the join block may write its storage type (as round 2f built); (2)
+  calls into C copy a bare argument passed to a non-const pointer, none for a header's `const T*` (C's promise, stated
+  unchecked as X1a); (3) callbacks and `any`: a bare argument held across a call whose code is unseen is copied (only
+  the parts that may change, listed by -memory); a lambda written at the call is read. QCI 3 under discussion.
