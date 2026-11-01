@@ -2308,10 +2308,51 @@ fn (c mut Checker&) checkNow(id I64) {
     asking := c.P.Asking
     called := c.ctorCalled
     last := c.lastErrs
+    # (the rework's round 3c: what the expression being checked had said of itself - a value being returned, an argument
+    # being fitted, the levels a store reaches - is no part of the other body: it starts without, and finds them again
+    # after; a return of it had left "retFollows" cleared for the rest of the expression that asked for it)
+    held := c.exprFlags() if source.NewParams else null
     c.check(id)
+    if held is not null: c.restoreFlags(held)
     c.P.Asking = asking
     c.ctorCalled = called
     c.lastErrs = last
+}
+
+# what checking an expression says of itself under the rework (checkNow): held while another body is checked
+type exprState struct(argRef Bool, argName String&, argBody I64, argK I64, retFollows Bool, argFollows Bool) {
+    argRef, argName, argBody, argK, retFollows, argFollows
+    argCtor Bool = false
+    argExtern Bool = false
+    argBare Bool = false
+    walkBind Bool = false
+    retInst I64 = -1
+    retLambda Bool = false
+    localStore Bool = false
+    handing Bool = false
+    storeParam I64 = -1
+    walkParam I64 = -1
+    fieldOn pair.Pair<I64, I64> = pair.Pair(-1, -1)
+    levelOn Vec<levelSite> = Vec<levelSite>()
+}
+
+fn (c mut Checker&) exprFlags() exprState&c {
+    h := exprState(c.argRef, c.argName, c.argBody, c.argK, c.retFollows, c.argFollows)
+    h.argCtor, h.argExtern, h.argBare, h.walkBind = c.argCtor, c.argExtern, c.argBare, c.walkBind
+    h.retInst, h.retLambda, h.localStore, h.handing = c.retInst, c.retLambda, c.localStore, c.handing
+    h.storeParam, h.walkParam, h.fieldOn, h.levelOn = c.storeParam, c.walkParam, c.fieldOn, c.levelOn
+    c.argRef, c.argName, c.argBody, c.argK, c.retFollows, c.argFollows = false, "", -1, -1, false, false
+    c.argCtor, c.argExtern, c.argBare, c.walkBind = false, false, false, false
+    c.retInst, c.retLambda, c.localStore, c.handing = -1, false, false, false
+    c.storeParam, c.walkParam, c.fieldOn, c.levelOn = -1, -1, pair.Pair(-1, -1), Vec<levelSite>()
+    return h
+}
+
+fn (c mut Checker&) restoreFlags(h exprState&c) {
+    c.argRef, c.argName, c.argBody, c.argK, c.retFollows, c.argFollows = h.argRef, h.argName, h.argBody, h.argK, h.retFollows, h.argFollows
+    c.argCtor, c.argExtern, c.argBare, c.walkBind = h.argCtor, h.argExtern, h.argBare, h.walkBind
+    c.retInst, c.retLambda, c.localStore, c.handing = h.retInst, h.retLambda, h.localStore, h.handing
+    c.storeParam, c.walkParam, c.fieldOn, c.levelOn = h.storeParam, h.walkParam, h.fieldOn, h.levelOn
 }
 
 # an inferred body's set, as its body found it: each error type once, in the canonical order - by the module declaring
@@ -7807,6 +7848,14 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
         # (round 2d: a value read-only below its top only by what bare parameters reach - one a call following them hands
         # back: the result follows them, rather than made read-only for every caller)
         if not hr and c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.followBare(x) { return c.convert(sp, x, want) }
+        # (round 3c: an instance's reference handed back, read-only at a level only by what follows its bare parameter -
+        # a nested call's result typed read-only by its argument here, "s.chunk(k)[i]" with "s := l.s": the result
+        # follows that parameter, judged at each call as a result read directly is, rather than made read-only for every
+        # caller - the link through the nested call kept)
+        if hr and c.retFollows and c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.followsArg(x) {
+            c.roResult(x)
+            return c.convert(sp, x, want)
+        }
         if c.P.T.SameButPerm(v, want) and c.P.T.WiderPerm(want, v) and c.Attempts < 19 and c.P.NarrowResult(c.retInst, v) {
             c.copiesGrew = true
             return x
@@ -10772,24 +10821,13 @@ fn (c mut Checker&) refKeptCopy(x typed.Expr?&) {
 
 # the rework's round 2: whether a read-only copy is one only through an instance's bare parameter (roByArg) - as
 # read-only as the call's argument, judged there (T25c's generic rule), not here
-fn (c mut Checker&) followsArg(x typed.Expr?&) Bool {
-    if not source.NewParams or x is null or not c.instanceBody(c.fr().Body) { return false }
-    # an instance built from such a parameter, holding it as given
+fn (c mut Checker&) followsArg(x typed.Expr?&) Bool { return c.followsArgIn(x, 0) }
+
+fn (c mut Checker&) followsArgIn(x typed.Expr?&, depth I64) Bool {
+    if not source.NewParams or x is null or depth > 16 or not c.instanceBody(c.fr().Body) { return false }
     match x {
         case typed.Expr.Call(_, _, cl) {
-            id := c.bodyOfCallee(cl.Target)
-            if id >= 0 and c.builds(id) {
-                for a in cl.Args {
-                    if c.isRef(typeOf(a)) and c.roRef(a) and not c.followsArg(a) { return false }
-                }
-                return true
-            }
-            # ... and a value a call copies out of one it is given, as read-only as that (h.s.items[0] through At)
-            if id >= 0 {
-                for k, a in cl.Args {
-                    if c.roFollows(id, k) and c.followsArg(a) { return true }
-                }
-            }
+            if c.callFollows(cl, depth) { return true }
         }
         case _ { }
     }
@@ -10801,14 +10839,93 @@ fn (c mut Checker&) followsArg(x typed.Expr?&) Bool {
     }
     # (a bare parameter passed by pointer is one whatever its type holds - bulk review 5)
     r := c.rootLocal(pl)
-    if r < 0 or not c.roLocal(r) and not c.bareLocals.Has(c.roKey(r)) { return false }
-    l := c.cur().Local(typed.LocalId(I32(r)))
-    if l.Kind != typed.LocalKind.Param { return false }
+    # (round 3c: a place reached through a call's result - read where the call stands, or held in a local the call gave
+    # - follows what that call follows: list's Last reading an element of "s.chunk(k)")
+    if r < 0 or c.cur().Local(typed.LocalId(I32(r))).Kind != typed.LocalKind.Param: return c.viaCall(pl, depth, false) >= 0
+    if not c.roLocal(r) and not c.bareLocals.Has(c.roKey(r)) { return false }
     ps := c.cur().Params
     for k in range ps.Len() {
         if I64(ps[k]) == r { return c.roByArg(c.fr().Body, k) }
     }
     return false
+}
+
+# whether a call's result is read-only only through what follows an instance's bare parameter: an instance built from
+# such a parameter, holding it as given; a value or reference a call hands back out of arguments it follows (h.s.items[0]
+# through At) - every read-only one of them followed so (round 3c: one read-only by anything else, an immutable global
+# beside the parameter, keeps the result read-only here)
+fn (c mut Checker&) callFollows(cl typed.Call&, depth I64) Bool {
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0 { return false }
+    if c.builds(id) {
+        for a in cl.Args {
+            if c.isRef(typeOf(a)) and c.roRef(a) and not c.followsArgIn(a, depth + 1) { return false }
+        }
+        return true
+    }
+    some := false
+    for k, a in cl.Args {
+        if not c.roFollows(id, k): continue
+        if c.followsArgIn(a, depth + 1) {
+            some = true
+            continue
+        }
+        if c.isRef(typeOf(a)) and c.roRef(a) or not c.isRef(typeOf(a)) and c.roValue(a): return false
+    }
+    return some
+}
+
+# a place reached through a call's result (round 3c) - read where the call stands (a temporary, a dereference of its
+# reference result), or held in a local the call gave (a reference local made from it, a read-only copy of it): with
+# param false, 1 where that call follows an instance's bare parameter (followsArg), else -1; with param true, the
+# parameter it follows (followedParam), else -1
+fn (c mut Checker&) viaCall(p typed.Lvalue?&, depth I64, param Bool) I64 {
+    q := p
+    for _ in range 32 {
+        if q is null or depth > 16: return -1
+        match q {
+            case typed.Lvalue.Field(_, _, base, _) { q = base }
+            case typed.Lvalue.Elem(_, _, e) { q = e.Base }
+            case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
+            case typed.Lvalue.Temp(_, _, v, _) { return c.followedCall(unwrapped(v), depth, param) }
+            case typed.Lvalue.Deref(_, _, ref) {
+                u := unwrapped(ref)
+                if isCall(u): return c.followedCall(u, depth, param)
+                q = readPlace(u)
+            }
+            case typed.Lvalue.Local(_, _, id) { return c.localCall(I64(id), depth, param) }
+            case _: return -1
+        }
+    }
+    return -1
+}
+
+# viaCall for a local of this body: the call a reference local was made from (refCalls) or a read-only copy copied
+# (roCopyFrom), else what a reference local is read out of (roFrom)
+fn (c mut Checker&) localCall(id I64, depth I64, param Bool) I64 {
+    if c.refCalls.Has(c.roKey(id)) {
+        cx := try c.refCalls.Get(c.roKey(id)) catch { return -1 }
+        return c.followedCall(unwrapped(cx), depth, param)
+    }
+    if c.roCopyFrom.Has(c.roKey(id)) {
+        cx := try c.roCopyFrom.Get(c.roKey(id)) catch { return -1 }
+        return c.followedCall(unwrapped(cx), depth, param)
+    }
+    o := try c.roFrom.Get(c.roKey(id)) catch { return -1 }
+    return c.viaCall(o.P, depth + 1, param)
+}
+
+fn (c mut Checker&) followedCall(x typed.Expr&, depth I64, param Bool) I64 {
+    if not isCall(x): return -1
+    if param: return c.followedParam(x)
+    return 1 if c.followsArgIn(x, depth + 1) else -1
+}
+
+fn isCall(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Call(_, _, _): true
+        case _: false
+    }
 }
 
 # the by-value parameter of this body a place is part of by value, its type holding writable references: its index
@@ -12387,7 +12504,10 @@ fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut Vec<I64>&, seen mut 
                 sig := c.Bodies[id].Ty
                 e := c.P.T.ResultFrom(sig, 0)
                 for k in range cl.Args.Len() {
-                    if (e >= 0 and (k == e or c.P.T.ShareOf(sig, k) == e) or c.followsAt(id, k)) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
+                    # (round 3c: and what an instance's reference result is read out of - a Vec's At, roFollows - so a
+                    # result reached through it follows that argument too)
+                    follows := c.followsAt(id, k) or source.NewParams and c.instanceBody(id) and c.roFollows(id, k)
+                    if (e >= 0 and (k == e or c.P.T.ShareOf(sig, k) == e) or follows) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
                 }
                 return
             }
@@ -22772,7 +22892,7 @@ fn (c mut Checker&) followedParam(x typed.Expr&) I64 {
         case _ { }
     }
     r := c.roRoot(pl)
-    if r < 0: return -1
+    if r < 0: return c.viaCall(pl, 0, true)
     ps := c.cur().Params
     for k in range ps.Len() {
         if I64(ps[k]) == r: return k

@@ -66,3 +66,60 @@ test innermost "hands back what a bare parameter reaches, as writable as the cal
 Seven I64 = value(shape.Wrap(shape.Leaf(cell(7))))
 assert Seven == 7
 assert value(pick(shape.Leaf(cell(1)), shape.Leaf(cell(2)), 1)) == 2
+
+# round 3c: an instance's result reached through a nested call on what its bare receiver reaches - a chunked store's
+# "last" reading an element of "chunk(k)" - follows that receiver as a result read directly does: writable for a
+# writable store, read-only for a read-only one (tests/params/fail/nestedfollow.olang)
+type chunks<T> struct() {
+    s store<T>& = store<T>()
+}
+
+type store<T> struct() {
+    first Vec<T>& = Vec<T>()
+    rest Vec<Vec<T>&>& = Vec<Vec<T>&>()
+}
+
+fn (s store<T>) chunk(k I64) Vec<T>&s {
+    if k == 0 { return s.first }
+    return s.rest[k - 1]
+}
+
+fn (c chunks<T>&) Add(x T) {
+    if c.s.first.Len() < 2 {
+        c.s.first.Push(x)
+        return
+    }
+    v := Vec<T>()
+    v.Push(x)
+    c.s.rest.Push(v)
+}
+
+fn (c chunks<T>) Last() T {
+    s := c.s
+    k := s.rest.Len()
+    v := s.chunk(k)
+    return v[v.Len() - 1]
+}
+
+fn (c chunks<T>) LastDirect() T { return c.s.chunk(c.s.rest.Len())[0] }
+
+fn churnCells(n I64) I64 {
+    t := 0
+    for i in range n {
+        xs := Vec<cell&>()
+        xs.Push(cell(i))
+        t += xs[0].v
+    }
+    return t
+}
+
+test chunks.Last "a result through a nested call on the receiver's reach follows the receiver - written through" {
+    c := chunks<cell&>()
+    c.Add(cell(1))
+    c.Add(cell(2))
+    c.Add(cell(3))
+    c.Last().v = 30
+    c.LastDirect().v += 1
+    assert churnCells(200) > 0
+    assert c.Last().v == 31
+}

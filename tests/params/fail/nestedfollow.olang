@@ -1,0 +1,33 @@
+# check: fail error[T25c]: this writes through a reference a read-only copy holds
+# round 3c: a result reached through a nested call on what a bare receiver reaches follows that receiver - here a
+# bare parameter's, so read-only: the write through it is refused (tests/params/follow.olang's chunks.Last the
+# writable case)
+type cell struct(v I64) {
+    v
+}
+
+type chunks<T> struct() {
+    s store<T>& = store<T>()
+}
+
+type store<T> struct() {
+    first Vec<T>& = Vec<T>()
+}
+
+fn (s store<T>) chunk(k I64) Vec<T>&s { return s.first }
+
+fn (c chunks<T>) Last() T {
+    s := c.s
+    v := s.chunk(0)
+    return v[v.Len() - 1]
+}
+
+fn bump(c chunks<cell&>) {
+    c.Last().v = 2
+}
+
+fn main() {
+    c := chunks<cell&>()
+    c.s.first.Push(cell(1))
+    bump(c)
+}

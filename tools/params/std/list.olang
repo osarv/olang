@@ -43,13 +43,3 @@ fn (l List<String&>) Join(sep String) String {
     }
     return out
 }
-
-# the last element - failing with Empty when there is none (read through the receiver's own fields, never through a
-# call on them, so what it gives follows the list it is asked of: writable for a writable one - round 3b)
-fn (l List<T>) Last() T ? Error.Empty {
-    if l.s.count == 0 { error Error.Empty }
-    if l.s.used > 0 { return l.s.tail[l.s.used - 1] }
-    k := l.s.nChunks - 2   # the tail is empty: the chunk before it is full
-    if k == 0 { return l.s.first[l.s.first.Len() - 1] }
-    return l.s.chunks[k][l.s.chunks[k].Len() - 1]
-}
