@@ -295,6 +295,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     deepDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     roLends Vec<roLendRec>
     roArgs Vec<roArg>
+    refKeptArgs Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # D9d: (body, "&" parameter) given (callee, by-value k)
     roFns Vec<roFn>
     # ...and through a generic instance's read-only reference parameters (roByArg): every value given a local of an
     # instance's body, by (body, local); the parameters a by-value result is copied out of, by (body, parameter)
@@ -739,6 +740,7 @@ fn (c mut Checker&) reset() {
     c.deepDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roLends = Vec<roLendRec>()
     c.roArgs = Vec<roArg>()
+    c.refKeptArgs = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roFns = Vec<roFn>()
     c.roVals = Map<pair.Pair<I64, I64>, Vec<typed.Expr&>>()
     c.roToResult = Map<pair.Pair<I64, I64>, Bool>()
@@ -10795,6 +10797,11 @@ test bareSpelled "drops a reference's last &, its scope marker and an old mut" {
 # (reference-only, X10, C11), a function value, a type variable's, an extern's or an export fn's (C's to write), a
 # variadic list
 fn (c mut Checker&) refSettle() {
+    for d in c.refKeptArgs {
+        if not c.roNeeds.Has(d.Second) { continue }
+        c.refUsed.Put(d.First, true)
+        c.refDeep.Put(d.First, true)
+    }
     for _ in range c.refDeps.Len() + 1 {
         moved := false
         for d in c.refDeps {
@@ -10965,6 +10972,9 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
     }
     j := c.paramOf(readPlace(e))
     if j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(me, j), pair.Pair(body, k))) }
+    # D9d (round 2e): a value copied out of what a "&" parameter reaches, given a by-value parameter that writes through
+    # it or keeps it ("m.fns.Push(f)") - that parameter used as one, deeply, once the need is settled (refSettle)
+    if source.NewParams and c.refParamOfX(e) >= 0 { c.refKeptArgs.Push(pair.Pair(pair.Pair(me, c.refParamOfX(e)), pair.Pair(body, k))) }
     if c.instanceBody(me) { c.roDeepArgs.Push(roDeepArg(me, e, body, k)) }
 }
 

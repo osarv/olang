@@ -30,3 +30,25 @@ test decider "a Vec stored from a & parameter is the caller's, and a walk of one
     d.take(ps)
     assert ps.Len() == 2 and sum(ps) == 3 and sum(d.plans) == 3
 }
+
+type entry struct(name String&, n I64) {
+    name
+    n
+}
+
+type machine struct() {
+    entries Vec<entry>
+}
+
+# "m.entries.Push(e)" keeps a copy of what "e" reaches - its text, shared: a use of "e" as a "&" parameter, never asked
+# to be bare (param_migrate had made it bare, then Push refused the read-only copy)
+fn (m machine&) define(e entry&) {
+    m.entries.Push(e)
+}
+
+test machine "a value copied out of a & parameter and kept by Push is a use of it" {
+    m := machine()
+    t := $"abc"
+    m.define(entry(t, 1))
+    assert m.entries.Len() == 1 and m.entries[0].name == "abc"
+}
