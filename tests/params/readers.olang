@@ -1,0 +1,57 @@
+# The scoping and parameters rework, round 3c (docs/rework.md section 18): a reader of a tree taking it as a nullable
+# reference and handing back a part of it - through a value match's clauses - follows its argument: a caller giving a
+# read-only tree (a bare receiver's map) reads the part, one giving its own writes through it, and the reader's
+# parameter stays read-only. Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type call struct(site I64) {
+    site
+}
+
+type ex enum {
+    Lit(v I64)
+    Call(c call&)
+    Away(x ex&)
+}
+
+type sc struct() {
+    inits Map<I64, ex&> = Map<I64, ex&>()
+}
+
+# the call an expression is, through what it was written as elsewhere - null for none
+fn (s sc) callOf(x ex?&) call?& {
+    if x is null { return null }
+    return match x {
+        case ex.Call(c): c
+        case ex.Away(y): s.callOf(y)
+        case _: null
+    }
+}
+
+# ... and a conditional's values handed back alike
+fn (s sc) callOr(x ex?&, y ex?&) call?& { return s.callOf(x) if x is not null else s.callOf(y) }
+
+# read through a bare receiver's map: read-only, and only read
+fn (s sc) heldCall(l I64) I64 {
+    x := try s.inits.Get(l) catch { return -1 }
+    c := s.callOf(x)
+    return c.site if c is not null else -1
+}
+
+fn bump(c call&) { c.site++ }
+
+# given a writable tree, the part handed back is written
+fn (s sc) bumpAll(x ex&) {
+    c := s.callOf(x)
+    if c is not null: bump(c)
+    d := s.callOr(null, x)
+    if d is not null: bump(d)
+}
+
+test sc.callOf "a part handed back through a value match follows the tree it is read out of" {
+    s := sc()
+    e := ex.Away(ex.Call(call(4)))
+    s.inits.Put(1, e)
+    s.bumpAll(e)
+    assert s.heldCall(1) == 6
+    assert s.heldCall(2) == -1
+}

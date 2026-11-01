@@ -286,6 +286,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
     walkBind Bool = false     # a for-in's collection bound to its hidden reference: no use of its own (walkBound, D9d)
     retInst I64 = -1          # a value being returned from this function's instance: its result may narrow (permFit)
+    retArms I64 = -1          # ... the instance a value match's clauses or a conditional's values are being returned from
+                              # (round 3c): each fitted to the result as a returned value is
     retLambda Bool = false    # ... from a lambda whose result is written: its written levels may narrow (permFit)
     localStore Bool = false   # the store being checked lands in a local of this body (followResult)
     handing Bool = false      # a value being handed back (returned) is being fitted: what a "&" parameter reaches handed
@@ -3836,6 +3838,10 @@ fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
     # that argument reaches: its parameter)
     k := c.followedNull(x)
     if k >= 0: return k
+    # (round 3c: a choice - a value match's clauses, a conditional's values - rests on one such parameter where every
+    # value it can give does, null aside: "return match x { case Call(c): c ... case _: null }")
+    ch := c.choiceNull(unwrapped(x))
+    if ch != -2: return ch
     r := c.levelRootX(x)
     # (a reference local made from what it reaches - a binding of its payload: that parameter)
     for _ in range 16 {
@@ -3850,6 +3856,33 @@ fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
         if I64(c.cur().Params[i]) == r: return i
     }
     return -1
+}
+
+# a choice's values' one nullable parameter (nullParamOf): its index, -1 where they rest on none or on two, -2 where x is
+# no choice
+fn (c mut Checker&) choiceNull(x typed.Expr&) I64 {
+    vs Vec<typed.Expr&>
+    match x {
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a.Value is not null: vs.Push(a.Value!)
+            }
+            if m.NoMatch is not null and m.NoMatch!.Value is not null: vs.Push(m.NoMatch!.Value!)
+        }
+        case typed.Expr.Cond(_, _, k) {
+            if k.A is not null: vs.Push(k.A!)
+            vs.Push(k.B)
+        }
+        case _: return -2
+    }
+    k I64 = -1
+    for v in vs {
+        if unwrapped(v) == typed.Expr.Lit: continue
+        j := c.nullParamOf(v)
+        if j < 0 or k >= 0 and j != k: return -1
+        k = j
+    }
+    return k
 }
 
 # the nullable parameter a call's result rests on, where its callee's result follows an argument (FollowResults) that is
@@ -9773,10 +9806,13 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
     dk := c.constCond(k)
     if dk == 1 { return c.expr(a, want) }
     if dk == 0 { return c.expr(b, want) }
+    ri := c.retArms
+    c.retArms = -1
     t := c.cond1(k)
     # E28: a literal value adapts to the other value's type (a number's) where nothing else is wanted
     x typed.Expr?&c = null
     y typed.Expr?&c = null
+    c.retArms = ri if choiceAst(a) or choiceAst(b) else -1
     # S8d: each value is checked where the condition says what it does - the first where it holds, the second where not
     if want == types.UnknownT and c.litLike(a) and not c.litLike(b) {
         y = c.factsExpr(k, false, b, want)
@@ -9824,7 +9860,28 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
             return c.unknown(sp)
         }
     }
-    return typed.Expr.Cond(sp, rt, typed.Cond(t, c.fit(x!, rt, a.Span()), c.fit(y!, rt, b.Span())))
+    c.retArms = -1
+    return typed.Expr.Cond(sp, rt, typed.Cond(t, c.armFit(x!, rt, a.Span(), ri), c.armFit(y!, rt, b.Span(), ri)))
+}
+
+# a clause's or a branch's value fitted to what is wanted - where the choice is a function's returned value (retArms),
+# as a returned value is: its result may narrow or follow, what it hands back judged as handed back
+fn (c mut Checker&) armFit(v typed.Expr&c, rt types.TypeId, sp source.Span, ri I64) typed.Expr&c {
+    if ri < 0: return c.fit(v, rt, sp)
+    wasInst, wasHanding := c.retInst, c.handing
+    c.retInst, c.handing = ri, true
+    w := c.fit(v, rt, sp)
+    c.retInst, c.handing = wasInst, wasHanding
+    return w
+}
+
+# whether an expression as written is a choice of values - a value match, a conditional - whose values a return hands back
+fn choiceAst(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.MatchE(_, _), ast.Expr.Cond(_, _, _, _): true
+        case ast.Expr.Paren(_, y): choiceAst(y)
+        case _: false
+    }
 }
 
 # whether a value of type t has storage a scope can hold: it holds references, or is (or has as a part) an array of a
@@ -11016,9 +11073,13 @@ fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
     if x != typed.Expr.Call: return -1
     first I64 = -1
     rt := typeOf(x)
+    # (round 3c: the argument the callee's result follows (load.FollowResults) is what it hands back - "s.callOf(x)"'s x,
+    # its result a payload of x's)
+    fi := c.calleeInst(x.c.Target)
     for i, a in x.c.Args {
         k := c.refParamOfX(a)
         if k < 0: continue
+        if fi >= 0 and c.P.L.FollowResults.Has($fi ":" $i): return k
         if first < 0: first = k
         # (an argument of the result's own type is what it hands back - a receiver beside it reached through no more
         # than the call: "s.unAway(x)" names x, not s)
@@ -11026,6 +11087,16 @@ fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
         if i > 0 and c.isRef(ta) and c.isRef(rt) and c.P.T.Same(c.P.T.Plain(c.P.T.Referent(ta)), c.P.T.Plain(c.P.T.Referent(rt))): return k
     }
     return first
+}
+
+# the instance a call's callee is, -1 for none (a constructor, a function value)
+fn (c mut Checker&) calleeInst(t typed.Callee&) I64 {
+    id := c.bodyOfCallee(t)
+    if id < 0: return -1
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): inst
+        case _: -1
+    }
 }
 
 # D9 under the round 2: an atomic read is there to see another thread's write - so a "&" parameter whose reach one
@@ -22352,7 +22423,9 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
 fn (c mut Checker&) returned(v ast.Expr&, rt types.TypeId) typed.Expr&c {
     lc := c.litCtor(v, rt)
     if lc is not null: return lc
+    c.retArms = c.narrowable() if source.NewParams and choiceAst(v) else -1
     e := c.expr(v, rt)
+    c.retArms = -1
     c.retInst = c.narrowable()
     c.retLambda = source.NewParams and c.fr().resultSites.Len() > 0
     c.handing = true
@@ -22450,7 +22523,8 @@ fn (c mut Checker&) settleViews() {
 fn (c mut Checker&) settleMade(f I64, fd ast.Func&) {
     if c.madeSaid.Has(f) or c.fr().Gapped or c.P.FnIsExtern(f) or fd.Export or fd.S.Results.Len() != 1: return
     b := c.cur()
-    if b.Root is null or c.arrayOf(c.deref(c.P.T.Result(b.Ty))) == types.UnknownT: return
+    rt := c.deref(c.P.T.Result(b.Ty))
+    if b.Root is null or c.arrayOf(rt) == types.UnknownT and not c.handleType(rt): return
     u := typed.Uses(c.P.T, b, fn(id typed.BodyId) types.TypeId { return c.Bodies[I64(id)].Ty })
     if u.Rets.Len() == 0: return
     for x in u.Rets {
@@ -22473,6 +22547,14 @@ fn (c mut Checker&) settleMade(f I64, fd ast.Func&) {
     w := diag.Where.Span(c.P.L.Mods[mi].File, I64(rsp.Start), I64(rsp.End))
     rec := c.P.L.Diags.Error(w, msgs.RefResultMade(t[I64(isp.Start):I64(isp.End)]))
     c.P.L.Diags.Note(rec, w, msgs.NoteRefResult())
+}
+
+# whether a type is a handle - a struct of one never-null reference field, a Vec's or a Map's: a copy of it names what
+# it does (settleMade)
+fn (c mut Checker&) handleType(t types.TypeId) Bool {
+    if c.P.T.KindOf(t) != types.Kind.Named or c.declKind(t) != types.DeclKind.Struct: return false
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    return fs.Len() == 1 and c.isRef(fs[0]) and not c.P.T.IsNullable(fs[0])
 }
 
 # the type a result written as a never-null reference refers to - through a "mut" the migration keeps - else null
@@ -24036,6 +24118,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
 fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
                               said0 types.TypeId) typed.Expr&c, types.TypeId, types.TypeId {
     rt, said := rt0, said0
+    ri := c.retArms
+    c.retArms = ri if choiceAst(x) else -1
     if said == types.UnknownT and rt != types.UnknownT and c.litLike(x) { said = typeOf(c.expr(x, types.UnknownT)) }
     v := c.expr(x, rt)
     if said == types.UnknownT { said = rt }
@@ -24043,7 +24127,8 @@ fn (c mut Checker&) caseValue(m ast.Match&, x ast.Expr&, rt0 types.TypeId
     # made to fit as fit does, with nothing it says kept - said in the match's own words (S12b, S13, E28)
     n := c.P.L.Diags.Count()
     g := c.P.L.Diags.Hold()
-    w := c.fit(v, rt, x.Span())
+    w := c.armFit(v, rt, x.Span(), ri)
+    c.retArms = ri
     c.P.L.Diags.EndHold()
     if c.P.L.Diags.Count() == n {
         c.P.L.Diags.Choose(g)
