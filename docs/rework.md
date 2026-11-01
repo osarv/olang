@@ -2335,7 +2335,8 @@ it stands; round 3 made Split, Lines and Iter copy because their results became 
   follow from a result to its argument does not pass through a nested call (recorded). FRO now joins the fields one
   store makes name one storage (`joinFields`: a list's `tail` given its `first` chunk or a `chunk(k)`): written through
   one, all of its type in the struct are - marking a field written only makes it the plain writable field it is.
-- array: `Reversed` takes its receiver bare and `ReversedIter` holds the array by value (as ArrayIter).
+- array: `Reversed` takes its receiver bare and `ReversedIter` holds the array by value (as ArrayIter); `Windows` takes
+  it bare and gives its views by value.
 - `$` and `T.Name` write no `mut` under the switches (`List<Pair<String&, F64>>`, not `mut String&`): no `mut` is
   written there.
 - `make verify-params` takes every std and prelude file with a test, indented ones in `if TestBuild` included (json,
@@ -2356,13 +2357,15 @@ it stands; round 3 made Split, Lines and Iter copy because their results became 
 
 ### 17.4 Found on the way
 
-- **Constant data given to a writable `&` parameter is neither refused nor copied under the switches**
-  (`take("abc")` with `fn take(a Array<Char>&)`, a plain function or a generic's method alike): the checker fits the
-  text to a read-only `Array<Char>&` and lowering passes the constant itself to the writable parameter - the MIR
-  verifier refuses it in a test build ("argument 0 is a Array<Char>&, where a mut Array<Char>& is wanted"), and in
-  any other build a write through it would write the program's constant data. Not fixed (the fit through text's base
-  type skips the writable branch's T25d test - found too late in the round); std's two cases avoided (list's test gives
-  `$"abc"`, Reversed is bare). Reproducer: `/tmp/rw4/repro/constref.olang`.
+- **Constant data given to a writable `&` parameter of the type text is declared over was handed over as the constant
+  itself under the switches** (`take("abc")` with `fn take(a Array<Char>&)`, a plain function or a generic's method
+  alike): the fit adapting text written in the program to its base type (T29a) converted it to a read-only
+  `Array<Char>&` and stopped there, so the callee's write landed in the program's constant data (the MIR verifier
+  refused it only in a test build). Fixed: going where it may be written, it is judged as text at its own type is -
+  T25d's refusal naming `$"abc"` for a `&` parameter, the permission machinery anywhere else. tests/params/fail/
+  constbase.olang. With it std's own such calls were refused: `"abcd".Windows(3)` - Windows takes its receiver bare now
+  and gives its views by value (a hand form, handed over as Split's pieces are), list's test gives `$"abc"`, Reversed
+  is bare.
 - `List.Last`'s result read-only for every caller (above): a reference handed back through a nested call on a bare
   parameter's reach loses the follow to the outer call's argument.
 
@@ -2381,9 +2384,8 @@ with a plan under the switch). bench's IR is identical to round 3's (`/tmp/rw3/i
 
 ### 17.7 Left, in order
 
-1. The constant-data hole (17.4) - a fix in the fit, with a must-fail case.
-2. 2.10's partial copies: copy only the parts that may change - a value kept whose fresh parts are copied again
+1. 2.10's partial copies: copy only the parts that may change - a value kept whose fresh parts are copied again
    (a constructor's instance), a reader whose position is written (json's reader copies its text once per Parse).
-3. Handles as values (16.6, 4) - not begun.
-4. compiler/ to zero under the switches, the self-build, its measurements (16.6, 5) - see 17.8.
-5. Then round 4's flip.
+2. Handles as values (16.6, 4) - not begun.
+3. compiler/ to zero under the switches, the self-build, its measurements (16.6, 5) - see 17.8.
+4. Then round 4's flip.

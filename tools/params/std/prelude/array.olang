@@ -24,3 +24,15 @@ type ReversedIter<T> struct(of Array<T>) {
 # the elements from the last to the first: "for x in a.Reversed() { ... }" - a walk, building nothing, as fast as the
 # counted loop down the positions (a String's too: "for c in t.Reversed()" walks its bytes backward)
 fn (a Array<T>) Reversed() ReversedIter<T> { return ReversedIter<T>(a) }
+
+# every run of size consecutive elements, in order - Len() - size + 1 of them (none where the array is shorter than
+# size), each a view of the array, nothing copied: "for w in a.Windows(3) { smooth.Push(w.Sum() / 3.0) }". The views
+# are held in an array of their own, allocated once at its exact length - its elements the receiver's views, handed
+# over uncopied where the caller only reads them (D9h, round 3b)
+fn (a Array<T>) Windows(size ChunkSize) Array<Array<T>> {
+    n := I64(size)
+    count := a.Len() - n + 1 if a.Len() >= n else 0
+    views := Array<Array<T>>(count)   # each view written below
+    for k in range count { views[k] = a[k:k + n] }
+    return views
+}

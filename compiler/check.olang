@@ -7329,7 +7329,13 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         r := c.P.T.Referent(have)
         w := c.P.T.Referent(want) if wk == types.Kind.Ref else want
         if not c.P.T.Same(r, w) and c.sameRepr(r, c.under(w)) {
-            return c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)) if wk == types.Kind.Ref else w)
+            y := c.convert(sp, x, c.P.T.Ref(w, c.P.T.PermOf(have)) if wk == types.Kind.Ref else w)
+            # (round 3b: going where it may be written - T25d's refusal of a "&" parameter given it, as at its own type,
+            # else judged as any read-only reference; it was handed over as the constant itself, its write unseen)
+            if not source.NewParams or wk != types.Kind.Ref or not c.writable(want): return y
+            if not c.argRef: return c.fit(y, want, sp)
+            c.err(sp, msgs.ConstToRefParam(c.argName, "'$" $c.src(sp) "'" if c.P.T.Same(r, c.textType()) else "'" $c.src(sp) ".Clone()'"))
+            return y
         }
         u := c.under(w)
         if c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) != types.TypeId(0) and c.sameRepr(c.P.T.Elem(c.under(r)), c.P.T.Elem(u)) {

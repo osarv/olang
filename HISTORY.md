@@ -27769,7 +27769,10 @@ round 3 (FRO not seeing `tail` and `first` naming one chunk) was not the cause h
 fields one store makes name one storage. `$` and `T.Name` rendered `mut String&` under the switches, where no `mut` is
 written. verify-params takes every std file with a test, indented ones included - 48 of them, all passing.
 
-**Found, not fixed.** Constant data given to a writable `&` parameter is neither refused nor copied under the switches
-(`take("abc")`, `fn take(a Array<Char>&)`): the text is fitted to a read-only `Array<Char>&` through its base type and
-handed to the writable parameter as the constant itself - the MIR verifier refuses it in test builds, and elsewhere a
-write would land in the program's constant data. std's two cases were avoided (list's test, array's Reversed).
+**Found and fixed: constant data written through its base type.** Under the switches `take("abc")` with `fn take(a
+Array<Char>&)` was accepted and handed the constant itself to the writable parameter: the fit that adapts text written
+in the program to the type it is declared over (T29a) converted it to a read-only `Array<Char>&` and stopped, so the
+callee's write would land in the program's constant data (the MIR verifier refused it, in test builds only - which is
+how list's and array's tests showed it once they were checked). Going where it may be written it is judged as text is
+at its own type now: T25d's refusal for a `&` parameter. std's own such calls went bare (`Windows`, `Reversed`) or
+give a copy (list's test).
