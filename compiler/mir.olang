@@ -1077,6 +1077,17 @@ fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
     if t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array {
         return t.Length(ra) == t.Length(rb) and v.sameRepr(t.Elem(ra), t.Elem(rb))
     }
+    # (the rework's round 2: two instances of one generic type whose arguments differ only in which reference levels
+    # may be written - a value made read-only below its top by what it follows - are laid out alike)
+    if t.KindOf(ra) == types.Kind.Named and t.KindOf(rb) == types.Kind.Named and t.DeclOf(ra) == t.DeclOf(rb) {
+        xa, xb := t.Items(t.Args(ra)), t.Items(t.Args(rb))
+        if xa.Len() != xb.Len() or xa.Len() == 0: return false
+        for k in range xa.Len() {
+            if v.sameRepr(xa[k], xb[k]): continue
+            if not (t.IsRef(xa[k]) and t.IsRef(xb[k]) and v.sameRepr(t.Referent(xa[k]), t.Referent(xb[k]))): return false
+        }
+        return true
+    }
     return false
 }
 

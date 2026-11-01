@@ -627,6 +627,18 @@ fn driven(paths Vec<String&>&, olang String&, jobs I64) ? {
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
     for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    left Vec<String&>
+    fileArray := files.ToArray()
+    srcmask.Say($fileArray.Len() " files, compiled by " $olang)
+    total := try freshPass(olang, fileArray, jobs, allowed, left, "")
+    srcmask.Say("total: " $total " edits")
+    for l in left { srcmask.Say("by hand: " $l) }
+}
+
+# the driven rounds from fresh work directories, then (round 2c) the unpinned ones: a parameter made "&" from a note is
+# pinned so the rounds cannot undo it; once they settle, D9d may find it never written after all (what its note asked
+# for was made bare later) - one more settling with no pins. How many edits
+fn freshPass(olang String&, files Array<String&>&, jobs I64, allowed Vec<String&>&, left mut Vec<String&>&, label String&) I64 ? os.Error {
     tmp := try os.MkTemp("", "param_migrate")
     defer try os.RemoveAll(tmp) catch { }
     work := Array<String&>(jobs)
@@ -634,18 +646,12 @@ fn driven(paths Vec<String&>&, olang String&, jobs I64) ? {
         work[k] = $tmp "/w" $k
         try os.MkDirAll(work[k])
     }
-    left Vec<String&>
-    fileArray := files.ToArray()
-    srcmask.Say($fileArray.Len() " files, compiled by " $olang)
-    total := try rounds(olang, fileArray, work, allowed, left, "round")
-    # (round 2c) a parameter made "&" from a note is pinned so the rounds cannot undo it; once they settle, D9d may find
-    # it never written after all (what its note asked for was made bare later) - one more settling with no pins
+    total := try rounds(olang, files, work, allowed, left, $label "round")
     if Pinned.Len() > 0 {
         Pinned = Map<String&, Bool>()
-        total += try rounds(olang, fileArray, work, allowed, left, "unpinned round")
+        total += try rounds(olang, files, work, allowed, left, $label "unpinned round")
     }
-    srcmask.Say("total: " $total " edits")
-    for l in left { srcmask.Say("by hand: " $l) }
+    return total
 }
 
 # the driven rounds, until one makes no edit: how many edits, what was left for a person in left
@@ -731,9 +737,18 @@ fn main() ? {
     }
     if text: return
     try driven(paths, $diagedit.RealPathOf(olang), jobs.Max(1))
+    finished := 0
     for f in files {
         src := try srcmask.ReadText(f)
         out := FinishPhase(src)
-        if out != src: try os.WriteFile(f, out)
+        if out == src: continue
+        try os.WriteFile(f, out)
+        finished++
+    }
+    # (round 2f) a result's "mut" kept through the driven phase and dropped by the finish phase can leave what that
+    # result hands back refused (D9g: a view of a bare parameter's reach shared writably) - driven again once
+    if finished > 0 {
+        srcmask.Say($finished " files changed by the finish phase - driven again")
+        try driven(paths, $diagedit.RealPathOf(olang), jobs.Max(1))
     }
 }

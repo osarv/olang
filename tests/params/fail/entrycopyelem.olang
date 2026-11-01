@@ -1,0 +1,17 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# bulk review 5 (F1), its reproducer entrycopy_elem_write.olang: refused under the switches
+# the copy on entry of a bare Array<node&> is Array<mut node&> (-memory says so): a write through an element goes
+# to the caller's node
+import "std/io"
+type node struct(v I64) {
+    v
+}
+fn g(a Array<node&>) I64 {
+    a[0].v = 6
+    return a.Len()
+}
+fn main() {
+    nd := node(1)
+    n := g(node&[nd])
+    io.Println($nd.v " " $n)!
+}

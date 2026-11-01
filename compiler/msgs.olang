@@ -2212,7 +2212,7 @@ fn IncdecNotNumber(tok String&, ty String&) Msg { return Msg(Diag.IncdecNotNumbe
 fn CaptureReadOnly() Msg { return Msg(Diag.CaptureReadOnly, "D16c", "a lambda's captures are read-only - capture a reference to change what is outside it") }
 
 # ERR_READ_ONLY_REF_WRITE
-fn ReadOnlyRefWrite() Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - one with no 'mut' in its type") }
+fn ReadOnlyRefWrite(newParams Bool = false) Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - what a bare parameter reaches, constant data or an immutable global" if newParams else "this writes through a read-only reference - one with no 'mut' in its type") }
 
 # ERR_WRITE_INTO_CALL_VALUE
 fn WriteIntoCallValue() Msg { return Msg(Diag.WriteIntoCallValue, "E31", "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") }
