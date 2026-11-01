@@ -300,6 +300,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roLends Vec<roLendRec>
     roArgs Vec<roArg>
     refKeptArgs Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # D9d: (body, "&" parameter) given (callee, by-value k)
+    refCalls Map<pair.Pair<I64, I64>, typed.Expr&>   # D9d (round 2f): a reference local made from a call's result, the call
     callOrigins Map<pair.Pair<I64, I64>, I64>   # resultUse: a reference local's last value a plain function's result, by function
     walkParam I64 = -1   # D9d (bulk review 5): the "&" parameter the walk whose element is being declared walks, -1 for none
     roFns Vec<roFn>
@@ -740,6 +741,8 @@ fn (c mut Checker&) reset() {
     c.bareLocals = Map<pair.Pair<I64, I64>, Bool>()   # (by body: another attempt's bodies are others)
     c.roBorrows = Map<pair.Pair<I64, I64>, Bool>()
     c.roFrom = Map<pair.Pair<I64, I64>, roOrigin>()
+    c.refCalls = Map<pair.Pair<I64, I64>, typed.Expr&>()
+    c.callOrigins = Map<pair.Pair<I64, I64>, I64>()
     c.roNeeds = Map<pair.Pair<I64, I64>, Bool>()
     c.roDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.refUsed = Map<pair.Pair<I64, I64>, Bool>()
@@ -10410,6 +10413,8 @@ fn (c mut Checker&) roTrack(id I64, x typed.Expr?&) {
         case typed.Expr.Read(_, _, p, _) { c.roFrom.Put(c.roKey(id), roOrigin(p, false)) }
         case typed.Expr.Borrow(_, _, p) { c.roFrom.Put(c.roKey(id), roOrigin(p, true)) }
         case typed.Expr.Slice(_, _, sl) { c.roFrom.Put(c.roKey(id), roOrigin(sl.Base, true)) }
+        # (round 2f: a reference a call gave - what it reaches is reached through the call's arguments, D9d)
+        case typed.Expr.Call(_, _, _) { if source.NewParams: c.refCalls.Put(c.roKey(id), y) }
         case _ { }
     }
 }
@@ -10673,14 +10678,44 @@ fn (c mut Checker&) paramIndex(id I64) I64 {
 fn (c mut Checker&) refParamOf(p typed.Lvalue?&) I64 {
     if c.frames.Len() == 0 { return -1 }
     r := c.rootLocal(p)
-    if r < 0 { return -1 }
+    if r < 0 { return c.callRefParam(p, 0) }
     k := try c.refFrom.Get(c.roKey(r)) catch default -1
     if k >= 0 { return k }
     l := c.cur().Local(typed.LocalId(I32(r)))
-    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) { return -1 }
+    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) { return c.callRefParam(typed.Lvalue.Local(l.Sp, l.Ty, typed.LocalId(I32(r))), 0) }
     ps := c.cur().Params
     for i in range ps.Len() {
         if I64(ps[i]) == r { return i }
+    }
+    return -1
+}
+
+# round 2f (D9d): the "&" parameter a place is reached through by way of a call's result - "fr := c.frames[fi];
+# fr.errUsed[j] = true" writes what c reaches through At - the first of the call's arguments reached through one, the
+# receiver first (counting a use where it may be none is safe: D9d's error is only for a "&" that says nothing)
+fn (c mut Checker&) callRefParam(p typed.Lvalue?&, depth I64) I64 {
+    if p is null or depth > 16 or not source.NewParams: return -1
+    return match p {
+        case typed.Lvalue.Field(_, _, b, _): c.callRefParam(b, depth + 1)
+        case typed.Lvalue.Elem(_, _, e): c.callRefParam(e.Base, depth + 1)
+        case typed.Lvalue.Payload(_, _, pl): c.callRefParam(pl.Base, depth + 1)
+        case typed.Lvalue.Deref(_, _, ref): c.callRefParam(readPlace(unwrapped(ref)), depth + 1)
+        case typed.Lvalue.Local(_, _, id): c.localRefParam(I64(id), depth)
+        case typed.Lvalue.Temp(_, _, v, _): c.callArgParam(unwrapped(v))
+        case _: -1
+    }
+}
+
+fn (c mut Checker&) localRefParam(id I64, depth I64) I64 {
+    if c.refCalls.Has(c.roKey(id)): return c.callArgParam(try c.refCalls.Get(c.roKey(id)) catch { return -1 })
+    return c.callRefParam((try c.roFrom.Get(c.roKey(id)) catch default roOrigin(null, false)).P, depth + 1)
+}
+
+fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
+    if x != typed.Expr.Call: return -1
+    for a in x.c.Args {
+        k := c.refParamOfX(a)
+        if k >= 0: return k
     }
     return -1
 }
@@ -16855,6 +16890,8 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     rt := typeOf(x)
     if asValue and c.isRef(rt) and not c.P.T.IsNullable(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
         rt = c.P.T.OrNull(rt)
+        # (round 2f: a reference result met with null is used as a reference - no value result can stand for it, D9g)
+        if source.NewParams { c.resultUse(x) }
     }
     cls Vec<typed.Clause&>
     if clauses.Len() > 0 {
