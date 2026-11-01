@@ -4,8 +4,10 @@
 # compiler/ and its tools, checks, fuzz and bench, each as an ordinary and as a test build - and for every checks case
 # that builds or runs, with the case's flags, each type written once, under the first program that holds it
 # ("== ROOT FLAGS"). Captured again here, the golden's own types are laid out again by the self-hosted type table ("dump
-# layout", as layoutdiff reads it, LAYOUTDIFF_DUMP naming another build), a deferred or unparsed one keeping the golden's
-# row: the set of types stays the one stage 0 captured.
+# layout", as layoutdiff reads it, LAYOUTDIFF_DUMP naming another build), a deferred one that layout.deferred allows
+# keeping the golden's row: the set of types stays the one stage 0 captured, less the types the language no longer has -
+# a row the table cannot read ("unparsed") or leaves deferred where nothing allows it names something removed, as the
+# prelude's vecState, mapState and mapSlot went when Vec and Map became values - whose rows are dropped, each listed.
 #
 # Run from the repository root after "make build/compiler_tools_dump" (make layoutgold), after a change to a layout.
 # LAYOUTGOLD_OUT names another file to write than the golden (to compare a capture without replacing it).
@@ -16,7 +18,8 @@ fn main() {
     fromPort(toolkit.Env("LAYOUTGOLD_OUT", "compiler/goldens/layout.txt"))
 }
 
-# the golden laid out again by the self-hosted type table, row for row; a row it leaves unlaid keeps the golden's
+# the golden laid out again by the self-hosted type table, row for row; a row it leaves deferred where layout.deferred
+# allows it keeps the golden's, one it cannot lay out otherwise is dropped and listed
 fn fromPort(out String&) {
     dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/layout.txt"
@@ -29,11 +32,22 @@ fn fromPort(out String&) {
     old := toolkit.Rows(toolkit.Read(golden))
     got := toolkit.Rows(o.Stdout)
     if got.Len() != old.Len() { toolkit.Die("layoutgold: " $dump " gave " $got.Len() " rows for the golden's " $old.Len()) }
+    allowed := Map<String, Bool>()
+    for r in toolkit.Rows(toolkit.Read("compiler/goldens/layout.deferred")) {
+        if not r.StartsWith("#") and r != "": allowed.Put($r, true)
+    }
     b := StringBuilder()
     kept I64 = 0
+    dropped I64 = 0
     for i in range old.Len() {
         row := got[i]
-        if row.EndsWith("\tdeferred") or row.EndsWith("\tunparsed") {
+        gone := row.EndsWith("\tunparsed") or row.EndsWith("\tdeferred") and typeOf(row) not in allowed
+        if gone {
+            toolkit.Say("layoutgold: dropped, no longer a type: " $typeOf(row) "\n")
+            dropped++
+            continue
+        }
+        if row.EndsWith("\tdeferred") {
             row = old[i]
             kept++
         }
@@ -41,5 +55,11 @@ fn fromPort(out String&) {
         b.PushChar('\n')
     }
     toolkit.Write(out, b.ToString())
-    toolkit.Say("layoutgold: " $old.Len() " rows laid out by " $dump " into " $out " (" $kept " left as the golden had them)\n")
+    toolkit.Say("layoutgold: " $old.Len() " rows laid out by " $dump " into " $out " (" $kept " left as the golden had them, " $dropped " no longer types)\n")
+}
+
+# a row's type: the text before its first tab
+fn typeOf(row String&) String {
+    at := try row.Find("\t") catch default row.Len()
+    return $row[0:at]
 }
