@@ -483,9 +483,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   part counts for `HoldsRefs` so a copy missed aliases and never frees early, mine); `Map<String, V>` owns its keys by
   construction; an array of references reads as an array of values where only read (a bare parameter), copied where
   held (mine); D9a/D9c were already gone under the switch. The readers that give values (`Split` an `Array<String>`,
-  `Lines`, `filepath.Dir`, `os.ReadDir`, `ArrayIter` holding its array) are param_migrate's hand forms
-  (`tools/params/`, folded into std at the flip) - copying where views would do: the handover of parts uncopied (D9h
-  for structs and elements), flags' and json's text fields, compiler/'s readers and handles as values are left.
+  `Lines`, `filepath.Dir`, `os.ReadDir`, `ArrayIter` holding its array, flags' parser holding its text) are
+  param_migrate's hand forms (`tools/params/`, folded into std at the flip) - copying where views would do; a part
+  owning storage is stored through (O25g), so its container's scope is passed exactly. verify-params' 40 files pass.
+  Left: the handover of parts uncopied (D9h for structs and elements), json's text, compiler/'s readers, handles as
+  values.
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31, the user reversing the day
   before's removal: "knowing whether or not a function you pass things into mutates what you passed is valuable", and
   "globals shouldn't be mut unless you say so").** `mut T&` writable, `T&` read-only, at
