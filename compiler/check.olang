@@ -7390,7 +7390,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     if c.levelRo(want) { return x }
                     if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return x }
                     if c.fieldsWrite(x) { return x }
-                    c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(unwrapped(x)))
+                    c.noteRoX(c.err(sp, msgs.ReadOnlyHere()), x, 0)
                     return x
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
@@ -10094,7 +10094,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
                 return true
             }
             if c.fieldsWrite(x) { return false }
-            c.noteRo(c.err(sp, msgs.ReadOnlyHere()), readPlace(unwrapped(x)))
+            c.noteRoX(c.err(sp, msgs.ReadOnlyHere()), x, 0)
             return false
         }
         c.err(sp, msgs.ReadOnlyToWritable())
