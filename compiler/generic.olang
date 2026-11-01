@@ -628,8 +628,10 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
 }
 
 # a reference to r, "?&" where it may be null (T2c) - but an array, which is never null: its zero value is the empty
-# array, so "?&" on one is said once and read as "&"
+# array, so "?&" on one is said once and read as "&" (a type declared over another asked for its body first: a signature
+# may be signed before anything else has)
 fn (p mut Program&) refType(c Context&, sp source.Span, r types.TypeId, nullable Bool) types.TypeId {
+    if nullable { p.overBodies(r) }
     if nullable and p.T.KindOf(p.T.Repr(r)) == types.Kind.Array {
         key := pair.Pair(c.Mi, I64(sp.Start))
         if not (try p.r1bSaid.Get(key) catch default false) {
@@ -1889,6 +1891,15 @@ fn (p mut Program&) substList(l types.ListId, owner I64, args types.ListId) type
 }
 
 # ---- bodies ----
+
+# the bodies of t and the types it is declared over, in turn (T29), so its representation is known (Repr)
+fn (p mut Program&) overBodies(t types.TypeId) {
+    at := t
+    for p.T.KindOf(at) == types.Kind.Named and p.T.DeclKindOf(p.T.DeclOf(at)) == types.DeclKind.Over {
+        if not p.Body(at): return
+        at = p.T.Base(at)
+    }
+}
 
 # a declared type's body, made the first time it is asked for: a struct's fields from its constructor (C2), an enum's
 # cases' payloads (T17), the type a declared type is over (T29); an instance's is its generic's substituted (G10b).

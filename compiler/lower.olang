@@ -1938,12 +1938,43 @@ fn (ln mut lowering&) fits(x typed.Expr?&, to types.TypeId) Bool {
 # conversions grew it every turn
 fn (ln mut lowering&) widen(v mir.Operand, from types.TypeId, to types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
     src := ln.local(v, from, sp)
-    n := mir.Operand.Const(mir.I64T, ln.fixedLen(ln.arrayOf(from)))
+    k := ln.fixedLen(ln.arrayOf(from))
+    n := mir.Operand.Const(mir.I64T, k)
     buf := ln.temp(to, sp)
+    fe := ln.T.Elem(ln.T.Repr(from))
+    te := ln.T.Elem(ln.T.Repr(to))
+    if ln.laidApart(fe, te) {
+        # QCE: rows laid out in place made rows of a run-time length - each widened in turn, made where the array is
+        ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
+        for i in range k {
+            e := ln.into(fe, mir.Rvalue.Use(mir.Operand.Copy(ln.F.Place(mir.Base.Local(src), mir.Proj[mir.Proj.At(i)]))), sp)
+            w := ln.widen(e, fe, te, sp, at)
+            ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.At(i)]), mir.Rvalue.Use(w)))
+        }
+        return mir.Operand.Copy(mir.L(buf))
+    }
     # no fill: every element is copied in at once
     ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, to, n, mir.Operand.None)))
     ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
     return mir.Operand.Copy(mir.L(buf))
+}
+
+# whether arrays of element types a and b lay their elements out apart: a's elements arrays laid out in place, b's of a
+# run-time length (QCE: Array<Array<I64>> made with a fill, wanted as rows each its own) - a widening element by element
+fn (ln mut lowering&) laidApart(a types.TypeId, b types.TypeId) Bool {
+    t := ln.T
+    ra := t.Repr(a)
+    rb := t.Repr(b)
+    return t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array and t.Length(ra) != types.TypeId(0) and
+           t.Length(rb) == types.TypeId(0)
+}
+
+# whether a conversion of a value of type from to array type to lays its elements out apart (laidApart): a copy, never
+# the pair naming from's storage
+fn (ln mut lowering&) convertsApart(from types.TypeId, to types.TypeId) Bool {
+    a := ln.arrayOf(from)
+    b := ln.arrayOf(to)
+    return a != types.UnknownT and b != types.UnknownT and ln.laidApart(ln.T.Elem(a), ln.T.Elem(b))
 }
 
 # the innermost scope open here that storage can be made in: a block's, a loop turn's, a join's or the frame's; the
@@ -3415,7 +3446,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
     # declaration's or a body that writes it)
     r typed.Expr?&args = null
-    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) and not ln.convertsApart(args[0].Type(), ty) { r = derefOf(args[0]) }
     if r is not null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
         v := ln.val(r)
         if ln.dead { return mir.Operand.None }

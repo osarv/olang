@@ -1,11 +1,29 @@
 # check: run
 # QCE (T7a relaxed): a type declared over an array of arrays holds its rows by value, each its own run-time array
 # (the third any review's finding 7 had made it T7a's error: converting rows laid out in place to it read each row as a
-# run-time array - a segfault, invalid IR - which must stay right)
+# run-time array - a segfault, invalid IR - which must stay right). Rows laid out in place given where rows of a
+# run-time length are wanted - a conversion, a constructor's field - are widened each in turn, as the evaluator agrees
 type Grid extends Array<Array<I64>>
-fn (g Grid&) Show() String { return "g " $g[0][0] }
+type Box struct(rows Array<Array<I64>>) {
+    rows
+}
+fn (g Grid&) Show() String { return "g " $g[0][0] $g[1][1] }
+fn grid() Grid {
+    a := Array<Array<I64>>(2, Array<I64>(2, 5))
+    a[1][1] = 7
+    return Grid(a)
+}
+fn boxed() Box {
+    a := Array<Array<I64>>(2, Array<I64>(2, 3))
+    a[0][1] = 4
+    return Box(a)
+}
+Shown String = grid().Show()
+Kept I64 = boxed().rows[0][1]
+assert Shown == "g 57" and Kept == 4
 fn main() {
     a := Array<Array<I64>>(2, Array<I64>(2, 5))
     g := Grid(a)
-    assert g.Show() == "g 5"
+    assert g.Show() == "g 55"
+    assert grid().Show() == Shown and boxed().rows[0][1] == Kept and boxed().rows[1].Len() == 2
 }

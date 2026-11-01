@@ -1,8 +1,8 @@
-# check: build
+# check: run
 # QCE (T7a relaxed): an array of arrays held in a field by value is the instance's own - its rows too, each its own
 # run-time array, copied in where the field is given existing storage (it was T7a's error, "held by reference")
 type M struct() { m Array<Array<I32>> = Array<Array<I32>>(0) }
-test "a field's array of arrays" {
+fn main() {
     x := M()
     assert x.m.Len() == 0
 }

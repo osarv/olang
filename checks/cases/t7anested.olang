@@ -1,8 +1,8 @@
-# check: build
+# check: run
 # QCE (T7a relaxed): an array of a run-time length held inside a struct by value is the struct's own - a copy of the
 # struct copies it (it was T7a's error, "held by reference"); a fixed-length one (T7c) is laid out in the value
 type W struct(n I32) { a Array<I32> = Array<I32>(n) }
-test "a struct's own array" {
+fn main() {
     w W = W(3)
     v := w
     v.a[0] = 7

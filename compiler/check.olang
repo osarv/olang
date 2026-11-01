@@ -7053,6 +7053,16 @@ fn (c mut Checker&) sameRepr(a types.TypeId, b types.TypeId) Bool {
     return false
 }
 
+# whether values of two types are laid out alike in memory: held alike (sameRepr), every array among them of one
+# length - a fixed one's elements in place, a run-time one's a pair naming them elsewhere
+fn (c mut Checker&) laidAlike(a types.TypeId, b types.TypeId) Bool {
+    if c.P.T.Same(a, b) { return true }
+    ua := c.under(a)
+    ub := c.under(b)
+    if c.P.T.KindOf(ua) != types.Kind.Array or c.P.T.KindOf(ub) != types.Kind.Array { return c.sameRepr(a, b) }
+    return c.P.T.Length(ua) == c.P.T.Length(ub) and c.laidAlike(c.P.T.Elem(ua), c.P.T.Elem(ub))
+}
+
 # whether two arrays' lengths agree: one length, or one a computed length not decided yet, which fits any (T7c)
 fn (c mut Checker&) lengthsMeet(a types.TypeId, b types.TypeId) Bool {
     la := c.P.T.Length(a)
@@ -11195,9 +11205,10 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         if c.flowsInto(c.deref(xt), base) or c.sameRepr(c.deref(xt), base) {
             if c.isRef(xt) { return c.convert(sp, x, c.P.T.Ref(t, c.P.T.PermOf(xt))) }
             # T29a: an array named by a place converted names its storage - a place of the declared type, whose read is
-            # a copy where one is made and whose borrow is that storage, written where it may be
+            # a copy where one is made and whose borrow is that storage, written where it may be - where its elements
+            # are laid out as the type's are (rows laid out in place are no rows of a run-time length: made anew, below)
             xp := readPlace(x)
-            if xp is not null and c.P.T.KindOf(c.under(xt)) == types.Kind.Array and c.P.T.KindOf(c.under(base)) == types.Kind.Array {
+            if xp is not null and c.P.T.KindOf(c.under(xt)) == types.Kind.Array and c.P.T.KindOf(c.under(base)) == types.Kind.Array and c.laidAlike(c.P.T.Elem(c.under(xt)), c.P.T.Elem(c.under(base))) {
                 perm := types.Writable if c.placeWritable(xp) else types.ReadOnly
                 r := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(xt, perm), xp), c.P.T.Ref(t, perm))
                 # fixed storage (T7d) is named as one of a run-time length, as a slice of it is (E16a): its read a copy
