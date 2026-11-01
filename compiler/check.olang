@@ -98,6 +98,10 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     nulls Vec<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
+    # G15, G30, G35: the statement just checked was decided for this instance and leaves - what follows it in its block
+    # is never reached in this instance, so it is not checked there (an index or a slice past a length the instance
+    # binds, "ts[0]" after "if ts.Len() == 0 { return }", is no error of it)
+    instLeft Bool = false
     # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
     # it reads by where each is written (ctKey), each one of its parameters
     Contract I64 = 0
@@ -5585,7 +5589,12 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
             }
         }
         fr.nonNullSet = Array<source.NameId>(0)
+        fr.instLeft = false
         c.stmt(body[i])
+        if fr.instLeft {
+            fr.instLeft = false
+            break
+        }
         for k in after {
             if k < fr.nulls.Len() { fr.nulls[k] = nullNarrow(fr.nulls[k].Path, fr.nulls[k].Block, true) }
         }
@@ -19271,21 +19280,35 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
     }
 }
 
+# an if decided for this instance (G30, G35): the branch chosen alone checked - and where it leaves, what follows the if
+# in its block is not checked in this instance (instLeft)
+fn (c mut Checker&) decidedIf(sp source.Span, i ast.If&, then Bool) typed.Stmt&c {
+    return c.decided(c.chosenBranch(sp, i, then))
+}
+
+fn (c mut Checker&) chosenBranch(sp source.Span, i ast.If&, then Bool) typed.Stmt&c {
+    if then: return typed.Stmt.Block(sp, c.branchBlock(i.Then!))
+    if i.Else is null: return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0)))
+    match i.Else {
+        case ast.Stmt.If(esp, e) {
+            if e.Cond is null: return typed.Stmt.Block(esp, c.branchBlock(e.Then!))
+            return c.ifOf(esp, e)
+        }
+        case _: return c.elseOf(sp, i.Else!)
+    }
+}
+
+# a statement decided for this instance (G15, G30, G35): one that leaves ends what its block checks (instLeft)
+fn (c mut Checker&) decided(s typed.Stmt&c) typed.Stmt&c {
+    if leaves(s): c.fr().instLeft = true
+    return s
+}
+
 fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     if i.Cond is null { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
     # G35: a condition reading a reflected member is decided for this instance - the chosen branch alone checked
     rd := c.reflDecide(i.Cond)
-    if rd == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
-    if rd == 0 {
-        if i.Else is null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
-        match i.Else {
-            case ast.Stmt.If(esp, e) {
-                if e.Cond is null { return typed.Stmt.Block(esp, c.branchBlock(e.Then!)) }
-                return c.ifOf(esp, e)
-            }
-            case _ { return c.elseOf(sp, i.Else!) }
-        }
-    }
+    if rd >= 0 { return c.decidedIf(sp, i, rd == 1) }
     d := c.P.L.Diags
     # B9c, S8b: decided by evaluation in an earlier check of the program - the branch chosen alone
     key := pair.Pair(c.fr().File, I64(i.Cond!.Span().Start))
@@ -19336,17 +19359,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     }
     # G30: a condition reading a length the instance binds is decided for it, the chosen branch alone checked
     dk := c.constCond(i.Cond!)
-    if dk == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
-    if dk == 0 {
-        if i.Else is null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
-        match i.Else {
-            case ast.Stmt.If(esp, e) {
-                if e.Cond is null { return typed.Stmt.Block(esp, c.branchBlock(e.Then!)) }
-                return c.ifOf(esp, e)
-            }
-            case _ { return c.elseOf(sp, i.Else!) }
-        }
-    }
+    if dk >= 0 { return c.decidedIf(sp, i, dk == 1) }
     # a running if: what both its branches hold is reported - one whose condition reads a local that is no fixed one
     # (S8c), or is wrong, included. One asked for stays held until evaluation decides it
     if not asked { c.Running(i) }
@@ -22388,7 +22401,7 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
         if k < 0 { return }
         cs := m.Cases[k]
         was := c.bindCase()
-        if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        if cs.Body.Len() > 0 { c.emit(c.decided(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp)))) }
         c.unbindCase(was)
         return
     }
@@ -22399,7 +22412,7 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
     if k != -2 {
         if k < 0 { return }
         cs := m.Cases[k]
-        if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        if cs.Body.Len() > 0 { c.emit(c.decided(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp)))) }
         return
     }
     c.emit(typed.Stmt.Eval(sp, c.matchExpr(sp, m, false, types.VoidT)))

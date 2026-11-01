@@ -13536,6 +13536,36 @@ test "G30: decided per instance - a recursion on a length ends where it is chose
     assert kViaLocal(b) == 1 and kViaLocal(s) == 0
 }
 
+# G30: a decided if that leaves ends what its block checks in that instance - an index or a slice past the length it
+# binds after "if a.Len() == 0 { return }" is never reached there, so no error of it (E16, D9a); and the same for a
+# decided match and a "match T" (G15, G35)
+fn kFirstSum(ts Array<I64>) I64 {
+    if ts.Len() == 0 { return -1 }
+    t := ts[0]
+    rest := ts[1:]
+    return t + kFirstSum(rest)
+}
+fn kLenNamed(a Array<I32>) String {
+    match a.Len() {
+        case 0 { return "none" }
+        case _ { }
+    }
+    return "first " $a[0]
+}
+fn kKindOf<T>(x T) String {
+    match T {
+        case I64 { return "int" }
+        case _ { }
+    }
+    return "other " $x.Len()
+}
+KFirstSumBaked := kFirstSum(I64[3, 4])
+test "G30: what follows a decided if that leaves is not checked in that instance" {
+    assert kFirstSum(I64[3, 4]) == 6 and kFirstSum(I64[]) == -1 and KFirstSumBaked == 6
+    assert kLenNamed(Array<I32>(0)) == "none" and kLenNamed(I32[7]) == "first 7"
+    assert kKindOf(5) == "int" and kKindOf("abc") == "other 3"
+}
+
 # what constant arguments of an enum and a Bool chose, marker types and "match T" choose
 type KRow struct() { }
 type KCol struct() { }

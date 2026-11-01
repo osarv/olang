@@ -8546,8 +8546,11 @@ not checked against it at all, as G14 says of a type match's other arms. Such a 
 reading a build constant is (S8b), never S8a's dead code; one that cannot be evaluated is an ordinary condition, both
 branches checked. Every branch is still parsed, the body being one for all instances; the chosen one behaves as a block
 in its place, an `if` none of whose branches is chosen is nothing, and a `match` used as a value (S12b) choosing
-nothing is a compile-time error at the instance. That is what lets one function do what only some of its lengths can,
-and what ends a recursion on a length:
+nothing is a compile-time error at the instance. Where the branch or clause chosen always leaves (D10a), what follows
+the statement in its block is never reached in that instance and is not checked against it either - an index or a
+slice past the length the instance binds after `if a.Len() == 0 { return }` is no error there (E16, D9a); the same
+holds for a statement decided by G14's `match T` and by G35. That is what lets one function do what only some of its
+lengths can, and what ends a recursion on a length:
 
 ```
 fn total(a Array<I64>) I64 {
