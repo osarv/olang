@@ -1505,3 +1505,104 @@ by-pointer value-result handover (12.6 item 2) - so the remaining class waits fo
 those parameters `?&` would let following (12.1) take them, a workaround the migration is not taught. D9d's 27 are parameters the
 pinned stage keeps `&` (made so by a note, then never used as one - what the unpinned settling would bare); O10c/O10d/O26 (48) and E28/E31b/T17c/T24 (32) are scope and
 copy refusals of views a bare parameter now gives, to be read again once value results hand over by pointer.
+
+## 13. Round 2d: value results handed over, a reference result says shared
+
+Built on `wt-rework` behind the same switches; without them the compiler checks and builds as before (13.4).
+
+### 13.1 What was built
+
+- **D9g, QCC's rule for results.** A result written as a reference (`T&` - not `T?&`, and not one the migration keeps
+  `mut` while it runs) hands the caller something it shares and may write. Handing back through it a value read-only
+  at its top - what a bare parameter reaches, constant data, an immutable global - is an error naming the value result
+  `T` (or `p T&`), with a note at the result, which `param_migrate` reads to make the result the value
+  (`check.writtenRefResult`, `roRefResult`, in permFit and roWritableRef where round 2b had narrowed the result
+  read-only). So is a by-value parameter's own storage lent through such a result (`ownParamBorrow`: the function's
+  copy, which dies at the return - O26 had said it, and the migration had made the parameter `&`). Two cases keep
+  round 2c's narrowing (13.2, 1).
+- **D9h, the value result handed over by pointer.** A function whose array value result is a view of what its
+  arguments reach hands the view back as it is; its callers copy it where they keep it:
+  - *Facts.* `typed.ViewWalk` reads a returned value: the parameters (a bit each) whose arguments' storage it is a view
+    of - through a reference a parameter holds, the parts of what it reaches, a slice, a conversion, a choice of such
+    views or new values, and a call of another such function whose viewed arguments are themselves such views (through
+    a promoted array argument too) - else 0 (new storage, or a call that copies) or -1 (other existing storage, which
+    the return copies as T7b does). One function for check and lowering: check records the bits at every return
+    (`recordViews`, `load.ViewResults` by instance; a `become` of such a function viewing anything else records
+    `ViewOther`, its result copied at every call) and checks the program again where they grow; lowering follows them.
+    A parameter the body assigns whole views nothing (names' `load.ParamWritten`).
+  - *The callee* (`lower.retView`): a return the walk finds a view of the arguments is handed back with no copy, the
+    calls it hands back marked read where they stand.
+  - *The caller* (`lower.call`): a call of such a function copies its result into the scope it passes for the callee's
+    result - what the callee's T7b copy did, so section 8's placement is unchanged - unless the call is read where it
+    stands and what it views cannot change before the read: read positions (`readHere`) are an argument for a
+    read-only parameter of a call whose result holds no reference, a text piece and a statement's discarded value;
+    stable sources (`stableViews`) are what a bare parameter of the caller reaches, constant data, a value made for the
+    call, or any place of the caller where the statement writes nothing (`quietStmt`: no writable argument, no call
+    through a value or an `any`, no statements of its own). A view is never held in a local: one kept is copied, so
+    section 8 never sees a view outlive its source.
+  - *Callers that cannot know*: a function value of such a function and its slot in an `any`'s table go through
+    `mir.FnKey.Copied` (`lower.copiedFn`, emitted where wanted, `linkonce_odr`), which copies the result; an adapter
+    (E31) copies too. The evaluator lowers without a plan, where every returned view is copied (T7b) and no fact is
+    used, so a baked global or a decided assert agrees with the run time by construction; `interpret` lowers with the
+    plan, as a build does.
+  - `-memory` prints how many returns hand back a view and how many calls read one in place or copy it;
+    `OLANG_VIEWDUMP=1` lists each call's decision.
+- **A plain function's value result follows its bare parameters** (`check.followBare`, `paramsOf`). A value result
+  holding references that hands back what bare parameters reach - a copy of a bare enum or struct, a part of one, a
+  choice among such, a value a call following such a parameter hands back - records the parameters it follows
+  (`load.FollowResults`, round 2c's map, which had held instances' and nullable parameters' follows): at a call giving a
+  read-only argument for one the result is a read-only copy (`roCallCopy`, `followedResult`), else as writable as the
+  caller's arguments. A field read-only by inference on the way is marked written instead (its data may be read-only
+  whatever the argument is). Before, such a return was refused (T25c, "a copy of a read-only Expr cannot be returned as a
+  writable value"), so the migration made the parameter `&` - and every caller with read-only data was then refused; a
+  `&` parameter only handed back so is no use now (D9d names `p T`). Such a function is no function value (round 2c's
+  `FollowingFuncValue`). Found with it: `followedResult` judged a value argument read-only only where it was a read-only
+  copy as written, so a followed call's result given to another followed call (`f(f(x))`, the inner one lent by a
+  temporary, `Promote`) came out writable - `roBelow` reads through the conversion and the temporary; and the T25c at a
+  `x!` read through a bare parameter named no parameter (`noteRo` reads through `unwrapped`), so the migration could not
+  make it `&`.
+- **T25c: a result the checker narrowed read-only is no writable built result** (`scope.readOnlyResult`), the scope
+  pass's stand-in for KeptPerm under the switches: a `T?&` result following its argument (13.2, 1), returned from
+  existing storage, is judged as borrowed - what KeptPerm had said - rather than refused as a writable built result
+  (O14, T25c; 23 of the migrated compiler's errors).
+- **KeptPerm off under the switches** (`generic.sigType`): a written borrowed result is a plain result there - after
+  D9g the markers left name `&` parameters, whose results are writable as written.
+- **A bare enum holding references passed by pointer, as a struct is** (`generic.byPointer`; round 2c's reverted try,
+  d5429f1), and **a type variable binds a bare parameter's value type** (`check.bindType`): the by-pointer
+  representation had leaked into generic binding - `T.Name` said `P&` for a bare struct `p P` - which is what had broken
+  std/json's `Str` when enums went by pointer. Plain enums stay in registers.
+- **O26 at a call notes the by-value parameter it rests on** (`scope.noteBareArg`), and `param_migrate` follows the
+  note: its blanket rewrite of every bare parameter among the call's arguments - numbers included (`want
+  types.TypeId&`, T24) - is gone.
+- **std/list**: a run slices its chunk directly (`runIn`), no array value call between it and the reference result.
+
+### 13.2 Decided here (mine, the user absent - provisional, for the user's review)
+
+1. **D9g's two exceptions.** A `T?&` result handing back a bare parameter's reach follows its argument as round 2c
+   has it (no value form holds an absence, and an error for "none" would rewrite every `?&` reader - 94 in compiler/
+   and std); and a view read through a field read-only by inference (round 2c's per-type fields) narrows the result
+   read-only for every caller, as before (making the field writable instead would refuse every read-only instance of
+   the type). Both are `&`s in a signature that are not writable - against the user's rule, so for review; the first
+   could become `? NotFound` readers, the second wants the stored read-only reference (open point 3).
+2. **Run-time arrays only.** The handover is for array values (text included), whose copy allocates and copies the
+   elements. A struct or an enum value result is copied by value as today - a few words, through memory past 128
+   bytes - and not handed over by pointer; measured not to matter in what was migrated (13.5).
+3. **Read where it stands, judged by statement.** No view lives in a local: `x := t.Trim()` copies (13.5 counts how
+   often), so the scope pass needs nothing new - every call it judges as new storage is new storage, but for the reads
+   where it stands, which end before the statement does.
+4. **2.10's hole, extended.** A view read where it stands is unobservable but where its source is written in the same
+   statement by a route the statement does not show - a mutable global reaching the same storage, written by a call
+   given only read-only arguments - which is 2.10's own provisional hole (a bare argument passed by pointer while the
+   call writes its storage another way). Stated; closed with 2.10's caller-side copy.
+5. **Copying wrappers for callers that cannot know** (`FnKey.Copied`) rather than copying at every call through a
+   value: a lambda's result, which is not handed over, would then be copied twice.
+6. **Enums holding references by pointer.** Needed by the compiler's own trees: a bare `x typed.Expr` held by value is
+   the function's copy, so a node built from it, or a reference result handing it back, held the frame's copy (O26),
+   and the migration made such parameters `&` - which every caller with read-only data was then refused (round 2c's
+   T25c class).
+7. **A type variable binds what a bare parameter is, not how it is passed** - a bare struct, array or enum binds its
+   value type. A fix of round 2a's representation leaking (found here); std's tests pass either way, std/json's needed it.
+8. **A plain function's value result follows its bare parameters** rather than being made read-only for every caller
+   (round 2b's NarrowResult) or refused: what a caller gets is as writable as what it gave, which is QCC's reading of a
+   value result (the caller's own). The cost is that such a function is no function value; a written "read-only below
+   the top" result type would make it one, which the language does not have (open point 3).

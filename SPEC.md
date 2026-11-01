@@ -2093,6 +2093,17 @@ handed to the caller without a copy where the caller only reads it, and copied w
 Excepted: a view read through a field read-only by inference (round 2c's per-type fields), whose result is read-only
 for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).
 
+**D9h (a value result handed over; provisional, as D9 above).** A value result is the caller's own: it may write it
+and what it holds. Where a function's array result (text included) is a view of what its arguments reach, the view is
+handed back with no copy and the caller copies it where it keeps it - unless it reads it where it stands (an argument for
+a read-only parameter, a text piece, a discarded value) and nothing the statement does can change what it views. A
+function value, an `any`'s table and an operator's adapter copy it at the call, since their caller cannot know. A
+plain function's value result holding references that hands back what its bare parameters reach - a copy of a bare
+enum or struct, a value a call following such a parameter hands back - **follows** those parameters: at a call given a
+read-only argument for one of them the result is read-only below its top (a read-only copy, T25c), else it is as
+writable as the caller's own arguments; so such a function is no function value (T21's "not a value": its result's
+permission is the call's). Unobservable in what a program computes; it decides only which programs are accepted.
+
 **G29 under the rework's round 2b (provisional).** A bare array parameter is passed by pointer, one instance for every
 length - but where its body decides something on its length: `p.Len()` in an `if`'s, an `assert`'s or a `match`'s
 condition, after a conditional's or a guard's `if`, in a `comptime` or as the length of an array the body makes. Such a
