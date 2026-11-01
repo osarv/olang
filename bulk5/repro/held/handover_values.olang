@@ -1,0 +1,31 @@
+# D9h (round 2d): a view handed back by a function called through a value, an any's table, a generic's instance, a
+# become; the caller keeps it and then writes the source
+import "std/io"
+
+type named trait {
+    Label() String
+}
+
+type tag struct(text String&) {
+    text
+}
+
+fn (g tag) Label() String { return g.text[1:] }
+
+fn inner(t String) String { return t[1:] }
+
+fn viaBecome(t String) String { become inner(t) }
+
+fn pass<T>(x T, f fn(x T) T) T { return f(x) }
+
+fn main() {
+    t := $"abcd"
+    f := inner
+    a := f(t)
+    n any named& = tag(t)
+    b := n.Label()
+    c := viaBecome(t)
+    e := String&[inner(t)]
+    t[2] = 'x'
+    io.Println($a " " $b " " $c " " $e[0])!
+}

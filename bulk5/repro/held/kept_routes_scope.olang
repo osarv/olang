@@ -1,0 +1,31 @@
+import "std/io"
+type holder struct(s String&) {
+    s
+}
+fn viaLocal(t String) holder {
+    s := t
+    return holder(s)
+}
+fn viaChoice(t String, u String, k I64) holder { return holder(t if k == 0 else u) }
+fn mk(i I64) holder {
+    t := $"abc" $i
+    return viaLocal(t)
+}
+fn mk2(i I64) holder {
+    t := $"abc" $i
+    return viaChoice(t, t, 0)
+}
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+fn main() {
+    hs := Vec<holder>()
+    for i in range 3 {
+        hs.Push(mk(i))
+        hs.Push(mk2(i))
+    }
+    s := 0
+    for i in range 1, 50 { s += churn(i * 8) }
+    io.Println($hs[0].s $hs[5].s " " $s)!
+}

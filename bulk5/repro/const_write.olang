@@ -1,0 +1,25 @@
+# a Vec<String&> holding a text literal (constant data, T25d - read-only, emitted as an LLVM constant) passed to a
+# bare parameter, whose elements are handed out writable: the callee writes the constant
+import "std/io"
+
+fn poke(v Vec<String&>) {
+    x := v[0]
+    x[0] = 'q'
+}
+
+fn main() {
+    v := Vec<String&>()
+    v.Push("abc")
+    poke(v)
+    io.Println($v)!
+}
+
+# the same through a bare array of text, no Vec
+fn pokeArray(a Array<String&>) {
+    x := a[0]
+    x[0] = 'q'
+}
+
+test "an array literal of text literals" {
+    pokeArray(String&["abc"])
+}

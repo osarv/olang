@@ -1,0 +1,33 @@
+import "std/io"
+type holder struct(s String&) {
+    s
+}
+type wholder struct(s String&) {
+    s
+}
+fn mk(t String) holder { return holder(t) }
+fn keepW(t String&) wholder { return wholder(t) }
+fn churn(n I64) I64 {
+    xs := Array<I64>(n, 7)
+    return xs[n - 1]
+}
+fn main() {
+    t1 := $"abc"
+    w := keepW(t1)
+    h1 := mk(t1)
+    w.s[0] = 'x'
+    # held across loop turns: written in a later turn
+    t2 := $"abc"
+    r2 String& = t2
+    hs := Vec<holder>()
+    for i in range 2 {
+        if i == 1 { r2[0] = 'x' }
+        hs.Push(mk(t2))
+    }
+    # a value local of a struct holding the text
+    t3 := $"abc"
+    h3 := mk(t3)
+    t3x := wholder(t3)
+    t3x.s[1] = 'y'
+    io.Println($h1.s " " $hs[0].s " " $h3.s)!
+}

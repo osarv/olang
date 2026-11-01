@@ -1,0 +1,32 @@
+import "std/io"
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+fn l1(a Array<I64>) I64 {
+    a += 1
+    return a[0]
+}
+fn l4(p pt) I64 {
+    p.x++
+    return p.x
+}
+fn l5(a Array<I64>) I64 {
+    a[0], a[1] = a[1], a[0]
+    return a[0]
+}
+fn l6(a Array<I64>) I64 {
+    defer { a[0] = 1000 }
+    return a[1]
+}
+fn l7(a Array<I64>) I64 {
+    a.Sort(fn(x I64, y I64) Bool { return x > y })
+    return a[0]
+}
+fn main() {
+    xs := I64[5, 6, 7]
+    r := l1(xs) + l5(xs) + l6(xs) + l7(xs)
+    p := pt(1, 2)
+    q := l4(p)
+    io.Println($xs " " $r " " $p " " $q)!
+}
