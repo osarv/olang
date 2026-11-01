@@ -1,0 +1,388 @@
+# handles_migrate - Vec, Map, StringBuilder, set.Set, deque.Deque and heap.Heap are values (QCE, the handles-as-values
+# round of 2026-11-01): a copy of one is a collection of its own, where it was a second name for the same storage, and
+# their Clone() is gone (a value assignment copies; list.List stays a handle and keeps it). Code written before is made
+# to mean what it meant from the compiler's own report (OLANG_HANDLES=1, check.handleReport) and its diagnostics:
+#   - a local declared as a copy of a place holding one by value ("t := c.items", "e := l.toks") becomes a reference to
+#     the place - "t Vec<I64>&c = c.items" where it is never written, "t mut Vec<I64>&c = c.items" where it is - so it
+#     names the same storage as the copy did;
+#   - a local declared from an element a Vec gives ("e := vv[i]") or a value a Map gives ("g := try m.Get(k)"), and
+#     written, takes the element where the collection holds it ("vv.Ref(i)", "try m.Ref(k)");
+#   - a by-value parameter its body writes ("fn add(v Vec<I64>, x I64)") is lent writably ("v mut Vec<I64>&");
+#   - "x.Clone()" on one of the six becomes "x": a value place given it copies (E12) - but "y := x.Clone()" of a
+#     reference x, where ":=" would name the same storage, is listed for a person.
+# What the report cannot decide is listed for a person to look at: a copy a function hands back, a local given another
+# function's value and written, a copy stored and the original written after (found by running the tests).
+# Each file is compiled (test when it has tests, compile otherwise), the edits applied, and that repeats until nothing
+# more changes. Only files under the paths given are edited. A checks/cases program that must fail keeps the failure it is
+# about: nothing is applied from a row carrying its expected text. Idempotent: code already migrated reports nothing.
+#
+#     $OLANG build tools/handles_migrate.olang && build/tools_handles_migrate [--olang PATH] [-j N] [--via FILE] FILE|DIR...
+#
+#   --via  compile FILE (repeatable) instead of every file under the paths - a program's root, whose report covers every
+#          module it imports (compiler/olang.olang for compiler/)
+
+import "std/os"
+import "std/cancel"
+import "srcmask"
+import "diagedit"
+
+Taken mut I64 = 0
+
+# one edit the report or a diagnostic asks for, at a file's line and column
+type edit struct(Path String, Line I64, Col I64, Kind String, Name String, Type String, Root String) {
+    Path, Line, Col, Kind, Name, Type, Root
+}
+
+# a report row "handles: PATH:LINE:COL: KIND NAME|TYPE|ROOT" as an edit, failing with NoRow for any other
+fn reportRow(row String&) edit ? NoRow {
+    if not row.StartsWith("handles: "): error NoRow
+    rest := row[9:]
+    # the place's end: ": " before the kind
+    at := try rest.Find(": ") catch { error NoRow }
+    for {
+        tail := rest[at + 2:]
+        if tail.StartsWith("ref ") or tail.StartsWith("mut ") or tail.StartsWith("kept ") or tail.StartsWith("call ") or tail.StartsWith("param "): break
+        next := try rest[at + 1:].Find(": ") catch { error NoRow }
+        at += next + 1
+    }
+    loc := rest[:at]
+    words := rest[at + 2:]
+    sp := try words.Find(" ") catch { error NoRow }
+    kind := words[:sp]
+    parts := words[sp + 1:].Split("|")
+    if parts.Len() != 3: error NoRow
+    c2 := try loc.FindLast(":") catch { error NoRow }
+    c1 := try loc[:c2].FindLast(":") catch { error NoRow }
+    line := try loc[c1 + 1:c2].ParseInt() catch { error NoRow }
+    col := try loc[c2 + 1:].ParseInt() catch { error NoRow }
+    return edit($loc[:c1], line, col, $kind, $parts[0], $parts[1], $parts[2])
+}
+
+# a diagnostic "TYPE has no method 'Clone'" on one of the six as an edit
+fn cloneRow(row String&) edit ? NoRow {
+    r := try diagedit.ParseRow(row) catch { error NoRow }
+    if not r.IsError or not r.Msg.EndsWith(" has no method 'Clone'"): error NoRow
+    ty := r.Msg[:r.Msg.Len() - 22]
+    return edit($r.Path, r.Line, r.Col, "clone", "", $ty, "")
+}
+
+# the edits a compilation's output asks for in the allowed paths - none from a must-fail case's expected rows
+fn editsFrom(out String&, allowed Vec<String&>&, expected Vec<String&>&, eds mut Vec<edit>&) {
+    for row in out.Lines() {
+        if diagedit.ContainsAny(row, expected): continue
+        e := try reportRow(row) catch {
+            c := try cloneRow(row) catch { continue }
+            if diagedit.Allowed(diagedit.RealPathOf(c.Path), allowed): eds.Push(c)
+            continue
+        }
+        if diagedit.Allowed(diagedit.RealPathOf(e.Path), allowed): eds.Push(e)
+    }
+}
+
+# the column (from 1) where the declaration of name at col goes on: after "name :=" - 0 where the line does not read so
+fn declAfter(line String&, col I64, name String&) I64 {
+    i := col - 1
+    if i < 0 or i + name.Len() > line.Len() or line[i:i + name.Len()] != name: return 0
+    j := i + name.Len()
+    for j < line.Len() and line[j] == ' ' { j++ }
+    if j + 2 > line.Len() or line[j:j + 2] != ":=": return 0
+    return j
+}
+
+# whether the place a declaration copies is assigned whole later in its function ("saved := c.list", "c.list = ...",
+# "defer c.list = saved"): there the copy is the old storage, kept while the place names another - a value, as a
+# handle's copy was, and no reference to the place
+fn reassigned(lines Vec<String&>&, k I64, place String&) Bool {
+    if place.Len() == 0: return false
+    for i in range k + 1, lines.Len() {
+        l := lines[i]
+        if l.StartsWith("fn ") or l.StartsWith("test ") or l.StartsWith("type "): return false
+        t := srcmask.StripStart(l)
+        if t.StartsWith("defer "): t = srcmask.StripStart(t[6:])
+        if t.StartsWith(place) and t[place.Len():].StartsWith(" = "): return true
+    }
+    return false
+}
+
+# what a declaration's ":=" is given, its trailing comment left out
+fn declValue(line String&, e edit&) String {
+    j := declAfter(line, e.Col, e.Name)
+    if j == 0: return ""
+    rhs := line[j + 2:]
+    h := try rhs.Find(" #") catch default -1
+    return $srcmask.Strip(rhs[:h] if h >= 0 else rhs)
+}
+
+# the line with the local's ":=" made a reference declaration of type ty to root's storage
+fn asReference(line String&, e edit&) String ? NoEdit {
+    j := declAfter(line, e.Col, e.Name)
+    if j == 0 or e.Root == "": error NoEdit
+    perm := "mut " if e.Kind == "mut" else ""
+    return $line[:e.Col - 1 + e.Name.Len()] " " $perm $e.Type "&" $e.Root " =" $line[j + 2:]
+}
+
+# the line with an element or a value read where its collection holds it: "x := a[i]" or "x := a.At(i)" as
+# "x := a.Ref(i)", "x := try m.Get(k)" as "x := try m.Ref(k)"
+fn asRef(line String&, e edit&) String ? NoEdit {
+    j := declAfter(line, e.Col, e.Name)
+    if j == 0: error NoEdit
+    rhs := line[j + 2:]
+    note := ""
+    h := try rhs.Find(" #") catch default -1
+    if h >= 0 {
+        note = rhs[h:]
+        rhs = rhs[:h]
+    }
+    if e.Root == "Get" {
+        g := try rhs.Find(".Get(") catch { error NoEdit }
+        return $line[:j + 2] $rhs[:g] ".Ref(" $rhs[g + 5:] $note
+    }
+    if e.Root != "At": error NoEdit
+    a := try rhs.Find(".At(") catch {
+        # "a[i]": the index's opening bracket, the last at depth 0
+        t := srcmask.StripEnd(rhs)
+        if t.Len() == 0 or t[t.Len() - 1] != ']': error NoEdit
+        d := 0
+        k := t.Len() - 1
+        for k >= 0 {
+            if t[k] == ']': d++
+            if t[k] == '[' {
+                d--
+                if d == 0: break
+            }
+            k--
+        }
+        if k <= 0: error NoEdit
+        return $line[:j + 2] $t[:k] ".Ref(" $t[k + 1:t.Len() - 1] ")" $rhs[t.Len():] $note
+    }
+    return $line[:j + 2] $rhs[:a] ".Ref(" $rhs[a + 4:] $note
+}
+
+# the line with the parameter at col lent writably: "name T" as "name mut T&"
+fn asLent(line String&, e edit&) String ? NoEdit {
+    i := e.Col - 1
+    n := e.Name.Len()
+    if i < 0 or i + n + 1 > line.Len() or line[i:i + n] != e.Name or line[i + n] != ' ': error NoEdit
+    t0 := i + n + 1
+    d := 0
+    k := t0
+    for k < line.Len() {
+        ch := line[k]
+        if ch == '<' or ch == '(' or ch == '[': d++
+        if ch == '>' or ch == ']': d--
+        if ch == ')' {
+            if d == 0: break
+            d--
+        }
+        if ch == ',' and d == 0: break
+        k++
+    }
+    ty := srcmask.StripEnd(line[t0:k])
+    if ty.EndsWith("&") or ty.StartsWith("mut "): error NoEdit
+    return $line[:t0] "mut " $ty "&" $line[t0 + ty.Len():]
+}
+
+# the line with ".Clone()" at col left out
+fn asValue(line String&, e edit&) String ? NoEdit {
+    i := e.Col - 2
+    if i < 0 or i + 8 > line.Len() or line[i:i + 8] != ".Clone()": error NoEdit
+    # "y := x.Clone()" of a reference x: ":=" would name x's storage - for a person
+    if e.Type.EndsWith("&") {
+        k := try line[:i].FindLast(":=") catch default -1
+        if k >= 0 and srcmask.Strip(line[k + 2:i]).Len() > 0 and not line[k + 2:i].Contains("("): error NoEdit
+    }
+    return $line[:i] $line[i + 8:]
+}
+
+# each file's edits applied, the latest column on a line first; what could not be done listed for a person
+fn apply(eds Vec<edit>&, left mut Vec<String&>&, cloned mut Vec<String>&) I64 {
+    paths Vec<String>
+    for e in eds {
+        if not paths.Has(e.Path): paths.Push(e.Path)
+    }
+    done I64 = 0
+    for p in paths { done += applyFile(p, eds, left, cloned) }
+    return done
+}
+
+fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Vec<String>&) I64 {
+    src := try srcmask.ReadText(path) catch { return 0 }
+    lines := src.Split("\n").ToVec()
+    mine Vec<edit>
+    for e in eds {
+        if e.Path == path: mine.Push(e)
+    }
+    mine.Sort(fn(a edit, b edit) Bool { return a.Line > b.Line or (a.Line == b.Line and a.Col > b.Col) })
+    done I64 = 0
+    last I64 = -1
+    for e in mine {
+        key := e.Line * 100000 + e.Col
+        if key == last or e.Line < 1 or e.Line > lines.Len(): continue
+        last = key
+        line := lines[e.Line - 1]
+        at := $path ":" $e.Line
+        # (a line whose Clone was left out keeps its copy: a later round's report of it is no handle's copy)
+        if e.Kind != "clone" and cloned.Has(at): continue
+        if (e.Kind == "ref" or e.Kind == "mut") and reassigned(lines, e.Line - 1, declValue(line, e)) {
+            # (a copy kept as the old value: it means what it did)
+            if e.Kind == "mut": left.Push($path ":" $e.Line ":" $e.Col ": a copy written, its place assigned later: " $e.Name)
+            continue
+        }
+        out := try changed(line, e) catch NoEdit {
+            if (e.Kind != "ref" or e.Root != "") and e.Root != "?": left.Push($path ":" $e.Line ":" $e.Col ": " $e.Kind " " $e.Name " " $e.Type " " $e.Root)
+            continue
+        }
+        lines[e.Line - 1] = $out
+        if e.Kind == "clone": cloned.Push(at)
+        done++
+    }
+    if done > 0 {
+        try os.WriteFile(path, lines.Join("\n")) catch { srcmask.SayErr("handles_migrate: cannot write " $path) }
+    }
+    return done
+}
+
+fn changed(line String&, e edit&) String ? NoEdit {
+    return match e.Kind {
+        case "ref", "mut": try asReference(line, e)
+        case "call": try asRef(line, e)
+        case "param": try asLent(line, e)
+        case "clone": try asValue(line, e)
+        case _: error NoEdit
+    }
+}
+
+# what compiling a file prints with the report on (test for a file with tests, compile otherwise)
+fn compileOne(olang String&, file String&, dir String&) String {
+    src := try srcmask.ReadText(file) catch { return "" }
+    mode := "test" if src.Contains("TestBuild") or src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
+    out := try os.ExecUntil(cancel.After(900000), "env", "OLANG_HANDLES=1", olang, mode, file, dir = dir) catch { return "" }
+    return $out.Stdout $out.Stderr
+}
+
+fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<String&>&) {
+    for {
+        k := Taken.AtomicAdd(1)
+        if k >= files.Len(): break
+        outputs[k] = compileOne(olang, files[k], dir)
+    }
+}
+
+fn compileAll(olang String&, files Array<String&>&, work Array<String&>&) Array<String&>& {
+    outputs mut Array<String&>&return = Array<String&>(files.Len(), "")
+    Taken = 0
+    join {
+        for w in work { spawn worker(olang, files, w, outputs) }
+    }
+    return outputs
+}
+
+fn main() ? {
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths Vec<String&>
+    via Vec<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if (args[i] == "--olang" or args[i] == "-j" or args[i] == "--via") and i + 1 < args.Len() {
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else if args[i] == "--via" {
+                via.Push($args[i + 1])
+            } else {
+                jobs = try args[i + 1].ParseInt() catch default 3
+            }
+            i += 2
+            continue
+        }
+        paths.Push($args[i])
+        i++
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_handles_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    olang = $diagedit.RealPathOf(olang)
+    files Vec<String&>
+    diagedit.OlangFiles(via if via.Len() > 0 else paths, files)
+    allowed Vec<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+    tmp := try os.MkTemp("", "handles_migrate")
+    defer try os.RemoveAll(tmp) catch { }
+    work Vec<String&>
+    for k in range jobs.Max(1) {
+        work.Push($tmp "/w" $k)
+        try os.MkDirAll(work[k])
+    }
+    total I64 = 0
+    left Vec<String&>
+    cloned Vec<String>
+    fileArray := files.ToArray()
+    for round in range 1, 6 {
+        outputs := compileAll(olang, fileArray, work.View())
+        eds Vec<edit>
+        for k in range outputs.Len() {
+            expected Vec<String&>
+            src := try srcmask.ReadText(fileArray[k]) catch default ""
+            diagedit.ExpectedTexts(src, expected)
+            editsFrom(outputs[k], allowed, expected, eds)
+        }
+        left.Clear()
+        n := apply(eds, left, cloned)
+        srcmask.Say("round " $round ": " $n " edits")
+        total += n
+        if n == 0: break
+    }
+    srcmask.Say("total: " $total " edits")
+    if left.Len() > 0 {
+        srcmask.Say("for a person:")
+        for l in left { srcmask.Say("  " $l) }
+    }
+}
+
+test reportRow "reads a report row" {
+    e := try reportRow("handles: a/b.olang:12:5: mut t|Vec<I64>|c")
+    assert e.Path == "a/b.olang" and e.Line == 12 and e.Col == 5 and e.Kind == "mut" and e.Name == "t" and e.Type == "Vec<I64>" and e.Root == "c"
+    ok := true
+    try reportRow("x.olang:1:2: error: no") catch { ok = false }
+    assert not ok
+}
+
+test asReference "a copy of a place made a reference to it" {
+    e := edit("f", 1, 5, "mut", "t", "Vec<I64>", "c")
+    assert (try asReference("    t := c.items", e)) == "    t mut Vec<I64>&c = c.items"
+    r := edit("f", 1, 5, "ref", "ps", "Vec<typed.LocalId>", "s")
+    assert (try asReference("    ps := s.Bodies[id].Params", r)) == "    ps Vec<typed.LocalId>&s = s.Bodies[id].Params"
+}
+
+test reassigned "a copy kept as the old value" {
+    ls := String&["fn f() {", "    saved := c.out", "    c.out = Map<I64, I64>()", "    defer c.out = saved", "}"].ToVec()
+    assert reassigned(ls, 1, "c.out") and not reassigned(ls, 1, "c.in")
+    e := edit("f", 1, 5, "ref", "saved", "", "c")
+    assert declValue("    saved := c.out  # x", e) == "c.out"
+}
+
+test asRef "an element or a value read where its collection holds it" {
+    e := edit("f", 1, 5, "call", "e", "Vec<I64>", "At")
+    assert (try asRef("    e := vv[i]", e)) == "    e := vv.Ref(i)"
+    assert (try asRef("    e := vv[a[i]]  # x", e)) == "    e := vv.Ref(a[i])  # x"
+    g := edit("f", 1, 5, "call", "g", "Vec<I64>", "Get")
+    assert (try asRef("    g := try m.Get(k) catch { continue }", g)) == "    g := try m.Ref(k) catch { continue }"
+}
+
+test asLent "a written by-value parameter lent writably" {
+    e := edit("f", 1, 11, "param", "v", "Vec<I64>", "")
+    assert (try asLent("fn pushTo(v Vec<I64>, x I64) {", e)) == "fn pushTo(v mut Vec<I64>&, x I64) {"
+    m := edit("f", 1, 11, "param", "m", "", "")
+    assert (try asLent("fn pushTo(m Map<K, V>) {", m)) == "fn pushTo(m mut Map<K, V>&) {"
+}
+
+test asValue "a Clone left out" {
+    e := edit("f", 1, 23, "clone", "", "Vec<I64>", "")
+    assert (try asValue("    c.Holds = s.Holds.Clone()", e)) == "    c.Holds = s.Holds"
+    r := edit("f", 1, 20, "clone", "", "Vec<I64>&", "")
+    ok := true
+    try asValue("    hs := s.Holds.Clone()", r) catch { ok = false }
+    assert not ok
+}

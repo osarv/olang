@@ -19,6 +19,7 @@
 
 import "std/pair"
 import "std/os"
+import "std/io"
 import "source"
 import "token"
 import "scan"
@@ -180,6 +181,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
     spellItem Bool = false                 # spelling an item of a list: a function type holding a comma is grouped (L18c)
     spellQualified Bool = false            # spelling a type as code in this module writes it: another module's by its alias
+    spellMod I64 = -1                      # ... the module it is spelled for, where no body is being checked (handleReport)
     spellIn I64 = -1                       # explain's module, where Ty spells types qualified from (B11b)
     spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
     fx mut effects.Effects?& = null           # A2.3, G42: the effect summaries of this attempt's bodies, made when first asked
@@ -587,6 +589,7 @@ fn (c mut Checker&) CheckProgram() {
             c.orderGlobals()
             c.settleAllViews()
             c.P.L.MutStorage = c.mutStorage()
+            if (try os.Env("OLANG_HANDLES") catch default "") != "": c.handleReport()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -19091,8 +19094,10 @@ fn (c mut Checker&) emptyArray(t types.TypeId) String {
 # what code in this module writes before a name declared in module m: nothing for its own and the prelude's, else the
 # alias it imports m by and a dot
 fn (c mut Checker&) qualifierFor(m I64) String {
-    if c.frames.Len() == 0 or m == c.fr().Mi { return "" }
-    for imp in c.P.L.Mods[c.fr().Mi].Imports {
+    if c.spellMod < 0 and c.frames.Len() == 0 { return "" }
+    here := c.spellMod if c.spellMod >= 0 else c.fr().Mi
+    if m == here { return "" }
+    for imp in c.P.L.Mods[here].Imports {
         if imp.Target != m { continue }
         alias := imp.Alias
         if alias.Len() == 0 {
@@ -22989,4 +22994,167 @@ test "a top-level condition is checked with no body around it (B9c)" {
     assert x is not null
     assert c.CondBody(l.Root, x) >= 0
     assert rootRules(l) == "", rootRules(l)
+}
+
+# ---- handles as values: the migration's report (OLANG_HANDLES, tools/handles_migrate.olang) ----
+
+# Vec, Map, StringBuilder, set.Set, deque.Deque and heap.Heap were handles - a copy of one a second name for the same
+# storage - and are values now. For the migration tool, every place in the program's own modules where a copy of a
+# value holding one by value was taken and the old meaning may show, one line on the standard error each:
+#   "handles: PATH:LINE:COL: KIND NAME|TYPE|ROOT"
+# KIND: "ref" - a local declared as a copy of a place, never written, which a read-only reference to the place keeps
+# meaning what it did; "mut" - one written, a writable reference; "kept" - one escaping or handed back (a person decides);
+# "call" - a local declared from a call's value and written (the copy may have been the container's own); "param" - a
+# by-value parameter the body writes, which the caller saw (a "mut T&" parameter now)
+fn (c mut Checker&) handleReport() {
+    for b in c.Bodies {
+        if b.Root is null: continue
+        mi := c.modOfFile(b.File)
+        if mi < 0 or c.P.L.Mods[mi].Prelude: continue
+        u := typed.Uses(c.P.T, b)
+        for i in range b.Locals.Len() { c.handleLocal(b, u, mi, i) }
+    }
+}
+
+fn (c mut Checker&) modOfFile(file I64) I64 {
+    for mi in range c.P.L.Mods.Len() {
+        if c.P.L.Mods[mi].File == file: return mi
+    }
+    return -1
+}
+
+fn (c mut Checker&) handleLocal(b typed.Body&, u typed.LocalUses&, mi I64, i I64) {
+    l := b.Locals[i]
+    if l.Name == source.NameId(0) or c.isRef(l.Ty) or not c.holdsHandle(l.Ty, 0): return
+    written := u.WrOther[i] or u.WrScalar[i] or u.Whole[i] or c.lentAt(u, i)
+    if l.Kind == typed.LocalKind.Param {
+        if written: c.handleLine(b, l, mi, "param", "")
+        return
+    }
+    if l.Kind != typed.LocalKind.Var: return
+    x := u.Init[i]
+    if x is null: return
+    copied := typed.CopiedOf(c.P.T, x)
+    if copied is not null {
+        p := readPlace(copied)
+        if p is null: return
+
+        r := handleRoot(p)
+        kind := "kept" if u.Ret[i] else "mut" if written else "ref"
+        c.handleLine(b, l, mi, kind, c.text(b.Locals[r].Name) if r >= 0 else "")
+        return
+    }
+    cl := handleCall(x)
+    if written and cl is not null and c.viewCallee(cl) { c.handleLine(b, l, mi, "call", c.handleCallee(cl)) }
+}
+
+# whether a call's value may be a view of what the callee is given or reaches (D9h's views) - where a handle copied
+# out of a container was the container's own
+fn (c mut Checker&) viewCallee(cl typed.Call&) Bool {
+    return match cl.Target {
+        case typed.Callee.Body(id): c.ViewsOf(id) != 0
+        case _: false
+    }
+}
+
+fn (c mut Checker&) handleCallee(cl typed.Call&) String {
+    match cl.Target {
+        case typed.Callee.Body(id) {
+            b := c.Bodies[I64(id)]
+            return match b.Of {
+                case typed.BodyOf.Fn(inst): c.text(c.P.FnDecl(c.P.InstanceFn(inst)).Name)
+                case _: "?"
+            }
+        }
+        case _ { return "?" }
+    }
+}
+
+fn (c mut Checker&) lentAt(u typed.LocalUses&, i I64) Bool {
+    for k in u.LendAt {
+        if k == i: return true
+    }
+    return false
+}
+
+fn (c mut Checker&) handleLine(b typed.Body&, l typed.Local&, mi I64, kind String&, root String&) {
+    c.spellMod = mi
+    was := c.spellQualified
+    c.spellQualified = true
+    ty := c.ty(l.Ty)
+    c.spellQualified = was
+    c.spellMod = -1
+    try io.PrintErrln("handles: " $c.P.L.Diags.Locate(b.File, I64(l.Sp.Start)) ": " $kind " " $c.text(l.Name) "|" $ty "|" $root) catch io.Error { }
+}
+
+# the local a place's storage belongs to - through fields, payloads, the elements of an array held by value and a
+# reference's referent - -1 for a global's or a value's
+fn handleRoot(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Field(_, _, base, _): handleRoot(base)
+        case typed.Lvalue.Payload(_, _, pl): handleRoot(pl.Base)
+        case typed.Lvalue.Elem(_, _, e): handleRoot(e.Base)
+        case typed.Lvalue.Deref(_, _, r): handleRef(r)
+        case _: -1
+    }
+}
+
+# ... a reference read, a borrow, or a method's result borrowed from its receiver (an element a Vec's At gives)
+fn handleRef(r typed.Expr&) I64 {
+    match r {
+        case typed.Expr.Borrow(_, _, p) { return handleRoot(p) }
+        case typed.Expr.Call(_, _, cl) { return handleRef(cl.Args[0]) if cl.Args.Len() > 0 else -1 }
+        case typed.Expr.Away(_, _, y) { return handleRef(y) }
+        case _ { }
+    }
+    p := readPlace(r)
+    return handleRoot(p) if p is not null else -1
+}
+
+# the call x's value is, through a try, a conversion or a statement-less sequence
+fn handleCall(x typed.Expr&) typed.Call?&x {
+    return match x {
+        case typed.Expr.Call(_, _, cl): cl
+        case typed.Expr.Try(_, _, tr): handleCall(tr.X!) if tr.X is not null else null
+        case typed.Expr.Away(_, _, y): handleCall(y)
+        case typed.Expr.Seq(_, _, q): handleCall(q.X!) if q.X is not null and q.Stmts.Len() == 0 else null
+        case _: null
+    }
+}
+
+# whether a value of type t holds, by value, one of the types that were handles - Vec, Map, StringBuilder, set.Set,
+# deque.Deque, heap.Heap - itself, or in a field, a payload, an element or a part
+fn (c mut Checker&) holdsHandle(t types.TypeId, depth I64) Bool {
+    if depth > 12: return false
+    r := c.P.T.Repr(t)
+    match c.P.T.KindOf(r) {
+        case types.Kind.Array: return c.holdsHandle(c.P.T.Elem(r), depth + 1)
+        case types.Kind.Tuple, types.Kind.Record { return c.anyHandle(c.P.T.Parts(r), depth) }
+        case types.Kind.Named { }
+        case _: return false
+    }
+    if not c.P.T.HasBody(r): return false
+    d := c.P.T.DeclOf(r)
+    name := c.text(c.P.T.DeclName(d))
+    m := c.P.T.DeclModule(d)
+    if m >= 0 and m < c.P.L.Mods.Len() {
+        id := c.P.L.Mods[m].Identity
+        if c.P.L.Mods[m].Prelude and (name == "Vec" or name == "Map" or name == "StringBuilder"): return true
+        if (id.EndsWith("std/set") and name == "Set") or (id.EndsWith("std/deque") and name == "Deque"): return true
+        if id.EndsWith("std/heap") and name == "Heap": return true
+    }
+    return match c.P.T.DeclKindOf(d) {
+        case types.DeclKind.Struct: c.anyHandle(c.P.T.Fields(r), depth)
+        case types.DeclKind.Enum: c.anyHandle(c.P.T.Cases(r), depth)
+        case types.DeclKind.Over: c.holdsHandle(c.P.T.Base(r), depth + 1)
+        case _: false
+    }
+}
+
+fn (c mut Checker&) anyHandle(l types.ListId, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if x != types.TypeId(0) and not c.isRef(x) and c.holdsHandle(x, depth + 1): return true
+    }
+    return false
 }
