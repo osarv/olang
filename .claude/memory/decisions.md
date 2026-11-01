@@ -2219,3 +2219,14 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   argument at a spawn)? Recommended: yes for kept parameters and spawns (an error naming `.Clone()` or `p T&` -
   rare, and a copy then is written); for 2.10's call-may-write case an error would hit ordinary calls into C and
   callbacks, so keep that copy. In effect: the rework's copies.
+- Refuse-vs-copy (1), ANSWERED 2026-11-01 (the user: "copying by assigning to a value variable from a reference
+  variable should be fine. No copy needed. In fact, copy should go as a method"): a copy is written as an assignment
+  to a value place (`c Pt = p`, `s String = t` - E12's reference-into-value copy), which is visible, so a kept bare
+  parameter is refused (no hidden caller copy, D9e's copy goes) with an error naming that assignment or `p T&`.
+  Reading taken (stated to the user): "copy should go as a method" = `.Clone()` is removed, the value assignment is the
+  one way to copy (6 Clone methods in std: Array, Map, Vec, set, list, deque; 41 uses). ASKED with it: a handle's value
+  (Vec, Map, list.List, Set, Deque) is the handle itself, so `w Vec<I64> = v` names the same Vec - the value assignment
+  cannot copy one. Options: (a) handles copy on a value assignment from a `&` (`w Vec<I64> = vr` with `vr Vec<I64>&`)
+  and share on `:=`; (b) keep Clone() for handles only; (c) handles stop being handles (a Vec value owns its buffer,
+  a copy copies; sharing written `Vec<T>&`). Recommended (c) eventually - it is QCE's rule for every type - but it
+  changes Vec/Map's meaning everywhere (std, compiler); (b) until then. Spawns (2) asked again with it.
