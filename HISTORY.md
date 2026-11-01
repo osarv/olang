@@ -27369,8 +27369,8 @@ the read ends within the statement and nothing the statement does can change wha
 gives the facts to the checker (which records them per instance and checks again where they grow) and to lowering; a
 function value, an `any`'s slot and an operator's adapter go through a copying wrapper (`FnKey.Copied`), since their
 callers cannot know; the evaluator lowers without a plan and copies every return, so baked globals and decided asserts
-agree with the run time by construction. Measured on bench (the rows below): the default path unchanged within ±20
-instructions; nbody hands 6 returns back, reads 2 in place and copies 14 (std's internals), sum and vec 4/0/6, every
+agree with the run time by construction. Measured on bench (20 rows under callgrind): the default path unchanged
+within ±20 instructions but listwalk (std/list below); nbody hands 6 returns back, reads 2 in place and copies 14 (std's internals), sum and vec 4/0/6, every
 other row none - the handover matters for the compiler's readers, not for bench's loops.
 
 **Following, for values that hold references.** A struct or enum value result is a few words, so the handover is not
@@ -27416,3 +27416,17 @@ it now. And one refusal was wrong under the switch: a conditional of constant te
 choice of places lent writably (E28, E31b), because every written `&` is writable there - but an instance's type
 variable's reference parameter holds what it is given as given, as the checker had already said for every other
 argument (`argFollows`).
+
+**By-pointer passing, observable twice.** 2.10's premise is that passing a bare struct by pointer cannot be told from
+passing a copy. Two places told: a lambda capturing a bare struct captured its pointer, so a kept lambda read the
+caller's later assignment (`tests/params/captures.olang` failed) - it captures the value now, as D16c says a value is
+captured; and a constructor or a case keeping a bare parameter's own storage in a field read-only by inference shares
+the caller's storage - `fn mk(t String) holder { return holder(t) }` hands back a holder over the caller's text, which
+the caller's later write changes. The second is memory-safe (the scope pass ties the holder to the argument) and older
+than this round (round 2c's struct fields; round 2d's payloads followed them); a copy on entry wherever a constructor
+keeps the parameter was tried and reverted (it broke std's walks over Map and Set, whose receivers are handles), and
+the fix recorded is the scope pass's: a by-pointer parameter's own storage judged as the frame's.
+
+**D9d's two misses, the migration's oscillation.** The migration's last stage left 21 parameters by hand, each
+flipping: bare, a refusal named it; `&`, D9d said it was never written. Two uses were missed - a write through `m.Oracle!`
+(D9d's walk did not read through `x!`) and a reference kept in a case's payload - and are counted now.

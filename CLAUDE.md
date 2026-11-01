@@ -421,9 +421,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   result read-only where its argument is); fixed on the way: a permission conversion and `x!` had hidden a bare
   parameter's view (a writable instance over the caller's text, a choice writing the caller's node), the evaluator read
   an aggregate converted to itself as a zero; compiler/'s migrated root down to 326 distinct errors, most of them
-  readers handing back a view of a `&` parameter given bare data - the by-pointer value results' job. Left before
-  the flip: compiler/'s migration finished, the by-pointer value results, the scope phase's field loop. The entry
-  below is today's rule until it lands.
+  readers handing back a view of a `&` parameter given bare data - the by-pointer value results' job; **round 2d**
+  (docs/rework.md section 13): a result written `T&` handing back a bare parameter's reach, constant data or an
+  immutable global is an error naming the value result (D9g, `param_migrate` rewrites it); a value array result that
+  is a view of an argument is handed back uncopied, its caller copying it only where it keeps it (D9h; function values,
+  `any` slots and adapters through copying wrappers, the evaluator copying every return); a plain function's value
+  result holding references handed back from bare parameters' reach follows them, read-only where the argument is
+  (mine, the user absent; such a function is no function value); enum payload fields read-only by inference as a
+  struct's are; an enum holding references by pointer, judged once its parts are laid out - bench unchanged on the
+  default path, std 40 of 40 under the switches, compiler/'s migrated root 326 -> 86 errors; found and fixed: a
+  followed result given to another came out writable, a lambda captured a bare struct by its pointer. Left before the
+  flip: compiler/'s migration finished and self-built; a constructor keeping a bare parameter's own storage in a field
+  read-only by inference shares the caller's (aliasing, memory-safe - the scope pass is to judge it as the frame's);
+  open point 5, 2.10's caller-side copy, the scope phase's field loop.
+  The entry below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds
   its own key text (a copy at Put of a new key, none on an update or a lookup); `Map<String&, V>` shares the caller's,

@@ -1641,8 +1641,49 @@ Built on `wt-rework` behind the same switches; without them the compiler checks 
   an instance's type variable's reference parameter holds what it is given as given (`argFollows`, round 2b). Both
   passes skip it there now (`check`, `scope.tvParam`; `tests/params/choices.olang`).
 
+- **A lambda captured a bare struct or enum by its pointer**: the capture of a by-pointer parameter copied the
+  pointer, so a kept lambda read the caller's later assignment (`tests/params/captures.olang` failed before) - by-pointer
+  passing observable. It captures the value now, a copy, as D16c says of a value (`captureIn`).
+- **D9d missed two uses**, so the migration oscillated on 21 parameters (bare: refused; `&`: "never written"): a write
+  through `m.Oracle!` (refParamOfX did not read through `x!`) and a reference kept in a case's payload (counted now in
+  `caseFit`).
+
 ### 13.4 Today's path
 
 Unchanged but for std/list's `runIn` (a run sliced directly - listwalk 512,589 -> 509,867 instructions) and the case
 arguments' fit, restructured with the same steps (`caseArg`): bench's other rows within ±20 instructions of 3e0e39a,
 outputs identical. Every new rule is behind `source.NewParams`.
+
+### 13.5 Measured
+
+- **std** 40 of 40 test files, and `tests/params/` (fields, lend, handover, follow, payloads, choices, captures; nine
+  fail cases), under `OLANG_PARAMS=new OLANG_SCOPES=infer` (`make verify-params`).
+- **compiler/'s migration** (`param_migrate` over a fresh copy, then the root checked), root errors: 323 before round
+  2d, 295 with D9g, 223 with the handover and following, 112 with payload fields, the layout fix and the notes, 86 with
+  D9d's two uses counted (the migration's oscillation down from 21 parameters left by hand to 7). The migrated root
+  checks in 15 s and 1.48 GB. Not yet zero, so the self-build under the switches is not measured (13.6).
+- **bench** (callgrind, `-target x86-64`, 20 rows): the default path identical but listwalk (-2,722, std/list); under
+  the switches outputs identical, knucleotide +0.90% and dispatch +0.91% against the default path (round 2c had both:
+  a bare String passed by pointer reloads its descriptor each turn, and `Vec<mut any Shape&>` is another instance), the
+  other rows +0.0-0.5% - ~2,450 instructions of which are ld.so's tunables reading the longer environment
+  (`OLANG_STD`), not code. The handover: nbody hands 6 returns back, reads 2 calls in place and copies 14 (std's
+  internals), sum and vec 4/0/6, every other row none.
+
+### 13.6 Left, in order
+
+1. **compiler/'s migration to zero**: 86 left on the last tree - T25c 22, D9d 7 (parameters still flipping), O10c 14
+   and O26 11 (a match binding of a plain `source.Span` lent by pointer to a callee whose inferred
+   obligations keep it - not reproduced small yet), O25h 10 (`unPassed(s.unAway(x))` chains), T17c 6, three E12s
+   where a struct field's inner level is written read-only (per-level permission of fields, not built). Then the
+   self-build under the switches (stage 2 == stage 3), its time and peak memory against the default build.
+2. **A bare parameter's own storage kept by a constructed value** is the caller's storage under by-pointer passing:
+   `fn mk(t String) holder { return holder(t) }` hands back a holder sharing the caller's text where the fields are
+   read-only by inference (round 2c's fields; round 2d's payloads alike) - memory-safe (the scope pass ties it to the
+   argument), but observable as aliasing, against 2.10. Tried and reverted: a copy on entry wherever a constructor or a
+   case keeps the parameter (broke std's Map/Set walks, whose receivers are handles). The fix is the scope pass's: a
+   by-pointer parameter's own storage judged as the frame's (a value's), its references as the caller's.
+3. **Open point 5** (a function type's `T&` result borrowed from its `&` parameters, so `fn first(a Array<I64>&)
+   Array<I64>&` is a value): a function type's result-from as a set of parameters; not started.
+4. **2.10's caller-side copy** of only the parts a call may write; not started.
+5. **The scope phase's field loop** judged incrementally; not started.
+6. Then round 4's flip (switches removed, `mut` out of the grammar, the seed) - not this round's.
