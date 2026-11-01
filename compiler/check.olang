@@ -19268,13 +19268,13 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
 # "mut" global of anything but a scalar, or any global whose value reaches a writable reference, a function value or an
 # "any" (types.ReachesWrite) - lowering's quiet statements read no view where it stands then (lower.quiet)
 fn (c mut Checker&) mutStorage() Bool {
+    c.P.L.MutGlobals.Clear()
     for key in c.globalTypes.Keys() {
         t := try c.globalTypes.Get(key) catch default types.UnknownT
         v := c.P.GlobalDecl(key.First, source.NameId(I32(key.Second)))
-        if v is not null and generic.WrittenMut(v.Ty) and not c.scalarType(t): return true
-        if c.P.T.ReachesWrite(t): return true
+        if v is not null and generic.WrittenMut(v.Ty) and not c.scalarType(t) or c.P.T.ReachesWrite(t) { c.P.L.MutGlobals.Push(I64(t)) }
     }
-    return false
+    return c.P.L.MutGlobals.Len() > 0
 }
 
 # a type no view can read: a number, a Bool, a declared type over one, an enum whose cases carry nothing

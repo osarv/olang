@@ -339,6 +339,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     vl Map<I64, Bool>
     noCopy Map<I64, Bool>
     qCover Map<I64, Bool>      # quietLife: the types whose storage the view held covers (its by-value parts)
+    qRoot types.TypeId = types.TypeId(0)   # ... and the type of the object it is a view into
     noLetCopy Map<I64, Bool>
     vlSites Map<I64, Bool>
     vlIn typed.BlockId = typed.BlockId(0)   # ... the block of the local being asked about (viewLocals)
@@ -2981,16 +2982,46 @@ fn (ln mut lowering&) heldReferent(u typed.LocalUses&, i I64) Bool {
 # statements, nested ones too, quiet (no call giving a writable reference, through a function value or an "any"), its
 # stores a scalar local's - in a program none of whose globals can be written through (check.mutStorage)
 fn (ln mut lowering&) quietLife(of types.TypeId) Bool {
-    if ln.L.P.L.MutStorage or ln.B.Root is null: return false
+    if ln.B.Root is null: return false
     b := findBlock(ln.B.Root!, ln.vlIn)
     if b is null: return false
     # (what can write the view's storage: a write of storage of one of the types its by-value parts are, or reaching one
     # through writable references - no type of olang is another's storage, so any other write leaves it as it is)
     ln.qCover.Clear()
     ln.coverAdd(of, 0)
-    ok := ln.quietBlock(b)
+    ln.qRoot = of
+    # (any call may write a mutable global, and what it reaches writably)
+    ok := true
+    for g in ln.L.P.L.MutGlobals {
+        gt := types.TypeId(I32(g))
+        if ln.objHits(gt) or ln.writesCover(gt, 0): ok = false
+    }
+    ok = ok and ln.quietBlock(b)
     ln.qCover.Clear()
     return ok
+}
+
+# whether an object of type o - what a reference names, a local's own storage - may be, hold by value or be held by
+# value in the object the view is into: o one of the view's by-value parts, or the view's object one of o's
+fn (ln mut lowering&) objHits(o types.TypeId) Bool {
+    t := ln.T
+    if ln.qCover.Has(I64(o)) or ln.qCover.Has(I64(t.Repr(o))): return true
+    held Map<I64, Bool>
+    ln.heldParts(o, held, 0)
+    return held.Has(I64(ln.qRoot)) or held.Has(I64(t.Repr(ln.qRoot)))
+}
+
+fn (ln mut lowering&) heldParts(t types.TypeId, out mut Map<I64, Bool>&, depth I64) {
+    tt := ln.T
+    if depth > 16 or out.Has(I64(t)): return
+    out.Put(I64(t), true)
+    r := tt.Repr(t)
+    out.Put(I64(r), true)
+    match tt.KindOf(r) {
+        case types.Kind.Array { ln.heldParts(tt.Elem(r), out, depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { for x in tt.Items(tt.Parts(r)) { if x != types.TypeId(0): ln.heldParts(x, out, depth + 1) } }
+        case _ { }
+    }
 }
 
 # the types whose storage a value of type t is: itself and its by-value parts, all the way down (never behind a
@@ -3013,11 +3044,11 @@ fn (ln mut lowering&) coverAdd(t types.TypeId, depth I64) {
 fn (ln mut lowering&) writesCover(t types.TypeId, depth I64) Bool {
     tt := ln.T
     if depth > 16: return true
-    if ln.qCover.Has(I64(t)) or ln.qCover.Has(I64(tt.Repr(t))): return true
     r := tt.Repr(t)
     return match tt.KindOf(r) {
         case types.Kind.Func, types.Kind.Var, types.Kind.Any: true
-        case types.Kind.Ref: (tt.PermOf(r) & types.Writable) != 0 and ln.writesCover(tt.Referent(r), depth + 1)
+        # (a writable reference: its object may be the view's, else what it holds writably)
+        case types.Kind.Ref: (tt.PermOf(r) & types.Writable) != 0 and (ln.objHits(tt.Referent(r)) or ln.writesCover(tt.Referent(r), depth + 1))
         case types.Kind.Array: ln.writesCover(tt.Elem(r), depth + 1)
         case types.Kind.Tuple, types.Kind.Record: ln.someWrites(tt.Items(tt.Parts(r)), depth)
         case types.Kind.AnonEnum: ln.someWrites(tt.Items(tt.ShapeCases(r)), depth)
@@ -3052,11 +3083,26 @@ fn findIn(a typed.Block&, e typed.Block?&, id typed.BlockId) typed.Block?&a {
     return findBlock(e, id)
 }
 
-# a store into p, quiet for quietLife: a scalar local's, or one of storage the view does not cover (writing it whole)
+# a store into p, quiet for quietLife: a scalar local's, or one into an object that is not the view's, holds it by
+# value or is held by it (a reference local repointed changes no object)
 fn (ln mut lowering&) quietStore(p typed.Lvalue&) Bool {
     t := ln.T
-    if p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT): return true
-    return ln.qCover.Len() > 0 and not ln.qCover.Has(I64(p.Type())) and not ln.qCover.Has(I64(t.Repr(p.Type())))
+    if p == typed.Lvalue.Local and (t.IsNumber(p.Type()) or p.Type() == types.BoolT or t.IsRef(p.Type())): return true
+    if ln.qCover.Len() == 0: return false
+    o := ln.objectOf(p)
+    return o != types.UnknownT and not ln.objHits(o)
+}
+
+# the type of the object place p is storage of: a local's own, what a reference names - unknown for any other
+fn (ln mut lowering&) objectOf(p typed.Lvalue&) types.TypeId {
+    return match p {
+        case typed.Lvalue.Local(_, ty, _): ty
+        case typed.Lvalue.Field(_, _, b, _): ln.objectOf(b)
+        case typed.Lvalue.Elem(_, _, e): ln.objectOf(e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.objectOf(py.Base)
+        case typed.Lvalue.Deref(_, ty, _): ty
+        case _: types.UnknownT
+    }
 }
 
 fn (ln mut lowering&) quietBlock(b typed.Block&) Bool {

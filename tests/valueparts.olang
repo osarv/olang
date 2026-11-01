@@ -190,3 +190,49 @@ test "a clone of an array is its own, its elements' parts too" {
     vs[0][0] = 'X'
     assert a[0] == 1 and b[0] == 9 and ws[0] == "ab" and vs[0] == "Xb"
 }
+
+# Handles as values (QCE, 2026-11-01): a for-in over a reference parameter's Vec of values owning storage reads each
+# element where it is while nothing in the loop's body can write storage of the element's types (D9h); where the body
+# can - pushing into the same Vec through another name, writing an element in place - each element is the walk's own
+# copy, as written. The same baked while compiling (VecWalksBaked, K2) and at run time
+type vwCell struct() {
+    xs Vec<I64> = Vec<I64>()
+    n I64 = 0
+}
+fn vwOther(o mut Vec<String&>&, k I64) { o.Push("x" if k > 0 else "") }
+fn vwSum(cs Vec<vwCell>&, o mut Vec<String&>&) I64 {
+    t I64 = 0
+    for c in cs {
+        vwOther(o, c.xs.Len())          # writes a Vec<String&>'s storage - no vwCell's, nothing it holds
+        t += c.xs.Len() * 10 + c.n
+    }
+    return t
+}
+fn vwGrowing(cs Vec<vwCell>&, w mut Vec<vwCell>&) I64 {
+    t I64 = 0
+    for c in cs {
+        w.RefMut(0).xs.Push(1)           # the same Vec's first element, through another name
+        w[0].n += 100                    # in place (E31b)
+        t += c.xs.Len() * 1000 + c.n
+    }
+    return t
+}
+fn vecWalks(k I64) I64 {
+    cs := Vec<vwCell>()
+    for i in range 3 {
+        c := vwCell()
+        for j in range i + k { c.xs.Push(j) }
+        c.n = i
+        cs.Push(c)
+    }
+    o := Vec<String&>()
+    a := vwSum(cs, o)
+    b := vwGrowing(cs, cs)
+    return a * 1000000 + b * 10 + o.Len()
+}
+VecWalksBaked := vecWalks(1)
+VwOne mut I64 = 1
+test "a walk of a Vec reads elements in place only where nothing can write them" {
+    assert churn() > 0
+    assert vecWalks(VwOne) == VecWalksBaked and VecWalksBaked == 63060033, $VecWalksBaked
+}

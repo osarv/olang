@@ -108,6 +108,7 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # ... and whether some global the program reads is, or reaches, storage a call given only read-only arguments may
     # write (check.mutStorage): lowering's quiet statements then read no view where it stands
     MutStorage Bool = true    # (until the program has checked: anything may)
+    MutGlobals Vec<I64>       # ... the types (TypeIds) of the globals through which it may (D9h's quietLife judges each)
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1
