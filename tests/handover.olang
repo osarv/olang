@@ -116,3 +116,25 @@ Twice String = twice("((ok))")
 assert Twice == "ok"
 assert pick("ab", "cd", 1) == "d"
 assert skipSpaces("  hi", 0) == "hi" and spacedOut("ab", 0) == "ab"
+
+# a call given only read-only arguments may still write through a closure one of them holds (a "mut" reference it
+# captured): a view read after such a call in its statement is the copy it would be
+type sink struct(f fn()) {
+    f
+}
+
+fn fired(s sink&) String {
+    s.f()
+    return "!"
+}
+
+# a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before fired runs
+fn joinedFired(t String&, s sink&) String { return $inner(t) $fired(s) }
+
+test joinedFired "copies a view where a closure an argument holds may write what it views before it is read" {
+    text := $"[abcd]"
+    r mut String& = text
+    s := sink(fn() { r[1] = 'X' })
+    assert joinedFired(text, s) == "abcd!"
+    assert text == "[Xbcd]"
+}

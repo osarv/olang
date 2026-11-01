@@ -257,8 +257,6 @@ type Diag enum {
     TypeMatchValueCase
     ArrayTooManyArgs
     NamedScopeOnElement
-    ArrayNestedByValue
-    LambdaResultHeld
     ConstraintNotTrait
     TypeArgNamedScope
     InvalidReferenceTarget
@@ -1571,12 +1569,6 @@ fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "G8, T7", "Ar
 
 # ERR_NAMED_SCOPE_ON_ELEMENT
 fn NamedScopeOnElement() Msg { return Msg(Diag.NamedScopeOnElement, "T24", "a nested reference lives in its container's scope - write a bare '&' here") }
-
-# ERR_ARRAY_NESTED_BY_VALUE
-fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7d", "an array inside an array or a struct is held by reference - write " $ty "&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place") }
-
-# ERR_LAMBDA_RESULT_HELD
-fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.LambdaResultHeld, "T7a", "this result binds " $text " to " $ty1 ", which the call holds in an array, where an array is held by reference - write the result as " $ty2 "&") }
 
 # ERR_CONSTRAINT_NOT_TRAIT
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }

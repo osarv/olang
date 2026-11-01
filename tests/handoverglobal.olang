@@ -1,0 +1,42 @@
+# D9h (docs/rework.md 18): a value result viewing what a read-only reference names is read where it stands only where
+# nothing could write that storage before it is read. A call given only read-only arguments may still write storage a
+# global reaches - a "mut" global's, or what a global's writable reference names - so a program with such a global
+# keeps every such view a copy.
+
+heldText mut String& = "abcd".Clone()
+
+# an immutable global reaching writable storage
+type cell struct() {
+    a mut String& = "efgh".Clone()
+}
+
+Held cell& = cell()
+
+# a value result that is a view of its argument
+fn mid(t String&) String { return t[1:3] }
+
+# write what the globals reach - each given nothing writable
+fn bumped() String {
+    heldText[1] = 'X'
+    return "!"
+}
+
+fn bumpedHeld() String {
+    Held.a[1] = 'Y'
+    return "?"
+}
+
+# a join's operands are evaluated before any piece renders (E11b): mid's result is its own copy before bumped runs
+fn joined(t String&) String { return $mid(t) $bumped() }
+
+fn joinedHeld(t String&) String { return $mid(t) $bumpedHeld() }
+
+test mid "a view of a mutable global's storage is copied where a call may write the global before it is read" {
+    assert joined(heldText) == "bc!"
+    assert heldText == "aXcd"
+}
+
+test mid "a view of what an immutable global's writable reference names is copied where a call may write it" {
+    assert joinedHeld(Held.a) == "fg?"
+    assert Held.a == "eYgh"
+}

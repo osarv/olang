@@ -52,7 +52,7 @@ Empty Range = Range(0, 0)
 type FnKey enum {
     Body(id typed.BodyId)
     Adapter(call typed.BodyId)
-    # the rework's round 2d (D9h): a function handing back views of what it is given, as a function value or a slot of an
+    # D9h: a function handing back views of what it is given, as a function value or a slot of an
     # "any"'s table: called, its result copied into its result scope - what a caller that cannot know it would not copy
     Copied(body typed.BodyId)
     Helper(kind HelperKind, t types.TypeId)
@@ -70,7 +70,7 @@ type HelperKind enum {
     Equal      # "==" part by part (E10): fn(a T&, b T&) Bool, pure data, calling nothing
     Hash       # the supplied Hash (E10b): fn(x T&) I64, pure data, calling nothing
     Zero       # the type's zero value (D13c): fn() T - its constructor called on its parameters' defaults or zeros
-    # the rework's round 3 (QCE): a value's own copy, fn(x T&) T with its result scope its one scope - its parts that are
+    # QCE: a value's own copy, fn(x T&) T with its result scope its one scope - its parts that are
     # arrays of a run-time length copied there, deep through values, shallow at references (typed.MakeKind.Copy)
     Copy
 }

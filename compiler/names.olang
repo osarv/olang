@@ -124,8 +124,6 @@ type Resolver struct(L mut load.Loader&) {
     raises Vec<raised>
     sigNames Vec<source.NameId>
     sigMarks Vec<I64>
-    # D9f (the rework's round 2): the item's bare parameters, by local index - each one's type as written - and where
-    # each is first written (its own copy assigned, a part of it assigned or changed)
     paramStarts Map<I64, I64>      # a parameter's local: where its declaration starts (load.ParamWritten's key, D9h)
 }
 
@@ -893,7 +891,7 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     }
 }
 
-# round 2d: a function's parameter, recorded where its declaration starts - one assigned whole in the body is said to
+# D9h: a function's parameter, recorded where its declaration starts - one assigned whole in the body is said to
 # the checker (load.ParamWritten): what such a body returns is no view of its argument (typed.ViewRoots)
 fn (r mut Resolver&) paramStart(p ast.Param&) {
     if r.locals.Len() == 0: return

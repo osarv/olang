@@ -295,7 +295,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     moveTo Term = Term.None
     landOK Bool = false
     landing Bool = false
-    # the rework's round 3 (QCE): where the comprehensions being judged are built, innermost last - an element owning
+    # QCE: where the comprehensions being judged are built, innermost last - an element owning
     # storage (an array of a run-time length, a value with such parts) is built where its array is
     collectAt Vec<Term>
     # decide's answer for a local declared from a part of a call's built result ("x := mk(b).p"), read by the first
@@ -328,8 +328,6 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     liftGather Bool = false
     liftGrew Bool = false
     lifts Map<pair.Pair<I64, I64>, Term>   # by (body, local): the term the inference gives its claim
-    # the rework's round 2e: by (body, bare parameter passed by pointer) whose own storage a use needs longer than the
-    # frame - its argument's then, and every caller copies an argument that may change (KeptOwn, plan.ArgCopy)
     siteLifts Map<pair.Pair<I64, I64>, Term> # by (body, call site): where the inference lands the call
     liftStor Map<pair.Pair<I64, I64>, Bool> # ... and its own storage too (a value local borrowed whole and kept)
     wLocals Map<pair.Pair<I64, I64>, Bool>  # ... a local whose uses need it to outlive two scope variables no obligation orders
@@ -885,7 +883,7 @@ fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
     }
 }
 
-# whether a part holds a reference or is an array of a run-time length held by value (the rework's round 3, QCE): a
+# whether a part holds a reference or is an array of a run-time length held by value (QCE): a
 # store into one builds where its container's references are, as a reference stored there must outlive them - so
 # something is stored through what reaches it (O25g), and its scope must be exact
 fn (s mut Scoper&) holdsPart(t types.TypeId) Bool { return s.holds(t) or s.P.T.OwnedPart(t) }
@@ -1145,28 +1143,6 @@ fn collectExpr(x typed.Expr?&, out mut walked&) {
         case typed.Expr.Away(_, _, y) { collectExpr(y, out) }
         case _ { }
     }
-}
-
-# the reference local an argument reads whole, or slices what it refers to (round 2e's argument reads), -1 for none
-fn argLocal(a typed.Expr&) I64 {
-    match a {
-        case typed.Expr.Slice(_, _, sl) {
-            b := sl.Base
-            if b == typed.Lvalue.Deref: return derefLocal(b.ref)
-        }
-        case _ { }
-    }
-    return derefLocal(a)
-}
-
-fn derefLocal(r typed.Expr&) I64 {
-    match r {
-        case typed.Expr.Read(_, _, p, _) {
-            if p == typed.Lvalue.Local: return I64(p.id)
-        }
-        case _ { }
-    }
-    return -1
 }
 
 fn collectArm(a typed.Arm?&, out mut walked&) {
@@ -4179,7 +4155,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
         case typed.Stmt.Yield(_, x) {
             n := s.collectAt.Len()
             if n > 0 and (s.P.T.OwnedPart(x.Type()) or s.P.T.OwnsParts(x.Type())) {
-                # (the rework's round 3: an element owning storage is built where its comprehension's array is)
+                # (QCE: an element owning storage is built where its comprehension's array is)
                 d := s.collectAt[n - 1]
                 v := s.val(x, d)
                 if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, FitElem) }
@@ -4208,7 +4184,7 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr?&) {
         moved = s.joinTerm(moved, lift) if moved != Term.None else lift
     }
     s.stors[I64(l)] = s.blockTerm(loc.In)
-    # (the rework's round 3, QCE: so does a field holding a run-time array by value - its elements the instance's own,
+    # (QCE: so does a field holding a run-time array by value - its elements the instance's own,
     # copied in where given existing storage, built there where given new storage)
     if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and loc.In == typed.BlockId(0) and (s.borrowed(I64(l)) or s.P.T.OwnedPart(t)) {
         # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
@@ -4730,7 +4706,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     s.targets.Push(p)
     s.placeOperands(p)
     if partOf(p) and s.P.T.OwnedPart(t) {
-        # the rework's round 3 (QCE): a part holding an array of a run-time length by value - its elements its
+        # QCE: a part holding an array of a run-time length by value - its elements its
         # container's own storage, where the container's references are (types.OwnedPart): what is stored is built
         # there, a copy of existing storage (check's storeCopy) or new storage the store takes
         sl := s.slotOf(p)
@@ -5183,16 +5159,6 @@ fn (s mut Scoper&) isParam(l I64) Bool {
     }
     return false
 }
-
-# ---- bare parameters passed by pointer (the rework's round 2e, docs/rework.md 2.10, 14) ----
-#
-# A bare parameter is the callee's own value (D9); one passed by pointer is a read-only reference to the caller's
-# storage, which stands for the copy while nothing can tell them apart. So its own storage is judged as a value's own,
-# the frame's - what it reaches through its references as its argument's - until a use needs it longer than the call
-# (a value built from it returned, D9e): then as its argument's, and the body's summary says it keeps it (KeptOwn) - a
-# caller copies an argument for it that may change while what keeps it lives (plan.ArgCopy), which makes the copy the
-# callee's own as by value; constant data, a value made for the call, a bare parameter of the caller and a local nothing
-# writes after it is made cannot change, and are passed as they are
 
 # a place's own subexpressions judged as operands: a reference it goes through, an index
 fn (s mut Scoper&) placeOperands(p typed.Lvalue&) {
@@ -5973,7 +5939,7 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
     }
 }
 
-# the rework's round 3 (QCE): a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
+# QCE: a value's own copy (typed.MakeKind.Copy) - new storage built in d, its parts that are
 # arrays of a run-time length copied there; what it still shares with what it copies, the references that value holds
 # (types.SharesRefs), must outlive d, as an "any"'s copy's do (T32a)
 fn (s mut Scoper&) ownCopy(m typed.Make&, ty types.TypeId, d Term) Val {

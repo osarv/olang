@@ -314,7 +314,7 @@ type MakeKind enum {
     Array      # an array literal, Items its elements (E19)
     Fill       # Array<T>(n, fill) (D14, T8): Length the length, Items the one fill (or none: the zero value, D13c); its
                # type an Array<T, n> where n is a compile-time constant (QP1), else a run-time Array<T>
-    # the rework's round 3 (QCE): Items[0], existing storage, given storage of its own where the site says - a value
+    # QCE: Items[0], existing storage, given storage of its own where the site says - a value
     # array's elements copied, and a value's parts that are arrays of a run-time length (types.OwnsParts), deep through
     # values and shallow at references: what a slot owning what it holds is given (a part stored into, a whole value
     # copied into a local)
@@ -401,19 +401,16 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
     }
 }
 
-# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+# ---- value results handed over uncopied (D9h) ----
 
 # what an array value a body returns is a view of, handed back as it is (ViewRoots): the body B, the parameters whose
 # arguments it may view (Elig: a bit each, by position in Params - those its body never assigns whole), and a callee's
 # own bits (Views: a function that hands back views of what it is given, as check recorded them, load.ViewResults)
-# - and (round 3b) the locals it hands back holding views of its parameters' arguments in their parts (Held: the
+# - and the locals it hands back holding views of its parameters' arguments in their parts (Held: the
 # parameters a local views, -1 for none - Settle), a constructor's fields its instance is made of
 type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64, Held fn(id LocalId) I64) {
     T, B, Elig, Views, Held
 }
-
-# no local holding views (Held's answer where none is known)
-fn NoLocalViews(id LocalId) I64 { return -1 }
 
 # the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
 # tail call's argument that is no parameter's) - its result copied at every call, never read in place
@@ -534,7 +531,7 @@ fn (w ViewWalk&) arrayValue(x Expr&) Bool {
     return w.T.KindOf(t) == types.Kind.Array and w.T.Length(t) == types.TypeId(0)
 }
 
-# the parameters a local's own storage views (round 3b): one the body hands back holding views of them (Locals), a
+# the parameters a local's own storage views: one the body hands back holding views of them (Locals), a
 # parameter held by value holding storage of its own - the argument's, unless the body writes it (then its copy, not in
 # Elig); -1 for any other local's own storage
 fn (w ViewWalk&) localRoots(id LocalId) I64 {
@@ -546,7 +543,7 @@ fn (w ViewWalk&) localRoots(id LocalId) I64 {
 }
 
 # the locals the body hands back - a constructor's fields, of which its instance is made - holding views of its
-# parameters' arguments in their parts, each with the parameters it views (round 3b, D9h for every value): a local of
+# parameters' arguments in their parts, each with the parameters it views (D9h for every value): a local of
 # the body's own holding storage by value, never written but by stores into its parts (a scalar field's aside), never
 # lent writably, escaping nowhere but its return, whose value and part stores are views of the parameters - their copies
 # left out where the body hands it back (ElidedCopy) - or values of their own: put in out, which the walk's Held reads
@@ -632,7 +629,7 @@ fn arenaArray(t types.Table&, ty types.TypeId) Bool {
     }
 }
 
-# ---- views held in place of copies (the rework's round 3b: D9h for every value - docs/rework.md 17) ----
+# ---- views held in place of copies (D9h for every value, docs/rework.md 17) ----
 
 # whether a value of type ty holds storage of its own in an arena by value - an array of a run-time length, or a part of
 # one in a field, an element, a payload, through any value held by value (types.OwnedPart, OwnsParts); never through a
@@ -693,10 +690,9 @@ type Ctx enum {
 # is assigned whole after its declaration (Whole), escapes (Esc), is handed back (Ret), and the values stored into its
 # parts with no reference crossed (StoreAt/StoreX); its Let's value (Init); the writable lends of it whole as an argument
 # of a body's call (LendAt/LendBody/LendParam); the local whose storage a reference, held or bound local names (AliasOf)
-type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
+type LocalUses struct(T types.Table&, B Body&) {
     T
     B
-    Sig        # a body's function type: whether a call's argument is given a bare parameter (bareArg)
     WrOther Vec<Bool>
     WrScalar Vec<Bool>
     Whole Vec<Bool>
@@ -720,9 +716,9 @@ type LocalUses struct(T types.Table&, B Body&, Sig fn(id BodyId) types.TypeId) {
     at BlockId = BlockId(0) # the block being walked
 }
 
-# the uses of b's locals, sig giving another body's function type
-fn Uses(t types.Table&, b Body&, sig fn(id BodyId) types.TypeId) LocalUses {
-    u := LocalUses(t, b, sig)
+# the uses of b's locals
+fn Uses(t types.Table&, b Body&) LocalUses {
+    u := LocalUses(t, b)
     for _ in range b.Locals.Len() {
         u.WrOther.Push(false)
         u.WrScalar.Push(false)
@@ -1080,8 +1076,7 @@ fn (u mut LocalUses&) clauses(cs Array<Clause&>&, ctx Ctx) {
     }
 }
 
-# a call's arguments: each one where an argument stands - a reference given anything but a bare parameter (which keeps
-# nothing of it, D9e) escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
+# a call's arguments: each one where an argument stands - a reference escapes, as the callee may keep it - a writable lend of a local whole to a body a Lend (whose
 # callee may keep its parts as they are), any other writable lend a write
 fn (u mut LocalUses&) call(c Call&) {
     body := -1
@@ -1092,7 +1087,6 @@ fn (u mut LocalUses&) call(c Call&) {
         case Callee.Helper(_, _) { helper = true }
         case _ { }
     }
-    ps := u.T.Items(u.T.Params(u.Sig(BodyId(I32(body))))) if body >= 0 else Array<types.TypeId>(0)
     for i in range c.Args.Len() {
         a := c.Args[i]
         lent := u.lendOf(a)
@@ -1110,7 +1104,7 @@ fn (u mut LocalUses&) call(c Call&) {
             u.TempParam.Push(i)
             u.TempIn.Push(u.at)
         }
-        kept := u.T.IsRef(a.Type()) and not helper and not (i < ps.Len() and false)
+        kept := u.T.IsRef(a.Type()) and not helper
         u.expr(a, Ctx.Esc if kept else Ctx.Arg)
     }
 }

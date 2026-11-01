@@ -586,6 +586,7 @@ fn (c mut Checker&) CheckProgram() {
             c.settleFixed()
             c.orderGlobals()
             c.settleAllViews()
+            c.P.L.MutStorage = c.mutStorage()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -3296,8 +3297,6 @@ fn (c mut Checker&) param(n source.NameId, sp source.Span, t types.TypeId, i I64
     c.cur().Params.Push(typed.LocalId(I32(id)))
     if tr is not null { c.fr().typeAt.Put(id, c.typeWrittenAt(tr)) }
 }
-
-# ---- inferred permission levels (the rework's round 2, docs/rework.md 2.8) ----
 
 # a function's name's span: after "fn" and its receiver, the first place its name is written
 # where function f's name is written, in its own module
@@ -9632,8 +9631,6 @@ fn (c mut Checker&) paramIndex(id I64) I64 {
     return -1
 }
 
-# ---- "&" parameters used as one (D9d, the rework's round 2) ----
-
 # this body's by-value parameter a place is part of needs a writable argument
 fn (c mut Checker&) roNeed(p typed.Lvalue?&) {
     if p is null: return
@@ -9742,20 +9739,6 @@ fn (c mut Checker&) strReceivers() {
         }
     }
 }
-
-# ---- reference fields read-only by inference (the rework's round 2c, docs/rework.md 12) ----
-
-# A reference field no code writes through - nothing written through what it names, nothing it reaches handed where it
-# may be written - is read-only, as a written "T&" field was before every written "&" became writable (QCC): an
-# instance holding read-only data there is no read-only copy, so it is lent, returned and walked as any value. Decided
-# per struct type (an instance of a generic its own), by attempts as entry copies are: a field a read-only value is
-# stored into is asked read-only (fieldWant) unless it is written through (fieldWrit); in the attempt after, what is
-# read through it is read-only, and a write through it, or a refusal resting on it, marks it written - the program is
-# checked again with it writable. Both sets only grow, so the attempts end.
-
-# round 2d: an enum case's payload field as a key - beside a struct's fields, numbered past them; (-1, -1) where it is
-# no reference field of a case of an enum this program declares
-CaseFieldBase I64 = 1 << 40
 
 # ---- read-only copies through a generic's read-only reference parameters (T25c: roByArg, roToResult) ----
 
@@ -18564,7 +18547,7 @@ fn (c mut Checker&) walkBody(f ast.ForIn&, cm ast.Compr?&, ce types.TypeId) {
     }
     sp := cm.Value.Span()
     out, idx := c.comprOut, c.comprIdx
-    # (the rework's round 3, QCE: an element owning storage, given existing storage, is its own copy)
+    # (QCE: an element owning storage, given existing storage, is its own copy)
     v := c.partCopy(c.exprTo(cm.Value, ce))
     if cm.Filter is null and out >= 0 {
         # T7c: the fixed array's element at the counter
@@ -19281,6 +19264,30 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
 
 # ---- value results handed over as views (D9h) ----
 
+# whether some global the program reads can be, or reach, storage a call given only read-only arguments may write: a
+# "mut" global of anything but a scalar, or any global whose value reaches a writable reference, a function value or an
+# "any" (types.ReachesWrite) - lowering's quiet statements read no view where it stands then (lower.quiet)
+fn (c mut Checker&) mutStorage() Bool {
+    for key in c.globalTypes.Keys() {
+        t := try c.globalTypes.Get(key) catch default types.UnknownT
+        v := c.P.GlobalDecl(key.First, source.NameId(I32(key.Second)))
+        if v is not null and generic.WrittenMut(v.Ty) and not c.scalarType(t): return true
+        if c.P.T.ReachesWrite(t): return true
+    }
+    return false
+}
+
+# a type no view can read: a number, a Bool, a declared type over one, an enum whose cases carry nothing
+fn (c mut Checker&) scalarType(t types.TypeId) Bool {
+    if t == types.BoolT or c.P.T.IsNumber(t): return true
+    if c.P.T.KindOf(t) != types.Kind.Named or not c.P.T.HasBody(t): return false
+    return match c.P.T.DeclKindOf(c.P.T.DeclOf(t)) {
+        case types.DeclKind.Over: c.scalarType(c.P.T.Base(t))
+        case types.DeclKind.Enum: not c.P.T.HasPayload(c.P.T.Cases(t))
+        case _: false
+    }
+}
+
 # once the program has checked: what each body's returns hand back as views of its parameters' arguments - directly
 # (typed.ViewWalk.Roots) or through locals holding them (Settle), a constructor's through its fields - recorded for the
 # instance (load.ViewResults) or the constructed type (CtorViews), so a caller copies the result only where it keeps it
@@ -19331,7 +19338,7 @@ fn (c Checker&) ctorViewKey(b typed.Body&) I64 {
 fn (c mut Checker&) settleViews(b typed.Body&, file I64) {
     key := c.ctorViewKey(b)
     inst := c.viewable(b)
-    u := typed.Uses(c.P.T, b, fn(id typed.BodyId) types.TypeId { return c.Bodies[I64(id)].Ty })
+    u := typed.Uses(c.P.T, b)
     c.viewHeld.Clear()
     w := typed.ViewWalk(c.P.T, b, c.viewElig(b, file), fn(id typed.BodyId) I64 { return c.ViewsOf(id) }
                         fn(id typed.LocalId) I64 { return try c.viewHeld.Get(I64(id)) catch default I64(-1) })
@@ -19382,7 +19389,7 @@ fn (c Checker&) ViewsOf(id typed.BodyId) I64 {
     }
 }
 
-# ---- values that own their parts (the rework's round 3, QCE: T7a relaxed) ----
+# ---- values that own their parts (QCE: T7a relaxed) ----
 
 # x stored into p as its own copy where p owns what it holds: a part of a value - a field, an element, a payload's field -
 # holding an array of a run-time length by value, or any place given a value with such parts (types.OwnsParts). A whole

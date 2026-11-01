@@ -262,9 +262,6 @@ BoolT TypeId = TypeId(2)
 NullT TypeId = TypeId(15)
 DefaultErrT TypeId = TypeId(16)
 NoreturnT TypeId = TypeId(17)
-# the rework's round 2: what a by-value array's length variable is bound to where the instance takes its length at run
-# time (D9a) - an array of it is one of a run-time length (Array)
-RunLength TypeId = NullT
 
 # an error set's entry for some words of error type e (R1c): mask bit i is e's word i
 fn (t mut Table&) ErrWords(e TypeId, mask U64) TypeId { return t.intern(data(Kind.ErrWords, I64(e), I64(mask), 0), 1) }
@@ -800,7 +797,7 @@ fn (t mut Table&) listHolds(l ListId, cases Bool = false, owned Bool = true) Boo
     return false
 }
 
-# the rework's round 3 (QCE, T7a relaxed): whether a part of a value - a field, an element, a payload's - is an array
+# QCE, T7a relaxed: whether a part of a value - a field, an element, a payload's - is an array
 # of a run-time length held by value, its elements its container's own storage, which lives where the container's
 # references do. Section 8 takes such a part for a reference into that scope (HoldsRefs), so a container sharing a
 # part's storage with what it was made from is judged as sharing it, never as owning it; a part store copies its value
@@ -813,7 +810,7 @@ fn (t Table&) OwnedPart(x TypeId) Bool {
 
 # whether a value of a type holds, by value, a part that is an array of a run-time length (OwnedPart) - in a field, an
 # element, a payload, through any value it holds by value: so a copy of it copies those parts' elements too, deep through
-# values and shallow at references (the rework's round 3, QCE). A reference never does (its referent is shared), nor do
+# values and shallow at references (QCE). A reference never does (its referent is shared), nor do
 # several results (a Tuple), nor a plain run-time array, whose copy is its elements'
 fn (t mut Table&) OwnsParts(id TypeId) Bool { return t.ownsParts(id, 0) }
 
@@ -860,6 +857,61 @@ fn (t mut Table&) sharesRefs(id TypeId, depth I64) Bool {
         case Kind.AnonEnum { return t.listShares(t.ShapeCases(id), depth, true) }
         case _ { return false }
     }
+}
+
+# whether a value of a type reaches code that may write what it was not given writably: a function value (a closure may
+# hold a "mut" reference), an "any" or a type variable - in it or behind its references, at any depth (D9h's quiet
+# calls). A type already being walked adds nothing; one not resolved may reach anything
+fn (t Table&) ReachesCode(id TypeId) Bool {
+    w := codeWalk(t)
+    return w.reaches(id)
+}
+
+# ... or a writable reference: what a global's value may let a call write (check.mutStorage)
+fn (t Table&) ReachesWrite(id TypeId) Bool {
+    w := codeWalk(t, true)
+    return w.reaches(id)
+}
+
+type codeWalk struct(T Table&, Writes Bool = false) {
+    T
+    Writes
+    walking Vec<TypeId>
+}
+
+fn (w mut codeWalk&) reaches(id TypeId) Bool {
+    t := w.T
+    if t.ForeignRef(id) or w.walking.Has(id): return false
+    k := t.KindOf(id)
+    if k == Kind.Func or k == Kind.Var or k == Kind.Any: return true
+    if w.Writes and k == Kind.Ref and (t.PermOf(id) & Writable) != 0: return true
+    w.walking.Push(id)
+    return match k {
+        case Kind.Ref: w.reaches(t.Referent(id))
+        case Kind.Array: w.reaches(t.Elem(id))
+        case Kind.Tuple, Kind.Record: w.some(t.Parts(id))
+        case Kind.AnonEnum: w.some(t.ShapeCases(id))
+        case Kind.Named: w.named(id)
+        case _: false
+    }
+}
+
+fn (w mut codeWalk&) named(id TypeId) Bool {
+    t := w.T
+    if not t.HasBody(id): return true
+    return match t.DeclKindOf(t.DeclOf(id)) {
+        case DeclKind.Struct: w.some(t.Fields(id))
+        case DeclKind.Enum: w.some(t.Cases(id))
+        case DeclKind.Over: w.reaches(t.Base(id))
+        case _: false
+    }
+}
+
+fn (w mut codeWalk&) some(l ListId) Bool {
+    for x in w.T.Items(l) {
+        if x != TypeId(0) and w.reaches(x): return true
+    }
+    return false
 }
 
 # (a part not typed yet may hold one; among cases, 0 is a case without a payload)

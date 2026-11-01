@@ -4878,5 +4878,3 @@ test "function types carry what their markers say; a call's scope variables come
     assert p.InstanceOrigin(atI64).File == -1
     assert l.Diags.Errors() == 0, saidRules(l)
 }
-
-# ---- permission levels (the rework's round 2, docs/rework.md 2.8) ----
