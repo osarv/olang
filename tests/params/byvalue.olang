@@ -1,0 +1,31 @@
+# The scoping and parameters rework (bulk review 5, F5): a function taking a bare parameter - passed by pointer - is a
+# value of a function type passing it by value, as a generic's "fn(x T) T" with T the value type is: the call goes
+# through a wrapper passing the value's address. Run by `make verify-params` under the switches.
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+fn inner(t String) String { return t[1:] }
+
+fn sum(p pt) I64 { return p.x + p.y }
+
+fn pass<T>(x T, f fn(x T) T) T { return f(x) }
+
+fn apply<T, U>(x T, f fn(x T) U) U { return f(x) }
+
+test pass "a function with a bare parameter is a by-value function type's value" {
+    t := $"abcd"
+    assert pass(t, inner) == "bcd"
+    assert apply(pt(2, 3), sum) == 5
+    fs := Vec<fn(p pt) I64>()
+    fs.Push(sum)
+    assert fs[0](pt(4, 5)) == 9
+}
+
+fn both() I64 { return apply(pt(7, 8), sum) * 10 + pass($"xy", inner).Len() }
+
+# the evaluator agrees
+Baked I64 = both()
+assert Baked == 151

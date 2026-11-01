@@ -1,10 +1,10 @@
-# check: fail error[E16]: index 0 is outside the array's 0 elements
+# check: fail error[E16]: index 1 is outside the array's 1 elements
 # also: g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
 # G16b: a long chain of instances shows its innermost notes and always the outermost - the program's own call
 import "std/io"
 fn Total(a Array<I64>) I64 {
     if a.Len() == 0 { return 0 }
-    return a[0] + Total(a[1:])
+    return a[1] + Total(a[1:])
 }
 fn main() ? {
     x := I64[1, 2, 3]

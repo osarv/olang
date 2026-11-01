@@ -27529,3 +27529,141 @@ where its body needs it - every caller giving a read-only one is then refused, a
 to be `&`); half a dozen are fields' and constructor parameters' inner levels, which round 2c's inference does not
 reach (`Array<mut String&>&` against a caller's `Array<String&>&`); the rest section 8 over temporaries of bare
 parameters' reach. The self-build waits for them (docs/rework.md 14.6).
+
+## The rework, round 2f: bulk review 5's fixes; compiler/ under the switches (2026-11-01)
+
+Behind `OLANG_PARAMS=new` and `OLANG_SCOPES=infer`, as rounds 2a-2e (docs/rework.md section 15).
+
+**Bulk review 5.** A read-only review of rounds 1-2e (`/home/user/review/bulk5`, the coordinator's directions) found
+the round's central promise broken in its most common shapes: QCC says a bare parameter never affects its caller, and
+round 2c had made a bare struct's reference fields read-only - but an element read out of a bare `Vec<node&>` (`v[0]`,
+`Get`, a walk, `View()`, even `ViewMut()` through a `&` receiver given a bare argument), what a `Clone` or a `Map`'s
+`Values` walk handed back, and anything reached from an immutable global were writable. One shape wrote constant data
+and segfaulted; another's store LLVM deleted as undefined behaviour. The cause was that read-only-ness was found by
+the root local of a place - a field chain - and every route through a call's result, a dereference of a reference read
+out of an element, or a global root lost it. The fix makes read-only a property of the level reached (`roReach`): a
+reference read out of a place reached read-only is read-only, through every dereference, index, walk and call result
+an instance hands back following a read-only argument - and, where unsure, an instance's value result holding a
+reference type a read-only argument holds is a read-only copy. An instance's own parameter still follows its argument
+(its reach is no read-only level inside it), so `At`, `View` and the walks stay one instance each. The copy on entry
+of a written bare parameter had writable inner levels (`Array<mut node&>`): it keeps the parameter's now.
+
+The review's other findings were wrong results, memory-safe: a bare parameter's own storage kept by routes round 2e's
+frame term did not follow (a `Push` into a returned `Vec<String&>`, a `Put`, a local, a conditional, a captured slice),
+an argument the same call wrote another way (`f(p, p)` with the second `&`, a mutable global), and an `any` made from a
+bare parameter borrowing the caller's instance, which `==` (identity) could tell. Each is fixed conservatively -
+"where unsure, count it as kept, so the caller copies" (the coordinator's direction): a parameter is kept wherever the
+result outlives its argument's storage and can name storage of its type; an argument the call may write another way is
+copied for the call; an any boxes a copy; and the evaluator, lowering with no plan, copies every bare parameter on
+entry, as 2.10 always said it would. A function with a bare parameter given where `fn(x T) T` is wanted was refused
+(F5): it is a value of that type now, through a wrapper that passes the value's address.
+
+**Found on the way.** G30's decided `if` checked what followed it in the instance where it leaves: `t := ts[0]` after
+`if ts.Len() == 0 { return }` was an E16 in the length-0 instance (round 2e's "E16 at ts[0]", on the default path too
+- a G16b check case had been written against that error). `std/flags`' `byName` - written `(s state&) ... mut flag&s`,
+a writable result out of a read-only receiver, shallow permission - was migrated to a value result once its element
+read became read-only, and its callers' writes (`fl.b = true`) went to a copy: its tests failed at run time, the one
+place the migration changed what a program computes. D9g's note now names the parameter, not the value result, where
+any caller writes through the result; flags takes `mut state&` in the old form. And param_migrate stopped one step
+early: the finish phase drops a result's kept `mut`, which can leave D9g to say, so it drives again after it.
+
+**The migration's divergence.** The first run of compiler/'s migration with this round's checker settled for eight
+rounds, then made 1,429 edits in its ninth and never came back. The cause was two refusals of one lend: a read-only
+reference lent to a `&` parameter (`countTrue(sm.Builds)`, `countTrue(xs Vec<Bool>&)`) was refused at the lend, with a
+note naming the caller's bare parameter, while D9d said the callee's `&` was never used - so `param_migrate` made the
+caller's parameter `&` and the callee's bare in the same round, and every caller of the caller in the next. Round 2c
+already judged a read-only copy lent so once the callee's use was settled (`lendLater`); a read-only reference reached
+any other way now is too, so only the callee's D9d is said.
+
+**F7, a task's bare argument.** After the review the coordinator found one more (`repro/spawn_bare.olang`): `spawn r =
+work(s)` with `work(p Pt)` bare, then `grow(s)` in the same join block, read 100 where by value reads 1 - a bare
+argument passed by pointer to a task sees its spawner's later write, a data race the by-pointer passing made
+observable. docs/rework.md 2.10 had stated the rule ("copied at the spawn unless the join block and every task in it
+write no storage of its type") but nothing built it. Now the scope pass asks, for each bare parameter passed by pointer
+of a spawned call, whether anything in the join block may write storage of its type (`typed.WriteWalk`, one walk over
+every statement, expression and place kind, as BreaksOut is) and marks those copied for the call; lowering makes the
+copy on the spawning thread in the join's scope, so it lasts until the join (P2) and each task of a loop holds its
+own. The whole join block is the window, not only what follows the spawn: in a loop the statements before it run again
+while the task does. The copy is not made where nothing writes the type (the spawn_bare variant with only `t = 5`
+beside it copies nothing - `-memory` lists each copy and counts F3's and F7's apart). Lowering with no plan copies every
+one: the evaluator runs tasks in sequence at the join, after what the block writes.
+
+Checking that 2.10's other promise was built found two bugs in generators: a bare struct parameter of a generator did
+not compile (the walk's local was declared the reference and given the captured value - a clang type error), and a bare
+array parameter was captured as the caller's reference, so a walk read what the caller wrote after the call. Both are
+captured as values now, copied where the generator lives. And F3's `TypeReaches` had answered "cannot reach" for every
+enum, past its depth bound and for a type variable; it answers "may" where unsure now and follows payloads, while a
+function written at the call that holds no writable reference no longer counts as writing anything.
+
+**A hole of this round's own, closed.** Widening `lendLater` to the dereference branches (the migration's divergence,
+above) let through a read-only reference lent to a `&` parameter whose callee wrote through the parameter itself: the
+settle asked only whether the callee used it deeply (`refDeep`), which is right for a read-only copy - its own top is
+its own - and wrong for a reference to the caller's storage. Such a lend is now marked direct and refused where the
+callee uses the parameter as a `&` at all. Making it at the fit too (a binding read-only by what it was matched out of)
+showed why most of compiler/'s remaining T25c rows had no note naming a bare parameter, so `param_migrate` left them:
+the binding's origin runs through the match's held subject to the call that made it (`s.unAway(a)`, a nullable
+parameter followed). The error is now made where the lend is, with notes found through that chain, and held until the
+settle chooses or drops it. And F7's copy at the spawn turned a migrated std/cancel test into an endless loop: its
+`spin(t Token&)` watches `t.flag.AtomicLoad()` while the spawner cancels, D9d had made `t` bare (never written), and a
+bare parameter is a copy - so an atomic read through a `&` parameter now counts as a use.
+
+**Where compiler/'s migration stopped.** With the round's last checker the migrated root has 53 errors, none naming a
+bare parameter (docs/rework.md 15.6 lists them): mostly compiler/'s readers of read-only trees that hand back borrowed
+references into what they are given and so take `&` - a shape QCC leaves no read-only form for, since a nullable
+reference has no value form - with the read-only-ness entering through a bare receiver's collection reads, nullable
+parameters read-only by inference and locals whose level the inference made read-only rather than widening their
+source. The self-build under the switches therefore waits for round 2g; the choice it needs first is whether such a
+reader's borrowed result follows its argument's permission, as an instance's already does.
+
+**A kept bare parameter refused (the user's decision, 2026-11-01).** Round 2e had made a bare parameter's own storage
+kept in what its function hands back the callee's copy, made by each caller whose argument might change - a hidden
+copy, decided by the scope pass. The user, asked through the coordinator, preferred the copy written: "copying by
+assigning to a value variable from a reference variable should be fine. No copy needed. In fact, copy should go as a
+method." So the scope pass now refuses such a parameter (D9e), naming `c T = p` and `p T&`, and no caller copies for
+it; `param_migrate` takes the `&` (the edit a token tool can make). The other copies stay for now - the spawn's (F7)
+and the call-may-write ones (2.10), on which the user has not decided - and `.Clone()` stays until round 3 decides
+whether the handles (Vec, Map) become values. One guess came out with it: bulk review 5's "kept where unsure" took a
+Vec's `At` as keeping its receiver whenever `T` was a function type (a function value may name anything); an instance
+whose declared result is a type variable builds no such value, so it is not guessed kept.
+
+**The hidden copies settled, and C's pointers (the user's decisions, 2026-11-01).** With the caller's copy for a kept
+parameter gone, the user settled what copies remain: a bare value passed by pointer is copied exactly where one of two
+guarantees cannot be proved - (A) the callee does not write it, (B) nothing else changes it during the call - copying
+only the parts that may change, each listed by `-memory`. An olang callee's body is checked, so (A) never needs a copy
+there; seen code (bodies, a lambda written at the call) is read for (B), unseen code (a function value, an `any`, a
+spawn's join block - F7) copies. For C, (A): `const T*` is trusted (breaking it is X1a's unchecked hole), a non-const
+`T*` (`p T&`) given an owned value borrows it writably as E12c does, and given what may not be lent writably - a bare
+parameter, constant data, an immutable global, a read-only view - it is copied, "because old C APIs often leave out
+const" (where an olang `&` is given those, T25c refuses). (B): a C call copies only if some export fn of the program may
+write that storage type, since C may call back into it; another thread outside a join is the program's own race.
+Built in the round (mine, details): the checker leaves such an argument typed read-only - converting a reference typed
+writable but read-only by what it is read out of (an immutable global's, a view of a read-only level) - and the scope
+pass's `externCopies` marks it in `ArgTemp`; lowering copies it as the argument's own type holds it before it is made
+the pointer C takes (a `CVoid?&` too). A bare parameter given whole stays the body's own copy, made on entry, as for an
+olang `&` parameter, so the body sees what C wrote (D9's rule; the coordinator's summary had read "for an olang callee
+those cases are errors", which holds for the global, the view and the data, not for a bare parameter whole - left to
+the user). For (B) `exportWrites` runs the F7 write walk over every export fn's body, by type (an export fn calling C may
+write anything, so a program with one copies a C call's mutable global argument). Two things came out with it: under
+the switch an export fn taking `CStr?&` did not fit a C function pointer's (`CStr?&` read-only in a C import where `mut`
+is left out, writable in olang) - an extern type's reference has no permission that says anything (X10), so function
+types now ignore it there, and the fn is passed as it is (its C entry); and std/io's `Write` would have copied each
+`tail := data[sent:]` before `write` once a program had an export fn - a read-only view local never assigned, made from
+what cannot change (a bare parameter's slice), is itself stable now, for olang calls' copies too (a relaxation for the
+bulk review). Not built: copying only the parts that may change (a whole array or struct is copied), for round 3.
+
+**Found on the way (both paths): a value local from a choice was a view.** `c String = t if k == 0 else u` - a value
+array local declared, or assigned, from a conditional, a match or a try's default of existing arrays - held no copy:
+lowering's `copiesValue` looked through none of them, so a later write to the chosen source showed through the local,
+built and in the evaluator alike (both run the same MIR). tests/params/keptroutes.olang's written copy through a choice
+found it; it now copies wherever any value the choice may give is existing storage, as a returned choice already did
+(`retCopies`). tests/textslot.olang holds it beside a baked global.
+
+**An atomic read of a bare parameter (mine, the user absent).** A fresh migration of std under the switches hung
+std/cancel's and std/chan's tests. param_migrate's text phase had made `Token.Why`'s `t Token&` - written without `mut`,
+so read-only - bare, as it does every such parameter, and only D9d's atomic use had kept it `&` before; with it bare,
+`Cancelled` and the test's `spin` became bare too, F7 copied the token at the spawn because the join block's `Cancel`
+writes Token storage, and the task spun on a copy that never fired. The migrated program was wrong by QCC's own rule -
+a bare parameter is the function's own value, which no other thread writes - so the compiler now says so (D9): an atomic
+read of a bare parameter's own storage is an error naming `p T&`, and so is a bare parameter given whole to a `&`
+parameter read atomically, directly or through those it hands it to (a settle over the D9d dependencies). Both carry
+the bare-parameter note, so the tool takes `&` again.

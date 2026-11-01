@@ -42,3 +42,33 @@ test "a text local from a literal starts from the literal every turn, and is wri
     s := "same"
     assert s == "same" and s.Len() == 4 and s[3] == 'e'
 }
+
+# a value text local declared or assigned from a choice - a conditional or a match of places or references - holds a
+# copy, as one declared from a place does (T7b): writing the source afterwards changes nothing it holds (it was a view)
+fn tsChose(t mut String&, u String&, k I64) String {
+    a := "abc"
+    b := "def"
+    c String = a if k == 0 else b
+    d String = match k {
+        case 0: b
+        case _: a
+    }
+    e String = t if k == 0 else u
+    f String = "-"
+    f = u if k == 0 else t
+    a[0] = 'x'
+    b[0] = 'y'
+    t[0] = 'z'
+    return $c $d $e $f
+}
+
+fn tsChoseRun() String {
+    v := $"ghi"
+    return tsChose(v, v, 0)
+}
+
+TsChose String& = tsChoseRun()
+
+test "a value text local from a conditional or a match of existing text is a copy" {
+    assert tsChoseRun() == "abcdefghighi" and TsChose == "abcdefghighi"
+}

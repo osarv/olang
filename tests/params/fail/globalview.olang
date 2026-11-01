@@ -1,0 +1,19 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# bulk review 5 (F1), its reproducer global_view_write.olang: refused under the switches
+# under the switches, Vec's View() on an immutable global hands out a writable view - the global (baked while
+# compiling, K2, constant data per T25d) is written through it
+import "std/io"
+
+fn mk() Vec<I64> {
+    v := Vec<I64>()
+    v.Push(1)
+    return v
+}
+
+G Vec<I64> = mk()
+
+fn main() {
+    w := G.View()
+    w[0] = 42
+    io.Println($G)!
+}

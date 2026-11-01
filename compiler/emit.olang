@@ -1083,6 +1083,7 @@ fn (e mut Emitter&) sym(k mir.FnKey) String {
         case mir.FnKey.Helper(kind, ty): types.Symbol("olang." $kind "." $(t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)))
         case mir.FnKey.Adapter(call): $e.bodySym(I64(call)) "_adapter"
         case mir.FnKey.Copied(b): $e.bodySym(I64(b)) "_copied"
+        case mir.FnKey.ByValue(b, ty): types.Symbol($e.bodySym(I64(b)) "_byvalue." $t.Canon(ty))
         case mir.FnKey.Init(m): types.Symbol("olang.init." $e.P.L.Mods[m].Identity)
         case mir.FnKey.AnyRender(ti, top): types.Symbol($"olang.anyrender" $(".top" if top else "") "." $e.tableName(ti))
     }
@@ -1533,6 +1534,7 @@ fn (e mut Emitter&) ProfName(k mir.FnKey) String {
         }
         case mir.FnKey.Adapter(call) { return $e.ProfName(mir.FnKey.Body(call)) ".adapter" }
         case mir.FnKey.Copied(b) { return e.ProfName(mir.FnKey.Body(b)) }
+        case mir.FnKey.ByValue(b, _) { return e.ProfName(mir.FnKey.Body(b)) }
         case _ { return e.sym(k) }
     }
 }
@@ -2195,6 +2197,7 @@ fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
         case mir.FnKey.Helper(_, _) { return HomeShared }
         case mir.FnKey.Adapter(call) { return e.homeOf(mir.FnKey.Body(call)) }
         case mir.FnKey.Copied(_) { return HomeShared }
+        case mir.FnKey.ByValue(_, _) { return HomeShared }
         case mir.FnKey.Init(m) { return m }
         case mir.FnKey.AnyRender(_, _) { return HomeShared }
     }
@@ -4888,6 +4891,7 @@ fn (e mut Emitter&) codeFor(code mir.FnKey, ty types.TypeId) String {
 fn (e mut Emitter&) codeType(k mir.FnKey) types.TypeId {
     return match k {
         case mir.FnKey.Body(id), mir.FnKey.Copied(id): e.Lw.Bodies[I64(id)].Ty
+        case mir.FnKey.ByValue(_, ty): ty
         case mir.FnKey.Helper(kind, t): mir.HelperType(e.T, kind, t)
         case _: e.Lw.LowerKey(k).Ty
     }

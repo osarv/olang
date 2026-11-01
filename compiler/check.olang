@@ -98,6 +98,10 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     nulls Vec<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
+    # G15, G30, G35: the statement just checked was decided for this instance and leaves - what follows it in its block
+    # is never reached in this instance, so it is not checked there (an index or a slice past a length the instance
+    # binds, "ts[0]" after "if ts.Len() == 0 { return }", is no error of it)
+    instLeft Bool = false
     # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
     # it reads by where each is written (ctKey), each one of its parameters
     Contract I64 = 0
@@ -275,6 +279,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     retFollows Bool = false   # an instance's result written as a type variable being returned (T25c's generic rule)
     argFollows Bool = false   # an argument for an instance's type variable's reference parameter (judged at the settle)
     argCtor Bool = false      # an argument for a constructor's or a case's "&" parameter: what it builds holds it as given
+    argExtern Bool = false    # an argument for an extern's writable pointer: what may not be lent writably is copied (X22)
     levelOn Vec<levelSite>    # the written reference levels a store being checked reaches (levelRo): its target's local's
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
     walkBind Bool = false     # a for-in's collection bound to its hidden reference: no use of its own (walkBound, D9d)
@@ -294,8 +299,16 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     refDeep Map<pair.Pair<I64, I64>, Bool>
     deepDeps Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     roLends Vec<roLendRec>
+    # (D9 under the round 2: the "&" parameters read atomically, directly or through those they are handed to, and the
+    # bare parameters' own values - their copies - handed to a "&" parameter, judged once that is known)
+    refAtomic Map<pair.Pair<I64, I64>, Bool>
+    atomicLends Vec<roLendRec>
     roArgs Vec<roArg>
     refKeptArgs Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # D9d: (body, "&" parameter) given (callee, by-value k)
+    refCalls Map<pair.Pair<I64, I64>, typed.Expr&>   # D9d (round 2f): a reference local made from a call's result, the call
+    roCopyFrom Map<pair.Pair<I64, I64>, typed.Expr&> # T25c's note (round 2f): a read-only copy's value, what it is copied out of
+    callOrigins Map<pair.Pair<I64, I64>, I64>   # resultUse: a reference local's last value a plain function's result, by function
+    walkParam I64 = -1   # D9d (bulk review 5): the "&" parameter the walk whose element is being declared walks, -1 for none
     roFns Vec<roFn>
     # ...and through a generic instance's read-only reference parameters (roByArg): every value given a local of an
     # instance's body, by (body, local); the parameters a by-value result is copied out of, by (body, parameter)
@@ -312,6 +325,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # ...and the read-only values given a constructor's "&" parameter (round 2c): refused where the constructor writes
     # through it (refDeep), settled with D9d
     roCtorArgs Vec<roLendRec>
+    # ...and the conditionals and matches choosing a place given one (E28) where every field it lands in is read-only by
+    # inference: refused only where the constructor writes through what it is given after all, settled with D9d
+    condCtorArgs Vec<roLendRec>
     roDeepArgs Vec<roDeepArg>
     roRefArgs Vec<roArg>
     # the rework's round 2c (docs/rework.md 12): reference fields read-only by inference, by (the struct type, the
@@ -602,7 +618,8 @@ type roDeepArg struct(Body I64, X typed.Expr&, Callee I64, Param I64) {
 # a read-only copy lent to a "&" parameter (the rework's round 2): where, its callee's body and parameter, the error
 # that stands if that parameter is used deeply
 type roLendRec struct(Body I64, At diag.Where, Callee I64, Param I64, Fix String&, Bare diag.Where = diag.Where.Nowhere
-                      BareName String& = "", Fields Array<pair.Pair<I64, I64>>& = Array<pair.Pair<I64, I64>>(0)) {
+                      BareName String& = "", Fields Array<pair.Pair<I64, I64>>& = Array<pair.Pair<I64, I64>>(0)
+                      Direct Bool = false, Held I64 = -1) {
     Body
     At
     Callee
@@ -611,6 +628,10 @@ type roLendRec struct(Body I64, At diag.Where, Callee I64, Param I64, Fix String
     Bare        # the bare parameter of Body it is read out of, where it is declared (NoteBareParam), if one
     BareName
     Fields      # the reference fields read-only by inference its read-only-ness rests on (round 2c)
+    # a reference to storage reached read-only, not a copy of its own (round 2f): refused where the callee uses the
+    # parameter as a "&" at all - a write through the parameter itself writes that storage - not only deeply
+    Direct
+    Held        # its error, with the notes naming what it is read out of, made where it was lent and held - or -1
 }
 
 # a body made a function value (T25c): what it is called in a diagnostic, and its parameters from First on
@@ -731,6 +752,9 @@ fn (c mut Checker&) reset() {
     c.bareLocals = Map<pair.Pair<I64, I64>, Bool>()   # (by body: another attempt's bodies are others)
     c.roBorrows = Map<pair.Pair<I64, I64>, Bool>()
     c.roFrom = Map<pair.Pair<I64, I64>, roOrigin>()
+    c.refCalls = Map<pair.Pair<I64, I64>, typed.Expr&>()
+    c.roCopyFrom = Map<pair.Pair<I64, I64>, typed.Expr&>()
+    c.callOrigins = Map<pair.Pair<I64, I64>, I64>()
     c.roNeeds = Map<pair.Pair<I64, I64>, Bool>()
     c.roDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.refUsed = Map<pair.Pair<I64, I64>, Bool>()
@@ -739,6 +763,8 @@ fn (c mut Checker&) reset() {
     c.refFrom = Map<pair.Pair<I64, I64>, I64>()
     c.deepDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roLends = Vec<roLendRec>()
+    c.refAtomic = Map<pair.Pair<I64, I64>, Bool>()
+    c.atomicLends = Vec<roLendRec>()
     c.roArgs = Vec<roArg>()
     c.refKeptArgs = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roFns = Vec<roFn>()
@@ -748,6 +774,7 @@ fn (c mut Checker&) reset() {
     c.roDeepNeeds = Vec<pair.Pair<I64, typed.Expr&>>()
     c.roDeepLends = Vec<roDeepArg>()
     c.roCtorArgs = Vec<roLendRec>()
+    c.condCtorArgs = Vec<roLendRec>()
     c.roCopyFields = Map<pair.Pair<I64, I64>, Vec<pair.Pair<I64, I64>>>()
     c.roDeepArgs = Vec<roDeepArg>()
     c.roRefArgs = Vec<roArg>()
@@ -3479,10 +3506,14 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
     c.cur().Params.Push(typed.LocalId(I32(hid)))
     c.bareLocals.Put(c.roKey(hid), true)
     if deep { c.roCopies.Put(c.roKey(hid), n) }
-    v := c.P.T.Referent(t)
+    # (bulk review 5: the copy's own storage is the body's to write, what it reaches as read-only as the parameter's -
+    # its levels below its top read-only, so "a[0].v = 1" of a copied Array<node&> writes no caller's node)
+    v := c.P.ReadOnlyAll(c.P.T.Referent(t))
     id := c.local(n, sp, v, typed.LocalKind.Var, typed.Mark.Infer)
     if deep { c.roCopies.Put(c.roKey(id), n) }
-    c.fr().entryLets.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), c.fit(c.readLocal(sp, hid), v, sp)))
+    cp := c.fit(c.readLocal(sp, hid), c.P.T.Referent(t), sp)
+    if v != c.P.T.Referent(t): cp = c.convert(sp, cp, v)
+    c.fr().entryLets.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), cp))
     c.entryCopies++
     key := pair.Pair(c.fr().File, I64(sp.Start))
     if c.copiedSaid.Has(key) { return }
@@ -3491,15 +3522,17 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
 }
 
 # the value type a ":=" initializer reading a bare parameter passed by pointer whole declares (round 2e): the
-# parameter's value type where it holds no reference - a plain struct or enum, copied as by value - else UnknownT (an
-# array's is a view of what is passed, a type holding references a read-only reference to it, as before)
-fn (c mut Checker&) plainBareCopy(x typed.Expr&) types.TypeId {
+# parameter's value type where it holds no reference - a plain struct or enum, copied as by value - and (round 2f) one
+# holding references where the local is never assigned whole after (kept: "r := e; r.Target = t; return r" writes the
+# copy's own fields, as by value; its references read-only as e's, and its value followed back to e); else UnknownT (an
+# array's is a view of what is passed, a type holding references assigned whole a read-only reference to it)
+fn (c mut Checker&) plainBareCopy(x typed.Expr&, kept Bool) types.TypeId {
     if not source.NewParams: return types.UnknownT
     u := unwrapped(x)
     if u != typed.Expr.Read or u.p != typed.Lvalue.Local: return types.UnknownT
     if c.bareWhole(u) < 0: return types.UnknownT
     v := c.P.T.Referent(u.ty)
-    if c.arrayOf(v) != types.UnknownT or c.P.T.HoldsRefs(v): return types.UnknownT
+    if c.arrayOf(v) != types.UnknownT or c.P.T.HoldsRefs(v) and not kept: return types.UnknownT
     return v
 }
 
@@ -3719,16 +3752,10 @@ fn (c mut Checker&) wantCopy(id I64) Bool {
 # generic.WidenParam) and the program checked again. Whether x reaches one so made
 fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
     if not source.NewParams or c.frames.Len() == 0: return false
-    r := c.levelRootX(x)
-    if r < 0: return false
-    l := c.cur().Local(typed.LocalId(I32(r)))
-    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) or not c.P.T.IsNullable(l.Ty) or c.writable(l.Ty): return false
+    # (through a reference local made from what it reaches - a binding of its payload - too, bulk review 5)
+    k := c.nullParamOf(x)
     f := c.bodyFn(c.fr().Body)
-    if f < 0: return false
-    k := -1
-    for i in range c.cur().Params.Len() {
-        if I64(c.cur().Params[i]) == r: k = i
-    }
+    if k < 0 or f < 0: return false
     return c.widenNullable(f, k)
 }
 
@@ -3736,6 +3763,10 @@ fn (c mut Checker&) wantWritable(x typed.Expr&) Bool {
 # receiver first), -1 for none (wantWritable's test, nothing made writable)
 fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
     if not source.NewParams or c.frames.Len() == 0 or c.bodyFn(c.fr().Body) < 0: return -1
+    # (bulk review 5: what a call following an argument hands back - "unAway(y)" of a binding of x's payload - is what
+    # that argument reaches: its parameter)
+    k := c.followedNull(x)
+    if k >= 0: return k
     r := c.levelRootX(x)
     # (a reference local made from what it reaches - a binding of its payload: that parameter)
     for _ in range 16 {
@@ -3748,6 +3779,27 @@ fn (c mut Checker&) nullParamOf(x typed.Expr&) I64 {
     if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) or not c.P.T.IsNullable(l.Ty) or c.writable(l.Ty): return -1
     for i in range c.cur().Params.Len() {
         if I64(c.cur().Params[i]) == r: return i
+    }
+    return -1
+}
+
+# the nullable parameter a call's result rests on, where its callee's result follows an argument (FollowResults) that is
+# read out of one - its index, -1 for none
+fn (c mut Checker&) followedNull(x typed.Expr&) I64 {
+    u := unwrapped(x)
+    if u != typed.Expr.Call: return -1
+    id := c.bodyOfCallee(u.c.Target)
+    if id < 0: return -1
+    i := match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst): inst
+        case _: -1
+    }
+    if i < 0: return -1
+    for k, a in u.c.Args {
+        if not c.P.L.FollowResults.Has($i ":" $k): continue
+        j := c.nullParamOf(unwrapped(a))
+        if j < 0 and c.refConverted(a) is not null: j = c.nullParamOf(unwrapped(c.refConverted(a)!))
+        if j >= 0: return j
     }
     return -1
 }
@@ -5585,7 +5637,12 @@ fn (c mut Checker&) stmtsOf(body Array<ast.Stmt&>&) {
             }
         }
         fr.nonNullSet = Array<source.NameId>(0)
+        fr.instLeft = false
         c.stmt(body[i])
+        if fr.instLeft {
+            fr.instLeft = false
+            break
+        }
         for k in after {
             if k < fr.nulls.Len() { fr.nulls[k] = nullNarrow(fr.nulls[k].Path, fr.nulls[k].Block, true) }
         }
@@ -5690,7 +5747,10 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
                 # S8d: a narrowed payload's copy, lent writably - the write would change nothing the program holds
                 c.narrowedWrite(sp, I64(id))
             } else if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
-                c.err(sp, msgs.CaptureReadOnly())
+                # (the rework's round 2: a capture of a bare parameter around - captured by value - named, so
+                # param_migrate makes it "&", which a lambda then captures as a reference)
+                rec := c.err(sp, msgs.CaptureReadOnly())
+                if source.NewParams: c.noteOuterBare(rec, c.cur().Local(id).Name)
             } else if not store and c.roLocal(I64(id)) {
                 # T25c: a read-only copy is not lent writably - but, under the rework's round 2, to a "&" parameter whose
                 # body writes only its own plain parts, judged once that is settled
@@ -5716,21 +5776,31 @@ fn (c mut Checker&) mustWrite(p typed.Lvalue&, sp source.Span, store Bool) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and (c.wantCopy(c.bareWhole(unwrapped(ref))) or c.wantWritable(unwrapped(ref))) {
                 return
+            } else if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 and not store and not c.capturedValue(ref) and c.lendLater(sp, "from its parts", p, true, unwrapped(ref)) {
+                return     # (round 2f: lent to a "&" parameter - refused once settled where the callee uses it as one)
             } else if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
                 if c.capturedValue(ref) {
-                    c.err(sp, msgs.CaptureReadOnly())
+                    rec := c.err(sp, msgs.CaptureReadOnly())
+                    q := c.rootLocal(readPlace(unwrapped(ref)))
+                    if source.NewParams and q >= 0: c.noteOuterBare(rec, c.cur().Local(typed.LocalId(I32(q))).Name)
                 } else {
-                    c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
+                    c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite(source.NewParams)), ref)
                 }
             } else if c.isRef(rt) and c.fieldsWrite(unwrapped(ref)) {
                 return     # (round 2c: written through a field read-only by inference - writable, checked again)
-            } else if c.isRef(rt) and c.roRoot(readPlace(unwrapped(ref))) >= 0 {
-                # T25c: a read-only copy writes nothing through the writable references it shares
+            } else if c.isRef(rt) and source.NewParams and c.roRoot(readPlace(unwrapped(ref))) < 0 and c.roRef(unwrapped(ref)) and c.wantWritable(unwrapped(ref)) {
+                return     # (a nullable parameter read-only by inference reached: made writable, checked again)
+            } else if c.isRef(rt) and not store and source.NewParams and c.roRoot(readPlace(unwrapped(ref))) < 0 and c.roRef(unwrapped(ref)) and c.lendLater(sp, "from its parts", p, true, unwrapped(ref)) {
+                return     # (round 2f: as above - lent, judged once the callee's use is settled)
+            } else if c.isRef(rt) and (c.roRoot(readPlace(unwrapped(ref))) >= 0 or source.NewParams and c.roRef(unwrapped(ref))) {
+                # T25c: a read-only copy writes nothing through the writable references it shares (bulk review 5: nor
+                # anything reached through a read-only level - an element, a call's result, an immutable global)
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
                 c.noteRo(rec, readPlace(unwrapped(ref)))
             } else if c.isRef(rt) {
                 c.roNeed(readPlace(unwrapped(ref)))
                 if source.NewParams {
+                    c.resultUse(unwrapped(ref))
                     c.fieldsThrough(readPlace(unwrapped(ref)), false, 0)
                     c.refUse(readPlace(unwrapped(ref)))
                     # through the parameter itself: its referent's own part; through what it reaches: deep
@@ -5862,7 +5932,9 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     # (the rework's round 2d: a bare struct or enum passed by pointer is a value - captured as one, a copy of the
     # caller's, not its pointer, so keeping the lambda keeps nothing of the call's argument: D16c as by value)
     pbody := c.frames[fr.Parent].Body
-    byPtr := source.NewParams and c.isRef(ot) and c.bareLocals.Has(pair.Pair(pbody, outer)) and c.arrayOf(c.P.T.Referent(ot)) == types.UnknownT
+    # (bulk review 5, F7: and a generator's bare array too - its walk runs after the call that gave it has returned, so
+    # it holds a copy, made where the generator lives, as by value)
+    byPtr := source.NewParams and c.isRef(ot) and c.bareLocals.Has(pair.Pair(pbody, outer)) and (c.arrayOf(c.P.T.Referent(ot)) == types.UnknownT or fr.Gen)
     if byPtr {
         it = c.P.T.Referent(ot)
         ox = typed.Expr.Read(sp, it, typed.Lvalue.Deref(sp, it, typed.Expr.Read(sp, ot, op, typed.SiteId(-1))), typed.SiteId(-1))
@@ -6188,7 +6260,8 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 return
             }
             if (perm & types.Owning) != 0 { b.Push("own ") }
-            if not top and (perm & types.Writable) != 0 { b.Push("mut ") }
+            # (under the rework's switches every "&" written may be written - "mut" is no spelling there, bulk review 5)
+            if not top and (perm & types.Writable) != 0 and not source.NewParams { b.Push("mut ") }
             c.spell(b, c.P.T.Referent(t), false)
             b.Push("?&" if (perm & types.Nullable) != 0 else "&")
         }
@@ -7188,6 +7261,12 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         return x
     }
     if have == want or c.P.T.Same(have, want) {
+        # (X22: read-only by what it is read out of, given a C function's pointer not "const" - typed read-only, so
+        # the scope pass copies it for the call)
+        if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 and source.NewParams and c.argExtern and not c.P.T.IsNullable(have) and c.roRef(x) {
+            if c.externLent(x) { return x }
+            return c.convert(sp, x, c.P.T.Ref(c.P.T.Referent(have), c.P.T.PermOf(have) & ~types.Writable))
+        }
         if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 { c.roWritableRef(x, sp) }
         return x
     }
@@ -7269,7 +7348,17 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     }
     # a function value where one of looser permissions is wanted (T22): a read-only parameter for a writable one, a
     # writable result for a read-only one
-    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) { return c.convert(sp, x, want) }
+    if hk == types.Kind.Func and wk == types.Kind.Func and c.funcFits(have, want, namedFn(x)) {
+        # (an export fn given C as it is - its C entry - where the two differ only in an extern type's reference's
+        # permission, which says nothing, X10, X13)
+        if source.NewParams and namedFn(x) and c.foreignPermOnly(have, want) { return x }
+        return c.convert(sp, x, want)
+    }
+    # (bulk review 5, F5: a named function taking a bare parameter by pointer, where a function type passes it by value
+    # - a generic's "fn(x T) T" with T the value type: a value of that type, lowering's by-value wrapper calling it)
+    if source.NewParams and hk == types.Kind.Func and wk == types.Kind.Func and namedFn(x) and c.funcFits(c.byValueType(have, want), want, true) and x == typed.Expr.Fn {
+        return typed.Expr.Fn(sp, want, x.f)
+    }
     # an instance whose type declares Call, where a function value is wanted (E31): an adapter holding it
     if wk == types.Kind.Func and hk != types.Kind.Func and have != types.NullT {
         a := c.adapter(sp, x, want)
@@ -7322,6 +7411,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             }
             p := readPlace(x)
             if p is not null {
+                # (X22, as above: a place that may not be written - an immutable global's - lent read-only, copied for
+                # the call)
+                if source.NewParams and c.argExtern and not c.placeWritable(p) { return typed.Expr.Borrow(sp, c.P.T.Ref(r, c.P.T.PermOf(want) & ~types.Writable), p) }
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
@@ -7344,7 +7436,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 # (not for an instance's type variable's reference parameter under the round 2: held as given)
                 if csp.Start >= 0 and c.condChoosesPlace(x) and not (source.NewParams and c.argFollows) {
                     # E28: a conditional's value is a copy, which the callee would write and drop
-                    c.err(csp, msgs.CondLentWritable())
+                    c.condLent(csp, c.argBody if c.argCtor else -1, c.argK)
                 } else {
                     c.roLend(x, sp)
                 }
@@ -7391,6 +7483,14 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 return c.fit(c.convert(sp, x, c.P.T.Ref(hr, (c.P.T.PermOf(have) & types.Writable) | (c.P.T.PermOf(want) & types.Owning))), want, sp)
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0 {
+                # the rework's round 2 (X22): a C function's pointer not "const" given what may not be lent writably -
+                # constant data, an immutable global, a read-only view - is given a copy, made for the call (the scope
+                # pass's ArgTemp): old C interfaces leave "const" out of what they only read. A bare parameter whole is
+                # the body's own copy, made on entry, as where an olang function's "&" parameter is given it (D9)
+                if source.NewParams and c.argExtern and not c.P.T.IsNullable(have) {
+                    c.externLent(x)
+                    return x
+                }
                 # an instance's type variable's reference parameter: as read-only as this argument (settled)
                 if source.NewParams and c.argCtor { c.ctorRoArg(sp, x) }
                 if source.NewParams and (c.argFollows or c.argCtor) { return c.convert(sp, x, want) }
@@ -7413,11 +7513,20 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                     if c.levelRo(want) { return x }
                     if c.wantCopy(c.bareWhole(x)) or c.wantWritable(x) { return x }
                     if c.fieldsWrite(x) { return x }
+                    # (round 2f: lent to a plain function's "&" parameter - judged once settled, refused where the
+                    # callee uses it as one; else D9d makes that parameter bare)
+                    if c.lendLater(sp, "from its parts", readPlace(unwrapped(x)), true, x) { return x }
                     c.noteRoX(c.err(sp, msgs.ReadOnlyHere()), x, 0)
                     return x
                 }
                 c.err(sp, msgs.ReadOnlyToWritable())
                 return x
+            }
+            # (X22, as above: a reference typed writable but read-only by what it is read out of - an immutable
+            # global's, a view of a read-only level - typed read-only, so the scope pass copies it)
+            if (c.P.T.PermOf(want) & types.Writable) != 0 and source.NewParams and c.argExtern and not c.P.T.IsNullable(have) and c.roRef(x) {
+                if c.externLent(x) { return x }
+                return c.convert(sp, x, c.P.T.Ref(hr, c.P.T.PermOf(have) & ~types.Writable))
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp) { return x }
             if c.P.T.Same(hr, wr) { return x }
@@ -7450,6 +7559,19 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     # T7d: two fixed arrays of one element type and two lengths
     if hk == types.Kind.Array and wk == types.Kind.Array and c.P.T.Same(c.P.T.Elem(have), c.P.T.Elem(want)) and c.P.T.KindOf(c.P.T.Length(have)) == types.Kind.Const and c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
         c.err(sp, msgs.ArraySizeMismatch(c.P.T.ConstValue(c.P.T.Length(have)), c.P.T.ConstValue(c.P.T.Length(want))))
+        return x
+    }
+    # (bulk review 5: the two types one but for which levels may be written - what is read-only here wanted where it
+    # may be written: T25c's error, naming the bare parameter it is reached through, so param_migrate makes it "&")
+    if source.NewParams and c.writable(want) and c.P.T.SameButPerm(c.deref(have), c.deref(want)) {
+        rec := c.err(sp, msgs.ReadOnlyHere())
+        r := c.bareBehind(x)
+        if r >= 0 {
+            l := c.cur().Local(typed.LocalId(I32(r)))
+            c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteBareParam(c.text(l.Name)))
+        } else {
+            c.noteRoX(rec, x, 0)
+        }
         return x
     }
     ws := c.ty(want)
@@ -7547,6 +7669,11 @@ fn (c mut Checker&) cStruct(t types.TypeId) Bool {
 fn (c mut Checker&) cBorrow(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     if c.isRef(have) {
+        # (the rework's round 2: what may not be lent writably is copied for the call, the scope pass's ArgTemp)
+        if c.writable(want) and source.NewParams and not c.P.T.IsNullable(have) and (not c.writable(have) or c.roRef(x)) {
+            if c.externLent(x) or not c.writable(have) { return x }
+            return c.convert(sp, x, c.P.T.Ref(c.P.T.Referent(have), c.P.T.PermOf(have) & ~types.Writable))
+        }
         if c.writable(want) and not c.writable(have) { c.err(sp, msgs.CPointerReadOnly(c.ty(have))) }
         return x
     }
@@ -7556,8 +7683,16 @@ fn (c mut Checker&) cBorrow(x typed.Expr&c, want types.TypeId, sp source.Span) t
         c.err(sp, msgs.CPointerTemporary(c.ty(have)))
         return x
     }
+    if c.writable(want) and source.NewParams and not c.placeWritable(p) { return typed.Expr.Borrow(sp, c.P.T.Ref(have, 0), p) }
     if c.writable(want) { c.mustWrite(p, sp, false) }
     return typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable if c.writable(want) else 0), p)
+}
+
+# the rework's round 2 (X22): a read-only argument for a C function's pointer not "const" - a bare parameter whole made
+# the body's own copy, on entry (as for an olang "&" parameter, D9), or a field read-only by inference written; true
+# where either is asked for (the program checked again), else the argument is copied for the call (scope.externCopies)
+fn (c mut Checker&) externLent(x typed.Expr&) Bool {
+    return c.wantCopy(c.bareWhole(x)) or c.fieldsWrite(x)
 }
 
 # whether t is a reference to the prelude's CVoid (X18)
@@ -7647,7 +7782,7 @@ fn (c mut Checker&) permFit(x typed.Expr&c, want types.TypeId, sp source.Span) t
         # (round 2d, D9g: its top read-only through a result written "T&", which is shared writably)
         rr := c.writtenRefResult()
         if rr is not null and hr and wr and c.writable(want) and not c.writable(have) and c.P.T.SameButPerm(v, want) {
-            c.roRefResult(sp, rr)
+            c.roRefResult(sp, rr, x)
             return x
         }
         # (round 2d: a value read-only below its top only by what bare parameters reach - one a call following them hands
@@ -9348,6 +9483,37 @@ fn namedFn(x typed.Expr&) Bool {
     }
 }
 
+# a function type h with each parameter it takes as a read-only reference never null where w takes that referent by value
+# read as w's - what a bare parameter passed by pointer is as a value (F5); h itself where none differs so
+fn (c mut Checker&) byValueType(h types.TypeId, w types.TypeId) types.TypeId {
+    hp := c.P.T.Items(c.P.T.Params(h))
+    wp := c.P.T.Items(c.P.T.Params(w))
+    if hp.Len() != wp.Len(): return h
+    out := Array<types.TypeId>(hp.Len())
+    changed := false
+    for i in range hp.Len() {
+        out[i] = hp[i]
+        if not c.isRef(hp[i]) or c.isRef(wp[i]) or c.writable(hp[i]) or c.P.T.IsNullable(hp[i]): continue
+        if not c.P.T.SameButPerm(c.deref(hp[i]), wp[i]): continue
+        out[i] = wp[i]
+        changed = true
+    }
+    if not changed: return h
+    return c.P.T.Func(c.P.T.List(out), c.P.T.Result(h), c.P.T.Errors(h), c.P.T.ScopesOf(h))
+}
+
+# whether two function types differ only in the permission of extern types' references among their parameters (X10)
+fn (c mut Checker&) foreignPermOnly(h types.TypeId, w types.TypeId) Bool {
+    hp := c.P.T.Items(c.P.T.Params(h))
+    wp := c.P.T.Items(c.P.T.Params(w))
+    if hp.Len() != wp.Len() or not c.P.T.Same(c.P.T.Result(h), c.P.T.Result(w)) or c.P.T.Errors(h) != c.P.T.Errors(w): return false
+    for i in range hp.Len() {
+        if c.P.T.Same(hp[i], wp[i]): continue
+        if not (c.foreignRef(hp[i]) and c.foreignRef(wp[i]) and c.P.T.Same(c.deref(hp[i]), c.deref(wp[i]))): return false
+    }
+    return true
+}
+
 fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     hp := c.P.T.Items(c.P.T.Params(h))
     wp := c.P.T.Items(c.P.T.Params(w))
@@ -9355,7 +9521,9 @@ fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     for i in range hp.Len() {
         if c.P.T.Same(hp[i], wp[i]) { continue }
         if not (c.isRef(hp[i]) and c.isRef(wp[i]) and c.P.T.Same(c.deref(hp[i]), c.deref(wp[i]))) { return false }
-        if (c.P.T.PermOf(hp[i]) & types.Writable) != 0 and (c.P.T.PermOf(wp[i]) & types.Writable) == 0 { return false }
+        # (X10: an extern type's reference has no permission that says anything - an export fn's "CStr?&" fits a C
+        # function pointer's, which a C import reads as read-only where "mut" is left out)
+        if (c.P.T.PermOf(hp[i]) & types.Writable) != 0 and (c.P.T.PermOf(wp[i]) & types.Writable) == 0 and not (source.NewParams and c.foreignRef(hp[i])) { return false }
     }
     hr := c.P.T.Result(h)
     wr := c.P.T.Result(w)
@@ -10021,6 +10189,38 @@ fn (c mut Checker&) listHoldsWritable(l types.ListId, depth I64) Bool {
 
 fn (c mut Checker&) roKey(id I64) pair.Pair<I64, I64> { return pair.Pair(c.fr().Body, id) }
 
+# the rework's round 2 (bulk review 5): whether a place is reached read-only - roPlace, and through a reference local
+# what it was made from, and through a call's result held as a temporary what that call hands back read-only (an
+# instance's At, Get, View, Next given a read-only receiver)
+fn (c mut Checker&) roReach(p typed.Lvalue?&, depth I64) Bool {
+    if p is null or depth > 24: return false
+    return match p {
+        case typed.Lvalue.Local(_, ty, id): c.roLocalReach(I64(id), ty, depth)
+        case typed.Lvalue.Global(_, _, mi, n): c.immutableGlobal(mi, n)
+        case typed.Lvalue.Deref(_, _, ref): c.roRef(ref)
+        case typed.Lvalue.Field(_, _, base, _): c.roReach(base, depth + 1)
+        case typed.Lvalue.Elem(_, _, e): c.roReach(e.Base, depth + 1)
+        case typed.Lvalue.Payload(_, _, pl): c.roReach(pl.Base, depth + 1)
+        case typed.Lvalue.Temp(_, _, v, _): c.roValue(v) or c.isRef(typeOf(v)) and c.roRef(v)
+        case _: false
+    }
+}
+
+# (an instance's parameter is as read-only as its argument - what its result hands back follows that, roByArg - so its
+# reach is no read-only level here; a write through it is still refused, by roRoot)
+fn (c mut Checker&) roLocalReach(id I64, ty types.TypeId, depth I64) Bool {
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if c.instanceBody(c.fr().Body) and (l.Kind == typed.LocalKind.Param or c.bareLocals.Has(c.roKey(id))): return false
+    if c.roPlace(typed.Lvalue.Local(l.Sp, ty, typed.LocalId(I32(id)))): return true
+    if l.Kind == typed.LocalKind.Param and c.isRef(ty) and c.bareLocals.Has(c.roKey(id)): return true
+    return c.roFromReach(id, depth)
+}
+
+fn (c mut Checker&) roFromReach(id I64, depth I64) Bool {
+    o := try c.roFrom.Get(c.roKey(id)) catch { return false }
+    return c.roReach(o.P, depth + 1)
+}
+
 # whether a place is reached read-only: an immutable global, what a read-only reference names, a captured value, a
 # read-only copy - and what is held in any of these by value
 fn (c mut Checker&) roPlace(p typed.Lvalue?&) Bool {
@@ -10072,12 +10272,31 @@ fn (c mut Checker&) ownParamBorrow(x typed.Expr&) Bool {
 
 # ... and a value read-only at its top handed back through it - what a bare parameter reaches, constant data, an
 # immutable global: D9g's error naming the value result, with a note at the result (what param_migrate rewrites)
-fn (c mut Checker&) roRefResult(sp source.Span, of ast.TypeRef&) {
+fn (c mut Checker&) roRefResult(sp source.Span, of ast.TypeRef&, x typed.Expr&) {
     f := c.P.InstanceFn(c.retInst if c.retInst >= 0 else c.narrowable())
     mi := c.P.FnModule(f)
     t := c.P.L.Mods[mi].Src!.Text
     osp := of.Span()
-    rec := c.err(sp, msgs.RefResultReadOnly(t[I64(osp.Start):I64(osp.End)]))
+    inner := t[I64(osp.Start):I64(osp.End)]
+    # (bulk review 5: an "any" is a reference always - no value form to suggest, T32: the bare parameter it is reached
+    # through named, to be taken "&")
+    if inner.StartsWith("any ") {
+        arec := c.err(sp, msgs.ReadOnlyHere())
+        ab := c.bareBehind(x)
+        if ab < 0: ab = c.soleBareHolder()
+        if ab >= 0: c.P.L.Diags.Note(arec, c.at(c.cur().Local(typed.LocalId(I32(ab))).Sp), msgs.NoteBareParam(c.text(c.cur().Local(typed.LocalId(I32(ab))).Name)))
+        return
+    }
+    rec := c.err(sp, msgs.RefResultReadOnly(inner))
+    # (bulk review 5: a result some caller writes through is shared writably - the bare parameter it is reached through
+    # named, so param_migrate makes that "&" rather than the result a value, whose copy the caller would write)
+    b := c.bareBehind(x) if c.P.L.ResultWritten.Has(f) else -1
+    if b < 0 and c.P.L.ResultWritten.Has(f): b = c.soleBareHolder()
+    if b >= 0 {
+        bl := c.cur().Local(typed.LocalId(I32(b)))
+        c.P.L.Diags.Note(rec, c.at(bl.Sp), msgs.NoteBareParam(c.text(bl.Name)))
+        return
+    }
     rsp := c.P.FnDecl(f).S.Results[0].Span()
     c.P.L.Diags.Note(rec, diag.Where.Span(c.P.L.Mods[mi].File, I64(rsp.Start), I64(rsp.End)), msgs.NoteRefResult())
 }
@@ -10106,9 +10325,15 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
             if c.instanceBody(c.fr().Body) and c.fieldsWrite(x) { return false }
             # (round 2d, D9g: through a result written "T&" - shared writably - an error naming the value result, unless
             # what makes it read-only is a field read-only by inference - the type's, so its views are: narrowed below)
+            # (bulk review 5: in an instance, a view of what a parameter reaches handed back follows its argument -
+            # read-only where the caller's is, roCallRef - whatever its result is written as)
+            if c.instanceBody(c.fr().Body) and c.followsArg(x) {
+                c.roResult(x)
+                return true
+            }
             rr := c.writtenRefResult() if c.retInst >= 0 else null
             if rr is not null and (c.bareRooted(c.rootLocal(readPlace(x))) or c.fieldRo.Len() == 0 or not c.roFieldX(x, 0)) {
-                c.roRefResult(sp, rr)
+                c.roRefResult(sp, rr, x)
                 return true
             }
             # a view of what a bare parameter reaches handed back: the result read-only, at every level (2.8)
@@ -10117,6 +10342,9 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
                 return true
             }
             if c.fieldsWrite(x) { return false }
+            # (round 2f: lent to a plain function's "&" parameter - judged once the callee's use is settled, refused
+            # where it uses the parameter as one; else D9d makes that parameter bare)
+            if c.lendLater(sp, "from its parts", readPlace(unwrapped(x)), true, x) { return true }
             c.noteRoX(c.err(sp, msgs.ReadOnlyHere()), x, 0)
             return false
         }
@@ -10177,7 +10405,17 @@ fn (c mut Checker&) roRef(x typed.Expr?&) Bool {
             case _ { }
         }
     }
-    if (c.P.T.PermOf(typeOf(x)) & types.Writable) != 0 { return c.roRoot(readPlace(x)) >= 0 or c.roTempBase(readPlace(x)) or c.roFieldX(x, 0) }
+    if (c.P.T.PermOf(typeOf(x)) & types.Writable) != 0 {
+        if c.roRoot(readPlace(x)) >= 0 or c.roTempBase(readPlace(x)) or c.roFieldX(x, 0): return true
+        # (bulk review 5: read-only is a property of the level reached - a reference read out of a place reached
+        # read-only, through every dereference, index, method result and immutable global, is read-only)
+        if not source.NewParams: return false
+        return match x {
+            case typed.Expr.Call(_, _, cl): c.roCallRef(cl)
+            case typed.Expr.Try(_, _, t): t.X is not null and c.roRef(t.X!)
+            case _: c.roReach(c.placeOfX(x), 0)
+        }
+    }
     return match x {
         case typed.Expr.Read(_, _, p, _): c.roRead(p)
         case typed.Expr.Borrow(_, _, p): c.roPlace(p)
@@ -10256,8 +10494,26 @@ fn (c mut Checker&) roTrack(id I64, x typed.Expr?&) {
         case typed.Expr.Read(_, _, p, _) { c.roFrom.Put(c.roKey(id), roOrigin(p, false)) }
         case typed.Expr.Borrow(_, _, p) { c.roFrom.Put(c.roKey(id), roOrigin(p, true)) }
         case typed.Expr.Slice(_, _, sl) { c.roFrom.Put(c.roKey(id), roOrigin(sl.Base, true)) }
+        # (round 2f: a reference a call gave - what it reaches is reached through the call's arguments, D9d)
+        case typed.Expr.Call(_, _, _) { if source.NewParams: c.refCalls.Put(c.roKey(id), y) }
+        # (round 2f: a choice - what its read-only alternative reaches it may reach: "x := filled if ... else f()", a
+        # nullable parameter's widening found through it, wantWritable)
+        case typed.Expr.Cond(_, _, k) {
+            if not source.NewParams: return
+            if k.A is not null and c.roAlt(id, k.A!): return
+            c.roAlt(id, k.B)
+        }
         case _ { }
     }
+}
+
+# a local made from a choice's alternative read-only (round 2f): what it reaches, recorded as roTrack's places are -
+# whether it was one
+fn (c mut Checker&) roAlt(id I64, alt typed.Expr&) Bool {
+    q := readPlace(unwrapped(alt))
+    if q is null or not c.roRef(unwrapped(alt)): return false
+    c.roFrom.Put(c.roKey(id), roOrigin(q, false))
+    return true
 }
 
 # whether a value is a read-only copy: one whose type holds writable references, copied out of a place reached
@@ -10290,14 +10546,36 @@ fn (c mut Checker&) roMatch(m typed.Match&) Bool {
 fn (c mut Checker&) roName(x typed.Expr&) source.NameId {
     return match x {
         case typed.Expr.Read(_, _, p, _): c.placeName(p)
+        # (bulk review 5: a call's value read-only by an argument - a walk's Next of its read-only copy - names that)
+        case typed.Expr.Call(_, _, cl): c.roArgName(cl) if source.NewParams else source.NameId(0)
+        case typed.Expr.Try(_, _, t): c.roName(t.X!) if source.NewParams and t.X is not null else source.NameId(0)
         case _: source.NameId(0)
     }
+}
+
+fn (c mut Checker&) roArgName(cl typed.Call&) source.NameId {
+    for a in cl.Args {
+        if not (c.isRef(typeOf(a)) and c.roRef(a) or not c.isRef(typeOf(a)) and c.roValue(a)): continue
+        u := unwrapped(a)
+        q := c.placeOfX(u)
+        r := c.rootLocal(q)
+        if r >= 0 {
+            n := try c.roCopies.Get(c.roKey(r)) catch default source.NameId(0)
+            if n != source.NameId(0): return n
+            if c.paramCopy(r): return c.cur().Local(typed.LocalId(I32(r))).Name
+        }
+        n := c.roName(u)
+        if n != source.NameId(0): return n
+    }
+    return source.NameId(0)
 }
 
 fn (c mut Checker&) placeName(p typed.Lvalue&) source.NameId {
     return match p {
         case typed.Lvalue.Local(_, _, id): c.cur().Local(id).Name
         case typed.Lvalue.Global(_, _, _, n): n
+        # (round 2f: what a bare parameter passed by pointer names, read whole - "r := e" copies e)
+        case typed.Lvalue.Deref(_, _, r): c.roName(unwrapped(r)) if source.NewParams and c.bareWhole(unwrapped(r)) >= 0 else source.NameId(0)
         case _: source.NameId(0)
     }
 }
@@ -10306,6 +10584,7 @@ fn (c mut Checker&) placeName(p typed.Lvalue&) source.NameId {
 fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
     if c.roValue(x) {
         c.roCopies.Put(c.roKey(id), c.roName(x))
+        if source.NewParams { c.roCopyFrom.Put(c.roKey(id), x) }
         # (round 2c: the reference fields read-only by inference it rests on)
         if c.fieldRo.Len() > 0 {
             fs mut Vec<pair.Pair<I64, I64>>&c = Vec<pair.Pair<I64, I64>>()
@@ -10348,17 +10627,48 @@ fn (c mut Checker&) noteWritable(rec I64, ref typed.Expr&) {
     }
 }
 
+# notes the arguments a temporary a place is a part of was made from - a call's result read through fields, elements and
+# payloads, or what a local was bound from (roFrom: a match's binding) - those a call follows (noteRoX)
+fn (c mut Checker&) noteTempUnder(rec I64, p typed.Lvalue?&, depth I64) {
+    if p is null or depth > 16: return
+    match p {
+        case typed.Lvalue.Temp(_, _, v, _) { c.noteRoX(rec, v, 1) }
+        case typed.Lvalue.Field(_, _, base, _) { c.noteTempUnder(rec, base, depth + 1) }
+        case typed.Lvalue.Elem(_, _, e) { c.noteTempUnder(rec, e.Base, depth + 1) }
+        case typed.Lvalue.Payload(_, _, pl) { c.noteTempUnder(rec, pl.Base, depth + 1) }
+        case typed.Lvalue.Deref(_, _, r) { c.noteTempUnder(rec, readPlace(unwrapped(r)), depth + 1) }
+        case typed.Lvalue.Local(_, _, id) {
+            # (a local - a match's held subject - made from a call's result: that call)
+            if c.refCalls.Has(c.roKey(I64(id))) {
+                cx := try c.refCalls.Get(c.roKey(I64(id))) catch { return }
+                c.noteRoX(rec, cx, 1)
+                return
+            }
+            o := try c.roFrom.Get(c.roKey(I64(id))) catch { return }
+            c.noteTempUnder(rec, o.P, depth + 1)
+        }
+        case _ { }
+    }
+}
+
 fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     id := c.roRoot(p)
     # (a bare parameter read-only at its top only - nothing writable below it to make a copy read-only: its own reach)
     if id < 0 and source.NewParams {
         r := c.rootLocal(p)
         if r >= 0 and c.bareLocals.Has(c.roKey(r)) and c.bareNamed(r) { id = r }
+        # (a bare parameter held by value - a type variable's, an array kept for G29 - too: bulk review 5)
+        if r >= 0 and id < 0 and c.cur().Local(typed.LocalId(I32(r))).Kind == typed.LocalKind.Param and c.bareNamed(r) and not c.writable(c.cur().Local(typed.LocalId(I32(r))).Ty) { id = r }
     }
     if id < 0 {
         # (a capture: read-only as the lambda holds it - a bare parameter's around, named)
         q := c.levelRoot(p)
-        if source.NewParams and q >= 0 and c.cur().Local(typed.LocalId(I32(q))).Kind == typed.LocalKind.Capture { c.noteOuterBare(rec, c.cur().Local(typed.LocalId(I32(q))).Name) }
+        if source.NewParams and q >= 0 and c.cur().Local(typed.LocalId(I32(q))).Kind == typed.LocalKind.Capture {
+            c.noteOuterBare(rec, c.cur().Local(typed.LocalId(I32(q))).Name)
+            return
+        }
+        # (a part of what a call hands back following its arguments - a binding of a match on one: those arguments)
+        if source.NewParams: c.noteTempUnder(rec, p, 0)
         return
     }
     l := c.cur().Local(typed.LocalId(I32(id)))
@@ -10387,6 +10697,13 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     } else {
         c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopy(c.text(l.Name)))
     }
+    # (round 2f: the copy is of what a bare parameter reaches - that parameter named too, what param_migrate makes "&":
+    # through what the copy was made from, a call following its arguments included)
+    if not source.NewParams or not c.roCopyFrom.Has(c.roKey(id)) { return }
+    cx := try c.roCopyFrom.Get(c.roKey(id)) catch { return }
+    c.roCopyFrom.Remove(c.roKey(id))     # (a cycle of copies stops)
+    c.noteRoX(rec, cx, 1)
+    c.roCopyFrom.Put(c.roKey(id), cx)
 }
 
 # a value stored where it can be written (a declaration's written type, an assignment, a literal's element, a payload,
@@ -10460,8 +10777,9 @@ fn (c mut Checker&) followsArg(x typed.Expr?&) Bool {
         case typed.Expr.Slice(_, _, sl) { pl = sl.Base }
         case _ { }
     }
-    r := c.roRoot(pl)
-    if r < 0 { return false }
+    # (a bare parameter passed by pointer is one whatever its type holds - bulk review 5)
+    r := c.rootLocal(pl)
+    if r < 0 or not c.roLocal(r) and not c.bareLocals.Has(c.roKey(r)) { return false }
     l := c.cur().Local(typed.LocalId(I32(r)))
     if l.Kind != typed.LocalKind.Param { return false }
     ps := c.cur().Params
@@ -10494,15 +10812,98 @@ fn (c mut Checker&) paramIndex(id I64) I64 {
 fn (c mut Checker&) refParamOf(p typed.Lvalue?&) I64 {
     if c.frames.Len() == 0 { return -1 }
     r := c.rootLocal(p)
-    if r < 0 { return -1 }
+    if r < 0 { return c.callRefParam(p, 0) }
     k := try c.refFrom.Get(c.roKey(r)) catch default -1
     if k >= 0 { return k }
     l := c.cur().Local(typed.LocalId(I32(r)))
-    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) { return -1 }
+    if l.Kind != typed.LocalKind.Param or not c.isRef(l.Ty) { return c.callRefParam(typed.Lvalue.Local(l.Sp, l.Ty, typed.LocalId(I32(r))), 0) }
     ps := c.cur().Params
     for i in range ps.Len() {
         if I64(ps[i]) == r { return i }
     }
+    return -1
+}
+
+# round 2f (D9d): the "&" parameter a place is reached through by way of a call's result - "fr := c.frames[fi];
+# fr.errUsed[j] = true" writes what c reaches through At - the first of the call's arguments reached through one, the
+# receiver first (counting a use where it may be none is safe: D9d's error is only for a "&" that says nothing)
+fn (c mut Checker&) callRefParam(p typed.Lvalue?&, depth I64) I64 {
+    if p is null or depth > 16 or not source.NewParams: return -1
+    return match p {
+        case typed.Lvalue.Field(_, _, b, _): c.callRefParam(b, depth + 1)
+        case typed.Lvalue.Elem(_, _, e): c.callRefParam(e.Base, depth + 1)
+        case typed.Lvalue.Payload(_, _, pl): c.callRefParam(pl.Base, depth + 1)
+        case typed.Lvalue.Deref(_, _, ref): c.callRefParam(readPlace(unwrapped(ref)), depth + 1)
+        case typed.Lvalue.Local(_, _, id): c.localRefParam(I64(id), depth)
+        case typed.Lvalue.Temp(_, _, v, _): c.callArgParam(unwrapped(v))
+        case _: -1
+    }
+}
+
+fn (c mut Checker&) localRefParam(id I64, depth I64) I64 {
+    if c.refCalls.Has(c.roKey(id)): return c.callArgParam(try c.refCalls.Get(c.roKey(id)) catch { return -1 })
+    return c.callRefParam((try c.roFrom.Get(c.roKey(id)) catch default roOrigin(null, false)).P, depth + 1)
+}
+
+fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
+    if x != typed.Expr.Call: return -1
+    first I64 = -1
+    rt := typeOf(x)
+    for i, a in x.c.Args {
+        k := c.refParamOfX(a)
+        if k < 0: continue
+        if first < 0: first = k
+        # (an argument of the result's own type is what it hands back - a receiver beside it reached through no more
+        # than the call: "s.unAway(x)" names x, not s)
+        ta := typeOf(a)
+        if i > 0 and c.isRef(ta) and c.isRef(rt) and c.P.T.Same(c.P.T.Plain(c.P.T.Referent(ta)), c.P.T.Plain(c.P.T.Referent(rt))): return k
+    }
+    return first
+}
+
+# D9 under the round 2: an atomic read is there to see another thread's write - so a "&" parameter whose reach one
+# reads is used as one (shared, which only a reference is, D9d), and a bare parameter's own storage read so is an error
+# naming "p T&": this function's own value, which no other thread writes (a copy of it would never change)
+fn (c mut Checker&) atomicRead(p typed.Lvalue&, sp source.Span) {
+    c.refUse(p)
+    k := c.refParamOf(p)
+    if k >= 0 { c.refAtomic.Put(pair.Pair(c.fr().Body, k), true) }
+    b := c.ownBare(p)
+    if b < 0: return
+    l := c.cur().Local(typed.LocalId(I32(b)))
+    rec := c.err(sp, msgs.AtomicBare(c.text(l.Name)))
+    c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteBareParam(c.text(l.Name)))
+}
+
+# the bare parameter (or its copy on entry) whose own storage place p is - through fields, elements and payloads, and
+# the one dereference of the pointer it is passed by; -1 where p is reached through any other reference
+fn (c mut Checker&) ownBare(p typed.Lvalue&) I64 {
+    q := p
+    for _ in range 32 {
+        match q {
+            case typed.Lvalue.Field(_, _, b, _) { q = b }
+            case typed.Lvalue.Elem(_, _, e) { q = e.Base }
+            case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
+            case typed.Lvalue.Deref(_, _, r) {
+                return match unwrapped(r) {
+                    case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): c.bareSelf(I64(id))
+                    case _: -1
+                }
+            }
+            case typed.Lvalue.Local(_, _, id) { return c.bareSelf(I64(id)) }
+            case _ { return -1 }
+        }
+    }
+    return -1
+}
+
+# whether local id is a bare parameter - passed by pointer, or by value (a number, a struct of one register) - or the
+# copy of one made on entry (declared where it is): the function's own value; the local, else -1
+fn (c mut Checker&) bareSelf(id I64) I64 {
+    if c.bareLocals.Has(c.roKey(id)): return id
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if l.Kind == typed.LocalKind.Param and l.Name != source.NameId(0) and not c.isRef(l.Ty): return id
+    if l.Kind == typed.LocalKind.Var and l.Name != source.NameId(0) and c.P.L.BareWritten.Has(pair.Pair(c.fr().File, I64(l.Sp.Start))): return id
     return -1
 }
 
@@ -10516,8 +10917,17 @@ fn (c mut Checker&) refUse(p typed.Lvalue?&) {
 # a place a lambda reaches through its capture of a "&" parameter of a body around it, used as one: that parameter used
 # (D9d) - deeply where deep
 fn (c mut Checker&) refUseOuter(p typed.Lvalue?&, deep Bool) {
+    o := c.outerParam(p)
+    if o.Second < 0: return
+    c.refUsed.Put(o, true)
+    if deep: c.refDeep.Put(o, true)
+}
+
+# the parameter of a body around this lambda that place p is reached through by a capture of it - (body, index), its
+# index -1 where there is none
+fn (c mut Checker&) outerParam(p typed.Lvalue?&) pair.Pair<I64, I64> {
     r := c.levelRoot(p)
-    if r < 0 or c.cur().Local(typed.LocalId(I32(r))).Kind != typed.LocalKind.Capture: return
+    if r < 0 or c.cur().Local(typed.LocalId(I32(r))).Kind != typed.LocalKind.Capture: return pair.Pair(-1, -1)
     n := c.cur().Local(typed.LocalId(I32(r))).Name
     f := c.fr().Parent
     for f >= 0 and f < c.frames.Len() {
@@ -10526,14 +10936,13 @@ fn (c mut Checker&) refUseOuter(p typed.Lvalue?&, deep Bool) {
         if id >= 0 {
             b := c.Bodies[fr.Body]
             for i in range b.Params.Len() {
-                if I64(b.Params[i]) != id: continue
-                c.refUsed.Put(pair.Pair(fr.Body, i), true)
-                if deep: c.refDeep.Put(pair.Pair(fr.Body, i), true)
+                if I64(b.Params[i]) == id: return pair.Pair(fr.Body, i)
             }
-            return
+            return pair.Pair(-1, -1)
         }
         f = fr.Parent
     }
+    return pair.Pair(-1, -1)
 }
 
 # a reference converted to another reference type - one that may be null (T2c), a read-only one: the reference it was
@@ -10604,11 +11013,14 @@ fn (c mut Checker&) followedUse(x typed.Expr&) {
 # the "&" parameter of this body a reference value comes from, its index; -1 for none
 fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
     if c.refConverted(x) is not null: return c.refParamOfX(c.refConverted(x)!)
+    u := unwrapped(x)
     return match x {
         case typed.Expr.Borrow(_, _, p): c.refParamOf(p)
         case typed.Expr.Slice(_, _, sl): c.refParamOf(sl.Base)
         case typed.Expr.Promote(_, _, pr): c.refParamOfX(pr.X)
-        case _: c.refParamOf(readPlace(unwrapped(x)))   # ("x!" read where x is, E35)
+        # (round 2f: a reference a call hands back - "unPassed(s.unAway(x))": what it is reached through by the call's
+        # arguments, D9d's use where it is given a "&" parameter)
+        case _: c.callArgParam(u) if source.NewParams and u == typed.Expr.Call else c.refParamOf(readPlace(u))
     }
 }
 
@@ -10623,6 +11035,7 @@ fn (c mut Checker&) argFor(ps Array<types.TypeId>&, k I64, target typed.Callee&,
     c.argK = k
     c.argFollows = c.argRef and c.argBody >= 0 and c.instanceBody(c.argBody) and c.tvRefParam(c.argBody, k)
     c.argCtor = c.argRef and c.argBody >= 0 and c.builds(c.argBody)
+    c.argExtern = c.argRef and target == typed.Callee.Extern
     if not c.argRef { return }
     c.argName = "the parameter"
     if f < 0 { return }
@@ -10634,8 +11047,16 @@ fn (c mut Checker&) argFor(ps Array<types.TypeId>&, k I64, target typed.Callee&,
 # a reference argument for parameter k of body: one reached through this body's "&" parameter is used as one where
 # that parameter is a "&" one used as one; given a bare one, it is only read
 fn (c mut Checker&) refArg(body I64, k I64, e typed.Expr&) {
+    ps0 := c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))
+    if source.NewParams and k < ps0.Len() and c.isRef(ps0[k]) and c.writable(ps0[k]) and not c.builds(body): c.resultUse(e)
     j := c.refParamOfX(e)
-    if j < 0 { return }
+    owner := pair.Pair(c.fr().Body, j)
+    # (a bare parameter's own value - its copy - handed to a "&" parameter: refused at the settle where that one is read
+    # atomically, for another thread's write, which the copy never sees)
+    if source.NewParams and k < ps0.Len() and c.isRef(ps0[k]) and c.writable(ps0[k]) { c.atomicLend(body, k, e) }
+    # (round 2f: a lambda's capture of a "&" parameter of a body around, handed on - that parameter's use)
+    if j < 0 and source.NewParams: owner = c.outerParam(readPlace(unwrapped(e)))
+    if owner.Second < 0 { return }
     ps := c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))
     if k >= ps.Len() or not c.isRef(ps[k]) or not c.writable(ps[k]) { return }
     # a constructor's, an enum case's, a lambda's: kept in what it makes, or not known - used; a constructor's as deep
@@ -10643,22 +11064,98 @@ fn (c mut Checker&) refArg(body I64, k I64, e typed.Expr&) {
     match c.Bodies[body].Of {
         case typed.BodyOf.Fn(_) { }
         case typed.BodyOf.Ctor(_, _) {
-            c.refUsed.Put(pair.Pair(c.fr().Body, j), true)
-            c.deepDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+            c.refUsed.Put(owner, true)
+            c.deepDeps.Push(pair.Pair(owner, pair.Pair(body, k)))
             return
         }
         case _ {
-            c.refUsed.Put(pair.Pair(c.fr().Body, j), true)
-            c.refDeep.Put(pair.Pair(c.fr().Body, j), true)
+            c.refUsed.Put(owner, true)
+            c.refDeep.Put(owner, true)
             return
         }
     }
-    c.refDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+    c.refDeps.Push(pair.Pair(owner, pair.Pair(body, k)))
     # the parameter itself handed on: as deep as the callee uses it; what it reaches handed on: deep
-    if c.isParamRead(e) {
-        c.deepDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
+    if c.isParamRead(e) or j < 0 and c.isCaptureRead(e) {
+        c.deepDeps.Push(pair.Pair(owner, pair.Pair(body, k)))
     } else {
-        c.refDeep.Put(pair.Pair(c.fr().Body, j), true)
+        c.refDeep.Put(owner, true)
+    }
+}
+
+# a reference used where it may be written - written through, lent to a "&" parameter: where it is a plain function's
+# reference result (the call itself, held as a temporary, or a reference local made or last given one), that function's
+# result is written by a caller (load.ResultWritten, bulk review 5), and the program checked again
+fn (c mut Checker&) resultUse(x typed.Expr&) {
+    f := c.callOriginOf(x)
+    if f < 0 or c.P.L.ResultWritten.Has(f): return
+    c.P.L.ResultWritten.Put(f, true)
+    c.copiesGrew = true
+}
+
+fn (c mut Checker&) callOriginOf(x typed.Expr&) I64 {
+    y := unwrapped(x)
+    if c.refConverted(y) is not null: y = unwrapped(c.refConverted(y)!)
+    if y == typed.Expr.Try and y.t.X is not null: y = unwrapped(y.t.X!)
+    cl := callHeld(y)
+    if cl is null and y == typed.Expr.Call: cl = y.c
+    if cl is not null {
+        id := c.bodyOfCallee(cl.Target)
+        if id < 0 or c.instanceBody(id): return -1
+        return c.bodyFn(id)
+    }
+    p := readPlace(y)
+    if p is null or p != typed.Lvalue.Local: return -1
+    return try c.callOrigins.Get(c.roKey(I64(p.id))) catch default -1
+}
+
+# the one bare parameter of this body whose value holds references - what a reference result read out of a walk of it
+# is reached through where the walk's own locals do not say (resultUse's note) - its local, -1 for none or several
+fn (c mut Checker&) soleBareHolder() I64 {
+    got := -1
+    for q in c.cur().Params {
+        l := c.cur().Local(q)
+        if l.Name == source.NameId(0) or c.writable(l.Ty) or not c.P.T.HoldsRefs(c.deref(l.Ty)): continue
+        if got >= 0: return -1
+        got = I64(q)
+    }
+    return got
+}
+
+# an assignment just emitted into a reference local: what it was given (noteCallOrigin)
+fn (c mut Checker&) originAssigned(p typed.Lvalue&) {
+    if not source.NewParams or p != typed.Lvalue.Local or c.stmts.Len() == 0: return
+    last := c.stmts[c.stmts.Len() - 1]
+    if last != typed.Stmt.Assign: return
+    c.noteCallOrigin(I64(p.id), last.value)
+}
+
+# a reference local declared or assigned from a plain function's reference result: which function (resultUse)
+fn (c mut Checker&) noteCallOrigin(id I64, x typed.Expr?&) {
+    if not source.NewParams or x is null or not c.isRef(typeOf(x)): return
+    y := unwrapped(x)
+    if c.refConverted(y) is not null: y = unwrapped(c.refConverted(y)!)
+    if y == typed.Expr.Try and y.t.X is not null: y = unwrapped(y.t.X!)
+    # (a reference local given another's value - "fl := f!" - holds what that one holds)
+    p := readPlace(y)
+    if p is not null and p == typed.Lvalue.Local {
+        f := try c.callOrigins.Get(c.roKey(I64(p.id))) catch default -1
+        if f >= 0: c.callOrigins.Put(c.roKey(id), f)
+        return
+    }
+    if y != typed.Expr.Call: return
+    b := c.bodyOfCallee(y.c.Target)
+    if b < 0 or c.instanceBody(b) or c.bodyFn(b) < 0: return
+    c.callOrigins.Put(c.roKey(id), c.bodyFn(b))
+}
+
+# whether a reference value is a capture of this lambda read as itself
+fn (c mut Checker&) isCaptureRead(x typed.Expr&) Bool {
+    p := readPlace(unwrapped(x))
+    if p is null: return false
+    return match p {
+        case typed.Lvalue.Local(_, _, id): c.cur().Local(id).Kind == typed.LocalKind.Capture
+        case _: false
     }
 }
 
@@ -10758,21 +11255,34 @@ fn (c mut Checker&) refDeepClose() {
 
 # a read-only copy lent writably to the "&" parameter of a function's body being fitted: recorded for the settle -
 # false where it is lent to anything else (an error now)
-fn (c mut Checker&) lendLater(sp source.Span, fix String&, p typed.Lvalue?& = null) Bool {
+fn (c mut Checker&) lendLater(sp source.Span, fix String&, p typed.Lvalue?& = null, direct Bool = false
+                              x typed.Expr?& = null) Bool {
     if not source.NewParams or not c.argRef or c.argBody < 0 { return false }
     match c.Bodies[c.argBody].Of {
         case typed.BodyOf.Fn(_) { }
         case _ { return false }
     }
+    # (a reference read-only by what it is read out of - a call following a bare parameter, a binding: the error and
+    # its notes made here, where that is known, held until the settle chooses or drops it)
+    if direct and x is not null {
+        g := c.P.L.Diags.Hold()
+        c.noteRoX(c.err(sp, msgs.ReadOnlyHere()), x, 0)
+        c.P.L.Diags.EndHold()
+        c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, Direct = true, Held = g))
+        return true
+    }
     id := c.roRoot(p)
+    # (a reference reached read-only: the bare parameter it is reached from, named in the note - what param_migrate
+    # makes "&" where the callee does use its parameter as one)
+    if direct and (id < 0 or not c.bareNamed(id)) and c.rootLocal(p) >= 0 and c.bareNamed(c.rootLocal(p)): id = c.rootLocal(p)
     fs Vec<pair.Pair<I64, I64>>
     if not c.bareRooted(c.rootLocal(p)) { c.roFieldsIn(p, fs, 0) }
     if id >= 0 and c.bareNamed(id) {
         l := c.cur().Local(typed.LocalId(I32(id)))
-        c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, c.at(l.Sp), $c.text(l.Name), fs.ToArray()))
+        c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, c.at(l.Sp), $c.text(l.Name), fs.ToArray(), direct))
         return true
     }
-    c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, Fields = fs.ToArray()))
+    c.roLends.Push(roLendRec(c.fr().Body, c.at(sp), c.argBody, c.argK, $fix, Fields = fs.ToArray(), Direct = direct))
     return true
 }
 
@@ -10796,6 +11306,26 @@ test bareSpelled "drops a reference's last &, its scope marker and an old mut" {
 # form - but where it cannot be bare: one that may be null ("?&"), an "any", an extern type's or a destructor's
 # (reference-only, X10, C11), a function value, a type variable's, an extern's or an export fn's (C's to write), a
 # variadic list
+# D9 under the round 2: a "&" parameter handed on to one read atomically is read so too; a bare parameter's own value
+# handed to such a parameter is an error at the call, naming "p T&" (param_migrate makes it so: the note)
+fn (c mut Checker&) atomicSettle() {
+    if not source.NewParams: return
+    for _ in range c.refDeps.Len() + 1 {
+        moved := false
+        for d in c.refDeps {
+            if not c.refAtomic.Has(d.Second) or c.refAtomic.Has(d.First): continue
+            c.refAtomic.Put(d.First, true)
+            moved = true
+        }
+        if not moved { break }
+    }
+    for l in c.atomicLends {
+        if not c.refAtomic.Has(pair.Pair(l.Callee, l.Param)): continue
+        rec := c.P.L.Diags.Error(l.At, msgs.AtomicBareLent(l.BareName))
+        c.P.L.Diags.Note(rec, l.Bare, msgs.NoteBareParam(l.BareName))
+    }
+}
+
 fn (c mut Checker&) refSettle() {
     for d in c.refKeptArgs {
         if not c.roNeeds.Has(d.Second) { continue }
@@ -10813,17 +11343,27 @@ fn (c mut Checker&) refSettle() {
         if not moved { break }
     }
     for e in c.refUsed { c.widenUsed(e.Key) }
+    c.atomicSettle()
     c.refDeepClose()
     for l in c.roCtorArgs {
         if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) or c.fieldsWritAll(l.Fields) { continue }
         rec := c.P.L.Diags.Error(l.At, msgs.ReadOnlyHere())
         if l.BareName.Len() > 0 { c.P.L.Diags.Note(rec, l.Bare, msgs.NoteBareParam(l.BareName)) }
     }
+    for l in c.condCtorArgs {
+        if c.refDeep.Has(pair.Pair(l.Callee, l.Param)): c.P.L.Diags.Error(l.At, msgs.CondLentWritable())
+    }
     for l in c.roLends {
-        if not c.refDeep.Has(pair.Pair(l.Callee, l.Param)) { continue }
+        key := pair.Pair(l.Callee, l.Param)
+        refused := c.refDeep.Has(key) or l.Direct and c.refUsed.Has(key)
+        if l.Held >= 0 {
+            if refused { c.P.L.Diags.Choose(l.Held) } else { c.P.L.Diags.Drop(l.Held) }
+            continue
+        }
+        if not refused { continue }
         # (round 2c: resting on fields read-only by inference - those written, the program checked again)
         if c.fieldsWritAll(l.Fields) { continue }
-        rec := c.P.L.Diags.Error(l.At, msgs.ReadOnlyCopyLent(l.Fix))
+        rec := c.P.L.Diags.Error(l.At, msgs.ReadOnlyHere() if l.Direct else msgs.ReadOnlyCopyLent(l.Fix))
         if l.BareName.Len() > 0 { c.P.L.Diags.Note(rec, l.Bare, msgs.NoteBareParam(l.BareName)) }
     }
     # by function and parameter: used by some instance
@@ -10911,6 +11451,23 @@ fn (c mut Checker&) roNeedOf(p typed.Lvalue?&, body I64, k I64) {
     if j >= 0: c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k)))
 }
 
+fn (c mut Checker&) atomicLend(body I64, k I64, e typed.Expr&) {
+    u := unwrapped(e)
+    p := match u {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
+        case _: null
+    }
+    if p is null: return
+    b := -1
+    match p {
+        case typed.Lvalue.Local(_, _, id) { b = c.bareSelf(I64(id)) }
+        case _ { }
+    }
+    if b < 0: return
+    l := c.cur().Local(typed.LocalId(I32(b)))
+    c.atomicLends.Push(roLendRec(c.fr().Body, c.at(e.Span()), body, k, "", c.at(l.Sp), $c.text(l.Name)))
+}
+
 # an argument for a by-value parameter of a body: a read-only copy is judged once the body's need is known; a
 # parameter of this body passed on needs what the other needs
 fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, callee String&) {
@@ -10926,6 +11483,9 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
     if source.NewParams and c.builds(body) { return }
     me := c.fr().Body
     if c.isRef(typeOf(e)) {
+        # (bulk review 5, D9d: a reference reached through a "&" parameter given an instance's parameter that keeps it
+        # writable - Put's key - uses that parameter, once the need is settled)
+        if source.NewParams and c.refParamOfX(e) >= 0 and c.roByArg(body, k) { c.refKeptArgs.Push(pair.Pair(pair.Pair(me, c.refParamOfX(e)), pair.Pair(body, k))) }
         # an instance's read-only reference parameter (roByArg): a read-only argument is judged once its need is known
         if not c.roByArg(body, k) { return }
         r := c.P.T.Referent(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])
@@ -10935,6 +11495,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
         if c.roRef(e) or tv and (c.P.T.PermOf(typeOf(e)) & types.Writable) == 0 {
             bp := c.roRoot(readPlace(e))
             if bp < 0 { bp = c.bareArgLocal(e) }
+            if bp < 0 or not c.bareNamed(bp) { bp = c.bareBehind(e) }
             fs Vec<pair.Pair<I64, I64>>
             if not c.bareRooted(c.rootLocal(readPlace(e))) { c.roFieldsOf(e, fs, 0) }
             if source.NewParams and bp >= 0 and c.bareNamed(bp) {
@@ -11278,6 +11839,18 @@ fn (c mut Checker&) fieldsWrite(x typed.Expr&) Bool {
     return c.fieldsThroughX(x, true, 0)
 }
 
+# E28: a conditional or a match choosing a place, given a "&" parameter k of the call being fitted - its value a copy the
+# callee would write and drop. Under the rework's round 2 a constructor's parameter is "&" by nature (it keeps what it
+# is given): refused there only where the constructor writes through it or a field it lands in is written - judged
+# once that is settled (condCtorArgs)
+fn (c mut Checker&) condLent(sp source.Span, body I64, k I64) {
+    if source.NewParams and body >= 0 and c.builds(body) and c.sinksRo(body, k) {
+        c.condCtorArgs.Push(roLendRec(c.fr().Body, c.at(sp), body, k, ""))
+        return
+    }
+    c.err(sp, msgs.CondLentWritable())
+}
+
 # a read-only value given the "&" parameter of a constructor being fitted (argCtor): judged once the constructor's
 # use of that parameter is settled - a constructor writing through what it was given would write the caller's
 # read-only data (round 2c; it had been taken as given whatever the constructor did)
@@ -11591,7 +12164,9 @@ fn (c mut Checker&) roCallRef(cl typed.Call&) Bool {
     # the rework's round 2: a reference an instance's result written as a type variable reads out of a bare parameter
     if not source.NewParams { return false }
     id := c.bodyOfCallee(cl.Target)
-    if id < 0 or not c.instanceBody(id) or c.P.T.ResultFrom(c.Bodies[id].Ty, 0) != types.FromTypeVar { return false }
+    # (bulk review 5: any reference an instance's result hands back following its argument - a Vec's View, ViewMut -
+    # not only one written as a type variable)
+    if id < 0 or not c.instanceBody(id) { return false }
     for j in range cl.Args.Len() {
         a := cl.Args[j]
         if not c.roFollows(id, j) { continue }
@@ -11603,7 +12178,9 @@ fn (c mut Checker&) roCallRef(cl typed.Call&) Bool {
 # whether a return in this body is of an instance's result written as a type variable (T25c's generic rule)
 fn (c mut Checker&) followsResult(rt types.TypeId) Bool {
     if not source.NewParams or not c.isRef(rt) or not c.instanceBody(c.fr().Body) { return false }
-    return c.P.T.ResultFrom(c.Bodies[c.fr().Body].Ty, 0) == types.FromTypeVar
+    # (bulk review 5: any reference an instance hands back follows the argument it reaches - a Vec's View - as the
+    # caller reads it, roCallRef)
+    return true
 }
 
 # a call's by-value result copied out of what a read-only argument reaches (roToResult)
@@ -11627,7 +12204,42 @@ fn (c mut Checker&) roCallCopy(cl typed.Call&) Bool {
         # (round 2d: a plain function's value result following a read-only argument - followBare - is as read-only)
         if source.NewParams and c.followsAt(id, k) and c.roBelow(a) { return true }
     }
+    # (bulk review 5: an instance's value result whose type holds a reference type a read-only argument's type does - a
+    # Vec's Clone, a Map's Values walk - may hold that argument's references: as read-only, where nothing says
+    # otherwise)
+    if not source.NewParams or not c.instanceBody(id): return false
+    rt := c.P.T.Result(c.Bodies[id].Ty)
+    rs Vec<types.TypeId>
+    c.refTypesIn(rt, rs, 0)
+    if rs.Len() == 0: return false
+    for a in cl.Args {
+        if not (c.isRef(typeOf(a)) and c.roRef(a) or not c.isRef(typeOf(a)) and c.roValue(a)): continue
+        qs Vec<types.TypeId>
+        c.refTypesIn(c.deref(typeOf(a)), qs, 0)
+        for r in rs {
+            for q in qs {
+                if c.P.T.Same(c.P.T.Referent(r), c.P.T.Referent(q)): return true
+            }
+        }
+    }
     return false
+}
+
+# the reference types a type holds through its type arguments and elements (not a struct's own fields, which its
+# declaration fixes): what a container's value may share with another of its element type
+fn (c mut Checker&) refTypesIn(t types.TypeId, out mut Vec<types.TypeId>&, depth I64) {
+    if depth > 8: return
+    match c.P.T.KindOf(t) {
+        case types.Kind.Ref {
+            if (c.P.T.PermOf(t) & types.Writable) != 0 and not out.Has(t): out.Push(t)
+            c.refTypesIn(c.P.T.Referent(t), out, depth + 1)
+        }
+        case types.Kind.Array { c.refTypesIn(c.P.T.Elem(t), out, depth + 1) }
+        case types.Kind.Named {
+            for x in c.P.T.Items(c.P.T.Args(t)) { c.refTypesIn(x, out, depth + 1) }
+        }
+        case _ { }
+    }
 }
 
 # the parameter of a call's body a reference result is borrowed from: an instance's read-only reference parameter
@@ -11847,10 +12459,13 @@ fn (c mut Checker&) noteRoX(rec I64, x typed.Expr&, depth I64) {
         case typed.Expr.Call(_, _, cl) {
             id := c.bodyOfCallee(cl.Target)
             if id < 0: return
+            # (round 2f: an instance's value holding what a read-only argument holds is a read-only copy of it too,
+            # roCallCopy - "o := try c.roFrom.Get(k)" with c bare)
             for k, a in cl.Args {
-                if (c.builds(id) or c.followsAt(id, k)) and c.roBelow(a): c.noteRoX(rec, a, depth + 1)
+                if (c.builds(id) or c.followsAt(id, k) or c.instanceBody(id)) and c.roBelow(a): c.noteRoX(rec, a, depth + 1)
             }
         }
+        case typed.Expr.Try(_, _, t) { if t.X is not null: c.noteRoX(rec, t.X!, depth + 1) }
         # (a conversion, or a reference's permission or nullability changed: what it is made from)
         case typed.Expr.Prim(_, _, _, _, args) {
             if args.Len() > 0: c.noteRoX(rec, args[0], depth + 1)
@@ -11860,6 +12475,45 @@ fn (c mut Checker&) noteRoX(rec I64, x typed.Expr&, depth I64) {
         case typed.Expr.Slice(_, _, sl) { c.noteRo(rec, sl.Base) }
         case _ { }
     }
+}
+
+# the bare parameter (or the local holding its value) a read-only value rests on, through conversions, the place it is
+# read from, and the names read-only copies copy (a walk's element its walk's, the walk the parameter walked) - its
+# local, -1 for none: what a note names so param_migrate makes it "&" (bulk review 5)
+fn (c mut Checker&) bareBehind(x typed.Expr&) I64 {
+    y := unwrapped(x)
+    for _ in range 8 {
+        match y {
+            case typed.Expr.Prim(_, _, _, _, args) { y = unwrapped(args[0]) if args.Len() > 0 else y }
+            case typed.Expr.Promote(_, _, pr) { y = unwrapped(pr.X) }
+            case _ { break }
+        }
+    }
+    p := c.placeOfX(y)
+    r := c.roRoot(p)
+    if r < 0: r = c.rootLocal(p)
+    for _ in range 8 {
+        if r < 0: return -1
+        l := c.cur().Local(typed.LocalId(I32(r)))
+        if c.paramCopy(r) and not c.writable(l.Ty): return r
+        n := try c.roCopies.Get(c.roKey(r)) catch default source.NameId(0)
+        if n == source.NameId(0) or n == l.Name: return -1
+        r = c.localNamed(n)
+    }
+    return -1
+}
+
+# whether local id is a named parameter, or the local a parameter's value is held in where its hidden one is passed (an
+# entry copy, a by-value array's): declared where a parameter is
+fn (c mut Checker&) paramCopy(id I64) Bool {
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if l.Name == source.NameId(0): return false
+    if l.Kind == typed.LocalKind.Param: return true
+    if l.Kind != typed.LocalKind.Var: return false
+    for q in c.cur().Params {
+        if c.cur().Local(q).Sp.Start == l.Sp.Start: return true
+    }
+    return false
 }
 
 # the bare parameter of this body (or its entry copy) a read-only copy is made from - read out of it, or built by a
@@ -13632,6 +14286,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         c.argBody = -1
         c.argFollows = false
         c.argCtor = false
+        c.argExtern = false
         c.roArgFor(c.bodyOfCallee(target), 0, rx, recv.Span(), c.calleeName(f))
         c.exprs.Push(rx)
         k = 1
@@ -13679,6 +14334,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             c.argBody = -1
             c.argFollows = false
             c.argCtor = false
+            c.argExtern = false
             c.nullDecl = wasPre
         } else if args.Len() > 0 and i < args.Len() {
             isDefault := false
@@ -13703,7 +14359,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                 } else {
                     # (an instance's type variable's reference parameter holds what it is given as given - the round 2's
                     # rule, its permission the argument's, settled later: no write through it is known here)
-                    if c.writable(ps[k]) and not (source.NewParams and c.argFollows) and c.condChoosesPlace(e!) { c.err(c.chosenAt(e!), msgs.CondLentWritable()) }
+                    if c.writable(ps[k]) and not (source.NewParams and c.argFollows) and c.condChoosesPlace(e!) { c.condLent(c.chosenAt(e!), c.bodyOfCallee(target), k) }
                     ex := c.cPointerArg(target, e!, ps[k], c.argSpan(args[i]))
                     if ex is null { ex = c.externArray(target, e!, ps[k], c.argSpan(args[i])) }
                     wasNull := c.nullDecl
@@ -13715,6 +14371,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.argBody = -1
                     c.argFollows = false
                     c.argCtor = false
+                    c.argExtern = false
                     c.nullDecl = wasNull
                     if c.cCallback(target, f) and c.P.T.KindOf(ps[k]) == types.Kind.Func { c.callbackArg(e!, c.argSpan(args[i])) }
                 }
@@ -14718,6 +15375,9 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
         if op != typed.PrimOp.AtomicLoad and source.NewParams { c.refPlaceWritten(p) }
+        # (D9d: an atomic read is there to see another thread's write, so a "&" parameter whose reach one reads is used
+        # as one - shared, which only a reference is; a bare parameter's own copy would never change)
+        if op == typed.PrimOp.AtomicLoad and source.NewParams { c.atomicRead(p, c.operandAt(x)) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.noteRo(c.err(c.operandAt(x), msgs.AtomicNotWritable()), p)
             return c.unknown(sp)
@@ -16490,6 +17150,8 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     rt := typeOf(x)
     if asValue and c.isRef(rt) and not c.P.T.IsNullable(rt) and nullDefault(clauses) and (want == types.UnknownT or c.P.T.IsNullable(want)) {
         rt = c.P.T.OrNull(rt)
+        # (round 2f: a reference result met with null is used as a reference - no value result can stand for it, D9g)
+        if source.NewParams { c.resultUse(x) }
     }
     cls Vec<typed.Clause&>
     if clauses.Len() > 0 {
@@ -18458,7 +19120,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 # (the rework's round 2e: ":=" of a bare parameter passed by pointer holding no reference - a plain
                 # struct or enum - declares a value, its copy, as by value: a reference local would be a second name of
                 # the caller's storage, and assigning it another value would tie the two scopes together)
-                pv := c.plainBareCopy(x!)
+                pv := c.plainBareCopy(x!, keep)
                 if pv != types.UnknownT {
                     t = pv
                     x = c.fit(x!, t, v.Values[i].Span())
@@ -18505,6 +19167,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if pend.Group >= 0 { c.unsets.Push(unsetCand(pend.Body, id, pend.Group, pend.NoZero, pend.ValueAt, pend.Sp, pend.Ty, pend.Field)) }
         if v.Ty is not null and not v.Infer { c.fr().typeAt.Put(id, c.typeWrittenAt(v.Ty!)) }
         if inferred or permFrom { c.roLet(id, x!) }
+        if i < v.Values.Len(): c.noteCallOrigin(id, x)
         # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
         if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
@@ -18843,6 +19506,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         c.storeParam = c.ownFieldParam(p)
         c.fieldOn = c.fieldTarget(p)
         c.storeInto(sp, p, value, osp, target)
+        c.originAssigned(p)
         c.localStore = wasLocal
         c.storeParam = wasParam
         c.fieldOn = wasField
@@ -19271,21 +19935,35 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
     }
 }
 
+# an if decided for this instance (G30, G35): the branch chosen alone checked - and where it leaves, what follows the if
+# in its block is not checked in this instance (instLeft)
+fn (c mut Checker&) decidedIf(sp source.Span, i ast.If&, then Bool) typed.Stmt&c {
+    return c.decided(c.chosenBranch(sp, i, then))
+}
+
+fn (c mut Checker&) chosenBranch(sp source.Span, i ast.If&, then Bool) typed.Stmt&c {
+    if then: return typed.Stmt.Block(sp, c.branchBlock(i.Then!))
+    if i.Else is null: return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0)))
+    match i.Else {
+        case ast.Stmt.If(esp, e) {
+            if e.Cond is null: return typed.Stmt.Block(esp, c.branchBlock(e.Then!))
+            return c.ifOf(esp, e)
+        }
+        case _: return c.elseOf(sp, i.Else!)
+    }
+}
+
+# a statement decided for this instance (G15, G30, G35): one that leaves ends what its block checks (instLeft)
+fn (c mut Checker&) decided(s typed.Stmt&c) typed.Stmt&c {
+    if leaves(s): c.fr().instLeft = true
+    return s
+}
+
 fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     if i.Cond is null { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
     # G35: a condition reading a reflected member is decided for this instance - the chosen branch alone checked
     rd := c.reflDecide(i.Cond)
-    if rd == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
-    if rd == 0 {
-        if i.Else is null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
-        match i.Else {
-            case ast.Stmt.If(esp, e) {
-                if e.Cond is null { return typed.Stmt.Block(esp, c.branchBlock(e.Then!)) }
-                return c.ifOf(esp, e)
-            }
-            case _ { return c.elseOf(sp, i.Else!) }
-        }
-    }
+    if rd >= 0 { return c.decidedIf(sp, i, rd == 1) }
     d := c.P.L.Diags
     # B9c, S8b: decided by evaluation in an earlier check of the program - the branch chosen alone
     key := pair.Pair(c.fr().File, I64(i.Cond!.Span().Start))
@@ -19336,17 +20014,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     }
     # G30: a condition reading a length the instance binds is decided for it, the chosen branch alone checked
     dk := c.constCond(i.Cond!)
-    if dk == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
-    if dk == 0 {
-        if i.Else is null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
-        match i.Else {
-            case ast.Stmt.If(esp, e) {
-                if e.Cond is null { return typed.Stmt.Block(esp, c.branchBlock(e.Then!)) }
-                return c.ifOf(esp, e)
-            }
-            case _ { return c.elseOf(sp, i.Else!) }
-        }
-    }
+    if dk >= 0 { return c.decidedIf(sp, i, dk == 1) }
     # a running if: what both its branches hold is reported - one whose condition reads a local that is no fixed one
     # (S8c), or is wrong, included. One asked for stays held until evaluation decides it
     if not asked { c.Running(i) }
@@ -20737,6 +21405,9 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
         }
         case _ { }
     }
+    # (bulk review 5: a walk of a read-only copy - a Map's Values walk of a bare map - is one, so what its Next hands
+    # back is read-only)
+    if source.NewParams and c.roValue(src) { c.roCopies.Put(c.roKey(it), c.roName(src)) }
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(it)), src))
     # (a "&" parameter walked: its Next writes what the copy names - the parameter used as one, D9d - deeply as far as
     # that Next uses its receiver deeply, round 2c)
@@ -20753,7 +21424,10 @@ fn (c mut Checker&) walkIter(sp source.Span, f ast.ForIn&, src typed.Expr&c, nex
     call := c.loopCall(sp, next, c.readLocal(sp, it), Array<typed.Expr&>(0))
     if source.NewParams { c.walkDeep(src, call) }
     v := c.exhaustedOrBreak(sp, call, id)
+    wasWalk := c.walkParam
+    c.walkParam = c.walkSrcParam(src) if source.NewParams else -1
     c.elementLocals(sp, f, k, v)
+    c.walkParam = wasWalk
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -20796,14 +21470,35 @@ fn (c mut Checker&) generatorCall(x typed.Expr&c) Bool {
     }
 }
 
+# the "&" parameter a walk's source is reached through - itself, or the receiver of the call making its iterator
+# ("for e in m" walking m.Iter()) - -1 for none
+fn (c mut Checker&) walkSrcParam(src typed.Expr&) I64 {
+    j := c.refParamOfX(src)
+    if j >= 0: return j
+    u := unwrapped(src)
+    if u != typed.Expr.Call or u.c.Args.Len() == 0: return -1
+    return c.refParamOfX(u.c.Args[0])
+}
+
+# the type a walk's element local is declared with: its value's - read-only at its top where it is a reference read
+# out of what is reached read-only (bulk review 5: a walk of a bare parameter's Vec handed its elements out writable)
+fn (c mut Checker&) elemType(v typed.Expr&) types.TypeId {
+    t := typeOf(v)
+    if not source.NewParams or not c.isRef(t) or (c.P.T.PermOf(t) & types.Writable) == 0 or c.P.T.KindOf(c.deref(t)) == types.Kind.Func: return t
+    if not c.roRef(v): return t
+    return c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & ~types.Writable)
+}
+
 # the key and the value locals of an iteration
 fn (c mut Checker&) elementLocals(sp source.Span, f ast.ForIn&, k I64, v typed.Expr&c) {
     if f.Key != source.NameId(0) and k >= 0 {
         key := c.local(f.Key, sp, c.i64(), typed.LocalKind.Var, typed.Mark.None)
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(key)), c.readLocal(sp, k)))
     }
-    x := c.local(f.Name, sp, typeOf(v), typed.LocalKind.Var, typed.Mark.Infer)
-    c.roLet(x, v)   # T25c: an element of a collection reached read-only is a read-only copy
+    x := c.local(f.Name, sp, c.elemType(v), typed.LocalKind.Var, typed.Mark.Infer)
+    c.roLet(x, v)
+    # (an element of a walk of what a "&" parameter reaches is reached through it: a use through it uses it, D9d)
+    if source.NewParams and c.walkParam >= 0 and c.P.T.HoldsRefs(typeOf(v)) and not c.refFrom.Has(c.roKey(x)) { c.refFrom.Put(c.roKey(x), c.walkParam) }   # T25c: an element of a collection reached read-only is a read-only copy
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), v))
 }
 
@@ -20879,7 +21574,10 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&c, run
     ra := c.arrayOf(rt)
     base typed.Lvalue&c = typed.Lvalue.Deref(sp, c.deref(rt), c.readLocal(sp, run))
     e := c.read(sp, typed.Lvalue.Elem(sp, c.P.T.Elem(ra), typed.Elem(base, c.readLocal(sp, j), typed.Check.None)))
+    wasWalk := c.walkParam
+    c.walkParam = c.walkSrcParam(src) if source.NewParams else -1
     c.elementLocals(sp, f, k, e)
+    c.walkParam = wasWalk
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -20915,7 +21613,10 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
     c.emit(c.breakUnless(sp, c.prim(sp, types.BoolT, typed.PrimOp.Lt, c.readLocal(sp, k), n), id))
     e := c.invoke(sp, sp, atm, c.readLocal(sp, coll), Array<ast.Expr&>(0), c.one(c.readLocal(sp, k)))
     if f.Tried { c.fr().Tries-- }
+    wasWalk := c.walkParam
+    c.walkParam = c.walkSrcParam(src) if source.NewParams else -1
     c.elementLocals(sp, f, k, e)
+    c.walkParam = wasWalk
     c.walkBody(f, cm, ce)
     try c.fr().loops.Pop() catch { }
     try c.fr().exits.Pop() catch { }
@@ -21060,7 +21761,7 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
     } else {
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }
-    x := c.local(f.Name, sp, typeOf(e), typed.LocalKind.Var, typed.Mark.Infer)
+    x := c.local(f.Name, sp, c.elemType(e!), typed.LocalKind.Var, typed.Mark.Infer)
     if c.rangeEnd.Start >= 0 {
         c.rangeEnds.Put(pair.Pair(c.fr().Body, x), c.rangeEnd)
         if c.rangeEndLit { c.litLocals.Put(pair.Pair(c.fr().Body, x), true) } else { c.rangeExprs.Put(pair.Pair(c.fr().Body, x), true) }
@@ -21389,7 +22090,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         # (round 2d, D9g: a by-value parameter's own storage lent through a result written "T&" - this function's
         # copy, which dies at the return: the value result is what it hands back)
         rr := c.writtenRefResult()
-        if rr is not null and c.ownParamBorrow(x) { c.roRefResult(values[0].Span(), rr) }
+        if rr is not null and c.ownParamBorrow(x) { c.roRefResult(values[0].Span(), rr, x) }
         if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) } # T25c: the caller holds it writably
         # (a value holding writable references handed back from what a "&" parameter reaches: kept - D9d)
         # (round 2d: one a bare parameter would hand back followed - the result following it, followBare - is no use)
@@ -21400,6 +22101,16 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
             c.refDeepX(x)
             c.handing = false
             c.retInst = -1
+        }
+        # (bulk review 5: a reference reached through a "&" parameter handed back through a result written "T&" -
+        # shared writably - keeps it writable: a use, D9d, as deep as a view through it reaches)
+        if source.NewParams and c.isRef(rt) and c.writable(rt) and rr is not null {
+            k := c.refParamOfX(x)
+            ps := c.cur().Params
+            if k >= 0 and k < ps.Len() and not c.P.T.IsNullable(c.cur().Local(ps[k]).Ty) {
+                c.refUsed.Put(pair.Pair(c.fr().Body, k), true)
+                c.refDeep.Put(pair.Pair(c.fr().Body, k), true)
+            }
         }
         c.emit(typed.Stmt.Return(sp, x))
         return
@@ -21599,7 +22310,9 @@ fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bo
             made := c.builds(id)
             n := ks.Len()
             for k, a in cl.Args {
-                if not made and not c.followsAt(id, k) or bare and not c.roBelow(a): continue
+                # (an instance's - a Vec's At - follows by what its body hands back, roFollows; round 2f)
+                follows := c.followsAt(id, k) or c.instanceBody(id) and c.roFollows(id, k)
+                if not made and not follows or bare and not c.roBelow(a): continue
                 if made and not c.P.T.HoldsRefs(typeOf(a)): continue
                 # (a followed call hands back what its argument reaches, never its own storage; what is built holds what
                 # it is given)
@@ -21611,6 +22324,15 @@ fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bo
         case typed.Expr.Cond(_, _, k) {
             if k.A is not null and (not bare or c.roBelow(k.A!)): try c.paramsOf(k.A!, ks, depth + 1, bare, lent)
             if not bare or c.roBelow(k.B): try c.paramsOf(k.B, ks, depth + 1, bare, lent)
+            return
+        }
+        # (round 2f: a value match, as a conditional - each clause's value; a clause that leaves gives none)
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a.Value is not null and (not bare or c.roBelow(a.Value!)): try c.paramsOf(a.Value!, ks, depth + 1, bare, lent)
+            }
+            if m.NoMatch is null or m.NoMatch!.Value is null: return
+            if not bare or c.roBelow(m.NoMatch!.Value!): try c.paramsOf(m.NoMatch!.Value!, ks, depth + 1, bare, lent)
             return
         }
         case typed.Expr.Prim(_, _, op, _, args) {
@@ -21629,10 +22351,47 @@ fn (c mut Checker&) paramsOf(x typed.Expr&, ks mut Vec<I64>&, depth I64, bare Bo
     # a reference kept: one read out of what the parameter reaches, never its own storage (the function's copy, by
     # value - D9e) or a part of it borrowed
     if not lent and c.isRef(typeOf(u)) and not c.storedRef(u): error Elsewhere
+    # (round 2f: a part of a call's value read where the call's result is held - "p.fns[f].F", a Vec's At - is what that
+    # call hands back: what it follows)
+    tc := c.tempCall(c.placeOfX(u))
+    if tc is not null {
+        try c.paramsOf(tc, ks, depth + 1, bare, lent)
+        return
+    }
     r := c.rootLocal(c.placeOfX(u))
+    # (round 2f: a local made from a call's result - a match's held subject, what a binding of its payload is read
+    # out of: what that call follows)
+    if r >= 0 and c.refCalls.Has(c.roKey(r)) {
+        cx := try c.refCalls.Get(c.roKey(r)) catch { error Elsewhere }
+        try c.paramsOf(cx, ks, depth + 1, bare, lent)
+        return
+    }
     k := c.bareParamAt(r) if bare else c.paramPos(r)
     if k < 0: error Elsewhere
     if not ks.Has(k): ks.Push(k)
+}
+
+# the call whose result holds place p - p that result, or a field, element or payload of it - null where p is no part of
+# a call's result
+fn (c mut Checker&) tempCall(p typed.Lvalue?&) typed.Expr?&p {
+    q := p
+    for _ in range 32 {
+        if q is null: return null
+        match q {
+            case typed.Lvalue.Field(_, _, base, _) { q = base }
+            case typed.Lvalue.Elem(_, _, e) { q = e.Base }
+            case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
+            case typed.Lvalue.Temp(_, _, v, _) {
+                u := unwrapped(v)
+                return match u {
+                    case typed.Expr.Call(_, _, _): u
+                    case _: null
+                }
+            }
+            case _: return null
+        }
+    }
+    return null
 }
 
 # the bare parameter an argument is, through conversions and a temporary - its local, -1 for none (a note naming it, so
@@ -21688,6 +22447,13 @@ fn (c mut Checker&) bareParamAt(id I64) I64 {
                 if n != source.NameId(0) and (try c.roCopies.Get(c.roKey(I64(ps[k]))) catch default source.NameId(0)) == n: return k
             }
             return -1
+        }
+        # (round 2f: a value copy of one - "r := e" of a bare e, never assigned whole after - holds what it holds)
+        l := c.cur().Local(typed.LocalId(I32(id)))
+        from := try c.roCopies.Get(key) catch default source.NameId(0)
+        if l.Kind == typed.LocalKind.Var and from != source.NameId(0) and from != l.Name and not c.fr().stored.Has(l.Name) {
+            id = c.localNamed(from)
+            continue
         }
         o := try c.roFrom.Get(key) catch { return -1 }
         id = c.rootLocal(o.P)
@@ -22195,8 +22961,11 @@ fn (c mut Checker&) genLambda(fd ast.Func&, ft types.TypeId, el I64, home I64) t
         x := c.readLocal(pl.Sp, cap)
         # a value array is captured as a read-only borrow (T7b): the local is the array, copied
         if ct != pl.Ty and c.isRef(ct) and not c.isRef(pl.Ty) { x = c.read(pl.Sp, typed.Lvalue.Deref(pl.Sp, pl.Ty, x)) }
-        mark := typed.Mark.Infer if c.isRef(pl.Ty) or c.P.T.HoldsRefs(pl.Ty) else typed.Mark.None
-        l := c.local(pl.Name, pl.Sp, pl.Ty, typed.LocalKind.Var, mark)
+        # (bulk review 5, F7: a bare parameter passed by pointer is captured as its value - 2.10's copy into the
+        # generator's home - and the walk's local is that value, its own from then on)
+        lt := ct if source.NewParams and c.isRef(pl.Ty) and not c.isRef(ct) else pl.Ty
+        mark := typed.Mark.Infer if c.isRef(lt) or c.P.T.HoldsRefs(lt) else typed.Mark.None
+        l := c.local(pl.Name, pl.Sp, lt, typed.LocalKind.Var, mark)
         c.emit(typed.Stmt.Let(pl.Sp, typed.LocalId(I32(l)), x))
         args.Push(l)
     }
@@ -22388,7 +23157,7 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
         if k < 0 { return }
         cs := m.Cases[k]
         was := c.bindCase()
-        if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        if cs.Body.Len() > 0 { c.emit(c.decided(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp)))) }
         c.unbindCase(was)
         return
     }
@@ -22399,7 +23168,7 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
     if k != -2 {
         if k < 0 { return }
         cs := m.Cases[k]
-        if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        if cs.Body.Len() > 0 { c.emit(c.decided(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp)))) }
         return
     }
     c.emit(typed.Stmt.Eval(sp, c.matchExpr(sp, m, false, types.VoidT)))
@@ -24695,6 +25464,13 @@ fn (c mut Checker&) toAny(x typed.Expr&c, want types.TypeId, sp source.Span) typ
             v = typed.Expr.Make(sp, stored, typed.Make(typed.MakeKind.Tuple, 0, gather(c.exprs, from), null, typed.SiteId(-1), typed.Check.None))
         }
         box := typed.Expr.Promote(sp, c.P.T.Ref(stored, perm & types.Writable), typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+        return c.prim(sp, want, typed.PrimOp.AnyMake, box, c.lit(sp, c.i64(), ti))
+    }
+    # (bulk review 5: a bare parameter passed by pointer is the callee's own value - boxed as a copy, as by value: its
+    # pointer would make the any the caller's instance, which identity, "==", tells)
+    if source.NewParams and c.bareWhole(unwrapped(x)) >= 0 {
+        v := c.fit(x, inst, sp)
+        box := typed.Expr.Promote(sp, c.P.T.Ref(inst, perm & types.Writable), typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
         return c.prim(sp, want, typed.PrimOp.AnyMake, box, c.lit(sp, c.i64(), ti))
     }
     ref := c.fit(x, c.P.T.Ref(inst, perm), sp)

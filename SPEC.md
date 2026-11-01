@@ -2074,29 +2074,49 @@ receiver says it may write the caller's instance, and every written `&` is writa
 as nothing); a bare parameter never affects the caller. One whose type is a struct or an array (text included) is
 passed by pointer to the caller's storage - a read-only reference written bare: it, and everything reached through
 it, is read-only in the body; a body that writes its own storage, or lends it where it may be written, works on a
-copy of its own made on entry. Numbers, enums, function values and a type variable's binding are passed by value, and
-an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable but where the same call also
-writes that storage through another route. `x := p` of a bare parameter holding no reference - a plain struct or enum -
-declares a value of its own, a copy (as by value); of one holding references, or an array, a read-only view of it. A
+copy of its own made on entry, whose levels below its top are read-only as the parameter's are. Read-only is a
+property of the level reached: a reference read out of what is reached read-only - through a dereference, an index,
+a walk's element, what a call hands back following a read-only argument, an immutable global and what it reaches - is
+read-only, and so is a value an instance hands back holding references of a type a read-only argument holds (a
+`Clone`, a `Values` walk). Numbers, enums, a struct of numbers fitting one register (eight bytes), function values and
+a type variable's binding are passed by value, and
+an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
+may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
+mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot
+change: constant data, a value made for the call, a bare parameter of the caller, an immutable global, a value local
+nothing assigns, writes or lends writably once it is made, a read-only view never assigned made from one of these. A
+lambda written at the call is read, not taken for unseen code: it may write the caller's storage only through what it
+captures writably. Each copy is listed by `-memory` (B18); a C function's pointers are X22's. An atomic read is there to see another thread's write, so one of a bare parameter's own storage - a by-value one's,
+or what its pointer points to, but no reference it holds - is a compile-time error naming `p T&`: its own value, which no
+other thread writes; and so is a bare parameter given whole to a `&` parameter that is read atomically (directly, or by
+one it is given to in turn), at the call: the body's own copy never sees the write. A spawned call's bare argument is copied at the spawn, on the spawning thread, where the join
+block may write storage of its type - its statements, its other tasks, a call through a function value or an `any`, a
+call handing such a value or a `&` argument reaching the type - and the copy lasts until the join; a generator's bare
+parameters are copied where the generator lives, its walk running after the call. An `any` made from a bare parameter
+boxes a copy of it. `x := p` of a bare parameter holding no
+reference - a plain struct or enum - declares a value of its own, a copy (as by value), and so does one holding
+references that nothing assigns whole afterwards; an array, or one assigned whole later, a read-only view of it. A
 trait method that may write its receiver is written `&Name()`.
 
 **D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
 passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error
-naming the bare form `p T`. A for-in walking it only reads it; a value holding references copied out of what it reaches
+naming the bare form `p T`. An atomic read of what it reaches uses it (it is there for another thread's write, which
+only a shared reference sees). A for-in walking it only reads it; a value holding references copied out of what it reaches
 is kept where it is stored into a field, an element, a payload or a global, or given a by-value parameter whose body
 writes through it or keeps it. Not judged for a `?&`, an `any`, an extern type, a destructor type, a type variable's
 reference, an extern, an export fn or a generic's parameter (its instances differ by program).
 
-**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so what the body keeps of
+**D9e (a bare parameter kept; provisional).** A bare parameter is the callee's own value, so the body may not keep
 its own storage past the call - the parameter itself or a view of it, in a value it builds and hands back (a
-constructor's field, a case's payload, an element) - is the callee's own copy: the caller's later writes to its
-argument never show through it. Passed by pointer, the copy is made by a caller whose argument may change while what
-keeps it lives, where the call's result is built; an argument that cannot change is passed as it is - constant data, a
-value made for the call, a bare parameter of the caller (its own callers copy for it), an immutable global, a value
-local nothing assigns, writes or lends writably once it is made, a reference local naming new storage that nothing
-writes through and that is read only as an argument for a parameter that cannot write it. A view of what the parameter
-reaches through its references is no copy (a struct's copy holds the same references). Stored into existing storage -
-a `&` parameter's, a global's - a bare parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy.
+constructor's field, a case's payload, an element): that is a compile-time error at the parameter, naming the two
+ways out - a copy of its own written in the body, a value assigned from it (`c T = p`, E12's reference into value),
+which it then keeps; or the parameter taken as `p T&`, sharing the caller's storage, which the `&` says. Nothing
+copies it unseen. A view of what the parameter reaches through its references is no keeping of its own storage (a
+struct's copy holds the same references). Stored into existing storage - a `&` parameter's, a global's - a bare
+parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy. Where the route is not followed - a
+local made from it, a conditional, a slice, a capture, a call storing its argument (`v.Push(t)`) - the parameter is
+taken as kept wherever the result outlives what its argument's storage is and the result's type can name storage of
+its type (a reference to it, a view of its array, a function value, an `any`).
 Section 8 lends an argument for a bare parameter whose own storage the callee does not keep where the argument's
 references live (O17 asks nothing more of a value whose references live elsewhere than its storage), and a temporary
 lent to one - read-only, stored through by nothing - needs its references only to outlive it (O25h).
@@ -2109,7 +2129,9 @@ type with no reference form.
 `T?&`) hands the caller something it shares and may write: storage reached through a `&` parameter, a global or a
 shared field, or new storage. Handing back through it a value read-only at its top - what a bare parameter reaches,
 constant data, an immutable global - is a compile-time error naming the value result `T` (or `p T&` for the parameter
-it is reached through). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
+it is reached through - the form the diagnostic's note names where some caller writes through the result, lends it
+where it may be written or keeps it, since a value result would leave such a caller writing a copy; and for an `any`
+result, which has no value form). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
 handed to the caller without a copy where the caller only reads it, and copied where it is kept or written (D9h).
 Excepted: a view read through a field read-only by inference (round 2c's per-type fields), whose result is read-only
 for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).
@@ -7781,7 +7803,9 @@ undefined behaviour, and a wrong *size* for a foreign type reached through a res
 This is unavoidable rather than an omission: the foreign side is compiled by another toolchain and olang
 has no view into it. Every other guarantee in this specification is stated as holding for programs that do
 not declare an incorrect prototype. Keeping the vocabulary deliberately narrow (X2) reduces how much can
-be got wrong, but does not close it.
+be got wrong, but does not close it. So is C writing through a pointer its prototype says is `const`, or handing one
+back writable to an export fn that writes it (X22): the compiler trusts `const`, and breaking it is undefined behaviour
+as a wrong prototype is.
 
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C boundary (its **vocabulary**) is:
@@ -8136,6 +8160,20 @@ wrong prototype is (X1a). An olang function is never variadic.
   `struct timespec *` given as two `I64`s); that the buffer holds what C reads there is the program's word (X1a).
 
 What C does with the pointer is X3's: it is the storage's own address, for the call.
+
+Under the rework's round 2 (`OLANG_PARAMS=new` only, provisional as D9 is), a pointer parameter C writes - one not
+`const`, `T *` read as `p T&` - given what may be written - a local or a part reached from one, a `&` parameter's
+storage, new storage - borrows it writably (E12c): no copy. Given what may not be lent writably it is given a copy,
+since old C interfaces leave `const` out of what they only read: a bare parameter whole is the body's own copy, made on
+entry as where an olang function's `&` parameter is given it (D9); constant data, an immutable global and a read-only
+view - a view of a bare parameter, of what a read-only level reaches - are copied for the call, in the block of the
+call (where an olang function's `&` parameter is given one, T25c's error). A `const` pointer is trusted: what it is given
+is passed as it is, never copied, unless an export fn of the program may write storage of its type (C may call back
+into one while it runs, handing it what it holds): then an argument that may change during the call - a mutable
+global's storage, a read-only view not made from what cannot change - is copied for the call, as an olang call's
+argument is that the same call may write another way (D9). `-memory` lists each copy (B18). A `?&` given a pointer not
+`const` keeps T25c's rule, and an extern type's reference has no permission that says anything (X10), in a function
+type too: an export fn taking `CStr?&` fits a C function pointer's.
 
 ## 12. Generics
 
@@ -8546,8 +8584,11 @@ not checked against it at all, as G14 says of a type match's other arms. Such a 
 reading a build constant is (S8b), never S8a's dead code; one that cannot be evaluated is an ordinary condition, both
 branches checked. Every branch is still parsed, the body being one for all instances; the chosen one behaves as a block
 in its place, an `if` none of whose branches is chosen is nothing, and a `match` used as a value (S12b) choosing
-nothing is a compile-time error at the instance. That is what lets one function do what only some of its lengths can,
-and what ends a recursion on a length:
+nothing is a compile-time error at the instance. Where the branch or clause chosen always leaves (D10a), what follows
+the statement in its block is never reached in that instance and is not checked against it either - an index or a
+slice past the length the instance binds after `if a.Len() == 0 { return }` is no error there (E16, D9a); the same
+holds for a statement decided by G14's `match T` and by G35. That is what lets one function do what only some of its
+lengths can, and what ends a recursion on a length:
 
 ```
 fn total(a Array<I64>) I64 {

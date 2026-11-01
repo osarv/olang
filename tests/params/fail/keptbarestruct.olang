@@ -1,0 +1,21 @@
+# check: fail take it as 'p pt&' to share the caller's
+# The scoping and parameters rework (round 2f, D9e): a bare struct kept whole by a reference in what is handed back is
+# refused, naming the written copy ('c pt = p') and the shared form.
+type pt struct(n I64, m I64, k I64) {
+    n
+    m
+    k
+}
+
+type ptHolder struct(q pt&) {
+    q
+}
+
+fn mkPt(p pt) ptHolder { return ptHolder(p) }
+
+fn main() {
+    a := pt(1, 2, 3)
+    h := mkPt(a)
+    a.n = 9
+    assert h.q.n == 1
+}

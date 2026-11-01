@@ -2873,31 +2873,19 @@ g16bgenericonce.olang:22:5: note: 'n' is declared here, in a block that closes f
       |     ^
 compilation failed with 2 errors
 === g16boutermost.olang
-g16boutermost.olang:7:14: error[E16]: index 0 is outside the array's 0 elements
-    7 |     return a[0] + Total(a[1:])
+g16boutermost.olang:7:14: error[E16]: index 1 is outside the array's 1 elements
+    7 |     return a[1] + Total(a[1:])
       |              ^
-g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 0
-    7 |     return a[0] + Total(a[1:])
-      |                   ^~~~~
 g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 1
-    7 |     return a[0] + Total(a[1:])
+    7 |     return a[1] + Total(a[1:])
+      |                   ^~~~~
+g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 2
+    7 |     return a[1] + Total(a[1:])
       |                   ^~~~~
 g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
    11 |     try io.Println($Total(x))
       |                     ^~~~~
-g16boutermost.olang:7:25: error[D9a]: 'a' takes its array by value, so its length must be known while compiling - this Array<I64>'s is known only at run time: take it as 'Array<I64>&', or pass a slice of a known length ('x[0:4]')
-    7 |     return a[0] + Total(a[1:])
-      |                         ^~~~~
-g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 0
-    7 |     return a[0] + Total(a[1:])
-      |                   ^~~~~
-g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 1
-    7 |     return a[0] + Total(a[1:])
-      |                   ^~~~~
-g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
-   11 |     try io.Println($Total(x))
-      |                     ^~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === g16note.olang
 g16note.olang:5:9: error[G15]: no case covers I64, which this generic is instantiated with - add one, or 'case _'
     5 |   match T {

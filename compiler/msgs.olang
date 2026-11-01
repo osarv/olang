@@ -385,6 +385,9 @@ type Diag enum {
     RefNeverUsed
     ConstToRefParam
     NoteBareParam
+    BareKept
+    AtomicBare
+    AtomicBareLent
     RefResultReadOnly
     NoteRefResult
     ReadOnlyToBuiltResult
@@ -1949,7 +1952,7 @@ fn ReadOnlyToWritable() Msg { return Msg(Diag.ReadOnlyToWritable, "T25c", "a rea
 fn ReadOnlyHere() Msg { return Msg(Diag.ReadOnlyHere, "T25c", "this is read-only here - what a bare parameter reaches, constant data or an immutable global - and is wanted where it may be written: give a copy of its own ('$x', 'x.Clone()'), or take the parameter as 'p T&'") }
 
 # ERR_BARE_DEAD_WRITE
-fn BareDeadWrite(name String&, ty String&, number Bool) Msg { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "', this function's own copy, and nothing reads it after - " $("return the new value instead" if number else $("take it as '" $name " " $ty "&' to change the caller's"))) }
+fn BareDeadWrite(name String&, ty String&, number Bool) Msg { return Msg(Diag.BareDeadWrite, "D9f", "this writes '" $name "' or what it reaches, and nothing reads it after - " $("return the new value instead" if number else $("take it as '" $name " " $ty "&' to change the caller's"))) }
 
 # ERR_REF_NEVER_USED
 fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D9d", "'" $name "' is never written, handed where it may be written, or kept - take it as '" $name " " $ty "'") }
@@ -1958,6 +1961,11 @@ fn RefNeverUsed(name String&, ty String&) Msg { return Msg(Diag.RefNeverUsed, "D
 fn ConstToRefParam(name String&, fix String&) Msg { return Msg(Diag.ConstToRefParam, "T25d", "this hands data written in the program to '" $name "', which may write it - pass a copy of its own: " $fix) }
 
 # NOTE_BARE_PARAM
+fn AtomicBare(name String&) Msg { return Msg(Diag.AtomicBare, "D9", "an atomic read of '" $name "', a bare parameter, reads this function's own value, which no other thread writes - take it as '" $name " T&' to see the caller's") }
+
+fn AtomicBareLent(name String&) Msg { return Msg(Diag.AtomicBareLent, "D9", "'" $name "' is this function's own value, given here to a parameter read atomically to see another thread's write, which its copy never sees - take it as '" $name " T&' to share the caller's") }
+
+fn BareKept(name String&, ty String&) Msg { return Msg(Diag.BareKept, "D9e", "'" $name "' is a bare parameter - this function's own value - and what it hands back keeps its storage: keep a copy of its own ('c " $ty " = " $name "'), or take it as '" $name " " $ty "&' to share the caller's") }
 fn NoteBareParam(name String&) Msg { return Msg(Diag.NoteBareParam, "", "'" $name "' is a bare parameter: this function's own value, and what it reaches read-only here") }
 
 # ERR_REF_RESULT_READ_ONLY
@@ -2212,7 +2220,7 @@ fn IncdecNotNumber(tok String&, ty String&) Msg { return Msg(Diag.IncdecNotNumbe
 fn CaptureReadOnly() Msg { return Msg(Diag.CaptureReadOnly, "D16c", "a lambda's captures are read-only - capture a reference to change what is outside it") }
 
 # ERR_READ_ONLY_REF_WRITE
-fn ReadOnlyRefWrite() Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - one with no 'mut' in its type") }
+fn ReadOnlyRefWrite(newParams Bool = false) Msg { return Msg(Diag.ReadOnlyRefWrite, "T25b", "this writes through a read-only reference - what a bare parameter reaches, constant data or an immutable global" if newParams else "this writes through a read-only reference - one with no 'mut' in its type") }
 
 # ERR_WRITE_INTO_CALL_VALUE
 fn WriteIntoCallValue() Msg { return Msg(Diag.WriteIntoCallValue, "E31", "this writes into a value a call gave back, a copy no one holds - store the whole element: x[i] = v") }

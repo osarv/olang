@@ -1,0 +1,17 @@
+# check: fail 'g' is this function's own value, given here to a parameter read atomically
+# D9 under the rework's round 2: a bare parameter given whole to a "&" parameter is its own copy (made on entry), so
+# where that parameter is read atomically - for another thread's write - the copy never sees it: the error at the call
+# names 'g T&' (param_migrate takes it)
+type Gate struct() {
+    flag I32 = 0
+    n I64 = 0
+}
+
+fn open(g Gate&) Bool { return g.flag.AtomicLoad() != 0 }
+
+fn waitOpen(g Gate) Bool { return open(g) }
+
+fn main() {
+    g := Gate()
+    assert not waitOpen(g)
+}

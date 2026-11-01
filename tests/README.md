@@ -31,7 +31,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `params/` - the scoping and parameters rework's tests, written in its spelling (a bare parameter read-only, `&` may
   write) and run only by `make verify-params`, under `OLANG_PARAMS=new OLANG_SCOPES=infer` (docs/rework.md section
   12); `params/fail/` holds programs that must fail there, each naming its diagnostic in a `# check: fail` header as
-  `checks/cases` does. `make verify` leaves them out until the switches become the default.
+  `checks/cases` does; `params/cptr/` is the C `cpointers.olang` imports. `make verify` leaves them out until the
+  switches become the default.
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

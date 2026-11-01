@@ -1,0 +1,50 @@
+# check: fail error[T25b]: this writes through a read-only reference
+# bulk review 5 (F1), its reproducer bare_handle_write.olang: refused under the switches
+# QCC: a bare parameter can never affect the caller - a bare Vec<I64>'s View() and ViewMut(), a bare
+# Map<I64, node&>'s Get and Values() and a bare list.List<node&>'s elements are handed out writable
+import "std/io"
+import "std/list"
+
+type node struct(v I64) {
+    v
+}
+
+fn byView(v Vec<I64>) {
+    w := v.View()
+    w[0] += 1
+}
+
+fn byViewMut(v Vec<I64>) {
+    w := v.ViewMut()
+    w[0] += 10
+}
+
+fn byMapGet(m Map<I64, node&>) {
+    x := m.Get(1)!
+    x.v += 1
+}
+
+fn byMapValues(m Map<I64, node&>) {
+    for x in m.Values() { x.v += 10 }
+}
+
+fn byList(l list.List<node&>) {
+    x := l[0]
+    x.v += 100
+}
+
+fn main() {
+    v := Vec<I64>()
+    v.Push(0)
+    byView(v)
+    byViewMut(v)
+    nd := node(0)
+    m := Map<I64, node&>()
+    m.Put(1, nd)
+    byMapGet(m)
+    byMapValues(m)
+    l := list.List<node&>()
+    l.Push(nd)
+    byList(l)
+    io.Println($v " " $nd.v)!
+}

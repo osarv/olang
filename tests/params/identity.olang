@@ -1,0 +1,41 @@
+# The scoping and parameters rework (bulk review 5, F4): an any made from a bare parameter boxes a copy of it, as by
+# value - its pointer would make the any the caller's instance, which "==" (identity) would tell. Run by
+# `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type pt struct(x I64, y I64) {
+    x
+    y
+}
+
+type shape trait {
+    Area() I64
+}
+
+fn (p pt) Area() I64 { return p.x * p.y }
+
+fn same(p pt, a any shape&) Bool {
+    b any shape& = p
+    return a == b
+}
+
+fn boxed(p pt) any shape& { return p }
+
+test same "an any of a bare parameter is no any of the caller's instance" {
+    p := pt(2, 3)
+    a any shape& = p
+    assert not same(p, a)
+    b := boxed(p)
+    p.x = 10
+    assert b.Area() == 6 and a.Area() == 30
+}
+
+fn areaLater() I64 {
+    p := pt(4, 5)
+    b := boxed(p)
+    p.x = 1
+    return b.Area()
+}
+
+# the evaluator agrees
+Twenty I64 = areaLater()
+assert Twenty == 20

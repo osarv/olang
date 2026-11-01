@@ -15,7 +15,11 @@ fn (c cursor&) next() Char ? Exhausted {
     return c.text[c.at - 1]
 }
 
-fn cursorOf(t String) cursor { return cursor(t) }
+# (a bare parameter's own storage is not kept - D9e - so the cursor is over a copy of its own, written)
+fn cursorOf(t String) cursor {
+    c String = t
+    return cursor(c)
+}
 
 fn vowels(t String) I64 {
     c := cursorOf(t)
