@@ -561,6 +561,9 @@ type atRec struct(Body I64, Site I64, Base typed.Lvalue&, Of types.TypeId) {
 # they ask for in turn
 fn (c mut Checker&) CheckProgram() {
     c.P.AllFns()
+    # every signature signed before the first attempt, so what signing says (R1, R23, O4a ...) is said once and kept: an
+    # attempt done again (R1a) forgets what it said, and a signature is signed only once
+    for f in range c.P.FnCount() { c.P.Sig(f) }
     if c.syntaxMark < 0 { c.syntaxMark = c.P.L.Diags.RecordCount() }
     for {
         c.Attempts++

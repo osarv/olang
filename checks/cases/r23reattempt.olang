@@ -1,0 +1,16 @@
+# check: fail error[R23]: a Bool among several results is a flag beside a value - what can fail says so with '? E' and raises an error instead (error NotFound)
+# a signature's error said in the checker's first attempt, kept when the program is checked again (R1a: a and b's sets
+# grow through their cycle): a signature is signed once, and what an attempt said was forgotten with it - so the
+# program compiled (found by the rework's round 3d)
+fn a(n I64) ? {
+    if n > 0 { try b(n - 1) }
+}
+fn b(n I64) ? {
+    if n > 0 { try a(n - 1) } else { error Low }
+}
+fn bad(k I64) I64, Bool { return k, true }
+fn main() ? {
+    try a(3)
+    x, y := bad(1)
+    assert x == 1 and y
+}
