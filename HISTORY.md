@@ -27529,3 +27529,40 @@ where its body needs it - every caller giving a read-only one is then refused, a
 to be `&`); half a dozen are fields' and constructor parameters' inner levels, which round 2c's inference does not
 reach (`Array<mut String&>&` against a caller's `Array<String&>&`); the rest section 8 over temporaries of bare
 parameters' reach. The self-build waits for them (docs/rework.md 14.6).
+
+## The rework, round 2f: bulk review 5's fixes; compiler/ under the switches (2026-11-01)
+
+Behind `OLANG_PARAMS=new` and `OLANG_SCOPES=infer`, as rounds 2a-2e (docs/rework.md section 15).
+
+**Bulk review 5.** A read-only review of rounds 1-2e (`/home/user/review/bulk5`, the coordinator's directions) found
+the round's central promise broken in its most common shapes: QCC says a bare parameter never affects its caller, and
+round 2c had made a bare struct's reference fields read-only - but an element read out of a bare `Vec<node&>` (`v[0]`,
+`Get`, a walk, `View()`, even `ViewMut()` through a `&` receiver given a bare argument), what a `Clone` or a `Map`'s
+`Values` walk handed back, and anything reached from an immutable global were writable. One shape wrote constant data
+and segfaulted; another's store LLVM deleted as undefined behaviour. The cause was that read-only-ness was found by
+the root local of a place - a field chain - and every route through a call's result, a dereference of a reference read
+out of an element, or a global root lost it. The fix makes read-only a property of the level reached (`roReach`): a
+reference read out of a place reached read-only is read-only, through every dereference, index, walk and call result
+an instance hands back following a read-only argument - and, where unsure, an instance's value result holding a
+reference type a read-only argument holds is a read-only copy. An instance's own parameter still follows its argument
+(its reach is no read-only level inside it), so `At`, `View` and the walks stay one instance each. The copy on entry
+of a written bare parameter had writable inner levels (`Array<mut node&>`): it keeps the parameter's now.
+
+The review's other findings were wrong results, memory-safe: a bare parameter's own storage kept by routes round 2e's
+frame term did not follow (a `Push` into a returned `Vec<String&>`, a `Put`, a local, a conditional, a captured slice),
+an argument the same call wrote another way (`f(p, p)` with the second `&`, a mutable global), and an `any` made from a
+bare parameter borrowing the caller's instance, which `==` (identity) could tell. Each is fixed conservatively -
+"where unsure, count it as kept, so the caller copies" (the coordinator's direction): a parameter is kept wherever the
+result outlives its argument's storage and can name storage of its type; an argument the call may write another way is
+copied for the call; an any boxes a copy; and the evaluator, lowering with no plan, copies every bare parameter on
+entry, as 2.10 always said it would. A function with a bare parameter given where `fn(x T) T` is wanted is still
+refused (F5) - it needs a by-value wrapper, left for the flip.
+
+**Found on the way.** G30's decided `if` checked what followed it in the instance where it leaves: `t := ts[0]` after
+`if ts.Len() == 0 { return }` was an E16 in the length-0 instance (round 2e's "E16 at ts[0]", on the default path too
+- a G16b check case had been written against that error). `std/flags`' `byName` - written `(s state&) ... mut flag&s`,
+a writable result out of a read-only receiver, shallow permission - was migrated to a value result once its element
+read became read-only, and its callers' writes (`fl.b = true`) went to a copy: its tests failed at run time, the one
+place the migration changed what a program computes. D9g's note now names the parameter, not the value result, where
+any caller writes through the result; flags takes `mut state&` in the old form. And param_migrate stopped one step
+early: the finish phase drops a result's kept `mut`, which can leave D9g to say, so it drives again after it.

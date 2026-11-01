@@ -2074,10 +2074,17 @@ receiver says it may write the caller's instance, and every written `&` is writa
 as nothing); a bare parameter never affects the caller. One whose type is a struct or an array (text included) is
 passed by pointer to the caller's storage - a read-only reference written bare: it, and everything reached through
 it, is read-only in the body; a body that writes its own storage, or lends it where it may be written, works on a
-copy of its own made on entry. Numbers, enums, function values and a type variable's binding are passed by value, and
-an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable but where the same call also
-writes that storage through another route. `x := p` of a bare parameter holding no reference - a plain struct or enum -
-declares a value of its own, a copy (as by value); of one holding references, or an array, a read-only view of it. A
+copy of its own made on entry, whose levels below its top are read-only as the parameter's are. Read-only is a
+property of the level reached: a reference read out of what is reached read-only - through a dereference, an index,
+a walk's element, what a call hands back following a read-only argument, an immutable global and what it reaches - is
+read-only, and so is a value an instance hands back holding references of a type a read-only argument holds (a
+`Clone`, a `Values` walk). Numbers, enums, function values and a type variable's binding are passed by value, and
+an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable: an argument the same call
+may write another way - another argument given a `&` parameter whose type reaches storage of the bare one's, a
+mutable global's storage, a function value or an `any` given beside it - is copied for the call, unless it cannot
+change (D9e's list). An `any` made from a bare parameter boxes a copy of it. `x := p` of a bare parameter holding no
+reference - a plain struct or enum - declares a value of its own, a copy (as by value), and so does one holding
+references that nothing assigns whole afterwards; an array, or one assigned whole later, a read-only view of it. A
 trait method that may write its receiver is written `&Name()`.
 
 **D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
@@ -2097,6 +2104,10 @@ local nothing assigns, writes or lends writably once it is made, a reference loc
 writes through and that is read only as an argument for a parameter that cannot write it. A view of what the parameter
 reaches through its references is no copy (a struct's copy holds the same references). Stored into existing storage -
 a `&` parameter's, a global's - a bare parameter is refused as section 8 and T25c refuse it, naming `p T&` or a copy.
+Where the route is not followed - a local made from it, a conditional, a slice, a capture, a call storing its
+argument (`v.Push(t)`) - the parameter is taken as kept wherever the result outlives what its argument's storage is
+and the result's type can name storage of its type (a reference to it, a view of its array, a function value, an
+`any`): its callers copy as above.
 Section 8 lends an argument for a bare parameter whose own storage the callee does not keep where the argument's
 references live (O17 asks nothing more of a value whose references live elsewhere than its storage), and a temporary
 lent to one - read-only, stored through by nothing - needs its references only to outlive it (O25h).
@@ -2109,7 +2120,9 @@ type with no reference form.
 `T?&`) hands the caller something it shares and may write: storage reached through a `&` parameter, a global or a
 shared field, or new storage. Handing back through it a value read-only at its top - what a bare parameter reaches,
 constant data, an immutable global - is a compile-time error naming the value result `T` (or `p T&` for the parameter
-it is reached through). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
+it is reached through - the form the diagnostic's note names where some caller writes through the result, lends it
+where it may be written or keeps it, since a value result would leave such a caller writing a copy; and for an `any`
+result, which has no value form). Read-only is said by a value: a value result that is a view of what a bare parameter reaches is
 handed to the caller without a copy where the caller only reads it, and copied where it is kept or written (D9h).
 Excepted: a view read through a field read-only by inference (round 2c's per-type fields), whose result is read-only
 for every caller, and a `T?&` result, which follows its argument (no value form holds an absence).

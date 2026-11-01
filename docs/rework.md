@@ -1829,3 +1829,112 @@ quick` passes (only the token and tree goldens of the edited compiler sources st
    a new key), and std's text-keyed maps moved to it (json, flags ...).
 5. **Round 4, the flip** - the switches removed, `mut` out of the grammar but on globals, the markers' spellings gone,
    the seed regenerated: not done (round 4's, after 1-4).
+
+## 15. Round 2f: bulk review 5's fixes; compiler/ under the switches
+
+Built on `wt-rework` behind the same switches; without them the compiler checks and builds as before but for two bug
+fixes (15.3) and the MIR verifier accepting what it never met on the default path (15.4).
+
+### 15.1 Bulk review 5, fixed
+
+The read-only review of rounds 1-2e (`/home/user/review/bulk5`, at a041393) found six things; five are fixed, each
+with its reproducer as a test (`tests/params/fail/{elemwrites, constwrite, entrycopyelem, handlewrites, globalview,
+globalelem, globalreach}.olang`, `tests/params/{keptroutes, alias, identity}.olang`).
+
+- **F1, unsound (fixed): read-only is a property of the level reached.** Round 2's read-only-ness was found for a
+  bare parameter's fields only (`roRoot`'s locals and `roCopies`). Now, under the switches, a reference is read-only
+  where it is read out of a place reached read-only, followed through every dereference, index, walk, call result and
+  global root (`check.roReach`, `roLocalReach`, `roFromReach`; `roRef`'s writable branch asks it, a call's own result
+  `roCallRef`): an element of a bare `Vec<node&>` (`v[0]`, `Get`, a walk, `View()`, `ViewMut()` - an instance's
+  reference result follows the argument it reaches whatever it is written as, `followsResult`), what an instance hands
+  back holding a reference type a read-only argument holds (`Clone`, a `Map`'s `Values` walk - `roCallCopy`'s
+  `refTypesIn`, the walk of a read-only copy being one), an immutable global and what it reaches (`G.n.v = 5`,
+  `G.View()[0] = 42`, `x := G[0]`). A walk's element is declared read-only at its top where its value is
+  (`elemType`). A copy on entry keeps its levels below its top read-only (`ReadOnlyAll`, copied then converted), so
+  `a[0].v = 6` of a copied bare `Array<node&>` writes no caller's node. In an instance a parameter's reach is still no
+  read-only level (`roLocalReach` - its result follows the argument), and a write through it is still refused by
+  `roRoot`. The constant-data segfault and the store LLVM dropped are refused now (T25b).
+- **F2, wrong result (fixed): a bare parameter's own storage kept by routes the frame term missed.** A body's
+  summary takes a bare parameter as kept (`KeptOwn`) wherever the result outlives what its argument's storage is (a
+  relation of the summary's, the parameter's scope variable over the result's) and the result's type can name storage
+  of the parameter's type - a reference to it, a view of its array, a function value or an `any`
+  (`scope.keptByResult`, `mayName`). So `v.Push(t)` into a returned `Vec<String&>`, `m.Put(t, 1)`, `s := t; return
+  holder(s)`, `holder(t if k else u)` and a kept lambda capturing `t[1:]` make a changing caller copy, as by value.
+- **F3, wrong result (fixed, 2.10's provisional hole): an argument the same call may write another way.**
+  `typed.AliasCopies` names the arguments, for a callee's bare parameters passed by pointer, that the same call may
+  write another way: another argument given a `&` parameter whose type reaches storage of the bare one's
+  (`TypeReaches`: `f(p, p)` with `b pt&`), a mutable global's storage given bare, or a function value or an `any`
+  given beside it (what it writes unknown). The scope pass copies those that may change (`plan.ArgTemp`, stableArg's
+  list) for the call alone - in the innermost scope, never the result's (`lower.tempArg`). And lowering with no plan
+  (the evaluator, while compiling) copies every bare parameter on entry (`bareEntryCopies`), so a baked global reads
+  what the run time computes.
+- **F4, wrong result (fixed): an `any` made from a bare parameter boxes a copy** (`toAny`), as by value; `==` on two
+  anys is no longer the caller's identity.
+- **F6, diagnostics (fixed but one):** under the switches T25b says "what a bare parameter reaches, constant data or an
+  immutable global" (no `mut`), types print with no `mut` (`c.spell`), a permission-only mismatch is T25c's "read-only
+  here" naming the bare parameter (it was E12, which named no parameter, so param_migrate left it); D9g at an `any`
+  result is T25c naming the parameter (no value form to suggest); D9f says "writes 'p' or what it reaches". Left: T25c's
+  "what a bare parameter reaches" for a lambda's capture of a local.
+- **F5, over-rejection (left):** a function with a bare by-pointer parameter does not fit `fn(x T) T` with T bound to
+  the value type. It needs a by-value wrapper (a `FnKey` of its own, lowered as the Call adapter is, emitted and given
+  the evaluator's tables) - recorded for the next round; the default path refuses its own form too.
+
+### 15.2 Built for compiler/'s migration
+
+- **G30: what follows a decided if or match that leaves is not checked in that instance** (`check.decided`,
+  `instLeft`) - the "real bug" round 2e named: `t := ts[0]` after `if ts.Len() == 0 { return }` was E16 in the
+  length-0 instance, and `ts[1:]` D9a. On the default path too (a bug fix, SPEC G30 states it).
+- **followBare through a value match and a part of a call's result** (`paramsOf`'s Match case, `tempCall`): `fn (p
+  Program) FnDecl(f I64) ast.Func { return p.fns[f].F }` and `convertArg`'s match follow their bare parameter; an
+  instance's result follows by `roFollows` there.
+- **A lambda's capture of a `&` parameter handed on to a `&` parameter is a D9d use** (`refArg` with `outerParam`), and
+  D16c names the bare parameter a capture is (`noteOuterBare`) - api's and mcp's `cfg`.
+- **E28 at a constructor's `&` parameter kept only in fields read-only by inference is judged once settled**
+  (`condLent`, `condCtorArgs`, refused where the constructor writes through it - `tests/params/fail/condwritten.olang`).
+- **`:=` of a bare parameter holding references, never assigned whole after, is a value copy** (`plainBareCopy`), its
+  value followed back to the parameter (`bareParamAt` through `roCopies`, `placeName` of a bare parameter read whole):
+  `r := e; r.Target = t; return r` writes the copy's own fields, as by value (doc's `attached`).
+- **D9g's note names the bare parameter where some caller writes through the result** (`load.ResultWritten`, recorded
+  by `resultUse` at a write through, or a lend to a `&` parameter of, a reference a plain function's call gave -
+  directly or through the locals given it, `callOrigins`): `std/flags`' `byName` had been made a value result and its
+  callers' writes went to a copy - the tests failed at run time. And `param_migrate` drives again after its finish
+  phase (dropping a result's kept `mut` can leave D9g); std/flags' `byName`/`byShort` take `mut state&` in the old form.
+- **D9d's uses**: an element of a walk of what a `&` parameter reaches (`walkParam`, `walkSrcParam` through the
+  iterator call), a reference reached through one given an instance's parameter that keeps it (`refKeptArgs`), and one
+  handed back through a written `T&` result (not a `?&` - it follows).
+- **The MIR verifier** takes two instances of one generic type whose arguments differ only in which reference levels
+  may be written as one representation (`mir.sameRepr`) - a value result made read-only below its top by what it
+  follows.
+
+### 15.3 Decisions (mine, the user absent)
+
+1. **Read-only by origin, conservatively** (F1): an instance's value result holding a reference type that a read-only
+   argument's type holds is a read-only copy unless its body says otherwise - "where unsure, read-only".
+2. **Kept where unsure** (F2): the result outliving the argument's storage and able to name storage of its type is
+   enough to copy at a changing caller; a struct parameter whose result only holds what it reaches is copied too (a
+   shallow copy, only where the argument may change).
+3. **Copied for the call** (F3): a function value or an `any` beside a bare argument counts as writing anything; a
+   mutable global's storage given bare is always copied (no write summary by storage type yet - 2.10's precise form,
+   decided to wait: the measured cost below says whether it is needed).
+4. **The evaluator copies every bare parameter on entry** (2.10's original statement) - compile-time storage, the
+   program's scope.
+5. **D9g takes `&` where a caller writes through the result**, never the value result (a migration must not change
+   what a program computes); the value result stays where nothing writes through it (the handover, D9h).
+6. **F5 waits** for a by-value wrapper, with the flip.
+
+### 15.4 New section-8 relaxations, for the next bulk review
+
+- `mir.sameRepr`: instances of one generic type equal up to reference permission in their arguments (the verifier;
+  layout is the same - every reference one pointer).
+- `followsResult` true for every reference result of an instance (round 2b: only a type variable's), and D9g skipped
+  in an instance where `followsArg` holds - an instance's view of its parameter's reach is no error there, its caller
+  reads it read-only where its argument is.
+- E28 deferred at a constructor's parameter (`condCtorArgs`), refused only where the constructor writes through it.
+- `plainBareCopy` for types holding references (a value copy where there was a read-only reference local).
+- `callOrigins`/`ResultWritten` only choose a note's form - no acceptance changes.
+
+### 15.5 Today's path
+
+Without the switches nothing changes but G30's dead tail (a fix: code after a decided leaving statement was checked in
+an instance where it is never reached) and the message function `ReadOnlyRefWrite` gaining a defaulted parameter;
+`make quick` passes but for the goldens of the edited compiler sources.
