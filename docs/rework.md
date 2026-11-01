@@ -1949,6 +1949,13 @@ seventh (F7), found after it, is fixed too.
   pass's `SliceArgs`, `readOnlyParam`): any slice had made its base local unstable for every call in the body, so
   `out.Push(text)` beside an `out.Push(text[:whole])` copied `text` for each call (F3's copy - std's float rendering
   did so at every `$x` of a float).
+- **D9d follows a reference a call hands back to the argument it is reached through** (`refParamOfX`'s call case;
+  `callArgParam` takes an argument of the result's own type over a receiver beside it): `unPassed(s.unAway(x))` -
+  handing `x`'s reach on through a following call to a `&` parameter used - is a use of `x`; it had been none, so D9d
+  made `x` bare and the lend of its reach was then refused, and the migration went round (21 of compiler/'s 25 D9d
+  rows were this). T25c's notes follow a read-only copy back to what it was copied out of (`roCopyFrom`), through a
+  `try` and an instance's call to the read-only argument it copies from, so the bare parameter is named: of the
+  T25c rows on compiler/'s root, 132 of 173 name one now (5 of 65 before).
 - **An atomic read through a `&` parameter's reach is a D9d use**: it is there to see another thread's write, which
   only a shared reference can (std/cancel's `spin(t Token&)` watching `t.flag.AtomicLoad()` - made bare, F7's copy at the
   spawn would never see the Cancel and the test spun forever).

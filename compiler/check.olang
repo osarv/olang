@@ -301,6 +301,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roArgs Vec<roArg>
     refKeptArgs Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>   # D9d: (body, "&" parameter) given (callee, by-value k)
     refCalls Map<pair.Pair<I64, I64>, typed.Expr&>   # D9d (round 2f): a reference local made from a call's result, the call
+    roCopyFrom Map<pair.Pair<I64, I64>, typed.Expr&> # T25c's note (round 2f): a read-only copy's value, what it is copied out of
     callOrigins Map<pair.Pair<I64, I64>, I64>   # resultUse: a reference local's last value a plain function's result, by function
     walkParam I64 = -1   # D9d (bulk review 5): the "&" parameter the walk whose element is being declared walks, -1 for none
     roFns Vec<roFn>
@@ -747,6 +748,7 @@ fn (c mut Checker&) reset() {
     c.roBorrows = Map<pair.Pair<I64, I64>, Bool>()
     c.roFrom = Map<pair.Pair<I64, I64>, roOrigin>()
     c.refCalls = Map<pair.Pair<I64, I64>, typed.Expr&>()
+    c.roCopyFrom = Map<pair.Pair<I64, I64>, typed.Expr&>()
     c.callOrigins = Map<pair.Pair<I64, I64>, I64>()
     c.roNeeds = Map<pair.Pair<I64, I64>, Bool>()
     c.roDeps = Vec<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
@@ -10504,6 +10506,7 @@ fn (c mut Checker&) placeName(p typed.Lvalue&) source.NameId {
 fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
     if c.roValue(x) {
         c.roCopies.Put(c.roKey(id), c.roName(x))
+        if source.NewParams { c.roCopyFrom.Put(c.roKey(id), x) }
         # (round 2c: the reference fields read-only by inference it rests on)
         if c.fieldRo.Len() > 0 {
             fs mut Vec<pair.Pair<I64, I64>>&c = Vec<pair.Pair<I64, I64>>()
@@ -10616,6 +10619,13 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Lvalue?&) {
     } else {
         c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopy(c.text(l.Name)))
     }
+    # (round 2f: the copy is of what a bare parameter reaches - that parameter named too, what param_migrate makes "&":
+    # through what the copy was made from, a call following its arguments included)
+    if not source.NewParams or not c.roCopyFrom.Has(c.roKey(id)) { return }
+    cx := try c.roCopyFrom.Get(c.roKey(id)) catch { return }
+    c.roCopyFrom.Remove(c.roKey(id))     # (a cycle of copies stops)
+    c.noteRoX(rec, cx, 1)
+    c.roCopyFrom.Put(c.roKey(id), cx)
 }
 
 # a value stored where it can be written (a declaration's written type, an assignment, a literal's element, a payload,
@@ -10759,11 +10769,18 @@ fn (c mut Checker&) localRefParam(id I64, depth I64) I64 {
 
 fn (c mut Checker&) callArgParam(x typed.Expr&) I64 {
     if x != typed.Expr.Call: return -1
-    for a in x.c.Args {
+    first I64 = -1
+    rt := typeOf(x)
+    for i, a in x.c.Args {
         k := c.refParamOfX(a)
-        if k >= 0: return k
+        if k < 0: continue
+        if first < 0: first = k
+        # (an argument of the result's own type is what it hands back - a receiver beside it reached through no more
+        # than the call: "s.unAway(x)" names x, not s)
+        ta := typeOf(a)
+        if i > 0 and c.isRef(ta) and c.isRef(rt) and c.P.T.Same(c.P.T.Plain(c.P.T.Referent(ta)), c.P.T.Plain(c.P.T.Referent(rt))): return k
     }
-    return -1
+    return first
 }
 
 # a place reached through a "&" parameter used where a writable one is wanted: the parameter used as one
@@ -10872,11 +10889,14 @@ fn (c mut Checker&) followedUse(x typed.Expr&) {
 # the "&" parameter of this body a reference value comes from, its index; -1 for none
 fn (c mut Checker&) refParamOfX(x typed.Expr&) I64 {
     if c.refConverted(x) is not null: return c.refParamOfX(c.refConverted(x)!)
+    u := unwrapped(x)
     return match x {
         case typed.Expr.Borrow(_, _, p): c.refParamOf(p)
         case typed.Expr.Slice(_, _, sl): c.refParamOf(sl.Base)
         case typed.Expr.Promote(_, _, pr): c.refParamOfX(pr.X)
-        case _: c.refParamOf(readPlace(unwrapped(x)))   # ("x!" read where x is, E35)
+        # (round 2f: a reference a call hands back - "unPassed(s.unAway(x))": what it is reached through by the call's
+        # arguments, D9d's use where it is given a "&" parameter)
+        case _: c.callArgParam(u) if source.NewParams and u == typed.Expr.Call else c.refParamOf(readPlace(u))
     }
 }
 
@@ -12273,10 +12293,13 @@ fn (c mut Checker&) noteRoX(rec I64, x typed.Expr&, depth I64) {
         case typed.Expr.Call(_, _, cl) {
             id := c.bodyOfCallee(cl.Target)
             if id < 0: return
+            # (round 2f: an instance's value holding what a read-only argument holds is a read-only copy of it too,
+            # roCallCopy - "o := try c.roFrom.Get(k)" with c bare)
             for k, a in cl.Args {
-                if (c.builds(id) or c.followsAt(id, k)) and c.roBelow(a): c.noteRoX(rec, a, depth + 1)
+                if (c.builds(id) or c.followsAt(id, k) or c.instanceBody(id)) and c.roBelow(a): c.noteRoX(rec, a, depth + 1)
             }
         }
+        case typed.Expr.Try(_, _, t) { if t.X is not null: c.noteRoX(rec, t.X!, depth + 1) }
         # (a conversion, or a reference's permission or nullability changed: what it is made from)
         case typed.Expr.Prim(_, _, _, _, args) {
             if args.Len() > 0: c.noteRoX(rec, args[0], depth + 1)
