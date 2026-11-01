@@ -2013,3 +2013,49 @@ seventh (F7), found after it, is fixed too.
 Without the switches nothing changes but G30's dead tail (a fix: code after a decided leaving statement was checked in
 an instance where it is never reached) and the message function `ReadOnlyRefWrite` gaining a defaulted parameter;
 `make quick` passes but for the goldens of the edited compiler sources.
+
+### 15.6 Left: compiler/ under the switches, and the order
+
+compiler/'s migrated root came down 115 -> 53 errors with this round's last checker (bc8b6d6), after four driven runs of
+`param_migrate` (the last 208 edits, 15 minutes at two jobs); none of the 53 names a bare parameter, so the tool can do
+no more, and the self-build under the switches was not reached - so no peak memory, wall time or miscompile bisection
+under the switches is measured this round, and the flip waits on these. What they are:
+
+1. **Readers of read-only trees taking `&` (39 T25c rows, most of them).** compiler/'s walkers over `typed.Expr`,
+   `typed.Lvalue` and `ast.Pattern` hand back borrowed references into what they are given (`callOf(x) typed.Call?&x`,
+   `patTail(r, ...) Array<Pattern&>&r`), so QCC makes their parameters "may write", and every caller must give
+   writable trees. The read-only-ness enters where a bare receiver's collection is read (`init := try s.inits.Get(l)`,
+   `fd := c.P.FnDecl(f)` following a bare `p`), where a nullable parameter is read-only by inference, and where a local's
+   level is inferred read-only (`xs Vec<typed.Expr&>` given a nullable parameter's reach, then handed to a `&`
+   parameter needing the level writable): the inference makes the local's level read-only instead of widening the
+   source, and nothing then names a bare parameter for the tool. The two directions to choose between (round 2g): read
+   a level's need backwards through such locals (widen the source, as wantWritable does for a nullable parameter), or a
+   reader returning a borrowed result follows its argument's permission as an instance's result does (2.8) - the second
+   is the one the language asks for (QCC's "read-only is said by a value" has no nullable value form, so `callOf` cannot
+   return one).
+2. **Read-only copies kept** (9): a constructor given parts of a read-only copy (`ctSource(fd.S.Contract!, ...)`), and
+   `Push`/`Put` of one into a collection with writable levels (api, doc, eval, mir, needs). Needs 2.8's per-field
+   level of a collection's type argument, or the caller made `&` by hand.
+3. **Value results out of a match on a following call** (3): `return match s.unAway(x) { case Promote(_, _, pr): pr.X
+   ... }`, `fn (c Checker) cur0(id I64) typed.Body { return c.Bodies[id] }` - followBare does not yet read through a
+   binding's dereference to the held subject.
+4. **D9d paired with the above** (4): the use is a lend of the reach of the parameter the checker does not attribute
+   (types.NamesOf's `t`, eval's `TraceWhat`, generic's `SynthGlobal`, check's `callArgParam`).
+5. **Section 8 over a bare parameter's reach** (10): a constructor's temporary holding a bare reach given to a bare or
+   nullable parameter (O25h: `s.aliasBlock(typed.Block(id, q.Stmts))`, definit's `w.block(...)`; profile's `String(b[40
+   + words * 8:])` stored), O17 at lane results and `fit` results pushed, O11/O12 at a primitive over two of them, T17c
+   at `ast.Expr.Member(sp, x, n)` of a bare `x`, O27 at bindgen's kept view of `rest`. These are 2.10's "temporaries of
+   a bare parameter's reach" - a temporary lent read-only and kept by nothing may live in the innermost scope; T17c's
+   `roTemp` (15.4) is that rule for one payload shape, not yet for a constructor's or a lane's.
+6. **E12** (1): a bare array parameter assigned whole (`pre = c.spread(args[0])`) - the assignment fits the written
+   value type, not the read-only reference the parameter is; rebinding should be allowed (the parameter's own value).
+7. **Constant text in a writable-element literal** (1): `String&["git", ..., branch, ...]` with `branch` a literal on
+   one path (fetch) - a genuine T25d case for this code; `$branch` fixes it.
+
+In order, before the flip (round 4): 1 and 2 (the language's choice in 1 first), 3, 5 (the innermost-scope rule for
+read-only temporaries, generally), 6, 4 and 7 by the tool once the rest is in; then compiler/ to zero, the self-build
+under the switches (stage 2 == stage 3), the suite with it, and the measurements this round could not make. Also left:
+2.10's partial copy (F3's copy is the whole argument; `sb.Push(t)` copies `t` wherever `t` may change, since a
+StringBuilder's buffer may hold storage of `t`'s type - the cost to measure on the self-build), and the field loop's
+incremental form (the scope phase's cost under OLANG_SCOPES=infer, round 1). Not begun, as briefed: round 3 (QCE's
+value arrays in structures, `Map<String, V>` owning its keys) and round 4 (the flip).

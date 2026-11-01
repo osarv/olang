@@ -450,8 +450,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   D9g's note naming the parameter `&` where a caller writes through the result (a value result had made std/flags'
   callers write a copy); G30's decided `if` that leaves no longer checks what follows it in that instance (an E16 at
   `ts[0]` after `if ts.Len() == 0 { return }`, the default path too). A function with a bare parameter is a value of a
-  function type passing it by value through a wrapper (F5). Left before the flip: compiler/'s migration and
-  self-build (docs/rework.md 15.6), the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
+  function type passing it by value through a wrapper (F5). Left before the flip: compiler/'s migrated root
+  115 -> 53 errors, none the tool can fix - readers of read-only trees taking `&`, read-only copies kept, section 8
+  over a bare reach's temporaries (docs/rework.md 15.6) - then the self-build under the switches, the field loop; round 3 (value arrays in values, `Map<String, V>` keys) not begun.
   The entry below is today's rule until it lands.
 - **A guarantee is declared by holding a value (the user's decision 2026-10-31; not built yet - held with QCC).** What
   must not change from outside is declared by value, and gets its own copy where it is kept: `Map<String, V>` holds

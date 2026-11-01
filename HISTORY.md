@@ -27606,3 +27606,11 @@ parameter followed). The error is now made where the lend is, with notes found t
 settle chooses or drops it. And F7's copy at the spawn turned a migrated std/cancel test into an endless loop: its
 `spin(t Token&)` watches `t.flag.AtomicLoad()` while the spawner cancels, D9d had made `t` bare (never written), and a
 bare parameter is a copy - so an atomic read through a `&` parameter now counts as a use.
+
+**Where compiler/'s migration stopped.** With the round's last checker the migrated root has 53 errors, none naming a
+bare parameter (docs/rework.md 15.6 lists them): mostly compiler/'s readers of read-only trees that hand back borrowed
+references into what they are given and so take `&` - a shape QCC leaves no read-only form for, since a nullable
+reference has no value form - with the read-only-ness entering through a bare receiver's collection reads, nullable
+parameters read-only by inference and locals whose level the inference made read-only rather than widening their
+source. The self-build under the switches therefore waits for round 2g; the choice it needs first is whether such a
+reader's borrowed result follows its argument's permission, as an instance's already does.
