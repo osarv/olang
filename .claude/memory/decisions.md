@@ -2366,3 +2366,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   arrays), the C rule (`T*` is `mut T&`, `const T*` is `T&`). Moot with it: QCJ's `any W` value form (`any W&` read-only,
   `mut any W&` writable stay as today; no silent box copy stays), D9e's refusal of a kept bare parameter (a bare
   parameter is the callee's own copy again). Round 3c paused (WIP on wt-rework).
+- `any` layout CONFIRMED 2026-11-01 (the user: "Good, keep it that way"): an `any Trait&` is two words, the instance
+  and a static table per (type, trait) - identity, `$`'s renderings, the slot functions, never the instance's size;
+  nothing through an `any` copies or lays out its instance. The reference-only types, always written `&`: `any W&`,
+  function types (`fn&`, QCI 3), types with a destructor (C11) and extern types (`extern type Db`, X10).
