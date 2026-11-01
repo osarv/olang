@@ -2312,3 +2312,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   leaves value types, List stays a handle with Clone; (4) a result's link to its argument's permission through a nested
   call is fixed in the checker, not by hand forms (list's `Last` back to its plain form once it is). The agent's nine
   details (docs/rework.md 17.3) stand; 2 (a constructor's kept instance copying its fresh parts again) is item 2.10's.
+- QCI 3, the user 2026-11-01: "What if we put the null marker after fn?" - read as `fn?(e Event)`. Answered: a
+  function value has no `&` to put `?` on, so the marker goes on the word that says "this is a function value", as
+  `?&` sits on the reference marker; never in a declaration (`fn name(` has a name) or a lambda (never null), so `fn?(`
+  parses with one token of lookahead; the error set stays after the result (`fn?(x I64) I64 ? E`). PROPOSED (rec):
+  function values never null unless written `fn?(...)`; `fn?` has `?&`'s rules (null its zero, `is null` / `is not
+  null` narrowing locals and parameters, `f!`, a `fn(...)` flows into `fn?(...)`, nothing called through one before
+  narrowing); a plain `fn(...)` field or local has no zero value, so it is assigned before any read (D13d) or given a
+  do-nothing default. Combines (b) and (c). ASKED to confirm. In effect: function values nullable (T21).
