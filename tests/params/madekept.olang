@@ -50,3 +50,20 @@ test joined "Split's pieces given where references to text are taken" {
     assert joined("a/b/c".Split("/")) == "a/b"
     assert joined(String&["x", "y"]) == "x/y"
 }
+
+# a matrix of rows walked recursively, each level's rows made of the tails of the last's - read-only patterns of the
+# caller's held in Vecs whose levels are read-only (2.8), the rows taken bare: keeping the tails keeps nothing writably
+fn depthOf(rows Vec<Array<cell&>&>, depth I64) I64 {
+    if depth > 3 or rows.Len() == 0: return depth
+    sub := Vec<Array<cell&>&>()
+    for r in rows {
+        if r.Len() > 1: sub.Push(tail(r))
+    }
+    return depthOf(sub, depth + 1)
+}
+
+test depthOf "rows of tails, recursively, kept in Vecs of read-only levels" {
+    rows := Vec<Array<cell&>&>()
+    rows.Push(cell&[cell(1), cell(2), cell(3)])
+    assert depthOf(rows, 0) == 3
+}

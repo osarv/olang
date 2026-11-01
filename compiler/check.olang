@@ -11282,12 +11282,24 @@ fn (c mut Checker&) argFor(ps Array<types.TypeId>&, k I64, target typed.Callee&,
     if fd.Recv is not null and k == 0 { c.argName = c.text(fd.Recv!.Name) } else if j >= 0 and j < fd.S.Params.Len() { c.argName = c.text(fd.S.Params[j].Name) }
 }
 
+# whether a reference is a temporary given a value made where it stands - a call's value result, an array, a case
+fn (c mut Checker&) freshTemp(x typed.Expr&) Bool {
+    return match unwrapped(x) {
+        case typed.Expr.Promote(_, _, pr): not c.isRef(typeOf(pr.X)) and (pr.X == typed.Expr.Call or c.freshValue(pr.X))
+        case _: false
+    }
+}
+
 # a reference argument for parameter k of body: one reached through this body's "&" parameter is used as one where
 # that parameter is a "&" one used as one; given a bare one, it is only read
 fn (c mut Checker&) refArg(body I64, k I64, e typed.Expr&) {
     ps0 := c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))
     if source.NewParams and k < ps0.Len() and c.isRef(ps0[k]) and c.writable(ps0[k]) and not c.builds(body): c.resultUse(e)
     j := c.refParamOfX(e)
+    # (round 3c: a temporary of a value made where it stands, given a parameter whose type holds nothing writable below
+    # its top - "sub.Push(tail(r))" into a Vec of read-only levels: nothing of what a "&" parameter reaches is handed on
+    # where it may be written)
+    if source.NewParams and k < ps0.Len() and c.freshTemp(e) and not c.holdsWritable(c.P.T.Referent(ps0[k])): j = -1
     owner := pair.Pair(c.fr().Body, j)
     # (a bare parameter's own value - its copy - handed to a "&" parameter: refused at the settle where that one is read
     # atomically, for another thread's write, which the copy never sees)
@@ -11723,7 +11735,11 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr?&, sp source.Span, ca
     if c.isRef(typeOf(e)) {
         # (bulk review 5, D9d: a reference reached through a "&" parameter given an instance's parameter that keeps it
         # writable - Put's key - uses that parameter, once the need is settled)
-        if source.NewParams and c.refParamOfX(e) >= 0 and c.roByArg(body, k) { c.refKeptArgs.Push(pair.Pair(pair.Pair(me, c.refParamOfX(e)), pair.Pair(body, k))) }
+        # (round 3c: not a temporary of a value made here holding what it reaches only at levels read-only in the
+        # parameter's type - "sub.Push(tail(r))" into a Vec whose levels are read-only: what is kept reaches nothing
+        # writably)
+        kept := not (c.freshTemp(e) and not c.holdsWritable(c.P.T.Referent(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])))
+        if source.NewParams and kept and c.refParamOfX(e) >= 0 and c.roByArg(body, k) { c.refKeptArgs.Push(pair.Pair(pair.Pair(me, c.refParamOfX(e)), pair.Pair(body, k))) }
         # an instance's read-only reference parameter (roByArg): a read-only argument is judged once its need is known
         if not c.roByArg(body, k) { return }
         r := c.P.T.Referent(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])
