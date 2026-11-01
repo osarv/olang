@@ -2285,3 +2285,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `T*` is `p T&`; an owned value (a local, a field through one) is borrowed writably, no copy; only a source that cannot
   be borrowed writably (a bare parameter, constant data, an immutable global, a read-only view) is copied for C (an
   error for an olang `&` parameter).
+- Rework round 2f's two questions DECIDED by me 2026-11-01 (the user's QCC rule applied; theirs to review): (1) a bare
+  parameter given whole to an olang or C `&` parameter stays the body's own copy, made on entry (D9, QCC: a bare
+  parameter may write its own copy) - not an error; only constant data, an immutable global and a read-only view are
+  errors for an olang `&` (copied for C). (2) a function that only hands back views of what it is given (`Split`,
+  `Lines`, `filepath.Dir`, compiler/'s tree readers `callOf`, `patTail`) takes its input bare and returns a VALUE,
+  handed over uncopied where nothing changes the source (D9h generalized to every value result and to elements), and
+  says absence by an error, never `?&` (no nullable value form - QAZ - and "errors are errors"); neither of round 2f's
+  options (a `&` result following its argument's permission would hide read-only behind `&`, against "every `&` a
+  signature shows is writable"). Needs round 3's value arrays inside values (`Vec<String>` elements by value), so round
+  3 runs before compiler/ is taken to zero.

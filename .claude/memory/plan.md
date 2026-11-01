@@ -681,3 +681,11 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   FOR THE BULK REVIEW (add): D9e's caller copy and stableArg/refStable exemptions, ownT/keepOwn, open point 5's
   valueCovered/valueRels, bareLent, the Promote fit for read-only temporaries. Running: round 2f (compiler/ to zero,
   self-build) and bulk review 5 (read-only, rounds 1-2e's relaxations) side by side.
+- 2026-11-01 CET: rework round 2f merged (7a45087; default-path verify passed on 6f0c00d, goldens recaptured):
+  bulk review 5's F1-F7, D9e (a kept bare parameter refused, no caller copy), X22's C pointers (owned values borrowed,
+  const trusted, copies listed by -memory), atomic reads of bare parameters refused, a conditional/match/try of arrays
+  into a value local now copies (bug on both paths). Under the switches std 33/40 (the 7 blocked by view-returning
+  readers), compiler/ 53 errors. Next: round 3 (fresh agent) - value results handed over uncopied for every value and
+  element, readers and Split to values with absence as errors, QCE's value arrays inside values and Map<String, V>,
+  handles as values (Vec, Map, Set, Deque, Heap, StringBuilder; List a handle), Clone() off value types, then compiler/
+  to zero and the self-build under the switches.
