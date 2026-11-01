@@ -74,6 +74,13 @@ type Lowerer struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     failCode Vec<I64>              # and its code under that type alone
     charT types.TypeId = types.TypeId(-1)
     textT types.TypeId = types.TypeId(-1)
+    # round 2d (D9h), counted for -memory: returns handing back a view as it is, calls whose view is read where it stands,
+    # and calls copying a view into where their result goes
+    ViewReturns I64 = 0
+    ViewReads I64 = 0
+    ViewCopies I64 = 0
+    ViewDump Bool = false        # OLANG_VIEWDUMP: each such call's decision, by place, in ViewLog
+    ViewLog Vec<String&>
 }
 
 # what a check failing as written fails with (E15a, R20): a word of a prelude error type
@@ -169,6 +176,7 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
         case mir.FnKey.Body(id) { return lw.Lower(I64(id)) }
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
         case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
+        case mir.FnKey.Copied(body) { return lw.copiedFn(body) }
         case mir.FnKey.Init(m) { return lw.initFn(m) }
         case mir.FnKey.AnyRender(ti, top) { return lw.anyRender(ti, top) }
     }
@@ -307,6 +315,12 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     tryRel I64 = -1                 # a try statement with clauses releasing its value on its success path (O8d): -1 not,
                                     # 0 the value, 1 the handle's state (free.IsHandle)
     walkSite typed.SiteId = typed.SiteId(-1)    # D18e: the generator call whose walk a for-in makes and finishes here
+    # round 2d (D9h): the call sites whose array value result is read where it stands - its consumer only reads it before
+    # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
+    # handing back views copies its result at every other site
+    reads Map<I64, Bool>
+    stmts Vec<typed.Stmt&>       # ... the statements being lowered, innermost last, and whether each writes nothing
+    stmtSafe Vec<I64>            # it reaches but through its own last store (quietStmt): -1 not yet asked, 0 no, 1 yes
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -794,6 +808,14 @@ fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs ty
 
 fn (ln mut lowering&) stmt(s typed.Stmt&) {
     if ln.dead { return }
+    ln.stmts.Push(s)
+    ln.stmtSafe.Push(-1)
+    ln.stmtIn(s)
+    ln.stmts.Pop()!
+    ln.stmtSafe.Pop()!
+}
+
+fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
     match s {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
@@ -1110,11 +1132,14 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
         case _ { }
     }
     res := ln.T.Result(ln.B.Ty)
+    # (round 2d, D9h: a view of what this body's arguments reach - its calls handing back views read as they are - is
+    # handed back as it is; its callers copy it where they keep it)
+    view := ln.retView(value)
     # a fixed array widened is made in the result scope, the result as it is (T7b, T7c)
     v := ln.fitAt(value, res, sp, ln.resultScope())
     if ln.dead { return }
     l := ln.local(v, res, sp)
-    if not ln.fits(value, res) and not ln.widens(value, res) { ln.retArrays(l, res, value, sp) }
+    if not view and not ln.fits(value, res) and not ln.widens(value, res) { ln.retArrays(l, res, value, sp) }
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
 }
@@ -1930,6 +1955,7 @@ fn (ln mut lowering&) evalStmt(sp source.Span, x typed.Expr&) {
             }
         }
     }
+    if rel.Len() == 0 { ln.readHere(x) }     # (round 2d: a value nothing keeps)
     v := ln.val(x)
     if rel.Len() == 0 or ln.dead { return }
     l := ln.local(v, x.Type(), sp)
@@ -2183,8 +2209,12 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         case _: false
     }
     ops := Array<mir.Operand>(c.Args.Len())
+    # (round 2d, D9h: an argument for a read-only parameter of a call whose result holds no reference is only read
+    # before the call returns)
+    reads := not t.HoldsRefs(t.Result(ty))
     for i in range c.Args.Len() {
         a := c.Args[i]
+        if reads and i < ps.Len() and not (t.IsRef(ps[i]) and (t.PermOf(ps[i]) & types.Writable) != 0) { ln.readHere(a) }
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
@@ -2235,7 +2265,294 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         return mir.Operand.None
     }
     if dest == mir.NoLocal { return mir.Operand.None }
+    # round 2d (D9h): a function handing back a view of what it is given - copied into where its result goes, as the
+    # function would have, unless the value is only read here before anything can change what it views
+    if ln.viewCall(c, ty) {
+        if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) ": " $("read" if ln.reads.Has(I64(c.Site)) else "kept") $(" stable" if ln.stableViews(c) else "")) }
+        if ln.reads.Has(I64(c.Site)) and ln.stableViews(c) {
+            ln.L.ViewReads++
+        } else {
+            ln.L.ViewCopies++
+            return ln.arrayCopy(mir.Operand.Copy(mir.L(dest)), ty, sp, ln.resultOf(fty, scopes))
+        }
+    }
     return mir.Operand.Copy(mir.L(dest))
+}
+
+# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+
+# the parameters a body's result may be a view of (check's load.ViewResults), where the body is lowered with a plan
+# under the rework's round 2 - none otherwise: while compiling, and for any other body, a returned view is copied (T7b)
+fn (lw Lowerer&) ViewsOf(id typed.BodyId) I64 {
+    if not source.NewParams or I64(id) < 0 or I64(id) >= lw.Plans.Len() or I64(id) >= lw.Bodies.Len(): return 0
+    return match lw.Bodies[I64(id)].Of {
+        case typed.BodyOf.Fn(inst): try lw.P.L.ViewResults.Get(inst) catch default I64(0)
+        case _: 0
+    }
+}
+
+# the walk over this body (typed.ViewWalk), as check made it
+fn (ln mut lowering&) viewWalk() typed.ViewWalk {
+    m I64 = 0
+    b := ln.B
+    for k in range b.Params.Len().Min(typed.ViewBits) {
+        key := pair.Pair(b.File, I64(b.Local(b.Params[k]).Sp.Start))
+        if not ln.L.P.L.ParamWritten.Has(key) and not ln.L.P.L.BareWritten.Has(key): m |= I64(1) << k
+    }
+    lw := ln.L
+    return typed.ViewWalk(ln.T, b, m, fn(id typed.BodyId) I64 { return lw.ViewsOf(id) })
+}
+
+# whether a return hands back a view of what the arguments reach, as it is: its calls handing back views marked read
+fn (ln mut lowering&) retView(x typed.Expr&) Bool {
+    if ln.L.ViewsOf(ln.B.Id) <= 0 or not ln.valueArray(ln.T.Result(ln.B.Ty)): return false
+    w := ln.viewWalk()
+    if w.Roots(x) <= 0: return false
+    ln.markViews(w, x)
+    ln.L.ViewReturns++
+    return true
+}
+
+# the calls of an expression a return hands back as they are (typed.ViewWalk.Roots): each read where it stands
+fn (ln mut lowering&) markViews(w typed.ViewWalk&, x typed.Expr?&) {
+    if x is null: return
+    match x {
+        case typed.Expr.Call(_, _, c) { if w.CallRoots(c) > 0: ln.reads.Put(I64(c.Site), true) }
+        case typed.Expr.Cond(_, _, k) {
+            ln.markViews(w, k.A)
+            ln.markViews(w, k.B)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms { ln.markViews(w, a.Value) }
+            if m.NoMatch is not null { ln.markViews(w, m.NoMatch!.Value) }
+        }
+        case typed.Expr.Try(_, _, tr) {
+            ln.markViews(w, tr.X)
+            for c in tr.Clauses {
+                for d in c.Defaults { ln.markViews(w, d) }
+            }
+        }
+        case typed.Expr.Seq(_, _, q) { ln.markViews(w, q.X) }
+        case typed.Expr.Away(_, _, y) { ln.markViews(w, y) }
+        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.markViews(w, args[0]) }
+        case _ { }
+    }
+}
+
+# whether a call is of a function handing back a view of what it is given, its result an array value
+fn (ln mut lowering&) viewCall(c typed.Call&, ty types.TypeId) Bool {
+    id := match c.Target {
+        case typed.Callee.Body(i): i
+        case _: typed.BodyId(-1)
+    }
+    return id >= typed.BodyId(0) and ln.L.ViewsOf(id) > 0 and ln.valueArray(ty)
+}
+
+# x, where it stands, is only read before its statement ends: the call of a function handing back views it is (through
+# a conversion or a temporary's storage given to it) may give its view as it is (call)
+fn (ln mut lowering&) readHere(x typed.Expr&) {
+    match x {
+        case typed.Expr.Call(_, _, c) { ln.reads.Put(I64(c.Site), true) }
+        case typed.Expr.Promote(_, _, pr) { ln.readHere(pr.X) }
+        case typed.Expr.Prim(_, _, op, _, args) { if op == typed.PrimOp.Convert and args.Len() == 1: ln.readHere(args[0]) }
+        case typed.Expr.Away(_, _, y) { ln.readHere(y) }
+        case typed.Expr.Seq(_, _, q) { if q.X is not null and q.Stmts.Len() == 0: ln.readHere(q.X!) }
+        case _ { }
+    }
+}
+
+# whether every argument a call may hand back a view of is storage nothing in this function can change before the view
+# is read: what a bare parameter of this function reaches (read-only here - and, as 2.10 has it, written by nothing the
+# call it is in reaches), constant data, or a value made for the call (no other name holds it)
+fn (ln mut lowering&) stableViews(c typed.Call&) Bool {
+    id := match c.Target {
+        case typed.Callee.Body(i): i
+        case _: typed.BodyId(-1)
+    }
+    v := ln.L.ViewsOf(id)
+    if (v & typed.ViewOther) != 0: return false
+    for k in range c.Args.Len().Min(typed.ViewBits) {
+        if (v & (I64(1) << k)) != 0 and not ln.stableRef(c.Args[k]): return false
+    }
+    return true
+}
+
+fn (ln mut lowering&) stableRef(r typed.Expr&) Bool {
+    # (what any place of this function reaches, where the statement the view is read in writes nothing until its end)
+    if ln.quiet() and ln.placeRooted(r): return true
+    return match r {
+        case typed.Expr.Read(_, _, p, _): ln.stableHolder(p)
+        case typed.Expr.Borrow(_, _, p): ln.stablePlace(p)
+        case typed.Expr.Slice(_, _, sl): ln.stablePlace(sl.Base)
+        case typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Promote(_, _, pr): ln.stableMade(pr.X)
+        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and ln.stableRef(args[0])
+        case typed.Expr.Away(_, _, y): ln.stableRef(y)
+        case _: false
+    }
+}
+
+# whether a reference is read out of, or borrows, a place of this function: a local's or a parameter's, or a part of
+# one, or what one reaches
+fn (ln mut lowering&) placeRooted(r typed.Expr&) Bool {
+    return match r {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): ln.localRooted(p)
+        case typed.Expr.Slice(_, _, sl): ln.localRooted(sl.Base)
+        case typed.Expr.Prim(_, _, op, _, args): typed.PassesRefs(op) and args.Len() > 0 and ln.placeRooted(args[0])
+        case typed.Expr.Away(_, _, y): ln.placeRooted(y)
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) localRooted(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, _): true
+        case typed.Lvalue.Field(_, _, base, _): ln.localRooted(base)
+        case typed.Lvalue.Elem(_, _, e): ln.localRooted(e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.localRooted(py.Base)
+        case typed.Lvalue.Deref(_, _, x): ln.placeRooted(x)
+        case _: false
+    }
+}
+
+# whether the statement being lowered writes nothing a view read in it could view before it ends: no call in what it
+# evaluates gives a writable reference, calls through a function value or an "any", or runs statements of its own (a
+# block of a match, a clause, a comprehension, a lambda made) - so between a call handing back a view of what a place of
+# this function reaches and the view's last read in the statement nothing writes it (nothing but what reaches the same
+# storage from a mutable global through a call given read-only arguments - 2.10's provisional hole, stated)
+fn (ln mut lowering&) quiet() Bool {
+    n := ln.stmtSafe.Len()
+    if n == 0: return false
+    if ln.stmtSafe[n - 1] < 0: ln.stmtSafe[n - 1] = 1 if ln.quietStmt(ln.stmts[n - 1]) else 0
+    return ln.stmtSafe[n - 1] == 1
+}
+
+fn (ln mut lowering&) quietStmt(s typed.Stmt&) Bool {
+    return match s {
+        case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x): ln.quietX(x)
+        case typed.Stmt.Assign(_, p, x): ln.quietPlace(p) and ln.quietX(x)
+        case typed.Stmt.If(_, i): ln.quietX(i.Test)
+        case typed.Stmt.Return(_, x): ln.quietX(x)
+        case typed.Stmt.Assert(_, c, _): ln.quietX(c)
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) quietX(x typed.Expr?&) Bool {
+    if x is null: return true
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): ln.quietPlace(p)
+        case typed.Expr.Promote(_, _, pr): ln.quietX(pr.X)
+        case typed.Expr.Call(_, _, c): ln.quietCall(c)
+        case typed.Expr.Make(_, _, m): ln.quietAll(m.Items) and ln.quietX(m.Length)
+        case typed.Expr.Prim(_, _, _, _, args): ln.quietAll(args)
+        case typed.Expr.Slice(_, _, sl): ln.quietPlace(sl.Base) and ln.quietX(sl.Lo) and ln.quietX(sl.Hi)
+        case typed.Expr.Cond(_, _, k): ln.quietX(k.C) and ln.quietX(k.A) and ln.quietX(k.B)
+        case typed.Expr.Seq(_, _, q): q.Stmts.Len() == 0 and ln.quietX(q.X)
+        case typed.Expr.Try(_, _, tr): ln.quietX(tr.X) and ln.quietClauses(tr)
+        case typed.Expr.Text(_, _, tx): ln.quietPieces(tx)
+        case typed.Expr.Away(_, _, y): ln.quietX(y)
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) quietAll(xs Array<typed.Expr&>&) Bool {
+    for x in xs {
+        if not ln.quietX(x): return false
+    }
+    return true
+}
+
+fn (ln mut lowering&) quietClauses(tr typed.Try&) Bool {
+    for c in tr.Clauses {
+        if c.Code is not null or not ln.quietAll(c.Defaults): return false
+    }
+    return true
+}
+
+fn (ln mut lowering&) quietPieces(tx typed.Text&) Bool {
+    for pc in tx.Pieces {
+        match pc {
+            case typed.Piece.Render(x) { if not ln.quietX(x): return false }
+            case _ { }
+        }
+    }
+    return true
+}
+
+fn (ln mut lowering&) quietPlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _), typed.Lvalue.Target(_, _): true
+        case typed.Lvalue.Deref(_, _, r): ln.quietX(r)
+        case typed.Lvalue.Field(_, _, base, _): ln.quietPlace(base)
+        case typed.Lvalue.Elem(_, _, e): ln.quietPlace(e.Base) and ln.quietX(e.Index)
+        case typed.Lvalue.Payload(_, _, py): ln.quietPlace(py.Base)
+        case typed.Lvalue.Temp(_, _, v, _): ln.quietX(v)
+    }
+}
+
+# a call writing nothing it is not given writably: a body's, an extern's or a helper's, every argument read-only or a value
+fn (ln mut lowering&) quietCall(c typed.Call&) Bool {
+    t := ln.T
+    ty := match c.Target {
+        case typed.Callee.Body(id): ln.L.Bodies[I64(id)].Ty
+        case typed.Callee.Extern(f): ln.L.P.Sig(f)
+        case typed.Callee.Helper(_, _): types.UnknownT
+        case _: types.TypeId(-1)
+    }
+    if ty == types.TypeId(-1): return false
+    ps := t.Items(t.Params(ty)) if ty != types.UnknownT else Array<types.TypeId>(0)
+    for k in range c.Args.Len() {
+        if k < ps.Len() and t.IsRef(ps[k]) and (t.PermOf(ps[k]) & types.Writable) != 0: return false
+        if not ln.quietX(c.Args[k]): return false
+    }
+    return true
+}
+
+# a place holding the reference: a bare parameter's (a read-only reference parameter of this body), a part of one, or
+# what one reaches
+fn (ln mut lowering&) stableHolder(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, ty, id): ln.B.Local(id).Kind == typed.LocalKind.Param and ln.T.IsRef(ty) and (ln.T.PermOf(ty) & types.Writable) == 0
+        case typed.Lvalue.Field(_, _, base, _): ln.stableHolder(base)
+        case typed.Lvalue.Elem(_, _, e): ln.stableHolder(e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.stableHolder(py.Base)
+        case typed.Lvalue.Deref(_, _, r): ln.stableRef(r)
+        case _: false
+    }
+}
+
+fn (ln mut lowering&) stablePlace(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Deref(_, _, r): ln.stableRef(r)
+        case typed.Lvalue.Field(_, _, base, _): ln.stablePlace(base)
+        case typed.Lvalue.Elem(_, _, e): ln.stablePlace(e.Base)
+        case typed.Lvalue.Payload(_, _, py): ln.stablePlace(py.Base)
+        case _: false
+    }
+}
+
+# a value given storage for the call (Promote): new - made there, or a call's result (copied, or a view read as it is,
+# whose own arguments were found stable where it was lowered)
+fn (ln mut lowering&) stableMade(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _), typed.Expr.Text(_, _, _), typed.Expr.Lit(_, _, _): true
+        case typed.Expr.Call(_, _, c): not typed.ScopedCall(c)
+        case typed.Expr.Read(_, _, p, _): ln.stablePlace(p)
+        case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and ln.stableMade(args[0])
+        case typed.Expr.Away(_, _, y): ln.stableMade(y)
+        case _: false
+    }
+}
+
+# where a call's result goes: the scope it passes for its callee's result scope, the program's where it passes none
+fn (ln mut lowering&) resultOf(fty types.TypeId, scopes mir.Range) mir.ScopeRef {
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len() {
+        if vs[j] == types.ResultVar and j < I64(scopes.N): return ln.F.Refs[I64(scopes.At) + j]
+    }
+    return mir.ScopeRef.Program
 }
 
 # D18e: call k, a generator function's for a for-in's own iterator, marked as the walk its block finishes - where the
@@ -2740,7 +3057,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Named(body): ln.into(ty, mir.Rvalue.Closure(ln.L.CodeOf(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site): ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site): ln.adapter(call, recv, site, ty, sp)
     }
@@ -2792,6 +3109,7 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
     for i in range tx.Pieces.Len() {
         match tx.Pieces[i] {
             case typed.Piece.Render(x) {
+                ln.readHere(x)
                 vals[i], tys[i] = ln.piece(x, sp)
             }
             case _ { }
@@ -3457,7 +3775,70 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return
     }
-    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest)))
+    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else ln.viewCopied(call, mir.Operand.Copy(mir.L(dest)), res, sp))
+}
+
+# round 2d (D9h): what a call of body made in a function lowering makes for a caller that cannot know what it returns
+# (a function value's, an "any"'s slot) - copied into the function's result scope where the body hands back views
+fn (ln mut lowering&) viewCopied(body typed.BodyId, v mir.Operand, res types.TypeId, sp source.Span) mir.Operand {
+    if ln.L.ViewsOf(body) <= 0 or not ln.valueArray(res): return v
+    at := mir.ScopeRef.Program
+    for k in range ln.F.Vars.Len() {
+        if ln.F.Vars[k] == mir.VarKind.Result: at = mir.ScopeRef.Var(k)
+    }
+    return ln.arrayCopy(v, res, sp, at)
+}
+
+# the code a function value or an "any"'s slot of body calls: the body, or its copying wrapper where it hands back
+# views of what it is given (mir.FnKey.Copied)
+fn (lw mut Lowerer&) CodeOf(body typed.BodyId) mir.FnKey {
+    return mir.FnKey.Copied(body) if lw.ViewsOf(body) > 0 else mir.FnKey.Body(body)
+}
+
+# a function handing back views, called as a function value or through an "any" (mir.FnKey.Copied): its parameters
+# passed on, its scopes its own, its result copied into its result scope
+fn (lw mut Lowerer&) copiedFn(body typed.BodyId) mir.Fn {
+    ty := lw.Bodies[I64(body)].Ty
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Copied(body), ty))
+    ln.copiedBody(body, ty)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+fn (ln mut lowering&) copiedBody(body typed.BodyId, ty types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    for p in t.Items(t.Params(ty)) { ln.F.AddParam(source.NameId(0), sp, p) }
+    vs := t.ScopeVarsOf(ty)
+    for v in vs { ln.F.Vars.Push(mir.VarKind.Result if v < 0 else mir.VarKind.Param(v)) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+    args := Array<mir.Operand>(ln.F.Params.Len())
+    for i in range ln.F.Params.Len() { args[i] = mir.Operand.Copy(mir.L(ln.F.Params[i])) }
+    passed := Array<mir.ScopeRef>(vs.Len())
+    for k in range vs.Len() { passed[k] = mir.ScopeRef.Var(k) }
+    res := t.Result(ty)
+    ok := ln.F.NewBlock()
+    dest := ln.temp(res, sp)
+    code := mir.NoLocal
+    eb := mir.NoBlock
+    if t.Items(t.Errors(ty)).Len() > 0 {
+        code = ln.temp(mir.I32T, sp)
+        eb = ln.F.NewBlock()
+    }
+    k := ln.F.AddCall(mir.Call(mir.Callee.Fn(mir.FnKey.Body(body), ty), ln.F.Args(args), ln.F.ScopeRefs(passed), mir.L(dest)
+                               true, ok, code, eb))
+    ln.end(mir.Term.Call(sp, k))
+    if eb != mir.NoBlock {
+        ln.start(eb)
+        ln.leave(0)
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+    }
+    ln.start(ok)
+    ln.epilogue(ln.viewCopied(body, mir.Operand.Copy(mir.L(dest)), res, sp))
 }
 
 # a module's initialization (B5a): each of its globals' initializers run, each after the globals it reads - check's

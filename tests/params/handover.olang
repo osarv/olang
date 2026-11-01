@@ -1,0 +1,83 @@
+# The scoping and parameters rework (docs/rework.md section 13): value results that are views of what a function is
+# given, handed over without a copy where the caller only reads them and copied where it keeps them (D9h). Run by
+# `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer, as fields.olang is.
+
+type entry struct(name String&, next entry?&) {
+    name
+    next
+}
+
+# a value result that is a view of what a bare parameter reaches
+fn nameOf(e entry) String { return e.name }
+
+fn inner(t String) String { return t[1:t.Len() - 1] }
+
+# a view of a view, handed back as it is
+fn twice(t String) String { return inner(inner(t)) }
+
+# one of two views, or new text
+fn pick(a String, b String, k I64) String {
+    if k == 0: return a
+    if k == 1: return b[1:]
+    return $a $b
+}
+
+fn count(t String) I64 { return t.Len() }
+
+type named trait {
+    Label() String
+}
+
+type tag struct(text String&) {
+    text
+}
+
+# a method an "any" calls through its table: the table's slot copies what it hands back
+fn (g tag) Label() String { return g.text[1:] }
+
+# a function a value calls: its copying wrapper copies what it hands back
+fn apply(f fn(t String) String, t String) String { return f(t) }
+
+test inner "hands a view over where the caller only reads it, and copies it where the caller keeps it" {
+    s := $"[abcd]"
+    assert inner(s) == "abcd"
+    assert count(twice(s)) == 2
+    kept := twice(s)
+    s[2] = 'X'
+    assert kept == "bc"
+    assert twice(s) == "Xc"
+    assert $inner(s) "!" == "aXcd!"
+}
+
+test pick "copies a view kept beside new text, whatever it gives" {
+    a, b := $"one", $"two"
+    xs := Vec<String&>()
+    for k in range 3 { xs.Push(pick(a, b, k)) }
+    a[0] = 'O'
+    b[1] = 'W'
+    assert xs[0] == "one" and xs[1] == "wo" and xs[2] == "onetwo"
+}
+
+test nameOf "keeps a view of a field's text its own when the entry changes" {
+    e := entry($"first", null)
+    n := nameOf(e)
+    e.name[0] = 'F'
+    assert n == "first" and nameOf(e) == "First"
+}
+
+test apply "copies a view handed back through a function value and through an any" {
+    t := $"<xy>"
+    r := apply(inner, t)
+    t[1] = 'Q'
+    assert r == "xy"
+    g := tag($"#tag")
+    w any named& = g
+    l := w.Label()
+    g.text[1] = 'T'
+    assert l == "tag" and w.Label() == "Tag"
+}
+
+# the evaluator copies every returned array value: a baked global and a decided assert agree with the run time
+Twice String = twice("((ok))")
+assert Twice == "ok"
+assert pick("ab", "cd", 1) == "d"

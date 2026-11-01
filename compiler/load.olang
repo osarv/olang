@@ -109,6 +109,12 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     # ... and the nullable parameters ("p T?&") found written through, passed where they may be written or kept, by
     # (module, the start of the parameter's written type): read-only otherwise (docs/rework.md 11.3 point 6)
     NullWritable Map<pair.Pair<I64, I64>, Bool>
+    # round 2d (D9h): the parameters names found assigned whole in their bodies - a reference repointed, a by-value one
+    # given another value - by (file, the parameter's start): what such a body returns is no view of its argument
+    ParamWritten Map<pair.Pair<I64, I64>, Bool>
+    # ... and the instances whose array value result is a view of what they are given, handed back as it is: by
+    # instance, a bit per parameter whose argument it may view (typed.ViewRoots, recorded by check at each return)
+    ViewResults Map<I64, I64>
     Mods Vec<mut Module&>
     preludeTypes Vec<String&>
     Root I64 = -1

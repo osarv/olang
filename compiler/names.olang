@@ -129,6 +129,7 @@ type Resolver struct(L mut load.Loader&) {
     bareParams Map<I64, source.Span>
     bareWrites Map<I64, source.Span>
     bareStarts Map<I64, I64>       # a bare parameter's local: where its declaration starts (load.BareWritten's key)
+    paramStarts Map<I64, I64>      # ... and any parameter's (load.ParamWritten's key, round 2d)
 }
 
 # R3b: "error X" met by the survey, X naming nothing - where, and whether its function's signature names X
@@ -758,6 +759,10 @@ fn (r mut Resolver&) target(x ast.Expr&) {
             ref := r.lookup(n)
             r.record(sp, ref)
             if ref.Kind == What.Local and r.bareParams.Has(ref.Index) { r.bareWritten(ref.Index, sp) }
+            if ref.Kind == What.Local and r.paramStarts.Has(ref.Index) {
+                start := try r.paramStarts.Get(ref.Index) catch default I64(0)
+                r.L.ParamWritten.Put(pair.Pair(r.L.Mods[r.mi].File, start), true)
+            }
         }
         case ast.Expr.Paren(_, y) { r.target(y) }
         case ast.Expr.Member(_, _, _), ast.Expr.Index(_, _, _) {
@@ -835,6 +840,7 @@ fn (r mut Resolver&) startItem(mi I64) {
     r.bareParams.Clear()
     r.bareWrites.Clear()
     r.bareStarts.Clear()
+    r.paramStarts.Clear()
     r.scope.Clear()
     r.undo.Clear()
     r.itemNames.Clear()
@@ -961,11 +967,21 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     if f.Recv is not null and f.Recv!.Name != source.NameId(0) {
         r.param(f.Recv!, body)
         if body { r.bareParam(f.Recv!) }
+        if body { r.paramStart(f.Recv!) }
     }
     for p in s.Params {
         r.param(p, body)
         if body { r.bareParam(p) }
+        if body { r.paramStart(p) }
     }
+}
+
+# round 2d: a function's parameter, recorded where its declaration starts - one assigned whole in the body is said to
+# the checker (load.ParamWritten): what such a body returns is no view of its argument (typed.ViewRoots)
+fn (r mut Resolver&) paramStart(p ast.Param&) {
+    if r.locals.Len() == 0: return
+    i := r.locals.Len() - 1
+    if r.locals[i].Name == p.Name: r.paramStarts.Put(i, I64(p.Sp.Start))
 }
 
 # a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,

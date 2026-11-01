@@ -396,6 +396,139 @@ fn AnyItemNew(t types.Table&, x Expr?&) Bool {
     }
 }
 
+# ---- value results handed over by pointer (the rework's round 2d, D9h) ----
+
+# what an array value a body returns is a view of, handed back as it is (ViewRoots): the body B, the parameters whose
+# arguments it may view (Elig: a bit each, by position in Params - those its body never assigns whole), and a callee's
+# own bits (Views: a function that hands back views of what it is given, as check recorded them, load.ViewResults)
+type ViewWalk struct(T types.Table&, B Body&, Elig I64, Views fn(id BodyId) I64) { T, B, Elig, Views }
+
+# the bits a function's view facts use: one per parameter below ViewBits, ViewOther for a view of anything else (a
+# tail call's argument that is no parameter's) - its result copied at every call, never read in place
+ViewBits I64 = 62
+ViewOther I64 = I64(1) << 62
+
+# the parameters whose arguments' storage x - an array value returned - is a view of: 0 for new storage (what T7b leaves
+# uncopied: a call's result, a value made), -1 for any other existing storage (a local's own, a global's, constant
+# data), which the return copies as T7b does. A call of a function handing back views is a view of what its arguments
+# reach where every argument it may view reaches a parameter here - the call then handed back as it is - else 0: the
+# call copies its result where it stands. One function for check, which records the bits, and lowering, which follows
+# them, so the two agree
+fn (w ViewWalk&) Roots(x Expr?&) I64 {
+    if x is null: return 0
+    return match x {
+        case Expr.Read(_, _, p, _): w.placeRoots(p)
+        case Expr.Slice(_, _, sl): w.placeRoots(sl.Base)
+        case Expr.Call(_, _, c): w.CallRoots(c)
+        case Expr.Cond(_, _, k): meetRoots(w.Roots(k.A), w.Roots(k.B))
+        case Expr.Match(_, _, m): w.matchRoots(m)
+        case Expr.Try(_, _, tr): w.tryRoots(tr)
+        case Expr.Seq(_, _, q): w.Roots(q.X)
+        case Expr.Away(_, _, y): w.Roots(y)
+        case Expr.Prim(_, _, op, _, args): w.Roots(args[0]) if op == PrimOp.Convert and args.Len() == 1 else 0
+        case Expr.Make(_, _, _), Expr.Collect(_, _, _), Expr.Text(_, _, _), Expr.Lit(_, _, _), Expr.Fn(_, _, _): 0
+        case _: -1
+    }
+}
+
+# two values one expression may give: -1 where either is copied (the whole is), else both views
+fn meetRoots(a I64, b I64) I64 { return -1 if a < 0 or b < 0 else a | b }
+
+fn (w ViewWalk&) matchRoots(m Match&) I64 {
+    r I64 = 0
+    for a in m.Arms { r = meetRoots(r, w.Roots(a.Value)) }
+    if m.NoMatch is not null { r = meetRoots(r, w.Roots(m.NoMatch!.Value)) }
+    return r
+}
+
+fn (w ViewWalk&) tryRoots(tr Try&) I64 {
+    r := w.Roots(tr.X)
+    for c in tr.Clauses {
+        for d in c.Defaults { r = meetRoots(r, w.Roots(d)) }
+    }
+    return r
+}
+
+# a call handed back as it is (ViewRoots): the parameters here its viewed arguments reach - 0 where it views nothing, or
+# one of them reaches anything else (the call copies its result, which is new storage here); a scoped call's (E25)
+# storage is where its scope argument says: existing, copied
+fn (w ViewWalk&) CallRoots(c Call&) I64 {
+    if ScopedCall(c): return -1
+    v := w.CallViews(c)
+    if v <= 0 or (v & ViewOther) != 0: return 0
+    r I64 = 0
+    for k in range c.Args.Len().Min(ViewBits) {
+        if (v & (I64(1) << k)) == 0: continue
+        a := w.refRoots(c.Args[k])
+        if a <= 0: return 0
+        r |= a
+    }
+    return r
+}
+
+# the view bits of a call's callee: a body's, none for anything else (a function value's or an "any"'s results are
+# copied by what the call reaches - a copying wrapper, D9h)
+fn (w ViewWalk&) CallViews(c Call&) I64 {
+    return match c.Target {
+        case Callee.Body(i): w.Views(i)
+        case _: 0
+    }
+}
+
+# the parameters whose arguments' storage a place is: reached through a reference read out of one (Deref) - and the
+# parts of such a place; a local's or a global's own storage is none of them (-1)
+fn (w ViewWalk&) placeRoots(p Lvalue&) I64 {
+    return match p {
+        case Lvalue.Deref(_, _, r): w.refRoots(r)
+        case Lvalue.Field(_, _, base, _): w.placeRoots(base)
+        case Lvalue.Elem(_, _, e): w.placeRoots(e.Base)
+        case Lvalue.Payload(_, _, pl): w.placeRoots(pl.Base)
+        case _: -1
+    }
+}
+
+# the parameters whose arguments reach what a reference value names: a parameter's own reference, or one held in what a
+# parameter holds or reaches (a reference field of a by-value parameter is the argument's)
+fn (w ViewWalk&) refRoots(r Expr&) I64 {
+    return match r {
+        case Expr.Read(_, _, p, _): w.holderRoots(p)
+        case Expr.Borrow(_, _, p): w.placeRoots(p)
+        case Expr.Slice(_, _, sl): w.placeRoots(sl.Base)
+        # (an array value given storage for the call: the pair holding where its elements are, which a view names)
+        case Expr.Promote(_, _, pr): w.Roots(pr.X) if w.arrayValue(pr.X) else -1
+        case Expr.Prim(_, _, op, _, args): w.refRoots(args[0]) if PassesRefs(op) and args.Len() > 0 else -1
+        case Expr.Seq(_, _, q): w.refRoots(q.X!) if q.X is not null and q.Stmts.Len() == 0 else -1
+        case Expr.Away(_, _, y): w.refRoots(y)
+        case _: -1
+    }
+}
+
+# where a reference read out of a place came from: the place a parameter itself is, a part of one, or what one reaches
+fn (w ViewWalk&) holderRoots(p Lvalue&) I64 {
+    return match p {
+        case Lvalue.Local(_, _, id): w.paramBit(id)
+        case Lvalue.Field(_, _, base, _): w.holderRoots(base)
+        case Lvalue.Elem(_, _, e): w.holderRoots(e.Base)
+        case Lvalue.Payload(_, _, pl): w.holderRoots(pl.Base)
+        case Lvalue.Deref(_, _, r): w.refRoots(r)
+        case _: -1
+    }
+}
+
+# whether x is an array of a run-time length held by value - its pair names its elements, wherever it is held
+fn (w ViewWalk&) arrayValue(x Expr&) Bool {
+    t := w.T.Repr(x.Type())
+    return w.T.KindOf(t) == types.Kind.Array and w.T.Length(t) == types.TypeId(0)
+}
+
+# a parameter local's bit, -1 for any other local and for a parameter the body assigns whole (not in Elig)
+fn (w ViewWalk&) paramBit(id LocalId) I64 {
+    for k in range w.B.Params.Len().Min(ViewBits) {
+        if w.B.Params[k] == id: return I64(1) << k if (w.Elig & (I64(1) << k)) != 0 else -1
+    }
+    return -1
+}
+
 # whether a value of type ty is, or holds as a part, an array of a run-time length: storage of its own in an arena
 fn arenaArray(t types.Table&, ty types.TypeId) Bool {
     r := t.Repr(ty)

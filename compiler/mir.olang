@@ -52,6 +52,9 @@ Empty Range = Range(0, 0)
 type FnKey enum {
     Body(id typed.BodyId)
     Adapter(call typed.BodyId)
+    # the rework's round 2d (D9h): a function handing back views of what it is given, as a function value or a slot of an
+    # "any"'s table: called, its result copied into its result scope - what a caller that cannot know it would not copy
+    Copied(body typed.BodyId)
     Helper(kind HelperKind, t types.TypeId)
     Init(module I64)
     # $ of an "any"'s instance (T33), a table's rendering slot: as a Render helper, fn(x Stored&, depth) with its builder -
@@ -2167,6 +2170,7 @@ fn (w mut dumper&) key(k FnKey) String {
     return match k {
         case FnKey.Body(b): "B" $b
         case FnKey.Adapter(b): "adapter B" $b
+        case FnKey.Copied(b): "copied B" $b
         case FnKey.Helper(kind, ty): $short($kind) " " $w.T.Canon(ty)
         case FnKey.Init(m): "init " $m
         case FnKey.AnyRender(ti, top): "any render table " $ti $(" top" if top else "")

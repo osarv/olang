@@ -1,0 +1,11 @@
+# check: fail error[D9g]: this is read-only here
+# a result written as a reference handing back what a bare parameter reaches: shared writably, which it is not here
+type node struct(v I64, next node?&) {
+    v
+    next
+}
+fn second(n node) node& { return n.next! }
+fn main() {
+    a := node(1, node(2, null))
+    second(a).v = 5
+}

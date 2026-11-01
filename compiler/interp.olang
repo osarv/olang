@@ -965,7 +965,7 @@ fn (x mut Exec&) table(ti I64, work mut Vec<mir.FnKey>&) {
     keys mut Array<mir.FnKey>&x = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
     keys[0] = mir.FnKey.AnyRender(ti, false)
     keys[1] = mir.FnKey.AnyRender(ti, true)
-    for i in range tab.Slots.Len() { keys[i + 2] = mir.FnKey.Body(typed.BodyId(I32(tab.Slots[i]))) }
+    for i in range tab.Slots.Len() { keys[i + 2] = x.Lw.CodeOf(typed.BodyId(I32(tab.Slots[i]))) }
     for k in keys { work.Push(k) }
     x.M.DefineTable(ti, tab.Concrete, keys)
 }

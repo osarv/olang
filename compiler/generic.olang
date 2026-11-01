@@ -1085,7 +1085,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
         rs[i] = p.Resolve(c, s.Results[i])
         from[i] = p.markedParam(c, s.Results[i], named, shares)
         if from[i] == types.OwnScope and p.T.KindOf(rs[i]) == types.Kind.Var { from[i] = types.FromTypeVar }
-        if from[i] == types.OwnScope and source.InferScopes and p.erasedParam(c, s.Results[i], named) { from[i] = types.KeptPerm }
+        if from[i] == types.OwnScope and source.InferScopes and not source.NewParams and p.erasedParam(c, s.Results[i], named) { from[i] = types.KeptPerm }
     }
     if s.Results.Len() == 1 {
         result = rs[0]

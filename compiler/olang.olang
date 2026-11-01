@@ -518,6 +518,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
+    lw.ViewDump = (try os.Env("OLANG_VIEWDUMP") catch default "") != ""
     # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
     fr := try placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
     lw.Plans = fr.Plans
@@ -552,6 +553,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         prog.FuzzCorpus = $e.FuzzCorpus
     }
     for w in e.TestWords { prog.TestWords.Push($w) }
+    # the rework's round 2d (D9h): array value results handed over as views (of what this build lowered)
+    if cfg.Memory and source.NewParams {
+        try io.Println($lw.ViewReturns " returns hand back a view, " $lw.ViewReads " calls read one where it stands, " $lw.ViewCopies " calls copy one") catch io.Error { }
+    }
+    for v in lw.ViewLog { try io.PrintErr($v "\n") catch io.Error { } }
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
