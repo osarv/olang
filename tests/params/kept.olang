@@ -104,3 +104,28 @@ test holder "an argument that cannot change is not copied, and reads the same" {
     g := mk("data")
     assert h.s == "stays" and g.s == "data"
 }
+
+type span struct(a I32, b I32) {
+    a
+    b
+}
+
+type spanned enum {
+    At(sp span, k I64)
+}
+
+# ":=" of a bare parameter holding no reference declares its own value, a copy - so it may be given another value
+# without tying the two parameters' storage together
+fn spannedAt(sp span, other span, k I64) spanned {
+    asp := sp
+    if k > 0: asp = other
+    return spanned.At(asp, k)
+}
+
+test spannedAt "a := of a bare plain struct is a value of its own" {
+    a := span(1, 2)
+    s := spannedAt(a, span(9, 9), 0)
+    t := spannedAt(a, span(9, 9), 1)
+    a.a = 5
+    assert s == spanned.At(span(1, 2), 0) and t == spanned.At(span(9, 9), 1)
+}

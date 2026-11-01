@@ -2076,7 +2076,9 @@ passed by pointer to the caller's storage - a read-only reference written bare: 
 it, is read-only in the body; a body that writes its own storage, or lends it where it may be written, works on a
 copy of its own made on entry. Numbers, enums, function values and a type variable's binding are passed by value, and
 an extern's or export fn's struct keeps C's convention (X11). Passing so is unobservable but where the same call also
-writes that storage through another route. A trait method that may write its receiver is written `&Name()`.
+writes that storage through another route. `x := p` of a bare parameter holding no reference - a plain struct or enum -
+declares a value of its own, a copy (as by value); of one holding references, or an array, a read-only view of it. A
+trait method that may write its receiver is written `&Name()`.
 
 **D9d (a `&` that says nothing; provisional, as D9 above).** A `&` parameter the body never writes through, never
 passes where it may be written, never keeps (stored, captured, handed out through a result) is a compile-time error

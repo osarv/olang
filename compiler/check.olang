@@ -3487,6 +3487,19 @@ fn (c mut Checker&) bareByPointer(n source.NameId, sp source.Span, t types.TypeI
     c.EntryCopied.Push($c.P.L.Diags.Locate(c.fr().File, I64(sp.Start)) ": copied on entry: " $c.text(n) " " $c.ty(v) " - its body writes it")
 }
 
+# the value type a ":=" initializer reading a bare parameter passed by pointer whole declares (round 2e): the
+# parameter's value type where it holds no reference - a plain struct or enum, copied as by value - else UnknownT (an
+# array's is a view of what is passed, a type holding references a read-only reference to it, as before)
+fn (c mut Checker&) plainBareCopy(x typed.Expr&) types.TypeId {
+    if not source.NewParams: return types.UnknownT
+    u := unwrapped(x)
+    if u != typed.Expr.Read or u.p != typed.Lvalue.Local: return types.UnknownT
+    if c.bareWhole(u) < 0: return types.UnknownT
+    v := c.P.T.Referent(u.ty)
+    if c.arrayOf(v) != types.UnknownT or c.P.T.HoldsRefs(v): return types.UnknownT
+    return v
+}
+
 # a bare parameter passed by pointer (2.10) whose own storage a place is - reached from it through its fields, payloads
 # and inline elements, no reference between: its local, -1 for none
 fn (c mut Checker&) bareOwn(pl typed.Lvalue?&) I64 {
@@ -18382,6 +18395,14 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                     if msp.Start >= 0 { c.err(msp, msgs.MutOnValueField(c.ty(t))) }
                 }
                 if c.P.T.KindOf(c.deref(t)) == types.Kind.Array and not c.P.T.Same(t, typeOf(x)) { x = c.fit(x!, t, v.Values[i].Span()) }
+                # (the rework's round 2e: ":=" of a bare parameter passed by pointer holding no reference - a plain
+                # struct or enum - declares a value, its copy, as by value: a reference local would be a second name of
+                # the caller's storage, and assigning it another value would tie the two scopes together)
+                pv := c.plainBareCopy(x!)
+                if pv != types.UnknownT {
+                    t = pv
+                    x = c.fit(x!, t, v.Values[i].Span())
+                }
             }
         } else {
             # D13c, D13d: its zero value, held back - said only if a path reads it before assigning it (settleUnset)
