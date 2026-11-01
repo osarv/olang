@@ -1,0 +1,16 @@
+# check: fail error[D9d]: 'parts' is never written, handed where it may be written, or kept - take it as 'parts Vec<String&>'
+# a "&" parameter a for-in only walks is no use of it as one (D9d, the rework's round 2e): binding the walk's hidden
+# reference to it had counted, so a Vec of views reached it writably at every level and a caller's Vec of read-only
+# views could not be passed
+fn total(parts Vec<String&>&) I64 {
+    n I64 = 0
+    for p in parts { n += p.Len() }
+    return n
+}
+
+fn main() {
+    parts Vec<String&>
+    parts.Push("a")
+    n := total(parts)
+    assert n == 1
+}

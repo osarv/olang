@@ -1,0 +1,32 @@
+# The scoping and parameters rework (docs/rework.md section 14): a handle copied out of what a "&" parameter reaches and
+# stored into a field keeps the very storage the parameter reaches - a use of it as one (D9d), never asked to be bare.
+# Run by `make verify-params` under OLANG_PARAMS=new OLANG_SCOPES=infer.
+
+type plan struct(n I64) {
+    n
+}
+
+type decider struct() {
+    plans Vec<plan>
+}
+
+# "d.plans = plans" shares the caller's Vec: a push through the field is the caller's
+fn (d decider&) take(plans Vec<plan>&) {
+    d.plans = plans
+    d.plans.Push(plan(2))
+}
+
+# walked only: taken bare
+fn sum(plans Vec<plan>) I64 {
+    n I64 = 0
+    for p in plans { n += p.n }
+    return n
+}
+
+test decider "a Vec stored from a & parameter is the caller's, and a walk of one needs no &" {
+    d := decider()
+    ps Vec<plan>
+    ps.Push(plan(1))
+    d.take(ps)
+    assert ps.Len() == 2 and sum(ps) == 3 and sum(d.plans) == 3
+}

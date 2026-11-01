@@ -277,6 +277,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     argCtor Bool = false      # an argument for a constructor's or a case's "&" parameter: what it builds holds it as given
     levelOn Vec<levelSite>    # the written reference levels a store being checked reaches (levelRo): its target's local's
     argBare Bool = false      # an argument for a bare parameter passed by pointer: read-only at every level (2.10)
+    walkBind Bool = false     # a for-in's collection bound to its hidden reference: no use of its own (walkBound, D9d)
     retInst I64 = -1          # a value being returned from this function's instance: its result may narrow (permFit)
     retLambda Bool = false    # ... from a lambda whose result is written: its written levels may narrow (permFit)
     localStore Bool = false   # the store being checked lands in a local of this body (followResult)
@@ -10125,7 +10126,7 @@ fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
     # (round 2c: what a nullable parameter read-only by inference reaches handed back - the result follows it)
     if source.NewParams and c.followNull(x) { return true }
     if source.NewParams and c.argFollows { c.roNeedOf(readPlace(x), c.argBody, c.argK) } else { c.roNeed(readPlace(x)) }
-    if source.NewParams and not c.argRef {
+    if source.NewParams and not c.argRef and not c.walkBind {
         c.refUseX(x)
         # (a constructor's parameter kept in a field of what it builds: what it builds holds it as given, no deep use -
         # round 2c, so a read-only argument is refused only where the constructor writes through it, roCtorArgs)
@@ -10394,6 +10395,7 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
         follows := kind == RoReturned and source.NewParams and c.instanceBody(c.fr().Body)
         if x is not null and not c.isRef(typeOf(x)) and not follows { c.roNeed(readPlace(x)) }
         if kind == RoReturned { c.roResult(x) } else { c.roDeepNeed(x) }
+        if kind == RoStored or kind == RoGlobal { c.refKeptCopy(x) }
         return false
     }
     # (round 2c: resting on fields read-only by inference - those written, the program checked again)
@@ -10414,6 +10416,17 @@ fn (c mut Checker&) roStore(x typed.Expr?&, sp source.Span, kind I64) Bool {
     rec := c.err(sp, m)
     c.noteRoX(rec, x!, 0)
     return true
+}
+
+# D9d: a value holding references copied out of what a "&" parameter reaches and stored - a field, an element, a
+# payload, a global: kept, the parameter used as one, deeply (round 2e: a handle's copy, a Vec's, names the very storage
+# the parameter reaches - "f.Plans = plans" had been no use, so param_migrate asked for a bare one and then refused it)
+fn (c mut Checker&) refKeptCopy(x typed.Expr?&) {
+    if not source.NewParams or x is null or c.isRef(typeOf(x)) or not c.P.T.HoldsRefs(typeOf(x)) { return }
+    k := c.refParamOfX(x)
+    if k < 0 { return }
+    c.refUsed.Put(pair.Pair(c.fr().Body, k), true)
+    c.refDeep.Put(pair.Pair(c.fr().Body, k), true)
 }
 
 # the rework's round 2: whether a read-only copy is one only through an instance's bare parameter (roByArg) - as
@@ -19522,11 +19535,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
         rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
         # T25c: a writable reference a read-only copy holds is walked read-only
         if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & types.Owning) }
-        coll := c.hidden(sp, rt)
-        c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))   # T25c
-        fx := c.fit(src, rt, f.Source.Span())
-        c.roTrack(coll, fx)
-        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), fx))
+        coll := c.walkBound(sp, src, rt, f.Source.Span())
         k := c.hidden(sp, c.i64())
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
         n := c.hidden(sp, c.i64())
@@ -20767,10 +20776,25 @@ fn (c mut Checker&) borrowedSource(sp source.Span, src typed.Expr&c) I64 {
     rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
     # T25c: a writable reference a read-only copy holds is walked read-only
     if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & types.Owning) }
+    return c.walkBound(sp, src, rt, sp)
+}
+
+# a for-in's collection bound to a hidden local reference of type rt: its own binding is no D9d use of a "&" parameter
+# it is read from (the rework's round 2e: walking reads it, and its elements are copies) - what the walk does through
+# the hidden local is the parameter's (refFrom)
+fn (c mut Checker&) walkBound(sp source.Span, src typed.Expr&c, rt types.TypeId, fsp source.Span) I64 {
+    st := typeOf(src)
     coll := c.hidden(sp, rt)
     # T25c: a value borrowed is as read-only as the place it is (its elements read-only copies exactly then)
     c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))
-    fx := c.fit(src, rt, sp)
+    was := c.walkBind
+    c.walkBind = source.NewParams
+    fx := c.fit(src, rt, fsp)
+    c.walkBind = was
+    if source.NewParams and c.isRef(st) {
+        k := c.refParamOfX(src)
+        if k >= 0 { c.refFrom.Put(c.roKey(coll), k) }
+    }
     c.roTrack(coll, fx)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), fx))
     return coll
