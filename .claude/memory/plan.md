@@ -723,3 +723,8 @@ NEXT: prelude moves (QZ2: List to std/list, helpers + StringBuilder onto Vec, a.
   four default-path bugs fixed (R1a's re-attempt lost signature errors - r23reattempt; D9h's quiet reading through
   closures and mut globals; fixed-row arrays widened as run-time rows segfaulted - t7aoverrows). Next: handles as
   values (Vec, Map, Set, Deque, Heap, StringBuilder; List a handle), D9a/D9c lifted, Vec<String>.Join; then round 4.
+- 2026-11-02 CET: handles as values merged (fea8d30, fast-forward; verify passed but two hash goldens, recaptured after;
+  seed regenerated): Vec, Map, Set, Deque, Heap, StringBuilder hold storage by value, Clone gone from them, Ref/RefMut
+  for in place, D9a/D9c lifted, Vec<String>.Join; seven bugs fixed on the way. Bench within 0.01% but knucleotide +3.4%
+  instructions / +4 MB peak, vecopaque -7.7%; the self-build peak 2.02 -> 2.28 GB. Next: round 4 (the flip); then an
+  early-freeing round (parts held in place, Map growth, x[i] mutating calls through RefMut); then QCI 3/4.

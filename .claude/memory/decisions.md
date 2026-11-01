@@ -2388,3 +2388,13 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   body decides on the length; (2) `Vec<String>.Join` comes with handles as values (Vec a value). The agent's eight
   details (docs/rework.md 18.7) stand; 7 (D9h's quiet reading limited by a program-wide check for writable globals) for
   the bulk review.
+- Handles as values (wt-values fea8d30) - its three questions DECIDED by me 2026-11-02 (theirs to review): (1) early
+  freeing reaches parts owned by values held in place (a Map by value in a field, a Vec as a Map's value) - an
+  optimization, so mine: built in the round after round 4 (server.olang 145 MB, mapvec 66 MB until then; the fixtures
+  hold them by `&` meanwhile); (2) a mutating call through `x[i]` goes through `RefMut` in place where the type has one,
+  as a store now does (one rule, E31b); without one it stays the error naming `x.RefMut(i)`; (3) Map growth lets its old
+  slot arrays go early where the early-freeing analysis proves no `Ref` of that Map is live, else they stay retired
+  until the scope closes (a Ref must never dangle) - with (1). The agent's fourteen details stand (docs/rework.md 19);
+  5 (the section-8 relaxations owns, viewed, ownCall, splitHeld) and 10 (a stale `Ref` after growth caught only by
+  -sanitize and the evaluator) for the bulk review. handles_migrate stays out of `olang fix` (not idempotent, as
+  io_print), kept for oann's catch-up.
