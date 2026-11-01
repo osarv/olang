@@ -560,3 +560,7 @@ commit, and the user made `master` oann's default branch. From now on oann's wor
 The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
 sonnet for the refactor". The compiler/ refactor (task #66) runs on Opus, as its validation does (bulk review,
 soundness checks at high).
+Then (the same evening): "You can use sonnet for building smaller code pieces if you think it is effective, but do
+restructuring using opus". So: Sonnet may build small, self-contained code pieces where I judge it effective (a std
+function, a migration tool, a test, a contained fix); any restructuring - the compiler/ refactor, moving code between
+modules, changing how a pass is organised - and all validation run on Opus.
