@@ -9566,10 +9566,14 @@ fn (s mut Scoper&) splitErr(a typed.Expr&) {
 fn (s mut Scoper&) noteBareArg(rec I64, a typed.Expr&) {
     if not source.NewParams: return
     p := s.placeRead(unPassed(s.unAway(a)))
-    # (what a by-pointer parameter names, borrowed: the parameter)
-    for _ in range 4 {
+    # (what a by-pointer parameter names, borrowed: the parameter; round 2f: an element, a field or a payload of a bare
+    # parameter's own storage - a by-value array's element - its parameter too)
+    for _ in range 8 {
         match p {
             case typed.Lvalue.Deref(_, _, r) { p = s.placeRead(unPassed(s.unAway(r))) }
+            case typed.Lvalue.Elem(_, _, e) { p = e.Base }
+            case typed.Lvalue.Field(_, _, b, _) { p = b }
+            case typed.Lvalue.Payload(_, _, pl) { p = pl.Base }
             case _ { break }
         }
     }
