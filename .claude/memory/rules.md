@@ -557,6 +557,6 @@ commit, and the user made `master` oann's default branch. From now on oann's wor
 (and the designated session branch). The user deleted `main` the same day.
 
 ## Models for the compiler/ refactor
-The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation". The compiler/ refactor (nesting,
-duplicated and dead code, task #66) runs on Sonnet; everything that validates it - the bulk review, soundness checks,
-judging the refactor's diffs - runs on Opus.
+The user, 2026-11-01: "Yes, use Sonnet for the refactor but not for the validation", then "Actually nvm. Don't use
+sonnet for the refactor". The compiler/ refactor (task #66) runs on Opus, as its validation does (bulk review,
+soundness checks at high).
