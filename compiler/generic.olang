@@ -799,6 +799,10 @@ fn (p mut Program&) byPointer(t types.TypeId) Bool {
         case types.Kind.Named {
             k := p.T.DeclKindOf(p.T.DeclOf(t))
             if k == types.DeclKind.Struct: return not p.cabi
+            # (round 2d: an enum holding references too - by value its copy's references would live where the copy does
+            # not, so handing back what it holds, or keeping it in a value made, would keep the frame's copy; plain ones
+            # stay in registers)
+            if k == types.DeclKind.Enum: return not p.cabi and p.Body(t) and p.T.HoldsRefs(t)
             if k != types.DeclKind.Over or not p.Body(t): return false
             b := p.T.Base(t)
             for _ in range 16 {

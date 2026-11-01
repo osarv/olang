@@ -13300,9 +13300,22 @@ fn (c mut Checker&) bindType(e typed.Expr&) types.TypeId {
         case typed.Expr.Data(_, ty, _, _) {
             if c.isRef(ty) and c.P.T.Referent(ty) == c.textType() { return c.textType() }
         }
+        # (round 2d: a bare parameter passed by pointer is a value written bare - its type the value's, as it reads:
+        # how it is passed is no part of what a generic is given, T.Name says "P", not "P&")
+        case typed.Expr.Read(_, ty, p, _) {
+            if source.NewParams and c.isRef(ty) and c.bareLocal(p) { return c.P.T.Referent(ty) }
+        }
         case _ { }
     }
     return typeOf(e)
+}
+
+# whether a place is a bare parameter passed by pointer itself (2.10), or its hidden one
+fn (c mut Checker&) bareLocal(p typed.Lvalue&) Bool {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): c.bareLocals.Has(c.roKey(I64(id)))
+        case _: false
+    }
 }
 
 fn lambdaOf(x ast.Expr&) ast.Func?&x {
