@@ -2178,3 +2178,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   inferred from the body, no spelling (QCC: read-only is said by a value, never by a marker); (3) per-field permission
   bindings (docs/rework.md 2.8) are built in round 2c - the last std files and compiler/'s O17 errors need them. The
   agent's ten provisional details (docs/rework.md 11.2) stand.
+- Bulk review 5's findings DECIDED by me 2026-11-01 (the user absent; /home/user/review/bulk5): (1) read-only is a
+  property of the level reached, followed through every dereference, index, method result and immutable-global root,
+  and a copy on entry keeps inner levels read-only (element writes through bare parameters and globals segfaulted on
+  constant data); (2) a bare parameter's own storage is tracked as kept through locals, conditionals, slices, captures
+  and storing calls - unsure counts as kept, the caller copies; (3) 2.10's alias hole is closed before the flip: a bare
+  argument goes by pointer only where nothing the call reaches may write storage of its type (a call through a function
+  value or `any` may), else the caller passes a copy; (4) an `any` made from a bare parameter boxes a copy (by-pointer
+  never observable through identity); (5) a bare `String` parameter fits `fn(x T) T`. All handed to round 2f first.
